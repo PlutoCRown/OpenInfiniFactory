@@ -75,10 +75,6 @@ pub fn raycast_blocks(origin: Vec3, dir: Vec3, world: &WorldBlocks) -> Option<Ta
     best.map(|(_, hit)| hit)
 }
 
-pub fn player_feet_block(position: Vec3) -> IVec3 {
-    IVec3::new(position.x.floor() as i32, 0, position.z.floor() as i32)
-}
-
 fn ray_aabb(origin: Vec3, dir: Vec3, min: Vec3, max: Vec3) -> Option<(f32, IVec3)> {
     let mut t_min = 0.0;
     let mut t_max = REACH;

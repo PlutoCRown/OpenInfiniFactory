@@ -2,14 +2,17 @@ use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 
-use crate::world::{player_feet_block, WorldBlocks};
+use crate::world::WorldBlocks;
 use crate::GameMode;
 
 pub const EYE_HEIGHT: f32 = 1.7;
 const PLAYER_SPEED: f32 = 5.5;
+const FLY_SPEED: f32 = 7.0;
 const JUMP_SPEED: f32 = 6.5;
 const GRAVITY: f32 = 18.0;
 const PLAYER_RADIUS: f32 = 0.28;
+const PLAYER_HEIGHT: f32 = EYE_HEIGHT;
+const DOUBLE_TAP_WINDOW: f32 = 0.28;
 
 #[derive(Component)]
 pub struct FlyCamera {
@@ -17,6 +20,8 @@ pub struct FlyCamera {
     pitch: f32,
     velocity_y: f32,
     grounded: bool,
+    flying: bool,
+    last_space_press: f32,
     sensitivity: f32,
 }
 
@@ -31,6 +36,8 @@ pub fn spawn_player(mut commands: Commands) {
             pitch: -0.15,
             velocity_y: 0.0,
             grounded: false,
+            flying: false,
+            last_space_press: -10.0,
             sensitivity: 0.0025,
         },
     ));
@@ -50,6 +57,19 @@ pub fn camera_move(
     let Ok((mut camera, mut transform)) = query.get_single_mut() else {
         return;
     };
+
+    let now = time.elapsed_seconds();
+    if keys.just_pressed(KeyCode::Space) {
+        if now - camera.last_space_press <= DOUBLE_TAP_WINDOW {
+            camera.flying = !camera.flying;
+            camera.velocity_y = 0.0;
+            camera.grounded = false;
+        } else if camera.grounded {
+            camera.velocity_y = JUMP_SPEED;
+            camera.grounded = false;
+        }
+        camera.last_space_press = now;
+    }
 
     let mut direction = Vec3::ZERO;
     let yaw_rotation = Quat::from_axis_angle(Vec3::Y, camera.yaw);
@@ -71,31 +91,50 @@ pub fn camera_move(
 
     if direction.length_squared() > 0.0 {
         let horizontal = Vec3::new(direction.x, 0.0, direction.z).normalize();
-        let delta = horizontal * PLAYER_SPEED * time.delta_seconds();
-        try_move_horizontally(&mut transform.translation, delta, &world);
+        let speed = if camera.flying {
+            FLY_SPEED
+        } else {
+            PLAYER_SPEED
+        };
+        let delta = horizontal * speed * time.delta_seconds();
+        move_with_collision(&mut transform.translation, delta, &world);
     }
 
-    if keys.just_pressed(KeyCode::Space) && camera.grounded {
-        camera.velocity_y = JUMP_SPEED;
-        camera.grounded = false;
+    if camera.flying {
+        let mut vertical = 0.0;
+        if keys.pressed(KeyCode::Space) {
+            vertical += 1.0;
+        }
+        if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
+            vertical -= 1.0;
+        }
+        if vertical != 0.0 {
+            move_with_collision(
+                &mut transform.translation,
+                Vec3::Y * vertical * FLY_SPEED * time.delta_seconds(),
+                &world,
+            );
+        }
+    } else {
+        camera.velocity_y -= GRAVITY * time.delta_seconds();
+        let vertical_delta = Vec3::Y * camera.velocity_y * time.delta_seconds();
+        let before = transform.translation;
+        move_with_collision(&mut transform.translation, vertical_delta, &world);
+
+        if transform.translation.y != before.y && camera.velocity_y > 0.0 {
+            camera.grounded = false;
+        } else if transform.translation.y == before.y && camera.velocity_y <= 0.0 {
+            camera.velocity_y = 0.0;
+            camera.grounded = is_supported(transform.translation, &world);
+        } else {
+            camera.grounded = is_supported(transform.translation, &world);
+        }
     }
 
-    camera.velocity_y -= GRAVITY * time.delta_seconds();
-    transform.translation.y += camera.velocity_y * time.delta_seconds();
-
-    let feet = player_feet_block(transform.translation);
-    let support_y = highest_support_y(transform.translation, &world).unwrap_or(0.0);
-    let minimum_eye_y = support_y + EYE_HEIGHT;
-    if transform.translation.y <= minimum_eye_y && world.blocks.contains_key(&feet) {
-        transform.translation.y = minimum_eye_y;
-        camera.velocity_y = 0.0;
-        camera.grounded = true;
-    } else if transform.translation.y <= EYE_HEIGHT {
+    if transform.translation.y < EYE_HEIGHT {
         transform.translation.y = EYE_HEIGHT;
         camera.velocity_y = 0.0;
         camera.grounded = true;
-    } else {
-        camera.grounded = false;
     }
 }
 
@@ -142,7 +181,14 @@ pub fn sync_cursor_grab(mode: Res<GameMode>, mut windows: Query<&mut Window, Wit
     }
 }
 
-fn try_move_horizontally(position: &mut Vec3, delta: Vec3, world: &WorldBlocks) {
+pub fn player_intersects_block(position: Vec3, block: IVec3) -> bool {
+    let (player_min, player_max) = player_aabb(position);
+    let block_min = block.as_vec3();
+    let block_max = block_min + Vec3::ONE;
+    aabb_intersects(player_min, player_max, block_min, block_max)
+}
+
+fn move_with_collision(position: &mut Vec3, delta: Vec3, world: &WorldBlocks) {
     let mut next = *position;
     next.x += delta.x;
     if !collides(next, world) {
@@ -154,19 +200,16 @@ fn try_move_horizontally(position: &mut Vec3, delta: Vec3, world: &WorldBlocks) 
     if !collides(next, world) {
         position.z = next.z;
     }
+
+    next = *position;
+    next.y += delta.y;
+    if !collides(next, world) {
+        position.y = next.y;
+    }
 }
 
 fn collides(position: Vec3, world: &WorldBlocks) -> bool {
-    let min = Vec3::new(
-        position.x - PLAYER_RADIUS,
-        position.y - EYE_HEIGHT,
-        position.z - PLAYER_RADIUS,
-    );
-    let max = Vec3::new(
-        position.x + PLAYER_RADIUS,
-        position.y,
-        position.z + PLAYER_RADIUS,
-    );
+    let (min, max) = player_aabb(position);
 
     let min_block = IVec3::new(
         min.x.floor() as i32,
@@ -182,7 +225,7 @@ fn collides(position: Vec3, world: &WorldBlocks) -> bool {
     for x in min_block.x..=max_block.x {
         for y in min_block.y..=max_block.y {
             for z in min_block.z..=max_block.z {
-                if y >= 1 && world.blocks.contains_key(&IVec3::new(x, y, z)) {
+                if y >= 0 && world.blocks.contains_key(&IVec3::new(x, y, z)) {
                     return true;
                 }
             }
@@ -192,17 +235,30 @@ fn collides(position: Vec3, world: &WorldBlocks) -> bool {
     false
 }
 
-fn highest_support_y(position: Vec3, world: &WorldBlocks) -> Option<f32> {
-    let x = position.x.floor() as i32;
-    let z = position.z.floor() as i32;
-    let feet_y = (position.y - EYE_HEIGHT + 0.08).floor() as i32;
-    let mut highest = None;
+fn is_supported(position: Vec3, world: &WorldBlocks) -> bool {
+    let probe = position - Vec3::Y * 0.04;
+    collides(probe, world)
+}
 
-    for y in 0..=feet_y {
-        if world.blocks.contains_key(&IVec3::new(x, y, z)) {
-            highest = Some(y as f32 + 1.0);
-        }
-    }
+fn player_aabb(position: Vec3) -> (Vec3, Vec3) {
+    let min = Vec3::new(
+        position.x - PLAYER_RADIUS,
+        position.y - PLAYER_HEIGHT,
+        position.z - PLAYER_RADIUS,
+    );
+    let max = Vec3::new(
+        position.x + PLAYER_RADIUS,
+        position.y - 0.05,
+        position.z + PLAYER_RADIUS,
+    );
+    (min, max)
+}
 
-    highest
+fn aabb_intersects(a_min: Vec3, a_max: Vec3, b_min: Vec3, b_max: Vec3) -> bool {
+    a_min.x < b_max.x
+        && a_max.x > b_min.x
+        && a_min.y < b_max.y
+        && a_max.y > b_min.y
+        && a_min.z < b_max.z
+        && a_max.z > b_min.z
 }

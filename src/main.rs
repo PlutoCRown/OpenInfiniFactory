@@ -9,7 +9,9 @@ use bevy::prelude::*;
 
 use blocks::{BlockData, Facing};
 use inventory::{CarriedItem, InventoryItems, HOTBAR_SLOTS};
-use player::{camera_look, camera_move, spawn_player, sync_cursor_grab, FlyCamera};
+use player::{
+    camera_look, camera_move, player_intersects_block, spawn_player, sync_cursor_grab, FlyCamera,
+};
 use rendering::{despawn_world, rebuild_world, setup_scene, BlockEntity, HoverMarker};
 use save::{load_world, save_world};
 use world::{grid_to_world, raycast_blocks, seed_demo_world, TargetHit, WorldBlocks};
@@ -21,6 +23,7 @@ fn main() {
         .insert_resource(PlacementState::default())
         .insert_resource(InventoryItems::default())
         .insert_resource(GameMode::Playing)
+        .insert_resource(GameSettings::default())
         .insert_resource(CarriedItem::default())
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -49,6 +52,8 @@ fn main() {
                 gameplay_input,
                 placement_input,
                 save_load_input,
+                pause_menu_actions,
+                apply_fov,
                 update_hover,
                 inventory::inventory_slot_clicks,
                 inventory::update_ui,
@@ -80,6 +85,17 @@ pub enum GameMode {
     Playing,
     Inventory,
     Paused,
+}
+
+#[derive(Resource)]
+pub struct GameSettings {
+    pub fov_degrees: f32,
+}
+
+impl Default for GameSettings {
+    fn default() -> Self {
+        Self { fov_degrees: 70.0 }
+    }
 }
 
 fn load_world_on_startup(
@@ -151,6 +167,7 @@ fn placement_input(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     block_entities: Query<Entity, With<BlockEntity>>,
+    player: Query<&Transform, With<FlyCamera>>,
 ) {
     if *mode != GameMode::Playing {
         return;
@@ -161,7 +178,7 @@ fn placement_input(
     };
 
     let mut changed = false;
-    if mouse_buttons.just_pressed(MouseButton::Left) && target.pos.y > 0 {
+    if mouse_buttons.just_pressed(MouseButton::Left) {
         world.blocks.remove(&target.pos);
         changed = true;
     }
@@ -169,6 +186,12 @@ fn placement_input(
     if mouse_buttons.just_pressed(MouseButton::Right) {
         let place_at = target.pos + target.normal;
         if place_at.y >= 0 && !world.blocks.contains_key(&place_at) {
+            if let Ok(player_transform) = player.get_single() {
+                if player_intersects_block(player_transform.translation, place_at) {
+                    return;
+                }
+            }
+
             let Some(kind) = inventory.hotbar[placement.selected] else {
                 return;
             };
@@ -204,6 +227,51 @@ fn save_load_input(
     if keys.just_pressed(KeyCode::F9) && load_world(&mut world) {
         despawn_world(&mut commands, &block_entities);
         rebuild_world(&mut commands, &world, &mut meshes, &mut materials);
+    }
+}
+
+fn pause_menu_actions(
+    mut exit: EventWriter<AppExit>,
+    mut settings: ResMut<GameSettings>,
+    mut mode: ResMut<GameMode>,
+    mut interactions: Query<
+        (&Interaction, &inventory::PauseAction),
+        (Changed<Interaction>, With<Button>),
+    >,
+) {
+    if *mode != GameMode::Paused {
+        return;
+    }
+
+    for (interaction, action) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        match action {
+            inventory::PauseAction::Resume => *mode = GameMode::Playing,
+            inventory::PauseAction::FovDown => {
+                settings.fov_degrees = (settings.fov_degrees - 5.0).clamp(50.0, 110.0);
+            }
+            inventory::PauseAction::FovUp => {
+                settings.fov_degrees = (settings.fov_degrees + 5.0).clamp(50.0, 110.0);
+            }
+            inventory::PauseAction::Quit => {
+                exit.send(AppExit::Success);
+            }
+        }
+    }
+}
+
+fn apply_fov(settings: Res<GameSettings>, mut cameras: Query<&mut Projection, With<FlyCamera>>) {
+    if !settings.is_changed() {
+        return;
+    }
+
+    for mut projection in &mut cameras {
+        if let Projection::Perspective(perspective) = projection.as_mut() {
+            perspective.fov = settings.fov_degrees.to_radians();
+        }
     }
 }
 

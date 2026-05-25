@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::blocks::{BlockKind, ALL_BLOCKS};
-use crate::{GameMode, PlacementState};
+use crate::{GameMode, GameSettings, PlacementState};
 
 pub const HOTBAR_SLOTS: usize = 9;
 const BACKPACK_SLOTS: usize = 27;
@@ -17,6 +17,17 @@ pub struct PausePanel;
 
 #[derive(Component)]
 pub struct Crosshair;
+
+#[derive(Component)]
+pub struct FovText;
+
+#[derive(Component, Clone, Copy)]
+pub enum PauseAction {
+    Resume,
+    FovDown,
+    FovUp,
+    Quit,
+}
 
 #[derive(Component)]
 pub(crate) struct SlotLabel;
@@ -215,14 +226,14 @@ pub fn setup_ui(mut commands: Commands) {
             root.spawn((
                 NodeBundle {
                     style: Style {
-                        width: Val::Px(340.0),
-                        height: Val::Px(170.0),
+                        width: Val::Px(380.0),
+                        height: Val::Px(270.0),
                         position_type: PositionType::Absolute,
                         left: Val::Percent(50.0),
                         top: Val::Percent(50.0),
                         margin: UiRect {
-                            left: Val::Px(-170.0),
-                            top: Val::Px(-85.0),
+                            left: Val::Px(-190.0),
+                            top: Val::Px(-135.0),
                             ..default()
                         },
                         padding: UiRect::all(Val::Px(20.0)),
@@ -245,14 +256,39 @@ pub fn setup_ui(mut commands: Commands) {
                         ..default()
                     },
                 ));
-                panel.spawn(TextBundle::from_section(
-                    "Press ESC or left click to return to the game.",
-                    TextStyle {
-                        font_size: 16.0,
-                        color: Color::srgb(0.82, 0.84, 0.84),
+                spawn_pause_button(panel, "Resume", PauseAction::Resume);
+
+                panel
+                    .spawn(NodeBundle {
+                        style: Style {
+                            width: Val::Percent(100.0),
+                            height: Val::Px(42.0),
+                            display: Display::Flex,
+                            align_items: AlignItems::Center,
+                            justify_content: JustifyContent::SpaceBetween,
+                            column_gap: Val::Px(8.0),
+                            ..default()
+                        },
+                        background_color: Color::NONE.into(),
                         ..default()
-                    },
-                ));
+                    })
+                    .with_children(|row| {
+                        spawn_pause_button(row, "FOV -", PauseAction::FovDown);
+                        row.spawn((
+                            TextBundle::from_section(
+                                "",
+                                TextStyle {
+                                    font_size: 18.0,
+                                    color: Color::WHITE,
+                                    ..default()
+                                },
+                            ),
+                            FovText,
+                        ));
+                        spawn_pause_button(row, "FOV +", PauseAction::FovUp);
+                    });
+
+                spawn_pause_button(panel, "Quit Game", PauseAction::Quit);
             });
 
             root.spawn((
@@ -313,6 +349,7 @@ pub fn update_ui(
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
     mode: Res<GameMode>,
+    settings: Res<GameSettings>,
     carried: Res<CarriedItem>,
     mut hotbar: Query<&mut Text, (With<HotbarText>, Without<SlotLabel>, Without<CarriedLabel>)>,
     mut panels: Query<&mut Style, With<BackpackPanel>>,
@@ -330,7 +367,21 @@ pub fn update_ui(
     mut labels: Query<&mut Text, (With<SlotLabel>, Without<HotbarText>, Without<CarriedLabel>)>,
     mut carried_label: Query<
         &mut Text,
-        (With<CarriedLabel>, Without<SlotLabel>, Without<HotbarText>),
+        (
+            With<CarriedLabel>,
+            Without<SlotLabel>,
+            Without<HotbarText>,
+            Without<FovText>,
+        ),
+    >,
+    mut fov_text: Query<
+        &mut Text,
+        (
+            With<FovText>,
+            Without<SlotLabel>,
+            Without<HotbarText>,
+            Without<CarriedLabel>,
+        ),
     >,
 ) {
     if let Ok(mut text) = hotbar.get_single_mut() {
@@ -400,6 +451,10 @@ pub fn update_ui(
             .map(|kind| format!("Holding: {}", kind.name()))
             .unwrap_or_default();
     }
+
+    if let Ok(mut text) = fov_text.get_single_mut() {
+        text.sections[0].value = format!("FOV {:.0}", settings.fov_degrees);
+    }
 }
 
 fn spawn_slot(parent: &mut ChildBuilder, area: SlotArea, index: usize) {
@@ -439,6 +494,37 @@ fn spawn_slot(parent: &mut ChildBuilder, area: SlotArea, index: usize) {
                     ..default()
                 },
                 SlotLabel,
+            ));
+        });
+}
+
+fn spawn_pause_button(parent: &mut ChildBuilder, label: &'static str, action: PauseAction) {
+    parent
+        .spawn((
+            ButtonBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    min_width: Val::Px(92.0),
+                    height: Val::Px(38.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                border_color: Color::srgb(0.38, 0.39, 0.40).into(),
+                background_color: Color::srgba(0.22, 0.24, 0.26, 0.96).into(),
+                ..default()
+            },
+            action,
+        ))
+        .with_children(|button| {
+            button.spawn(TextBundle::from_section(
+                label,
+                TextStyle {
+                    font_size: 16.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
             ));
         });
 }
