@@ -11,15 +11,15 @@ cargo run
 ## Controls
 
 - `WASD`: move camera
-- `Space` / `Left Shift`: move up / down
-- Hold right mouse: look around
+- `Space`: jump
+- Move mouse: look around while captured
 - Left click: break targeted block
 - Right click: place selected block
-- `1`-`5`: select block
+- `1`-`9`: select hotbar slot
 - `R`: rotate placement direction
-- `E` or `I`: open/close inventory
+- `E` or `I`: open/close inventory and release mouse
 - `F5`: save
 - `F9`: load
-- `Esc`: close inventory
+- `Esc`: pause/release mouse, or return to game
 
 Saves are written to `saves/world.ron`.
