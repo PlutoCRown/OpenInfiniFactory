@@ -2,8 +2,8 @@ use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 
+use crate::state::GameMode;
 use crate::world::WorldBlocks;
-use crate::GameMode;
 
 pub const EYE_HEIGHT: f32 = 1.7;
 pub const PLAYER_RADIUS: f32 = 0.28;

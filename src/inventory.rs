@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::blocks::{BlockKind, ALL_BLOCKS};
-use crate::{GameMode, GameSettings, PlacementState};
+use crate::state::{GameMode, GameSettings, PlacementState};
 
 pub const HOTBAR_SLOTS: usize = 9;
 const BACKPACK_SLOTS: usize = 27;
