@@ -5,6 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
+use crate::shared::i18n::Language;
 use crate::shared::save::SAVE_DIR;
 
 pub const CONFIG_FILE: &str = "config.ron";
@@ -12,6 +13,8 @@ pub const CONFIG_FILE: &str = "config.ron";
 #[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct GameConfig {
     pub fov_degrees: f32,
+    #[serde(default)]
+    pub language: Option<Language>,
     pub key_bindings: KeyBindings,
 }
 
@@ -19,6 +22,7 @@ impl Default for GameConfig {
     fn default() -> Self {
         Self {
             fov_degrees: 70.0,
+            language: None,
             key_bindings: KeyBindings::default(),
         }
     }
@@ -87,19 +91,19 @@ impl ConfigAction {
         ConfigAction::FlyDown,
     ];
 
-    pub fn label(self) -> &'static str {
+    pub fn label_key(self) -> &'static str {
         match self {
-            ConfigAction::Pause => "Pause / Back",
-            ConfigAction::Inventory => "Inventory",
-            ConfigAction::RotateOrRollback => "Rotate / Rollback",
-            ConfigAction::Simulate => "Start / Fast Sim",
-            ConfigAction::Debug => "Debug Overlay",
-            ConfigAction::Forward => "Move Forward",
-            ConfigAction::Backward => "Move Backward",
-            ConfigAction::Left => "Move Left",
-            ConfigAction::Right => "Move Right",
-            ConfigAction::JumpOrFlyUp => "Jump / Fly Up",
-            ConfigAction::FlyDown => "Fly Down",
+            ConfigAction::Pause => "action.pause",
+            ConfigAction::Inventory => "action.inventory",
+            ConfigAction::RotateOrRollback => "action.rotate_or_rollback",
+            ConfigAction::Simulate => "action.simulate",
+            ConfigAction::Debug => "action.debug",
+            ConfigAction::Forward => "action.forward",
+            ConfigAction::Backward => "action.backward",
+            ConfigAction::Left => "action.left",
+            ConfigAction::Right => "action.right",
+            ConfigAction::JumpOrFlyUp => "action.jump_or_fly_up",
+            ConfigAction::FlyDown => "action.fly_down",
         }
     }
 }

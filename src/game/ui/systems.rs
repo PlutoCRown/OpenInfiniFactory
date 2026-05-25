@@ -1,15 +1,15 @@
 use bevy::prelude::*;
 
 use crate::game::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
-use crate::game::world::blocks::BlockKind;
 use crate::shared::config::{ConfigAction, GameConfig};
+use crate::shared::i18n::I18n;
 use crate::shared::save::SaveState;
 
 use super::types::{
     BackpackPanel, CarriedItem, CarriedLabel, Crosshair, CurrentSaveText, FovText, HotbarText,
-    InventoryItems, InventorySlot, InventoryTitle, KeyBindingButton, KeyBindingLabel,
-    MainMenuPanel, PausePanel, PendingKeyBind, SaveListAction, SaveListLabel, SaveListPanel,
-    SaveListTitle, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
+    InventoryItems, InventorySlot, InventoryTitle, KeyBindingButton, KeyBindingLabel, LanguageText,
+    LocalizedText, MainMenuPanel, PausePanel, PendingKeyBind, SaveListAction, SaveListLabel,
+    SaveListPanel, SaveListTitle, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
     SettingsStatusText, SettingsTab, SimulationText, SlotArea, SlotLabel,
 };
 use super::widgets::{short_item_name, slot_color};
@@ -48,6 +48,7 @@ pub fn update_status_ui(
     settings: Res<GameSettings>,
     save_state: Res<SaveState>,
     carried: Res<CarriedItem>,
+    i18n: Res<I18n>,
     mut hotbar: Query<&mut Text, (With<HotbarText>, Without<SlotLabel>, Without<CarriedLabel>)>,
     mut inventory_title: Query<
         &mut Text,
@@ -112,24 +113,29 @@ pub fn update_status_ui(
 ) {
     if let Ok(mut text) = hotbar.get_single_mut() {
         let selected = inventory.hotbar[placement.selected]
-            .map(BlockKind::name)
-            .unwrap_or("Empty");
-        text.sections[0].value = format!(
-            "Mode: {}   Selected: {}   Facing: {}   Inventory   Pause",
-            builder_mode_name(*builder_mode),
-            selected,
-            placement.facing.name()
+            .map(|kind| i18n.text(kind.name_key()))
+            .unwrap_or_else(|| i18n.text("empty"));
+        text.sections[0].value = i18n.fmt(
+            "status.hotbar",
+            &[
+                ("mode", builder_mode_name(*builder_mode, &i18n)),
+                ("selected", selected),
+                ("facing", i18n.text(placement.facing.name_key())),
+            ],
         );
     }
 
     if let Ok(mut text) = inventory_title.get_single_mut() {
-        text.sections[0].value = format!("Inventory - {} Mode", builder_mode_name(*builder_mode));
+        text.sections[0].value = i18n.fmt(
+            "inventory.title",
+            &[("mode", builder_mode_name(*builder_mode, &i18n))],
+        );
     }
 
     if let Ok(mut text) = carried_label.get_single_mut() {
         text.sections[0].value = carried
             .item()
-            .map(|kind| format!("Holding: {}", kind.name()))
+            .map(|kind| i18n.fmt("inventory.holding", &[("item", i18n.text(kind.name_key()))]))
             .unwrap_or_default();
     }
 
@@ -138,16 +144,21 @@ pub fn update_status_ui(
     }
 
     if let Ok(mut text) = simulation_text.get_single_mut() {
-        text.sections[0].value = format!(
-            "Mode: {}\nTurns: {}\nSim: {} x{:.0}",
-            builder_mode_name(*builder_mode),
-            simulation.turn,
-            if simulation.running {
-                "Playing"
-            } else {
-                "Paused"
-            },
-            simulation.speed
+        text.sections[0].value = i18n.fmt(
+            "status.simulation",
+            &[
+                ("mode", builder_mode_name(*builder_mode, &i18n)),
+                ("turns", simulation.turn.to_string()),
+                (
+                    "state",
+                    i18n.text(if simulation.running {
+                        "state.playing"
+                    } else {
+                        "state.paused"
+                    }),
+                ),
+                ("speed", format!("{:.0}", simulation.speed)),
+            ],
         );
     }
 
@@ -155,15 +166,15 @@ pub fn update_status_ui(
         text.sections[0].value = save_state
             .current
             .as_ref()
-            .map(|name| format!("World: {name}"))
-            .unwrap_or_else(|| "No world loaded".to_string());
+            .map(|name| i18n.fmt("save.world", &[("name", name.clone())]))
+            .unwrap_or_else(|| i18n.text("save.no_world_loaded"));
     }
 }
 
-fn builder_mode_name(mode: BuilderMode) -> &'static str {
+fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
     match mode {
-        BuilderMode::Edit => "Edit",
-        BuilderMode::Play => "Play",
+        BuilderMode::Edit => i18n.text("mode.edit"),
+        BuilderMode::Play => i18n.text("mode.play"),
     }
 }
 
@@ -171,6 +182,7 @@ pub fn update_settings_status_ui(
     config: Res<GameConfig>,
     settings_tab: Res<SettingsTab>,
     pending_key_bind: Res<PendingKeyBind>,
+    i18n: Res<I18n>,
     mut settings_status: Query<
         &mut Text,
         (
@@ -192,19 +204,40 @@ pub fn update_settings_status_ui(
 ) {
     if let Ok(mut text) = settings_status.get_single_mut() {
         let tab_name = match *settings_tab {
-            SettingsTab::Gameplay => "Gameplay",
-            SettingsTab::KeyBindings => "Key Bindings",
+            SettingsTab::Gameplay => i18n.text("tab.gameplay"),
+            SettingsTab::KeyBindings => i18n.text("tab.key_bindings"),
         };
         let pending = pending_key_bind
             .0
-            .map(|action| format!("Press a key for {}", action.label()))
-            .unwrap_or_else(|| "Click a key binding to rebind it.".to_string());
-        text.sections[0].value = format!(
-            "{tab_name} | Config: saves/config.ron\n{pending}\nSim: {}  Rollback: {}  Inventory: {}  Pause: {}",
-            config.key(ConfigAction::Simulate).name(),
-            config.key(ConfigAction::RotateOrRollback).name(),
-            config.key(ConfigAction::Inventory).name(),
-            config.key(ConfigAction::Pause).name()
+            .map(|action| {
+                i18n.fmt(
+                    "settings.pending_key",
+                    &[("action", i18n.text(action.label_key()))],
+                )
+            })
+            .unwrap_or_else(|| i18n.text("settings.rebind_hint"));
+        text.sections[0].value = i18n.fmt(
+            "settings.status",
+            &[
+                ("tab", tab_name),
+                ("pending", pending),
+                (
+                    "simulate",
+                    config.key(ConfigAction::Simulate).name().to_string(),
+                ),
+                (
+                    "rollback",
+                    config
+                        .key(ConfigAction::RotateOrRollback)
+                        .name()
+                        .to_string(),
+                ),
+                (
+                    "inventory",
+                    config.key(ConfigAction::Inventory).name().to_string(),
+                ),
+                ("pause", config.key(ConfigAction::Pause).name().to_string()),
+            ],
         );
     }
 
@@ -217,7 +250,28 @@ pub fn update_settings_status_ui(
             .filter(|pending| *pending == button.0)
             .map(|_| "...")
             .unwrap_or(config.key(button.0).name());
-        text.sections[0].value = format!("{}: {suffix}", button.0.label());
+        text.sections[0].value = format!("{}: {suffix}", i18n.text(button.0.label_key()));
+    }
+}
+
+pub fn update_localized_ui(
+    i18n: Res<I18n>,
+    mut localized_text: Query<(&LocalizedText, &mut Text), Without<LanguageText>>,
+    mut language_text: Query<&mut Text, With<LanguageText>>,
+) {
+    if !i18n.is_changed() {
+        return;
+    }
+
+    for (localized, mut text) in &mut localized_text {
+        text.sections[0].value = i18n.text(localized.key);
+    }
+
+    for mut text in &mut language_text {
+        text.sections[0].value = i18n.fmt(
+            "button.language",
+            &[("language", i18n.language().native_name().to_string())],
+        );
     }
 }
 
@@ -304,6 +358,7 @@ pub fn update_panel_visibility(
 pub fn update_inventory_slots(
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
+    i18n: Res<I18n>,
     mut slot_query: Query<
         (
             &InventorySlot,
@@ -335,7 +390,7 @@ pub fn update_inventory_slots(
         for child in children.iter() {
             if let Ok(mut text) = labels.get_mut(*child) {
                 text.sections[0].value = item
-                    .map(|kind| short_item_name(kind).to_string())
+                    .map(|kind| i18n.text(short_item_name(kind)))
                     .unwrap_or_default();
             }
         }
@@ -345,6 +400,7 @@ pub fn update_inventory_slots(
 pub fn update_save_list_ui(
     mode: Res<GameMode>,
     save_state: Res<SaveState>,
+    i18n: Res<I18n>,
     mut text_sets: ParamSet<(
         Query<&mut Text, With<SaveListTitle>>,
         Query<&mut Text, With<SaveListLabel>>,
@@ -353,9 +409,9 @@ pub fn update_save_list_ui(
 ) {
     if let Ok(mut title) = text_sets.p0().get_single_mut() {
         title.sections[0].value = match *mode {
-            GameMode::SaveListMain => "Load Save".to_string(),
-            GameMode::SaveListPause => "Switch Save".to_string(),
-            _ => "Saves".to_string(),
+            GameMode::SaveListMain => i18n.text("save.title.main"),
+            GameMode::SaveListPause => i18n.text("save.title.pause"),
+            _ => i18n.text("save.title.default"),
         };
     }
 
@@ -364,9 +420,9 @@ pub fn update_save_list_ui(
             SaveListAction::Load(index) => save_state
                 .slots
                 .get(index)
-                .map(|name| format!("Load {name}"))
-                .unwrap_or_else(|| "Empty Slot".to_string()),
-            SaveListAction::Back => "Back".to_string(),
+                .map(|name| i18n.fmt("save.load", &[("name", name.clone())]))
+                .unwrap_or_else(|| i18n.text("empty_slot")),
+            SaveListAction::Back => i18n.text("button.back"),
         };
 
         let enabled_load = match *action {

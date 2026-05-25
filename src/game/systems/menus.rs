@@ -8,6 +8,7 @@ use crate::game::ui::{
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
 use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity};
 use crate::shared::config::{key_from_input, open_config_folder, save_config, GameConfig};
+use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::save::{load_world, next_world_name, save_world, SaveState};
 
 pub fn main_menu_actions(
@@ -196,6 +197,7 @@ pub fn settings_menu_actions(
     mut mode: ResMut<GameMode>,
     mut settings: ResMut<GameSettings>,
     mut config: ResMut<GameConfig>,
+    mut i18n: ResMut<I18n>,
     mut settings_tab: ResMut<SettingsTab>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut interactions: Query<(&Interaction, &SettingsAction), (Changed<Interaction>, With<Button>)>,
@@ -235,12 +237,19 @@ pub fn settings_menu_actions(
                 config.fov_degrees = settings.fov_degrees;
                 save_config(&config);
             }
+            SettingsAction::LanguageNext => {
+                let language = i18n.language().next();
+                i18n.set_language(language);
+                config.language = Some(language);
+                save_config(&config);
+            }
             SettingsAction::Bind(action) => {
                 pending_key_bind.0 = Some(action);
             }
             SettingsAction::ResetDefaults => {
                 *config = GameConfig::default();
                 settings.fov_degrees = config.fov_degrees;
+                i18n.set_language(resolve_language(config.language));
                 pending_key_bind.0 = None;
                 save_config(&config);
             }

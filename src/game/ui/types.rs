@@ -61,6 +61,14 @@ pub struct FovText;
 #[derive(Component)]
 pub struct SimulationText;
 
+#[derive(Component)]
+pub struct LocalizedText {
+    pub key: &'static str,
+}
+
+#[derive(Component)]
+pub struct LanguageText;
+
 #[derive(Component, Clone, Copy)]
 pub enum PauseAction {
     Resume,
@@ -97,6 +105,7 @@ pub enum SettingsAction {
     TabKeyBindings,
     FovDown,
     FovUp,
+    LanguageNext,
     Bind(ConfigAction),
     ResetDefaults,
     OpenFolder,

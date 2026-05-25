@@ -1,21 +1,23 @@
 use bevy::prelude::*;
 
 use crate::shared::config::ConfigAction;
+use crate::shared::i18n::I18n;
 use crate::shared::save::SAVE_SLOTS;
 
 use super::theme::{absolute_text_bundle, panel_bundle, row_bundle, text_section, STATUS_TEXT};
 use super::types::{
     BackpackPanel, CarriedLabel, Crosshair, CurrentSaveText, FovText, HotbarText, InventoryTitle,
-    MainMenuAction, MainMenuPanel, PauseAction, PausePanel, SaveListPanel, SaveListTitle,
-    SettingsAction, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
+    LocalizedText, MainMenuAction, MainMenuPanel, PauseAction, PausePanel, SaveListPanel,
+    SaveListTitle, SettingsAction, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
     SettingsStatusText, SimulationAction, SimulationText, SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::widgets::{
-    spawn_main_button, spawn_pause_button, spawn_save_back_button, spawn_save_slot_button,
-    spawn_settings_button, spawn_sim_button, spawn_slot,
+    spawn_language_settings_button, spawn_localized_main_button, spawn_localized_pause_button,
+    spawn_localized_settings_button, spawn_localized_sim_button, spawn_save_back_button,
+    spawn_save_slot_button, spawn_slot,
 };
 
-pub fn setup_ui(mut commands: Commands) {
+pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
     commands
         .spawn(NodeBundle {
             style: Style {
@@ -95,8 +97,18 @@ pub fn setup_ui(mut commands: Commands) {
                 ..default()
             })
             .with_children(|bar| {
-                spawn_sim_button(bar, "Play", SimulationAction::ToggleRun);
-                spawn_sim_button(bar, "Rollback", SimulationAction::Rollback);
+                spawn_localized_sim_button(
+                    bar,
+                    i18n.text("button.sim_play"),
+                    "button.sim_play",
+                    SimulationAction::ToggleRun,
+                );
+                spawn_localized_sim_button(
+                    bar,
+                    i18n.text("button.rollback"),
+                    "button.rollback",
+                    SimulationAction::Rollback,
+                );
             });
 
             root.spawn(NodeBundle {
@@ -182,35 +194,81 @@ pub fn setup_ui(mut commands: Commands) {
                         }
                     });
 
-                panel.spawn(TextBundle::from_section(
-                    "Click a slot to pick up or swap. Number keys select the hotbar.",
-                    TextStyle {
-                        font_size: 15.0,
-                        color: Color::srgb(0.78, 0.78, 0.76),
-                        ..default()
+                panel.spawn((
+                    TextBundle::from_section(
+                        i18n.text("inventory.help"),
+                        TextStyle {
+                            font_size: 15.0,
+                            color: Color::srgb(0.78, 0.78, 0.76),
+                            ..default()
+                        },
+                    ),
+                    LocalizedText {
+                        key: "inventory.help",
                     },
                 ));
             });
 
             root.spawn((panel_bundle(380.0, 450.0, -190.0, -225.0), PausePanel))
                 .with_children(|panel| {
-                    panel.spawn(text_section("Paused", 30.0, Color::WHITE));
-                    spawn_pause_button(panel, "Resume", PauseAction::Resume);
-                    spawn_pause_button(
+                    panel.spawn((
+                        text_section(i18n.text("state.paused"), 30.0, Color::WHITE),
+                        LocalizedText {
+                            key: "state.paused",
+                        },
+                    ));
+                    spawn_localized_pause_button(
                         panel,
-                        "Toggle Edit/Play Mode",
+                        i18n.text("button.resume"),
+                        "button.resume",
+                        PauseAction::Resume,
+                    );
+                    spawn_localized_pause_button(
+                        panel,
+                        i18n.text("button.toggle_builder_mode"),
+                        "button.toggle_builder_mode",
                         PauseAction::ToggleBuilderMode,
                     );
-                    spawn_pause_button(panel, "Save World", PauseAction::SaveWorld);
-                    spawn_pause_button(panel, "Switch Save", PauseAction::OpenSaveList);
-                    spawn_pause_button(panel, "Settings", PauseAction::OpenSettings);
-                    spawn_pause_button(panel, "Back to Main Menu", PauseAction::BackToMainMenu);
-                    spawn_pause_button(panel, "Quit Game", PauseAction::Quit);
+                    spawn_localized_pause_button(
+                        panel,
+                        i18n.text("button.save_world"),
+                        "button.save_world",
+                        PauseAction::SaveWorld,
+                    );
+                    spawn_localized_pause_button(
+                        panel,
+                        i18n.text("button.switch_save"),
+                        "button.switch_save",
+                        PauseAction::OpenSaveList,
+                    );
+                    spawn_localized_pause_button(
+                        panel,
+                        i18n.text("button.settings"),
+                        "button.settings",
+                        PauseAction::OpenSettings,
+                    );
+                    spawn_localized_pause_button(
+                        panel,
+                        i18n.text("button.back_to_main_menu"),
+                        "button.back_to_main_menu",
+                        PauseAction::BackToMainMenu,
+                    );
+                    spawn_localized_pause_button(
+                        panel,
+                        i18n.text("button.quit_game"),
+                        "button.quit_game",
+                        PauseAction::Quit,
+                    );
                 });
 
             root.spawn((panel_bundle(760.0, 560.0, -380.0, -280.0), SettingsPanel))
                 .with_children(|panel| {
-                    panel.spawn(text_section("Settings", 30.0, Color::WHITE));
+                    panel.spawn((
+                        text_section(i18n.text("settings.title"), 30.0, Color::WHITE),
+                        LocalizedText {
+                            key: "settings.title",
+                        },
+                    ));
 
                     panel
                         .spawn(NodeBundle {
@@ -225,10 +283,16 @@ pub fn setup_ui(mut commands: Commands) {
                             ..default()
                         })
                         .with_children(|tabs| {
-                            spawn_settings_button(tabs, "Gameplay", SettingsAction::TabGameplay);
-                            spawn_settings_button(
+                            spawn_localized_settings_button(
                                 tabs,
-                                "Key Bindings",
+                                i18n.text("button.gameplay"),
+                                "button.gameplay",
+                                SettingsAction::TabGameplay,
+                            );
+                            spawn_localized_settings_button(
+                                tabs,
+                                i18n.text("button.key_bindings"),
+                                "button.key_bindings",
                                 SettingsAction::TabKeyBindings,
                             );
                         });
@@ -249,7 +313,12 @@ pub fn setup_ui(mut commands: Commands) {
                         .spawn(row_bundle(40.0))
                         .insert(SettingsGameplayGroup)
                         .with_children(|row| {
-                            spawn_settings_button(row, "FOV -", SettingsAction::FovDown);
+                            spawn_localized_settings_button(
+                                row,
+                                i18n.text("button.fov_down"),
+                                "button.fov_down",
+                                SettingsAction::FovDown,
+                            );
                             row.spawn((
                                 TextBundle::from_section(
                                     "",
@@ -261,7 +330,20 @@ pub fn setup_ui(mut commands: Commands) {
                                 ),
                                 FovText,
                             ));
-                            spawn_settings_button(row, "FOV +", SettingsAction::FovUp);
+                            spawn_localized_settings_button(
+                                row,
+                                i18n.text("button.fov_up"),
+                                "button.fov_up",
+                                SettingsAction::FovUp,
+                            );
+                            spawn_language_settings_button(
+                                row,
+                                i18n.fmt(
+                                    "button.language",
+                                    &[("language", i18n.language().native_name().to_string())],
+                                ),
+                                SettingsAction::LanguageNext,
+                            );
                         });
 
                     panel
@@ -282,9 +364,10 @@ pub fn setup_ui(mut commands: Commands) {
                         .insert(SettingsKeyBindingsGroup)
                         .with_children(|grid| {
                             for action in ConfigAction::ALL {
-                                spawn_settings_button(
+                                spawn_localized_settings_button(
                                     grid,
-                                    action.label(),
+                                    i18n.text(action.label_key()),
+                                    action.label_key(),
                                     SettingsAction::Bind(action),
                                 );
                             }
@@ -303,26 +386,51 @@ pub fn setup_ui(mut commands: Commands) {
                             ..default()
                         })
                         .with_children(|row| {
-                            spawn_settings_button(
+                            spawn_localized_settings_button(
                                 row,
-                                "Reset Defaults",
+                                i18n.text("button.reset_defaults"),
+                                "button.reset_defaults",
                                 SettingsAction::ResetDefaults,
                             );
-                            spawn_settings_button(
+                            spawn_localized_settings_button(
                                 row,
-                                "Open Config Folder",
+                                i18n.text("button.open_config_folder"),
+                                "button.open_config_folder",
                                 SettingsAction::OpenFolder,
                             );
-                            spawn_settings_button(row, "Back", SettingsAction::Back);
+                            spawn_localized_settings_button(
+                                row,
+                                i18n.text("button.back"),
+                                "button.back",
+                                SettingsAction::Back,
+                            );
                         });
                 });
 
             root.spawn((panel_bundle(360.0, 260.0, -180.0, -130.0), MainMenuPanel))
                 .with_children(|panel| {
-                    panel.spawn(text_section("OpenInfiniFactory", 30.0, Color::WHITE));
-                    spawn_main_button(panel, "Create New World", MainMenuAction::NewWorld);
-                    spawn_main_button(panel, "Load Save", MainMenuAction::OpenSaveList);
-                    spawn_main_button(panel, "Quit Game", MainMenuAction::Quit);
+                    panel.spawn((
+                        text_section(i18n.text("main.title"), 30.0, Color::WHITE),
+                        LocalizedText { key: "main.title" },
+                    ));
+                    spawn_localized_main_button(
+                        panel,
+                        i18n.text("button.create_new_world"),
+                        "button.create_new_world",
+                        MainMenuAction::NewWorld,
+                    );
+                    spawn_localized_main_button(
+                        panel,
+                        i18n.text("button.load_save"),
+                        "button.load_save",
+                        MainMenuAction::OpenSaveList,
+                    );
+                    spawn_localized_main_button(
+                        panel,
+                        i18n.text("button.quit_game"),
+                        "button.quit_game",
+                        MainMenuAction::Quit,
+                    );
                 });
 
             root.spawn((panel_bundle(460.0, 460.0, -230.0, -230.0), SaveListPanel))

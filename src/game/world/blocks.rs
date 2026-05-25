@@ -32,17 +32,17 @@ pub enum BlockKind {
 }
 
 impl BlockKind {
-    pub fn name(self) -> &'static str {
+    pub fn name_key(self) -> &'static str {
         match self {
-            BlockKind::Solid => "Solid",
-            BlockKind::Glass => "Glass",
-            BlockKind::Generator => "Generator",
-            BlockKind::Welder => "Welder",
-            BlockKind::Conveyor => "Conveyor",
-            BlockKind::Piston => "Piston",
-            BlockKind::Goal => "Goal",
-            BlockKind::Material => "Material",
-            BlockKind::WeldPoint => "Weld Point",
+            BlockKind::Solid => "block.solid",
+            BlockKind::Glass => "block.glass",
+            BlockKind::Generator => "block.generator",
+            BlockKind::Welder => "block.welder",
+            BlockKind::Conveyor => "block.conveyor",
+            BlockKind::Piston => "block.piston",
+            BlockKind::Goal => "block.goal",
+            BlockKind::Material => "block.material",
+            BlockKind::WeldPoint => "block.weld_point",
         }
     }
 
@@ -109,12 +109,12 @@ impl Facing {
         }
     }
 
-    pub fn name(self) -> &'static str {
+    pub fn name_key(self) -> &'static str {
         match self {
-            Facing::North => "North",
-            Facing::East => "East",
-            Facing::South => "South",
-            Facing::West => "West",
+            Facing::North => "facing.north",
+            Facing::East => "facing.east",
+            Facing::South => "facing.south",
+            Facing::West => "facing.west",
         }
     }
 

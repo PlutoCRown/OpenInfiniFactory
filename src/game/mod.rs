@@ -11,6 +11,7 @@ use bevy::pbr::DirectionalLightShadowMap;
 use bevy::prelude::*;
 
 use crate::shared::config::load_config;
+use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::save::SaveState;
 
 use player::controller::{camera_look, camera_move, spawn_player, sync_cursor_grab};
@@ -29,6 +30,7 @@ pub struct GamePlugin;
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         let config = load_config();
+        let i18n = I18n::new(resolve_language(config.language));
         let settings = GameSettings {
             fov_degrees: config.fov_degrees,
         };
@@ -47,6 +49,7 @@ impl Plugin for GamePlugin {
             .insert_resource(SimulationState::default())
             .insert_resource(settings)
             .insert_resource(config)
+            .insert_resource(i18n)
             .insert_resource(SaveState::default())
             .insert_resource(SettingsTab::default())
             .insert_resource(PendingKeyBind::default())
@@ -86,6 +89,7 @@ impl Plugin for GamePlugin {
                 (
                     ui::inventory_slot_clicks,
                     ui::update_status_ui,
+                    ui::update_localized_ui,
                     ui::update_settings_status_ui,
                     ui::update_panel_visibility,
                     ui::update_inventory_slots,

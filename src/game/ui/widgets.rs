@@ -4,8 +4,8 @@ use crate::game::world::blocks::BlockKind;
 
 use super::theme::{BUTTON_BG, BUTTON_BORDER};
 use super::types::{
-    InventorySlot, KeyBindingButton, KeyBindingLabel, MainMenuAction, PauseAction, SaveListAction,
-    SaveListLabel, SettingsAction, SimulationAction, SlotArea, SlotLabel,
+    InventorySlot, KeyBindingButton, KeyBindingLabel, LanguageText, MainMenuAction, PauseAction,
+    SaveListAction, SaveListLabel, SettingsAction, SimulationAction, SlotArea, SlotLabel,
 };
 
 pub(super) fn spawn_slot(parent: &mut ChildBuilder, area: SlotArea, index: usize) {
@@ -49,28 +49,55 @@ pub(super) fn spawn_slot(parent: &mut ChildBuilder, area: SlotArea, index: usize
         });
 }
 
-pub(super) fn spawn_pause_button(
+pub(super) fn spawn_localized_pause_button(
     parent: &mut ChildBuilder,
-    label: &'static str,
+    label: String,
+    key: &'static str,
     action: PauseAction,
 ) {
     parent
         .spawn((menu_button_bundle(38.0), action))
         .with_children(|button| {
-            button.spawn(TextBundle::from_section(
-                label,
-                TextStyle {
-                    font_size: 16.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
+            button.spawn((
+                TextBundle::from_section(
+                    label,
+                    TextStyle {
+                        font_size: 16.0,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                ),
+                super::types::LocalizedText { key },
             ));
         });
 }
 
-pub(super) fn spawn_settings_button(
+pub(super) fn spawn_language_settings_button(
     parent: &mut ChildBuilder,
-    label: &'static str,
+    label: impl Into<String>,
+    action: SettingsAction,
+) {
+    parent
+        .spawn((menu_button_bundle(36.0), action))
+        .with_children(|button| {
+            button.spawn((
+                TextBundle::from_section(
+                    label,
+                    TextStyle {
+                        font_size: 14.0,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                ),
+                LanguageText,
+            ));
+        });
+}
+
+pub(super) fn spawn_localized_settings_button(
+    parent: &mut ChildBuilder,
+    label: String,
+    key: &'static str,
     action: SettingsAction,
 ) {
     let mut button = parent.spawn((menu_button_bundle(36.0), action));
@@ -78,13 +105,16 @@ pub(super) fn spawn_settings_button(
         button.insert(KeyBindingButton(action));
     }
     button.with_children(|button| {
-        let mut label_entity = button.spawn(TextBundle::from_section(
-            label,
-            TextStyle {
-                font_size: 14.0,
-                color: Color::WHITE,
-                ..default()
-            },
+        let mut label_entity = button.spawn((
+            TextBundle::from_section(
+                label,
+                TextStyle {
+                    font_size: 14.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ),
+            super::types::LocalizedText { key },
         ));
         if matches!(action, SettingsAction::Bind(_)) {
             label_entity.insert(KeyBindingLabel);
@@ -92,9 +122,10 @@ pub(super) fn spawn_settings_button(
     });
 }
 
-pub(super) fn spawn_sim_button(
+pub(super) fn spawn_localized_sim_button(
     parent: &mut ChildBuilder,
-    label: &'static str,
+    label: String,
+    key: &'static str,
     action: SimulationAction,
 ) {
     parent
@@ -115,32 +146,39 @@ pub(super) fn spawn_sim_button(
             action,
         ))
         .with_children(|button| {
-            button.spawn(TextBundle::from_section(
-                label,
-                TextStyle {
-                    font_size: 12.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
+            button.spawn((
+                TextBundle::from_section(
+                    label,
+                    TextStyle {
+                        font_size: 12.0,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                ),
+                super::types::LocalizedText { key },
             ));
         });
 }
 
-pub(super) fn spawn_main_button(
+pub(super) fn spawn_localized_main_button(
     parent: &mut ChildBuilder,
-    label: &'static str,
+    label: String,
+    key: &'static str,
     action: MainMenuAction,
 ) {
     parent
         .spawn((menu_button_bundle(44.0), action))
         .with_children(|button| {
-            button.spawn(TextBundle::from_section(
-                label,
-                TextStyle {
-                    font_size: 17.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
+            button.spawn((
+                TextBundle::from_section(
+                    label,
+                    TextStyle {
+                        font_size: 17.0,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                ),
+                super::types::LocalizedText { key },
             ));
         });
 }
@@ -169,7 +207,7 @@ pub(super) fn spawn_save_back_button(parent: &mut ChildBuilder) {
         .with_children(|button| {
             button.spawn((
                 TextBundle::from_section(
-                    "Back",
+                    "",
                     TextStyle {
                         font_size: 16.0,
                         color: Color::WHITE,
@@ -214,14 +252,14 @@ pub(super) fn slot_color(kind: BlockKind) -> Color {
 
 pub(super) fn short_item_name(kind: BlockKind) -> &'static str {
     match kind {
-        BlockKind::Solid => "Solid",
-        BlockKind::Glass => "Glass",
-        BlockKind::Generator => "Gen",
-        BlockKind::Welder => "Weld",
-        BlockKind::Conveyor => "Belt",
-        BlockKind::Piston => "Piston",
-        BlockKind::Goal => "Goal",
-        BlockKind::Material => "Mat",
-        BlockKind::WeldPoint => "Point",
+        BlockKind::Solid => "short.solid",
+        BlockKind::Glass => "short.glass",
+        BlockKind::Generator => "short.generator",
+        BlockKind::Welder => "short.welder",
+        BlockKind::Conveyor => "short.conveyor",
+        BlockKind::Piston => "short.piston",
+        BlockKind::Goal => "short.goal",
+        BlockKind::Material => "short.material",
+        BlockKind::WeldPoint => "short.weld_point",
     }
 }
