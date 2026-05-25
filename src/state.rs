@@ -22,6 +22,9 @@ impl Default for PlacementState {
 
 #[derive(Resource, Clone, Copy, Eq, PartialEq)]
 pub enum GameMode {
+    MainMenu,
+    SaveListMain,
+    SaveListPause,
     Playing,
     Inventory,
     Paused,
@@ -55,6 +58,12 @@ impl Default for SimulationState {
             turn: 0,
             accumulator: 0.0,
         }
+    }
+}
+
+impl SimulationState {
+    pub fn is_active(&self) -> bool {
+        self.running || self.turn > 0
     }
 }
 

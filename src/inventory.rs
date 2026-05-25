@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::blocks::{BlockKind, EDIT_BLOCKS, PLAY_BLOCKS};
+use crate::save::{SaveState, SAVE_SLOTS};
 use crate::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
 
 pub const HOTBAR_SLOTS: usize = 9;
@@ -19,6 +20,21 @@ pub struct InventoryTitle;
 pub struct PausePanel;
 
 #[derive(Component)]
+pub struct MainMenuPanel;
+
+#[derive(Component)]
+pub struct SaveListPanel;
+
+#[derive(Component)]
+pub struct SaveListTitle;
+
+#[derive(Component)]
+pub struct SaveListLabel;
+
+#[derive(Component)]
+pub struct CurrentSaveText;
+
+#[derive(Component)]
 pub struct Crosshair;
 
 #[derive(Component)]
@@ -31,6 +47,9 @@ pub struct SimulationText;
 pub enum PauseAction {
     Resume,
     ToggleBuilderMode,
+    SaveWorld,
+    OpenSaveList,
+    BackToMainMenu,
     FovDown,
     FovUp,
     Quit,
@@ -39,8 +58,20 @@ pub enum PauseAction {
 #[derive(Component, Clone, Copy)]
 pub enum SimulationAction {
     ToggleRun,
-    Faster,
     Rollback,
+}
+
+#[derive(Component, Clone, Copy)]
+pub enum MainMenuAction {
+    NewWorld,
+    OpenSaveList,
+    Quit,
+}
+
+#[derive(Component, Clone, Copy)]
+pub enum SaveListAction {
+    Load(usize),
+    Back,
 }
 
 #[derive(Component)]
@@ -169,6 +200,27 @@ pub fn setup_ui(mut commands: Commands) {
                     text: Text::from_section(
                         "",
                         TextStyle {
+                            font_size: 15.0,
+                            color: Color::srgb(0.88, 0.96, 1.0),
+                            ..default()
+                        },
+                    ),
+                    style: Style {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(18.0),
+                        top: Val::Px(18.0),
+                        ..default()
+                    },
+                    ..default()
+                },
+                CurrentSaveText,
+            ));
+
+            root.spawn((
+                TextBundle {
+                    text: Text::from_section(
+                        "",
+                        TextStyle {
                             font_size: 16.0,
                             color: Color::srgb(0.88, 0.96, 1.0),
                             ..default()
@@ -200,8 +252,7 @@ pub fn setup_ui(mut commands: Commands) {
                 ..default()
             })
             .with_children(|bar| {
-                spawn_sim_button(bar, "Play/Pause", SimulationAction::ToggleRun);
-                spawn_sim_button(bar, "Speed", SimulationAction::Faster);
+                spawn_sim_button(bar, "F Play", SimulationAction::ToggleRun);
                 spawn_sim_button(bar, "Rollback", SimulationAction::Rollback);
             });
 
@@ -302,13 +353,13 @@ pub fn setup_ui(mut commands: Commands) {
                 NodeBundle {
                     style: Style {
                         width: Val::Px(380.0),
-                        height: Val::Px(270.0),
+                        height: Val::Px(450.0),
                         position_type: PositionType::Absolute,
                         left: Val::Percent(50.0),
                         top: Val::Percent(50.0),
                         margin: UiRect {
                             left: Val::Px(-190.0),
-                            top: Val::Px(-135.0),
+                            top: Val::Px(-225.0),
                             ..default()
                         },
                         padding: UiRect::all(Val::Px(20.0)),
@@ -337,6 +388,8 @@ pub fn setup_ui(mut commands: Commands) {
                     "Toggle Edit/Play Mode",
                     PauseAction::ToggleBuilderMode,
                 );
+                spawn_pause_button(panel, "Save World", PauseAction::SaveWorld);
+                spawn_pause_button(panel, "Switch Save", PauseAction::OpenSaveList);
 
                 panel
                     .spawn(NodeBundle {
@@ -368,7 +421,88 @@ pub fn setup_ui(mut commands: Commands) {
                         spawn_pause_button(row, "FOV +", PauseAction::FovUp);
                     });
 
+                spawn_pause_button(panel, "Back to Main Menu", PauseAction::BackToMainMenu);
                 spawn_pause_button(panel, "Quit Game", PauseAction::Quit);
+            });
+
+            root.spawn((
+                NodeBundle {
+                    style: Style {
+                        width: Val::Px(360.0),
+                        height: Val::Px(260.0),
+                        position_type: PositionType::Absolute,
+                        left: Val::Percent(50.0),
+                        top: Val::Percent(50.0),
+                        margin: UiRect {
+                            left: Val::Px(-180.0),
+                            top: Val::Px(-130.0),
+                            ..default()
+                        },
+                        padding: UiRect::all(Val::Px(20.0)),
+                        display: Display::None,
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(14.0),
+                        ..default()
+                    },
+                    background_color: Color::srgba(0.08, 0.09, 0.10, 0.96).into(),
+                    ..default()
+                },
+                MainMenuPanel,
+            ))
+            .with_children(|panel| {
+                panel.spawn(TextBundle::from_section(
+                    "OpenInfiniFactory",
+                    TextStyle {
+                        font_size: 30.0,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                ));
+                spawn_main_button(panel, "Create New World", MainMenuAction::NewWorld);
+                spawn_main_button(panel, "Load Save", MainMenuAction::OpenSaveList);
+                spawn_main_button(panel, "Quit Game", MainMenuAction::Quit);
+            });
+
+            root.spawn((
+                NodeBundle {
+                    style: Style {
+                        width: Val::Px(460.0),
+                        height: Val::Px(460.0),
+                        position_type: PositionType::Absolute,
+                        left: Val::Percent(50.0),
+                        top: Val::Percent(50.0),
+                        margin: UiRect {
+                            left: Val::Px(-230.0),
+                            top: Val::Px(-230.0),
+                            ..default()
+                        },
+                        padding: UiRect::all(Val::Px(20.0)),
+                        display: Display::None,
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(10.0),
+                        ..default()
+                    },
+                    background_color: Color::srgba(0.08, 0.09, 0.10, 0.96).into(),
+                    ..default()
+                },
+                SaveListPanel,
+            ))
+            .with_children(|panel| {
+                panel.spawn((
+                    TextBundle::from_section(
+                        "",
+                        TextStyle {
+                            font_size: 26.0,
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                    ),
+                    SaveListTitle,
+                ));
+                for index in 0..SAVE_SLOTS {
+                    spawn_save_slot_button(panel, index);
+                }
+                spawn_save_back_button(panel);
             });
 
             root.spawn((
@@ -431,6 +565,7 @@ pub fn update_status_ui(
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
     settings: Res<GameSettings>,
+    save_state: Res<SaveState>,
     carried: Res<CarriedItem>,
     mut hotbar: Query<&mut Text, (With<HotbarText>, Without<SlotLabel>, Without<CarriedLabel>)>,
     mut inventory_title: Query<
@@ -468,6 +603,17 @@ pub fn update_status_ui(
             Without<HotbarText>,
             Without<CarriedLabel>,
             Without<FovText>,
+        ),
+    >,
+    mut current_save_text: Query<
+        &mut Text,
+        (
+            With<CurrentSaveText>,
+            Without<SlotLabel>,
+            Without<HotbarText>,
+            Without<CarriedLabel>,
+            Without<FovText>,
+            Without<SimulationText>,
         ),
     >,
 ) {
@@ -511,14 +657,40 @@ pub fn update_status_ui(
             simulation.speed
         );
     }
+
+    if let Ok(mut text) = current_save_text.get_single_mut() {
+        text.sections[0].value = save_state
+            .current
+            .as_ref()
+            .map(|name| format!("World: {name}"))
+            .unwrap_or_else(|| "No world loaded".to_string());
+    }
 }
 
 pub fn update_panel_visibility(
     mode: Res<GameMode>,
+    mut main_menu_panels: Query<&mut Style, With<MainMenuPanel>>,
+    mut save_list_panels: Query<&mut Style, With<SaveListPanel>>,
     mut panels: Query<&mut Style, With<BackpackPanel>>,
     mut pause_panels: Query<&mut Style, (With<PausePanel>, Without<BackpackPanel>)>,
     mut crosshair: Query<&mut Visibility, With<Crosshair>>,
 ) {
+    for mut style in &mut main_menu_panels {
+        style.display = if *mode == GameMode::MainMenu {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    for mut style in &mut save_list_panels {
+        style.display = if matches!(*mode, GameMode::SaveListMain | GameMode::SaveListPause) {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
     for mut style in &mut panels {
         style.display = if *mode == GameMode::Inventory {
             Display::Flex
@@ -580,6 +752,49 @@ pub fn update_inventory_slots(
                 text.sections[0].value = item
                     .map(|kind| short_item_name(kind).to_string())
                     .unwrap_or_default();
+            }
+        }
+    }
+}
+
+pub fn update_save_list_ui(
+    mode: Res<GameMode>,
+    save_state: Res<SaveState>,
+    mut titles: Query<&mut Text, With<SaveListTitle>>,
+    mut slots: Query<(&SaveListAction, &Children, &mut BackgroundColor), With<Button>>,
+    mut labels: Query<&mut Text, With<SaveListLabel>>,
+) {
+    if let Ok(mut title) = titles.get_single_mut() {
+        title.sections[0].value = match *mode {
+            GameMode::SaveListMain => "Load Save".to_string(),
+            GameMode::SaveListPause => "Switch Save".to_string(),
+            _ => "Saves".to_string(),
+        };
+    }
+
+    for (action, children, mut background) in &mut slots {
+        let label = match *action {
+            SaveListAction::Load(index) => save_state
+                .slots
+                .get(index)
+                .map(|name| format!("Load {name}"))
+                .unwrap_or_else(|| "Empty Slot".to_string()),
+            SaveListAction::Back => "Back".to_string(),
+        };
+
+        let enabled_load = match *action {
+            SaveListAction::Load(index) => save_state.slots.get(index).is_some(),
+            SaveListAction::Back => true,
+        };
+        *background = if enabled_load {
+            Color::srgba(0.22, 0.24, 0.26, 0.96).into()
+        } else {
+            Color::srgba(0.12, 0.12, 0.13, 0.82).into()
+        };
+
+        for child in children.iter() {
+            if let Ok(mut text) = labels.get_mut(*child) {
+                text.sections[0].value = label.clone();
             }
         }
     }
@@ -683,6 +898,102 @@ fn spawn_sim_button(parent: &mut ChildBuilder, label: &'static str, action: Simu
                     color: Color::WHITE,
                     ..default()
                 },
+            ));
+        });
+}
+
+fn spawn_main_button(parent: &mut ChildBuilder, label: &'static str, action: MainMenuAction) {
+    parent
+        .spawn((
+            ButtonBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(44.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                border_color: Color::srgb(0.38, 0.39, 0.40).into(),
+                background_color: Color::srgba(0.22, 0.24, 0.26, 0.96).into(),
+                ..default()
+            },
+            action,
+        ))
+        .with_children(|button| {
+            button.spawn(TextBundle::from_section(
+                label,
+                TextStyle {
+                    font_size: 17.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ));
+        });
+}
+
+fn spawn_save_slot_button(parent: &mut ChildBuilder, index: usize) {
+    parent
+        .spawn((
+            ButtonBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(34.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                border_color: Color::srgb(0.32, 0.34, 0.35).into(),
+                background_color: Color::srgba(0.22, 0.24, 0.26, 0.96).into(),
+                ..default()
+            },
+            SaveListAction::Load(index),
+        ))
+        .with_children(|button| {
+            button.spawn((
+                TextBundle::from_section(
+                    "",
+                    TextStyle {
+                        font_size: 15.0,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                ),
+                SaveListLabel,
+            ));
+        });
+}
+
+fn spawn_save_back_button(parent: &mut ChildBuilder) {
+    parent
+        .spawn((
+            ButtonBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(38.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                border_color: Color::srgb(0.38, 0.39, 0.40).into(),
+                background_color: Color::srgba(0.18, 0.19, 0.20, 0.96).into(),
+                ..default()
+            },
+            SaveListAction::Back,
+        ))
+        .with_children(|button| {
+            button.spawn((
+                TextBundle::from_section(
+                    "Back",
+                    TextStyle {
+                        font_size: 16.0,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                ),
+                SaveListLabel,
             ));
         });
 }

@@ -13,15 +13,15 @@ use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::prelude::*;
 
 use gameplay::{
-    apply_fov, gameplay_input, pause_menu_actions, placement_input, save_load_input,
-    simulation_controls, update_hover,
+    apply_fov, gameplay_input, main_menu_actions, pause_menu_actions, placement_input,
+    save_list_actions, simulation_controls, update_hover,
 };
 use inventory::{CarriedItem, InventoryItems};
 use player::{camera_look, camera_move, spawn_player, sync_cursor_grab};
-use rendering::{rebuild_world, setup_scene};
-use save::load_world;
+use rendering::setup_scene;
+use save::SaveState;
 use state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
-use world::{seed_demo_world, WorldBlocks};
+use world::WorldBlocks;
 
 fn main() {
     App::new()
@@ -29,10 +29,11 @@ fn main() {
         .insert_resource(WorldBlocks::default())
         .insert_resource(PlacementState::default())
         .insert_resource(InventoryItems::default())
-        .insert_resource(GameMode::Playing)
+        .insert_resource(GameMode::MainMenu)
         .insert_resource(BuilderMode::default())
         .insert_resource(SimulationState::default())
         .insert_resource(GameSettings::default())
+        .insert_resource(SaveState::default())
         .insert_resource(debug::DebugState::default())
         .insert_resource(CarriedItem::default())
         .add_plugins((
@@ -52,7 +53,7 @@ fn main() {
             (
                 setup_scene,
                 spawn_player,
-                load_world_on_startup,
+                refresh_saves_on_startup,
                 inventory::setup_ui,
                 debug::setup_debug_ui,
             )
@@ -65,7 +66,8 @@ fn main() {
                 camera_look,
                 gameplay_input,
                 placement_input,
-                save_load_input,
+                main_menu_actions,
+                save_list_actions,
                 pause_menu_actions,
                 simulation_controls,
                 simulation::tick_simulation,
@@ -80,6 +82,7 @@ fn main() {
                 inventory::update_status_ui,
                 inventory::update_panel_visibility,
                 inventory::update_inventory_slots,
+                inventory::update_save_list_ui,
                 sync_cursor_grab,
             ),
         )
@@ -94,14 +97,6 @@ fn main() {
         .run();
 }
 
-fn load_world_on_startup(
-    mut commands: Commands,
-    mut world: ResMut<WorldBlocks>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    if !load_world(&mut world) {
-        seed_demo_world(&mut world);
-    }
-    rebuild_world(&mut commands, &world, &mut meshes, &mut materials);
+fn refresh_saves_on_startup(mut save_state: ResMut<SaveState>) {
+    save_state.refresh();
 }
