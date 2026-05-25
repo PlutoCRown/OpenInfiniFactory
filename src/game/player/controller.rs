@@ -2,9 +2,9 @@ use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 
-use crate::config::{ConfigAction, GameConfig};
-use crate::state::GameMode;
-use crate::world::WorldBlocks;
+use crate::game::state::GameMode;
+use crate::game::world::grid::WorldBlocks;
+use crate::shared::config::{ConfigAction, GameConfig};
 
 pub const EYE_HEIGHT: f32 = 1.7;
 pub const PLAYER_RADIUS: f32 = 0.28;

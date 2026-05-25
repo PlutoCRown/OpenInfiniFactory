@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 
-use crate::blocks::{BlockData, BlockKind, Facing};
-use crate::rendering::{despawn_world, rebuild_world, BlockEntity};
-use crate::state::{BuilderMode, SimulationState};
-use crate::world::WorldBlocks;
+use crate::game::state::{BuilderMode, SimulationState};
+use crate::game::world::blocks::{BlockData, BlockKind, Facing};
+use crate::game::world::grid::WorldBlocks;
+use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity};
 
 pub fn run_turn(
     world: &mut WorldBlocks,

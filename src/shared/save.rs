@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::blocks::BlockData;
-use crate::world::WorldBlocks;
+use crate::game::world::blocks::BlockData;
+use crate::game::world::grid::WorldBlocks;
 
 pub const SAVE_DIR: &str = "saves";
 pub const SAVE_SLOTS: usize = 8;

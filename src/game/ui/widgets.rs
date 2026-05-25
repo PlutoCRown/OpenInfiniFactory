@@ -1,0 +1,227 @@
+use bevy::prelude::*;
+
+use crate::game::world::blocks::BlockKind;
+
+use super::theme::{BUTTON_BG, BUTTON_BORDER};
+use super::types::{
+    InventorySlot, KeyBindingButton, KeyBindingLabel, MainMenuAction, PauseAction, SaveListAction,
+    SaveListLabel, SettingsAction, SimulationAction, SlotArea, SlotLabel,
+};
+
+pub(super) fn spawn_slot(parent: &mut ChildBuilder, area: SlotArea, index: usize) {
+    parent
+        .spawn((
+            ButtonBundle {
+                style: Style {
+                    width: Val::Px(54.0),
+                    height: Val::Px(54.0),
+                    border: UiRect::all(Val::Px(2.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                border_color: Color::srgb(0.22, 0.22, 0.22).into(),
+                background_color: Color::srgba(0.28, 0.28, 0.30, 0.92).into(),
+                ..default()
+            },
+            InventorySlot { area, index },
+        ))
+        .with_children(|slot| {
+            slot.spawn((
+                TextBundle {
+                    text: Text::from_section(
+                        "",
+                        TextStyle {
+                            font_size: 12.0,
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                    )
+                    .with_justify(JustifyText::Center),
+                    style: Style {
+                        margin: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    ..default()
+                },
+                SlotLabel,
+            ));
+        });
+}
+
+pub(super) fn spawn_pause_button(
+    parent: &mut ChildBuilder,
+    label: &'static str,
+    action: PauseAction,
+) {
+    parent
+        .spawn((menu_button_bundle(38.0), action))
+        .with_children(|button| {
+            button.spawn(TextBundle::from_section(
+                label,
+                TextStyle {
+                    font_size: 16.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ));
+        });
+}
+
+pub(super) fn spawn_settings_button(
+    parent: &mut ChildBuilder,
+    label: &'static str,
+    action: SettingsAction,
+) {
+    let mut button = parent.spawn((menu_button_bundle(36.0), action));
+    if let SettingsAction::Bind(action) = action {
+        button.insert(KeyBindingButton(action));
+    }
+    button.with_children(|button| {
+        let mut label_entity = button.spawn(TextBundle::from_section(
+            label,
+            TextStyle {
+                font_size: 14.0,
+                color: Color::WHITE,
+                ..default()
+            },
+        ));
+        if matches!(action, SettingsAction::Bind(_)) {
+            label_entity.insert(KeyBindingLabel);
+        }
+    });
+}
+
+pub(super) fn spawn_sim_button(
+    parent: &mut ChildBuilder,
+    label: &'static str,
+    action: SimulationAction,
+) {
+    parent
+        .spawn((
+            ButtonBundle {
+                style: Style {
+                    width: Val::Px(82.0),
+                    height: Val::Px(34.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                border_color: Color::srgb(0.30, 0.36, 0.40).into(),
+                background_color: Color::srgba(0.12, 0.18, 0.22, 0.84).into(),
+                ..default()
+            },
+            action,
+        ))
+        .with_children(|button| {
+            button.spawn(TextBundle::from_section(
+                label,
+                TextStyle {
+                    font_size: 12.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ));
+        });
+}
+
+pub(super) fn spawn_main_button(
+    parent: &mut ChildBuilder,
+    label: &'static str,
+    action: MainMenuAction,
+) {
+    parent
+        .spawn((menu_button_bundle(44.0), action))
+        .with_children(|button| {
+            button.spawn(TextBundle::from_section(
+                label,
+                TextStyle {
+                    font_size: 17.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ));
+        });
+}
+
+pub(super) fn spawn_save_slot_button(parent: &mut ChildBuilder, index: usize) {
+    parent
+        .spawn((menu_button_bundle(34.0), SaveListAction::Load(index)))
+        .with_children(|button| {
+            button.spawn((
+                TextBundle::from_section(
+                    "",
+                    TextStyle {
+                        font_size: 15.0,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                ),
+                SaveListLabel,
+            ));
+        });
+}
+
+pub(super) fn spawn_save_back_button(parent: &mut ChildBuilder) {
+    parent
+        .spawn((menu_button_bundle(38.0), SaveListAction::Back))
+        .with_children(|button| {
+            button.spawn((
+                TextBundle::from_section(
+                    "Back",
+                    TextStyle {
+                        font_size: 16.0,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                ),
+                SaveListLabel,
+            ));
+        });
+}
+
+fn menu_button_bundle(height: f32) -> ButtonBundle {
+    ButtonBundle {
+        style: Style {
+            width: Val::Percent(100.0),
+            min_width: Val::Px(92.0),
+            height: Val::Px(height),
+            border: UiRect::all(Val::Px(1.0)),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        border_color: BUTTON_BORDER.into(),
+        background_color: BUTTON_BG.into(),
+        ..default()
+    }
+}
+
+pub(super) fn slot_color(kind: BlockKind) -> Color {
+    match kind {
+        BlockKind::Solid => Color::srgb(0.38, 0.39, 0.40),
+        BlockKind::Glass => Color::srgb(0.42, 0.66, 0.76),
+        BlockKind::Generator => Color::srgb(0.42, 0.20, 0.56),
+        BlockKind::Welder => Color::srgb(0.62, 0.12, 0.12),
+        BlockKind::Conveyor => Color::srgb(0.08, 0.20, 0.26),
+        BlockKind::Piston => Color::srgb(0.66, 0.43, 0.20),
+        BlockKind::Goal => Color::srgb(0.24, 0.56, 0.30),
+        BlockKind::Material => Color::srgb(0.74, 0.74, 0.78),
+        BlockKind::WeldPoint => Color::srgb(0.86, 0.16, 0.12),
+    }
+}
+
+pub(super) fn short_item_name(kind: BlockKind) -> &'static str {
+    match kind {
+        BlockKind::Solid => "Solid",
+        BlockKind::Glass => "Glass",
+        BlockKind::Generator => "Gen",
+        BlockKind::Welder => "Weld",
+        BlockKind::Conveyor => "Belt",
+        BlockKind::Piston => "Piston",
+        BlockKind::Goal => "Goal",
+        BlockKind::Material => "Mat",
+        BlockKind::WeldPoint => "Point",
+    }
+}

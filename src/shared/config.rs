@@ -5,7 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-use crate::save::SAVE_DIR;
+use crate::shared::save::SAVE_DIR;
 
 pub const CONFIG_FILE: &str = "config.ron";
 

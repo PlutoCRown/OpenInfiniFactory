@@ -1,0 +1,268 @@
+use bevy::prelude::*;
+
+use crate::game::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
+use crate::game::ui::{
+    CarriedItem, InventoryItems, MainMenuAction, PauseAction, PendingKeyBind, SaveListAction,
+    SettingsAction, SettingsTab,
+};
+use crate::game::world::grid::{seed_demo_world, WorldBlocks};
+use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity};
+use crate::shared::config::{key_from_input, open_config_folder, save_config, GameConfig};
+use crate::shared::save::{load_world, next_world_name, save_world, SaveState};
+
+pub fn main_menu_actions(
+    mut exit: EventWriter<AppExit>,
+    mut mode: ResMut<GameMode>,
+    mut builder_mode: ResMut<BuilderMode>,
+    mut inventory: ResMut<InventoryItems>,
+    mut carried: ResMut<CarriedItem>,
+    mut placement: ResMut<PlacementState>,
+    mut save_state: ResMut<SaveState>,
+    mut commands: Commands,
+    mut world: ResMut<WorldBlocks>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    block_entities: Query<Entity, With<BlockEntity>>,
+    mut interactions: Query<(&Interaction, &MainMenuAction), (Changed<Interaction>, With<Button>)>,
+) {
+    if *mode != GameMode::MainMenu {
+        return;
+    }
+
+    for (interaction, action) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        match action {
+            MainMenuAction::NewWorld => {
+                let name = next_world_name(&save_state.slots);
+                world.blocks.clear();
+                seed_demo_world(&mut world);
+                save_world(&world, &name);
+                save_state.current = Some(name);
+                save_state.refresh();
+                reset_builder_state(
+                    &mut builder_mode,
+                    &mut inventory,
+                    &mut carried,
+                    &mut placement,
+                );
+                despawn_world(&mut commands, &block_entities);
+                rebuild_world(&mut commands, &world, &mut meshes, &mut materials);
+                *mode = GameMode::Playing;
+            }
+            MainMenuAction::OpenSaveList => {
+                save_state.refresh();
+                *mode = GameMode::SaveListMain;
+            }
+            MainMenuAction::Quit => {
+                exit.send(AppExit::Success);
+            }
+        }
+    }
+}
+
+pub fn save_list_actions(
+    mut mode: ResMut<GameMode>,
+    mut builder_mode: ResMut<BuilderMode>,
+    mut inventory: ResMut<InventoryItems>,
+    mut carried: ResMut<CarriedItem>,
+    mut placement: ResMut<PlacementState>,
+    mut save_state: ResMut<SaveState>,
+    mut commands: Commands,
+    mut world: ResMut<WorldBlocks>,
+    mut simulation: ResMut<SimulationState>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    block_entities: Query<Entity, With<BlockEntity>>,
+    mut interactions: Query<(&Interaction, &SaveListAction), (Changed<Interaction>, With<Button>)>,
+) {
+    if !matches!(*mode, GameMode::SaveListMain | GameMode::SaveListPause) {
+        return;
+    }
+
+    for (interaction, action) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        match *action {
+            SaveListAction::Load(index) => {
+                let Some(name) = save_state.slots.get(index).cloned() else {
+                    continue;
+                };
+                if load_world(&mut world, &name) {
+                    save_state.current = Some(name);
+                    simulation.running = false;
+                    simulation.turn = 0;
+                    simulation.accumulator = 0.0;
+                    reset_builder_state(
+                        &mut builder_mode,
+                        &mut inventory,
+                        &mut carried,
+                        &mut placement,
+                    );
+                    despawn_world(&mut commands, &block_entities);
+                    rebuild_world(&mut commands, &world, &mut meshes, &mut materials);
+                    *mode = GameMode::Playing;
+                }
+            }
+            SaveListAction::Back => {
+                *mode = match *mode {
+                    GameMode::SaveListPause => GameMode::Paused,
+                    _ => GameMode::MainMenu,
+                };
+            }
+        }
+    }
+}
+
+pub fn pause_menu_actions(
+    mut exit: EventWriter<AppExit>,
+    mut builder_mode: ResMut<BuilderMode>,
+    mut simulation: ResMut<SimulationState>,
+    mut inventory: ResMut<InventoryItems>,
+    mut carried: ResMut<CarriedItem>,
+    mut placement: ResMut<PlacementState>,
+    mut mode: ResMut<GameMode>,
+    mut save_state: ResMut<SaveState>,
+    mut world: ResMut<WorldBlocks>,
+    mut commands: Commands,
+    block_entities: Query<Entity, With<BlockEntity>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut interactions: Query<(&Interaction, &PauseAction), (Changed<Interaction>, With<Button>)>,
+) {
+    if *mode != GameMode::Paused {
+        return;
+    }
+
+    for (interaction, action) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        match action {
+            PauseAction::Resume => *mode = GameMode::Playing,
+            PauseAction::ToggleBuilderMode => {
+                *builder_mode = match *builder_mode {
+                    BuilderMode::Edit => {
+                        simulation.running = false;
+                        simulation.accumulator = 0.0;
+                        BuilderMode::Play
+                    }
+                    BuilderMode::Play => BuilderMode::Edit,
+                };
+                *inventory = InventoryItems::for_mode(*builder_mode);
+                carried.clear();
+                placement.selected = 0;
+            }
+            PauseAction::SaveWorld => {
+                let name = save_state
+                    .current
+                    .clone()
+                    .unwrap_or_else(|| next_world_name(&save_state.slots));
+                if save_world(&world, &name) {
+                    save_state.current = Some(name);
+                    save_state.refresh();
+                }
+            }
+            PauseAction::OpenSaveList => {
+                save_state.refresh();
+                *mode = GameMode::SaveListPause;
+            }
+            PauseAction::OpenSettings => {
+                *mode = GameMode::Settings;
+            }
+            PauseAction::BackToMainMenu => {
+                simulation.running = false;
+                simulation.accumulator = 0.0;
+                world.blocks.clear();
+                save_state.current = None;
+                despawn_world(&mut commands, &block_entities);
+                rebuild_world(&mut commands, &world, &mut meshes, &mut materials);
+                *mode = GameMode::MainMenu;
+            }
+            PauseAction::Quit => {
+                exit.send(AppExit::Success);
+            }
+        }
+    }
+}
+
+pub fn settings_menu_actions(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut mode: ResMut<GameMode>,
+    mut settings: ResMut<GameSettings>,
+    mut config: ResMut<GameConfig>,
+    mut settings_tab: ResMut<SettingsTab>,
+    mut pending_key_bind: ResMut<PendingKeyBind>,
+    mut interactions: Query<(&Interaction, &SettingsAction), (Changed<Interaction>, With<Button>)>,
+) {
+    if *mode != GameMode::Settings {
+        pending_key_bind.0 = None;
+        return;
+    }
+
+    if let Some(action) = pending_key_bind.0 {
+        if let Some(key) = key_from_input(&keys) {
+            config.set_key(action, key);
+            save_config(&config);
+            pending_key_bind.0 = None;
+        }
+    }
+
+    for (interaction, action) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        match *action {
+            SettingsAction::TabGameplay => {
+                *settings_tab = SettingsTab::Gameplay;
+            }
+            SettingsAction::TabKeyBindings => {
+                *settings_tab = SettingsTab::KeyBindings;
+            }
+            SettingsAction::FovDown => {
+                settings.fov_degrees = (settings.fov_degrees - 5.0).clamp(50.0, 110.0);
+                config.fov_degrees = settings.fov_degrees;
+                save_config(&config);
+            }
+            SettingsAction::FovUp => {
+                settings.fov_degrees = (settings.fov_degrees + 5.0).clamp(50.0, 110.0);
+                config.fov_degrees = settings.fov_degrees;
+                save_config(&config);
+            }
+            SettingsAction::Bind(action) => {
+                pending_key_bind.0 = Some(action);
+            }
+            SettingsAction::ResetDefaults => {
+                *config = GameConfig::default();
+                settings.fov_degrees = config.fov_degrees;
+                pending_key_bind.0 = None;
+                save_config(&config);
+            }
+            SettingsAction::OpenFolder => {
+                open_config_folder();
+            }
+            SettingsAction::Back => {
+                pending_key_bind.0 = None;
+                *mode = GameMode::Paused;
+            }
+        }
+    }
+}
+
+fn reset_builder_state(
+    builder_mode: &mut BuilderMode,
+    inventory: &mut InventoryItems,
+    carried: &mut CarriedItem,
+    placement: &mut PlacementState,
+) {
+    *builder_mode = BuilderMode::Edit;
+    *inventory = InventoryItems::for_mode(*builder_mode);
+    carried.clear();
+    placement.selected = 0;
+}

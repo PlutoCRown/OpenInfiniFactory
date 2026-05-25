@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
-use crate::blocks::Facing;
-use crate::world::TargetHit;
+use crate::game::world::blocks::Facing;
+use crate::game::world::grid::TargetHit;
 
 #[derive(Resource)]
 pub struct PlacementState {

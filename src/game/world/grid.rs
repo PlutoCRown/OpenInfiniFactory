@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::blocks::{BlockData, BlockKind, Facing};
+use crate::game::world::blocks::{BlockData, BlockKind, Facing};
 
 pub const REACH: f32 = 8.0;
 pub const FLOOR_RADIUS: i32 = 12;

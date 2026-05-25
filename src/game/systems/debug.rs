@@ -1,10 +1,10 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
-use crate::config::{ConfigAction, GameConfig};
-use crate::inventory::PendingKeyBind;
-use crate::player::{player_collision_box, FlyCamera};
-use crate::state::GameMode;
+use crate::game::player::controller::{player_collision_box, FlyCamera};
+use crate::game::state::GameMode;
+use crate::game::ui::PendingKeyBind;
+use crate::shared::config::{ConfigAction, GameConfig};
 
 #[derive(Resource, Default)]
 pub struct DebugState {

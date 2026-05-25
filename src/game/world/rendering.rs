@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
-use crate::blocks::{BlockData, BlockKind, BLOCK_SIZE};
-use crate::world::{grid_to_world, WorldBlocks};
+use crate::game::world::blocks::{BlockData, BlockKind, BLOCK_SIZE};
+use crate::game::world::grid::{grid_to_world, WorldBlocks};
 
 #[derive(Component)]
 pub struct BlockEntity;
