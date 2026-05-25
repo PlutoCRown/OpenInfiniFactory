@@ -71,7 +71,7 @@ pub fn seed_demo_world(world: &mut WorldBlocks) {
 }
 
 pub fn grid_to_world(pos: IVec3) -> Vec3 {
-    Vec3::new(pos.x as f32, pos.y as f32 + 0.5, pos.z as f32)
+    pos.as_vec3() + Vec3::splat(0.5)
 }
 
 pub fn raycast_blocks(origin: Vec3, dir: Vec3, world: &WorldBlocks) -> Option<TargetHit> {
