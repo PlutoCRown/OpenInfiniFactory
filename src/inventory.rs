@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::blocks::{BlockKind, PLACEABLE_BLOCKS};
+use crate::blocks::{BlockKind, EDIT_BLOCKS, PLAY_BLOCKS};
 use crate::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
 
 pub const HOTBAR_SLOTS: usize = 9;
@@ -11,6 +11,9 @@ pub struct HotbarText;
 
 #[derive(Component)]
 pub struct BackpackPanel;
+
+#[derive(Component)]
+pub struct InventoryTitle;
 
 #[derive(Component)]
 pub struct PausePanel;
@@ -60,14 +63,25 @@ pub struct InventoryItems {
 
 impl Default for InventoryItems {
     fn default() -> Self {
+        Self::for_mode(BuilderMode::default())
+    }
+}
+
+impl InventoryItems {
+    pub fn for_mode(mode: BuilderMode) -> Self {
+        let blocks: &[BlockKind] = match mode {
+            BuilderMode::Edit => &EDIT_BLOCKS,
+            BuilderMode::Play => &PLAY_BLOCKS,
+        };
+
         let mut hotbar = [None; HOTBAR_SLOTS];
-        for (index, kind) in PLACEABLE_BLOCKS.iter().enumerate() {
+        for (index, kind) in blocks.iter().enumerate() {
             hotbar[index] = Some(*kind);
         }
 
         let mut backpack = [None; BACKPACK_SLOTS];
         for index in 0..BACKPACK_SLOTS {
-            backpack[index] = Some(PLACEABLE_BLOCKS[index % PLACEABLE_BLOCKS.len()]);
+            backpack[index] = Some(blocks[index % blocks.len()]);
         }
 
         Self { hotbar, backpack }
@@ -80,6 +94,12 @@ pub struct CarriedItem(Option<BlockKind>);
 impl Default for CarriedItem {
     fn default() -> Self {
         Self(None)
+    }
+}
+
+impl CarriedItem {
+    pub fn clear(&mut self) {
+        self.0 = None;
     }
 }
 
@@ -235,13 +255,16 @@ pub fn setup_ui(mut commands: Commands) {
                 BackpackPanel,
             ))
             .with_children(|panel| {
-                panel.spawn(TextBundle::from_section(
-                    "Inventory",
-                    TextStyle {
-                        font_size: 24.0,
-                        color: Color::srgb(0.94, 0.94, 0.92),
-                        ..default()
-                    },
+                panel.spawn((
+                    TextBundle::from_section(
+                        "",
+                        TextStyle {
+                            font_size: 24.0,
+                            color: Color::srgb(0.94, 0.94, 0.92),
+                            ..default()
+                        },
+                    ),
+                    InventoryTitle,
                 ));
 
                 panel
@@ -402,28 +425,23 @@ pub fn inventory_slot_clicks(
     }
 }
 
-pub fn update_ui(
+pub fn update_status_ui(
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
-    mode: Res<GameMode>,
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
     settings: Res<GameSettings>,
     carried: Res<CarriedItem>,
     mut hotbar: Query<&mut Text, (With<HotbarText>, Without<SlotLabel>, Without<CarriedLabel>)>,
-    mut panels: Query<&mut Style, With<BackpackPanel>>,
-    mut pause_panels: Query<&mut Style, (With<PausePanel>, Without<BackpackPanel>)>,
-    mut crosshair: Query<&mut Visibility, With<Crosshair>>,
-    mut slot_query: Query<
+    mut inventory_title: Query<
+        &mut Text,
         (
-            &InventorySlot,
-            &Children,
-            &mut BackgroundColor,
-            &mut BorderColor,
+            With<InventoryTitle>,
+            Without<HotbarText>,
+            Without<SlotLabel>,
+            Without<CarriedLabel>,
         ),
-        With<Button>,
     >,
-    mut labels: Query<&mut Text, (With<SlotLabel>, Without<HotbarText>, Without<CarriedLabel>)>,
     mut carried_label: Query<
         &mut Text,
         (
@@ -465,54 +483,8 @@ pub fn update_ui(
         );
     }
 
-    for mut style in &mut panels {
-        style.display = if *mode == GameMode::Inventory {
-            Display::Flex
-        } else {
-            Display::None
-        };
-    }
-
-    for mut style in &mut pause_panels {
-        style.display = if *mode == GameMode::Paused {
-            Display::Flex
-        } else {
-            Display::None
-        };
-    }
-
-    for mut visibility in &mut crosshair {
-        *visibility = if *mode == GameMode::Playing {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
-    }
-
-    for (slot, children, mut background, mut border) in &mut slot_query {
-        let item = match slot.area {
-            SlotArea::Hotbar => inventory.hotbar[slot.index],
-            SlotArea::Backpack => inventory.backpack[slot.index],
-        };
-
-        let selected_hotbar = slot.area == SlotArea::Hotbar && slot.index == placement.selected;
-        *background = item
-            .map(slot_color)
-            .unwrap_or(Color::srgba(0.16, 0.16, 0.17, 0.92))
-            .into();
-        *border = if selected_hotbar {
-            Color::srgb(1.0, 1.0, 1.0).into()
-        } else {
-            Color::srgb(0.22, 0.22, 0.22).into()
-        };
-
-        for child in children.iter() {
-            if let Ok(mut text) = labels.get_mut(*child) {
-                text.sections[0].value = item
-                    .map(|kind| short_item_name(kind).to_string())
-                    .unwrap_or_default();
-            }
-        }
+    if let Ok(mut text) = inventory_title.get_single_mut() {
+        text.sections[0].value = format!("Inventory - {} Mode", builder_mode_name(*builder_mode));
     }
 
     if let Ok(mut text) = carried_label.get_single_mut() {
@@ -538,6 +510,78 @@ pub fn update_ui(
             },
             simulation.speed
         );
+    }
+}
+
+pub fn update_panel_visibility(
+    mode: Res<GameMode>,
+    mut panels: Query<&mut Style, With<BackpackPanel>>,
+    mut pause_panels: Query<&mut Style, (With<PausePanel>, Without<BackpackPanel>)>,
+    mut crosshair: Query<&mut Visibility, With<Crosshair>>,
+) {
+    for mut style in &mut panels {
+        style.display = if *mode == GameMode::Inventory {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    for mut style in &mut pause_panels {
+        style.display = if *mode == GameMode::Paused {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    for mut visibility in &mut crosshair {
+        *visibility = if *mode == GameMode::Playing {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+}
+
+pub fn update_inventory_slots(
+    placement: Res<PlacementState>,
+    inventory: Res<InventoryItems>,
+    mut slot_query: Query<
+        (
+            &InventorySlot,
+            &Children,
+            &mut BackgroundColor,
+            &mut BorderColor,
+        ),
+        With<Button>,
+    >,
+    mut labels: Query<&mut Text, (With<SlotLabel>, Without<HotbarText>, Without<CarriedLabel>)>,
+) {
+    for (slot, children, mut background, mut border) in &mut slot_query {
+        let item = match slot.area {
+            SlotArea::Hotbar => inventory.hotbar[slot.index],
+            SlotArea::Backpack => inventory.backpack[slot.index],
+        };
+
+        let selected_hotbar = slot.area == SlotArea::Hotbar && slot.index == placement.selected;
+        *background = item
+            .map(slot_color)
+            .unwrap_or(Color::srgba(0.16, 0.16, 0.17, 0.92))
+            .into();
+        *border = if selected_hotbar {
+            Color::srgb(1.0, 1.0, 1.0).into()
+        } else {
+            Color::srgb(0.22, 0.22, 0.22).into()
+        };
+
+        for child in children.iter() {
+            if let Ok(mut text) = labels.get_mut(*child) {
+                text.sections[0].value = item
+                    .map(|kind| short_item_name(kind).to_string())
+                    .unwrap_or_default();
+            }
+        }
     }
 }
 

@@ -140,6 +140,9 @@ pub fn pause_menu_actions(
     mut settings: ResMut<GameSettings>,
     mut builder_mode: ResMut<BuilderMode>,
     mut simulation: ResMut<SimulationState>,
+    mut inventory: ResMut<InventoryItems>,
+    mut carried: ResMut<inventory::CarriedItem>,
+    mut placement: ResMut<PlacementState>,
     mut mode: ResMut<GameMode>,
     mut interactions: Query<
         (&Interaction, &inventory::PauseAction),
@@ -166,6 +169,9 @@ pub fn pause_menu_actions(
                     }
                     BuilderMode::Play => BuilderMode::Edit,
                 };
+                *inventory = InventoryItems::for_mode(*builder_mode);
+                carried.clear();
+                placement.selected = 0;
             }
             inventory::PauseAction::FovDown => {
                 settings.fov_degrees = (settings.fov_degrees - 5.0).clamp(50.0, 110.0);

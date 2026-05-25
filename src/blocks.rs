@@ -2,14 +2,14 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub const BLOCK_SIZE: f32 = 1.0;
-pub const PLACEABLE_BLOCKS: [BlockKind; 7] = [
-    BlockKind::Solid,
-    BlockKind::Glass,
+
+pub const EDIT_BLOCKS: [BlockKind; 3] = [BlockKind::Solid, BlockKind::Glass, BlockKind::Goal];
+
+pub const PLAY_BLOCKS: [BlockKind; 4] = [
     BlockKind::Generator,
     BlockKind::Welder,
     BlockKind::Conveyor,
     BlockKind::Piston,
-    BlockKind::Goal,
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

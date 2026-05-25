@@ -71,12 +71,24 @@ fn main() {
                 simulation::tick_simulation,
                 apply_fov,
                 update_hover,
+            ),
+        )
+        .add_systems(
+            Update,
+            (
+                inventory::inventory_slot_clicks,
+                inventory::update_status_ui,
+                inventory::update_panel_visibility,
+                inventory::update_inventory_slots,
+                sync_cursor_grab,
+            ),
+        )
+        .add_systems(
+            Update,
+            (
                 debug::toggle_debug,
                 debug::update_debug_ui,
                 debug::draw_player_collider,
-                inventory::inventory_slot_clicks,
-                inventory::update_ui,
-                sync_cursor_grab,
             ),
         )
         .run();
