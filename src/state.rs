@@ -25,6 +25,7 @@ pub enum GameMode {
     MainMenu,
     SaveListMain,
     SaveListPause,
+    Settings,
     Playing,
     Inventory,
     Paused,

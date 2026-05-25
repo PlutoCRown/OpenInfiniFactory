@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::blocks::{BlockData, BlockKind};
+use crate::config::{key_from_input, open_config_folder, save_config, ConfigAction, GameConfig};
 use crate::inventory::{self, InventoryItems, HOTBAR_SLOTS};
 use crate::player::{player_intersects_block, FlyCamera};
 use crate::rendering::{despawn_world, rebuild_world, BlockEntity, HoverMarker};
@@ -11,14 +12,23 @@ use crate::world::{grid_to_world, raycast_blocks, seed_demo_world, WorldBlocks};
 
 pub fn gameplay_input(
     keys: Res<ButtonInput<KeyCode>>,
+    config: Res<GameConfig>,
     simulation: Res<SimulationState>,
+    pending_key_bind: Res<inventory::PendingKeyBind>,
     mut mode: ResMut<GameMode>,
     mut placement: ResMut<PlacementState>,
 ) {
-    if keys.just_pressed(KeyCode::Escape) {
+    let bindings = &config.key_bindings;
+
+    if *mode == GameMode::Settings && pending_key_bind.0.is_some() {
+        return;
+    }
+
+    if keys.just_pressed(bindings.pause.key_code()) {
         *mode = match *mode {
             GameMode::Playing | GameMode::Inventory => GameMode::Paused,
             GameMode::Paused => GameMode::Playing,
+            GameMode::Settings => GameMode::Paused,
             GameMode::SaveListPause => GameMode::Paused,
             GameMode::SaveListMain => GameMode::MainMenu,
             other => other,
@@ -29,7 +39,7 @@ pub fn gameplay_input(
         return;
     }
 
-    if keys.just_pressed(KeyCode::KeyE) || keys.just_pressed(KeyCode::KeyI) {
+    if keys.just_pressed(bindings.inventory.key_code()) {
         *mode = if *mode == GameMode::Inventory {
             GameMode::Playing
         } else {
@@ -53,7 +63,7 @@ pub fn gameplay_input(
         }
     }
 
-    if keys.just_pressed(KeyCode::KeyR) && !simulation.is_active() {
+    if keys.just_pressed(bindings.rotate_or_rollback.key_code()) && !simulation.is_active() {
         placement.facing = placement.facing.rotate();
     }
 }
@@ -240,7 +250,6 @@ pub fn save_list_actions(
 
 pub fn pause_menu_actions(
     mut exit: EventWriter<AppExit>,
-    mut settings: ResMut<GameSettings>,
     mut builder_mode: ResMut<BuilderMode>,
     mut simulation: ResMut<SimulationState>,
     mut inventory: ResMut<InventoryItems>,
@@ -296,6 +305,9 @@ pub fn pause_menu_actions(
                 save_state.refresh();
                 *mode = GameMode::SaveListPause;
             }
+            inventory::PauseAction::OpenSettings => {
+                *mode = GameMode::Settings;
+            }
             inventory::PauseAction::BackToMainMenu => {
                 simulation.running = false;
                 simulation.accumulator = 0.0;
@@ -305,12 +317,6 @@ pub fn pause_menu_actions(
                 rebuild_world(&mut commands, &world, &mut meshes, &mut materials);
                 *mode = GameMode::MainMenu;
             }
-            inventory::PauseAction::FovDown => {
-                settings.fov_degrees = (settings.fov_degrees - 5.0).clamp(50.0, 110.0);
-            }
-            inventory::PauseAction::FovUp => {
-                settings.fov_degrees = (settings.fov_degrees + 5.0).clamp(50.0, 110.0);
-            }
             inventory::PauseAction::Quit => {
                 exit.send(AppExit::Success);
             }
@@ -318,8 +324,76 @@ pub fn pause_menu_actions(
     }
 }
 
+pub fn settings_menu_actions(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut mode: ResMut<GameMode>,
+    mut settings: ResMut<GameSettings>,
+    mut config: ResMut<GameConfig>,
+    mut settings_tab: ResMut<inventory::SettingsTab>,
+    mut pending_key_bind: ResMut<inventory::PendingKeyBind>,
+    mut interactions: Query<
+        (&Interaction, &inventory::SettingsAction),
+        (Changed<Interaction>, With<Button>),
+    >,
+) {
+    if *mode != GameMode::Settings {
+        pending_key_bind.0 = None;
+        return;
+    }
+
+    if let Some(action) = pending_key_bind.0 {
+        if let Some(key) = key_from_input(&keys) {
+            config.set_key(action, key);
+            save_config(&config);
+            pending_key_bind.0 = None;
+        }
+    }
+
+    for (interaction, action) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        match *action {
+            inventory::SettingsAction::TabGameplay => {
+                *settings_tab = inventory::SettingsTab::Gameplay;
+            }
+            inventory::SettingsAction::TabKeyBindings => {
+                *settings_tab = inventory::SettingsTab::KeyBindings;
+            }
+            inventory::SettingsAction::FovDown => {
+                settings.fov_degrees = (settings.fov_degrees - 5.0).clamp(50.0, 110.0);
+                config.fov_degrees = settings.fov_degrees;
+                save_config(&config);
+            }
+            inventory::SettingsAction::FovUp => {
+                settings.fov_degrees = (settings.fov_degrees + 5.0).clamp(50.0, 110.0);
+                config.fov_degrees = settings.fov_degrees;
+                save_config(&config);
+            }
+            inventory::SettingsAction::Bind(action) => {
+                pending_key_bind.0 = Some(action);
+            }
+            inventory::SettingsAction::ResetDefaults => {
+                *config = GameConfig::default();
+                settings.fov_degrees = config.fov_degrees;
+                pending_key_bind.0 = None;
+                save_config(&config);
+            }
+            inventory::SettingsAction::OpenFolder => {
+                open_config_folder();
+            }
+            inventory::SettingsAction::Back => {
+                pending_key_bind.0 = None;
+                *mode = GameMode::Paused;
+            }
+        }
+    }
+}
+
 pub fn simulation_controls(
     keys: Res<ButtonInput<KeyCode>>,
+    config: Res<GameConfig>,
     mut commands: Commands,
     mut interactions: Query<
         (&Interaction, &inventory::SimulationAction),
@@ -337,16 +411,19 @@ pub fn simulation_controls(
         return;
     }
 
-    if keys.just_pressed(KeyCode::KeyF) {
+    let simulate_key = config.key(ConfigAction::Simulate).key_code();
+    let rollback_key = config.key(ConfigAction::RotateOrRollback).key_code();
+
+    if keys.just_pressed(simulate_key) {
         simulation.running = true;
     }
-    simulation.speed = if simulation.running && keys.pressed(KeyCode::KeyF) {
+    simulation.speed = if simulation.running && keys.pressed(simulate_key) {
         4.0
     } else {
         1.0
     };
 
-    if keys.just_pressed(KeyCode::KeyR) && simulation.is_active() {
+    if keys.just_pressed(rollback_key) && simulation.is_active() {
         rollback_simulation(&mut simulation, &mut world);
         despawn_world(&mut commands, &block_entities);
         rebuild_world(&mut commands, &world, &mut meshes, &mut materials);

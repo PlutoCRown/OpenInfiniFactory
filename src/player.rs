@@ -2,6 +2,7 @@ use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 
+use crate::config::{ConfigAction, GameConfig};
 use crate::state::GameMode;
 use crate::world::WorldBlocks;
 
@@ -47,6 +48,7 @@ pub fn spawn_player(mut commands: Commands) {
 pub fn camera_move(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
+    config: Res<GameConfig>,
     mode: Res<GameMode>,
     world: Res<WorldBlocks>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
@@ -60,7 +62,11 @@ pub fn camera_move(
     };
 
     let now = time.elapsed_seconds();
-    if keys.just_pressed(KeyCode::Space) {
+    let bindings = &config.key_bindings;
+    let jump_key = bindings.jump_or_fly_up.key_code();
+    let fly_down_key = bindings.fly_down.key_code();
+
+    if keys.just_pressed(jump_key) {
         if now - camera.last_space_press <= DOUBLE_TAP_WINDOW {
             camera.flying = !camera.flying;
             camera.velocity_y = 0.0;
@@ -77,16 +83,16 @@ pub fn camera_move(
     let forward = yaw_rotation * Vec3::NEG_Z;
     let right = yaw_rotation * Vec3::X;
 
-    if keys.pressed(KeyCode::KeyW) {
+    if keys.pressed(config.key(ConfigAction::Forward).key_code()) {
         direction += forward;
     }
-    if keys.pressed(KeyCode::KeyS) {
+    if keys.pressed(config.key(ConfigAction::Backward).key_code()) {
         direction -= forward;
     }
-    if keys.pressed(KeyCode::KeyD) {
+    if keys.pressed(config.key(ConfigAction::Right).key_code()) {
         direction += right;
     }
-    if keys.pressed(KeyCode::KeyA) {
+    if keys.pressed(config.key(ConfigAction::Left).key_code()) {
         direction -= right;
     }
 
@@ -103,10 +109,10 @@ pub fn camera_move(
 
     if camera.flying {
         let mut vertical = 0.0;
-        if keys.pressed(KeyCode::Space) {
+        if keys.pressed(jump_key) {
             vertical += 1.0;
         }
-        if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
+        if keys.pressed(fly_down_key) {
             vertical -= 1.0;
         }
         if vertical != 0.0 {

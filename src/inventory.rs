@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::blocks::{BlockKind, EDIT_BLOCKS, PLAY_BLOCKS};
+use crate::config::{ConfigAction, GameConfig};
 use crate::save::{SaveState, SAVE_SLOTS};
 use crate::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
 
@@ -18,6 +19,24 @@ pub struct InventoryTitle;
 
 #[derive(Component)]
 pub struct PausePanel;
+
+#[derive(Component)]
+pub struct SettingsPanel;
+
+#[derive(Component)]
+pub struct SettingsStatusText;
+
+#[derive(Component)]
+pub struct SettingsGameplayGroup;
+
+#[derive(Component)]
+pub struct SettingsKeyBindingsGroup;
+
+#[derive(Component)]
+pub struct KeyBindingLabel;
+
+#[derive(Component, Clone, Copy)]
+pub struct KeyBindingButton(pub ConfigAction);
 
 #[derive(Component)]
 pub struct MainMenuPanel;
@@ -49,9 +68,8 @@ pub enum PauseAction {
     ToggleBuilderMode,
     SaveWorld,
     OpenSaveList,
+    OpenSettings,
     BackToMainMenu,
-    FovDown,
-    FovUp,
     Quit,
 }
 
@@ -72,6 +90,33 @@ pub enum MainMenuAction {
 pub enum SaveListAction {
     Load(usize),
     Back,
+}
+
+#[derive(Component, Clone, Copy)]
+pub enum SettingsAction {
+    TabGameplay,
+    TabKeyBindings,
+    FovDown,
+    FovUp,
+    Bind(ConfigAction),
+    ResetDefaults,
+    OpenFolder,
+    Back,
+}
+
+#[derive(Resource, Clone, Copy, Eq, PartialEq)]
+pub enum SettingsTab {
+    Gameplay,
+    KeyBindings,
+}
+
+#[derive(Resource, Default)]
+pub struct PendingKeyBind(pub Option<ConfigAction>);
+
+impl Default for SettingsTab {
+    fn default() -> Self {
+        Self::Gameplay
+    }
 }
 
 #[derive(Component)]
@@ -252,7 +297,7 @@ pub fn setup_ui(mut commands: Commands) {
                 ..default()
             })
             .with_children(|bar| {
-                spawn_sim_button(bar, "F Play", SimulationAction::ToggleRun);
+                spawn_sim_button(bar, "Play", SimulationAction::ToggleRun);
                 spawn_sim_button(bar, "Rollback", SimulationAction::Rollback);
             });
 
@@ -390,23 +435,90 @@ pub fn setup_ui(mut commands: Commands) {
                 );
                 spawn_pause_button(panel, "Save World", PauseAction::SaveWorld);
                 spawn_pause_button(panel, "Switch Save", PauseAction::OpenSaveList);
+                spawn_pause_button(panel, "Settings", PauseAction::OpenSettings);
+                spawn_pause_button(panel, "Back to Main Menu", PauseAction::BackToMainMenu);
+                spawn_pause_button(panel, "Quit Game", PauseAction::Quit);
+            });
+
+            root.spawn((
+                NodeBundle {
+                    style: Style {
+                        width: Val::Px(760.0),
+                        height: Val::Px(560.0),
+                        position_type: PositionType::Absolute,
+                        left: Val::Percent(50.0),
+                        top: Val::Percent(50.0),
+                        margin: UiRect {
+                            left: Val::Px(-380.0),
+                            top: Val::Px(-280.0),
+                            ..default()
+                        },
+                        padding: UiRect::all(Val::Px(20.0)),
+                        display: Display::None,
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(12.0),
+                        ..default()
+                    },
+                    background_color: Color::srgba(0.08, 0.09, 0.10, 0.97).into(),
+                    ..default()
+                },
+                SettingsPanel,
+            ))
+            .with_children(|panel| {
+                panel.spawn(TextBundle::from_section(
+                    "Settings",
+                    TextStyle {
+                        font_size: 30.0,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                ));
 
                 panel
                     .spawn(NodeBundle {
                         style: Style {
                             width: Val::Percent(100.0),
-                            height: Val::Px(42.0),
+                            height: Val::Px(40.0),
                             display: Display::Flex,
-                            align_items: AlignItems::Center,
-                            justify_content: JustifyContent::SpaceBetween,
                             column_gap: Val::Px(8.0),
                             ..default()
                         },
                         background_color: Color::NONE.into(),
                         ..default()
                     })
+                    .with_children(|tabs| {
+                        spawn_settings_button(tabs, "Gameplay", SettingsAction::TabGameplay);
+                        spawn_settings_button(tabs, "Key Bindings", SettingsAction::TabKeyBindings);
+                    });
+
+                panel.spawn((
+                    TextBundle::from_section(
+                        "",
+                        TextStyle {
+                            font_size: 16.0,
+                            color: Color::srgb(0.84, 0.92, 1.0),
+                            ..default()
+                        },
+                    ),
+                    SettingsStatusText,
+                ));
+
+                panel
+                    .spawn(NodeBundle {
+                        style: Style {
+                            width: Val::Percent(100.0),
+                            height: Val::Px(40.0),
+                            display: Display::Flex,
+                            align_items: AlignItems::Center,
+                            column_gap: Val::Px(8.0),
+                            ..default()
+                        },
+                        background_color: Color::NONE.into(),
+                        ..default()
+                    })
+                    .insert(SettingsGameplayGroup)
                     .with_children(|row| {
-                        spawn_pause_button(row, "FOV -", PauseAction::FovDown);
+                        spawn_settings_button(row, "FOV -", SettingsAction::FovDown);
                         row.spawn((
                             TextBundle::from_section(
                                 "",
@@ -418,11 +530,56 @@ pub fn setup_ui(mut commands: Commands) {
                             ),
                             FovText,
                         ));
-                        spawn_pause_button(row, "FOV +", PauseAction::FovUp);
+                        spawn_settings_button(row, "FOV +", SettingsAction::FovUp);
                     });
 
-                spawn_pause_button(panel, "Back to Main Menu", PauseAction::BackToMainMenu);
-                spawn_pause_button(panel, "Quit Game", PauseAction::Quit);
+                panel
+                    .spawn(NodeBundle {
+                        style: Style {
+                            display: Display::Grid,
+                            grid_template_columns: RepeatedGridTrack::flex(2, 1.0),
+                            grid_template_rows: RepeatedGridTrack::flex(6, 1.0),
+                            width: Val::Percent(100.0),
+                            height: Val::Px(300.0),
+                            row_gap: Val::Px(6.0),
+                            column_gap: Val::Px(8.0),
+                            ..default()
+                        },
+                        background_color: Color::NONE.into(),
+                        ..default()
+                    })
+                    .insert(SettingsKeyBindingsGroup)
+                    .with_children(|grid| {
+                        for action in ConfigAction::ALL {
+                            spawn_settings_button(
+                                grid,
+                                action.label(),
+                                SettingsAction::Bind(action),
+                            );
+                        }
+                    });
+
+                panel
+                    .spawn(NodeBundle {
+                        style: Style {
+                            width: Val::Percent(100.0),
+                            height: Val::Px(42.0),
+                            display: Display::Flex,
+                            column_gap: Val::Px(8.0),
+                            ..default()
+                        },
+                        background_color: Color::NONE.into(),
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        spawn_settings_button(row, "Reset Defaults", SettingsAction::ResetDefaults);
+                        spawn_settings_button(
+                            row,
+                            "Open Config Folder",
+                            SettingsAction::OpenFolder,
+                        );
+                        spawn_settings_button(row, "Back", SettingsAction::Back);
+                    });
             });
 
             root.spawn((
@@ -622,7 +779,7 @@ pub fn update_status_ui(
             .map(BlockKind::name)
             .unwrap_or("Empty");
         text.sections[0].value = format!(
-            "Mode: {}   Selected: {}   Facing: {}   E: Inventory   ESC: Pause",
+            "Mode: {}   Selected: {}   Facing: {}   Inventory   Pause",
             builder_mode_name(*builder_mode),
             selected,
             placement.facing.name()
@@ -667,10 +824,80 @@ pub fn update_status_ui(
     }
 }
 
+pub fn update_settings_status_ui(
+    config: Res<GameConfig>,
+    settings_tab: Res<SettingsTab>,
+    pending_key_bind: Res<PendingKeyBind>,
+    mut settings_status: Query<
+        &mut Text,
+        (
+            With<SettingsStatusText>,
+            Without<SlotLabel>,
+            Without<HotbarText>,
+            Without<CarriedLabel>,
+            Without<FovText>,
+            Without<SimulationText>,
+            Without<CurrentSaveText>,
+            Without<KeyBindingLabel>,
+        ),
+    >,
+    mut key_labels: Query<
+        (&Parent, &mut Text),
+        (With<KeyBindingLabel>, Without<SettingsStatusText>),
+    >,
+    key_buttons: Query<&KeyBindingButton>,
+) {
+    if let Ok(mut text) = settings_status.get_single_mut() {
+        let tab_name = match *settings_tab {
+            SettingsTab::Gameplay => "Gameplay",
+            SettingsTab::KeyBindings => "Key Bindings",
+        };
+        let pending = pending_key_bind
+            .0
+            .map(|action| format!("Press a key for {}", action.label()))
+            .unwrap_or_else(|| "Click a key binding to rebind it.".to_string());
+        text.sections[0].value = format!(
+            "{tab_name} | Config: saves/config.ron\n{pending}\nSim: {}  Rollback: {}  Inventory: {}  Pause: {}",
+            config.key(ConfigAction::Simulate).name(),
+            config.key(ConfigAction::RotateOrRollback).name(),
+            config.key(ConfigAction::Inventory).name(),
+            config.key(ConfigAction::Pause).name()
+        );
+    }
+
+    for (parent, mut text) in &mut key_labels {
+        let Ok(button) = key_buttons.get(parent.get()) else {
+            continue;
+        };
+        let suffix = pending_key_bind
+            .0
+            .filter(|pending| *pending == button.0)
+            .map(|_| "...")
+            .unwrap_or(config.key(button.0).name());
+        text.sections[0].value = format!("{}: {suffix}", button.0.label());
+    }
+}
+
 pub fn update_panel_visibility(
     mode: Res<GameMode>,
+    settings_tab: Res<SettingsTab>,
     mut main_menu_panels: Query<&mut Style, With<MainMenuPanel>>,
     mut save_list_panels: Query<&mut Style, With<SaveListPanel>>,
+    mut settings_panels: Query<&mut Style, With<SettingsPanel>>,
+    mut settings_gameplay_groups: Query<
+        &mut Style,
+        (
+            With<SettingsGameplayGroup>,
+            Without<SettingsKeyBindingsGroup>,
+        ),
+    >,
+    mut settings_key_groups: Query<
+        &mut Style,
+        (
+            With<SettingsKeyBindingsGroup>,
+            Without<SettingsGameplayGroup>,
+        ),
+    >,
     mut panels: Query<&mut Style, With<BackpackPanel>>,
     mut pause_panels: Query<&mut Style, (With<PausePanel>, Without<BackpackPanel>)>,
     mut crosshair: Query<&mut Visibility, With<Crosshair>>,
@@ -686,6 +913,31 @@ pub fn update_panel_visibility(
     for mut style in &mut save_list_panels {
         style.display = if matches!(*mode, GameMode::SaveListMain | GameMode::SaveListPause) {
             Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    for mut style in &mut settings_panels {
+        style.display = if *mode == GameMode::Settings {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    for mut style in &mut settings_gameplay_groups {
+        style.display = if *mode == GameMode::Settings && *settings_tab == SettingsTab::Gameplay {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    for mut style in &mut settings_key_groups {
+        style.display = if *mode == GameMode::Settings && *settings_tab == SettingsTab::KeyBindings
+        {
+            Display::Grid
         } else {
             Display::None
         };
@@ -870,6 +1122,42 @@ fn spawn_pause_button(parent: &mut ChildBuilder, label: &'static str, action: Pa
                 },
             ));
         });
+}
+
+fn spawn_settings_button(parent: &mut ChildBuilder, label: &'static str, action: SettingsAction) {
+    let mut button = parent.spawn((
+        ButtonBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                min_width: Val::Px(96.0),
+                height: Val::Px(36.0),
+                border: UiRect::all(Val::Px(1.0)),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            border_color: Color::srgb(0.34, 0.36, 0.38).into(),
+            background_color: Color::srgba(0.20, 0.22, 0.24, 0.96).into(),
+            ..default()
+        },
+        action,
+    ));
+    if let SettingsAction::Bind(action) = action {
+        button.insert(KeyBindingButton(action));
+    }
+    button.with_children(|button| {
+        let mut label_entity = button.spawn(TextBundle::from_section(
+            label,
+            TextStyle {
+                font_size: 14.0,
+                color: Color::WHITE,
+                ..default()
+            },
+        ));
+        if matches!(action, SettingsAction::Bind(_)) {
+            label_entity.insert(KeyBindingLabel);
+        }
+    });
 }
 
 fn spawn_sim_button(parent: &mut ChildBuilder, label: &'static str, action: SimulationAction) {

@@ -1,7 +1,10 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
+use crate::config::{ConfigAction, GameConfig};
+use crate::inventory::PendingKeyBind;
 use crate::player::{player_collision_box, FlyCamera};
+use crate::state::GameMode;
 
 #[derive(Resource, Default)]
 pub struct DebugState {
@@ -35,8 +38,18 @@ pub fn setup_debug_ui(mut commands: Commands) {
     ));
 }
 
-pub fn toggle_debug(keys: Res<ButtonInput<KeyCode>>, mut debug: ResMut<DebugState>) {
-    if keys.just_pressed(KeyCode::Slash) {
+pub fn toggle_debug(
+    keys: Res<ButtonInput<KeyCode>>,
+    config: Res<GameConfig>,
+    mode: Res<GameMode>,
+    pending_key_bind: Res<PendingKeyBind>,
+    mut debug: ResMut<DebugState>,
+) {
+    if *mode == GameMode::Settings && pending_key_bind.0.is_some() {
+        return;
+    }
+
+    if keys.just_pressed(config.key(ConfigAction::Debug).key_code()) {
         debug.enabled = !debug.enabled;
     }
 }
