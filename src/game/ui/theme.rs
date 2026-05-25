@@ -1,8 +1,6 @@
 use bevy::prelude::*;
 
 pub const PANEL_BG: Color = Color::srgba(0.08, 0.09, 0.10, 0.96);
-pub const BUTTON_BG: Color = Color::srgba(0.22, 0.24, 0.26, 0.96);
-pub const BUTTON_BORDER: Color = Color::srgb(0.38, 0.39, 0.40);
 pub const STATUS_TEXT: Color = Color::srgb(0.88, 0.96, 1.0);
 
 pub fn panel_bundle(width: f32, height: f32, offset_x: f32, offset_y: f32) -> NodeBundle {
@@ -27,32 +25,6 @@ pub fn panel_bundle(width: f32, height: f32, offset_x: f32, offset_y: f32) -> No
         background_color: PANEL_BG.into(),
         ..default()
     }
-}
-
-pub fn row_bundle(height: f32) -> NodeBundle {
-    NodeBundle {
-        style: Style {
-            width: Val::Percent(100.0),
-            height: Val::Px(height),
-            display: Display::Flex,
-            align_items: AlignItems::Center,
-            column_gap: Val::Px(8.0),
-            ..default()
-        },
-        background_color: Color::NONE.into(),
-        ..default()
-    }
-}
-
-pub fn text_section(value: impl Into<String>, font_size: f32, color: Color) -> TextBundle {
-    TextBundle::from_section(
-        value,
-        TextStyle {
-            font_size,
-            color,
-            ..default()
-        },
-    )
 }
 
 pub fn absolute_text_bundle(

@@ -1,3 +1,4 @@
+mod components;
 mod layout;
 mod systems;
 mod theme;

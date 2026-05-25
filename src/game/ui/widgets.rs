@@ -1,8 +1,9 @@
+use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
 
 use crate::game::world::blocks::BlockKind;
 
-use super::theme::{BUTTON_BG, BUTTON_BORDER};
+use super::components::menu_button;
 use super::types::{
     InventorySlot, KeyBindingButton, KeyBindingLabel, LanguageText, MainMenuAction, PauseAction,
     SaveListAction, SaveListLabel, SettingsAction, SimulationAction, SlotArea, SlotLabel,
@@ -55,21 +56,7 @@ pub(super) fn spawn_localized_pause_button(
     key: &'static str,
     action: PauseAction,
 ) {
-    parent
-        .spawn((menu_button_bundle(38.0), action))
-        .with_children(|button| {
-            button.spawn((
-                TextBundle::from_section(
-                    label,
-                    TextStyle {
-                        font_size: 16.0,
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
-                super::types::LocalizedText { key },
-            ));
-        });
+    spawn_localized_button(parent, 38.0, 16.0, label, key, action);
 }
 
 pub(super) fn spawn_language_settings_button(
@@ -78,7 +65,7 @@ pub(super) fn spawn_language_settings_button(
     action: SettingsAction,
 ) {
     parent
-        .spawn((menu_button_bundle(36.0), action))
+        .spawn((menu_button(36.0), action))
         .with_children(|button| {
             button.spawn((
                 TextBundle::from_section(
@@ -100,7 +87,8 @@ pub(super) fn spawn_localized_settings_button(
     key: &'static str,
     action: SettingsAction,
 ) {
-    let mut button = parent.spawn((menu_button_bundle(36.0), action));
+    let is_binding = matches!(action, SettingsAction::Bind(_));
+    let mut button = parent.spawn((menu_button(36.0), action));
     if let SettingsAction::Bind(action) = action {
         button.insert(KeyBindingButton(action));
     }
@@ -116,7 +104,7 @@ pub(super) fn spawn_localized_settings_button(
             ),
             super::types::LocalizedText { key },
         ));
-        if matches!(action, SettingsAction::Bind(_)) {
+        if is_binding {
             label_entity.insert(KeyBindingLabel);
         }
     });
@@ -128,36 +116,7 @@ pub(super) fn spawn_localized_sim_button(
     key: &'static str,
     action: SimulationAction,
 ) {
-    parent
-        .spawn((
-            ButtonBundle {
-                style: Style {
-                    width: Val::Px(82.0),
-                    height: Val::Px(34.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },
-                border_color: Color::srgb(0.30, 0.36, 0.40).into(),
-                background_color: Color::srgba(0.12, 0.18, 0.22, 0.84).into(),
-                ..default()
-            },
-            action,
-        ))
-        .with_children(|button| {
-            button.spawn((
-                TextBundle::from_section(
-                    label,
-                    TextStyle {
-                        font_size: 12.0,
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
-                super::types::LocalizedText { key },
-            ));
-        });
+    spawn_localized_button(parent, 34.0, 12.0, label, key, action);
 }
 
 pub(super) fn spawn_localized_main_button(
@@ -166,26 +125,12 @@ pub(super) fn spawn_localized_main_button(
     key: &'static str,
     action: MainMenuAction,
 ) {
-    parent
-        .spawn((menu_button_bundle(44.0), action))
-        .with_children(|button| {
-            button.spawn((
-                TextBundle::from_section(
-                    label,
-                    TextStyle {
-                        font_size: 17.0,
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
-                super::types::LocalizedText { key },
-            ));
-        });
+    spawn_localized_button(parent, 44.0, 17.0, label, key, action);
 }
 
 pub(super) fn spawn_save_slot_button(parent: &mut ChildBuilder, index: usize) {
     parent
-        .spawn((menu_button_bundle(34.0), SaveListAction::Load(index)))
+        .spawn((menu_button(34.0), SaveListAction::Load(index)))
         .with_children(|button| {
             button.spawn((
                 TextBundle::from_section(
@@ -203,7 +148,7 @@ pub(super) fn spawn_save_slot_button(parent: &mut ChildBuilder, index: usize) {
 
 pub(super) fn spawn_save_back_button(parent: &mut ChildBuilder) {
     parent
-        .spawn((menu_button_bundle(38.0), SaveListAction::Back))
+        .spawn((menu_button(38.0), SaveListAction::Back))
         .with_children(|button| {
             button.spawn((
                 TextBundle::from_section(
@@ -219,21 +164,29 @@ pub(super) fn spawn_save_back_button(parent: &mut ChildBuilder) {
         });
 }
 
-fn menu_button_bundle(height: f32) -> ButtonBundle {
-    ButtonBundle {
-        style: Style {
-            width: Val::Percent(100.0),
-            min_width: Val::Px(92.0),
-            height: Val::Px(height),
-            border: UiRect::all(Val::Px(1.0)),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-        border_color: BUTTON_BORDER.into(),
-        background_color: BUTTON_BG.into(),
-        ..default()
-    }
+fn spawn_localized_button<'a, A: Bundle>(
+    parent: &'a mut ChildBuilder,
+    height: f32,
+    font_size: f32,
+    label: String,
+    key: &'static str,
+    action: A,
+) -> EntityCommands<'a> {
+    let mut entity = parent.spawn((menu_button(height), action));
+    entity.with_children(|button| {
+        button.spawn((
+            TextBundle::from_section(
+                label,
+                TextStyle {
+                    font_size,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ),
+            super::types::LocalizedText { key },
+        ));
+    });
+    entity
 }
 
 pub(super) fn slot_color(kind: BlockKind) -> Color {
