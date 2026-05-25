@@ -10,6 +10,9 @@ pub struct BlockEntity;
 #[derive(Component)]
 pub struct HoverMarker;
 
+#[derive(Component)]
+pub struct PlacementPreview;
+
 pub fn setup_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -61,6 +64,25 @@ pub fn setup_scene(
             ..default()
         },
         HoverMarker,
+    ));
+
+    let preview_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
+    let preview_material = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.7, 0.95, 1.0, 0.34),
+        alpha_mode: AlphaMode::Blend,
+        perceptual_roughness: 0.92,
+        reflectance: 0.0,
+        ..default()
+    });
+
+    commands.spawn((
+        PbrBundle {
+            mesh: preview_mesh,
+            material: preview_material,
+            visibility: Visibility::Hidden,
+            ..default()
+        },
+        PlacementPreview,
     ));
 }
 

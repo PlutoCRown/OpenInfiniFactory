@@ -8,6 +8,7 @@ pub struct PlacementState {
     pub selected: usize,
     pub facing: Facing,
     pub target: Option<TargetHit>,
+    pub pending_delete: Option<IVec3>,
 }
 
 impl Default for PlacementState {
@@ -16,6 +17,7 @@ impl Default for PlacementState {
             selected: 0,
             facing: Facing::North,
             target: None,
+            pending_delete: None,
         }
     }
 }
