@@ -6,13 +6,14 @@ use crate::world::WorldBlocks;
 use crate::GameMode;
 
 pub const EYE_HEIGHT: f32 = 1.7;
+pub const PLAYER_RADIUS: f32 = 0.28;
+pub const PLAYER_HEIGHT: f32 = EYE_HEIGHT;
 const PLAYER_SPEED: f32 = 5.5;
 const FLY_SPEED: f32 = 7.0;
 const JUMP_SPEED: f32 = 6.5;
 const GRAVITY: f32 = 18.0;
-const PLAYER_RADIUS: f32 = 0.28;
-const PLAYER_HEIGHT: f32 = EYE_HEIGHT;
 const DOUBLE_TAP_WINDOW: f32 = 0.28;
+const AABB_EPSILON: f32 = 0.001;
 
 #[derive(Component)]
 pub struct FlyCamera {
@@ -188,6 +189,10 @@ pub fn player_intersects_block(position: Vec3, block: IVec3) -> bool {
     aabb_intersects(player_min, player_max, block_min, block_max)
 }
 
+pub fn player_collision_box(position: Vec3) -> (Vec3, Vec3) {
+    player_aabb(position)
+}
+
 fn move_with_collision(position: &mut Vec3, delta: Vec3, world: &WorldBlocks) {
     let mut next = *position;
     next.x += delta.x;
@@ -211,16 +216,8 @@ fn move_with_collision(position: &mut Vec3, delta: Vec3, world: &WorldBlocks) {
 fn collides(position: Vec3, world: &WorldBlocks) -> bool {
     let (min, max) = player_aabb(position);
 
-    let min_block = IVec3::new(
-        min.x.floor() as i32,
-        min.y.floor() as i32,
-        min.z.floor() as i32,
-    );
-    let max_block = IVec3::new(
-        max.x.floor() as i32,
-        max.y.floor() as i32,
-        max.z.floor() as i32,
-    );
+    let min_block = min.floor().as_ivec3();
+    let max_block = (max - Vec3::splat(AABB_EPSILON)).floor().as_ivec3();
 
     for x in min_block.x..=max_block.x {
         for y in min_block.y..=max_block.y {
@@ -236,8 +233,27 @@ fn collides(position: Vec3, world: &WorldBlocks) -> bool {
 }
 
 fn is_supported(position: Vec3, world: &WorldBlocks) -> bool {
-    let probe = position - Vec3::Y * 0.04;
-    collides(probe, world)
+    let (min, max) = player_aabb(position);
+    let probe_y = min.y - 0.04;
+    let min_x = min.x.floor() as i32;
+    let max_x = (max.x - AABB_EPSILON).floor() as i32;
+    let min_z = min.z.floor() as i32;
+    let max_z = (max.z - AABB_EPSILON).floor() as i32;
+    let y = probe_y.floor() as i32;
+
+    if y < 0 {
+        return false;
+    }
+
+    for x in min_x..=max_x {
+        for z in min_z..=max_z {
+            if world.blocks.contains_key(&IVec3::new(x, y, z)) {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 fn player_aabb(position: Vec3) -> (Vec3, Vec3) {

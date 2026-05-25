@@ -24,5 +24,6 @@ cargo run
 - `F9`: load
 - `Esc`: pause/release mouse, or return to game
 - Pause menu: resume, adjust FOV, or quit
+- `/`: toggle debug overlay with FPS and player collision box
 
 Saves are written to `saves/world.ron`.
