@@ -61,7 +61,7 @@ pub fn rebuild_world(
     materials: &mut Assets<StandardMaterial>,
 ) {
     for (pos, data) in &world.blocks {
-        spawn_block(commands, meshes, materials, *pos, *data);
+        spawn_block(commands, meshes, materials, world, *pos, *data);
     }
 }
 
@@ -75,17 +75,24 @@ fn spawn_block(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    world: &WorldBlocks,
     pos: IVec3,
     data: BlockData,
 ) {
-    let block_mesh = meshes.add(Cuboid::new(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE));
+    let size = if data.kind == BlockKind::WeldPoint {
+        BLOCK_SIZE * 0.38
+    } else {
+        BLOCK_SIZE
+    };
+    let block_mesh = meshes.add(Cuboid::new(size, size, size));
     let mut material = StandardMaterial {
         base_color: data.kind.material(),
         perceptual_roughness: 0.82,
         ..default()
     };
-    if data.kind == BlockKind::Glass {
+    if matches!(data.kind, BlockKind::Glass | BlockKind::WeldPoint) {
         material.alpha_mode = AlphaMode::Blend;
+        material.unlit = data.kind == BlockKind::WeldPoint;
     }
     let block_material = materials.add(material);
 
@@ -150,6 +157,35 @@ fn spawn_block(
                     transform: Transform::from_xyz(0.0, 0.55, 0.0),
                     ..default()
                 });
+            }
+
+            if data.kind == BlockKind::WeldPoint {
+                for offset in [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z] {
+                    let neighbor = pos + offset;
+                    if world
+                        .blocks
+                        .get(&neighbor)
+                        .is_some_and(|block| block.kind == BlockKind::WeldPoint)
+                    {
+                        let connector_mesh = if offset.x != 0 {
+                            meshes.add(Cuboid::new(0.72, 0.08, 0.08))
+                        } else {
+                            meshes.add(Cuboid::new(0.08, 0.08, 0.72))
+                        };
+                        let connector_material = materials.add(StandardMaterial {
+                            base_color: Color::srgba(1.0, 0.22, 0.10, 0.72),
+                            alpha_mode: AlphaMode::Blend,
+                            unlit: true,
+                            ..default()
+                        });
+                        parent.spawn(PbrBundle {
+                            mesh: connector_mesh,
+                            material: connector_material,
+                            transform: Transform::from_translation(offset.as_vec3() * 0.36),
+                            ..default()
+                        });
+                    }
+                }
             }
         });
 }

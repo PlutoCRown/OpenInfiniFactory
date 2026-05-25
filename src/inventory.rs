@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::blocks::{BlockKind, ALL_BLOCKS};
+use crate::blocks::{BlockKind, PLACEABLE_BLOCKS};
 use crate::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
 
 pub const HOTBAR_SLOTS: usize = 9;
@@ -61,13 +61,13 @@ pub struct InventoryItems {
 impl Default for InventoryItems {
     fn default() -> Self {
         let mut hotbar = [None; HOTBAR_SLOTS];
-        for (index, kind) in ALL_BLOCKS.iter().enumerate() {
+        for (index, kind) in PLACEABLE_BLOCKS.iter().enumerate() {
             hotbar[index] = Some(*kind);
         }
 
         let mut backpack = [None; BACKPACK_SLOTS];
         for index in 0..BACKPACK_SLOTS {
-            backpack[index] = Some(ALL_BLOCKS[index % ALL_BLOCKS.len()]);
+            backpack[index] = Some(PLACEABLE_BLOCKS[index % PLACEABLE_BLOCKS.len()]);
         }
 
         Self { hotbar, backpack }
@@ -653,19 +653,27 @@ fn builder_mode_name(mode: BuilderMode) -> &'static str {
 fn slot_color(kind: BlockKind) -> Color {
     match kind {
         BlockKind::Solid => Color::srgb(0.38, 0.39, 0.40),
+        BlockKind::Glass => Color::srgb(0.42, 0.66, 0.76),
+        BlockKind::Generator => Color::srgb(0.42, 0.20, 0.56),
+        BlockKind::Welder => Color::srgb(0.62, 0.12, 0.12),
         BlockKind::Conveyor => Color::srgb(0.08, 0.20, 0.26),
         BlockKind::Piston => Color::srgb(0.66, 0.43, 0.20),
-        BlockKind::Glass => Color::srgb(0.42, 0.66, 0.76),
         BlockKind::Goal => Color::srgb(0.24, 0.56, 0.30),
+        BlockKind::Material => Color::srgb(0.74, 0.74, 0.78),
+        BlockKind::WeldPoint => Color::srgb(0.86, 0.16, 0.12),
     }
 }
 
 fn short_item_name(kind: BlockKind) -> &'static str {
     match kind {
         BlockKind::Solid => "Solid",
+        BlockKind::Glass => "Glass",
+        BlockKind::Generator => "Gen",
+        BlockKind::Welder => "Weld",
         BlockKind::Conveyor => "Belt",
         BlockKind::Piston => "Piston",
-        BlockKind::Glass => "Glass",
         BlockKind::Goal => "Goal",
+        BlockKind::Material => "Mat",
+        BlockKind::WeldPoint => "Point",
     }
 }

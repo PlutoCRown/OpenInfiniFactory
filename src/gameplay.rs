@@ -5,6 +5,7 @@ use crate::inventory::{self, InventoryItems, HOTBAR_SLOTS};
 use crate::player::{player_intersects_block, FlyCamera};
 use crate::rendering::{despawn_world, rebuild_world, BlockEntity, HoverMarker};
 use crate::save::{load_world, save_world};
+use crate::simulation::reset_simulation;
 use crate::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
 use crate::world::{grid_to_world, raycast_blocks, WorldBlocks};
 
@@ -84,7 +85,7 @@ pub fn placement_input(
 
     if mouse_buttons.just_pressed(MouseButton::Right) {
         let place_at = target.pos + target.normal;
-        if place_at.y >= 0 && !world.blocks.contains_key(&place_at) {
+        if place_at.y >= 0 && world.can_place_solid_at(place_at) {
             if let Ok(player_transform) = player.get_single() {
                 if player_intersects_block(player_transform.translation, place_at) {
                     return;
@@ -186,6 +187,7 @@ pub fn simulation_controls(
     >,
     builder_mode: Res<BuilderMode>,
     mut simulation: ResMut<SimulationState>,
+    mut world: ResMut<WorldBlocks>,
 ) {
     if *builder_mode != BuilderMode::Play {
         return;
@@ -211,24 +213,9 @@ pub fn simulation_controls(
                 simulation.running = false;
                 simulation.turn = 0;
                 simulation.accumulator = 0.0;
+                reset_simulation(&mut world);
             }
         }
-    }
-}
-
-pub fn simulation_tick(
-    time: Res<Time>,
-    builder_mode: Res<BuilderMode>,
-    mut simulation: ResMut<SimulationState>,
-) {
-    if *builder_mode != BuilderMode::Play || !simulation.running {
-        return;
-    }
-
-    simulation.accumulator += time.delta_seconds() * simulation.speed;
-    while simulation.accumulator >= 1.0 {
-        simulation.turn += 1;
-        simulation.accumulator -= 1.0;
     }
 }
 
@@ -286,10 +273,7 @@ pub fn update_hover(
 
 fn can_place_in_mode(kind: BlockKind, mode: BuilderMode) -> bool {
     match mode {
-        BuilderMode::Edit => matches!(kind, BlockKind::Solid | BlockKind::Glass),
-        BuilderMode::Play => matches!(
-            kind,
-            BlockKind::Conveyor | BlockKind::Piston | BlockKind::Goal
-        ),
+        BuilderMode::Edit => kind.is_scene(),
+        BuilderMode::Play => kind.is_factory(),
     }
 }

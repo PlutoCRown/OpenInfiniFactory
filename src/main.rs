@@ -5,6 +5,7 @@ mod inventory;
 mod player;
 mod rendering;
 mod save;
+mod simulation;
 mod state;
 mod world;
 
@@ -13,7 +14,7 @@ use bevy::prelude::*;
 
 use gameplay::{
     apply_fov, gameplay_input, pause_menu_actions, placement_input, save_load_input,
-    simulation_controls, simulation_tick, update_hover,
+    simulation_controls, update_hover,
 };
 use inventory::{CarriedItem, InventoryItems};
 use player::{camera_look, camera_move, spawn_player, sync_cursor_grab};
@@ -67,7 +68,7 @@ fn main() {
                 save_load_input,
                 pause_menu_actions,
                 simulation_controls,
-                simulation_tick,
+                simulation::tick_simulation,
                 apply_fov,
                 update_hover,
                 debug::toggle_debug,

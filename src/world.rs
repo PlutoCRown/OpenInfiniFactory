@@ -11,6 +11,23 @@ pub struct WorldBlocks {
     pub blocks: HashMap<IVec3, BlockData>,
 }
 
+impl WorldBlocks {
+    pub fn is_occupied(&self, pos: IVec3) -> bool {
+        self.blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.has_collision())
+    }
+
+    pub fn can_place_solid_at(&self, pos: IVec3) -> bool {
+        !self.is_occupied(pos)
+    }
+
+    pub fn clear_generated_markers(&mut self) {
+        self.blocks
+            .retain(|_, block| !block.kind.is_generated_marker());
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct TargetHit {
     pub pos: IVec3,
