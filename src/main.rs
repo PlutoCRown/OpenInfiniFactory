@@ -12,13 +12,14 @@ use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::prelude::*;
 
 use gameplay::{
-    apply_fov, gameplay_input, pause_menu_actions, placement_input, save_load_input, update_hover,
+    apply_fov, gameplay_input, pause_menu_actions, placement_input, save_load_input,
+    simulation_controls, simulation_tick, update_hover,
 };
 use inventory::{CarriedItem, InventoryItems};
 use player::{camera_look, camera_move, spawn_player, sync_cursor_grab};
 use rendering::{rebuild_world, setup_scene};
 use save::load_world;
-use state::{GameMode, GameSettings, PlacementState};
+use state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
 use world::{seed_demo_world, WorldBlocks};
 
 fn main() {
@@ -28,6 +29,8 @@ fn main() {
         .insert_resource(PlacementState::default())
         .insert_resource(InventoryItems::default())
         .insert_resource(GameMode::Playing)
+        .insert_resource(BuilderMode::default())
+        .insert_resource(SimulationState::default())
         .insert_resource(GameSettings::default())
         .insert_resource(debug::DebugState::default())
         .insert_resource(CarriedItem::default())
@@ -63,6 +66,8 @@ fn main() {
                 placement_input,
                 save_load_input,
                 pause_menu_actions,
+                simulation_controls,
+                simulation_tick,
                 apply_fov,
                 update_hover,
                 debug::toggle_debug,

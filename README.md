@@ -25,5 +25,7 @@ cargo run
 - `Esc`: pause/release mouse, or return to game
 - Pause menu: resume, adjust FOV, or quit
 - `/`: toggle debug overlay with FPS and player collision box
+- Pause menu can switch Edit/Play build modes
+- Top-right controls handle turn playback, speed, and rollback in Play mode
 
 Saves are written to `saves/world.ron`.

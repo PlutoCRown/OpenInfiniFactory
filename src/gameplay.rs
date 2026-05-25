@@ -1,11 +1,11 @@
 use bevy::prelude::*;
 
-use crate::blocks::BlockData;
+use crate::blocks::{BlockData, BlockKind};
 use crate::inventory::{self, InventoryItems, HOTBAR_SLOTS};
 use crate::player::{player_intersects_block, FlyCamera};
 use crate::rendering::{despawn_world, rebuild_world, BlockEntity, HoverMarker};
 use crate::save::{load_world, save_world};
-use crate::state::{GameMode, GameSettings, PlacementState};
+use crate::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
 use crate::world::{grid_to_world, raycast_blocks, WorldBlocks};
 
 pub fn gameplay_input(
@@ -60,6 +60,7 @@ pub fn placement_input(
     mut commands: Commands,
     mut world: ResMut<WorldBlocks>,
     inventory: Res<InventoryItems>,
+    builder_mode: Res<BuilderMode>,
     mode: Res<GameMode>,
     placement: Res<PlacementState>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -93,6 +94,11 @@ pub fn placement_input(
             let Some(kind) = inventory.hotbar[placement.selected] else {
                 return;
             };
+
+            if !can_place_in_mode(kind, *builder_mode) {
+                return;
+            }
+
             world.blocks.insert(
                 place_at,
                 BlockData {
@@ -131,6 +137,8 @@ pub fn save_load_input(
 pub fn pause_menu_actions(
     mut exit: EventWriter<AppExit>,
     mut settings: ResMut<GameSettings>,
+    mut builder_mode: ResMut<BuilderMode>,
+    mut simulation: ResMut<SimulationState>,
     mut mode: ResMut<GameMode>,
     mut interactions: Query<
         (&Interaction, &inventory::PauseAction),
@@ -148,6 +156,16 @@ pub fn pause_menu_actions(
 
         match action {
             inventory::PauseAction::Resume => *mode = GameMode::Playing,
+            inventory::PauseAction::ToggleBuilderMode => {
+                *builder_mode = match *builder_mode {
+                    BuilderMode::Edit => {
+                        simulation.running = false;
+                        simulation.accumulator = 0.0;
+                        BuilderMode::Play
+                    }
+                    BuilderMode::Play => BuilderMode::Edit,
+                };
+            }
             inventory::PauseAction::FovDown => {
                 settings.fov_degrees = (settings.fov_degrees - 5.0).clamp(50.0, 110.0);
             }
@@ -158,6 +176,59 @@ pub fn pause_menu_actions(
                 exit.send(AppExit::Success);
             }
         }
+    }
+}
+
+pub fn simulation_controls(
+    mut interactions: Query<
+        (&Interaction, &inventory::SimulationAction),
+        (Changed<Interaction>, With<Button>),
+    >,
+    builder_mode: Res<BuilderMode>,
+    mut simulation: ResMut<SimulationState>,
+) {
+    if *builder_mode != BuilderMode::Play {
+        return;
+    }
+
+    for (interaction, action) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        match action {
+            inventory::SimulationAction::ToggleRun => {
+                simulation.running = !simulation.running;
+            }
+            inventory::SimulationAction::Faster => {
+                simulation.speed = match simulation.speed as u32 {
+                    1 => 2.0,
+                    2 => 4.0,
+                    _ => 1.0,
+                };
+            }
+            inventory::SimulationAction::Rollback => {
+                simulation.running = false;
+                simulation.turn = 0;
+                simulation.accumulator = 0.0;
+            }
+        }
+    }
+}
+
+pub fn simulation_tick(
+    time: Res<Time>,
+    builder_mode: Res<BuilderMode>,
+    mut simulation: ResMut<SimulationState>,
+) {
+    if *builder_mode != BuilderMode::Play || !simulation.running {
+        return;
+    }
+
+    simulation.accumulator += time.delta_seconds() * simulation.speed;
+    while simulation.accumulator >= 1.0 {
+        simulation.turn += 1;
+        simulation.accumulator -= 1.0;
     }
 }
 
@@ -210,5 +281,15 @@ pub fn update_hover(
         *visibility = Visibility::Visible;
     } else {
         *visibility = Visibility::Hidden;
+    }
+}
+
+fn can_place_in_mode(kind: BlockKind, mode: BuilderMode) -> bool {
+    match mode {
+        BuilderMode::Edit => matches!(kind, BlockKind::Solid | BlockKind::Glass),
+        BuilderMode::Play => matches!(
+            kind,
+            BlockKind::Conveyor | BlockKind::Piston | BlockKind::Goal
+        ),
     }
 }

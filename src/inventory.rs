@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::blocks::{BlockKind, ALL_BLOCKS};
-use crate::state::{GameMode, GameSettings, PlacementState};
+use crate::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
 
 pub const HOTBAR_SLOTS: usize = 9;
 const BACKPACK_SLOTS: usize = 27;
@@ -21,12 +21,23 @@ pub struct Crosshair;
 #[derive(Component)]
 pub struct FovText;
 
+#[derive(Component)]
+pub struct SimulationText;
+
 #[derive(Component, Clone, Copy)]
 pub enum PauseAction {
     Resume,
+    ToggleBuilderMode,
     FovDown,
     FovUp,
     Quit,
+}
+
+#[derive(Component, Clone, Copy)]
+pub enum SimulationAction {
+    ToggleRun,
+    Faster,
+    Rollback,
 }
 
 #[derive(Component)]
@@ -132,6 +143,47 @@ pub fn setup_ui(mut commands: Commands) {
                 },
                 HotbarText,
             ));
+
+            root.spawn((
+                TextBundle {
+                    text: Text::from_section(
+                        "",
+                        TextStyle {
+                            font_size: 16.0,
+                            color: Color::srgb(0.88, 0.96, 1.0),
+                            ..default()
+                        },
+                    ),
+                    style: Style {
+                        position_type: PositionType::Absolute,
+                        right: Val::Px(18.0),
+                        top: Val::Px(118.0),
+                        ..default()
+                    },
+                    ..default()
+                },
+                SimulationText,
+            ));
+
+            root.spawn(NodeBundle {
+                style: Style {
+                    width: Val::Px(260.0),
+                    height: Val::Px(38.0),
+                    position_type: PositionType::Absolute,
+                    right: Val::Px(18.0),
+                    top: Val::Px(182.0),
+                    display: Display::Flex,
+                    column_gap: Val::Px(6.0),
+                    ..default()
+                },
+                background_color: Color::NONE.into(),
+                ..default()
+            })
+            .with_children(|bar| {
+                spawn_sim_button(bar, "Play/Pause", SimulationAction::ToggleRun);
+                spawn_sim_button(bar, "Speed", SimulationAction::Faster);
+                spawn_sim_button(bar, "Rollback", SimulationAction::Rollback);
+            });
 
             root.spawn(NodeBundle {
                 style: Style {
@@ -257,6 +309,11 @@ pub fn setup_ui(mut commands: Commands) {
                     },
                 ));
                 spawn_pause_button(panel, "Resume", PauseAction::Resume);
+                spawn_pause_button(
+                    panel,
+                    "Toggle Edit/Play Mode",
+                    PauseAction::ToggleBuilderMode,
+                );
 
                 panel
                     .spawn(NodeBundle {
@@ -349,6 +406,8 @@ pub fn update_ui(
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
     mode: Res<GameMode>,
+    builder_mode: Res<BuilderMode>,
+    simulation: Res<SimulationState>,
     settings: Res<GameSettings>,
     carried: Res<CarriedItem>,
     mut hotbar: Query<&mut Text, (With<HotbarText>, Without<SlotLabel>, Without<CarriedLabel>)>,
@@ -383,13 +442,24 @@ pub fn update_ui(
             Without<CarriedLabel>,
         ),
     >,
+    mut simulation_text: Query<
+        &mut Text,
+        (
+            With<SimulationText>,
+            Without<SlotLabel>,
+            Without<HotbarText>,
+            Without<CarriedLabel>,
+            Without<FovText>,
+        ),
+    >,
 ) {
     if let Ok(mut text) = hotbar.get_single_mut() {
         let selected = inventory.hotbar[placement.selected]
             .map(BlockKind::name)
             .unwrap_or("Empty");
         text.sections[0].value = format!(
-            "Selected: {}   Facing: {}   E: Inventory   ESC: Pause",
+            "Mode: {}   Selected: {}   Facing: {}   E: Inventory   ESC: Pause",
+            builder_mode_name(*builder_mode),
             selected,
             placement.facing.name()
         );
@@ -454,6 +524,20 @@ pub fn update_ui(
 
     if let Ok(mut text) = fov_text.get_single_mut() {
         text.sections[0].value = format!("FOV {:.0}", settings.fov_degrees);
+    }
+
+    if let Ok(mut text) = simulation_text.get_single_mut() {
+        text.sections[0].value = format!(
+            "Mode: {}\nTurns: {}\nSim: {} x{:.0}",
+            builder_mode_name(*builder_mode),
+            simulation.turn,
+            if simulation.running {
+                "Playing"
+            } else {
+                "Paused"
+            },
+            simulation.speed
+        );
     }
 }
 
@@ -527,6 +611,43 @@ fn spawn_pause_button(parent: &mut ChildBuilder, label: &'static str, action: Pa
                 },
             ));
         });
+}
+
+fn spawn_sim_button(parent: &mut ChildBuilder, label: &'static str, action: SimulationAction) {
+    parent
+        .spawn((
+            ButtonBundle {
+                style: Style {
+                    width: Val::Px(82.0),
+                    height: Val::Px(34.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                border_color: Color::srgb(0.30, 0.36, 0.40).into(),
+                background_color: Color::srgba(0.12, 0.18, 0.22, 0.84).into(),
+                ..default()
+            },
+            action,
+        ))
+        .with_children(|button| {
+            button.spawn(TextBundle::from_section(
+                label,
+                TextStyle {
+                    font_size: 12.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ));
+        });
+}
+
+fn builder_mode_name(mode: BuilderMode) -> &'static str {
+    match mode {
+        BuilderMode::Edit => "Edit",
+        BuilderMode::Play => "Play",
+    }
 }
 
 fn slot_color(kind: BlockKind) -> Color {

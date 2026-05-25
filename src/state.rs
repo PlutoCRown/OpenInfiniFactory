@@ -27,6 +27,37 @@ pub enum GameMode {
     Paused,
 }
 
+#[derive(Resource, Clone, Copy, Eq, PartialEq)]
+pub enum BuilderMode {
+    Edit,
+    Play,
+}
+
+impl Default for BuilderMode {
+    fn default() -> Self {
+        Self::Edit
+    }
+}
+
+#[derive(Resource)]
+pub struct SimulationState {
+    pub running: bool,
+    pub speed: f32,
+    pub turn: u64,
+    pub accumulator: f32,
+}
+
+impl Default for SimulationState {
+    fn default() -> Self {
+        Self {
+            running: false,
+            speed: 1.0,
+            turn: 0,
+            accumulator: 0.0,
+        }
+    }
+}
+
 #[derive(Resource)]
 pub struct GameSettings {
     pub fov_degrees: f32,
