@@ -1,3 +1,4 @@
+use bevy::pbr::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 
 use crate::game::world::blocks::{BlockData, BlockKind, BLOCK_SIZE};
@@ -16,22 +17,31 @@ pub fn setup_scene(
 ) {
     commands.spawn(PointLightBundle {
         point_light: PointLight {
-            intensity: 4500.0,
+            intensity: 1100.0,
             shadows_enabled: true,
-            range: 40.0,
+            range: 18.0,
+            radius: 3.5,
             ..default()
         },
-        transform: Transform::from_xyz(4.0, 9.0, 6.0),
+        transform: Transform::from_xyz(3.5, 5.5, 4.5),
         ..default()
     });
 
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
-            illuminance: 7000.0,
+            illuminance: 9500.0,
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.8, -0.6, 0.0)),
+        transform: Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -1.05, -0.55, -0.28)),
+        cascade_shadow_config: CascadeShadowConfigBuilder {
+            num_cascades: 4,
+            minimum_distance: 0.15,
+            maximum_distance: 60.0,
+            first_cascade_far_bound: 8.0,
+            overlap_proportion: 0.18,
+        }
+        .into(),
         ..default()
     });
 
@@ -87,7 +97,8 @@ fn spawn_block(
     let block_mesh = meshes.add(Cuboid::new(size, size, size));
     let mut material = StandardMaterial {
         base_color: data.kind.material(),
-        perceptual_roughness: 0.82,
+        perceptual_roughness: 0.88,
+        reflectance: 0.18,
         ..default()
     };
     if matches!(data.kind, BlockKind::Glass | BlockKind::WeldPoint) {

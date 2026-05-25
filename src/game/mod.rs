@@ -5,7 +5,9 @@ pub mod systems;
 pub mod ui;
 pub mod world;
 
+use bevy::core_pipeline::experimental::taa::TemporalAntiAliasPlugin;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+use bevy::pbr::DirectionalLightShadowMap;
 use bevy::prelude::*;
 
 use crate::shared::config::load_config;
@@ -32,6 +34,11 @@ impl Plugin for GamePlugin {
         };
 
         app.insert_resource(ClearColor(Color::srgb(0.58, 0.68, 0.76)))
+            .insert_resource(AmbientLight {
+                color: Color::srgb(0.78, 0.86, 1.0),
+                brightness: 260.0,
+            })
+            .insert_resource(DirectionalLightShadowMap { size: 4096 })
             .insert_resource(WorldBlocks::default())
             .insert_resource(PlacementState::default())
             .insert_resource(InventoryItems::default())
@@ -45,7 +52,7 @@ impl Plugin for GamePlugin {
             .insert_resource(PendingKeyBind::default())
             .insert_resource(systems::debug::DebugState::default())
             .insert_resource(CarriedItem::default())
-            .add_plugins(FrameTimeDiagnosticsPlugin)
+            .add_plugins((FrameTimeDiagnosticsPlugin, TemporalAntiAliasPlugin))
             .add_systems(
                 Startup,
                 (

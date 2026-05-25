@@ -1,5 +1,13 @@
+use bevy::core_pipeline::experimental::taa::TemporalAntiAliasSettings;
+use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
+use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
 use bevy::input::mouse::MouseMotion;
+use bevy::pbr::{
+    ScreenSpaceAmbientOcclusionQualityLevel, ScreenSpaceAmbientOcclusionSettings,
+    ShadowFilteringMethod,
+};
 use bevy::prelude::*;
+use bevy::render::camera::TemporalJitter;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 
 use crate::game::state::GameMode;
@@ -30,9 +38,24 @@ pub struct FlyCamera {
 pub fn spawn_player(mut commands: Commands) {
     commands.spawn((
         Camera3dBundle {
+            camera: Camera {
+                hdr: true,
+                ..default()
+            },
+            tonemapping: Tonemapping::SomewhatBoringDisplayTransform,
+            deband_dither: DebandDither::Enabled,
             transform: Transform::from_xyz(3.0, EYE_HEIGHT, 7.0).looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
+        ScreenSpaceAmbientOcclusionSettings {
+            quality_level: ScreenSpaceAmbientOcclusionQualityLevel::High,
+        },
+        TemporalAntiAliasSettings::default(),
+        TemporalJitter::default(),
+        DepthPrepass,
+        NormalPrepass,
+        MotionVectorPrepass,
+        ShadowFilteringMethod::Temporal,
         FlyCamera {
             yaw: std::f32::consts::PI,
             pitch: -0.15,

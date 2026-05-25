@@ -56,6 +56,9 @@ pub fn update_status_ui(
             Without<HotbarText>,
             Without<SlotLabel>,
             Without<CarriedLabel>,
+            Without<FovText>,
+            Without<SimulationText>,
+            Without<CurrentSaveText>,
         ),
     >,
     mut carried_label: Query<
@@ -64,7 +67,10 @@ pub fn update_status_ui(
             With<CarriedLabel>,
             Without<SlotLabel>,
             Without<HotbarText>,
+            Without<InventoryTitle>,
             Without<FovText>,
+            Without<SimulationText>,
+            Without<CurrentSaveText>,
         ),
     >,
     mut fov_text: Query<
@@ -74,6 +80,9 @@ pub fn update_status_ui(
             Without<SlotLabel>,
             Without<HotbarText>,
             Without<CarriedLabel>,
+            Without<InventoryTitle>,
+            Without<SimulationText>,
+            Without<CurrentSaveText>,
         ),
     >,
     mut simulation_text: Query<
@@ -83,7 +92,9 @@ pub fn update_status_ui(
             Without<SlotLabel>,
             Without<HotbarText>,
             Without<CarriedLabel>,
+            Without<InventoryTitle>,
             Without<FovText>,
+            Without<CurrentSaveText>,
         ),
     >,
     mut current_save_text: Query<
@@ -93,6 +104,7 @@ pub fn update_status_ui(
             Without<SlotLabel>,
             Without<HotbarText>,
             Without<CarriedLabel>,
+            Without<InventoryTitle>,
             Without<FovText>,
             Without<SimulationText>,
         ),
@@ -212,28 +224,18 @@ pub fn update_settings_status_ui(
 pub fn update_panel_visibility(
     mode: Res<GameMode>,
     settings_tab: Res<SettingsTab>,
-    mut main_menu_panels: Query<&mut Style, With<MainMenuPanel>>,
-    mut save_list_panels: Query<&mut Style, With<SaveListPanel>>,
-    mut settings_panels: Query<&mut Style, With<SettingsPanel>>,
-    mut settings_gameplay_groups: Query<
-        &mut Style,
-        (
-            With<SettingsGameplayGroup>,
-            Without<SettingsKeyBindingsGroup>,
-        ),
-    >,
-    mut settings_key_groups: Query<
-        &mut Style,
-        (
-            With<SettingsKeyBindingsGroup>,
-            Without<SettingsGameplayGroup>,
-        ),
-    >,
-    mut panels: Query<&mut Style, With<BackpackPanel>>,
-    mut pause_panels: Query<&mut Style, (With<PausePanel>, Without<BackpackPanel>)>,
+    mut style_sets: ParamSet<(
+        Query<&mut Style, With<MainMenuPanel>>,
+        Query<&mut Style, With<SaveListPanel>>,
+        Query<&mut Style, With<SettingsPanel>>,
+        Query<&mut Style, With<SettingsGameplayGroup>>,
+        Query<&mut Style, With<SettingsKeyBindingsGroup>>,
+        Query<&mut Style, With<BackpackPanel>>,
+        Query<&mut Style, With<PausePanel>>,
+    )>,
     mut crosshair: Query<&mut Visibility, With<Crosshair>>,
 ) {
-    for mut style in &mut main_menu_panels {
+    for mut style in &mut style_sets.p0() {
         style.display = if *mode == GameMode::MainMenu {
             Display::Flex
         } else {
@@ -241,7 +243,7 @@ pub fn update_panel_visibility(
         };
     }
 
-    for mut style in &mut save_list_panels {
+    for mut style in &mut style_sets.p1() {
         style.display = if matches!(*mode, GameMode::SaveListMain | GameMode::SaveListPause) {
             Display::Flex
         } else {
@@ -249,7 +251,7 @@ pub fn update_panel_visibility(
         };
     }
 
-    for mut style in &mut settings_panels {
+    for mut style in &mut style_sets.p2() {
         style.display = if *mode == GameMode::Settings {
             Display::Flex
         } else {
@@ -257,7 +259,7 @@ pub fn update_panel_visibility(
         };
     }
 
-    for mut style in &mut settings_gameplay_groups {
+    for mut style in &mut style_sets.p3() {
         style.display = if *mode == GameMode::Settings && *settings_tab == SettingsTab::Gameplay {
             Display::Flex
         } else {
@@ -265,7 +267,7 @@ pub fn update_panel_visibility(
         };
     }
 
-    for mut style in &mut settings_key_groups {
+    for mut style in &mut style_sets.p4() {
         style.display = if *mode == GameMode::Settings && *settings_tab == SettingsTab::KeyBindings
         {
             Display::Grid
@@ -274,7 +276,7 @@ pub fn update_panel_visibility(
         };
     }
 
-    for mut style in &mut panels {
+    for mut style in &mut style_sets.p5() {
         style.display = if *mode == GameMode::Inventory {
             Display::Flex
         } else {
@@ -282,7 +284,7 @@ pub fn update_panel_visibility(
         };
     }
 
-    for mut style in &mut pause_panels {
+    for mut style in &mut style_sets.p6() {
         style.display = if *mode == GameMode::Paused {
             Display::Flex
         } else {
@@ -343,11 +345,13 @@ pub fn update_inventory_slots(
 pub fn update_save_list_ui(
     mode: Res<GameMode>,
     save_state: Res<SaveState>,
-    mut titles: Query<&mut Text, With<SaveListTitle>>,
+    mut text_sets: ParamSet<(
+        Query<&mut Text, With<SaveListTitle>>,
+        Query<&mut Text, With<SaveListLabel>>,
+    )>,
     mut slots: Query<(&SaveListAction, &Children, &mut BackgroundColor), With<Button>>,
-    mut labels: Query<&mut Text, With<SaveListLabel>>,
 ) {
-    if let Ok(mut title) = titles.get_single_mut() {
+    if let Ok(mut title) = text_sets.p0().get_single_mut() {
         title.sections[0].value = match *mode {
             GameMode::SaveListMain => "Load Save".to_string(),
             GameMode::SaveListPause => "Switch Save".to_string(),
@@ -376,7 +380,7 @@ pub fn update_save_list_ui(
         };
 
         for child in children.iter() {
-            if let Ok(mut text) = labels.get_mut(*child) {
+            if let Ok(mut text) = text_sets.p1().get_mut(*child) {
                 text.sections[0].value = label.clone();
             }
         }
