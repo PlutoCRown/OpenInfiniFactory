@@ -40,7 +40,7 @@ impl Plugin for GamePlugin {
                 color: Color::srgb(0.78, 0.86, 1.0),
                 brightness: 260.0,
             })
-            .insert_resource(DirectionalLightShadowMap { size: 4096 })
+            .insert_resource(DirectionalLightShadowMap { size: 2048 })
             .insert_resource(WorldBlocks::default())
             .insert_resource(PlacementState::default())
             .insert_resource(InventoryItems::default())
@@ -54,6 +54,7 @@ impl Plugin for GamePlugin {
             .insert_resource(SettingsTab::default())
             .insert_resource(PendingKeyBind::default())
             .insert_resource(systems::debug::DebugState::default())
+            .insert_resource(systems::debug::PerfStats::default())
             .insert_resource(CarriedItem::default())
             .add_plugins((FrameTimeDiagnosticsPlugin, TemporalAntiAliasPlugin))
             .add_systems(
@@ -67,23 +68,43 @@ impl Plugin for GamePlugin {
                 )
                     .chain(),
             )
+            .add_systems(First, systems::debug::begin_perf_frame)
+            .add_systems(
+                Update,
+                (camera_move, camera_look, gameplay_input, placement_input)
+                    .chain()
+                    .before(systems::debug::mark_perf_input),
+            )
+            .add_systems(Update, systems::debug::mark_perf_input)
             .add_systems(
                 Update,
                 (
-                    camera_move,
-                    camera_look,
-                    gameplay_input,
-                    placement_input,
                     main_menu_actions,
                     save_list_actions,
                     pause_menu_actions,
                     settings_menu_actions,
-                    simulation_controls,
-                    simulation::runtime::tick_simulation,
-                    apply_fov,
-                    update_hover,
-                ),
+                )
+                    .chain()
+                    .after(systems::debug::mark_perf_input)
+                    .before(systems::debug::mark_perf_menus),
             )
+            .add_systems(Update, systems::debug::mark_perf_menus)
+            .add_systems(
+                Update,
+                (simulation_controls, simulation::runtime::tick_simulation)
+                    .chain()
+                    .after(systems::debug::mark_perf_menus)
+                    .before(systems::debug::mark_perf_simulation),
+            )
+            .add_systems(Update, systems::debug::mark_perf_simulation)
+            .add_systems(
+                Update,
+                (apply_fov, update_hover)
+                    .chain()
+                    .after(systems::debug::mark_perf_simulation)
+                    .before(systems::debug::mark_perf_view),
+            )
+            .add_systems(Update, systems::debug::mark_perf_view)
             .add_systems(
                 Update,
                 (
@@ -95,16 +116,24 @@ impl Plugin for GamePlugin {
                     ui::update_inventory_slots,
                     ui::update_save_list_ui,
                     sync_cursor_grab,
-                ),
+                )
+                    .after(systems::debug::mark_perf_view)
+                    .before(systems::debug::mark_perf_ui),
             )
+            .add_systems(Update, systems::debug::mark_perf_ui)
             .add_systems(
                 Update,
                 (
                     systems::debug::toggle_debug,
                     systems::debug::update_debug_ui,
                     systems::debug::draw_player_collider,
-                ),
-            );
+                )
+                    .chain()
+                    .after(systems::debug::mark_perf_ui)
+                    .before(systems::debug::mark_perf_debug),
+            )
+            .add_systems(Update, systems::debug::mark_perf_debug)
+            .add_systems(Last, systems::debug::finish_perf_frame);
     }
 }
 

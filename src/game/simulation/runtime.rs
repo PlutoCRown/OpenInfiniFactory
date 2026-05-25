@@ -3,14 +3,13 @@ use bevy::prelude::*;
 use crate::game::state::{BuilderMode, SimulationState};
 use crate::game::world::blocks::{BlockData, BlockKind, Facing};
 use crate::game::world::grid::WorldBlocks;
-use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity};
+use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
 
 pub fn run_turn(
     world: &mut WorldBlocks,
     commands: &mut Commands,
     block_entities: &Query<Entity, With<BlockEntity>>,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    render_assets: &WorldRenderAssets,
 ) {
     sync_weld_points(world);
     spawn_materials(world);
@@ -18,7 +17,7 @@ pub fn run_turn(
     apply_material_gravity(world);
 
     despawn_world(commands, block_entities);
-    rebuild_world(commands, world, meshes, materials);
+    rebuild_world(commands, world, render_assets);
 }
 
 pub fn reset_simulation(world: &mut WorldBlocks) {
@@ -33,8 +32,7 @@ pub fn tick_simulation(
     mut world: ResMut<WorldBlocks>,
     mut commands: Commands,
     block_entities: Query<Entity, With<BlockEntity>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    render_assets: Res<WorldRenderAssets>,
 ) {
     if *builder_mode != BuilderMode::Play || !simulation.running {
         return;
@@ -44,13 +42,7 @@ pub fn tick_simulation(
     while simulation.accumulator >= 1.0 {
         simulation.turn += 1;
         simulation.accumulator -= 1.0;
-        run_turn(
-            &mut world,
-            &mut commands,
-            &block_entities,
-            &mut meshes,
-            &mut materials,
-        );
+        run_turn(&mut world, &mut commands, &block_entities, &render_assets);
     }
 }
 

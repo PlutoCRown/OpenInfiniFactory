@@ -6,7 +6,7 @@ use crate::game::ui::{
     SettingsAction, SettingsTab,
 };
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
-use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity};
+use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
 use crate::shared::config::{key_from_input, open_config_folder, save_config, GameConfig};
 use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::save::{load_world, next_world_name, save_world, SaveState};
@@ -21,8 +21,7 @@ pub fn main_menu_actions(
     mut save_state: ResMut<SaveState>,
     mut commands: Commands,
     mut world: ResMut<WorldBlocks>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    render_assets: Res<WorldRenderAssets>,
     block_entities: Query<Entity, With<BlockEntity>>,
     mut interactions: Query<(&Interaction, &MainMenuAction), (Changed<Interaction>, With<Button>)>,
 ) {
@@ -50,7 +49,7 @@ pub fn main_menu_actions(
                     &mut placement,
                 );
                 despawn_world(&mut commands, &block_entities);
-                rebuild_world(&mut commands, &world, &mut meshes, &mut materials);
+                rebuild_world(&mut commands, &world, &render_assets);
                 *mode = GameMode::Playing;
             }
             MainMenuAction::OpenSaveList => {
@@ -74,8 +73,7 @@ pub fn save_list_actions(
     mut commands: Commands,
     mut world: ResMut<WorldBlocks>,
     mut simulation: ResMut<SimulationState>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    render_assets: Res<WorldRenderAssets>,
     block_entities: Query<Entity, With<BlockEntity>>,
     mut interactions: Query<(&Interaction, &SaveListAction), (Changed<Interaction>, With<Button>)>,
 ) {
@@ -105,7 +103,7 @@ pub fn save_list_actions(
                         &mut placement,
                     );
                     despawn_world(&mut commands, &block_entities);
-                    rebuild_world(&mut commands, &world, &mut meshes, &mut materials);
+                    rebuild_world(&mut commands, &world, &render_assets);
                     *mode = GameMode::Playing;
                 }
             }
@@ -131,8 +129,7 @@ pub fn pause_menu_actions(
     mut world: ResMut<WorldBlocks>,
     mut commands: Commands,
     block_entities: Query<Entity, With<BlockEntity>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    render_assets: Res<WorldRenderAssets>,
     mut interactions: Query<(&Interaction, &PauseAction), (Changed<Interaction>, With<Button>)>,
 ) {
     if *mode != GameMode::Paused {
@@ -182,7 +179,7 @@ pub fn pause_menu_actions(
                 world.blocks.clear();
                 save_state.current = None;
                 despawn_world(&mut commands, &block_entities);
-                rebuild_world(&mut commands, &world, &mut meshes, &mut materials);
+                rebuild_world(&mut commands, &world, &render_assets);
                 *mode = GameMode::MainMenu;
             }
             PauseAction::Quit => {

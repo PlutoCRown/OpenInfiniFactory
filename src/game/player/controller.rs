@@ -48,7 +48,7 @@ pub fn spawn_player(mut commands: Commands) {
             ..default()
         },
         ScreenSpaceAmbientOcclusionSettings {
-            quality_level: ScreenSpaceAmbientOcclusionQualityLevel::High,
+            quality_level: ScreenSpaceAmbientOcclusionQualityLevel::Medium,
         },
         TemporalAntiAliasSettings::default(),
         TemporalJitter::default(),

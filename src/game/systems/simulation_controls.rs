@@ -4,7 +4,7 @@ use crate::game::simulation::runtime::reset_simulation;
 use crate::game::state::{BuilderMode, GameMode, SimulationState};
 use crate::game::ui::SimulationAction;
 use crate::game::world::grid::WorldBlocks;
-use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity};
+use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
 use crate::shared::config::{ConfigAction, GameConfig};
 
 pub fn simulation_controls(
@@ -20,8 +20,7 @@ pub fn simulation_controls(
     mut simulation: ResMut<SimulationState>,
     mut world: ResMut<WorldBlocks>,
     block_entities: Query<Entity, With<BlockEntity>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    render_assets: Res<WorldRenderAssets>,
 ) {
     if *builder_mode != BuilderMode::Play || *mode != GameMode::Playing {
         return;
@@ -42,7 +41,7 @@ pub fn simulation_controls(
     if keys.just_pressed(rollback_key) && simulation.is_active() {
         rollback_simulation(&mut simulation, &mut world);
         despawn_world(&mut commands, &block_entities);
-        rebuild_world(&mut commands, &world, &mut meshes, &mut materials);
+        rebuild_world(&mut commands, &world, &render_assets);
     }
 
     for (interaction, action) in &mut interactions {
@@ -57,7 +56,7 @@ pub fn simulation_controls(
             SimulationAction::Rollback => {
                 rollback_simulation(&mut simulation, &mut world);
                 despawn_world(&mut commands, &block_entities);
-                rebuild_world(&mut commands, &world, &mut meshes, &mut materials);
+                rebuild_world(&mut commands, &world, &render_assets);
             }
         }
     }

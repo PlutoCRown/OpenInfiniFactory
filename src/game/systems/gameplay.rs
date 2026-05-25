@@ -6,7 +6,7 @@ use crate::game::ui::{InventoryItems, PendingKeyBind, HOTBAR_SLOTS};
 use crate::game::world::blocks::{BlockData, BlockKind};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, WorldBlocks};
 use crate::game::world::rendering::{
-    despawn_world, rebuild_world, BlockEntity, HoverMarker, PlacementPreview,
+    spawn_block, BlockEntity, HoverMarker, PlacementPreview, WorldRenderAssets,
 };
 use crate::shared::config::GameConfig;
 
@@ -77,9 +77,8 @@ pub fn placement_input(
     mode: Res<GameMode>,
     simulation: Res<SimulationState>,
     mut placement: ResMut<PlacementState>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    block_entities: Query<Entity, With<BlockEntity>>,
+    render_assets: Res<WorldRenderAssets>,
+    block_entities: Query<(Entity, &BlockEntity)>,
     player: Query<&Transform, With<FlyCamera>>,
 ) {
     let place_button = MouseButton::Left;
@@ -95,7 +94,6 @@ pub fn placement_input(
         return;
     }
 
-    let mut changed = false;
     let mut canceled_delete = false;
 
     if mouse_buttons.just_pressed(place_button) && placement.pending_delete.is_some() {
@@ -105,8 +103,14 @@ pub fn placement_input(
 
     if mouse_buttons.just_released(delete_button) {
         if let Some(delete_pos) = placement.pending_delete.take() {
-            world.blocks.remove(&delete_pos);
-            changed = true;
+            if world.blocks.remove(&delete_pos).is_some() {
+                if let Some((entity, _)) = block_entities
+                    .iter()
+                    .find(|(_, block_entity)| block_entity.pos == delete_pos)
+                {
+                    commands.entity(entity).despawn_recursive();
+                }
+            }
         }
     }
 
@@ -136,14 +140,18 @@ pub fn placement_input(
                         facing: placement.facing,
                     },
                 );
-                changed = true;
+                spawn_block(
+                    &mut commands,
+                    &render_assets,
+                    &world,
+                    place_at,
+                    BlockData {
+                        kind,
+                        facing: placement.facing,
+                    },
+                );
             }
         }
-    }
-
-    if changed {
-        despawn_world(&mut commands, &block_entities);
-        rebuild_world(&mut commands, &world, &mut meshes, &mut materials);
     }
 }
 
