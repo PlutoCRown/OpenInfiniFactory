@@ -103,7 +103,7 @@ pub fn placement_input(
 
     if mouse_buttons.just_released(delete_button) {
         if let Some(delete_pos) = placement.pending_delete.take() {
-            if world.blocks.remove(&delete_pos).is_some() {
+            if world.remove(&delete_pos).is_some() {
                 if let Some((entity, _)) = block_entities
                     .iter()
                     .find(|(_, block_entity)| block_entity.pos == delete_pos)
@@ -133,7 +133,7 @@ pub fn placement_input(
                 &player,
             ) {
                 let kind = inventory.hotbar[placement.selected].expect("validated selected block");
-                world.blocks.insert(
+                world.insert(
                     place_at,
                     BlockData {
                         kind,

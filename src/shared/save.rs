@@ -78,11 +78,9 @@ pub fn load_world(world: &mut WorldBlocks, name: &str) -> bool {
         return false;
     };
 
-    world.blocks.clear();
+    world.clear();
     for saved in save.blocks {
-        world
-            .blocks
-            .insert(IVec3::new(saved.x, saved.y, saved.z), saved.data);
+        world.insert(IVec3::new(saved.x, saved.y, saved.z), saved.data);
     }
     true
 }

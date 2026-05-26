@@ -9,9 +9,41 @@ pub const FLOOR_RADIUS: i32 = 12;
 #[derive(Resource, Default)]
 pub struct WorldBlocks {
     pub blocks: HashMap<IVec3, BlockData>,
+    pub topology_revision: u64,
 }
 
 impl WorldBlocks {
+    pub fn insert(&mut self, pos: IVec3, block: BlockData) -> Option<BlockData> {
+        let previous = self.blocks.insert(pos, block);
+        if previous != Some(block) {
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+        previous
+    }
+
+    pub fn remove(&mut self, pos: &IVec3) -> Option<BlockData> {
+        let removed = self.blocks.remove(pos);
+        if removed.is_some() {
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+        removed
+    }
+
+    pub fn clear(&mut self) {
+        if !self.blocks.is_empty() {
+            self.blocks.clear();
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+    }
+
+    pub fn retain(&mut self, mut keep: impl FnMut(&IVec3, &BlockData) -> bool) {
+        let before = self.blocks.len();
+        self.blocks.retain(|pos, block| keep(pos, block));
+        if self.blocks.len() != before {
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+    }
+
     pub fn is_occupied(&self, pos: IVec3) -> bool {
         self.blocks
             .get(&pos)
@@ -23,8 +55,7 @@ impl WorldBlocks {
     }
 
     pub fn clear_generated_markers(&mut self) {
-        self.blocks
-            .retain(|_, block| !block.kind.is_generated_marker());
+        self.retain(|_, block| !block.kind.is_generated_marker());
     }
 }
 
@@ -37,7 +68,7 @@ pub struct TargetHit {
 pub fn seed_demo_world(world: &mut WorldBlocks) {
     for x in -FLOOR_RADIUS..=FLOOR_RADIUS {
         for z in -FLOOR_RADIUS..=FLOOR_RADIUS {
-            world.blocks.insert(
+            world.insert(
                 IVec3::new(x, 0, z),
                 BlockData {
                     kind: BlockKind::Solid,
@@ -47,21 +78,21 @@ pub fn seed_demo_world(world: &mut WorldBlocks) {
         }
     }
 
-    world.blocks.insert(
+    world.insert(
         IVec3::new(0, 1, 0),
         BlockData {
             kind: BlockKind::Conveyor,
             facing: Facing::East,
         },
     );
-    world.blocks.insert(
+    world.insert(
         IVec3::new(1, 1, 0),
         BlockData {
             kind: BlockKind::Piston,
             facing: Facing::South,
         },
     );
-    world.blocks.insert(
+    world.insert(
         IVec3::new(2, 1, 0),
         BlockData {
             kind: BlockKind::Goal,

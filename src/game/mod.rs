@@ -53,6 +53,7 @@ impl Plugin for GamePlugin {
             .insert_resource(GameMode::MainMenu)
             .insert_resource(BuilderMode::default())
             .insert_resource(SimulationState::default())
+            .insert_resource(simulation::runtime::SignalNetworkCache::default())
             .insert_resource(settings)
             .insert_resource(UiScale(config.ui_scale))
             .insert_resource(config)

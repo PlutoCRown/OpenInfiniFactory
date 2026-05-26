@@ -38,7 +38,7 @@ pub fn main_menu_actions(
         match action {
             MainMenuAction::NewWorld => {
                 let name = next_world_name(&save_state.slots);
-                world.blocks.clear();
+                world.clear();
                 seed_demo_world(&mut world);
                 save_world(&world, &name);
                 save_state.current = Some(name);
@@ -177,7 +177,7 @@ pub fn pause_menu_actions(
             PauseAction::BackToMainMenu => {
                 simulation.running = false;
                 simulation.accumulator = 0.0;
-                world.blocks.clear();
+                world.clear();
                 save_state.current = None;
                 despawn_world(&mut commands, &block_entities);
                 rebuild_world(&mut commands, &world, &render_assets);
