@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::game::world::blocks::{BlockData, BlockKind, Facing};
+use crate::game::world::blocks::{BlockData, BlockKind, Facing, MaterialKind};
 
 pub const REACH: f32 = 8.0;
 pub const FLOOR_RADIUS: i32 = 12;
@@ -11,7 +11,23 @@ pub const FLOOR_RADIUS: i32 = 12;
 pub struct WorldBlocks {
     pub blocks: HashMap<IVec3, BlockData>,
     pub material_welds: HashSet<MaterialWeld>,
+    pub generator_settings: HashMap<IVec3, GeneratorSettings>,
     pub topology_revision: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct GeneratorSettings {
+    pub period: u64,
+    pub material: MaterialKind,
+}
+
+impl Default for GeneratorSettings {
+    fn default() -> Self {
+        Self {
+            period: crate::game::world::blocks::DEFAULT_GENERATOR_PERIOD,
+            material: MaterialKind::Basic,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
@@ -57,6 +73,7 @@ impl WorldBlocks {
         let removed = self.blocks.remove(pos);
         if removed.is_some() {
             self.material_welds.retain(|weld| !weld.contains(*pos));
+            self.generator_settings.remove(pos);
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
         removed
@@ -66,6 +83,7 @@ impl WorldBlocks {
         if !self.blocks.is_empty() {
             self.blocks.clear();
             self.material_welds.clear();
+            self.generator_settings.clear();
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -77,6 +95,28 @@ impl WorldBlocks {
             self.material_welds.retain(|weld| {
                 self.blocks.contains_key(&weld.a) && self.blocks.contains_key(&weld.b)
             });
+            self.generator_settings
+                .retain(|pos, _| self.blocks.contains_key(pos));
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+    }
+
+    pub fn generator_settings(&self, pos: IVec3) -> GeneratorSettings {
+        self.generator_settings
+            .get(&pos)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub fn set_generator_settings(&mut self, pos: IVec3, settings: GeneratorSettings) {
+        if !self
+            .blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind == BlockKind::Generator)
+        {
+            return;
+        }
+        if self.generator_settings.insert(pos, settings) != Some(settings) {
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }

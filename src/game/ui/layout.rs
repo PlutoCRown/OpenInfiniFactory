@@ -8,15 +8,16 @@ use super::components::{flex_row, localized_text, root_node, text, transparent_n
 use super::theme::{absolute_text_bundle, panel_bundle, STATUS_TEXT};
 use super::types::{
     BackpackPanel, CarriedLabel, Crosshair, CurrentSaveText, DeleteSelectionModeText, FovText,
-    HotbarText, InventoryTitle, MainMenuAction, MainMenuPanel, PauseAction, PausePanel,
-    PlaceSelectionModeText, SaveListPanel, SaveListTitle, SettingsAction, SettingsGameplayGroup,
-    SettingsKeyBindingsGroup, SettingsPanel, SettingsStatusText, SimulationAction, SimulationText,
-    SlotArea, UiScaleText, BACKPACK_SLOTS, HOTBAR_SLOTS,
+    GeneratorAction, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText, HotbarText,
+    InGameHudStyle, InGameHudVisibility, InventoryTitle, MainMenuAction, MainMenuPanel,
+    PauseAction, PausePanel, PlaceSelectionModeText, SaveListPanel, SaveListTitle, SettingsAction,
+    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsStatusText,
+    SimulationAction, SimulationText, SlotArea, UiScaleText, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::widgets::{
-    spawn_language_settings_button, spawn_localized_main_button, spawn_localized_pause_button,
-    spawn_localized_settings_button, spawn_localized_sim_button, spawn_save_back_button,
-    spawn_save_slot_button, spawn_slot,
+    spawn_generator_button, spawn_language_settings_button, spawn_localized_main_button,
+    spawn_localized_pause_button, spawn_localized_settings_button, spawn_localized_sim_button,
+    spawn_save_back_button, spawn_save_slot_button, spawn_slot,
 };
 
 pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
@@ -25,12 +26,50 @@ pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
         spawn_simulation_buttons(root, &i18n);
         spawn_hotbar(root);
         spawn_inventory_panel(root, &i18n);
+        spawn_generator_panel(root, &i18n);
         spawn_pause_panel(root, &i18n);
         spawn_settings_panel(root, &i18n);
         spawn_main_menu(root, &i18n);
         spawn_save_list(root);
         spawn_carried_label(root);
     });
+}
+
+fn spawn_generator_panel(root: &mut ChildBuilder, i18n: &I18n) {
+    root.spawn((panel_bundle(420.0, 250.0, -210.0, -125.0), GeneratorPanel))
+        .with_children(|panel| {
+            panel.spawn(localized_text(i18n, "generator.title", 26.0, Color::WHITE));
+            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
+                spawn_generator_button(
+                    row,
+                    i18n.text("button.period_down"),
+                    "button.period_down",
+                    GeneratorAction::PeriodDown,
+                );
+                row.spawn((text("", 18.0, Color::WHITE), GeneratorPeriodText));
+                spawn_generator_button(
+                    row,
+                    i18n.text("button.period_up"),
+                    "button.period_up",
+                    GeneratorAction::PeriodUp,
+                );
+            });
+            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
+                spawn_generator_button(
+                    row,
+                    i18n.text("button.material_next"),
+                    "button.material_next",
+                    GeneratorAction::MaterialNext,
+                );
+                row.spawn((text("", 18.0, Color::WHITE), GeneratorMaterialText));
+            });
+            spawn_generator_button(
+                panel,
+                i18n.text("button.close"),
+                "button.close",
+                GeneratorAction::Close,
+            );
+        });
 }
 
 fn spawn_status_overlays(root: &mut ChildBuilder) {
@@ -45,6 +84,7 @@ fn spawn_status_overlays(root: &mut ChildBuilder) {
             None,
         ),
         Crosshair,
+        InGameHudVisibility,
     ));
     root.spawn((
         absolute_text_bundle(
@@ -57,6 +97,7 @@ fn spawn_status_overlays(root: &mut ChildBuilder) {
             Some(Val::Px(92.0)),
         ),
         HotbarText,
+        InGameHudVisibility,
     ));
     root.spawn((
         absolute_text_bundle(
@@ -69,6 +110,7 @@ fn spawn_status_overlays(root: &mut ChildBuilder) {
             None,
         ),
         CurrentSaveText,
+        InGameHudVisibility,
     ));
     root.spawn((
         absolute_text_bundle(
@@ -81,20 +123,24 @@ fn spawn_status_overlays(root: &mut ChildBuilder) {
             None,
         ),
         SimulationText,
+        InGameHudVisibility,
     ));
 }
 
 fn spawn_simulation_buttons(root: &mut ChildBuilder, i18n: &I18n) {
-    root.spawn(transparent_node(Style {
-        width: Val::Px(260.0),
-        height: Val::Px(38.0),
-        position_type: PositionType::Absolute,
-        right: Val::Px(18.0),
-        top: Val::Px(182.0),
-        display: Display::Flex,
-        column_gap: Val::Px(6.0),
-        ..default()
-    }))
+    root.spawn((
+        transparent_node(Style {
+            width: Val::Px(260.0),
+            height: Val::Px(38.0),
+            position_type: PositionType::Absolute,
+            right: Val::Px(18.0),
+            top: Val::Px(182.0),
+            display: Display::Flex,
+            column_gap: Val::Px(6.0),
+            ..default()
+        }),
+        InGameHudStyle,
+    ))
     .with_children(|bar| {
         spawn_localized_sim_button(
             bar,
@@ -112,25 +158,28 @@ fn spawn_simulation_buttons(root: &mut ChildBuilder, i18n: &I18n) {
 }
 
 fn spawn_hotbar(root: &mut ChildBuilder) {
-    root.spawn(NodeBundle {
-        style: Style {
-            width: Val::Px(540.0),
-            height: Val::Px(58.0),
-            position_type: PositionType::Absolute,
-            left: Val::Percent(50.0),
-            bottom: Val::Px(22.0),
-            margin: UiRect {
-                left: Val::Px(-270.0),
+    root.spawn((
+        NodeBundle {
+            style: Style {
+                width: Val::Px(540.0),
+                height: Val::Px(58.0),
+                position_type: PositionType::Absolute,
+                left: Val::Percent(50.0),
+                bottom: Val::Px(22.0),
+                margin: UiRect {
+                    left: Val::Px(-270.0),
+                    ..default()
+                },
+                display: Display::Flex,
+                justify_content: JustifyContent::Center,
+                column_gap: Val::Px(4.0),
                 ..default()
             },
-            display: Display::Flex,
-            justify_content: JustifyContent::Center,
-            column_gap: Val::Px(4.0),
+            background_color: Color::srgba(0.04, 0.04, 0.04, 0.38).into(),
             ..default()
         },
-        background_color: Color::srgba(0.04, 0.04, 0.04, 0.38).into(),
-        ..default()
-    })
+        InGameHudStyle,
+    ))
     .with_children(|bar| {
         for index in 0..HOTBAR_SLOTS {
             spawn_slot(bar, SlotArea::Hotbar, index);

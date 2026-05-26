@@ -2,9 +2,10 @@ use bevy::prelude::*;
 
 use crate::game::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
 use crate::game::ui::{
-    CarriedItem, InventoryItems, MainMenuAction, PauseAction, PendingKeyBind, SaveListAction,
-    SettingsAction, SettingsTab,
+    CarriedItem, GeneratorAction, InventoryItems, MainMenuAction, PauseAction, PendingKeyBind,
+    SaveListAction, SettingsAction, SettingsTab,
 };
+use crate::game::world::blocks::MaterialKind;
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
 use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
 use crate::game::{UI_SCALE_MAX, UI_SCALE_MIN, UI_SCALE_STEP};
@@ -177,6 +178,7 @@ pub fn pause_menu_actions(
             PauseAction::BackToMainMenu => {
                 simulation.running = false;
                 simulation.accumulator = 0.0;
+                placement.generator_panel = None;
                 world.clear();
                 save_state.current = None;
                 despawn_world(&mut commands, &block_entities);
@@ -283,6 +285,57 @@ pub fn settings_menu_actions(
             }
         }
     }
+}
+
+pub fn generator_menu_actions(
+    mut mode: ResMut<GameMode>,
+    mut placement: ResMut<PlacementState>,
+    mut world: ResMut<WorldBlocks>,
+    mut interactions: Query<(&Interaction, &GeneratorAction), (Changed<Interaction>, With<Button>)>,
+) {
+    if *mode != GameMode::GeneratorSettings {
+        return;
+    }
+
+    let Some(pos) = placement.generator_panel else {
+        *mode = GameMode::Playing;
+        return;
+    };
+
+    for (interaction, action) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        let mut settings = world.generator_settings(pos);
+        match *action {
+            GeneratorAction::PeriodDown => {
+                settings.period = settings.period.saturating_sub(1).max(1);
+                world.set_generator_settings(pos, settings);
+            }
+            GeneratorAction::PeriodUp => {
+                settings.period = (settings.period + 1).min(120);
+                world.set_generator_settings(pos, settings);
+            }
+            GeneratorAction::MaterialNext => {
+                settings.material = next_material(settings.material);
+                world.set_generator_settings(pos, settings);
+            }
+            GeneratorAction::Close => {
+                placement.generator_panel = None;
+                *mode = GameMode::Playing;
+            }
+        }
+    }
+}
+
+fn next_material(material: MaterialKind) -> MaterialKind {
+    let all = MaterialKind::ALL;
+    let index = all
+        .iter()
+        .position(|candidate| *candidate == material)
+        .unwrap_or(0);
+    all[(index + 1) % all.len()]
 }
 
 fn step_ui_scale(current: f32, delta: f32) -> f32 {

@@ -32,6 +32,22 @@ pub struct BlockData {
     pub facing: Facing,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum MaterialKind {
+    #[default]
+    Basic,
+}
+
+impl MaterialKind {
+    pub const ALL: [Self; 1] = [Self::Basic];
+
+    pub fn name_key(self) -> &'static str {
+        match self {
+            Self::Basic => "material.basic",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum BlockKind {
     SelectionTool,

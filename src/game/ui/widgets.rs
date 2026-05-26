@@ -81,6 +81,29 @@ pub(super) fn spawn_language_settings_button(
         });
 }
 
+pub(super) fn spawn_generator_button(
+    parent: &mut ChildBuilder,
+    label: String,
+    key: &'static str,
+    action: super::types::GeneratorAction,
+) {
+    parent
+        .spawn((menu_button(36.0), action))
+        .with_children(|button| {
+            button.spawn((
+                TextBundle::from_section(
+                    label,
+                    TextStyle {
+                        font_size: 14.0,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                ),
+                super::types::LocalizedText { key },
+            ));
+        });
+}
+
 pub(super) fn spawn_localized_settings_button(
     parent: &mut ChildBuilder,
     label: String,

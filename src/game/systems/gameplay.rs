@@ -32,6 +32,10 @@ pub fn gameplay_input(
         *mode = match *mode {
             GameMode::Playing | GameMode::Inventory => GameMode::Paused,
             GameMode::Paused => GameMode::Playing,
+            GameMode::GeneratorSettings => {
+                placement.generator_panel = None;
+                GameMode::Playing
+            }
             GameMode::Settings => GameMode::Paused,
             GameMode::SaveListPause => GameMode::Paused,
             GameMode::SaveListMain => GameMode::MainMenu,
@@ -83,7 +87,7 @@ pub fn placement_input(
     inventory: Res<InventoryItems>,
     config: Res<GameConfig>,
     builder_mode: Res<BuilderMode>,
-    mode: Res<GameMode>,
+    mut mode: ResMut<GameMode>,
     simulation: Res<SimulationState>,
     mut placement: ResMut<PlacementState>,
     render_assets: Res<WorldRenderAssets>,
@@ -113,6 +117,23 @@ pub fn placement_input(
     let current_place_at = placement.target.map(|target| target.pos + target.normal);
     let current_delete_at = placement.target.map(|target| target.pos);
     let current_target_pos = placement.target.map(|target| target.pos);
+
+    if mouse_buttons.just_pressed(place_button)
+        && selected_kind(&inventory, &placement).is_none()
+        && current_target_pos.is_some_and(|pos| {
+            world
+                .blocks
+                .get(&pos)
+                .is_some_and(|block| block.kind == BlockKind::Generator)
+        })
+    {
+        placement.generator_panel = current_target_pos;
+        placement.edit_gesture = None;
+        placement.selection.clear();
+        *mode = GameMode::GeneratorSettings;
+        despawn_edit_previews(&mut commands, &edit_previews);
+        return;
+    }
 
     if selected_kind(&inventory, &placement) == Some(BlockKind::SelectionTool) {
         handle_selection_tool_input(

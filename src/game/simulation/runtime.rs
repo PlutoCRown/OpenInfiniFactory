@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 use crate::game::state::{BuilderMode, SimulationState};
-use crate::game::world::blocks::{BlockData, BlockKind, Facing, DEFAULT_GENERATOR_PERIOD};
+use crate::game::world::blocks::{BlockData, BlockKind, Facing, MaterialKind};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
 
@@ -149,7 +149,7 @@ fn sync_generated_markers(
 }
 
 fn spawn_materials(world: &mut WorldBlocks, turn: u64) {
-    if turn == 0 || turn % DEFAULT_GENERATOR_PERIOD != 0 {
+    if turn == 0 {
         return;
     }
 
@@ -162,16 +162,27 @@ fn spawn_materials(world: &mut WorldBlocks, turn: u64) {
         .collect();
 
     for (pos, facing) in generators {
+        let settings = world.generator_settings(pos);
+        if turn % settings.period.max(1) != 0 {
+            continue;
+        }
+
         let spawn_pos = pos + facing.forward_ivec3();
         if world.can_place_solid_at(spawn_pos) {
             world.insert(
                 spawn_pos,
                 BlockData {
-                    kind: BlockKind::Material,
+                    kind: material_block_kind(settings.material),
                     facing: Facing::North,
                 },
             );
         }
+    }
+}
+
+fn material_block_kind(material: MaterialKind) -> BlockKind {
+    match material {
+        MaterialKind::Basic => BlockKind::Material,
     }
 }
 

@@ -11,6 +11,7 @@ pub struct PlacementState {
     pub target: Option<TargetHit>,
     pub edit_gesture: Option<EditGesture>,
     pub selection: SelectionState,
+    pub generator_panel: Option<IVec3>,
 }
 
 impl Default for PlacementState {
@@ -21,6 +22,7 @@ impl Default for PlacementState {
             target: None,
             edit_gesture: None,
             selection: SelectionState::default(),
+            generator_panel: None,
         }
     }
 }
@@ -120,6 +122,7 @@ pub enum GameMode {
     MainMenu,
     SaveListMain,
     SaveListPause,
+    GeneratorSettings,
     Settings,
     Playing,
     Inventory,

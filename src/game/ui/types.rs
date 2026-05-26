@@ -11,6 +11,12 @@ pub(super) const BACKPACK_SLOTS: usize = 27;
 pub struct HotbarText;
 
 #[derive(Component)]
+pub struct InGameHudStyle;
+
+#[derive(Component)]
+pub struct InGameHudVisibility;
+
+#[derive(Component)]
 pub struct BackpackPanel;
 
 #[derive(Component)]
@@ -21,6 +27,15 @@ pub struct PausePanel;
 
 #[derive(Component)]
 pub struct SettingsPanel;
+
+#[derive(Component)]
+pub struct GeneratorPanel;
+
+#[derive(Component)]
+pub struct GeneratorPeriodText;
+
+#[derive(Component)]
+pub struct GeneratorMaterialText;
 
 #[derive(Component)]
 pub struct SettingsStatusText;
@@ -123,6 +138,14 @@ pub enum SettingsAction {
     ResetDefaults,
     OpenFolder,
     Back,
+}
+
+#[derive(Component, Clone, Copy)]
+pub enum GeneratorAction {
+    PeriodDown,
+    PeriodUp,
+    MaterialNext,
+    Close,
 }
 
 #[derive(Resource, Clone, Copy, Eq, PartialEq)]

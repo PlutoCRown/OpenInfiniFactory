@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::game::world::blocks::BlockData;
-use crate::game::world::grid::{MaterialWeld, WorldBlocks};
+use crate::game::world::grid::{GeneratorSettings, MaterialWeld, WorldBlocks};
 
 pub const SAVE_DIR: &str = "saves";
 pub const SAVE_SLOTS: usize = 8;
@@ -27,6 +27,8 @@ struct SaveFile {
     blocks: Vec<SavedBlock>,
     #[serde(default)]
     material_welds: Vec<MaterialWeld>,
+    #[serde(default)]
+    generator_settings: Vec<SavedGeneratorSettings>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -35,6 +37,14 @@ struct SavedBlock {
     y: i32,
     z: i32,
     data: BlockData,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SavedGeneratorSettings {
+    x: i32,
+    y: i32,
+    z: i32,
+    settings: GeneratorSettings,
 }
 
 pub fn save_world(world: &WorldBlocks, name: &str) -> bool {
@@ -50,6 +60,16 @@ pub fn save_world(world: &WorldBlocks, name: &str) -> bool {
             })
             .collect(),
         material_welds: world.material_welds.iter().copied().collect(),
+        generator_settings: world
+            .generator_settings
+            .iter()
+            .map(|(pos, settings)| SavedGeneratorSettings {
+                x: pos.x,
+                y: pos.y,
+                z: pos.z,
+                settings: *settings,
+            })
+            .collect(),
     };
 
     if let Err(error) = fs::create_dir_all(SAVE_DIR) {
@@ -91,6 +111,9 @@ pub fn load_world(world: &mut WorldBlocks, name: &str) -> bool {
             .filter(|weld| world.is_material_at(weld.a) && world.is_material_at(weld.b))
             .collect(),
     );
+    for saved in save.generator_settings {
+        world.set_generator_settings(IVec3::new(saved.x, saved.y, saved.z), saved.settings);
+    }
     true
 }
 

@@ -7,11 +7,12 @@ use crate::shared::save::SaveState;
 
 use super::types::{
     BackpackPanel, CarriedItem, CarriedLabel, Crosshair, CurrentSaveText, DeleteSelectionModeText,
-    FovText, HotbarText, InventoryItems, InventorySlot, InventoryTitle, KeyBindingButton,
-    KeyBindingLabel, LanguageText, LocalizedText, MainMenuPanel, PausePanel, PendingKeyBind,
-    PlaceSelectionModeText, SaveListAction, SaveListLabel, SaveListPanel, SaveListTitle,
-    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsStatusText,
-    SettingsTab, SimulationText, SlotArea, SlotLabel, UiScaleText,
+    FovText, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText, HotbarText,
+    InGameHudStyle, InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle,
+    KeyBindingButton, KeyBindingLabel, LanguageText, LocalizedText, MainMenuPanel, PausePanel,
+    PendingKeyBind, PlaceSelectionModeText, SaveListAction, SaveListLabel, SaveListPanel,
+    SaveListTitle, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
+    SettingsStatusText, SettingsTab, SimulationText, SlotArea, SlotLabel, UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -216,6 +217,41 @@ pub fn update_status_ui(
     }
 }
 
+pub fn update_generator_ui(
+    placement: Res<PlacementState>,
+    world: Res<crate::game::world::grid::WorldBlocks>,
+    i18n: Res<I18n>,
+    mut generator_period_text: Query<
+        &mut Text,
+        (With<GeneratorPeriodText>, Without<GeneratorMaterialText>),
+    >,
+    mut generator_material_text: Query<
+        &mut Text,
+        (With<GeneratorMaterialText>, Without<GeneratorPeriodText>),
+    >,
+) {
+    let Some(pos) = placement.generator_panel else {
+        return;
+    };
+
+    let generator_settings = world.generator_settings(pos);
+    if let Ok(mut text) = generator_period_text.get_single_mut() {
+        text.sections[0].value = i18n.fmt(
+            "generator.period",
+            &[("period", generator_settings.period.to_string())],
+        );
+    }
+    if let Ok(mut text) = generator_material_text.get_single_mut() {
+        text.sections[0].value = i18n.fmt(
+            "generator.material",
+            &[(
+                "material",
+                i18n.text(generator_settings.material.name_key()),
+            )],
+        );
+    }
+}
+
 fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
     match mode {
         BuilderMode::Edit => i18n.text("mode.edit"),
@@ -359,8 +395,8 @@ pub fn update_panel_visibility(
         Query<&mut Style, With<SettingsKeyBindingsGroup>>,
         Query<&mut Style, With<BackpackPanel>>,
         Query<&mut Style, With<PausePanel>>,
+        Query<&mut Style, With<GeneratorPanel>>,
     )>,
-    mut crosshair: Query<&mut Visibility, With<Crosshair>>,
 ) {
     for mut style in &mut style_sets.p0() {
         style.display = if *mode == GameMode::MainMenu {
@@ -419,8 +455,44 @@ pub fn update_panel_visibility(
         };
     }
 
-    for mut visibility in &mut crosshair {
-        *visibility = if *mode == GameMode::Playing {
+    for mut style in &mut style_sets.p7() {
+        style.display = if *mode == GameMode::GeneratorSettings {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+}
+
+pub fn update_hud_visibility(
+    mode: Res<GameMode>,
+    save_state: Res<SaveState>,
+    mut hud_style: Query<&mut Style, With<InGameHudStyle>>,
+    mut visibility_sets: ParamSet<(
+        Query<&mut Visibility, With<Crosshair>>,
+        Query<&mut Visibility, With<InGameHudVisibility>>,
+    )>,
+) {
+    let has_world = save_state.current.is_some();
+
+    for mut style in &mut hud_style {
+        style.display = if has_world {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    for mut visibility in &mut visibility_sets.p0() {
+        *visibility = if has_world && *mode == GameMode::Playing {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+
+    for mut visibility in &mut visibility_sets.p1() {
+        *visibility = if has_world {
             Visibility::Visible
         } else {
             Visibility::Hidden
