@@ -1,10 +1,13 @@
 use bevy::prelude::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::game::state::{BuilderMode, SimulationState};
+use crate::game::world::animation::{pair_block_animations, SIMULATION_TURN_SECONDS};
 use crate::game::world::blocks::{BlockData, BlockKind, Facing, MaterialKind};
 use crate::game::world::grid::WorldBlocks;
-use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
+use crate::game::world::rendering::{
+    despawn_world, rebuild_world_with_animations, BlockEntity, WorldRenderAssets,
+};
 
 use super::signal_offsets;
 pub use super::signals::SignalNetworkCache;
@@ -21,6 +24,7 @@ pub fn run_turn(
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
 ) {
+    let before = animation_snapshot(world);
     sync_generated_markers(world, signal_cache, &HashSet::new());
     signal_cache.refresh(world);
     let powered_components = signal_cache.powered_components(world);
@@ -37,8 +41,9 @@ pub fn run_turn(
     apply_factory_gravity(world);
     signal_cache.refresh(world);
 
+    let animations = pair_block_animations(&before, &animation_snapshot(world));
     despawn_world(commands, block_entities);
-    rebuild_world(commands, world, render_assets);
+    rebuild_world_with_animations(commands, world, render_assets, &animations);
 }
 
 pub fn reset_simulation(world: &mut WorldBlocks) {
@@ -60,7 +65,7 @@ pub fn tick_simulation(
         return;
     }
 
-    simulation.accumulator += time.delta_seconds() * simulation.speed;
+    simulation.accumulator += time.delta_seconds() * simulation.speed / SIMULATION_TURN_SECONDS;
     while simulation.accumulator >= 1.0 {
         simulation.turn += 1;
         simulation.accumulator -= 1.0;
@@ -73,6 +78,16 @@ pub fn tick_simulation(
             &render_assets,
         );
     }
+}
+
+fn animation_snapshot(world: &WorldBlocks) -> HashMap<IVec3, (BlockKind, Facing)> {
+    world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| {
+            (!block.kind.is_generated_marker()).then_some((*pos, (block.kind, block.facing)))
+        })
+        .collect()
 }
 
 fn sync_generated_markers(

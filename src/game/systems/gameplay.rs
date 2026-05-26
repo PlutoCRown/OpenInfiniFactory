@@ -6,11 +6,13 @@ use crate::game::state::{
     SelectionAxis, SelectionBounds, SelectionDrag, SimulationState,
 };
 use crate::game::ui::{AreaKind, CarriedItem, InventoryItems, PendingKeyBind, HOTBAR_SLOTS};
+use crate::game::world::animation::BlockAnimation;
 use crate::game::world::blocks::{BlockData, BlockKind};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::{
-    despawn_edit_previews, spawn_block, spawn_edit_preview, BlockEntity, EditPreview,
-    EditPreviewKind, HoverMarker, PlacementPreview, WorldRenderAssets,
+    despawn_edit_previews, spawn_block, spawn_block_preview, spawn_block_with_animation,
+    spawn_edit_preview, BlockEntity, EditPreview, EditPreviewKind, HoverMarker, PlacementPreview,
+    WorldRenderAssets,
 };
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
@@ -81,13 +83,17 @@ pub fn gameplay_input(
         }
     }
 
-    if keys.just_pressed(bindings.rotate_or_rollback.key_code()) && !simulation.is_active() {
+    if keys.just_pressed(bindings.rotate_or_rollback.key_code())
+        && !simulation.is_active()
+        && placement.target.is_none()
+    {
         placement.facing = placement.facing.rotate();
     }
 }
 
 pub fn placement_input(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
     mut world: ResMut<WorldBlocks>,
     inventory: Res<InventoryItems>,
@@ -123,6 +129,10 @@ pub fn placement_input(
     let current_place_at = placement.target.map(|target| target.pos + target.normal);
     let current_delete_at = placement.target.map(|target| target.pos);
     let current_target_pos = placement.target.map(|target| target.pos);
+    let can_preview_place = current_place_at.is_some_and(|pos| {
+        selected_place_block(&inventory, *builder_mode, &placement)
+            .is_some_and(|block| can_place_block_at(pos, block, *builder_mode, &world, &player))
+    });
 
     if mouse_buttons.just_pressed(place_button)
         && selected_kind(&inventory, &placement).is_none()
@@ -157,6 +167,22 @@ pub fn placement_input(
     }
 
     placement.selection.clear();
+
+    if keys.just_pressed(config.key_bindings.rotate_or_rollback.key_code()) {
+        if !rotate_pending_place_preview(&mut placement) {
+            if can_preview_place {
+                placement.facing = placement.facing.rotate();
+            } else if let Some(pos) = current_target_pos {
+                rotate_block_at(
+                    pos,
+                    &mut world,
+                    &block_entities,
+                    &mut commands,
+                    &render_assets,
+                );
+            }
+        }
+    }
 
     if mouse_buttons.just_pressed(delete_button) {
         match placement.edit_gesture.as_mut() {
@@ -239,6 +265,20 @@ pub fn placement_input(
             );
         }
     }
+}
+
+fn rotate_pending_place_preview(placement: &mut PlacementState) -> bool {
+    let Some(EditGesture {
+        kind: EditGestureKind::Place { block },
+        ..
+    }) = placement.edit_gesture.as_mut()
+    else {
+        return false;
+    };
+
+    block.facing = block.facing.rotate();
+    placement.facing = block.facing;
+    true
 }
 
 fn selected_place_block(
@@ -401,10 +441,62 @@ fn move_selection(
     for (pos, block) in selected {
         let target = pos + offset;
         world.insert(target, block);
-        spawn_block(commands, render_assets, world, target, block);
+        spawn_block_with_animation(
+            commands,
+            render_assets,
+            world,
+            target,
+            block,
+            Some(BlockAnimation {
+                from_pos: pos,
+                to_pos: target,
+                from_facing: block.facing,
+                to_facing: block.facing,
+            }),
+        );
     }
     world.replace_material_welds(updated_welds);
     true
+}
+
+fn rotate_block_at(
+    pos: IVec3,
+    world: &mut WorldBlocks,
+    block_entities: &Query<(Entity, &BlockEntity)>,
+    commands: &mut Commands,
+    render_assets: &WorldRenderAssets,
+) {
+    let Some(block) = world.blocks.get_mut(&pos) else {
+        return;
+    };
+    if !block.kind.is_directional() {
+        return;
+    }
+
+    let from_facing = block.facing;
+    block.facing = block.facing.rotate();
+    let updated = *block;
+
+    if let Some((entity, _)) = block_entities
+        .iter()
+        .find(|(_, block_entity)| block_entity.pos == pos)
+    {
+        commands.entity(entity).despawn_recursive();
+    }
+
+    spawn_block_with_animation(
+        commands,
+        render_assets,
+        world,
+        pos,
+        updated,
+        Some(BlockAnimation {
+            from_pos: pos,
+            to_pos: pos,
+            from_facing,
+            to_facing: updated.facing,
+        }),
+    );
 }
 
 fn moved_selection_welds(
@@ -539,7 +631,7 @@ fn spawn_gesture_previews(
             );
             for pos in positions {
                 if can_place_block_at(pos, block, builder_mode, world, player) {
-                    spawn_edit_preview(commands, render_assets, pos, EditPreviewKind::Place);
+                    spawn_block_preview(commands, render_assets, world, pos, block);
                 }
             }
         }

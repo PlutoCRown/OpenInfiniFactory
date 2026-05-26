@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::game::world::blocks::{BlockData, BlockKind, Facing, MaterialKind};
 
-pub const REACH: f32 = 8.0;
+pub const REACH: f32 = 12.0;
 pub const FLOOR_RADIUS: i32 = 12;
 
 #[derive(Resource, Default)]
@@ -217,15 +217,23 @@ pub fn grid_to_world(pos: IVec3) -> Vec3 {
 }
 
 pub fn raycast_blocks(origin: Vec3, dir: Vec3, world: &WorldBlocks) -> Option<TargetHit> {
+    let dir = dir.normalize_or_zero();
+    if dir == Vec3::ZERO {
+        return None;
+    }
+
     let mut best: Option<(f32, TargetHit)> = None;
 
-    for pos in world.blocks.keys() {
+    for (pos, block) in &world.blocks {
+        if !block.kind.has_collision() {
+            continue;
+        }
+
         let center = grid_to_world(*pos);
         let min = center - Vec3::splat(0.5);
         let max = center + Vec3::splat(0.5);
-        if let Some((distance, normal)) = ray_aabb(origin, dir, min, max) {
-            if distance <= REACH && best.map_or(true, |(best_distance, _)| distance < best_distance)
-            {
+        if let Some((distance, normal)) = ray_aabb(origin, dir, min, max, REACH) {
+            if best.map_or(true, |(best_distance, _)| distance < best_distance) {
                 best = Some((distance, TargetHit { pos: *pos, normal }));
             }
         }
@@ -234,9 +242,15 @@ pub fn raycast_blocks(origin: Vec3, dir: Vec3, world: &WorldBlocks) -> Option<Ta
     best.map(|(_, hit)| hit)
 }
 
-fn ray_aabb(origin: Vec3, dir: Vec3, min: Vec3, max: Vec3) -> Option<(f32, IVec3)> {
-    let mut t_min = 0.0;
-    let mut t_max = REACH;
+fn ray_aabb(
+    origin: Vec3,
+    dir: Vec3,
+    min: Vec3,
+    max: Vec3,
+    max_distance: f32,
+) -> Option<(f32, IVec3)> {
+    let mut t_enter = 0.0;
+    let mut t_exit = max_distance;
     let mut normal = IVec3::ZERO;
 
     for axis in 0..3 {
@@ -253,26 +267,39 @@ fn ray_aabb(origin: Vec3, dir: Vec3, min: Vec3, max: Vec3) -> Option<(f32, IVec3
         }
 
         let inv_dir = 1.0 / dir_axis;
-        let mut t1 = (min_axis - origin_axis) * inv_dir;
-        let mut t2 = (max_axis - origin_axis) * inv_dir;
-        let mut axis_normal = IVec3::ZERO;
-
-        if t1 > t2 {
-            std::mem::swap(&mut t1, &mut t2);
-            axis_normal[axis] = 1;
+        let mut near = (min_axis - origin_axis) * inv_dir;
+        let mut far = (max_axis - origin_axis) * inv_dir;
+        let near_normal = if inv_dir >= 0.0 {
+            -axis_vec(axis)
         } else {
-            axis_normal[axis] = -1;
+            axis_vec(axis)
+        };
+
+        if near > far {
+            std::mem::swap(&mut near, &mut far);
         }
 
-        if t1 > t_min {
-            t_min = t1;
-            normal = axis_normal;
+        if near > t_enter {
+            t_enter = near;
+            normal = near_normal;
         }
-        t_max = t_max.min(t2);
-        if t_min > t_max {
+        t_exit = t_exit.min(far);
+        if t_enter > t_exit {
             return None;
         }
     }
 
-    Some((t_min.max(0.0), normal))
+    if t_exit < 0.0 {
+        None
+    } else {
+        Some((t_enter.max(0.0), normal))
+    }
+}
+
+fn axis_vec(axis: usize) -> IVec3 {
+    match axis {
+        0 => IVec3::X,
+        1 => IVec3::Y,
+        _ => IVec3::Z,
+    }
 }

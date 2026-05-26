@@ -40,13 +40,30 @@ pub struct WorldRenderAssets {
     pub(crate) arrow_nose_material: Handle<StandardMaterial>,
     pub(crate) goal_top_material: Handle<StandardMaterial>,
     pub(crate) weld_connector_material: Handle<StandardMaterial>,
-    place_preview_material: Handle<StandardMaterial>,
     delete_preview_material: Handle<StandardMaterial>,
     selection_preview_material: Handle<StandardMaterial>,
+    preview_solid: Handle<StandardMaterial>,
+    preview_grass: Handle<StandardMaterial>,
+    preview_stone: Handle<StandardMaterial>,
+    preview_dirt: Handle<StandardMaterial>,
+    preview_planks: Handle<StandardMaterial>,
+    preview_glass: Handle<StandardMaterial>,
+    preview_generator: Handle<StandardMaterial>,
+    preview_welder: Handle<StandardMaterial>,
+    preview_conveyor: Handle<StandardMaterial>,
+    preview_detector: Handle<StandardMaterial>,
+    preview_wire: Handle<StandardMaterial>,
+    preview_piston: Handle<StandardMaterial>,
+    preview_lifter: Handle<StandardMaterial>,
+    preview_rotator: Handle<StandardMaterial>,
+    preview_blocker: Handle<StandardMaterial>,
+    preview_drill: Handle<StandardMaterial>,
+    preview_laser: Handle<StandardMaterial>,
+    preview_goal: Handle<StandardMaterial>,
+    preview_material: Handle<StandardMaterial>,
 }
 
 pub enum EditPreviewKind {
-    Place,
     Delete,
     Selection,
 }
@@ -57,6 +74,11 @@ impl WorldRenderAssets {
         materials: &mut Assets<StandardMaterial>,
         images: &mut Assets<Image>,
     ) -> Self {
+        let grass_texture = images.add(block_texture(ProceduralTexture::Grass));
+        let stone_texture = images.add(block_texture(ProceduralTexture::Stone));
+        let dirt_texture = images.add(block_texture(ProceduralTexture::Dirt));
+        let planks_texture = images.add(block_texture(ProceduralTexture::Planks));
+
         Self {
             block: meshes.add(Cuboid::new(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)),
             node: meshes.add(Cuboid::new(
@@ -73,19 +95,19 @@ impl WorldRenderAssets {
             solid: materials.add(block_material(BlockKind::Solid)),
             grass: materials.add(textured_block_material(
                 BlockKind::Grass,
-                images.add(block_texture(ProceduralTexture::Grass)),
+                grass_texture.clone(),
             )),
             stone: materials.add(textured_block_material(
                 BlockKind::Stone,
-                images.add(block_texture(ProceduralTexture::Stone)),
+                stone_texture.clone(),
             )),
             dirt: materials.add(textured_block_material(
                 BlockKind::Dirt,
-                images.add(block_texture(ProceduralTexture::Dirt)),
+                dirt_texture.clone(),
             )),
             planks: materials.add(textured_block_material(
                 BlockKind::Planks,
-                images.add(block_texture(ProceduralTexture::Planks)),
+                planks_texture.clone(),
             )),
             glass: materials.add(block_material(BlockKind::Glass)),
             generator: materials.add(block_material(BlockKind::Generator)),
@@ -130,12 +152,6 @@ impl WorldRenderAssets {
                 unlit: true,
                 ..default()
             }),
-            place_preview_material: materials.add(StandardMaterial {
-                base_color: Color::srgba(0.55, 0.92, 1.0, 0.36),
-                alpha_mode: AlphaMode::Blend,
-                unlit: true,
-                ..default()
-            }),
             delete_preview_material: materials.add(StandardMaterial {
                 base_color: Color::srgba(1.0, 0.08, 0.04, 0.38),
                 alpha_mode: AlphaMode::Blend,
@@ -148,6 +164,37 @@ impl WorldRenderAssets {
                 unlit: true,
                 ..default()
             }),
+            preview_solid: materials.add(preview_block_material(BlockKind::Solid, None)),
+            preview_grass: materials.add(preview_block_material(
+                BlockKind::Grass,
+                Some(grass_texture.clone()),
+            )),
+            preview_stone: materials.add(preview_block_material(
+                BlockKind::Stone,
+                Some(stone_texture.clone()),
+            )),
+            preview_dirt: materials.add(preview_block_material(
+                BlockKind::Dirt,
+                Some(dirt_texture.clone()),
+            )),
+            preview_planks: materials.add(preview_block_material(
+                BlockKind::Planks,
+                Some(planks_texture.clone()),
+            )),
+            preview_glass: materials.add(preview_block_material(BlockKind::Glass, None)),
+            preview_generator: materials.add(preview_block_material(BlockKind::Generator, None)),
+            preview_welder: materials.add(preview_block_material(BlockKind::Welder, None)),
+            preview_conveyor: materials.add(preview_block_material(BlockKind::Conveyor, None)),
+            preview_detector: materials.add(preview_block_material(BlockKind::Detector, None)),
+            preview_wire: materials.add(preview_block_material(BlockKind::Wire, None)),
+            preview_piston: materials.add(preview_block_material(BlockKind::Piston, None)),
+            preview_lifter: materials.add(preview_block_material(BlockKind::Lifter, None)),
+            preview_rotator: materials.add(preview_block_material(BlockKind::Rotator, None)),
+            preview_blocker: materials.add(preview_block_material(BlockKind::Blocker, None)),
+            preview_drill: materials.add(preview_block_material(BlockKind::Drill, None)),
+            preview_laser: materials.add(preview_block_material(BlockKind::Laser, None)),
+            preview_goal: materials.add(preview_block_material(BlockKind::Goal, None)),
+            preview_material: materials.add(preview_block_material(BlockKind::Material, None)),
         }
     }
 
@@ -191,9 +238,35 @@ impl WorldRenderAssets {
 
     pub(crate) fn edit_preview_material(&self, kind: EditPreviewKind) -> Handle<StandardMaterial> {
         match kind {
-            EditPreviewKind::Place => self.place_preview_material.clone(),
             EditPreviewKind::Delete => self.delete_preview_material.clone(),
             EditPreviewKind::Selection => self.selection_preview_material.clone(),
+        }
+    }
+
+    pub(crate) fn block_preview_material(&self, kind: BlockKind) -> Handle<StandardMaterial> {
+        match kind {
+            BlockKind::Solid => self.preview_solid.clone(),
+            BlockKind::Grass => self.preview_grass.clone(),
+            BlockKind::Stone => self.preview_stone.clone(),
+            BlockKind::Dirt => self.preview_dirt.clone(),
+            BlockKind::Planks => self.preview_planks.clone(),
+            BlockKind::Glass => self.preview_glass.clone(),
+            BlockKind::Generator => self.preview_generator.clone(),
+            BlockKind::Welder => self.preview_welder.clone(),
+            BlockKind::Conveyor => self.preview_conveyor.clone(),
+            BlockKind::Detector => self.preview_detector.clone(),
+            BlockKind::Wire => self.preview_wire.clone(),
+            BlockKind::Piston => self.preview_piston.clone(),
+            BlockKind::Lifter => self.preview_lifter.clone(),
+            BlockKind::Rotator => self.preview_rotator.clone(),
+            BlockKind::Blocker => self.preview_blocker.clone(),
+            BlockKind::Drill => self.preview_drill.clone(),
+            BlockKind::Laser => self.preview_laser.clone(),
+            BlockKind::Goal => self.preview_goal.clone(),
+            BlockKind::Material => self.preview_material.clone(),
+            BlockKind::WeldPoint => self.weld_point_material.clone(),
+            BlockKind::BlockerHead => self.blocker_head.clone(),
+            BlockKind::DrillHead => self.drill_head.clone(),
         }
     }
 
@@ -231,6 +304,17 @@ fn textured_block_material(kind: BlockKind, texture: Handle<Image>) -> StandardM
         base_color_texture: Some(texture),
         perceptual_roughness: 0.94,
         reflectance: 0.10,
+        ..default()
+    }
+}
+
+fn preview_block_material(kind: BlockKind, texture: Option<Handle<Image>>) -> StandardMaterial {
+    StandardMaterial {
+        base_color: kind.material().with_alpha(0.46),
+        base_color_texture: texture,
+        alpha_mode: AlphaMode::Blend,
+        perceptual_roughness: 0.94,
+        reflectance: 0.08,
         ..default()
     }
 }

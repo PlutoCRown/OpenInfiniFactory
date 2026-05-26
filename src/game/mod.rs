@@ -23,6 +23,7 @@ use systems::menus::{
 };
 use systems::simulation_controls::simulation_controls;
 use ui::{CarriedItem, InventoryItems, OpenSettingsDropdown, PendingKeyBind, SettingsTab};
+use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
 use world::rendering::setup_scene;
 
@@ -116,6 +117,7 @@ impl Plugin for GamePlugin {
                     .before(systems::debug::mark_perf_view),
             )
             .add_systems(Update, systems::debug::mark_perf_view)
+            .add_systems(Update, animate_blocks.after(systems::debug::mark_perf_view))
             .add_systems(
                 Update,
                 (

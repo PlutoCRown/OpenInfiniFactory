@@ -1,7 +1,9 @@
 use bevy::pbr::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
+use std::collections::HashMap;
 
-use crate::game::world::blocks::{BlockData, BlockKind};
+use crate::game::world::animation::{AnimatedBlock, BlockAnimation, EDIT_ANIMATION_SECONDS};
+use crate::game::world::blocks::{BlockData, BlockKind, Facing};
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
 
@@ -131,6 +133,26 @@ pub fn spawn_edit_preview(
     ));
 }
 
+pub fn spawn_block_preview(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    world: &WorldBlocks,
+    pos: IVec3,
+    data: BlockData,
+) {
+    spawn_block_model(
+        commands,
+        assets,
+        world,
+        pos,
+        data,
+        assets.block_preview_material(data.kind),
+        Some(EditPreview),
+        None,
+        false,
+    );
+}
+
 pub fn spawn_block(
     commands: &mut Commands,
     assets: &WorldRenderAssets,
@@ -138,87 +160,152 @@ pub fn spawn_block(
     pos: IVec3,
     data: BlockData,
 ) {
-    commands
-        .spawn((
-            PbrBundle {
-                mesh: assets.block_mesh(data.kind),
-                material: assets.block_material(data.kind),
-                transform: Transform::from_translation(grid_to_world(pos)),
+    spawn_block_with_animation(commands, assets, world, pos, data, None);
+}
+
+pub fn spawn_block_with_animation(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    world: &WorldBlocks,
+    pos: IVec3,
+    data: BlockData,
+    animation: Option<BlockAnimation>,
+) {
+    spawn_block_model(
+        commands,
+        assets,
+        world,
+        pos,
+        data,
+        assets.block_material(data.kind),
+        None,
+        animation,
+        true,
+    );
+}
+
+pub fn rebuild_world_with_animations(
+    commands: &mut Commands,
+    world: &WorldBlocks,
+    assets: &WorldRenderAssets,
+    animations: &HashMap<IVec3, BlockAnimation>,
+) {
+    for (pos, data) in &world.blocks {
+        spawn_block_with_animation(
+            commands,
+            assets,
+            world,
+            *pos,
+            *data,
+            animations.get(pos).copied(),
+        );
+    }
+}
+
+fn spawn_block_model(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    world: &WorldBlocks,
+    pos: IVec3,
+    data: BlockData,
+    material: Handle<StandardMaterial>,
+    edit_preview: Option<EditPreview>,
+    animation: Option<BlockAnimation>,
+    with_block_entity: bool,
+) {
+    let mut transform = Transform::from_translation(grid_to_world(pos));
+    if animation.is_none() {
+        transform.rotation = Quat::from_rotation_y(data.facing.yaw());
+    }
+
+    let mut entity = commands.spawn(PbrBundle {
+        mesh: assets.block_mesh(data.kind),
+        material,
+        transform,
+        ..default()
+    });
+
+    if with_block_entity {
+        entity.insert(BlockEntity { pos });
+    }
+
+    if let Some(edit_preview) = edit_preview {
+        entity.insert(edit_preview);
+    }
+
+    if let Some(animation) = animation {
+        entity.insert(AnimatedBlock::new(animation, EDIT_ANIMATION_SECONDS));
+    }
+
+    entity.with_children(|parent| {
+        if data.kind.is_directional() {
+            let forward = Facing::North.forward();
+            parent.spawn(PbrBundle {
+                mesh: assets.arrow.clone(),
+                material: assets.arrow_material.clone(),
+                transform: Transform {
+                    translation: forward * 0.05 + Vec3::Y * 0.54,
+                    ..default()
+                },
                 ..default()
-            },
-            BlockEntity { pos },
-        ))
-        .with_children(|parent| {
-            if data.kind.is_directional() {
-                let forward = data.facing.forward();
-                parent.spawn(PbrBundle {
-                    mesh: assets.arrow.clone(),
-                    material: assets.arrow_material.clone(),
-                    transform: Transform {
-                        translation: forward * 0.05 + Vec3::Y * 0.54,
-                        rotation: Quat::from_rotation_y(data.facing.yaw()),
+            });
+
+            parent.spawn(PbrBundle {
+                mesh: assets.arrow_nose.clone(),
+                material: assets.arrow_nose_material.clone(),
+                transform: Transform {
+                    translation: forward * 0.42 + Vec3::Y * 0.56,
+                    ..default()
+                },
+                ..default()
+            });
+        }
+
+        if data.kind == BlockKind::Goal {
+            parent.spawn(PbrBundle {
+                mesh: assets.goal_top.clone(),
+                material: assets.goal_top_material.clone(),
+                transform: Transform::from_xyz(0.0, 0.55, 0.0),
+                ..default()
+            });
+        }
+
+        if data.kind == BlockKind::WeldPoint {
+            for offset in signal_offsets() {
+                let neighbor = pos + offset;
+                if world
+                    .blocks
+                    .get(&neighbor)
+                    .is_some_and(|block| weld_point_connects_to(block, -offset))
+                {
+                    parent.spawn(PbrBundle {
+                        mesh: assets.connector_mesh(offset),
+                        material: assets.weld_connector_material.clone(),
+                        transform: Transform::from_translation(offset.as_vec3() * 0.34),
                         ..default()
-                    },
-                    ..default()
-                });
-
-                parent.spawn(PbrBundle {
-                    mesh: assets.arrow_nose.clone(),
-                    material: assets.arrow_nose_material.clone(),
-                    transform: Transform {
-                        translation: forward * 0.42 + Vec3::Y * 0.56,
-                        rotation: Quat::from_rotation_y(data.facing.yaw()),
-                        ..default()
-                    },
-                    ..default()
-                });
-            }
-
-            if data.kind == BlockKind::Goal {
-                parent.spawn(PbrBundle {
-                    mesh: assets.goal_top.clone(),
-                    material: assets.goal_top_material.clone(),
-                    transform: Transform::from_xyz(0.0, 0.55, 0.0),
-                    ..default()
-                });
-            }
-
-            if data.kind == BlockKind::WeldPoint {
-                for offset in signal_offsets() {
-                    let neighbor = pos + offset;
-                    if world
-                        .blocks
-                        .get(&neighbor)
-                        .is_some_and(|block| weld_point_connects_to(block, -offset))
-                    {
-                        parent.spawn(PbrBundle {
-                            mesh: assets.connector_mesh(offset),
-                            material: assets.weld_connector_material.clone(),
-                            transform: Transform::from_translation(offset.as_vec3() * 0.34),
-                            ..default()
-                        });
-                    }
+                    });
                 }
             }
+        }
 
-            if data.kind == BlockKind::Wire {
-                for offset in signal_offsets() {
-                    let neighbor = pos + offset;
-                    if world
-                        .blocks
-                        .get(&neighbor)
-                        .is_some_and(|block| wire_connects_to(block, -offset))
-                    {
-                        parent.spawn(PbrBundle {
-                            mesh: assets.connector_mesh(offset),
-                            material: assets.wire_connector_material.clone(),
-                            transform: Transform::from_translation(offset.as_vec3() * 0.34),
-                            ..default()
-                        });
-                    }
+        if data.kind == BlockKind::Wire {
+            for offset in signal_offsets() {
+                let neighbor = pos + offset;
+                if world
+                    .blocks
+                    .get(&neighbor)
+                    .is_some_and(|block| wire_connects_to(block, -offset))
+                {
+                    parent.spawn(PbrBundle {
+                        mesh: assets.connector_mesh(offset),
+                        material: assets.wire_connector_material.clone(),
+                        transform: Transform::from_translation(offset.as_vec3() * 0.34),
+                        ..default()
+                    });
                 }
             }
-        });
+        }
+    });
 }
 
 fn weld_point_connects_to(block: &BlockData, connector_from_block: IVec3) -> bool {

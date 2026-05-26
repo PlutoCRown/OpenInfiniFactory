@@ -1,3 +1,4 @@
+pub mod animation;
 pub mod blocks;
 pub mod grid;
 pub mod procedural_textures;
