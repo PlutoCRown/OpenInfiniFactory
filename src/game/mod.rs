@@ -70,6 +70,7 @@ impl Plugin for GamePlugin {
                     setup_scene,
                     spawn_player,
                     refresh_saves_on_startup,
+                    ui::load_ui_font,
                     ui::setup_ui,
                     systems::debug::setup_debug_ui,
                 )
@@ -122,6 +123,7 @@ impl Plugin for GamePlugin {
                     ui::update_panel_visibility,
                     ui::update_inventory_slots,
                     ui::update_save_list_ui,
+                    ui::apply_ui_font,
                     sync_cursor_grab,
                 )
                     .after(systems::debug::mark_perf_view)

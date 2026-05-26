@@ -14,6 +14,25 @@ use super::types::{
 };
 use super::widgets::{short_item_name, slot_color};
 
+#[derive(Resource, Clone)]
+pub struct UiFont(pub Handle<Font>);
+
+pub fn load_ui_font(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.insert_resource(UiFont(asset_server.load("fonts/PingFangSC-Regular.ttf")));
+}
+
+pub fn apply_ui_font(ui_font: Option<Res<UiFont>>, mut text_query: Query<&mut Text, Added<Text>>) {
+    let Some(ui_font) = ui_font else {
+        return;
+    };
+
+    for mut text in &mut text_query {
+        for section in &mut text.sections {
+            section.style.font = ui_font.0.clone();
+        }
+    }
+}
+
 pub fn inventory_slot_clicks(
     mut interaction_query: Query<
         (&Interaction, &InventorySlot),

@@ -29,3 +29,9 @@ cargo run
 - Top-right controls handle turn playback, speed, and rollback in Play mode
 
 Saves are written to `saves/world.ron`.
+
+## Font Notice
+
+`assets/fonts/PingFangSC-Regular.ttf` is exported from the macOS system PingFang
+font collection for Chinese UI rendering. PingFang is an Apple system font; check
+Apple's font license before redistributing this asset outside local development.
