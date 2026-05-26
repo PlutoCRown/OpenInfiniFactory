@@ -12,15 +12,13 @@ pub struct BlockEntity {
 #[derive(Resource, Clone)]
 pub struct WorldRenderAssets {
     block: Handle<Mesh>,
-    weld_point: Handle<Mesh>,
+    node: Handle<Mesh>,
     arrow: Handle<Mesh>,
     arrow_nose: Handle<Mesh>,
     goal_top: Handle<Mesh>,
-    weld_connector_x: Handle<Mesh>,
-    weld_connector_z: Handle<Mesh>,
-    wire_connector_x: Handle<Mesh>,
-    wire_connector_y: Handle<Mesh>,
-    wire_connector_z: Handle<Mesh>,
+    connector_x: Handle<Mesh>,
+    connector_y: Handle<Mesh>,
+    connector_z: Handle<Mesh>,
     solid: Handle<StandardMaterial>,
     glass: Handle<StandardMaterial>,
     generator: Handle<StandardMaterial>,
@@ -125,7 +123,7 @@ impl WorldRenderAssets {
     fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
             block: meshes.add(Cuboid::new(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)),
-            weld_point: meshes.add(Cuboid::new(
+            node: meshes.add(Cuboid::new(
                 BLOCK_SIZE * 0.38,
                 BLOCK_SIZE * 0.38,
                 BLOCK_SIZE * 0.38,
@@ -133,11 +131,9 @@ impl WorldRenderAssets {
             arrow: meshes.add(Cuboid::new(0.18, 0.08, 0.72)),
             arrow_nose: meshes.add(Cuboid::new(0.42, 0.10, 0.18)),
             goal_top: meshes.add(Cuboid::new(0.62, 0.08, 0.62)),
-            weld_connector_x: meshes.add(Cuboid::new(0.72, 0.08, 0.08)),
-            weld_connector_z: meshes.add(Cuboid::new(0.08, 0.08, 0.72)),
-            wire_connector_x: meshes.add(Cuboid::new(0.74, 0.10, 0.10)),
-            wire_connector_y: meshes.add(Cuboid::new(0.10, 0.74, 0.10)),
-            wire_connector_z: meshes.add(Cuboid::new(0.10, 0.10, 0.74)),
+            connector_x: meshes.add(Cuboid::new(0.74, 0.10, 0.10)),
+            connector_y: meshes.add(Cuboid::new(0.10, 0.74, 0.10)),
+            connector_z: meshes.add(Cuboid::new(0.10, 0.10, 0.74)),
             solid: materials.add(block_material(BlockKind::Solid)),
             glass: materials.add(block_material(BlockKind::Glass)),
             generator: materials.add(block_material(BlockKind::Generator)),
@@ -179,8 +175,8 @@ impl WorldRenderAssets {
     }
 
     fn block_mesh(&self, kind: BlockKind) -> Handle<Mesh> {
-        if kind == BlockKind::WeldPoint {
-            self.weld_point.clone()
+        if matches!(kind, BlockKind::WeldPoint | BlockKind::Wire) {
+            self.node.clone()
         } else {
             self.block.clone()
         }
@@ -282,22 +278,17 @@ pub fn spawn_block(
             }
 
             if data.kind == BlockKind::WeldPoint {
-                for offset in [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z] {
+                for offset in signal_offsets() {
                     let neighbor = pos + offset;
                     if world
                         .blocks
                         .get(&neighbor)
-                        .is_some_and(|block| block.kind == BlockKind::WeldPoint)
+                        .is_some_and(|block| weld_point_connects_to(block, -offset))
                     {
-                        let connector_mesh = if offset.x == 0 {
-                            assets.weld_connector_z.clone()
-                        } else {
-                            assets.weld_connector_x.clone()
-                        };
                         parent.spawn(PbrBundle {
-                            mesh: connector_mesh,
+                            mesh: assets.connector_mesh(offset),
                             material: assets.weld_connector_material.clone(),
-                            transform: Transform::from_translation(offset.as_vec3() * 0.36),
+                            transform: Transform::from_translation(offset.as_vec3() * 0.34),
                             ..default()
                         });
                     }
@@ -313,7 +304,7 @@ pub fn spawn_block(
                         .is_some_and(|block| wire_connects_to(block, -offset))
                     {
                         parent.spawn(PbrBundle {
-                            mesh: assets.wire_connector_mesh(offset),
+                            mesh: assets.connector_mesh(offset),
                             material: assets.wire_connector_material.clone(),
                             transform: Transform::from_translation(offset.as_vec3() * 0.34),
                             ..default()
@@ -325,14 +316,22 @@ pub fn spawn_block(
 }
 
 impl WorldRenderAssets {
-    fn wire_connector_mesh(&self, offset: IVec3) -> Handle<Mesh> {
+    fn connector_mesh(&self, offset: IVec3) -> Handle<Mesh> {
         if offset.x != 0 {
-            self.wire_connector_x.clone()
+            self.connector_x.clone()
         } else if offset.y != 0 {
-            self.wire_connector_y.clone()
+            self.connector_y.clone()
         } else {
-            self.wire_connector_z.clone()
+            self.connector_z.clone()
         }
+    }
+}
+
+fn weld_point_connects_to(block: &BlockData, connector_from_block: IVec3) -> bool {
+    match block.kind {
+        BlockKind::WeldPoint => true,
+        BlockKind::Welder => connector_from_block == block.facing.forward_ivec3(),
+        _ => false,
     }
 }
 
