@@ -1,14 +1,18 @@
 use bevy::prelude::*;
 
 use crate::game::player::controller::{player_intersects_block, FlyCamera};
-use crate::game::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
+use crate::game::state::{
+    BuilderMode, EditGesture, EditGestureKind, GameMode, GameSettings, PlacementState,
+    SimulationState,
+};
 use crate::game::ui::{InventoryItems, PendingKeyBind, HOTBAR_SLOTS};
 use crate::game::world::blocks::{BlockData, BlockKind};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, WorldBlocks};
 use crate::game::world::rendering::{
-    spawn_block, BlockEntity, HoverMarker, PlacementPreview, WorldRenderAssets,
+    despawn_edit_previews, spawn_block, spawn_edit_preview, BlockEntity, EditPreview,
+    EditPreviewKind, HoverMarker, PlacementPreview, WorldRenderAssets,
 };
-use crate::shared::config::GameConfig;
+use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
 pub fn gameplay_input(
     keys: Res<ButtonInput<KeyCode>>,
@@ -73,93 +77,133 @@ pub fn placement_input(
     mut commands: Commands,
     mut world: ResMut<WorldBlocks>,
     inventory: Res<InventoryItems>,
+    config: Res<GameConfig>,
     builder_mode: Res<BuilderMode>,
     mode: Res<GameMode>,
     simulation: Res<SimulationState>,
     mut placement: ResMut<PlacementState>,
     render_assets: Res<WorldRenderAssets>,
     block_entities: Query<(Entity, &BlockEntity)>,
+    edit_previews: Query<Entity, With<EditPreview>>,
     player: Query<&Transform, With<FlyCamera>>,
 ) {
     let place_button = MouseButton::Left;
     let delete_button = MouseButton::Right;
 
     if *mode != GameMode::Playing {
-        placement.pending_delete = None;
+        placement.edit_gesture = None;
+        despawn_edit_previews(&mut commands, &edit_previews);
         return;
     }
 
     if simulation.is_active() {
-        placement.pending_delete = None;
+        placement.edit_gesture = None;
+        despawn_edit_previews(&mut commands, &edit_previews);
         return;
     }
 
-    let mut canceled_delete = false;
+    let current_place_at = placement.target.map(|target| target.pos + target.normal);
+    let current_delete_at = placement.target.map(|target| target.pos);
 
-    if mouse_buttons.just_pressed(place_button) && placement.pending_delete.is_some() {
-        placement.pending_delete = None;
-        canceled_delete = true;
-    }
-
-    if mouse_buttons.just_released(delete_button) {
-        if let Some(delete_pos) = placement.pending_delete.take() {
-            if world.remove(&delete_pos).is_some() {
-                if let Some((entity, _)) = block_entities
-                    .iter()
-                    .find(|(_, block_entity)| block_entity.pos == delete_pos)
-                {
-                    commands.entity(entity).despawn_recursive();
+    if mouse_buttons.just_pressed(delete_button) {
+        match placement.edit_gesture.as_mut() {
+            Some(gesture) if matches!(gesture.kind, EditGestureKind::Place { .. }) => {
+                gesture.canceled = true;
+            }
+            None => {
+                if let Some(start) = current_delete_at {
+                    placement.edit_gesture = Some(EditGesture {
+                        kind: EditGestureKind::Delete,
+                        start,
+                        canceled: false,
+                    });
                 }
             }
+            Some(_) => {}
         }
     }
 
-    if let Some(target) = placement.target {
-        if mouse_buttons.just_pressed(delete_button) {
-            placement.pending_delete = Some(target.pos);
+    if mouse_buttons.just_pressed(place_button) {
+        match placement.edit_gesture.as_mut() {
+            Some(gesture) if matches!(gesture.kind, EditGestureKind::Delete) => {
+                gesture.canceled = true;
+            }
+            None => {
+                if let Some(start) = current_place_at {
+                    if let Some(block) = selected_place_block(&inventory, *builder_mode, &placement)
+                    {
+                        placement.edit_gesture = Some(EditGesture {
+                            kind: EditGestureKind::Place { block },
+                            start,
+                            canceled: false,
+                        });
+                    }
+                }
+            }
+            Some(_) => {}
         }
+    }
 
-        if mouse_buttons.just_pressed(place_button)
-            && placement.pending_delete.is_none()
-            && !canceled_delete
-        {
-            let place_at = target.pos + target.normal;
-            if can_place_selected_block(
-                place_at,
-                &inventory,
-                *builder_mode,
-                &placement,
-                &world,
-                &player,
-            ) {
-                let kind = inventory.hotbar[placement.selected].expect("validated selected block");
-                world.insert(
-                    place_at,
-                    BlockData {
-                        kind,
-                        facing: placement.facing,
-                    },
-                );
-                spawn_block(
+    let released_place = mouse_buttons.just_released(place_button);
+    let released_delete = mouse_buttons.just_released(delete_button);
+    let should_finish = placement.edit_gesture.as_ref().is_some_and(|gesture| {
+        matches!(gesture.kind, EditGestureKind::Place { .. }) && released_place
+            || matches!(gesture.kind, EditGestureKind::Delete) && released_delete
+    });
+
+    if should_finish {
+        if let Some(gesture) = placement.edit_gesture.take() {
+            if !gesture.canceled {
+                commit_edit_gesture(
+                    gesture,
+                    current_place_at,
+                    current_delete_at,
+                    &config,
+                    &mut world,
+                    *builder_mode,
+                    &player,
                     &mut commands,
                     &render_assets,
-                    &world,
-                    place_at,
-                    BlockData {
-                        kind,
-                        facing: placement.facing,
-                    },
+                    &block_entities,
                 );
             }
+        }
+    }
+
+    despawn_edit_previews(&mut commands, &edit_previews);
+    if let Some(gesture) = &placement.edit_gesture {
+        if !gesture.canceled {
+            spawn_gesture_previews(
+                gesture,
+                current_place_at,
+                current_delete_at,
+                &config,
+                &world,
+                *builder_mode,
+                &player,
+                &mut commands,
+                &render_assets,
+            );
         }
     }
 }
 
-fn can_place_selected_block(
-    place_at: IVec3,
+fn selected_place_block(
     inventory: &InventoryItems,
     builder_mode: BuilderMode,
     placement: &PlacementState,
+) -> Option<BlockData> {
+    let kind = inventory.hotbar[placement.selected]?;
+    can_place_in_mode(kind, builder_mode).then_some(BlockData {
+        kind,
+        facing: placement.facing,
+    })
+}
+
+fn can_place_block_at(
+    place_at: IVec3,
+    block: BlockData,
+    builder_mode: BuilderMode,
     world: &WorldBlocks,
     player: &Query<&Transform, With<FlyCamera>>,
 ) -> bool {
@@ -167,11 +211,7 @@ fn can_place_selected_block(
         return false;
     }
 
-    let Some(kind) = inventory.hotbar[placement.selected] else {
-        return false;
-    };
-
-    if !can_place_in_mode(kind, builder_mode) {
+    if !can_place_in_mode(block.kind, builder_mode) {
         return false;
     }
 
@@ -182,6 +222,144 @@ fn can_place_selected_block(
     }
 
     true
+}
+
+fn commit_edit_gesture(
+    gesture: EditGesture,
+    current_place_at: Option<IVec3>,
+    current_delete_at: Option<IVec3>,
+    config: &GameConfig,
+    world: &mut WorldBlocks,
+    builder_mode: BuilderMode,
+    player: &Query<&Transform, With<FlyCamera>>,
+    commands: &mut Commands,
+    render_assets: &WorldRenderAssets,
+    block_entities: &Query<(Entity, &BlockEntity)>,
+) {
+    match gesture.kind {
+        EditGestureKind::Place { block } => {
+            let positions = selection_positions(
+                config.place_selection_mode,
+                gesture.start,
+                current_place_at.unwrap_or(gesture.start),
+            );
+            for pos in positions {
+                if can_place_block_at(pos, block, builder_mode, world, player) {
+                    world.insert(pos, block);
+                    spawn_block(commands, render_assets, world, pos, block);
+                }
+            }
+        }
+        EditGestureKind::Delete => {
+            let positions = selection_positions(
+                config.delete_selection_mode,
+                gesture.start,
+                current_delete_at.unwrap_or(gesture.start),
+            );
+            for pos in positions {
+                if world.remove(&pos).is_some() {
+                    if let Some((entity, _)) = block_entities
+                        .iter()
+                        .find(|(_, block_entity)| block_entity.pos == pos)
+                    {
+                        commands.entity(entity).despawn_recursive();
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn spawn_gesture_previews(
+    gesture: &EditGesture,
+    current_place_at: Option<IVec3>,
+    current_delete_at: Option<IVec3>,
+    config: &GameConfig,
+    world: &WorldBlocks,
+    builder_mode: BuilderMode,
+    player: &Query<&Transform, With<FlyCamera>>,
+    commands: &mut Commands,
+    render_assets: &WorldRenderAssets,
+) {
+    match gesture.kind {
+        EditGestureKind::Place { block } => {
+            let positions = selection_positions(
+                config.place_selection_mode,
+                gesture.start,
+                current_place_at.unwrap_or(gesture.start),
+            );
+            for pos in positions {
+                if can_place_block_at(pos, block, builder_mode, world, player) {
+                    spawn_edit_preview(commands, render_assets, pos, EditPreviewKind::Place);
+                }
+            }
+        }
+        EditGestureKind::Delete => {
+            let positions = selection_positions(
+                config.delete_selection_mode,
+                gesture.start,
+                current_delete_at.unwrap_or(gesture.start),
+            );
+            for pos in positions {
+                if world.is_occupied(pos) {
+                    spawn_edit_preview(commands, render_assets, pos, EditPreviewKind::Delete);
+                }
+            }
+        }
+    }
+}
+
+fn selection_positions(mode: ConfigSelectionMode, start: IVec3, end: IVec3) -> Vec<IVec3> {
+    match mode {
+        ConfigSelectionMode::Point => vec![start],
+        ConfigSelectionMode::Line => line_selection(start, end),
+        ConfigSelectionMode::Plane => plane_selection(start, end),
+    }
+}
+
+fn line_selection(start: IVec3, end: IVec3) -> Vec<IVec3> {
+    let delta = end - start;
+    let axis = if delta.x.abs() >= delta.y.abs() && delta.x.abs() >= delta.z.abs() {
+        0
+    } else if delta.y.abs() >= delta.z.abs() {
+        1
+    } else {
+        2
+    };
+
+    let (min, max) = match axis {
+        0 => min_max(start.x, end.x),
+        1 => min_max(start.y, end.y),
+        _ => min_max(start.z, end.z),
+    };
+
+    (min..=max)
+        .map(|value| match axis {
+            0 => IVec3::new(value, start.y, start.z),
+            1 => IVec3::new(start.x, value, start.z),
+            _ => IVec3::new(start.x, start.y, value),
+        })
+        .collect()
+}
+
+fn plane_selection(start: IVec3, end: IVec3) -> Vec<IVec3> {
+    let (min_x, max_x) = min_max(start.x, end.x);
+    let (min_z, max_z) = min_max(start.z, end.z);
+    let mut positions = Vec::new();
+    for x in min_x..=max_x {
+        for z in min_z..=max_z {
+            positions.push(IVec3::new(x, start.y, z));
+        }
+    }
+    positions
+}
+
+fn min_max(a: i32, b: i32) -> (i32, i32) {
+    if a <= b {
+        (a, b)
+    } else {
+        (b, a)
+    }
 }
 
 pub fn apply_fov(
@@ -223,7 +401,7 @@ pub fn update_hover(
 ) {
     if *mode != GameMode::Playing {
         placement.target = None;
-        placement.pending_delete = None;
+        placement.edit_gesture = None;
         if let Ok((_, mut visibility, _)) = marker.get_single_mut() {
             *visibility = Visibility::Hidden;
         }
@@ -249,12 +427,8 @@ pub fn update_hover(
         return;
     };
 
-    if let Some(delete_pos) = placement.pending_delete {
-        marker_transform.translation = grid_to_world(delete_pos);
-        *marker_visibility = Visibility::Visible;
-        if let Some(material) = materials.get_mut(marker_material) {
-            material.base_color = Color::srgba(1.0, 0.12, 0.08, 0.34);
-        }
+    if placement.edit_gesture.is_some() {
+        *marker_visibility = Visibility::Hidden;
     } else if let Some(target) = placement.target {
         marker_transform.translation = grid_to_world(target.pos);
         *marker_visibility = Visibility::Visible;
@@ -265,46 +439,12 @@ pub fn update_hover(
         *marker_visibility = Visibility::Hidden;
     }
 
-    let Ok((mut preview_transform, mut preview_visibility, preview_material)) =
-        preview.get_single_mut()
-    else {
+    let Ok((_, mut preview_visibility, _)) = preview.get_single_mut() else {
         return;
     };
 
-    if placement.pending_delete.is_some() {
-        *preview_visibility = Visibility::Hidden;
-        return;
-    }
-
-    let Some(target) = placement.target else {
-        *preview_visibility = Visibility::Hidden;
-        return;
-    };
-
-    let place_at = target.pos + target.normal;
-    if can_place_selected_block(
-        place_at,
-        &inventory,
-        *builder_mode,
-        &placement,
-        &world,
-        &player,
-    ) {
-        preview_transform.translation = grid_to_world(place_at);
-        *preview_visibility = Visibility::Visible;
-        if let Some(material) = materials.get_mut(preview_material) {
-            let kind = inventory.hotbar[placement.selected].expect("validated selected block");
-            material.base_color = translucent_color(kind.material(), 0.34);
-            material.unlit = kind == BlockKind::WeldPoint;
-        }
-    } else {
-        *preview_visibility = Visibility::Hidden;
-    }
-}
-
-fn translucent_color(color: Color, alpha: f32) -> Color {
-    let srgba = color.to_srgba();
-    Color::srgba(srgba.red, srgba.green, srgba.blue, alpha)
+    let _ = (inventory, builder_mode, player);
+    *preview_visibility = Visibility::Hidden;
 }
 
 fn can_place_in_mode(kind: BlockKind, mode: BuilderMode) -> bool {

@@ -42,6 +42,8 @@ pub struct WorldRenderAssets {
     arrow_nose_material: Handle<StandardMaterial>,
     goal_top_material: Handle<StandardMaterial>,
     weld_connector_material: Handle<StandardMaterial>,
+    place_preview_material: Handle<StandardMaterial>,
+    delete_preview_material: Handle<StandardMaterial>,
 }
 
 #[derive(Component)]
@@ -49,6 +51,14 @@ pub struct HoverMarker;
 
 #[derive(Component)]
 pub struct PlacementPreview;
+
+#[derive(Component)]
+pub struct EditPreview;
+
+pub enum EditPreviewKind {
+    Place,
+    Delete,
+}
 
 pub fn setup_scene(
     mut commands: Commands,
@@ -185,6 +195,18 @@ impl WorldRenderAssets {
                 unlit: true,
                 ..default()
             }),
+            place_preview_material: materials.add(StandardMaterial {
+                base_color: Color::srgba(0.55, 0.92, 1.0, 0.36),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            }),
+            delete_preview_material: materials.add(StandardMaterial {
+                base_color: Color::srgba(1.0, 0.08, 0.04, 0.38),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            }),
         }
     }
 
@@ -221,6 +243,13 @@ impl WorldRenderAssets {
             BlockKind::DrillHead => self.drill_head.clone(),
         }
     }
+
+    fn edit_preview_material(&self, kind: EditPreviewKind) -> Handle<StandardMaterial> {
+        match kind {
+            EditPreviewKind::Place => self.place_preview_material.clone(),
+            EditPreviewKind::Delete => self.delete_preview_material.clone(),
+        }
+    }
 }
 
 fn block_material(kind: BlockKind) -> StandardMaterial {
@@ -250,6 +279,29 @@ pub fn despawn_world(commands: &mut Commands, block_entities: &Query<Entity, Wit
     for entity in block_entities {
         commands.entity(entity).despawn_recursive();
     }
+}
+
+pub fn despawn_edit_previews(commands: &mut Commands, previews: &Query<Entity, With<EditPreview>>) {
+    for entity in previews {
+        commands.entity(entity).despawn_recursive();
+    }
+}
+
+pub fn spawn_edit_preview(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    pos: IVec3,
+    kind: EditPreviewKind,
+) {
+    commands.spawn((
+        PbrBundle {
+            mesh: assets.block.clone(),
+            material: assets.edit_preview_material(kind),
+            transform: Transform::from_translation(grid_to_world(pos)),
+            ..default()
+        },
+        EditPreview,
+    ));
 }
 
 pub fn spawn_block(

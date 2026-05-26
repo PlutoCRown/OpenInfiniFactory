@@ -6,11 +6,12 @@ use crate::shared::i18n::I18n;
 use crate::shared::save::SaveState;
 
 use super::types::{
-    BackpackPanel, CarriedItem, CarriedLabel, Crosshair, CurrentSaveText, FovText, HotbarText,
-    InventoryItems, InventorySlot, InventoryTitle, KeyBindingButton, KeyBindingLabel, LanguageText,
-    LocalizedText, MainMenuPanel, PausePanel, PendingKeyBind, SaveListAction, SaveListLabel,
-    SaveListPanel, SaveListTitle, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
-    SettingsStatusText, SettingsTab, SimulationText, SlotArea, SlotLabel, UiScaleText,
+    BackpackPanel, CarriedItem, CarriedLabel, Crosshair, CurrentSaveText, DeleteSelectionModeText,
+    FovText, HotbarText, InventoryItems, InventorySlot, InventoryTitle, KeyBindingButton,
+    KeyBindingLabel, LanguageText, LocalizedText, MainMenuPanel, PausePanel, PendingKeyBind,
+    PlaceSelectionModeText, SaveListAction, SaveListLabel, SaveListPanel, SaveListTitle,
+    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsStatusText,
+    SettingsTab, SimulationText, SlotArea, SlotLabel, UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -232,6 +233,8 @@ pub fn update_settings_status_ui(
             Without<HotbarText>,
             Without<CarriedLabel>,
             Without<FovText>,
+            Without<PlaceSelectionModeText>,
+            Without<DeleteSelectionModeText>,
             Without<SimulationText>,
             Without<CurrentSaveText>,
             Without<KeyBindingLabel>,
@@ -240,6 +243,24 @@ pub fn update_settings_status_ui(
     mut key_labels: Query<
         (&Parent, &mut Text),
         (With<KeyBindingLabel>, Without<SettingsStatusText>),
+    >,
+    mut place_mode_text: Query<
+        &mut Text,
+        (
+            With<PlaceSelectionModeText>,
+            Without<SettingsStatusText>,
+            Without<KeyBindingLabel>,
+            Without<DeleteSelectionModeText>,
+        ),
+    >,
+    mut delete_mode_text: Query<
+        &mut Text,
+        (
+            With<DeleteSelectionModeText>,
+            Without<SettingsStatusText>,
+            Without<KeyBindingLabel>,
+            Without<PlaceSelectionModeText>,
+        ),
     >,
     key_buttons: Query<&KeyBindingButton>,
 ) {
@@ -292,6 +313,14 @@ pub fn update_settings_status_ui(
             .map(|_| "...")
             .unwrap_or(config.key(button.0).name());
         text.sections[0].value = format!("{}: {suffix}", i18n.text(button.0.label_key()));
+    }
+
+    if let Ok(mut text) = place_mode_text.get_single_mut() {
+        text.sections[0].value = i18n.text(config.place_selection_mode.label_key());
+    }
+
+    if let Ok(mut text) = delete_mode_text.get_single_mut() {
+        text.sections[0].value = i18n.text(config.delete_selection_mode.label_key());
     }
 }
 

@@ -248,6 +248,14 @@ pub fn settings_menu_actions(
                 config.ui_scale = settings.ui_scale;
                 save_config(&config);
             }
+            SettingsAction::PlaceSelectionModeNext => {
+                config.place_selection_mode = config.place_selection_mode.next();
+                save_config(&config);
+            }
+            SettingsAction::DeleteSelectionModeNext => {
+                config.delete_selection_mode = config.delete_selection_mode.next();
+                save_config(&config);
+            }
             SettingsAction::LanguageNext => {
                 let language = i18n.language().next();
                 i18n.set_language(language);

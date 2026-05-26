@@ -62,6 +62,12 @@ pub struct FovText;
 pub struct UiScaleText;
 
 #[derive(Component)]
+pub struct PlaceSelectionModeText;
+
+#[derive(Component)]
+pub struct DeleteSelectionModeText;
+
+#[derive(Component)]
 pub struct SimulationText;
 
 #[derive(Component)]
@@ -110,6 +116,8 @@ pub enum SettingsAction {
     FovUp,
     UiScaleDown,
     UiScaleUp,
+    PlaceSelectionModeNext,
+    DeleteSelectionModeNext,
     LanguageNext,
     Bind(ConfigAction),
     ResetDefaults,

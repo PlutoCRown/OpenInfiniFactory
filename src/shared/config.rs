@@ -17,6 +17,10 @@ pub struct GameConfig {
     pub ui_scale: f32,
     #[serde(default)]
     pub language: Option<Language>,
+    #[serde(default)]
+    pub place_selection_mode: ConfigSelectionMode,
+    #[serde(default)]
+    pub delete_selection_mode: ConfigSelectionMode,
     pub key_bindings: KeyBindings,
 }
 
@@ -26,6 +30,8 @@ impl Default for GameConfig {
             fov_degrees: 70.0,
             ui_scale: default_ui_scale(),
             language: None,
+            place_selection_mode: ConfigSelectionMode::Point,
+            delete_selection_mode: ConfigSelectionMode::Point,
             key_bindings: KeyBindings::default(),
         }
     }
@@ -33,6 +39,32 @@ impl Default for GameConfig {
 
 fn default_ui_scale() -> f32 {
     1.0
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ConfigSelectionMode {
+    #[default]
+    Point,
+    Line,
+    Plane,
+}
+
+impl ConfigSelectionMode {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Point => Self::Line,
+            Self::Line => Self::Plane,
+            Self::Plane => Self::Point,
+        }
+    }
+
+    pub fn label_key(self) -> &'static str {
+        match self {
+            Self::Point => "selection_mode.point",
+            Self::Line => "selection_mode.line",
+            Self::Plane => "selection_mode.plane",
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]

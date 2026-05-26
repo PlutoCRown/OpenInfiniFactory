@@ -7,11 +7,11 @@ use crate::shared::save::SAVE_SLOTS;
 use super::components::{flex_row, localized_text, root_node, text, transparent_node};
 use super::theme::{absolute_text_bundle, panel_bundle, STATUS_TEXT};
 use super::types::{
-    BackpackPanel, CarriedLabel, Crosshair, CurrentSaveText, FovText, HotbarText, InventoryTitle,
-    MainMenuAction, MainMenuPanel, PauseAction, PausePanel, SaveListPanel, SaveListTitle,
-    SettingsAction, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
-    SettingsStatusText, SimulationAction, SimulationText, SlotArea, UiScaleText, BACKPACK_SLOTS,
-    HOTBAR_SLOTS,
+    BackpackPanel, CarriedLabel, Crosshair, CurrentSaveText, DeleteSelectionModeText, FovText,
+    HotbarText, InventoryTitle, MainMenuAction, MainMenuPanel, PauseAction, PausePanel,
+    PlaceSelectionModeText, SaveListPanel, SaveListTitle, SettingsAction, SettingsGameplayGroup,
+    SettingsKeyBindingsGroup, SettingsPanel, SettingsStatusText, SimulationAction, SimulationText,
+    SlotArea, UiScaleText, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::widgets::{
     spawn_language_settings_button, spawn_localized_main_button, spawn_localized_pause_button,
@@ -253,6 +253,25 @@ fn spawn_gameplay_settings(panel: &mut ChildBuilder, i18n: &I18n) {
                 "button.ui_scale_up",
                 SettingsAction::UiScaleUp,
             );
+        });
+    panel
+        .spawn(flex_row(40.0, 8.0))
+        .insert(SettingsGameplayGroup)
+        .with_children(|row| {
+            spawn_localized_settings_button(
+                row,
+                i18n.text("button.place_selection_mode"),
+                "button.place_selection_mode",
+                SettingsAction::PlaceSelectionModeNext,
+            );
+            row.spawn((text("", 18.0, Color::WHITE), PlaceSelectionModeText));
+            spawn_localized_settings_button(
+                row,
+                i18n.text("button.delete_selection_mode"),
+                "button.delete_selection_mode",
+                SettingsAction::DeleteSelectionModeNext,
+            );
+            row.spawn((text("", 18.0, Color::WHITE), DeleteSelectionModeText));
         });
 }
 

@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::game::world::blocks::BlockData;
 use crate::game::world::blocks::Facing;
 use crate::game::world::grid::TargetHit;
 
@@ -8,7 +9,7 @@ pub struct PlacementState {
     pub selected: usize,
     pub facing: Facing,
     pub target: Option<TargetHit>,
-    pub pending_delete: Option<IVec3>,
+    pub edit_gesture: Option<EditGesture>,
 }
 
 impl Default for PlacementState {
@@ -17,9 +18,22 @@ impl Default for PlacementState {
             selected: 0,
             facing: Facing::North,
             target: None,
-            pending_delete: None,
+            edit_gesture: None,
         }
     }
+}
+
+#[derive(Clone)]
+pub struct EditGesture {
+    pub kind: EditGestureKind,
+    pub start: IVec3,
+    pub canceled: bool,
+}
+
+#[derive(Clone)]
+pub enum EditGestureKind {
+    Place { block: BlockData },
+    Delete,
 }
 
 #[derive(Resource, Clone, Copy, Eq, PartialEq)]
