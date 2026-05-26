@@ -164,7 +164,7 @@ impl InventoryItems {
         };
 
         let mut hotbar = [None; HOTBAR_SLOTS];
-        for (index, kind) in blocks.iter().enumerate() {
+        for (index, kind) in blocks.iter().take(HOTBAR_SLOTS).enumerate() {
             hotbar[index] = Some(*kind);
         }
 

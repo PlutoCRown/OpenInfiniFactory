@@ -199,9 +199,16 @@ pub(super) fn slot_color(kind: BlockKind) -> Color {
         BlockKind::Detector => Color::srgb(0.12, 0.34, 0.62),
         BlockKind::Wire => Color::srgb(0.88, 0.62, 0.12),
         BlockKind::Piston => Color::srgb(0.66, 0.43, 0.20),
+        BlockKind::Lifter => Color::srgb(0.18, 0.48, 0.62),
+        BlockKind::Rotator => Color::srgb(0.42, 0.26, 0.64),
+        BlockKind::Blocker => Color::srgb(0.50, 0.32, 0.20),
+        BlockKind::Drill => Color::srgb(0.24, 0.26, 0.30),
+        BlockKind::Laser => Color::srgb(0.72, 0.12, 0.26),
         BlockKind::Goal => Color::srgb(0.24, 0.56, 0.30),
         BlockKind::Material => Color::srgb(0.74, 0.74, 0.78),
         BlockKind::WeldPoint => Color::srgb(0.86, 0.16, 0.12),
+        BlockKind::BlockerHead => Color::srgb(0.58, 0.36, 0.18),
+        BlockKind::DrillHead => Color::srgb(0.10, 0.11, 0.12),
     }
 }
 
@@ -215,8 +222,15 @@ pub(super) fn short_item_name(kind: BlockKind) -> &'static str {
         BlockKind::Detector => "short.detector",
         BlockKind::Wire => "short.wire",
         BlockKind::Piston => "short.piston",
+        BlockKind::Lifter => "short.lifter",
+        BlockKind::Rotator => "short.rotator",
+        BlockKind::Blocker => "short.blocker",
+        BlockKind::Drill => "short.drill",
+        BlockKind::Laser => "short.laser",
         BlockKind::Goal => "short.goal",
         BlockKind::Material => "short.material",
         BlockKind::WeldPoint => "short.weld_point",
+        BlockKind::BlockerHead => "short.blocker_head",
+        BlockKind::DrillHead => "short.drill_head",
     }
 }

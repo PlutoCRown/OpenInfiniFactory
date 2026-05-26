@@ -11,7 +11,7 @@ pub struct SignalNetworkCache {
     topology_revision: u64,
     wire_components: HashMap<IVec3, usize>,
     component_detectors: Vec<Vec<IVec3>>,
-    piston_components: HashMap<IVec3, Vec<usize>>,
+    device_components: HashMap<IVec3, Vec<usize>>,
     initialized: bool,
 }
 
@@ -22,10 +22,15 @@ pub fn run_turn(
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
 ) {
-    sync_weld_points(world);
+    sync_generated_markers(world, signal_cache, &HashSet::new());
     signal_cache.refresh(world);
     let powered_components = signal_cache.powered_components(world);
+    sync_generated_markers(world, signal_cache, &powered_components);
+    drill_materials(world);
+    fire_lasers(world, signal_cache, &powered_components);
     push_powered_pistons(world, signal_cache, &powered_components);
+    lift_structures(world);
+    rotate_structures(world);
     spawn_materials(world);
     move_conveyed_materials(world);
     apply_material_gravity(world);
@@ -69,7 +74,11 @@ pub fn tick_simulation(
     }
 }
 
-fn sync_weld_points(world: &mut WorldBlocks) {
+fn sync_generated_markers(
+    world: &mut WorldBlocks,
+    signal_cache: &SignalNetworkCache,
+    powered_components: &HashSet<usize>,
+) {
     world.clear_generated_markers();
 
     let welders: Vec<(IVec3, Facing)> = world
@@ -87,6 +96,50 @@ fn sync_weld_points(world: &mut WorldBlocks) {
                 point_pos,
                 BlockData {
                     kind: BlockKind::WeldPoint,
+                    facing,
+                },
+            );
+        }
+    }
+
+    let blockers: Vec<(IVec3, Facing)> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| {
+            (block.kind == BlockKind::Blocker).then_some((*pos, block.facing))
+        })
+        .collect();
+
+    for (pos, facing) in blockers {
+        if signal_cache.is_device_powered(pos, powered_components) {
+            continue;
+        }
+
+        let head_pos = pos + facing.forward_ivec3();
+        if world.can_place_solid_at(head_pos) {
+            world.insert(
+                head_pos,
+                BlockData {
+                    kind: BlockKind::BlockerHead,
+                    facing,
+                },
+            );
+        }
+    }
+
+    let drills: Vec<(IVec3, Facing)> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| (block.kind == BlockKind::Drill).then_some((*pos, block.facing)))
+        .collect();
+
+    for (pos, facing) in drills {
+        let head_pos = pos + facing.forward_ivec3();
+        if !world.is_occupied(head_pos) {
+            world.insert(
+                head_pos,
+                BlockData {
+                    kind: BlockKind::DrillHead,
                     facing,
                 },
             );
@@ -183,6 +236,130 @@ fn move_conveyed_materials(world: &mut WorldBlocks) {
     }
 }
 
+fn lift_structures(world: &mut WorldBlocks) {
+    let lifters: Vec<IVec3> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| (block.kind == BlockKind::Lifter).then_some(*pos))
+        .collect();
+
+    for pos in lifters {
+        let Some(source) = (1..=5)
+            .map(|height| pos + IVec3::Y * height)
+            .find(|candidate| {
+                world
+                    .blocks
+                    .get(candidate)
+                    .is_some_and(|block| block.kind.is_material())
+            })
+        else {
+            continue;
+        };
+
+        let structure = material_structure(world, source);
+        if can_move_structure(world, &structure, IVec3::Y) {
+            move_structure(world, &structure, IVec3::Y);
+        }
+    }
+}
+
+fn rotate_structures(world: &mut WorldBlocks) {
+    let rotators: Vec<IVec3> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| (block.kind == BlockKind::Rotator).then_some(*pos))
+        .collect();
+
+    for pos in rotators {
+        let source = pos + IVec3::Y;
+        let Some(block) = world.blocks.get(&source) else {
+            continue;
+        };
+        if !block.kind.is_material() {
+            continue;
+        }
+
+        let structure = material_structure(world, source);
+        if can_rotate_structure(world, &structure, pos) {
+            rotate_structure(world, &structure, pos);
+        }
+    }
+}
+
+fn drill_materials(world: &mut WorldBlocks) {
+    let drills: Vec<(IVec3, Facing)> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| (block.kind == BlockKind::Drill).then_some((*pos, block.facing)))
+        .collect();
+
+    for (pos, facing) in drills {
+        let target = pos + facing.forward_ivec3();
+        if world
+            .blocks
+            .get(&target)
+            .is_some_and(|block| block.kind.is_material())
+        {
+            world.remove(&target);
+        }
+    }
+
+    let drill_heads: Vec<IVec3> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| (block.kind == BlockKind::DrillHead).then_some(*pos))
+        .collect();
+
+    for pos in drill_heads {
+        for offset in signal_offsets() {
+            let target = pos + offset;
+            if world
+                .blocks
+                .get(&target)
+                .is_some_and(|block| block.kind.is_material())
+            {
+                world.remove(&target);
+            }
+        }
+    }
+}
+
+fn fire_lasers(
+    world: &mut WorldBlocks,
+    signal_cache: &SignalNetworkCache,
+    powered_components: &HashSet<usize>,
+) {
+    let lasers: Vec<(IVec3, Facing)> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| (block.kind == BlockKind::Laser).then_some((*pos, block.facing)))
+        .collect();
+
+    for (pos, facing) in lasers {
+        if !signal_cache.is_device_powered(pos, powered_components) {
+            continue;
+        }
+
+        let forward = facing.forward_ivec3();
+        for distance in 1..=30 {
+            let target = pos + forward * distance;
+            let Some(block) = world.blocks.get(&target).copied() else {
+                continue;
+            };
+            if block.kind.is_material() {
+                world.remove(&target);
+                continue;
+            }
+            if block.kind.is_factory()
+                || block.kind.is_scene()
+                || block.kind == BlockKind::BlockerHead
+            {
+                break;
+            }
+        }
+    }
+}
+
 impl SignalNetworkCache {
     fn refresh(&mut self, world: &WorldBlocks) {
         if self.initialized && self.topology_revision == world.topology_revision {
@@ -192,7 +369,7 @@ impl SignalNetworkCache {
         self.topology_revision = world.topology_revision;
         self.wire_components.clear();
         self.component_detectors.clear();
-        self.piston_components.clear();
+        self.device_components.clear();
         self.initialized = true;
 
         for (&pos, block) in &world.blocks {
@@ -220,7 +397,9 @@ impl SignalNetworkCache {
         for (&pos, block) in &world.blocks {
             match block.kind {
                 BlockKind::Detector => self.cache_detector(pos, block.facing),
-                BlockKind::Piston => self.cache_piston(pos, block.facing),
+                BlockKind::Piston | BlockKind::Blocker | BlockKind::Laser => {
+                    self.cache_powered_device(pos, block.facing)
+                }
                 _ => {}
             }
         }
@@ -242,7 +421,7 @@ impl SignalNetworkCache {
         }
     }
 
-    fn cache_piston(&mut self, pos: IVec3, facing: Facing) {
+    fn cache_powered_device(&mut self, pos: IVec3, facing: Facing) {
         let mut components = Vec::new();
         let mut seen = HashSet::new();
         for offset in signal_offsets() {
@@ -259,7 +438,7 @@ impl SignalNetworkCache {
         }
 
         if !components.is_empty() {
-            self.piston_components.insert(pos, components);
+            self.device_components.insert(pos, components);
         }
     }
 
@@ -276,8 +455,8 @@ impl SignalNetworkCache {
             .collect()
     }
 
-    fn is_piston_powered(&self, pos: IVec3, powered_components: &HashSet<usize>) -> bool {
-        self.piston_components.get(&pos).is_some_and(|components| {
+    fn is_device_powered(&self, pos: IVec3, powered_components: &HashSet<usize>) -> bool {
+        self.device_components.get(&pos).is_some_and(|components| {
             components
                 .iter()
                 .any(|component| powered_components.contains(component))
@@ -314,7 +493,7 @@ fn push_powered_pistons(
         .collect();
 
     for (pos, facing) in pistons {
-        if !signal_cache.is_piston_powered(pos, powered_components) {
+        if !signal_cache.is_device_powered(pos, powered_components) {
             continue;
         }
 
@@ -375,6 +554,30 @@ fn move_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, offset: I
     for (pos, block) in blocks {
         world.insert(pos + offset, block);
     }
+}
+
+fn can_rotate_structure(world: &WorldBlocks, structure: &HashSet<IVec3>, pivot: IVec3) -> bool {
+    structure.iter().all(|pos| {
+        let target = rotate_pos_y(*pos, pivot);
+        target.y >= 0 && (structure.contains(&target) || world.can_place_solid_at(target))
+    })
+}
+
+fn rotate_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, pivot: IVec3) {
+    let blocks: Vec<(IVec3, BlockData)> = structure
+        .iter()
+        .filter_map(|pos| world.remove(pos).map(|block| (*pos, block)))
+        .collect();
+
+    for (pos, mut block) in blocks {
+        block.facing = block.facing.rotate();
+        world.insert(rotate_pos_y(pos, pivot), block);
+    }
+}
+
+fn rotate_pos_y(pos: IVec3, pivot: IVec3) -> IVec3 {
+    let rel = pos - pivot;
+    pivot + IVec3::new(-rel.z, rel.y, rel.x)
 }
 
 fn is_wire_at(world: &WorldBlocks, pos: IVec3) -> bool {

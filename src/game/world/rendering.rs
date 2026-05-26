@@ -27,9 +27,16 @@ pub struct WorldRenderAssets {
     detector: Handle<StandardMaterial>,
     wire: Handle<StandardMaterial>,
     piston: Handle<StandardMaterial>,
+    lifter: Handle<StandardMaterial>,
+    rotator: Handle<StandardMaterial>,
+    blocker: Handle<StandardMaterial>,
+    drill: Handle<StandardMaterial>,
+    laser: Handle<StandardMaterial>,
     goal: Handle<StandardMaterial>,
     material: Handle<StandardMaterial>,
     weld_point_material: Handle<StandardMaterial>,
+    blocker_head: Handle<StandardMaterial>,
+    drill_head: Handle<StandardMaterial>,
     wire_connector_material: Handle<StandardMaterial>,
     arrow_material: Handle<StandardMaterial>,
     arrow_nose_material: Handle<StandardMaterial>,
@@ -142,9 +149,16 @@ impl WorldRenderAssets {
             detector: materials.add(block_material(BlockKind::Detector)),
             wire: materials.add(block_material(BlockKind::Wire)),
             piston: materials.add(block_material(BlockKind::Piston)),
+            lifter: materials.add(block_material(BlockKind::Lifter)),
+            rotator: materials.add(block_material(BlockKind::Rotator)),
+            blocker: materials.add(block_material(BlockKind::Blocker)),
+            drill: materials.add(block_material(BlockKind::Drill)),
+            laser: materials.add(block_material(BlockKind::Laser)),
             goal: materials.add(block_material(BlockKind::Goal)),
             material: materials.add(block_material(BlockKind::Material)),
             weld_point_material: materials.add(block_material(BlockKind::WeldPoint)),
+            blocker_head: materials.add(block_material(BlockKind::BlockerHead)),
+            drill_head: materials.add(block_material(BlockKind::DrillHead)),
             wire_connector_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.88, 0.30),
                 emissive: Color::srgb(0.20, 0.12, 0.02).into(),
@@ -175,7 +189,10 @@ impl WorldRenderAssets {
     }
 
     fn block_mesh(&self, kind: BlockKind) -> Handle<Mesh> {
-        if matches!(kind, BlockKind::WeldPoint | BlockKind::Wire) {
+        if matches!(
+            kind,
+            BlockKind::WeldPoint | BlockKind::Wire | BlockKind::DrillHead
+        ) {
             self.node.clone()
         } else {
             self.block.clone()
@@ -192,9 +209,16 @@ impl WorldRenderAssets {
             BlockKind::Detector => self.detector.clone(),
             BlockKind::Wire => self.wire.clone(),
             BlockKind::Piston => self.piston.clone(),
+            BlockKind::Lifter => self.lifter.clone(),
+            BlockKind::Rotator => self.rotator.clone(),
+            BlockKind::Blocker => self.blocker.clone(),
+            BlockKind::Drill => self.drill.clone(),
+            BlockKind::Laser => self.laser.clone(),
             BlockKind::Goal => self.goal.clone(),
             BlockKind::Material => self.material.clone(),
             BlockKind::WeldPoint => self.weld_point_material.clone(),
+            BlockKind::BlockerHead => self.blocker_head.clone(),
+            BlockKind::DrillHead => self.drill_head.clone(),
         }
     }
 }
@@ -206,9 +230,12 @@ fn block_material(kind: BlockKind) -> StandardMaterial {
         reflectance: 0.18,
         ..default()
     };
-    if matches!(kind, BlockKind::Glass | BlockKind::WeldPoint) {
+    if matches!(
+        kind,
+        BlockKind::Glass | BlockKind::WeldPoint | BlockKind::DrillHead
+    ) {
         material.alpha_mode = AlphaMode::Blend;
-        material.unlit = kind == BlockKind::WeldPoint;
+        material.unlit = matches!(kind, BlockKind::WeldPoint | BlockKind::DrillHead);
     }
     material
 }
@@ -340,6 +367,8 @@ fn wire_connects_to(block: &BlockData, wire_from_block: IVec3) -> bool {
         BlockKind::Wire => true,
         BlockKind::Detector => wire_from_block != block.facing.forward_ivec3(),
         BlockKind::Piston => wire_from_block != block.facing.forward_ivec3(),
+        BlockKind::Blocker => wire_from_block != block.facing.forward_ivec3(),
+        BlockKind::Laser => wire_from_block != block.facing.forward_ivec3(),
         _ => false,
     }
 }

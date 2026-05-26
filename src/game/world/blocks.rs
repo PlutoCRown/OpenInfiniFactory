@@ -5,13 +5,18 @@ pub const BLOCK_SIZE: f32 = 1.0;
 
 pub const EDIT_BLOCKS: [BlockKind; 3] = [BlockKind::Solid, BlockKind::Glass, BlockKind::Goal];
 
-pub const PLAY_BLOCKS: [BlockKind; 6] = [
+pub const PLAY_BLOCKS: [BlockKind; 11] = [
     BlockKind::Generator,
     BlockKind::Welder,
     BlockKind::Conveyor,
     BlockKind::Detector,
     BlockKind::Wire,
     BlockKind::Piston,
+    BlockKind::Lifter,
+    BlockKind::Rotator,
+    BlockKind::Blocker,
+    BlockKind::Drill,
+    BlockKind::Laser,
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -30,9 +35,16 @@ pub enum BlockKind {
     Detector,
     Wire,
     Piston,
+    Lifter,
+    Rotator,
+    Blocker,
+    Drill,
+    Laser,
     Goal,
     Material,
     WeldPoint,
+    BlockerHead,
+    DrillHead,
 }
 
 impl BlockKind {
@@ -46,9 +58,16 @@ impl BlockKind {
             BlockKind::Detector => "block.detector",
             BlockKind::Wire => "block.wire",
             BlockKind::Piston => "block.piston",
+            BlockKind::Lifter => "block.lifter",
+            BlockKind::Rotator => "block.rotator",
+            BlockKind::Blocker => "block.blocker",
+            BlockKind::Drill => "block.drill",
+            BlockKind::Laser => "block.laser",
             BlockKind::Goal => "block.goal",
             BlockKind::Material => "block.material",
             BlockKind::WeldPoint => "block.weld_point",
+            BlockKind::BlockerHead => "block.blocker_head",
+            BlockKind::DrillHead => "block.drill_head",
         }
     }
 
@@ -62,9 +81,16 @@ impl BlockKind {
             BlockKind::Detector => Color::srgb(0.15, 0.45, 0.72),
             BlockKind::Wire => Color::srgb(0.95, 0.72, 0.18),
             BlockKind::Piston => Color::srgb(0.78, 0.55, 0.28),
+            BlockKind::Lifter => Color::srgb(0.25, 0.58, 0.72),
+            BlockKind::Rotator => Color::srgb(0.48, 0.32, 0.72),
+            BlockKind::Blocker => Color::srgb(0.58, 0.40, 0.24),
+            BlockKind::Drill => Color::srgb(0.32, 0.36, 0.40),
+            BlockKind::Laser => Color::srgb(0.85, 0.20, 0.34),
             BlockKind::Goal => Color::srgb(0.35, 0.72, 0.42),
             BlockKind::Material => Color::srgb(0.82, 0.82, 0.86),
             BlockKind::WeldPoint => Color::srgba(1.0, 0.28, 0.18, 0.45),
+            BlockKind::BlockerHead => Color::srgb(0.70, 0.48, 0.28),
+            BlockKind::DrillHead => Color::srgb(0.12, 0.14, 0.16),
         }
     }
 
@@ -76,11 +102,14 @@ impl BlockKind {
                 | BlockKind::Conveyor
                 | BlockKind::Detector
                 | BlockKind::Piston
+                | BlockKind::Blocker
+                | BlockKind::Drill
+                | BlockKind::Laser
         )
     }
 
     pub fn has_collision(self) -> bool {
-        !matches!(self, BlockKind::WeldPoint)
+        !matches!(self, BlockKind::WeldPoint | BlockKind::DrillHead)
     }
 
     pub fn is_factory(self) -> bool {
@@ -92,6 +121,11 @@ impl BlockKind {
                 | BlockKind::Detector
                 | BlockKind::Wire
                 | BlockKind::Piston
+                | BlockKind::Lifter
+                | BlockKind::Rotator
+                | BlockKind::Blocker
+                | BlockKind::Drill
+                | BlockKind::Laser
         )
     }
 
@@ -104,7 +138,10 @@ impl BlockKind {
     }
 
     pub fn is_generated_marker(self) -> bool {
-        matches!(self, BlockKind::WeldPoint)
+        matches!(
+            self,
+            BlockKind::WeldPoint | BlockKind::BlockerHead | BlockKind::DrillHead
+        )
     }
 }
 
