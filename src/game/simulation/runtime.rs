@@ -251,14 +251,19 @@ fn apply_factory_gravity(world: &mut WorldBlocks) {
         .collect();
     factory_blocks.sort_by_key(|pos| pos.y);
 
+    let mut handled = HashSet::new();
     for pos in factory_blocks {
-        let Some(block) = world.blocks.get(&pos).copied() else {
+        if handled.contains(&pos) || !world.is_factory_at(pos) {
             continue;
         };
-        let next = pos + IVec3::NEG_Y;
-        if next.y >= 0 && world.can_place_solid_at(next) {
-            world.remove(&pos);
-            world.insert(next, block);
+
+        let structure = factory_structure(world, pos);
+        handled.extend(structure.iter().copied());
+        if factory_structure_is_anchored(world, &structure) {
+            continue;
+        }
+        if can_move_structure(world, &structure, IVec3::NEG_Y) {
+            move_block_structure(world, &structure, IVec3::NEG_Y);
         }
     }
 }
@@ -584,6 +589,33 @@ fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     structure
 }
 
+fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
+    let mut structure = HashSet::new();
+    let mut queue = VecDeque::from([start]);
+    structure.insert(start);
+
+    while let Some(pos) = queue.pop_front() {
+        for offset in signal_offsets() {
+            let neighbor = pos + offset;
+            if structure.contains(&neighbor) || !world.is_factory_at(neighbor) {
+                continue;
+            }
+            structure.insert(neighbor);
+            queue.push_back(neighbor);
+        }
+    }
+
+    structure
+}
+
+fn factory_structure_is_anchored(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
+    structure.iter().any(|pos| {
+        signal_offsets()
+            .into_iter()
+            .any(|offset| world.is_scene_at(*pos + offset))
+    })
+}
+
 fn welded_neighbors(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
     world
         .material_welds
@@ -611,6 +643,17 @@ fn move_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, offset: I
         world.insert(pos + offset, block);
     }
     world.replace_material_welds(updated_welds);
+}
+
+fn move_block_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, offset: IVec3) {
+    let blocks: Vec<(IVec3, BlockData)> = structure
+        .iter()
+        .filter_map(|pos| world.remove(pos).map(|block| (*pos, block)))
+        .collect();
+
+    for (pos, block) in blocks {
+        world.insert(pos + offset, block);
+    }
 }
 
 fn can_rotate_structure(world: &WorldBlocks, structure: &HashSet<IVec3>, pivot: IVec3) -> bool {

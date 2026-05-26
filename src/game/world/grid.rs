@@ -113,6 +113,18 @@ impl WorldBlocks {
             .is_some_and(|block| block.kind.is_material())
     }
 
+    pub fn is_factory_at(&self, pos: IVec3) -> bool {
+        self.blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.is_factory())
+    }
+
+    pub fn is_scene_at(&self, pos: IVec3) -> bool {
+        self.blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.is_scene())
+    }
+
     pub fn clear_generated_markers(&mut self) {
         self.retain(|_, block| !block.kind.is_generated_marker());
     }
