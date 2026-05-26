@@ -4,8 +4,11 @@ use crate::shared::i18n::I18n;
 
 use super::types::LocalizedText;
 
-const BUTTON_BG: Color = Color::srgba(0.22, 0.24, 0.26, 0.96);
-const BUTTON_BORDER: Color = Color::srgb(0.38, 0.39, 0.40);
+pub const BUTTON_BG: Color = Color::srgba(0.22, 0.24, 0.26, 0.96);
+pub const BUTTON_HOVER_BG: Color = Color::srgba(0.30, 0.34, 0.37, 0.98);
+pub const BUTTON_PRESSED_BG: Color = Color::srgba(0.16, 0.19, 0.21, 0.98);
+pub const BUTTON_BORDER: Color = Color::srgb(0.38, 0.39, 0.40);
+pub const BUTTON_HOVER_BORDER: Color = Color::srgb(0.56, 0.72, 0.78);
 const DEFAULT_BUTTON_SCALE: f32 = 1.2;
 const DEFAULT_TEXT_SCALE: f32 = 1.5;
 

@@ -41,7 +41,7 @@ fn default_ui_scale() -> f32 {
     1.0
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Reflect, Serialize, Deserialize)]
 pub enum ConfigSelectionMode {
     #[default]
     Point,
@@ -50,6 +50,12 @@ pub enum ConfigSelectionMode {
 }
 
 impl ConfigSelectionMode {
+    pub const ALL: [ConfigSelectionMode; 3] = [
+        ConfigSelectionMode::Point,
+        ConfigSelectionMode::Line,
+        ConfigSelectionMode::Plane,
+    ];
+
     pub fn next(self) -> Self {
         match self {
             Self::Point => Self::Line,

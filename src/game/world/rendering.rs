@@ -1,5 +1,8 @@
 use bevy::pbr::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
+use bevy::render::render_asset::RenderAssetUsages;
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use bevy::render::texture::ImageSampler;
 
 use crate::game::world::blocks::{BlockData, BlockKind, BLOCK_SIZE};
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
@@ -20,6 +23,10 @@ pub struct WorldRenderAssets {
     connector_y: Handle<Mesh>,
     connector_z: Handle<Mesh>,
     solid: Handle<StandardMaterial>,
+    grass: Handle<StandardMaterial>,
+    stone: Handle<StandardMaterial>,
+    dirt: Handle<StandardMaterial>,
+    planks: Handle<StandardMaterial>,
     glass: Handle<StandardMaterial>,
     generator: Handle<StandardMaterial>,
     welder: Handle<StandardMaterial>,
@@ -66,6 +73,7 @@ pub fn setup_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     commands.spawn(PointLightBundle {
         point_light: PointLight {
@@ -97,7 +105,7 @@ pub fn setup_scene(
         ..default()
     });
 
-    let render_assets = WorldRenderAssets::new(&mut meshes, &mut materials);
+    let render_assets = WorldRenderAssets::new(&mut meshes, &mut materials, &mut images);
     commands.insert_resource(render_assets);
 
     let marker_mesh = meshes.add(Cuboid::new(1.04, 1.04, 1.04));
@@ -139,7 +147,11 @@ pub fn setup_scene(
 }
 
 impl WorldRenderAssets {
-    fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
+    fn new(
+        meshes: &mut Assets<Mesh>,
+        materials: &mut Assets<StandardMaterial>,
+        images: &mut Assets<Image>,
+    ) -> Self {
         Self {
             block: meshes.add(Cuboid::new(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)),
             node: meshes.add(Cuboid::new(
@@ -154,6 +166,22 @@ impl WorldRenderAssets {
             connector_y: meshes.add(Cuboid::new(0.10, 0.74, 0.10)),
             connector_z: meshes.add(Cuboid::new(0.10, 0.10, 0.74)),
             solid: materials.add(block_material(BlockKind::Solid)),
+            grass: materials.add(textured_block_material(
+                BlockKind::Grass,
+                images.add(procedural_block_texture(ProceduralTexture::Grass)),
+            )),
+            stone: materials.add(textured_block_material(
+                BlockKind::Stone,
+                images.add(procedural_block_texture(ProceduralTexture::Stone)),
+            )),
+            dirt: materials.add(textured_block_material(
+                BlockKind::Dirt,
+                images.add(procedural_block_texture(ProceduralTexture::Dirt)),
+            )),
+            planks: materials.add(textured_block_material(
+                BlockKind::Planks,
+                images.add(procedural_block_texture(ProceduralTexture::Planks)),
+            )),
             glass: materials.add(block_material(BlockKind::Glass)),
             generator: materials.add(block_material(BlockKind::Generator)),
             welder: materials.add(block_material(BlockKind::Welder)),
@@ -232,6 +260,10 @@ impl WorldRenderAssets {
     fn block_material(&self, kind: BlockKind) -> Handle<StandardMaterial> {
         match kind {
             BlockKind::Solid => self.solid.clone(),
+            BlockKind::Grass => self.grass.clone(),
+            BlockKind::Stone => self.stone.clone(),
+            BlockKind::Dirt => self.dirt.clone(),
+            BlockKind::Planks => self.planks.clone(),
             BlockKind::Glass => self.glass.clone(),
             BlockKind::Generator => self.generator.clone(),
             BlockKind::Welder => self.welder.clone(),
@@ -276,6 +308,126 @@ fn block_material(kind: BlockKind) -> StandardMaterial {
         material.unlit = matches!(kind, BlockKind::WeldPoint | BlockKind::DrillHead);
     }
     material
+}
+
+#[derive(Clone, Copy)]
+enum ProceduralTexture {
+    Grass,
+    Stone,
+    Dirt,
+    Planks,
+}
+
+fn textured_block_material(kind: BlockKind, texture: Handle<Image>) -> StandardMaterial {
+    StandardMaterial {
+        base_color: kind.material(),
+        base_color_texture: Some(texture),
+        perceptual_roughness: 0.94,
+        reflectance: 0.10,
+        ..default()
+    }
+}
+
+fn procedural_block_texture(kind: ProceduralTexture) -> Image {
+    const SIZE: u32 = 32;
+    let mut data = Vec::with_capacity((SIZE * SIZE * 4) as usize);
+
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let [r, g, b] = match kind {
+                ProceduralTexture::Grass => grass_pixel(x, y),
+                ProceduralTexture::Stone => stone_pixel(x, y),
+                ProceduralTexture::Dirt => dirt_pixel(x, y),
+                ProceduralTexture::Planks => planks_pixel(x, y),
+            };
+            data.extend_from_slice(&[r, g, b, 255]);
+        }
+    }
+
+    let mut image = Image::new(
+        Extent3d {
+            width: SIZE,
+            height: SIZE,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    );
+    image.sampler = ImageSampler::nearest();
+    image
+}
+
+fn grass_pixel(x: u32, y: u32) -> [u8; 3] {
+    let noise = texture_noise(x, y, 17);
+    if y < 7 {
+        let blade = ((x * 5 + y * 11 + noise as u32) % 13) < 4;
+        if blade {
+            shade([66, 135, 42], noise, 24)
+        } else {
+            shade([82, 154, 48], noise, 18)
+        }
+    } else {
+        let root = ((x + y * 3 + noise as u32) % 17) < 3;
+        if root {
+            shade([78, 48, 26], noise, 18)
+        } else {
+            shade([118, 79, 43], noise, 22)
+        }
+    }
+}
+
+fn stone_pixel(x: u32, y: u32) -> [u8; 3] {
+    let noise = texture_noise(x, y, 41);
+    let crack = ((x * 3 + y * 7 + noise as u32) % 23) == 0 || (x + y * 2) % 29 == 0;
+    if crack {
+        shade([70, 70, 68], noise, 10)
+    } else {
+        shade([122, 123, 119], noise, 26)
+    }
+}
+
+fn dirt_pixel(x: u32, y: u32) -> [u8; 3] {
+    let noise = texture_noise(x, y, 73);
+    let pebble = ((x * 13 + y * 5 + noise as u32) % 19) < 2;
+    if pebble {
+        shade([96, 73, 52], noise, 16)
+    } else {
+        shade([111, 72, 39], noise, 24)
+    }
+}
+
+fn planks_pixel(x: u32, y: u32) -> [u8; 3] {
+    let noise = texture_noise(x, y, 109);
+    let seam = y % 8 == 0 || x % 16 == 0;
+    let grain = ((x * 7 + noise as u32) % 11) < 3;
+    if seam {
+        shade([86, 52, 25], noise, 10)
+    } else if grain {
+        shade([154, 104, 55], noise, 18)
+    } else {
+        shade([178, 121, 65], noise, 20)
+    }
+}
+
+fn texture_noise(x: u32, y: u32, seed: u32) -> u8 {
+    let mut value = x
+        .wrapping_mul(73_856_093)
+        .wrapping_add(y.wrapping_mul(19_349_663))
+        .wrapping_add(seed.wrapping_mul(83_492_791));
+    value ^= value >> 13;
+    value = value.wrapping_mul(1_274_126_177);
+    ((value ^ (value >> 16)) & 0xff) as u8
+}
+
+fn shade(base: [u8; 3], noise: u8, amount: i16) -> [u8; 3] {
+    let delta = (noise as i16 - 128) * amount / 128;
+    [
+        (base[0] as i16 + delta).clamp(0, 255) as u8,
+        (base[1] as i16 + delta).clamp(0, 255) as u8,
+        (base[2] as i16 + delta).clamp(0, 255) as u8,
+    ]
 }
 
 pub fn rebuild_world(commands: &mut Commands, world: &WorldBlocks, assets: &WorldRenderAssets) {

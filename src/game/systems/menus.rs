@@ -1,14 +1,15 @@
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 
 use crate::game::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
 use crate::game::ui::{
-    CarriedItem, GeneratorAction, InventoryItems, MainMenuAction, PauseAction, PendingKeyBind,
-    SaveListAction, SettingsAction, SettingsTab,
+    CarriedItem, GeneratorAction, InventoryItems, MainMenuAction, OpenSettingsDropdown,
+    PauseAction, PendingKeyBind, SaveListAction, SettingsAction, SettingsTab,
 };
 use crate::game::world::blocks::MaterialKind;
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
 use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
-use crate::game::{UI_SCALE_MAX, UI_SCALE_MIN, UI_SCALE_STEP};
+use crate::game::{UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{key_from_input, open_config_folder, save_config, GameConfig};
 use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::save::{load_world, next_world_name, save_world, SaveState};
@@ -194,17 +195,23 @@ pub fn pause_menu_actions(
 
 pub fn settings_menu_actions(
     keys: Res<ButtonInput<KeyCode>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
     mut mode: ResMut<GameMode>,
     mut settings: ResMut<GameSettings>,
     mut ui_scale: ResMut<UiScale>,
     mut config: ResMut<GameConfig>,
     mut i18n: ResMut<I18n>,
     mut settings_tab: ResMut<SettingsTab>,
+    mut open_dropdown: ResMut<OpenSettingsDropdown>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
-    mut interactions: Query<(&Interaction, &SettingsAction), (Changed<Interaction>, With<Button>)>,
+    mut interactions: Query<
+        (&Interaction, &SettingsAction, &Node, &GlobalTransform),
+        (Changed<Interaction>, With<Button>),
+    >,
 ) {
     if *mode != GameMode::Settings {
         pending_key_bind.0 = None;
+        open_dropdown.0 = None;
         return;
     }
 
@@ -216,7 +223,12 @@ pub fn settings_menu_actions(
         }
     }
 
-    for (interaction, action) in &mut interactions {
+    let cursor_position = windows
+        .get_single()
+        .ok()
+        .and_then(|window| window.cursor_position());
+
+    for (interaction, action, node, transform) in &mut interactions {
         if *interaction != Interaction::Pressed {
             continue;
         }
@@ -224,45 +236,52 @@ pub fn settings_menu_actions(
         match *action {
             SettingsAction::TabGameplay => {
                 *settings_tab = SettingsTab::Gameplay;
+                open_dropdown.0 = None;
             }
             SettingsAction::TabKeyBindings => {
                 *settings_tab = SettingsTab::KeyBindings;
+                open_dropdown.0 = None;
             }
-            SettingsAction::FovDown => {
-                settings.fov_degrees = (settings.fov_degrees - 5.0).clamp(50.0, 110.0);
-                config.fov_degrees = settings.fov_degrees;
+            SettingsAction::FovSlider => {
+                if let Some(percent) = slider_percent(cursor_position, node, transform) {
+                    settings.fov_degrees = (50.0 + percent * 60.0).round().clamp(50.0, 110.0);
+                    config.fov_degrees = settings.fov_degrees;
+                    save_config(&config);
+                }
+            }
+            SettingsAction::UiScaleSlider => {
+                if let Some(percent) = slider_percent(cursor_position, node, transform) {
+                    settings.ui_scale =
+                        ((UI_SCALE_MIN + percent * (UI_SCALE_MAX - UI_SCALE_MIN)) * 10.0).round()
+                            / 10.0;
+                    settings.ui_scale = settings.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
+                    ui_scale.0 = settings.ui_scale;
+                    config.ui_scale = settings.ui_scale;
+                    save_config(&config);
+                }
+            }
+            SettingsAction::SetPlaceSelectionMode(selection_mode) => {
+                config.place_selection_mode = selection_mode;
+                open_dropdown.0 = None;
                 save_config(&config);
             }
-            SettingsAction::FovUp => {
-                settings.fov_degrees = (settings.fov_degrees + 5.0).clamp(50.0, 110.0);
-                config.fov_degrees = settings.fov_degrees;
+            SettingsAction::SetDeleteSelectionMode(selection_mode) => {
+                config.delete_selection_mode = selection_mode;
+                open_dropdown.0 = None;
                 save_config(&config);
             }
-            SettingsAction::UiScaleDown => {
-                settings.ui_scale = step_ui_scale(settings.ui_scale, -UI_SCALE_STEP);
-                ui_scale.0 = settings.ui_scale;
-                config.ui_scale = settings.ui_scale;
-                save_config(&config);
-            }
-            SettingsAction::UiScaleUp => {
-                settings.ui_scale = step_ui_scale(settings.ui_scale, UI_SCALE_STEP);
-                ui_scale.0 = settings.ui_scale;
-                config.ui_scale = settings.ui_scale;
-                save_config(&config);
-            }
-            SettingsAction::PlaceSelectionModeNext => {
-                config.place_selection_mode = config.place_selection_mode.next();
-                save_config(&config);
-            }
-            SettingsAction::DeleteSelectionModeNext => {
-                config.delete_selection_mode = config.delete_selection_mode.next();
-                save_config(&config);
-            }
-            SettingsAction::LanguageNext => {
-                let language = i18n.language().next();
+            SettingsAction::SetLanguage(language) => {
                 i18n.set_language(language);
                 config.language = Some(language);
+                open_dropdown.0 = None;
                 save_config(&config);
+            }
+            SettingsAction::ToggleDropdown(dropdown) => {
+                open_dropdown.0 = if open_dropdown.0 == Some(dropdown) {
+                    None
+                } else {
+                    Some(dropdown)
+                };
             }
             SettingsAction::Bind(action) => {
                 pending_key_bind.0 = Some(action);
@@ -273,6 +292,7 @@ pub fn settings_menu_actions(
                 settings.ui_scale = config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
                 ui_scale.0 = settings.ui_scale;
                 i18n.set_language(resolve_language(config.language));
+                open_dropdown.0 = None;
                 pending_key_bind.0 = None;
                 save_config(&config);
             }
@@ -280,11 +300,26 @@ pub fn settings_menu_actions(
                 open_config_folder();
             }
             SettingsAction::Back => {
+                open_dropdown.0 = None;
                 pending_key_bind.0 = None;
                 *mode = GameMode::Paused;
             }
         }
     }
+}
+
+fn slider_percent(
+    cursor_position: Option<Vec2>,
+    node: &Node,
+    transform: &GlobalTransform,
+) -> Option<f32> {
+    let cursor_position = cursor_position?;
+    let width = node.size().x;
+    if width <= 0.0 {
+        return None;
+    }
+    let left = transform.translation().x - width * 0.5;
+    Some(((cursor_position.x - left) / width).clamp(0.0, 1.0))
 }
 
 pub fn generator_menu_actions(
@@ -336,10 +371,6 @@ fn next_material(material: MaterialKind) -> MaterialKind {
         .position(|candidate| *candidate == material)
         .unwrap_or(0);
     all[(index + 1) % all.len()]
-}
-
-fn step_ui_scale(current: f32, delta: f32) -> f32 {
-    (((current + delta) * 10.0).round() / 10.0).clamp(UI_SCALE_MIN, UI_SCALE_MAX)
 }
 
 fn reset_builder_state(

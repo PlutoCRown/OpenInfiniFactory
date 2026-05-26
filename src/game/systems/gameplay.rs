@@ -5,7 +5,7 @@ use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, GameSettings, PlacementState,
     SelectionAxis, SelectionBounds, SelectionDrag, SimulationState,
 };
-use crate::game::ui::{AreaKind, InventoryItems, PendingKeyBind, HOTBAR_SLOTS};
+use crate::game::ui::{AreaKind, CarriedItem, InventoryItems, PendingKeyBind, HOTBAR_SLOTS};
 use crate::game::world::blocks::{BlockData, BlockKind};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::{
@@ -21,6 +21,7 @@ pub fn gameplay_input(
     pending_key_bind: Res<PendingKeyBind>,
     mut mode: ResMut<GameMode>,
     mut placement: ResMut<PlacementState>,
+    mut carried: ResMut<CarriedItem>,
 ) {
     let bindings = &config.key_bindings;
 
@@ -30,7 +31,11 @@ pub fn gameplay_input(
 
     if keys.just_pressed(bindings.pause.key_code()) {
         *mode = match *mode {
-            GameMode::Playing | GameMode::Inventory => GameMode::Paused,
+            GameMode::Playing => GameMode::Paused,
+            GameMode::Inventory => {
+                carried.clear();
+                GameMode::Playing
+            }
             GameMode::Paused => GameMode::Playing,
             GameMode::GeneratorSettings => {
                 placement.generator_panel = None;
@@ -49,6 +54,7 @@ pub fn gameplay_input(
 
     if keys.just_pressed(bindings.inventory.key_code()) {
         *mode = if *mode == GameMode::Inventory {
+            carried.clear();
             GameMode::Playing
         } else {
             GameMode::Inventory

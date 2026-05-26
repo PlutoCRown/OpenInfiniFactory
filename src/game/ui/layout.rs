@@ -14,19 +14,19 @@ use super::types::{
     FovText, GeneratorAction, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText,
     HotbarText, InGameHudStyle, InGameHudVisibility, InventoryTitle, MainMenuAction, MainMenuPanel,
     PauseAction, PausePanel, PlaceSelectionModeText, SaveListPanel, SaveListTitle, SettingsAction,
-    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsStatusText,
-    SimulationAction, SimulationText, SlotArea, UiScaleText, BACKPACK_SLOTS, HOTBAR_SLOTS,
+    SettingsDropdown, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
+    SettingsSlider, SettingsStatusText, SimulationText, SlotArea, UiScaleText, BACKPACK_SLOTS,
+    HOTBAR_SLOTS,
 };
 use super::widgets::{
-    spawn_generator_button, spawn_language_settings_button, spawn_localized_main_button,
-    spawn_localized_pause_button, spawn_localized_settings_button, spawn_localized_sim_button,
-    spawn_save_back_button, spawn_save_slot_button, spawn_slot,
+    spawn_generator_button, spawn_localized_main_button, spawn_localized_pause_button,
+    spawn_localized_settings_button, spawn_save_back_button, spawn_save_slot_button,
+    spawn_settings_dropdown, spawn_settings_slider, spawn_settings_tab, spawn_slot,
 };
 
 pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
     commands.spawn(root_node()).with_children(|root| {
         spawn_status_overlays(root);
-        spawn_simulation_buttons(root, &i18n);
         spawn_hotbar(root);
         spawn_inventory_panel(root, &i18n);
         spawn_generator_panel(root, &i18n);
@@ -96,8 +96,8 @@ fn spawn_status_overlays(root: &mut ChildBuilder) {
             Color::WHITE,
             Some(Val::Px(18.0)),
             None,
+            Some(Val::Px(62.0)),
             None,
-            Some(Val::Px(92.0)),
         ),
         HotbarText,
         InGameHudVisibility,
@@ -120,44 +120,14 @@ fn spawn_status_overlays(root: &mut ChildBuilder) {
             "",
             16.0,
             STATUS_TEXT,
-            None,
             Some(Val::Px(18.0)),
-            Some(Val::Px(118.0)),
+            None,
+            Some(Val::Px(112.0)),
             None,
         ),
         SimulationText,
         InGameHudVisibility,
     ));
-}
-
-fn spawn_simulation_buttons(root: &mut ChildBuilder, i18n: &I18n) {
-    root.spawn((
-        transparent_node(Style {
-            width: Val::Px(default_button_size(260.0)),
-            height: Val::Px(default_button_size(38.0)),
-            position_type: PositionType::Absolute,
-            right: Val::Px(18.0),
-            top: Val::Px(182.0),
-            display: Display::Flex,
-            column_gap: Val::Px(6.0),
-            ..default()
-        }),
-        InGameHudStyle,
-    ))
-    .with_children(|bar| {
-        spawn_localized_sim_button(
-            bar,
-            i18n.text("button.sim_play"),
-            "button.sim_play",
-            SimulationAction::ToggleRun,
-        );
-        spawn_localized_sim_button(
-            bar,
-            i18n.text("button.rollback"),
-            "button.rollback",
-            SimulationAction::Rollback,
-        );
-    });
 }
 
 fn spawn_hotbar(root: &mut ChildBuilder) {
@@ -245,86 +215,90 @@ fn spawn_settings_panel(root: &mut ChildBuilder, i18n: &I18n) {
 }
 
 fn spawn_settings_tabs(panel: &mut ChildBuilder, i18n: &I18n) {
-    panel.spawn(flex_row(40.0, 8.0)).with_children(|tabs| {
-        spawn_localized_settings_button(
-            tabs,
-            i18n.text("button.gameplay"),
-            "button.gameplay",
-            SettingsAction::TabGameplay,
-        );
-        spawn_localized_settings_button(
-            tabs,
-            i18n.text("button.key_bindings"),
-            "button.key_bindings",
-            SettingsAction::TabKeyBindings,
-        );
-    });
+    panel
+        .spawn(transparent_node(Style {
+            width: Val::Percent(100.0),
+            height: Val::Px(default_button_size(42.0)),
+            display: Display::Flex,
+            column_gap: Val::Px(6.0),
+            ..default()
+        }))
+        .with_children(|tabs| {
+            spawn_settings_tab(
+                tabs,
+                i18n.text("button.gameplay"),
+                "button.gameplay",
+                SettingsAction::TabGameplay,
+            );
+            spawn_settings_tab(
+                tabs,
+                i18n.text("button.key_bindings"),
+                "button.key_bindings",
+                SettingsAction::TabKeyBindings,
+            );
+        });
+}
+
+fn spawn_settings_row(
+    panel: &mut ChildBuilder,
+    i18n: &I18n,
+    label_key: &'static str,
+    label_marker: impl Bundle,
+    controls: impl FnOnce(&mut ChildBuilder),
+) {
+    panel
+        .spawn(transparent_node(Style {
+            width: Val::Percent(100.0),
+            min_height: Val::Px(default_button_size(54.0)),
+            display: Display::Flex,
+            align_items: AlignItems::FlexStart,
+            column_gap: Val::Px(18.0),
+            ..default()
+        }))
+        .insert(SettingsGameplayGroup)
+        .with_children(|row| {
+            row.spawn((
+                localized_text(i18n, label_key, 15.0, Color::srgb(0.82, 0.88, 0.90)),
+                label_marker,
+            ));
+            row.spawn(transparent_node(Style {
+                width: Val::Px(430.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(8.0),
+                ..default()
+            }))
+            .with_children(controls);
+        });
 }
 
 fn spawn_gameplay_settings(panel: &mut ChildBuilder, i18n: &I18n) {
-    panel
-        .spawn(flex_row(40.0, 8.0))
-        .insert(SettingsGameplayGroup)
-        .with_children(|row| {
-            spawn_localized_settings_button(
-                row,
-                i18n.text("button.fov_down"),
-                "button.fov_down",
-                SettingsAction::FovDown,
-            );
-            row.spawn((text("", 18.0, Color::WHITE), FovText));
-            spawn_localized_settings_button(
-                row,
-                i18n.text("button.fov_up"),
-                "button.fov_up",
-                SettingsAction::FovUp,
-            );
-            spawn_language_settings_button(
-                row,
-                i18n.fmt(
-                    "button.language",
-                    &[("language", i18n.language().native_name().to_string())],
-                ),
-                SettingsAction::LanguageNext,
-            );
-        });
-    panel
-        .spawn(flex_row(40.0, 8.0))
-        .insert(SettingsGameplayGroup)
-        .with_children(|row| {
-            spawn_localized_settings_button(
-                row,
-                i18n.text("button.ui_scale_down"),
-                "button.ui_scale_down",
-                SettingsAction::UiScaleDown,
-            );
-            row.spawn((text("", 18.0, Color::WHITE), UiScaleText));
-            spawn_localized_settings_button(
-                row,
-                i18n.text("button.ui_scale_up"),
-                "button.ui_scale_up",
-                SettingsAction::UiScaleUp,
-            );
-        });
-    panel
-        .spawn(flex_row(40.0, 8.0))
-        .insert(SettingsGameplayGroup)
-        .with_children(|row| {
-            spawn_localized_settings_button(
-                row,
-                i18n.text("button.place_selection_mode"),
-                "button.place_selection_mode",
-                SettingsAction::PlaceSelectionModeNext,
-            );
-            row.spawn((text("", 18.0, Color::WHITE), PlaceSelectionModeText));
-            spawn_localized_settings_button(
-                row,
-                i18n.text("button.delete_selection_mode"),
-                "button.delete_selection_mode",
-                SettingsAction::DeleteSelectionModeNext,
-            );
-            row.spawn((text("", 18.0, Color::WHITE), DeleteSelectionModeText));
-        });
+    spawn_settings_row(panel, i18n, "settings.fov", (), |controls| {
+        spawn_settings_slider(controls, SettingsSlider::Fov);
+    });
+    spawn_settings_row(panel, i18n, "settings.ui_scale_label", (), |controls| {
+        spawn_settings_slider(controls, SettingsSlider::UiScale);
+    });
+    spawn_settings_row(panel, i18n, "settings.language", (), |controls| {
+        spawn_settings_dropdown(controls, SettingsDropdown::Language);
+    });
+    spawn_settings_row(
+        panel,
+        i18n,
+        "settings.place_selection_mode",
+        (),
+        |controls| {
+            spawn_settings_dropdown(controls, SettingsDropdown::PlaceSelectionMode);
+        },
+    );
+    spawn_settings_row(
+        panel,
+        i18n,
+        "settings.delete_selection_mode",
+        (),
+        |controls| {
+            spawn_settings_dropdown(controls, SettingsDropdown::DeleteSelectionMode);
+        },
+    );
 }
 
 fn spawn_key_bindings(panel: &mut ChildBuilder, i18n: &I18n) {

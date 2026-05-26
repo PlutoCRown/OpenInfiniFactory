@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 pub const DEFAULT_LANGUAGE: Language = Language::English;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Reflect, Serialize, Deserialize)]
 pub enum Language {
     English,
     ChineseSimplified,

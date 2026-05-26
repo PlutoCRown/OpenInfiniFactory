@@ -2,7 +2,8 @@ use bevy::prelude::*;
 
 use crate::game::state::BuilderMode;
 use crate::game::world::blocks::{BlockKind, EDIT_BLOCKS, PLAY_BLOCKS};
-use crate::shared::config::ConfigAction;
+use crate::shared::config::{ConfigAction, ConfigSelectionMode};
+use crate::shared::i18n::Language;
 
 pub const HOTBAR_SLOTS: usize = 9;
 pub(super) const BACKPACK_SLOTS: usize = 27;
@@ -82,6 +83,40 @@ pub struct PlaceSelectionModeText;
 #[derive(Component)]
 pub struct DeleteSelectionModeText;
 
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsValueText(pub SettingsValue);
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum SettingsValue {
+    Fov,
+    UiScale,
+}
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsSliderFill(pub SettingsSlider);
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsSliderKnob(pub SettingsSlider);
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsDropdownLabel(pub SettingsDropdown);
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsDropdownList(pub SettingsDropdown);
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum SettingsSlider {
+    Fov,
+    UiScale,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum SettingsDropdown {
+    Language,
+    PlaceSelectionMode,
+    DeleteSelectionMode,
+}
+
 #[derive(Component)]
 pub struct SimulationText;
 
@@ -89,9 +124,6 @@ pub struct SimulationText;
 pub struct LocalizedText {
     pub key: &'static str,
 }
-
-#[derive(Component)]
-pub struct LanguageText;
 
 #[derive(Component, Clone, Copy)]
 pub enum PauseAction {
@@ -127,13 +159,12 @@ pub enum SaveListAction {
 pub enum SettingsAction {
     TabGameplay,
     TabKeyBindings,
-    FovDown,
-    FovUp,
-    UiScaleDown,
-    UiScaleUp,
-    PlaceSelectionModeNext,
-    DeleteSelectionModeNext,
-    LanguageNext,
+    FovSlider,
+    UiScaleSlider,
+    SetPlaceSelectionMode(ConfigSelectionMode),
+    SetDeleteSelectionMode(ConfigSelectionMode),
+    SetLanguage(Language),
+    ToggleDropdown(SettingsDropdown),
     Bind(ConfigAction),
     ResetDefaults,
     OpenFolder,
@@ -156,6 +187,9 @@ pub enum SettingsTab {
 
 #[derive(Resource, Default)]
 pub struct PendingKeyBind(pub Option<ConfigAction>);
+
+#[derive(Resource, Default)]
+pub struct OpenSettingsDropdown(pub Option<SettingsDropdown>);
 
 impl Default for SettingsTab {
     fn default() -> Self {
@@ -268,6 +302,10 @@ impl CarriedItem {
     pub fn clear(&mut self) {
         self.0 = None;
     }
+
+    pub fn set(&mut self, item: Option<InventoryItem>) {
+        self.0 = item;
+    }
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -279,9 +317,5 @@ pub(crate) enum SlotArea {
 impl CarriedItem {
     pub(super) fn item(&self) -> Option<InventoryItem> {
         self.0
-    }
-
-    pub(super) fn item_mut(&mut self) -> &mut Option<InventoryItem> {
-        &mut self.0
     }
 }

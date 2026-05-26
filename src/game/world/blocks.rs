@@ -4,7 +4,15 @@ use serde::{Deserialize, Serialize};
 pub const BLOCK_SIZE: f32 = 1.0;
 pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
 
-pub const EDIT_BLOCKS: [BlockKind; 3] = [BlockKind::Solid, BlockKind::Glass, BlockKind::Goal];
+pub const EDIT_BLOCKS: [BlockKind; 7] = [
+    BlockKind::Solid,
+    BlockKind::Grass,
+    BlockKind::Stone,
+    BlockKind::Dirt,
+    BlockKind::Planks,
+    BlockKind::Glass,
+    BlockKind::Goal,
+];
 
 pub const PLAY_BLOCKS: [BlockKind; 11] = [
     BlockKind::Generator,
@@ -45,6 +53,10 @@ impl MaterialKind {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum BlockKind {
     Solid,
+    Grass,
+    Stone,
+    Dirt,
+    Planks,
     Glass,
     Generator,
     Welder,
@@ -68,6 +80,10 @@ impl BlockKind {
     pub fn name_key(self) -> &'static str {
         match self {
             BlockKind::Solid => "block.solid",
+            BlockKind::Grass => "block.grass",
+            BlockKind::Stone => "block.stone",
+            BlockKind::Dirt => "block.dirt",
+            BlockKind::Planks => "block.planks",
             BlockKind::Glass => "block.glass",
             BlockKind::Generator => "block.generator",
             BlockKind::Welder => "block.welder",
@@ -91,6 +107,10 @@ impl BlockKind {
     pub fn material(self) -> Color {
         match self {
             BlockKind::Solid => Color::srgb(0.46, 0.48, 0.50),
+            BlockKind::Grass => Color::srgb(0.34, 0.62, 0.24),
+            BlockKind::Stone => Color::srgb(0.43, 0.43, 0.42),
+            BlockKind::Dirt => Color::srgb(0.40, 0.27, 0.16),
+            BlockKind::Planks => Color::srgb(0.66, 0.45, 0.25),
             BlockKind::Glass => Color::srgba(0.55, 0.82, 0.95, 0.45),
             BlockKind::Generator => Color::srgb(0.52, 0.30, 0.68),
             BlockKind::Welder => Color::srgb(0.76, 0.18, 0.16),
@@ -147,7 +167,16 @@ impl BlockKind {
     }
 
     pub fn is_scene(self) -> bool {
-        matches!(self, BlockKind::Solid | BlockKind::Glass | BlockKind::Goal)
+        matches!(
+            self,
+            BlockKind::Solid
+                | BlockKind::Grass
+                | BlockKind::Stone
+                | BlockKind::Dirt
+                | BlockKind::Planks
+                | BlockKind::Glass
+                | BlockKind::Goal
+        )
     }
 
     pub fn is_material(self) -> bool {

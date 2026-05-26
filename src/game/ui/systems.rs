@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::game::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
+use crate::game::{UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ConfigAction, GameConfig};
 use crate::shared::i18n::I18n;
 use crate::shared::save::SaveState;
@@ -10,10 +11,15 @@ use super::types::{
     BackpackPanel, CarriedIcon, CarriedItem, CarriedLabel, Crosshair, CurrentSaveText,
     DeleteSelectionModeText, FovText, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText,
     HotbarText, InGameHudStyle, InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle,
-    KeyBindingButton, KeyBindingLabel, LanguageText, LocalizedText, MainMenuPanel, PausePanel,
-    PendingKeyBind, PlaceSelectionModeText, SaveListAction, SaveListLabel, SaveListPanel,
-    SaveListTitle, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
-    SettingsStatusText, SettingsTab, SimulationText, SlotArea, SlotLabel, UiScaleText,
+    KeyBindingButton, KeyBindingLabel, LocalizedText, MainMenuPanel, OpenSettingsDropdown,
+    PausePanel, PendingKeyBind, PlaceSelectionModeText, SaveListAction, SaveListLabel,
+    SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdownLabel, SettingsDropdownList,
+    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider,
+    SettingsSliderFill, SettingsSliderKnob, SettingsStatusText, SettingsTab, SettingsValue,
+    SettingsValueText, SimulationText, SlotArea, SlotLabel, UiScaleText,
+};
+use super::components::{
+    BUTTON_BG, BUTTON_BORDER, BUTTON_HOVER_BG, BUTTON_HOVER_BORDER, BUTTON_PRESSED_BG,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -41,7 +47,7 @@ pub fn inventory_slot_clicks(
         (&Interaction, &InventorySlot),
         (Changed<Interaction>, With<Button>),
     >,
-    mut inventory: ResMut<InventoryItems>,
+    inventory: Res<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mode: Res<GameMode>,
@@ -55,13 +61,42 @@ pub fn inventory_slot_clicks(
             continue;
         }
 
-        let slot_item = match slot.area {
-            SlotArea::Hotbar => &mut inventory.hotbar[slot.index],
-            SlotArea::Backpack => &mut inventory.backpack[slot.index],
-        };
-        std::mem::swap(slot_item, carried.item_mut());
+        carried.set(match slot.area {
+            SlotArea::Hotbar => inventory.hotbar[slot.index],
+            SlotArea::Backpack => inventory.backpack[slot.index],
+        });
         placement.selection.clear();
         placement.edit_gesture = None;
+    }
+}
+
+pub fn update_button_hover_ui(
+    mut buttons: Query<
+        (&Interaction, &mut BackgroundColor, &mut BorderColor),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            Without<InventorySlot>,
+            Without<SettingsAction>,
+            Without<SaveListAction>,
+        ),
+    >,
+) {
+    for (interaction, mut background, mut border) in &mut buttons {
+        match *interaction {
+            Interaction::Pressed => {
+                *background = BUTTON_PRESSED_BG.into();
+                *border = BUTTON_HOVER_BORDER.into();
+            }
+            Interaction::Hovered => {
+                *background = BUTTON_HOVER_BG.into();
+                *border = BUTTON_HOVER_BORDER.into();
+            }
+            Interaction::None => {
+                *background = BUTTON_BG.into();
+                *border = BUTTON_BORDER.into();
+            }
+        }
     }
 }
 
@@ -277,7 +312,7 @@ fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
     }
 }
 
-pub fn update_settings_status_ui(
+pub fn update_settings_text_ui(
     config: Res<GameConfig>,
     settings_tab: Res<SettingsTab>,
     pending_key_bind: Res<PendingKeyBind>,
@@ -295,11 +330,18 @@ pub fn update_settings_status_ui(
             Without<SimulationText>,
             Without<CurrentSaveText>,
             Without<KeyBindingLabel>,
+            Without<SettingsDropdownLabel>,
+            Without<SettingsValueText>,
         ),
     >,
     mut key_labels: Query<
         (&Parent, &mut Text),
-        (With<KeyBindingLabel>, Without<SettingsStatusText>),
+        (
+            With<KeyBindingLabel>,
+            Without<SettingsStatusText>,
+            Without<SettingsDropdownLabel>,
+            Without<SettingsValueText>,
+        ),
     >,
     mut place_mode_text: Query<
         &mut Text,
@@ -308,6 +350,8 @@ pub fn update_settings_status_ui(
             Without<SettingsStatusText>,
             Without<KeyBindingLabel>,
             Without<DeleteSelectionModeText>,
+            Without<SettingsDropdownLabel>,
+            Without<SettingsValueText>,
         ),
     >,
     mut delete_mode_text: Query<
@@ -317,6 +361,8 @@ pub fn update_settings_status_ui(
             Without<SettingsStatusText>,
             Without<KeyBindingLabel>,
             Without<PlaceSelectionModeText>,
+            Without<SettingsDropdownLabel>,
+            Without<SettingsValueText>,
         ),
     >,
     key_buttons: Query<&KeyBindingButton>,
@@ -381,10 +427,153 @@ pub fn update_settings_status_ui(
     }
 }
 
+pub fn update_settings_sliders_ui(
+    settings: Res<GameSettings>,
+    mut slider_fills: Query<
+        (&SettingsSliderFill, &mut Style),
+        (Without<SettingsSliderKnob>, Without<SettingsDropdownList>),
+    >,
+    mut slider_knobs: Query<
+        (&SettingsSliderKnob, &mut Style),
+        (Without<SettingsSliderFill>, Without<SettingsDropdownList>),
+    >,
+) {
+    for (fill, mut style) in &mut slider_fills {
+        style.width = Val::Percent(settings_slider_percent(fill.0, &settings));
+    }
+
+    for (knob, mut style) in &mut slider_knobs {
+        style.left = Val::Percent(settings_slider_percent(knob.0, &settings));
+    }
+}
+
+pub fn update_settings_dropdowns_ui(
+    config: Res<GameConfig>,
+    settings: Res<GameSettings>,
+    open_dropdown: Res<OpenSettingsDropdown>,
+    i18n: Res<I18n>,
+    mut dropdown_labels: Query<
+        (&SettingsDropdownLabel, &mut Text),
+        (
+            Without<SettingsStatusText>,
+            Without<KeyBindingLabel>,
+            Without<FovText>,
+            Without<PlaceSelectionModeText>,
+            Without<DeleteSelectionModeText>,
+            Without<SettingsValueText>,
+        ),
+    >,
+    mut value_texts: Query<
+        (&SettingsValueText, &mut Text),
+        (
+            Without<SettingsStatusText>,
+            Without<KeyBindingLabel>,
+            Without<FovText>,
+            Without<PlaceSelectionModeText>,
+            Without<DeleteSelectionModeText>,
+            Without<SettingsDropdownLabel>,
+        ),
+    >,
+    mut dropdown_lists: Query<
+        (&SettingsDropdownList, &mut Style),
+        (Without<SettingsSliderFill>, Without<SettingsSliderKnob>),
+    >,
+) {
+    for (label, mut text) in &mut dropdown_labels {
+        text.sections[0].value = match label.0 {
+            super::types::SettingsDropdown::Language => i18n.language().native_name().to_string(),
+            super::types::SettingsDropdown::PlaceSelectionMode => {
+                i18n.text(config.place_selection_mode.label_key())
+            }
+            super::types::SettingsDropdown::DeleteSelectionMode => {
+                i18n.text(config.delete_selection_mode.label_key())
+            }
+        };
+    }
+
+    for (value, mut text) in &mut value_texts {
+        text.sections[0].value = match value.0 {
+            SettingsValue::Fov => format!("FOV {:.0}", settings.fov_degrees),
+            SettingsValue::UiScale => i18n.fmt(
+                "settings.ui_scale",
+                &[("scale", format!("{:.1}", settings.ui_scale))],
+            ),
+        };
+    }
+
+    for (list, mut style) in &mut dropdown_lists {
+        style.display = if open_dropdown.0 == Some(list.0) {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+}
+
+pub fn update_settings_tabs_ui(
+    settings_tab: Res<SettingsTab>,
+    mut tab_buttons: Query<
+        (
+            &SettingsAction,
+            &Interaction,
+            &mut BackgroundColor,
+            &mut BorderColor,
+        ),
+        With<Button>,
+    >,
+) {
+    for (action, interaction, mut background, mut border) in &mut tab_buttons {
+        let selected = matches!(
+            (*action, *settings_tab),
+            (SettingsAction::TabGameplay, SettingsTab::Gameplay)
+                | (SettingsAction::TabKeyBindings, SettingsTab::KeyBindings)
+        );
+        if selected {
+            *background = Color::srgba(0.24, 0.30, 0.34, 0.98).into();
+            *border = Color::srgb(0.42, 0.72, 0.82).into();
+        } else if matches!(
+            *action,
+            SettingsAction::TabGameplay | SettingsAction::TabKeyBindings
+        ) {
+            if *interaction == Interaction::Hovered {
+                *background = BUTTON_HOVER_BG.into();
+                *border = BUTTON_HOVER_BORDER.into();
+            } else {
+                *background = Color::srgba(0.16, 0.17, 0.18, 0.96).into();
+                *border = BUTTON_BORDER.into();
+            }
+        } else {
+            match *interaction {
+                Interaction::Pressed => {
+                    *background = BUTTON_PRESSED_BG.into();
+                    *border = BUTTON_HOVER_BORDER.into();
+                }
+                Interaction::Hovered => {
+                    *background = BUTTON_HOVER_BG.into();
+                    *border = BUTTON_HOVER_BORDER.into();
+                }
+                Interaction::None => {
+                    *background = BUTTON_BG.into();
+                    *border = BUTTON_BORDER.into();
+                }
+            }
+        }
+    }
+}
+
+fn settings_slider_percent(slider: SettingsSlider, settings: &GameSettings) -> f32 {
+    match slider {
+        SettingsSlider::Fov => ((settings.fov_degrees - 50.0) / 60.0 * 100.0).clamp(0.0, 100.0),
+        SettingsSlider::UiScale => {
+            ((settings.ui_scale - UI_SCALE_MIN) / (UI_SCALE_MAX - UI_SCALE_MIN) * 100.0)
+                .clamp(0.0, 100.0)
+        }
+    }
+}
+
 pub fn update_localized_ui(
     i18n: Res<I18n>,
-    mut localized_text: Query<(&LocalizedText, &mut Text), Without<LanguageText>>,
-    mut language_text: Query<&mut Text, With<LanguageText>>,
+    mut localized_text: Query<(&LocalizedText, &mut Text)>,
 ) {
     if !i18n.is_changed() {
         return;
@@ -392,13 +581,6 @@ pub fn update_localized_ui(
 
     for (localized, mut text) in &mut localized_text {
         text.sections[0].value = i18n.text(localized.key);
-    }
-
-    for mut text in &mut language_text {
-        text.sections[0].value = i18n.fmt(
-            "button.language",
-            &[("language", i18n.language().native_name().to_string())],
-        );
     }
 }
 
@@ -540,12 +722,20 @@ pub fn update_inventory_slots(
         };
 
         let selected_hotbar = slot.area == SlotArea::Hotbar && slot.index == placement.selected;
-        *background = item
+        let base_color = item
             .map(slot_color)
-            .unwrap_or(Color::srgba(0.16, 0.16, 0.17, 0.92))
-            .into();
+            .unwrap_or(Color::srgba(0.16, 0.16, 0.17, 0.92));
+        *background = if *interaction == Interaction::Hovered && item.is_none() {
+            Color::srgba(0.24, 0.26, 0.28, 0.96).into()
+        } else if *interaction == Interaction::Hovered {
+            base_color.with_alpha(1.0).into()
+        } else {
+            base_color.into()
+        };
         *border = if selected_hotbar {
             Color::srgb(1.0, 1.0, 1.0).into()
+        } else if *interaction == Interaction::Hovered {
+            BUTTON_HOVER_BORDER.into()
         } else {
             Color::srgb(0.22, 0.22, 0.22).into()
         };
@@ -568,7 +758,7 @@ pub fn update_save_list_ui(
         Query<&mut Text, With<SaveListTitle>>,
         Query<&mut Text, With<SaveListLabel>>,
     )>,
-    mut slots: Query<(&SaveListAction, &Children, &mut BackgroundColor), With<Button>>,
+    mut slots: Query<(&SaveListAction, &Interaction, &Children, &mut BackgroundColor), With<Button>>,
 ) {
     if let Ok(mut title) = text_sets.p0().get_single_mut() {
         title.sections[0].value = match *mode {
@@ -578,7 +768,7 @@ pub fn update_save_list_ui(
         };
     }
 
-    for (action, children, mut background) in &mut slots {
+    for (action, interaction, children, mut background) in &mut slots {
         let label = match *action {
             SaveListAction::Load(index) => save_state
                 .slots
@@ -592,8 +782,10 @@ pub fn update_save_list_ui(
             SaveListAction::Load(index) => save_state.slots.get(index).is_some(),
             SaveListAction::Back => true,
         };
-        *background = if enabled_load {
-            Color::srgba(0.22, 0.24, 0.26, 0.96).into()
+        *background = if enabled_load && *interaction == Interaction::Hovered {
+            BUTTON_HOVER_BG.into()
+        } else if enabled_load {
+            BUTTON_BG.into()
         } else {
             Color::srgba(0.12, 0.12, 0.13, 0.82).into()
         };

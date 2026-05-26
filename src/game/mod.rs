@@ -22,7 +22,7 @@ use systems::menus::{
     settings_menu_actions,
 };
 use systems::simulation_controls::simulation_controls;
-use ui::{CarriedItem, InventoryItems, PendingKeyBind, SettingsTab};
+use ui::{CarriedItem, InventoryItems, OpenSettingsDropdown, PendingKeyBind, SettingsTab};
 use world::grid::WorldBlocks;
 use world::rendering::setup_scene;
 
@@ -30,7 +30,6 @@ pub struct GamePlugin;
 
 pub const UI_SCALE_MIN: f32 = 1.0;
 pub const UI_SCALE_MAX: f32 = 3.0;
-pub const UI_SCALE_STEP: f32 = 0.1;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
@@ -61,6 +60,7 @@ impl Plugin for GamePlugin {
             .insert_resource(i18n)
             .insert_resource(SaveState::default())
             .insert_resource(SettingsTab::default())
+            .insert_resource(OpenSettingsDropdown::default())
             .insert_resource(PendingKeyBind::default())
             .insert_resource(systems::debug::DebugState::default())
             .insert_resource(systems::debug::PerfStats::default())
@@ -122,7 +122,11 @@ impl Plugin for GamePlugin {
                     ui::inventory_slot_clicks,
                     ui::update_status_ui,
                     ui::update_localized_ui,
-                    ui::update_settings_status_ui,
+                    ui::update_button_hover_ui,
+                    ui::update_settings_text_ui,
+                    ui::update_settings_sliders_ui,
+                    ui::update_settings_dropdowns_ui,
+                    ui::update_settings_tabs_ui,
                     ui::update_panel_visibility,
                     ui::update_hud_visibility,
                     ui::update_generator_ui,
