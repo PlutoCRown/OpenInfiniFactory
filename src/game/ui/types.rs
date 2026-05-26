@@ -281,8 +281,8 @@ impl InventoryItems {
 
         let mut backpack = [None; BACKPACK_SLOTS];
         backpack[0] = Some(InventoryItem::Area(AreaKind::Selection));
-        for index in 1..BACKPACK_SLOTS {
-            backpack[index] = Some(InventoryItem::Block(blocks[(index - 1) % blocks.len()]));
+        for (index, kind) in blocks.iter().take(BACKPACK_SLOTS - 1).enumerate() {
+            backpack[index + 1] = Some(InventoryItem::Block(*kind));
         }
 
         Self { hotbar, backpack }

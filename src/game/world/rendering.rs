@@ -278,10 +278,11 @@ fn spawn_block_model(
                     .get(&neighbor)
                     .is_some_and(|block| weld_point_connects_to(block, -offset))
                 {
+                    let local_offset = local_connector_offset(data, offset);
                     parent.spawn(PbrBundle {
-                        mesh: assets.connector_mesh(offset),
+                        mesh: assets.connector_mesh(local_offset),
                         material: assets.weld_connector_material.clone(),
-                        transform: Transform::from_translation(offset.as_vec3() * 0.34),
+                        transform: Transform::from_translation(local_offset.as_vec3() * 0.34),
                         ..default()
                     });
                 }
@@ -296,10 +297,11 @@ fn spawn_block_model(
                     .get(&neighbor)
                     .is_some_and(|block| wire_connects_to(block, -offset))
                 {
+                    let local_offset = local_connector_offset(data, offset);
                     parent.spawn(PbrBundle {
-                        mesh: assets.connector_mesh(offset),
+                        mesh: assets.connector_mesh(local_offset),
                         material: assets.wire_connector_material.clone(),
-                        transform: Transform::from_translation(offset.as_vec3() * 0.34),
+                        transform: Transform::from_translation(local_offset.as_vec3() * 0.34),
                         ..default()
                     });
                 }
@@ -316,13 +318,20 @@ fn weld_point_connects_to(block: &BlockData, connector_from_block: IVec3) -> boo
     }
 }
 
+fn local_connector_offset(data: BlockData, offset: IVec3) -> IVec3 {
+    if data.kind.is_directional() {
+        data.facing.inverse_rotate_offset(offset)
+    } else {
+        offset
+    }
+}
+
 fn wire_connects_to(block: &BlockData, wire_from_block: IVec3) -> bool {
     match block.kind {
         BlockKind::Wire => true,
-        BlockKind::Detector => wire_from_block != block.facing.forward_ivec3(),
-        BlockKind::Piston => wire_from_block != block.facing.forward_ivec3(),
-        BlockKind::Blocker => wire_from_block != block.facing.forward_ivec3(),
-        BlockKind::Laser => wire_from_block != block.facing.forward_ivec3(),
+        BlockKind::Detector | BlockKind::Piston | BlockKind::Blocker | BlockKind::Laser => {
+            wire_from_block != block.facing.forward_ivec3()
+        }
         _ => false,
     }
 }

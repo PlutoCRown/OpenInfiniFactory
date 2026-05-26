@@ -10,9 +10,9 @@ use crate::game::world::animation::BlockAnimation;
 use crate::game::world::blocks::{BlockData, BlockKind};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::{
-    despawn_edit_previews, spawn_block, spawn_block_preview, spawn_block_with_animation,
-    spawn_edit_preview, BlockEntity, EditPreview, EditPreviewKind, HoverMarker, PlacementPreview,
-    WorldRenderAssets,
+    despawn_edit_previews, rebuild_world, rebuild_world_with_animations, spawn_block_preview,
+    spawn_block_with_animation, spawn_edit_preview, BlockEntity, EditPreview, EditPreviewKind,
+    HoverMarker, PlacementPreview, WorldRenderAssets,
 };
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
@@ -176,6 +176,7 @@ pub fn placement_input(
                 rotate_block_at(
                     pos,
                     &mut world,
+                    &mut placement,
                     &block_entities,
                     &mut commands,
                     &render_assets,
@@ -459,9 +460,40 @@ fn move_selection(
     true
 }
 
+fn despawn_block_entities(commands: &mut Commands, block_entities: &Query<(Entity, &BlockEntity)>) {
+    for (entity, _) in block_entities {
+        commands.entity(entity).despawn_recursive();
+    }
+}
+
+fn refresh_edit_generated_markers(world: &mut WorldBlocks) {
+    world.clear_generated_markers();
+    let welders: Vec<(IVec3, crate::game::world::blocks::Facing)> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| {
+            (block.kind == BlockKind::Welder).then_some((*pos, block.facing))
+        })
+        .collect();
+
+    for (pos, facing) in welders {
+        let point_pos = pos + facing.forward_ivec3();
+        if !world.is_occupied(point_pos) {
+            world.insert(
+                point_pos,
+                BlockData {
+                    kind: BlockKind::WeldPoint,
+                    facing,
+                },
+            );
+        }
+    }
+}
+
 fn rotate_block_at(
     pos: IVec3,
     world: &mut WorldBlocks,
+    placement: &mut PlacementState,
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
@@ -476,27 +508,22 @@ fn rotate_block_at(
     let from_facing = block.facing;
     block.facing = block.facing.rotate();
     let updated = *block;
+    placement.facing = updated.facing;
 
-    if let Some((entity, _)) = block_entities
-        .iter()
-        .find(|(_, block_entity)| block_entity.pos == pos)
-    {
-        commands.entity(entity).despawn_recursive();
-    }
-
-    spawn_block_with_animation(
-        commands,
-        render_assets,
-        world,
+    refresh_edit_generated_markers(world);
+    let mut animations = std::collections::HashMap::new();
+    animations.insert(
         pos,
-        updated,
-        Some(BlockAnimation {
+        BlockAnimation {
             from_pos: pos,
             to_pos: pos,
             from_facing,
             to_facing: updated.facing,
-        }),
+        },
     );
+
+    despawn_block_entities(commands, block_entities);
+    rebuild_world_with_animations(commands, world, render_assets, &animations);
 }
 
 fn moved_selection_welds(
@@ -587,9 +614,11 @@ fn commit_edit_gesture(
             for pos in positions {
                 if can_place_block_at(pos, block, builder_mode, world, player) {
                     world.insert(pos, block);
-                    spawn_block(commands, render_assets, world, pos, block);
                 }
             }
+            refresh_edit_generated_markers(world);
+            despawn_block_entities(commands, block_entities);
+            rebuild_world(commands, world, render_assets);
         }
         EditGestureKind::Delete => {
             let positions = selection_positions(
@@ -607,6 +636,9 @@ fn commit_edit_gesture(
                     }
                 }
             }
+            refresh_edit_generated_markers(world);
+            despawn_block_entities(commands, block_entities);
+            rebuild_world(commands, world, render_assets);
         }
     }
 }
@@ -629,10 +661,13 @@ fn spawn_gesture_previews(
                 gesture.start,
                 current_place_at.unwrap_or(gesture.start),
             );
+            let positions: Vec<IVec3> = positions
+                .into_iter()
+                .filter(|pos| can_place_block_at(*pos, block, builder_mode, world, player))
+                .collect();
+            let preview_world = preview_world(world, &positions, block);
             for pos in positions {
-                if can_place_block_at(pos, block, builder_mode, world, player) {
-                    spawn_block_preview(commands, render_assets, world, pos, block);
-                }
+                spawn_block_preview(commands, render_assets, &preview_world, pos, block);
             }
         }
         EditGestureKind::Delete => {
@@ -648,6 +683,15 @@ fn spawn_gesture_previews(
             }
         }
     }
+}
+
+fn preview_world(world: &WorldBlocks, positions: &[IVec3], block: BlockData) -> WorldBlocks {
+    let mut preview = world.clone();
+    for pos in positions {
+        preview.insert(*pos, block);
+    }
+    refresh_edit_generated_markers(&mut preview);
+    preview
 }
 
 fn selection_positions(mode: ConfigSelectionMode, start: IVec3, end: IVec3) -> Vec<IVec3> {

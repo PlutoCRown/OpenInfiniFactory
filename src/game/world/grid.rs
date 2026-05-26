@@ -7,7 +7,7 @@ use crate::game::world::blocks::{BlockData, BlockKind, Facing, MaterialKind};
 pub const REACH: f32 = 12.0;
 pub const FLOOR_RADIUS: i32 = 12;
 
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Clone)]
 pub struct WorldBlocks {
     pub blocks: HashMap<IVec3, BlockData>,
     pub material_welds: HashSet<MaterialWeld>,

@@ -139,6 +139,8 @@ impl BlockKind {
                 | BlockKind::Conveyor
                 | BlockKind::Detector
                 | BlockKind::Piston
+                | BlockKind::Lifter
+                | BlockKind::Rotator
                 | BlockKind::Blocker
                 | BlockKind::Drill
                 | BlockKind::Laser
@@ -242,6 +244,15 @@ impl Facing {
             Facing::East => IVec3::new(1, 0, 0),
             Facing::South => IVec3::new(0, 0, 1),
             Facing::West => IVec3::new(-1, 0, 0),
+        }
+    }
+
+    pub fn inverse_rotate_offset(self, offset: IVec3) -> IVec3 {
+        match self {
+            Facing::North => offset,
+            Facing::East => IVec3::new(-offset.z, offset.y, offset.x),
+            Facing::South => IVec3::new(-offset.x, offset.y, -offset.z),
+            Facing::West => IVec3::new(offset.z, offset.y, -offset.x),
         }
     }
 }
