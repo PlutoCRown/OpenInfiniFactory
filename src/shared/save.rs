@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::game::world::blocks::BlockData;
-use crate::game::world::grid::WorldBlocks;
+use crate::game::world::grid::{MaterialWeld, WorldBlocks};
 
 pub const SAVE_DIR: &str = "saves";
 pub const SAVE_SLOTS: usize = 8;
@@ -25,6 +25,8 @@ impl SaveState {
 #[derive(Serialize, Deserialize)]
 struct SaveFile {
     blocks: Vec<SavedBlock>,
+    #[serde(default)]
+    material_welds: Vec<MaterialWeld>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -47,6 +49,7 @@ pub fn save_world(world: &WorldBlocks, name: &str) -> bool {
                 data: *data,
             })
             .collect(),
+        material_welds: world.material_welds.iter().copied().collect(),
     };
 
     if let Err(error) = fs::create_dir_all(SAVE_DIR) {
@@ -82,6 +85,12 @@ pub fn load_world(world: &mut WorldBlocks, name: &str) -> bool {
     for saved in save.blocks {
         world.insert(IVec3::new(saved.x, saved.y, saved.z), saved.data);
     }
+    world.replace_material_welds(
+        save.material_welds
+            .into_iter()
+            .filter(|weld| world.is_material_at(weld.a) && world.is_material_at(weld.b))
+            .collect(),
+    );
     true
 }
 

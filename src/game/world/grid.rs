@@ -1,5 +1,6 @@
 use bevy::prelude::*;
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 use crate::game::world::blocks::{BlockData, BlockKind, Facing};
 
@@ -9,7 +10,38 @@ pub const FLOOR_RADIUS: i32 = 12;
 #[derive(Resource, Default)]
 pub struct WorldBlocks {
     pub blocks: HashMap<IVec3, BlockData>,
+    pub material_welds: HashSet<MaterialWeld>,
     pub topology_revision: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct MaterialWeld {
+    pub a: IVec3,
+    pub b: IVec3,
+}
+
+impl MaterialWeld {
+    pub fn new(a: IVec3, b: IVec3) -> Self {
+        if (a.x, a.y, a.z) <= (b.x, b.y, b.z) {
+            Self { a, b }
+        } else {
+            Self { a: b, b: a }
+        }
+    }
+
+    pub fn other(self, pos: IVec3) -> Option<IVec3> {
+        if self.a == pos {
+            Some(self.b)
+        } else if self.b == pos {
+            Some(self.a)
+        } else {
+            None
+        }
+    }
+
+    pub fn contains(self, pos: IVec3) -> bool {
+        self.a == pos || self.b == pos
+    }
 }
 
 impl WorldBlocks {
@@ -24,6 +56,7 @@ impl WorldBlocks {
     pub fn remove(&mut self, pos: &IVec3) -> Option<BlockData> {
         let removed = self.blocks.remove(pos);
         if removed.is_some() {
+            self.material_welds.retain(|weld| !weld.contains(*pos));
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
         removed
@@ -32,6 +65,7 @@ impl WorldBlocks {
     pub fn clear(&mut self) {
         if !self.blocks.is_empty() {
             self.blocks.clear();
+            self.material_welds.clear();
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -40,6 +74,25 @@ impl WorldBlocks {
         let before = self.blocks.len();
         self.blocks.retain(|pos, block| keep(pos, block));
         if self.blocks.len() != before {
+            self.material_welds.retain(|weld| {
+                self.blocks.contains_key(&weld.a) && self.blocks.contains_key(&weld.b)
+            });
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+    }
+
+    pub fn weld_materials(&mut self, a: IVec3, b: IVec3) {
+        if a == b || !self.is_material_at(a) || !self.is_material_at(b) {
+            return;
+        }
+        if self.material_welds.insert(MaterialWeld::new(a, b)) {
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+    }
+
+    pub fn replace_material_welds(&mut self, welds: HashSet<MaterialWeld>) {
+        if self.material_welds != welds {
+            self.material_welds = welds;
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -52,6 +105,12 @@ impl WorldBlocks {
 
     pub fn can_place_solid_at(&self, pos: IVec3) -> bool {
         !self.is_occupied(pos)
+    }
+
+    pub fn is_material_at(&self, pos: IVec3) -> bool {
+        self.blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.is_material())
     }
 
     pub fn clear_generated_markers(&mut self) {

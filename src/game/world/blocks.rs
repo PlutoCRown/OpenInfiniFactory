@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub const BLOCK_SIZE: f32 = 1.0;
+pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
 
 pub const EDIT_BLOCKS: [BlockKind; 3] = [BlockKind::Solid, BlockKind::Glass, BlockKind::Goal];
 

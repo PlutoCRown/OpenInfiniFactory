@@ -2,8 +2,8 @@ use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::game::state::{BuilderMode, SimulationState};
-use crate::game::world::blocks::{BlockData, BlockKind, Facing};
-use crate::game::world::grid::WorldBlocks;
+use crate::game::world::blocks::{BlockData, BlockKind, Facing, DEFAULT_GENERATOR_PERIOD};
+use crate::game::world::grid::{MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
 
 #[derive(Default, Resource)]
@@ -18,6 +18,7 @@ pub struct SignalNetworkCache {
 pub fn run_turn(
     world: &mut WorldBlocks,
     signal_cache: &mut SignalNetworkCache,
+    turn: u64,
     commands: &mut Commands,
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
@@ -29,9 +30,10 @@ pub fn run_turn(
     drill_materials(world);
     fire_lasers(world, signal_cache, &powered_components);
     push_powered_pistons(world, signal_cache, &powered_components);
+    weld_material_structures(world);
     lift_structures(world);
     rotate_structures(world);
-    spawn_materials(world);
+    spawn_materials(world, turn);
     move_conveyed_materials(world);
     apply_material_gravity(world);
     apply_factory_gravity(world);
@@ -67,6 +69,7 @@ pub fn tick_simulation(
         run_turn(
             &mut world,
             &mut signal_cache,
+            simulation.turn,
             &mut commands,
             &block_entities,
             &render_assets,
@@ -147,7 +150,11 @@ fn sync_generated_markers(
     }
 }
 
-fn spawn_materials(world: &mut WorldBlocks) {
+fn spawn_materials(world: &mut WorldBlocks, turn: u64) {
+    if turn == 0 || turn % DEFAULT_GENERATOR_PERIOD != 0 {
+        return;
+    }
+
     let generators: Vec<(IVec3, Facing)> = world
         .blocks
         .iter()
@@ -170,6 +177,50 @@ fn spawn_materials(world: &mut WorldBlocks) {
     }
 }
 
+fn weld_material_structures(world: &mut WorldBlocks) {
+    let weld_points: Vec<IVec3> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| (block.kind == BlockKind::WeldPoint).then_some(*pos))
+        .collect();
+
+    for weld_point in weld_points {
+        let Some(material_a) = adjacent_material(world, weld_point) else {
+            continue;
+        };
+
+        for offset in signal_offsets() {
+            let neighbor = weld_point + offset;
+            if !world
+                .blocks
+                .get(&neighbor)
+                .is_some_and(|block| block.kind == BlockKind::WeldPoint)
+            {
+                continue;
+            }
+
+            let Some(material_b) = adjacent_material_except(world, neighbor, material_a) else {
+                continue;
+            };
+            world.weld_materials(material_a, material_b);
+        }
+    }
+}
+
+fn adjacent_material(world: &WorldBlocks, pos: IVec3) -> Option<IVec3> {
+    signal_offsets()
+        .into_iter()
+        .map(|offset| pos + offset)
+        .find(|candidate| world.is_material_at(*candidate))
+}
+
+fn adjacent_material_except(world: &WorldBlocks, pos: IVec3, except: IVec3) -> Option<IVec3> {
+    signal_offsets()
+        .into_iter()
+        .map(|offset| pos + offset)
+        .find(|candidate| *candidate != except && world.is_material_at(*candidate))
+}
+
 fn apply_material_gravity(world: &mut WorldBlocks) {
     let mut materials: Vec<IVec3> = world
         .blocks
@@ -178,14 +229,16 @@ fn apply_material_gravity(world: &mut WorldBlocks) {
         .collect();
     materials.sort_by_key(|pos| pos.y);
 
+    let mut handled = HashSet::new();
     for pos in materials {
-        let Some(block) = world.blocks.get(&pos).copied() else {
+        if handled.contains(&pos) || !world.is_material_at(pos) {
             continue;
         };
-        let next = pos + IVec3::NEG_Y;
-        if next.y >= 0 && world.can_place_solid_at(next) {
-            world.remove(&pos);
-            world.insert(next, block);
+
+        let structure = material_structure(world, pos);
+        handled.extend(structure.iter().copied());
+        if can_move_structure(world, &structure, IVec3::NEG_Y) {
+            move_structure(world, &structure, IVec3::NEG_Y);
         }
     }
 }
@@ -228,10 +281,10 @@ fn move_conveyed_materials(world: &mut WorldBlocks) {
             continue;
         }
 
-        let target = source + facing.forward_ivec3();
-        if world.can_place_solid_at(target) {
-            world.remove(&source);
-            world.insert(target, block);
+        let structure = material_structure(world, source);
+        let offset = facing.forward_ivec3();
+        if can_move_structure(world, &structure, offset) {
+            move_structure(world, &structure, offset);
         }
     }
 }
@@ -519,23 +572,25 @@ fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     structure.insert(start);
 
     while let Some(pos) = queue.pop_front() {
-        for offset in signal_offsets() {
-            let neighbor = pos + offset;
+        for neighbor in welded_neighbors(world, pos) {
             if structure.contains(&neighbor) {
                 continue;
             }
-            if world
-                .blocks
-                .get(&neighbor)
-                .is_some_and(|block| block.kind.is_material())
-            {
-                structure.insert(neighbor);
-                queue.push_back(neighbor);
-            }
+            structure.insert(neighbor);
+            queue.push_back(neighbor);
         }
     }
 
     structure
+}
+
+fn welded_neighbors(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
+    world
+        .material_welds
+        .iter()
+        .filter_map(|weld| weld.other(pos))
+        .filter(|neighbor| world.is_material_at(*neighbor))
+        .collect()
 }
 
 fn can_move_structure(world: &WorldBlocks, structure: &HashSet<IVec3>, offset: IVec3) -> bool {
@@ -546,6 +601,7 @@ fn can_move_structure(world: &WorldBlocks, structure: &HashSet<IVec3>, offset: I
 }
 
 fn move_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, offset: IVec3) {
+    let updated_welds = moved_welds(world, structure, |pos| pos + offset);
     let blocks: Vec<(IVec3, BlockData)> = structure
         .iter()
         .filter_map(|pos| world.remove(pos).map(|block| (*pos, block)))
@@ -554,6 +610,7 @@ fn move_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, offset: I
     for (pos, block) in blocks {
         world.insert(pos + offset, block);
     }
+    world.replace_material_welds(updated_welds);
 }
 
 fn can_rotate_structure(world: &WorldBlocks, structure: &HashSet<IVec3>, pivot: IVec3) -> bool {
@@ -564,6 +621,7 @@ fn can_rotate_structure(world: &WorldBlocks, structure: &HashSet<IVec3>, pivot: 
 }
 
 fn rotate_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, pivot: IVec3) {
+    let updated_welds = moved_welds(world, structure, |pos| rotate_pos_y(pos, pivot));
     let blocks: Vec<(IVec3, BlockData)> = structure
         .iter()
         .filter_map(|pos| world.remove(pos).map(|block| (*pos, block)))
@@ -573,11 +631,36 @@ fn rotate_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, pivot: 
         block.facing = block.facing.rotate();
         world.insert(rotate_pos_y(pos, pivot), block);
     }
+    world.replace_material_welds(updated_welds);
 }
 
 fn rotate_pos_y(pos: IVec3, pivot: IVec3) -> IVec3 {
     let rel = pos - pivot;
     pivot + IVec3::new(-rel.z, rel.y, rel.x)
+}
+
+fn moved_welds(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+    transform: impl Fn(IVec3) -> IVec3,
+) -> HashSet<MaterialWeld> {
+    world
+        .material_welds
+        .iter()
+        .filter_map(|weld| {
+            let a = if structure.contains(&weld.a) {
+                transform(weld.a)
+            } else {
+                weld.a
+            };
+            let b = if structure.contains(&weld.b) {
+                transform(weld.b)
+            } else {
+                weld.b
+            };
+            (a != b).then_some(MaterialWeld::new(a, b))
+        })
+        .collect()
 }
 
 fn is_wire_at(world: &WorldBlocks, pos: IVec3) -> bool {
