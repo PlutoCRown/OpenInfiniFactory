@@ -73,10 +73,14 @@ impl SimulationState {
 #[derive(Resource)]
 pub struct GameSettings {
     pub fov_degrees: f32,
+    pub ui_scale: f32,
 }
 
 impl Default for GameSettings {
     fn default() -> Self {
-        Self { fov_degrees: 70.0 }
+        Self {
+            fov_degrees: 70.0,
+            ui_scale: 1.0,
+        }
     }
 }

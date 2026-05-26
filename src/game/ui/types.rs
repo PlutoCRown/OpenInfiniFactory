@@ -59,6 +59,9 @@ pub struct Crosshair;
 pub struct FovText;
 
 #[derive(Component)]
+pub struct UiScaleText;
+
+#[derive(Component)]
 pub struct SimulationText;
 
 #[derive(Component)]
@@ -105,6 +108,8 @@ pub enum SettingsAction {
     TabKeyBindings,
     FovDown,
     FovUp,
+    UiScaleDown,
+    UiScaleUp,
     LanguageNext,
     Bind(ConfigAction),
     ResetDefaults,

@@ -13,6 +13,8 @@ pub const CONFIG_FILE: &str = "config.ron";
 #[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct GameConfig {
     pub fov_degrees: f32,
+    #[serde(default = "default_ui_scale")]
+    pub ui_scale: f32,
     #[serde(default)]
     pub language: Option<Language>,
     pub key_bindings: KeyBindings,
@@ -22,10 +24,15 @@ impl Default for GameConfig {
     fn default() -> Self {
         Self {
             fov_degrees: 70.0,
+            ui_scale: default_ui_scale(),
             language: None,
             key_bindings: KeyBindings::default(),
         }
     }
+}
+
+fn default_ui_scale() -> f32 {
+    1.0
 }
 
 #[derive(Clone, Serialize, Deserialize)]

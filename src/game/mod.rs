@@ -27,12 +27,18 @@ use world::rendering::setup_scene;
 
 pub struct GamePlugin;
 
+pub const UI_SCALE_MIN: f32 = 1.0;
+pub const UI_SCALE_MAX: f32 = 3.0;
+pub const UI_SCALE_STEP: f32 = 0.1;
+
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        let config = load_config();
+        let mut config = load_config();
+        config.ui_scale = config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
         let i18n = I18n::new(resolve_language(config.language));
         let settings = GameSettings {
             fov_degrees: config.fov_degrees,
+            ui_scale: config.ui_scale,
         };
 
         app.insert_resource(ClearColor(Color::srgb(0.58, 0.68, 0.76)))
@@ -48,6 +54,7 @@ impl Plugin for GamePlugin {
             .insert_resource(BuilderMode::default())
             .insert_resource(SimulationState::default())
             .insert_resource(settings)
+            .insert_resource(UiScale(config.ui_scale))
             .insert_resource(config)
             .insert_resource(i18n)
             .insert_resource(SaveState::default())

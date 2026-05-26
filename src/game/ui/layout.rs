@@ -10,7 +10,8 @@ use super::types::{
     BackpackPanel, CarriedLabel, Crosshair, CurrentSaveText, FovText, HotbarText, InventoryTitle,
     MainMenuAction, MainMenuPanel, PauseAction, PausePanel, SaveListPanel, SaveListTitle,
     SettingsAction, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
-    SettingsStatusText, SimulationAction, SimulationText, SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
+    SettingsStatusText, SimulationAction, SimulationText, SlotArea, UiScaleText, BACKPACK_SLOTS,
+    HOTBAR_SLOTS,
 };
 use super::widgets::{
     spawn_language_settings_button, spawn_localized_main_button, spawn_localized_pause_button,
@@ -233,6 +234,24 @@ fn spawn_gameplay_settings(panel: &mut ChildBuilder, i18n: &I18n) {
                     &[("language", i18n.language().native_name().to_string())],
                 ),
                 SettingsAction::LanguageNext,
+            );
+        });
+    panel
+        .spawn(flex_row(40.0, 8.0))
+        .insert(SettingsGameplayGroup)
+        .with_children(|row| {
+            spawn_localized_settings_button(
+                row,
+                i18n.text("button.ui_scale_down"),
+                "button.ui_scale_down",
+                SettingsAction::UiScaleDown,
+            );
+            row.spawn((text("", 18.0, Color::WHITE), UiScaleText));
+            spawn_localized_settings_button(
+                row,
+                i18n.text("button.ui_scale_up"),
+                "button.ui_scale_up",
+                SettingsAction::UiScaleUp,
             );
         });
 }

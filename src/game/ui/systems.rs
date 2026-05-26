@@ -10,7 +10,7 @@ use super::types::{
     InventoryItems, InventorySlot, InventoryTitle, KeyBindingButton, KeyBindingLabel, LanguageText,
     LocalizedText, MainMenuPanel, PausePanel, PendingKeyBind, SaveListAction, SaveListLabel,
     SaveListPanel, SaveListTitle, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
-    SettingsStatusText, SettingsTab, SimulationText, SlotArea, SlotLabel,
+    SettingsStatusText, SettingsTab, SimulationText, SlotArea, SlotLabel, UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -82,6 +82,20 @@ pub fn update_status_ui(
             Without<HotbarText>,
             Without<CarriedLabel>,
             Without<InventoryTitle>,
+            Without<UiScaleText>,
+            Without<SimulationText>,
+            Without<CurrentSaveText>,
+        ),
+    >,
+    mut ui_scale_text: Query<
+        &mut Text,
+        (
+            With<UiScaleText>,
+            Without<SlotLabel>,
+            Without<HotbarText>,
+            Without<CarriedLabel>,
+            Without<InventoryTitle>,
+            Without<FovText>,
             Without<SimulationText>,
             Without<CurrentSaveText>,
         ),
@@ -95,6 +109,7 @@ pub fn update_status_ui(
             Without<CarriedLabel>,
             Without<InventoryTitle>,
             Without<FovText>,
+            Without<UiScaleText>,
             Without<CurrentSaveText>,
         ),
     >,
@@ -141,6 +156,13 @@ pub fn update_status_ui(
 
     if let Ok(mut text) = fov_text.get_single_mut() {
         text.sections[0].value = format!("FOV {:.0}", settings.fov_degrees);
+    }
+
+    if let Ok(mut text) = ui_scale_text.get_single_mut() {
+        text.sections[0].value = i18n.fmt(
+            "settings.ui_scale",
+            &[("scale", format!("{:.1}", settings.ui_scale))],
+        );
     }
 
     if let Ok(mut text) = simulation_text.get_single_mut() {

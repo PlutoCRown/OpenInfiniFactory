@@ -7,6 +7,7 @@ use crate::game::ui::{
 };
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
 use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
+use crate::game::{UI_SCALE_MAX, UI_SCALE_MIN, UI_SCALE_STEP};
 use crate::shared::config::{key_from_input, open_config_folder, save_config, GameConfig};
 use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::save::{load_world, next_world_name, save_world, SaveState};
@@ -193,6 +194,7 @@ pub fn settings_menu_actions(
     keys: Res<ButtonInput<KeyCode>>,
     mut mode: ResMut<GameMode>,
     mut settings: ResMut<GameSettings>,
+    mut ui_scale: ResMut<UiScale>,
     mut config: ResMut<GameConfig>,
     mut i18n: ResMut<I18n>,
     mut settings_tab: ResMut<SettingsTab>,
@@ -234,6 +236,18 @@ pub fn settings_menu_actions(
                 config.fov_degrees = settings.fov_degrees;
                 save_config(&config);
             }
+            SettingsAction::UiScaleDown => {
+                settings.ui_scale = step_ui_scale(settings.ui_scale, -UI_SCALE_STEP);
+                ui_scale.0 = settings.ui_scale;
+                config.ui_scale = settings.ui_scale;
+                save_config(&config);
+            }
+            SettingsAction::UiScaleUp => {
+                settings.ui_scale = step_ui_scale(settings.ui_scale, UI_SCALE_STEP);
+                ui_scale.0 = settings.ui_scale;
+                config.ui_scale = settings.ui_scale;
+                save_config(&config);
+            }
             SettingsAction::LanguageNext => {
                 let language = i18n.language().next();
                 i18n.set_language(language);
@@ -246,6 +260,8 @@ pub fn settings_menu_actions(
             SettingsAction::ResetDefaults => {
                 *config = GameConfig::default();
                 settings.fov_degrees = config.fov_degrees;
+                settings.ui_scale = config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
+                ui_scale.0 = settings.ui_scale;
                 i18n.set_language(resolve_language(config.language));
                 pending_key_bind.0 = None;
                 save_config(&config);
@@ -259,6 +275,10 @@ pub fn settings_menu_actions(
             }
         }
     }
+}
+
+fn step_ui_scale(current: f32, delta: f32) -> f32 {
+    (((current + delta) * 10.0).round() / 10.0).clamp(UI_SCALE_MIN, UI_SCALE_MAX)
 }
 
 fn reset_builder_state(
