@@ -104,6 +104,15 @@ pub struct SettingsDropdownLabel(pub SettingsDropdown);
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct SettingsDropdownList(pub SettingsDropdown);
 
+#[derive(Component)]
+pub struct ScrollContainer {
+    pub offset: f32,
+    pub max_offset: f32,
+}
+
+#[derive(Component)]
+pub struct ScrollContent;
+
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum SettingsSlider {
     Fov,
@@ -146,6 +155,7 @@ pub enum SimulationAction {
 pub enum MainMenuAction {
     NewWorld,
     OpenSaveList,
+    OpenSettings,
     Quit,
 }
 
@@ -274,15 +284,13 @@ impl InventoryItems {
         };
 
         let mut hotbar = [None; HOTBAR_SLOTS];
-        hotbar[0] = Some(InventoryItem::Area(AreaKind::Selection));
-        for (index, kind) in blocks.iter().take(HOTBAR_SLOTS - 1).enumerate() {
-            hotbar[index + 1] = Some(InventoryItem::Block(*kind));
+        for (index, kind) in blocks.iter().take(HOTBAR_SLOTS).enumerate() {
+            hotbar[index] = Some(InventoryItem::Block(*kind));
         }
 
         let mut backpack = [None; BACKPACK_SLOTS];
-        backpack[0] = Some(InventoryItem::Area(AreaKind::Selection));
-        for (index, kind) in blocks.iter().take(BACKPACK_SLOTS - 1).enumerate() {
-            backpack[index + 1] = Some(InventoryItem::Block(*kind));
+        for (index, kind) in blocks.iter().take(BACKPACK_SLOTS).enumerate() {
+            backpack[index] = Some(InventoryItem::Block(*kind));
         }
 
         Self { hotbar, backpack }

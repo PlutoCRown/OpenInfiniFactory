@@ -1,3 +1,4 @@
+use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
 use crate::game::player::controller::{player_intersects_block, FlyCamera};
@@ -18,6 +19,7 @@ use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
 pub fn gameplay_input(
     keys: Res<ButtonInput<KeyCode>>,
+    mut mouse_wheel: EventReader<MouseWheel>,
     config: Res<GameConfig>,
     simulation: Res<SimulationState>,
     pending_key_bind: Res<PendingKeyBind>,
@@ -28,6 +30,7 @@ pub fn gameplay_input(
     let bindings = &config.key_bindings;
 
     if *mode == GameMode::Settings && pending_key_bind.0.is_some() {
+        mouse_wheel.clear();
         return;
     }
 
@@ -51,6 +54,7 @@ pub fn gameplay_input(
     }
 
     if !matches!(*mode, GameMode::Playing | GameMode::Inventory) {
+        mouse_wheel.clear();
         return;
     }
 
@@ -80,6 +84,17 @@ pub fn gameplay_input(
                 placement.edit_gesture = None;
                 placement.selected = index;
             }
+        }
+    }
+
+    let wheel_delta: f32 = mouse_wheel.read().map(|event| event.y).sum();
+    if wheel_delta.abs() > f32::EPSILON {
+        let direction = if wheel_delta > 0.0 { -1 } else { 1 };
+        let selected = (placement.selected as i32 + direction).rem_euclid(HOTBAR_SLOTS as i32);
+        if placement.selected != selected as usize {
+            placement.selection.clear();
+            placement.edit_gesture = None;
+            placement.selected = selected as usize;
         }
     }
 

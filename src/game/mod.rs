@@ -15,7 +15,9 @@ use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::save::SaveState;
 
 use player::controller::{camera_look, camera_move, spawn_player, sync_cursor_grab};
-use state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
+use state::{
+    BuilderMode, GameMode, GameSettings, PlacementState, SettingsReturnMode, SimulationState,
+};
 use systems::gameplay::{apply_fov, gameplay_input, placement_input, update_hover};
 use systems::menus::{
     generator_menu_actions, main_menu_actions, pause_menu_actions, save_list_actions,
@@ -61,6 +63,7 @@ impl Plugin for GamePlugin {
             .insert_resource(i18n)
             .insert_resource(SaveState::default())
             .insert_resource(SettingsTab::default())
+            .insert_resource(SettingsReturnMode::default())
             .insert_resource(OpenSettingsDropdown::default())
             .insert_resource(PendingKeyBind::default())
             .insert_resource(systems::debug::DebugState::default())
@@ -118,6 +121,7 @@ impl Plugin for GamePlugin {
             )
             .add_systems(Update, systems::debug::mark_perf_view)
             .add_systems(Update, animate_blocks.after(systems::debug::mark_perf_view))
+            .add_systems(Update, systems::debug::mark_perf_animation)
             .add_systems(
                 Update,
                 (
@@ -129,6 +133,7 @@ impl Plugin for GamePlugin {
                     ui::update_settings_sliders_ui,
                     ui::update_settings_dropdowns_ui,
                     ui::update_settings_tabs_ui,
+                    ui::update_scroll_containers,
                     ui::update_panel_visibility,
                     ui::update_hud_visibility,
                     ui::update_generator_ui,
@@ -138,7 +143,7 @@ impl Plugin for GamePlugin {
                     ui::apply_ui_font,
                     sync_cursor_grab,
                 )
-                    .after(systems::debug::mark_perf_view)
+                    .after(systems::debug::mark_perf_animation)
                     .before(systems::debug::mark_perf_ui),
             )
             .add_systems(Update, systems::debug::mark_perf_ui)

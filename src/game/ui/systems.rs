@@ -1,3 +1,4 @@
+use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
@@ -17,9 +18,10 @@ use super::types::{
     KeyBindingButton, KeyBindingLabel, LocalizedText, MainMenuPanel, OpenSettingsDropdown,
     PausePanel, PendingKeyBind, PlaceSelectionModeText, SaveListAction, SaveListLabel,
     SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdownLabel, SettingsDropdownList,
-    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider,
-    SettingsSliderFill, SettingsSliderKnob, SettingsStatusText, SettingsTab, SettingsValue,
-    SettingsValueText, SimulationText, SlotArea, SlotLabel, UiScaleText,
+    ScrollContainer, ScrollContent, SettingsGameplayGroup, SettingsKeyBindingsGroup,
+    SettingsPanel, SettingsSlider, SettingsSliderFill, SettingsSliderKnob, SettingsStatusText,
+    SettingsTab, SettingsValue, SettingsValueText, SimulationText, SlotArea, SlotLabel,
+    UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -47,7 +49,7 @@ pub fn inventory_slot_clicks(
         (&Interaction, &InventorySlot),
         (Changed<Interaction>, With<Button>),
     >,
-    inventory: Res<InventoryItems>,
+    mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mode: Res<GameMode>,
@@ -61,10 +63,23 @@ pub fn inventory_slot_clicks(
             continue;
         }
 
-        carried.set(match slot.area {
+        let clicked_item = match slot.area {
             SlotArea::Hotbar => inventory.hotbar[slot.index],
             SlotArea::Backpack => inventory.backpack[slot.index],
-        });
+        };
+
+        if slot.area == SlotArea::Hotbar {
+            if let Some(item) = carried.item() {
+                inventory.hotbar[slot.index] = Some(item);
+                placement.selected = slot.index;
+                carried.clear();
+            } else {
+                carried.set(clicked_item);
+                placement.selected = slot.index;
+            }
+        } else {
+            carried.set(clicked_item);
+        }
         placement.selection.clear();
         placement.edit_gesture = None;
     }
@@ -261,12 +276,48 @@ pub fn update_carried_item_ui(
     };
 
     style.display = Display::Flex;
-    style.left = Val::Px(cursor.x + 14.0);
-    style.top = Val::Px(cursor.y + 14.0);
+    style.left = Val::Px(cursor.x + 4.0);
+    style.top = Val::Px(cursor.y + 4.0);
     *background = slot_color(item).with_alpha(0.9).into();
 
     if let Ok(mut text) = label.get_single_mut() {
         text.sections[0].value = i18n.text(short_item_name(item));
+    }
+}
+
+pub fn update_scroll_containers(
+    mode: Res<GameMode>,
+    settings_tab: Res<SettingsTab>,
+    mouse_wheel: EventReader<MouseWheel>,
+    mut containers: Query<(&mut ScrollContainer, &Children, &Node)>,
+    mut contents: Query<(&mut Style, &Node), With<ScrollContent>>,
+) {
+    if *mode != GameMode::Settings || *settings_tab != SettingsTab::KeyBindings {
+        return;
+    }
+
+    let wheel_delta: f32 = mouse_wheel.read().map(|event| event.y).sum();
+
+    for (mut container, children, node) in &mut containers {
+        let Some(child) = children
+            .iter()
+            .find(|child| contents.get(**child).is_ok())
+            .copied()
+        else {
+            continue;
+        };
+        let Ok((mut style, content_node)) = contents.get_mut(child) else {
+            continue;
+        };
+
+        container.max_offset = (content_node.size().y - node.size().y).max(0.0);
+        if wheel_delta.abs() > f32::EPSILON {
+            container.offset =
+                (container.offset - wheel_delta * 32.0).clamp(0.0, container.max_offset);
+        } else {
+            container.offset = container.offset.clamp(0.0, container.max_offset);
+        }
+        style.top = Val::Px(-container.offset);
     }
 }
 
@@ -633,7 +684,7 @@ pub fn update_panel_visibility(
     for mut style in &mut style_sets.p4() {
         style.display = if *mode == GameMode::Settings && *settings_tab == SettingsTab::KeyBindings
         {
-            Display::Grid
+            Display::Flex
         } else {
             Display::None
         };

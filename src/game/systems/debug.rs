@@ -28,8 +28,10 @@ pub struct PerfStats {
     menu_ms: SmoothedMs,
     simulation_ms: SmoothedMs,
     view_ms: SmoothedMs,
+    animation_ms: SmoothedMs,
     ui_ms: SmoothedMs,
     debug_ms: SmoothedMs,
+    main_other_ms: SmoothedMs,
     render_other_ms: SmoothedMs,
     display_timer: Timer,
     display_text: String,
@@ -47,8 +49,10 @@ impl Default for PerfStats {
             menu_ms: SmoothedMs::default(),
             simulation_ms: SmoothedMs::default(),
             view_ms: SmoothedMs::default(),
+            animation_ms: SmoothedMs::default(),
             ui_ms: SmoothedMs::default(),
             debug_ms: SmoothedMs::default(),
+            main_other_ms: SmoothedMs::default(),
             render_other_ms: SmoothedMs::default(),
             display_timer: Timer::from_seconds(0.25, TimerMode::Repeating),
             display_text: String::new(),
@@ -106,6 +110,11 @@ pub fn mark_perf_view(mut perf: ResMut<PerfStats>) {
     perf.view_ms.sample(elapsed);
 }
 
+pub fn mark_perf_animation(mut perf: ResMut<PerfStats>) {
+    let elapsed = perf.mark_elapsed();
+    perf.animation_ms.sample(elapsed);
+}
+
 pub fn mark_perf_ui(mut perf: ResMut<PerfStats>) {
     let elapsed = perf.mark_elapsed();
     perf.ui_ms.sample(elapsed);
@@ -122,7 +131,16 @@ pub fn finish_perf_frame(mut perf: ResMut<PerfStats>) {
         .as_secs_f64()
         * 1000.0;
     let render_other_ms = (perf.frame_ms.value - main_ms).max(0.0);
+    let measured_main_ms = perf.input_ms.value
+        + perf.menu_ms.value
+        + perf.simulation_ms.value
+        + perf.view_ms.value
+        + perf.animation_ms.value
+        + perf.ui_ms.value
+        + perf.debug_ms.value;
+    let main_other_ms = (main_ms - measured_main_ms).max(0.0);
     perf.main_ms.sample_ms(main_ms);
+    perf.main_other_ms.sample_ms(main_other_ms);
     perf.render_other_ms.sample_ms(render_other_ms);
 }
 
@@ -216,7 +234,7 @@ pub fn update_debug_ui(
         .unwrap_or(Vec3::ZERO);
 
     perf.display_text = format!(
-        "Debug\nFPS: {:>4.0}\nFrame: {:>4.1} ms\nMain: {:>4.1} ms\n  Input: {:>4.1} ms\n  Menus: {:>4.1} ms\n  Sim: {:>4.1} ms\n  View: {:>4.1} ms\n  UI: {:>4.1} ms\n  Debug: {:>4.1} ms\nRender/Other: {:>4.1} ms\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
+        "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n  Input: {:>5.2} ms\n  Menus: {:>5.2} ms\n  Sim: {:>5.2} ms\n  View: {:>5.2} ms\n  Anim: {:>5.2} ms\n  UI: {:>5.2} ms\n  Debug: {:>5.2} ms\n  Other: {:>5.2} ms\nRender/Other: {:>5.2} ms\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
         fps,
         perf.frame_ms.value,
         perf.main_ms.value,
@@ -224,8 +242,10 @@ pub fn update_debug_ui(
         perf.menu_ms.value,
         perf.simulation_ms.value,
         perf.view_ms.value,
+        perf.animation_ms.value,
         perf.ui_ms.value,
         perf.debug_ms.value,
+        perf.main_other_ms.value,
         perf.render_other_ms.value,
         world.blocks.len(),
         block_entities.iter().count(),

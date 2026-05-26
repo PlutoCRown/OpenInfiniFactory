@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::game::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
+use crate::game::state::{
+    BuilderMode, GameMode, GameSettings, PlacementState, SettingsReturnMode, SimulationState,
+};
 use crate::game::ui::{
     CarriedItem, GeneratorAction, InventoryItems, MainMenuAction, OpenSettingsDropdown,
     PauseAction, PendingKeyBind, SaveListAction, SettingsAction, SettingsTab,
@@ -22,6 +24,7 @@ pub fn main_menu_actions(
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mut save_state: ResMut<SaveState>,
+    mut settings_return: ResMut<SettingsReturnMode>,
     mut commands: Commands,
     mut world: ResMut<WorldBlocks>,
     render_assets: Res<WorldRenderAssets>,
@@ -58,6 +61,10 @@ pub fn main_menu_actions(
             MainMenuAction::OpenSaveList => {
                 save_state.refresh();
                 *mode = GameMode::SaveListMain;
+            }
+            MainMenuAction::OpenSettings => {
+                settings_return.0 = GameMode::MainMenu;
+                *mode = GameMode::Settings;
             }
             MainMenuAction::Quit => {
                 exit.send(AppExit::Success);
@@ -129,6 +136,7 @@ pub fn pause_menu_actions(
     mut placement: ResMut<PlacementState>,
     mut mode: ResMut<GameMode>,
     mut save_state: ResMut<SaveState>,
+    mut settings_return: ResMut<SettingsReturnMode>,
     mut world: ResMut<WorldBlocks>,
     mut commands: Commands,
     block_entities: Query<Entity, With<BlockEntity>>,
@@ -174,6 +182,7 @@ pub fn pause_menu_actions(
                 *mode = GameMode::SaveListPause;
             }
             PauseAction::OpenSettings => {
+                settings_return.0 = GameMode::Paused;
                 *mode = GameMode::Settings;
             }
             PauseAction::BackToMainMenu => {
@@ -197,6 +206,7 @@ pub fn settings_menu_actions(
     keys: Res<ButtonInput<KeyCode>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut mode: ResMut<GameMode>,
+    settings_return: Res<SettingsReturnMode>,
     mut settings: ResMut<GameSettings>,
     mut ui_scale: ResMut<UiScale>,
     mut config: ResMut<GameConfig>,
@@ -206,7 +216,7 @@ pub fn settings_menu_actions(
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut interactions: Query<
         (&Interaction, &SettingsAction, &Node, &GlobalTransform),
-        (Changed<Interaction>, With<Button>),
+        With<Button>,
     >,
 ) {
     if *mode != GameMode::Settings {
@@ -226,7 +236,11 @@ pub fn settings_menu_actions(
     let cursor_position = windows
         .get_single()
         .ok()
-        .and_then(|window| window.cursor_position());
+        .and_then(|window| {
+            window
+                .cursor_position()
+                .map(|cursor| Vec2::new(cursor.x - window.width() * 0.5, cursor.y))
+        });
 
     for (interaction, action, node, transform) in &mut interactions {
         if *interaction != Interaction::Pressed {
@@ -235,10 +249,16 @@ pub fn settings_menu_actions(
 
         match *action {
             SettingsAction::TabGameplay => {
+                if !interaction.is_changed() {
+                    continue;
+                }
                 *settings_tab = SettingsTab::Gameplay;
                 open_dropdown.0 = None;
             }
             SettingsAction::TabKeyBindings => {
+                if !interaction.is_changed() {
+                    continue;
+                }
                 *settings_tab = SettingsTab::KeyBindings;
                 open_dropdown.0 = None;
             }
@@ -261,22 +281,34 @@ pub fn settings_menu_actions(
                 }
             }
             SettingsAction::SetPlaceSelectionMode(selection_mode) => {
+                if !interaction.is_changed() {
+                    continue;
+                }
                 config.place_selection_mode = selection_mode;
                 open_dropdown.0 = None;
                 save_config(&config);
             }
             SettingsAction::SetDeleteSelectionMode(selection_mode) => {
+                if !interaction.is_changed() {
+                    continue;
+                }
                 config.delete_selection_mode = selection_mode;
                 open_dropdown.0 = None;
                 save_config(&config);
             }
             SettingsAction::SetLanguage(language) => {
+                if !interaction.is_changed() {
+                    continue;
+                }
                 i18n.set_language(language);
                 config.language = Some(language);
                 open_dropdown.0 = None;
                 save_config(&config);
             }
             SettingsAction::ToggleDropdown(dropdown) => {
+                if !interaction.is_changed() {
+                    continue;
+                }
                 open_dropdown.0 = if open_dropdown.0 == Some(dropdown) {
                     None
                 } else {
@@ -284,9 +316,15 @@ pub fn settings_menu_actions(
                 };
             }
             SettingsAction::Bind(action) => {
+                if !interaction.is_changed() {
+                    continue;
+                }
                 pending_key_bind.0 = Some(action);
             }
             SettingsAction::ResetDefaults => {
+                if !interaction.is_changed() {
+                    continue;
+                }
                 *config = GameConfig::default();
                 settings.fov_degrees = config.fov_degrees;
                 settings.ui_scale = config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
@@ -297,12 +335,18 @@ pub fn settings_menu_actions(
                 save_config(&config);
             }
             SettingsAction::OpenFolder => {
+                if !interaction.is_changed() {
+                    continue;
+                }
                 open_config_folder();
             }
             SettingsAction::Back => {
+                if !interaction.is_changed() {
+                    continue;
+                }
                 open_dropdown.0 = None;
                 pending_key_bind.0 = None;
-                *mode = GameMode::Paused;
+                *mode = settings_return.0;
             }
         }
     }

@@ -6,9 +6,9 @@ use crate::game::world::blocks::BlockKind;
 use super::components::{default_button_size, default_font_size, menu_button};
 use super::types::{
     AreaKind, InventoryItem, InventorySlot, KeyBindingButton, KeyBindingLabel, MainMenuAction,
-    PauseAction, SaveListAction, SaveListLabel, SettingsAction, SettingsDropdown,
-    SettingsDropdownLabel, SettingsDropdownList, SettingsSlider, SettingsSliderFill,
-    SettingsSliderKnob, SettingsValue, SettingsValueText, SlotArea, SlotLabel,
+    PauseAction, SaveListAction, SaveListLabel, ScrollContainer, ScrollContent, SettingsAction,
+    SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList, SettingsSlider,
+    SettingsSliderFill, SettingsSliderKnob, SettingsValue, SettingsValueText, SlotArea, SlotLabel,
 };
 
 pub(super) fn spawn_slot(parent: &mut ChildBuilder, area: SlotArea, index: usize) {
@@ -234,9 +234,11 @@ pub(super) fn spawn_settings_dropdown(parent: &mut ChildBuilder, dropdown: Setti
                 width: Val::Px(260.0),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(4.0),
+                position_type: PositionType::Relative,
                 ..default()
             },
             background_color: Color::NONE.into(),
+            z_index: ZIndex::Global(80),
             ..default()
         })
         .with_children(|container| {
@@ -285,11 +287,14 @@ pub(super) fn spawn_settings_dropdown(parent: &mut ChildBuilder, dropdown: Setti
                         style: Style {
                             width: Val::Percent(100.0),
                             display: Display::None,
+                            position_type: PositionType::Absolute,
+                            top: Val::Px(default_button_size(40.0)),
                             flex_direction: FlexDirection::Column,
                             row_gap: Val::Px(3.0),
                             ..default()
                         },
-                        background_color: Color::NONE.into(),
+                        background_color: Color::srgba(0.10, 0.11, 0.12, 0.98).into(),
+                        z_index: ZIndex::Global(120),
                         ..default()
                     },
                     SettingsDropdownList(dropdown),
@@ -370,6 +375,43 @@ pub(super) fn spawn_localized_main_button(
     action: MainMenuAction,
 ) {
     spawn_localized_button(parent, 44.0, 17.0, label, key, action);
+}
+
+pub(super) fn scroll_container(height: f32) -> (NodeBundle, ScrollContainer) {
+    (
+        NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                height: Val::Px(height),
+                position_type: PositionType::Relative,
+                overflow: Overflow::clip_y(),
+                ..default()
+            },
+            background_color: Color::NONE.into(),
+            ..default()
+        },
+        ScrollContainer {
+            offset: 0.0,
+            max_offset: 0.0,
+        },
+    )
+}
+
+pub(super) fn scroll_content() -> (NodeBundle, ScrollContent) {
+    (
+        NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                position_type: PositionType::Absolute,
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(6.0),
+                ..default()
+            },
+            background_color: Color::NONE.into(),
+            ..default()
+        },
+        ScrollContent,
+    )
 }
 
 pub(super) fn spawn_save_slot_button(parent: &mut ChildBuilder, index: usize) {

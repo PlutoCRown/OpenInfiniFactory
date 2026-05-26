@@ -5,17 +5,17 @@ pub const BLOCK_SIZE: f32 = 1.0;
 pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
 
 pub const EDIT_BLOCKS: [BlockKind; 7] = [
-    BlockKind::Solid,
     BlockKind::Grass,
     BlockKind::Stone,
     BlockKind::Dirt,
     BlockKind::Planks,
     BlockKind::Glass,
+    BlockKind::Generator,
     BlockKind::Goal,
 ];
 
 pub const PLAY_BLOCKS: [BlockKind; 11] = [
-    BlockKind::Generator,
+    BlockKind::Solid,
     BlockKind::Welder,
     BlockKind::Conveyor,
     BlockKind::Detector,
@@ -154,7 +154,7 @@ impl BlockKind {
     pub fn is_factory(self) -> bool {
         matches!(
             self,
-            BlockKind::Generator
+            BlockKind::Solid
                 | BlockKind::Welder
                 | BlockKind::Conveyor
                 | BlockKind::Detector
@@ -171,13 +171,13 @@ impl BlockKind {
     pub fn is_scene(self) -> bool {
         matches!(
             self,
-            BlockKind::Solid
-                | BlockKind::Grass
+            BlockKind::Grass
                 | BlockKind::Stone
                 | BlockKind::Dirt
                 | BlockKind::Planks
                 | BlockKind::Glass
-                | BlockKind::Goal
+                | BlockKind::Generator
+                 | BlockKind::Goal
         )
     }
 

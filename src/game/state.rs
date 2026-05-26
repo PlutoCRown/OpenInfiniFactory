@@ -130,6 +130,15 @@ pub enum GameMode {
 }
 
 #[derive(Resource, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsReturnMode(pub GameMode);
+
+impl Default for SettingsReturnMode {
+    fn default() -> Self {
+        Self(GameMode::Paused)
+    }
+}
+
+#[derive(Resource, Clone, Copy, Eq, PartialEq)]
 pub enum BuilderMode {
     Edit,
     Play,

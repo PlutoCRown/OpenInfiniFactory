@@ -22,6 +22,7 @@ use super::widgets::{
     spawn_generator_button, spawn_localized_main_button, spawn_localized_pause_button,
     spawn_localized_settings_button, spawn_save_back_button, spawn_save_slot_button,
     spawn_settings_dropdown, spawn_settings_slider, spawn_settings_tab, spawn_slot,
+    scroll_container, scroll_content,
 };
 
 pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
@@ -303,17 +304,21 @@ fn spawn_gameplay_settings(panel: &mut ChildBuilder, i18n: &I18n) {
 
 fn spawn_key_bindings(panel: &mut ChildBuilder, i18n: &I18n) {
     panel
-        .spawn(key_bindings_grid_bundle())
+        .spawn(scroll_container(360.0))
         .insert(SettingsKeyBindingsGroup)
-        .with_children(|grid| {
-            for action in ConfigAction::ALL {
-                spawn_localized_settings_button(
-                    grid,
-                    i18n.text(action.label_key()),
-                    action.label_key(),
-                    SettingsAction::Bind(action),
-                );
-            }
+        .with_children(|container| {
+            container
+                .spawn((key_bindings_grid_bundle(), scroll_content()))
+                .with_children(|grid| {
+                    for action in ConfigAction::ALL {
+                        spawn_localized_settings_button(
+                            grid,
+                            i18n.text(action.label_key()),
+                            action.label_key(),
+                            SettingsAction::Bind(action),
+                        );
+                    }
+                });
         });
 }
 
@@ -336,6 +341,7 @@ fn spawn_main_menu(root: &mut ChildBuilder, i18n: &I18n) {
             for (key, action) in [
                 ("button.create_new_world", MainMenuAction::NewWorld),
                 ("button.load_save", MainMenuAction::OpenSaveList),
+                ("button.settings", MainMenuAction::OpenSettings),
                 ("button.quit_game", MainMenuAction::Quit),
             ] {
                 spawn_localized_main_button(panel, i18n.text(key), key, action);

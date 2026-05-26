@@ -171,6 +171,7 @@ pub fn camera_move(
 }
 
 pub fn camera_look(
+    keys: Res<ButtonInput<KeyCode>>,
     mode: Res<GameMode>,
     mut mouse_motion: EventReader<MouseMotion>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
@@ -179,7 +180,7 @@ pub fn camera_look(
         return;
     };
 
-    if *mode != GameMode::Playing {
+    if *mode != GameMode::Playing || alt_pressed(&keys) {
         mouse_motion.clear();
         return;
     }
@@ -195,22 +196,26 @@ pub fn camera_look(
         Quat::from_axis_angle(Vec3::Y, camera.yaw) * Quat::from_axis_angle(Vec3::X, camera.pitch);
 }
 
-pub fn sync_cursor_grab(mode: Res<GameMode>, mut windows: Query<&mut Window, With<PrimaryWindow>>) {
-    if !mode.is_changed() {
-        return;
-    }
-
+pub fn sync_cursor_grab(
+    keys: Res<ButtonInput<KeyCode>>,
+    mode: Res<GameMode>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+) {
     let Ok(mut window) = windows.get_single_mut() else {
         return;
     };
 
-    if *mode == GameMode::Playing {
+    if *mode == GameMode::Playing && !alt_pressed(&keys) {
         window.cursor.grab_mode = CursorGrabMode::Locked;
         window.cursor.visible = false;
     } else {
         window.cursor.grab_mode = CursorGrabMode::None;
         window.cursor.visible = true;
     }
+}
+
+fn alt_pressed(keys: &ButtonInput<KeyCode>) -> bool {
+    keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight)
 }
 
 pub fn player_intersects_block(position: Vec3, block: IVec3) -> bool {
