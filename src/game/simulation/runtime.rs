@@ -1,19 +1,17 @@
 use bevy::prelude::*;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashSet;
 
 use crate::game::state::{BuilderMode, SimulationState};
 use crate::game::world::blocks::{BlockData, BlockKind, Facing, DEFAULT_GENERATOR_PERIOD};
-use crate::game::world::grid::{MaterialWeld, WorldBlocks};
+use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
 
-#[derive(Default, Resource)]
-pub struct SignalNetworkCache {
-    topology_revision: u64,
-    wire_components: HashMap<IVec3, usize>,
-    component_detectors: Vec<Vec<IVec3>>,
-    device_components: HashMap<IVec3, Vec<usize>>,
-    initialized: bool,
-}
+use super::signal_offsets;
+pub use super::signals::SignalNetworkCache;
+use super::structures::{
+    apply_factory_gravity, apply_material_gravity, can_move_structure, can_rotate_structure,
+    material_structure, move_structure, rotate_structure,
+};
 
 pub fn run_turn(
     world: &mut WorldBlocks,
@@ -221,53 +219,6 @@ fn adjacent_material_except(world: &WorldBlocks, pos: IVec3, except: IVec3) -> O
         .find(|candidate| *candidate != except && world.is_material_at(*candidate))
 }
 
-fn apply_material_gravity(world: &mut WorldBlocks) {
-    let mut materials: Vec<IVec3> = world
-        .blocks
-        .iter()
-        .filter_map(|(pos, block)| block.kind.is_material().then_some(*pos))
-        .collect();
-    materials.sort_by_key(|pos| pos.y);
-
-    let mut handled = HashSet::new();
-    for pos in materials {
-        if handled.contains(&pos) || !world.is_material_at(pos) {
-            continue;
-        };
-
-        let structure = material_structure(world, pos);
-        handled.extend(structure.iter().copied());
-        if can_move_structure(world, &structure, IVec3::NEG_Y) {
-            move_structure(world, &structure, IVec3::NEG_Y);
-        }
-    }
-}
-
-fn apply_factory_gravity(world: &mut WorldBlocks) {
-    let mut factory_blocks: Vec<IVec3> = world
-        .blocks
-        .iter()
-        .filter_map(|(pos, block)| block.kind.is_factory().then_some(*pos))
-        .collect();
-    factory_blocks.sort_by_key(|pos| pos.y);
-
-    let mut handled = HashSet::new();
-    for pos in factory_blocks {
-        if handled.contains(&pos) || !world.is_factory_at(pos) {
-            continue;
-        };
-
-        let structure = factory_structure(world, pos);
-        handled.extend(structure.iter().copied());
-        if factory_structure_is_anchored(world, &structure) {
-            continue;
-        }
-        if can_move_structure(world, &structure, IVec3::NEG_Y) {
-            move_block_structure(world, &structure, IVec3::NEG_Y);
-        }
-    }
-}
-
 fn move_conveyed_materials(world: &mut WorldBlocks) {
     let conveyors: Vec<(IVec3, Facing)> = world
         .blocks
@@ -418,125 +369,6 @@ fn fire_lasers(
     }
 }
 
-impl SignalNetworkCache {
-    fn refresh(&mut self, world: &WorldBlocks) {
-        if self.initialized && self.topology_revision == world.topology_revision {
-            return;
-        }
-
-        self.topology_revision = world.topology_revision;
-        self.wire_components.clear();
-        self.component_detectors.clear();
-        self.device_components.clear();
-        self.initialized = true;
-
-        for (&pos, block) in &world.blocks {
-            if block.kind != BlockKind::Wire || self.wire_components.contains_key(&pos) {
-                continue;
-            }
-
-            let component = self.component_detectors.len();
-            self.component_detectors.push(Vec::new());
-            let mut queue = VecDeque::from([pos]);
-            self.wire_components.insert(pos, component);
-
-            while let Some(wire_pos) = queue.pop_front() {
-                for offset in signal_offsets() {
-                    let neighbor = wire_pos + offset;
-                    if is_wire_at(world, neighbor)
-                        && self.wire_components.insert(neighbor, component).is_none()
-                    {
-                        queue.push_back(neighbor);
-                    }
-                }
-            }
-        }
-
-        for (&pos, block) in &world.blocks {
-            match block.kind {
-                BlockKind::Detector => self.cache_detector(pos, block.facing),
-                BlockKind::Piston | BlockKind::Blocker | BlockKind::Laser => {
-                    self.cache_powered_device(pos, block.facing)
-                }
-                _ => {}
-            }
-        }
-    }
-
-    fn cache_detector(&mut self, pos: IVec3, facing: Facing) {
-        let mut connected_components = HashSet::new();
-        for offset in signal_offsets() {
-            if offset == facing.forward_ivec3() {
-                continue;
-            }
-
-            let Some(&component) = self.wire_components.get(&(pos + offset)) else {
-                continue;
-            };
-            if connected_components.insert(component) {
-                self.component_detectors[component].push(pos);
-            }
-        }
-    }
-
-    fn cache_powered_device(&mut self, pos: IVec3, facing: Facing) {
-        let mut components = Vec::new();
-        let mut seen = HashSet::new();
-        for offset in signal_offsets() {
-            if offset == facing.forward_ivec3() {
-                continue;
-            }
-
-            let Some(&component) = self.wire_components.get(&(pos + offset)) else {
-                continue;
-            };
-            if seen.insert(component) {
-                components.push(component);
-            }
-        }
-
-        if !components.is_empty() {
-            self.device_components.insert(pos, components);
-        }
-    }
-
-    fn powered_components(&self, world: &WorldBlocks) -> HashSet<usize> {
-        self.component_detectors
-            .iter()
-            .enumerate()
-            .filter_map(|(component, detectors)| {
-                detectors
-                    .iter()
-                    .any(|detector_pos| detector_is_active(world, *detector_pos))
-                    .then_some(component)
-            })
-            .collect()
-    }
-
-    fn is_device_powered(&self, pos: IVec3, powered_components: &HashSet<usize>) -> bool {
-        self.device_components.get(&pos).is_some_and(|components| {
-            components
-                .iter()
-                .any(|component| powered_components.contains(component))
-        })
-    }
-}
-
-fn detector_is_active(world: &WorldBlocks, pos: IVec3) -> bool {
-    let Some(block) = world.blocks.get(&pos) else {
-        return false;
-    };
-    if block.kind != BlockKind::Detector {
-        return false;
-    }
-
-    let detected_pos = pos + block.facing.forward_ivec3();
-    world
-        .blocks
-        .get(&detected_pos)
-        .is_some_and(|detected| detected.kind.is_material())
-}
-
 fn push_powered_pistons(
     world: &mut WorldBlocks,
     signal_cache: &SignalNetworkCache,
@@ -569,157 +401,4 @@ fn push_powered_pistons(
             move_structure(world, &structure, offset);
         }
     }
-}
-
-fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
-    let mut structure = HashSet::new();
-    let mut queue = VecDeque::from([start]);
-    structure.insert(start);
-
-    while let Some(pos) = queue.pop_front() {
-        for neighbor in welded_neighbors(world, pos) {
-            if structure.contains(&neighbor) {
-                continue;
-            }
-            structure.insert(neighbor);
-            queue.push_back(neighbor);
-        }
-    }
-
-    structure
-}
-
-fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
-    let mut structure = HashSet::new();
-    let mut queue = VecDeque::from([start]);
-    structure.insert(start);
-
-    while let Some(pos) = queue.pop_front() {
-        for offset in signal_offsets() {
-            let neighbor = pos + offset;
-            if structure.contains(&neighbor) || !world.is_factory_at(neighbor) {
-                continue;
-            }
-            structure.insert(neighbor);
-            queue.push_back(neighbor);
-        }
-    }
-
-    structure
-}
-
-fn factory_structure_is_anchored(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
-    structure.iter().any(|pos| {
-        signal_offsets()
-            .into_iter()
-            .any(|offset| world.is_scene_at(*pos + offset))
-    })
-}
-
-fn welded_neighbors(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
-    world
-        .material_welds
-        .iter()
-        .filter_map(|weld| weld.other(pos))
-        .filter(|neighbor| world.is_material_at(*neighbor))
-        .collect()
-}
-
-fn can_move_structure(world: &WorldBlocks, structure: &HashSet<IVec3>, offset: IVec3) -> bool {
-    structure.iter().all(|pos| {
-        let target = *pos + offset;
-        target.y >= 0 && (structure.contains(&target) || world.can_place_solid_at(target))
-    })
-}
-
-fn move_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, offset: IVec3) {
-    let updated_welds = moved_welds(world, structure, |pos| pos + offset);
-    let blocks: Vec<(IVec3, BlockData)> = structure
-        .iter()
-        .filter_map(|pos| world.remove(pos).map(|block| (*pos, block)))
-        .collect();
-
-    for (pos, block) in blocks {
-        world.insert(pos + offset, block);
-    }
-    world.replace_material_welds(updated_welds);
-}
-
-fn move_block_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, offset: IVec3) {
-    let blocks: Vec<(IVec3, BlockData)> = structure
-        .iter()
-        .filter_map(|pos| world.remove(pos).map(|block| (*pos, block)))
-        .collect();
-
-    for (pos, block) in blocks {
-        world.insert(pos + offset, block);
-    }
-}
-
-fn can_rotate_structure(world: &WorldBlocks, structure: &HashSet<IVec3>, pivot: IVec3) -> bool {
-    structure.iter().all(|pos| {
-        let target = rotate_pos_y(*pos, pivot);
-        target.y >= 0 && (structure.contains(&target) || world.can_place_solid_at(target))
-    })
-}
-
-fn rotate_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, pivot: IVec3) {
-    let updated_welds = moved_welds(world, structure, |pos| rotate_pos_y(pos, pivot));
-    let blocks: Vec<(IVec3, BlockData)> = structure
-        .iter()
-        .filter_map(|pos| world.remove(pos).map(|block| (*pos, block)))
-        .collect();
-
-    for (pos, mut block) in blocks {
-        block.facing = block.facing.rotate();
-        world.insert(rotate_pos_y(pos, pivot), block);
-    }
-    world.replace_material_welds(updated_welds);
-}
-
-fn rotate_pos_y(pos: IVec3, pivot: IVec3) -> IVec3 {
-    let rel = pos - pivot;
-    pivot + IVec3::new(-rel.z, rel.y, rel.x)
-}
-
-fn moved_welds(
-    world: &WorldBlocks,
-    structure: &HashSet<IVec3>,
-    transform: impl Fn(IVec3) -> IVec3,
-) -> HashSet<MaterialWeld> {
-    world
-        .material_welds
-        .iter()
-        .filter_map(|weld| {
-            let a = if structure.contains(&weld.a) {
-                transform(weld.a)
-            } else {
-                weld.a
-            };
-            let b = if structure.contains(&weld.b) {
-                transform(weld.b)
-            } else {
-                weld.b
-            };
-            (a != b).then_some(MaterialWeld::new(a, b))
-        })
-        .collect()
-}
-
-fn is_wire_at(world: &WorldBlocks, pos: IVec3) -> bool {
-    world
-        .blocks
-        .get(&pos)
-        .is_some_and(|block| block.kind == BlockKind::Wire)
-}
-
-fn signal_offsets() -> [IVec3; 6] {
-    [
-        IVec3::X,
-        IVec3::NEG_X,
-        IVec3::Y,
-        IVec3::NEG_Y,
-        IVec3::Z,
-        IVec3::NEG_Z,
-    ]
 }
