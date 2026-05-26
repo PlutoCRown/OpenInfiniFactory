@@ -12,6 +12,6 @@ pub use systems::{
     update_settings_status_ui, update_status_ui,
 };
 pub use types::{
-    CarriedItem, GeneratorAction, InventoryItems, MainMenuAction, PauseAction, PendingKeyBind,
-    SaveListAction, SettingsAction, SettingsTab, SimulationAction, HOTBAR_SLOTS,
+    AreaKind, CarriedItem, GeneratorAction, InventoryItems, MainMenuAction, PauseAction,
+    PendingKeyBind, SaveListAction, SettingsAction, SettingsTab, SimulationAction, HOTBAR_SLOTS,
 };

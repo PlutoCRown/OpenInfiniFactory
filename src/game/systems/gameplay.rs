@@ -5,7 +5,7 @@ use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, GameSettings, PlacementState,
     SelectionAxis, SelectionBounds, SelectionDrag, SimulationState,
 };
-use crate::game::ui::{InventoryItems, PendingKeyBind, HOTBAR_SLOTS};
+use crate::game::ui::{AreaKind, InventoryItems, PendingKeyBind, HOTBAR_SLOTS};
 use crate::game::world::blocks::{BlockData, BlockKind};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::{
@@ -110,7 +110,7 @@ pub fn placement_input(
         return;
     }
 
-    if selected_kind(&inventory, &placement) != Some(BlockKind::SelectionTool) {
+    if selected_area(&inventory, &placement) != Some(AreaKind::Selection) {
         placement.selection.clear();
     }
 
@@ -135,8 +135,8 @@ pub fn placement_input(
         return;
     }
 
-    if selected_kind(&inventory, &placement) == Some(BlockKind::SelectionTool) {
-        handle_selection_tool_input(
+    if selected_area(&inventory, &placement) == Some(AreaKind::Selection) {
+        handle_selection_area_input(
             &mouse_buttons,
             current_target_pos,
             &mut placement,
@@ -241,6 +241,7 @@ fn selected_place_block(
     placement: &PlacementState,
 ) -> Option<BlockData> {
     let kind = inventory.hotbar[placement.selected]?;
+    let kind = kind.block()?;
     can_place_in_mode(kind, builder_mode).then_some(BlockData {
         kind,
         facing: placement.facing,
@@ -248,10 +249,14 @@ fn selected_place_block(
 }
 
 fn selected_kind(inventory: &InventoryItems, placement: &PlacementState) -> Option<BlockKind> {
-    inventory.hotbar[placement.selected]
+    inventory.hotbar[placement.selected].and_then(|item| item.block())
 }
 
-fn handle_selection_tool_input(
+fn selected_area(inventory: &InventoryItems, placement: &PlacementState) -> Option<AreaKind> {
+    inventory.hotbar[placement.selected].and_then(|item| item.area())
+}
+
+fn handle_selection_area_input(
     mouse_buttons: &ButtonInput<MouseButton>,
     current_target_pos: Option<IVec3>,
     placement: &mut PlacementState,

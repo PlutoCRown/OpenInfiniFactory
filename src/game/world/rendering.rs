@@ -19,7 +19,6 @@ pub struct WorldRenderAssets {
     connector_x: Handle<Mesh>,
     connector_y: Handle<Mesh>,
     connector_z: Handle<Mesh>,
-    selection_tool: Handle<StandardMaterial>,
     solid: Handle<StandardMaterial>,
     glass: Handle<StandardMaterial>,
     generator: Handle<StandardMaterial>,
@@ -154,7 +153,6 @@ impl WorldRenderAssets {
             connector_x: meshes.add(Cuboid::new(0.74, 0.10, 0.10)),
             connector_y: meshes.add(Cuboid::new(0.10, 0.74, 0.10)),
             connector_z: meshes.add(Cuboid::new(0.10, 0.10, 0.74)),
-            selection_tool: materials.add(block_material(BlockKind::SelectionTool)),
             solid: materials.add(block_material(BlockKind::Solid)),
             glass: materials.add(block_material(BlockKind::Glass)),
             generator: materials.add(block_material(BlockKind::Generator)),
@@ -223,10 +221,7 @@ impl WorldRenderAssets {
     fn block_mesh(&self, kind: BlockKind) -> Handle<Mesh> {
         if matches!(
             kind,
-            BlockKind::SelectionTool
-                | BlockKind::WeldPoint
-                | BlockKind::Wire
-                | BlockKind::DrillHead
+            BlockKind::WeldPoint | BlockKind::Wire | BlockKind::DrillHead
         ) {
             self.node.clone()
         } else {
@@ -236,7 +231,6 @@ impl WorldRenderAssets {
 
     fn block_material(&self, kind: BlockKind) -> Handle<StandardMaterial> {
         match kind {
-            BlockKind::SelectionTool => self.selection_tool.clone(),
             BlockKind::Solid => self.solid.clone(),
             BlockKind::Glass => self.glass.clone(),
             BlockKind::Generator => self.generator.clone(),

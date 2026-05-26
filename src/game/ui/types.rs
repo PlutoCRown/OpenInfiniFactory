@@ -175,10 +175,52 @@ pub(crate) struct InventorySlot {
     pub index: usize,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum AreaKind {
+    Selection,
+}
+
+impl AreaKind {
+    pub fn name_key(self) -> &'static str {
+        match self {
+            Self::Selection => "area.selection",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum InventoryItem {
+    Block(BlockKind),
+    Area(AreaKind),
+}
+
+impl InventoryItem {
+    pub fn name_key(self) -> &'static str {
+        match self {
+            Self::Block(kind) => kind.name_key(),
+            Self::Area(kind) => kind.name_key(),
+        }
+    }
+
+    pub fn block(self) -> Option<BlockKind> {
+        match self {
+            Self::Block(kind) => Some(kind),
+            Self::Area(_) => None,
+        }
+    }
+
+    pub fn area(self) -> Option<AreaKind> {
+        match self {
+            Self::Area(kind) => Some(kind),
+            Self::Block(_) => None,
+        }
+    }
+}
+
 #[derive(Resource)]
 pub struct InventoryItems {
-    pub hotbar: [Option<BlockKind>; HOTBAR_SLOTS],
-    pub(super) backpack: [Option<BlockKind>; BACKPACK_SLOTS],
+    pub hotbar: [Option<InventoryItem>; HOTBAR_SLOTS],
+    pub(super) backpack: [Option<InventoryItem>; BACKPACK_SLOTS],
 }
 
 impl Default for InventoryItems {
@@ -195,13 +237,15 @@ impl InventoryItems {
         };
 
         let mut hotbar = [None; HOTBAR_SLOTS];
-        for (index, kind) in blocks.iter().take(HOTBAR_SLOTS).enumerate() {
-            hotbar[index] = Some(*kind);
+        hotbar[0] = Some(InventoryItem::Area(AreaKind::Selection));
+        for (index, kind) in blocks.iter().take(HOTBAR_SLOTS - 1).enumerate() {
+            hotbar[index + 1] = Some(InventoryItem::Block(*kind));
         }
 
         let mut backpack = [None; BACKPACK_SLOTS];
-        for index in 0..BACKPACK_SLOTS {
-            backpack[index] = Some(blocks[index % blocks.len()]);
+        backpack[0] = Some(InventoryItem::Area(AreaKind::Selection));
+        for index in 1..BACKPACK_SLOTS {
+            backpack[index] = Some(InventoryItem::Block(blocks[(index - 1) % blocks.len()]));
         }
 
         Self { hotbar, backpack }
@@ -209,7 +253,7 @@ impl InventoryItems {
 }
 
 #[derive(Resource)]
-pub struct CarriedItem(Option<BlockKind>);
+pub struct CarriedItem(Option<InventoryItem>);
 
 impl Default for CarriedItem {
     fn default() -> Self {
@@ -230,11 +274,11 @@ pub(crate) enum SlotArea {
 }
 
 impl CarriedItem {
-    pub(super) fn item(&self) -> Option<BlockKind> {
+    pub(super) fn item(&self) -> Option<InventoryItem> {
         self.0
     }
 
-    pub(super) fn item_mut(&mut self) -> &mut Option<BlockKind> {
+    pub(super) fn item_mut(&mut self) -> &mut Option<InventoryItem> {
         &mut self.0
     }
 }
