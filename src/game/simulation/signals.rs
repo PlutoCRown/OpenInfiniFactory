@@ -52,7 +52,7 @@ impl SignalNetworkCache {
         for (&pos, block) in &world.blocks {
             match block.kind {
                 BlockKind::Detector => self.cache_detector(pos, block.facing),
-                BlockKind::Piston | BlockKind::Blocker | BlockKind::Laser => {
+                BlockKind::Piston | BlockKind::Blocker | BlockKind::Drill | BlockKind::Laser => {
                     self.cache_powered_device(pos, block.facing)
                 }
                 _ => {}

@@ -314,6 +314,7 @@ fn weld_point_connects_to(block: &BlockData, connector_from_block: IVec3) -> boo
     match block.kind {
         BlockKind::WeldPoint => true,
         BlockKind::Welder => connector_from_block == block.facing.forward_ivec3(),
+        BlockKind::DownWelder => connector_from_block == IVec3::NEG_Y,
         _ => false,
     }
 }
@@ -329,9 +330,11 @@ fn local_connector_offset(data: BlockData, offset: IVec3) -> IVec3 {
 fn wire_connects_to(block: &BlockData, wire_from_block: IVec3) -> bool {
     match block.kind {
         BlockKind::Wire => true,
-        BlockKind::Detector | BlockKind::Piston | BlockKind::Blocker | BlockKind::Laser => {
-            wire_from_block != block.facing.forward_ivec3()
-        }
+        BlockKind::Detector
+        | BlockKind::Piston
+        | BlockKind::Blocker
+        | BlockKind::Laser
+        | BlockKind::Drill => wire_from_block != block.facing.forward_ivec3(),
         _ => false,
     }
 }

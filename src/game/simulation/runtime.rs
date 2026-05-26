@@ -97,16 +97,18 @@ fn sync_generated_markers(
 ) {
     world.clear_generated_markers();
 
-    let welders: Vec<(IVec3, Facing)> = world
+    let welders: Vec<(IVec3, IVec3, Facing)> = world
         .blocks
         .iter()
-        .filter_map(|(pos, block)| {
-            (block.kind == BlockKind::Welder).then_some((*pos, block.facing))
+        .filter_map(|(pos, block)| match block.kind {
+            BlockKind::Welder => Some((*pos, block.facing.forward_ivec3(), block.facing)),
+            BlockKind::DownWelder => Some((*pos, IVec3::NEG_Y, Facing::North)),
+            _ => None,
         })
         .collect();
 
-    for (pos, facing) in welders {
-        let point_pos = pos + facing.forward_ivec3();
+    for (pos, offset, facing) in welders {
+        let point_pos = pos + offset;
         if !world.is_occupied(point_pos) {
             world.insert(
                 point_pos,
@@ -246,16 +248,20 @@ fn adjacent_material_except(world: &WorldBlocks, pos: IVec3, except: IVec3) -> O
 }
 
 fn move_conveyed_materials(world: &mut WorldBlocks) {
-    let conveyors: Vec<(IVec3, Facing)> = world
+    let conveyors: Vec<(IVec3, Facing, IVec3)> = world
         .blocks
         .iter()
         .filter_map(|(pos, block)| {
-            (block.kind == BlockKind::Conveyor).then_some((*pos, block.facing))
+            match block.kind {
+                BlockKind::Conveyor => Some((*pos, block.facing, IVec3::Y)),
+                BlockKind::ReverseConveyor => Some((*pos, block.facing, IVec3::NEG_Y)),
+                _ => None,
+            }
         })
         .collect();
 
-    for (pos, facing) in conveyors {
-        let source = pos + IVec3::Y;
+    for (pos, facing, source_offset) in conveyors {
+        let source = pos + source_offset;
         let Some(block) = world.blocks.get(&source).copied() else {
             continue;
         };
@@ -299,13 +305,17 @@ fn lift_structures(world: &mut WorldBlocks) {
 }
 
 fn rotate_structures(world: &mut WorldBlocks) {
-    let rotators: Vec<IVec3> = world
+    let rotators: Vec<(IVec3, bool)> = world
         .blocks
         .iter()
-        .filter_map(|(pos, block)| (block.kind == BlockKind::Rotator).then_some(*pos))
+        .filter_map(|(pos, block)| match block.kind {
+            BlockKind::Rotator => Some((*pos, true)),
+            BlockKind::CounterRotator => Some((*pos, false)),
+            _ => None,
+        })
         .collect();
 
-    for pos in rotators {
+    for (pos, clockwise) in rotators {
         let source = pos + IVec3::Y;
         let Some(block) = world.blocks.get(&source) else {
             continue;
@@ -315,8 +325,8 @@ fn rotate_structures(world: &mut WorldBlocks) {
         }
 
         let structure = material_structure(world, source);
-        if can_rotate_structure(world, &structure, pos) {
-            rotate_structure(world, &structure, pos);
+        if can_rotate_structure(world, &structure, pos, clockwise) {
+            rotate_structure(world, &structure, pos, clockwise);
         }
     }
 }

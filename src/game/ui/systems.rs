@@ -452,6 +452,10 @@ pub fn update_settings_text_ui(
                     "inventory",
                     config.key(ConfigAction::Inventory).name().to_string(),
                 ),
+                (
+                    "alternate",
+                    config.key(ConfigAction::Alternate).name().to_string(),
+                ),
                 ("pause", config.key(ConfigAction::Pause).name().to_string()),
             ],
         );

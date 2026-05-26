@@ -183,6 +183,21 @@ pub fn placement_input(
 
     placement.selection.clear();
 
+    if keys.just_pressed(config.key_bindings.alternate.key_code()) {
+        if let Some(pos) = current_target_pos {
+            alternate_block_at(
+                pos,
+                &mut world,
+                &block_entities,
+                &mut commands,
+                &render_assets,
+            );
+        }
+        placement.edit_gesture = None;
+        despawn_edit_previews(&mut commands, &edit_previews);
+        return;
+    }
+
     if keys.just_pressed(config.key_bindings.rotate_or_rollback.key_code()) {
         if !rotate_pending_place_preview(&mut placement) {
             if can_preview_place {
@@ -483,16 +498,18 @@ fn despawn_block_entities(commands: &mut Commands, block_entities: &Query<(Entit
 
 fn refresh_edit_generated_markers(world: &mut WorldBlocks) {
     world.clear_generated_markers();
-    let welders: Vec<(IVec3, crate::game::world::blocks::Facing)> = world
+    let welders: Vec<(IVec3, IVec3, crate::game::world::blocks::Facing)> = world
         .blocks
         .iter()
-        .filter_map(|(pos, block)| {
-            (block.kind == BlockKind::Welder).then_some((*pos, block.facing))
+        .filter_map(|(pos, block)| match block.kind {
+            BlockKind::Welder => Some((*pos, block.facing.forward_ivec3(), block.facing)),
+            BlockKind::DownWelder => Some((*pos, IVec3::NEG_Y, block.facing)),
+            _ => None,
         })
         .collect();
 
-    for (pos, facing) in welders {
-        let point_pos = pos + facing.forward_ivec3();
+    for (pos, offset, facing) in welders {
+        let point_pos = pos + offset;
         if !world.is_occupied(point_pos) {
             world.insert(
                 point_pos,
@@ -503,6 +520,26 @@ fn refresh_edit_generated_markers(world: &mut WorldBlocks) {
             );
         }
     }
+}
+
+fn alternate_block_at(
+    pos: IVec3,
+    world: &mut WorldBlocks,
+    block_entities: &Query<(Entity, &BlockEntity)>,
+    commands: &mut Commands,
+    render_assets: &WorldRenderAssets,
+) {
+    let Some(block) = world.blocks.get_mut(&pos) else {
+        return;
+    };
+    let Some(kind) = block.kind.alternate() else {
+        return;
+    };
+
+    block.kind = kind;
+    refresh_edit_generated_markers(world);
+    despawn_block_entities(commands, block_entities);
+    rebuild_world(commands, world, render_assets);
 }
 
 fn rotate_block_at(

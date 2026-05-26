@@ -14,15 +14,18 @@ pub const EDIT_BLOCKS: [BlockKind; 7] = [
     BlockKind::Goal,
 ];
 
-pub const PLAY_BLOCKS: [BlockKind; 11] = [
+pub const PLAY_BLOCKS: [BlockKind; 14] = [
     BlockKind::Solid,
     BlockKind::Welder,
+    BlockKind::DownWelder,
     BlockKind::Conveyor,
+    BlockKind::ReverseConveyor,
     BlockKind::Detector,
     BlockKind::Wire,
     BlockKind::Piston,
     BlockKind::Lifter,
     BlockKind::Rotator,
+    BlockKind::CounterRotator,
     BlockKind::Blocker,
     BlockKind::Drill,
     BlockKind::Laser,
@@ -60,12 +63,15 @@ pub enum BlockKind {
     Glass,
     Generator,
     Welder,
+    DownWelder,
     Conveyor,
+    ReverseConveyor,
     Detector,
     Wire,
     Piston,
     Lifter,
     Rotator,
+    CounterRotator,
     Blocker,
     Drill,
     Laser,
@@ -87,12 +93,15 @@ impl BlockKind {
             BlockKind::Glass => "block.glass",
             BlockKind::Generator => "block.generator",
             BlockKind::Welder => "block.welder",
+            BlockKind::DownWelder => "block.down_welder",
             BlockKind::Conveyor => "block.conveyor",
+            BlockKind::ReverseConveyor => "block.reverse_conveyor",
             BlockKind::Detector => "block.detector",
             BlockKind::Wire => "block.wire",
             BlockKind::Piston => "block.piston",
             BlockKind::Lifter => "block.lifter",
             BlockKind::Rotator => "block.rotator",
+            BlockKind::CounterRotator => "block.counter_rotator",
             BlockKind::Blocker => "block.blocker",
             BlockKind::Drill => "block.drill",
             BlockKind::Laser => "block.laser",
@@ -114,12 +123,15 @@ impl BlockKind {
             BlockKind::Glass => Color::srgba(0.55, 0.82, 0.95, 0.45),
             BlockKind::Generator => Color::srgb(0.52, 0.30, 0.68),
             BlockKind::Welder => Color::srgb(0.76, 0.18, 0.16),
+            BlockKind::DownWelder => Color::srgb(0.92, 0.32, 0.20),
             BlockKind::Conveyor => Color::srgb(0.10, 0.22, 0.28),
+            BlockKind::ReverseConveyor => Color::srgb(0.14, 0.30, 0.36),
             BlockKind::Detector => Color::srgb(0.15, 0.45, 0.72),
             BlockKind::Wire => Color::srgb(0.95, 0.72, 0.18),
             BlockKind::Piston => Color::srgb(0.78, 0.55, 0.28),
             BlockKind::Lifter => Color::srgb(0.25, 0.58, 0.72),
             BlockKind::Rotator => Color::srgb(0.48, 0.32, 0.72),
+            BlockKind::CounterRotator => Color::srgb(0.62, 0.28, 0.78),
             BlockKind::Blocker => Color::srgb(0.58, 0.40, 0.24),
             BlockKind::Drill => Color::srgb(0.32, 0.36, 0.40),
             BlockKind::Laser => Color::srgb(0.85, 0.20, 0.34),
@@ -137,10 +149,12 @@ impl BlockKind {
             BlockKind::Generator
                 | BlockKind::Welder
                 | BlockKind::Conveyor
+                | BlockKind::ReverseConveyor
                 | BlockKind::Detector
                 | BlockKind::Piston
                 | BlockKind::Lifter
                 | BlockKind::Rotator
+                | BlockKind::CounterRotator
                 | BlockKind::Blocker
                 | BlockKind::Drill
                 | BlockKind::Laser
@@ -156,12 +170,15 @@ impl BlockKind {
             self,
             BlockKind::Solid
                 | BlockKind::Welder
+                | BlockKind::DownWelder
                 | BlockKind::Conveyor
+                | BlockKind::ReverseConveyor
                 | BlockKind::Detector
                 | BlockKind::Wire
                 | BlockKind::Piston
                 | BlockKind::Lifter
                 | BlockKind::Rotator
+                | BlockKind::CounterRotator
                 | BlockKind::Blocker
                 | BlockKind::Drill
                 | BlockKind::Laser
@@ -177,7 +194,7 @@ impl BlockKind {
                 | BlockKind::Planks
                 | BlockKind::Glass
                 | BlockKind::Generator
-                 | BlockKind::Goal
+                | BlockKind::Goal
         )
     }
 
@@ -190,6 +207,22 @@ impl BlockKind {
             self,
             BlockKind::WeldPoint | BlockKind::BlockerHead | BlockKind::DrillHead
         )
+    }
+
+    pub fn alternate(self) -> Option<Self> {
+        match self {
+            BlockKind::Conveyor => Some(BlockKind::ReverseConveyor),
+            BlockKind::ReverseConveyor => Some(BlockKind::Conveyor),
+            BlockKind::Welder => Some(BlockKind::DownWelder),
+            BlockKind::DownWelder => Some(BlockKind::Welder),
+            BlockKind::Piston => Some(BlockKind::Blocker),
+            BlockKind::Blocker => Some(BlockKind::Piston),
+            BlockKind::Rotator => Some(BlockKind::CounterRotator),
+            BlockKind::CounterRotator => Some(BlockKind::Rotator),
+            BlockKind::Drill => Some(BlockKind::Laser),
+            BlockKind::Laser => Some(BlockKind::Drill),
+            _ => None,
+        }
     }
 }
 
@@ -208,6 +241,15 @@ impl Facing {
             Facing::East => Facing::South,
             Facing::South => Facing::West,
             Facing::West => Facing::North,
+        }
+    }
+
+    pub fn rotate_counter(self) -> Self {
+        match self {
+            Facing::North => Facing::West,
+            Facing::West => Facing::South,
+            Facing::South => Facing::East,
+            Facing::East => Facing::North,
         }
     }
 

@@ -41,6 +41,10 @@ fn default_ui_scale() -> f32 {
     1.0
 }
 
+fn default_alternate_key() -> ConfigKey {
+    ConfigKey::KeyC
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Reflect, Serialize, Deserialize)]
 pub enum ConfigSelectionMode {
     #[default]
@@ -77,6 +81,8 @@ impl ConfigSelectionMode {
 pub struct KeyBindings {
     pub pause: ConfigKey,
     pub inventory: ConfigKey,
+    #[serde(default = "default_alternate_key")]
+    pub alternate: ConfigKey,
     pub rotate_or_rollback: ConfigKey,
     pub simulate: ConfigKey,
     pub debug: ConfigKey,
@@ -93,6 +99,7 @@ impl Default for KeyBindings {
         Self {
             pause: ConfigKey::Escape,
             inventory: ConfigKey::KeyE,
+            alternate: default_alternate_key(),
             rotate_or_rollback: ConfigKey::KeyR,
             simulate: ConfigKey::KeyF,
             debug: ConfigKey::Slash,
@@ -110,6 +117,7 @@ impl Default for KeyBindings {
 pub enum ConfigAction {
     Pause,
     Inventory,
+    Alternate,
     RotateOrRollback,
     Simulate,
     Debug,
@@ -122,9 +130,10 @@ pub enum ConfigAction {
 }
 
 impl ConfigAction {
-    pub const ALL: [ConfigAction; 11] = [
+    pub const ALL: [ConfigAction; 12] = [
         ConfigAction::Pause,
         ConfigAction::Inventory,
+        ConfigAction::Alternate,
         ConfigAction::RotateOrRollback,
         ConfigAction::Simulate,
         ConfigAction::Debug,
@@ -140,6 +149,7 @@ impl ConfigAction {
         match self {
             ConfigAction::Pause => "action.pause",
             ConfigAction::Inventory => "action.inventory",
+            ConfigAction::Alternate => "action.alternate",
             ConfigAction::RotateOrRollback => "action.rotate_or_rollback",
             ConfigAction::Simulate => "action.simulate",
             ConfigAction::Debug => "action.debug",
@@ -161,6 +171,7 @@ pub enum ConfigKey {
     ShiftRight,
     Slash,
     KeyA,
+    KeyC,
     KeyD,
     KeyE,
     KeyF,
@@ -188,6 +199,7 @@ impl ConfigKey {
             ConfigKey::ShiftRight => KeyCode::ShiftRight,
             ConfigKey::Slash => KeyCode::Slash,
             ConfigKey::KeyA => KeyCode::KeyA,
+            ConfigKey::KeyC => KeyCode::KeyC,
             ConfigKey::KeyD => KeyCode::KeyD,
             ConfigKey::KeyE => KeyCode::KeyE,
             ConfigKey::KeyF => KeyCode::KeyF,
@@ -215,6 +227,7 @@ impl ConfigKey {
             ConfigKey::ShiftRight => "Right Shift",
             ConfigKey::Slash => "/",
             ConfigKey::KeyA => "A",
+            ConfigKey::KeyC => "C",
             ConfigKey::KeyD => "D",
             ConfigKey::KeyE => "E",
             ConfigKey::KeyF => "F",
@@ -240,6 +253,7 @@ impl GameConfig {
         match action {
             ConfigAction::Pause => self.key_bindings.pause,
             ConfigAction::Inventory => self.key_bindings.inventory,
+            ConfigAction::Alternate => self.key_bindings.alternate,
             ConfigAction::RotateOrRollback => self.key_bindings.rotate_or_rollback,
             ConfigAction::Simulate => self.key_bindings.simulate,
             ConfigAction::Debug => self.key_bindings.debug,
@@ -256,6 +270,7 @@ impl GameConfig {
         match action {
             ConfigAction::Pause => self.key_bindings.pause = key,
             ConfigAction::Inventory => self.key_bindings.inventory = key,
+            ConfigAction::Alternate => self.key_bindings.alternate = key,
             ConfigAction::RotateOrRollback => self.key_bindings.rotate_or_rollback = key,
             ConfigAction::Simulate => self.key_bindings.simulate = key,
             ConfigAction::Debug => self.key_bindings.debug = key,
@@ -320,6 +335,7 @@ pub fn key_from_input(keys: &ButtonInput<KeyCode>) -> Option<ConfigKey> {
         ConfigKey::ShiftRight,
         ConfigKey::Slash,
         ConfigKey::KeyA,
+        ConfigKey::KeyC,
         ConfigKey::KeyD,
         ConfigKey::KeyE,
         ConfigKey::KeyF,

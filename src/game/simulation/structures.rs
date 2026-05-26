@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::collections::{HashSet, VecDeque};
 
-use crate::game::world::blocks::BlockData;
+use crate::game::world::blocks::{BlockData, Facing};
 use crate::game::world::grid::{MaterialWeld, WorldBlocks};
 
 use super::signal_offsets;
@@ -146,30 +146,48 @@ pub(super) fn can_rotate_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     pivot: IVec3,
+    clockwise: bool,
 ) -> bool {
     structure.iter().all(|pos| {
-        let target = rotate_pos_y(*pos, pivot);
+        let target = rotate_pos_y(*pos, pivot, clockwise);
         target.y >= 0 && (structure.contains(&target) || world.can_place_solid_at(target))
     })
 }
 
-pub(super) fn rotate_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, pivot: IVec3) {
-    let updated_welds = moved_welds(world, structure, |pos| rotate_pos_y(pos, pivot));
+pub(super) fn rotate_structure(
+    world: &mut WorldBlocks,
+    structure: &HashSet<IVec3>,
+    pivot: IVec3,
+    clockwise: bool,
+) {
+    let updated_welds = moved_welds(world, structure, |pos| rotate_pos_y(pos, pivot, clockwise));
     let blocks: Vec<(IVec3, BlockData)> = structure
         .iter()
         .filter_map(|pos| world.remove(pos).map(|block| (*pos, block)))
         .collect();
 
     for (pos, mut block) in blocks {
-        block.facing = block.facing.rotate();
-        world.insert(rotate_pos_y(pos, pivot), block);
+        block.facing = rotate_facing(block.facing, clockwise);
+        world.insert(rotate_pos_y(pos, pivot, clockwise), block);
     }
     world.replace_material_welds(updated_welds);
 }
 
-fn rotate_pos_y(pos: IVec3, pivot: IVec3) -> IVec3 {
+fn rotate_pos_y(pos: IVec3, pivot: IVec3, clockwise: bool) -> IVec3 {
     let rel = pos - pivot;
-    pivot + IVec3::new(-rel.z, rel.y, rel.x)
+    if clockwise {
+        pivot + IVec3::new(-rel.z, rel.y, rel.x)
+    } else {
+        pivot + IVec3::new(rel.z, rel.y, -rel.x)
+    }
+}
+
+fn rotate_facing(facing: Facing, clockwise: bool) -> Facing {
+    if clockwise {
+        facing.rotate()
+    } else {
+        facing.rotate_counter()
+    }
 }
 
 fn moved_welds(
