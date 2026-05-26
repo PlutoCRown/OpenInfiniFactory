@@ -18,15 +18,21 @@ pub struct WorldRenderAssets {
     goal_top: Handle<Mesh>,
     weld_connector_x: Handle<Mesh>,
     weld_connector_z: Handle<Mesh>,
+    wire_connector_x: Handle<Mesh>,
+    wire_connector_y: Handle<Mesh>,
+    wire_connector_z: Handle<Mesh>,
     solid: Handle<StandardMaterial>,
     glass: Handle<StandardMaterial>,
     generator: Handle<StandardMaterial>,
     welder: Handle<StandardMaterial>,
     conveyor: Handle<StandardMaterial>,
+    detector: Handle<StandardMaterial>,
+    wire: Handle<StandardMaterial>,
     piston: Handle<StandardMaterial>,
     goal: Handle<StandardMaterial>,
     material: Handle<StandardMaterial>,
     weld_point_material: Handle<StandardMaterial>,
+    wire_connector_material: Handle<StandardMaterial>,
     arrow_material: Handle<StandardMaterial>,
     arrow_nose_material: Handle<StandardMaterial>,
     goal_top_material: Handle<StandardMaterial>,
@@ -129,15 +135,25 @@ impl WorldRenderAssets {
             goal_top: meshes.add(Cuboid::new(0.62, 0.08, 0.62)),
             weld_connector_x: meshes.add(Cuboid::new(0.72, 0.08, 0.08)),
             weld_connector_z: meshes.add(Cuboid::new(0.08, 0.08, 0.72)),
+            wire_connector_x: meshes.add(Cuboid::new(0.74, 0.10, 0.10)),
+            wire_connector_y: meshes.add(Cuboid::new(0.10, 0.74, 0.10)),
+            wire_connector_z: meshes.add(Cuboid::new(0.10, 0.10, 0.74)),
             solid: materials.add(block_material(BlockKind::Solid)),
             glass: materials.add(block_material(BlockKind::Glass)),
             generator: materials.add(block_material(BlockKind::Generator)),
             welder: materials.add(block_material(BlockKind::Welder)),
             conveyor: materials.add(block_material(BlockKind::Conveyor)),
+            detector: materials.add(block_material(BlockKind::Detector)),
+            wire: materials.add(block_material(BlockKind::Wire)),
             piston: materials.add(block_material(BlockKind::Piston)),
             goal: materials.add(block_material(BlockKind::Goal)),
             material: materials.add(block_material(BlockKind::Material)),
             weld_point_material: materials.add(block_material(BlockKind::WeldPoint)),
+            wire_connector_material: materials.add(StandardMaterial {
+                base_color: Color::srgb(1.0, 0.88, 0.30),
+                emissive: Color::srgb(0.20, 0.12, 0.02).into(),
+                ..default()
+            }),
             arrow_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(0.95, 0.95, 0.38),
                 unlit: true,
@@ -177,6 +193,8 @@ impl WorldRenderAssets {
             BlockKind::Generator => self.generator.clone(),
             BlockKind::Welder => self.welder.clone(),
             BlockKind::Conveyor => self.conveyor.clone(),
+            BlockKind::Detector => self.detector.clone(),
+            BlockKind::Wire => self.wire.clone(),
             BlockKind::Piston => self.piston.clone(),
             BlockKind::Goal => self.goal.clone(),
             BlockKind::Material => self.material.clone(),
@@ -285,5 +303,55 @@ pub fn spawn_block(
                     }
                 }
             }
+
+            if data.kind == BlockKind::Wire {
+                for offset in signal_offsets() {
+                    let neighbor = pos + offset;
+                    if world
+                        .blocks
+                        .get(&neighbor)
+                        .is_some_and(|block| wire_connects_to(block, -offset))
+                    {
+                        parent.spawn(PbrBundle {
+                            mesh: assets.wire_connector_mesh(offset),
+                            material: assets.wire_connector_material.clone(),
+                            transform: Transform::from_translation(offset.as_vec3() * 0.34),
+                            ..default()
+                        });
+                    }
+                }
+            }
         });
+}
+
+impl WorldRenderAssets {
+    fn wire_connector_mesh(&self, offset: IVec3) -> Handle<Mesh> {
+        if offset.x != 0 {
+            self.wire_connector_x.clone()
+        } else if offset.y != 0 {
+            self.wire_connector_y.clone()
+        } else {
+            self.wire_connector_z.clone()
+        }
+    }
+}
+
+fn wire_connects_to(block: &BlockData, wire_from_block: IVec3) -> bool {
+    match block.kind {
+        BlockKind::Wire => true,
+        BlockKind::Detector => wire_from_block != block.facing.forward_ivec3(),
+        BlockKind::Piston => wire_from_block != block.facing.forward_ivec3(),
+        _ => false,
+    }
+}
+
+fn signal_offsets() -> [IVec3; 6] {
+    [
+        IVec3::X,
+        IVec3::NEG_X,
+        IVec3::Y,
+        IVec3::NEG_Y,
+        IVec3::Z,
+        IVec3::NEG_Z,
+    ]
 }

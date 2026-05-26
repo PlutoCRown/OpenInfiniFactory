@@ -5,10 +5,12 @@ pub const BLOCK_SIZE: f32 = 1.0;
 
 pub const EDIT_BLOCKS: [BlockKind; 3] = [BlockKind::Solid, BlockKind::Glass, BlockKind::Goal];
 
-pub const PLAY_BLOCKS: [BlockKind; 4] = [
+pub const PLAY_BLOCKS: [BlockKind; 6] = [
     BlockKind::Generator,
     BlockKind::Welder,
     BlockKind::Conveyor,
+    BlockKind::Detector,
+    BlockKind::Wire,
     BlockKind::Piston,
 ];
 
@@ -25,6 +27,8 @@ pub enum BlockKind {
     Generator,
     Welder,
     Conveyor,
+    Detector,
+    Wire,
     Piston,
     Goal,
     Material,
@@ -39,6 +43,8 @@ impl BlockKind {
             BlockKind::Generator => "block.generator",
             BlockKind::Welder => "block.welder",
             BlockKind::Conveyor => "block.conveyor",
+            BlockKind::Detector => "block.detector",
+            BlockKind::Wire => "block.wire",
             BlockKind::Piston => "block.piston",
             BlockKind::Goal => "block.goal",
             BlockKind::Material => "block.material",
@@ -53,6 +59,8 @@ impl BlockKind {
             BlockKind::Generator => Color::srgb(0.52, 0.30, 0.68),
             BlockKind::Welder => Color::srgb(0.76, 0.18, 0.16),
             BlockKind::Conveyor => Color::srgb(0.10, 0.22, 0.28),
+            BlockKind::Detector => Color::srgb(0.15, 0.45, 0.72),
+            BlockKind::Wire => Color::srgb(0.95, 0.72, 0.18),
             BlockKind::Piston => Color::srgb(0.78, 0.55, 0.28),
             BlockKind::Goal => Color::srgb(0.35, 0.72, 0.42),
             BlockKind::Material => Color::srgb(0.82, 0.82, 0.86),
@@ -63,7 +71,11 @@ impl BlockKind {
     pub fn is_directional(self) -> bool {
         matches!(
             self,
-            BlockKind::Generator | BlockKind::Welder | BlockKind::Conveyor | BlockKind::Piston
+            BlockKind::Generator
+                | BlockKind::Welder
+                | BlockKind::Conveyor
+                | BlockKind::Detector
+                | BlockKind::Piston
         )
     }
 
@@ -74,7 +86,12 @@ impl BlockKind {
     pub fn is_factory(self) -> bool {
         matches!(
             self,
-            BlockKind::Generator | BlockKind::Welder | BlockKind::Conveyor | BlockKind::Piston
+            BlockKind::Generator
+                | BlockKind::Welder
+                | BlockKind::Conveyor
+                | BlockKind::Detector
+                | BlockKind::Wire
+                | BlockKind::Piston
         )
     }
 
