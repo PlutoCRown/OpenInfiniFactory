@@ -191,6 +191,7 @@ fn spawn_localized_button<'a, A: Bundle>(
 
 pub(super) fn slot_color(kind: BlockKind) -> Color {
     match kind {
+        BlockKind::SelectionTool => Color::srgb(0.22, 0.66, 0.62),
         BlockKind::Solid => Color::srgb(0.38, 0.39, 0.40),
         BlockKind::Glass => Color::srgb(0.42, 0.66, 0.76),
         BlockKind::Generator => Color::srgb(0.42, 0.20, 0.56),
@@ -214,6 +215,7 @@ pub(super) fn slot_color(kind: BlockKind) -> Color {
 
 pub(super) fn short_item_name(kind: BlockKind) -> &'static str {
     match kind {
+        BlockKind::SelectionTool => "short.selection_tool",
         BlockKind::Solid => "short.solid",
         BlockKind::Glass => "short.glass",
         BlockKind::Generator => "short.generator",

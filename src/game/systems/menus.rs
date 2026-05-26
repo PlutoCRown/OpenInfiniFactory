@@ -299,4 +299,6 @@ fn reset_builder_state(
     *inventory = InventoryItems::for_mode(*builder_mode);
     carried.clear();
     placement.selected = 0;
+    placement.edit_gesture = None;
+    placement.selection.clear();
 }

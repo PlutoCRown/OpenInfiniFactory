@@ -41,6 +41,7 @@ pub fn inventory_slot_clicks(
     >,
     mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
+    mut placement: ResMut<PlacementState>,
     mode: Res<GameMode>,
 ) {
     if *mode != GameMode::Inventory {
@@ -57,6 +58,8 @@ pub fn inventory_slot_clicks(
             SlotArea::Backpack => &mut inventory.backpack[slot.index],
         };
         std::mem::swap(slot_item, carried.item_mut());
+        placement.selection.clear();
+        placement.edit_gesture = None;
     }
 }
 

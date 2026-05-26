@@ -19,6 +19,7 @@ pub struct WorldRenderAssets {
     connector_x: Handle<Mesh>,
     connector_y: Handle<Mesh>,
     connector_z: Handle<Mesh>,
+    selection_tool: Handle<StandardMaterial>,
     solid: Handle<StandardMaterial>,
     glass: Handle<StandardMaterial>,
     generator: Handle<StandardMaterial>,
@@ -44,6 +45,7 @@ pub struct WorldRenderAssets {
     weld_connector_material: Handle<StandardMaterial>,
     place_preview_material: Handle<StandardMaterial>,
     delete_preview_material: Handle<StandardMaterial>,
+    selection_preview_material: Handle<StandardMaterial>,
 }
 
 #[derive(Component)]
@@ -58,6 +60,7 @@ pub struct EditPreview;
 pub enum EditPreviewKind {
     Place,
     Delete,
+    Selection,
 }
 
 pub fn setup_scene(
@@ -151,6 +154,7 @@ impl WorldRenderAssets {
             connector_x: meshes.add(Cuboid::new(0.74, 0.10, 0.10)),
             connector_y: meshes.add(Cuboid::new(0.10, 0.74, 0.10)),
             connector_z: meshes.add(Cuboid::new(0.10, 0.10, 0.74)),
+            selection_tool: materials.add(block_material(BlockKind::SelectionTool)),
             solid: materials.add(block_material(BlockKind::Solid)),
             glass: materials.add(block_material(BlockKind::Glass)),
             generator: materials.add(block_material(BlockKind::Generator)),
@@ -207,13 +211,22 @@ impl WorldRenderAssets {
                 unlit: true,
                 ..default()
             }),
+            selection_preview_material: materials.add(StandardMaterial {
+                base_color: Color::srgba(0.25, 0.95, 0.88, 0.34),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            }),
         }
     }
 
     fn block_mesh(&self, kind: BlockKind) -> Handle<Mesh> {
         if matches!(
             kind,
-            BlockKind::WeldPoint | BlockKind::Wire | BlockKind::DrillHead
+            BlockKind::SelectionTool
+                | BlockKind::WeldPoint
+                | BlockKind::Wire
+                | BlockKind::DrillHead
         ) {
             self.node.clone()
         } else {
@@ -223,6 +236,7 @@ impl WorldRenderAssets {
 
     fn block_material(&self, kind: BlockKind) -> Handle<StandardMaterial> {
         match kind {
+            BlockKind::SelectionTool => self.selection_tool.clone(),
             BlockKind::Solid => self.solid.clone(),
             BlockKind::Glass => self.glass.clone(),
             BlockKind::Generator => self.generator.clone(),
@@ -248,6 +262,7 @@ impl WorldRenderAssets {
         match kind {
             EditPreviewKind::Place => self.place_preview_material.clone(),
             EditPreviewKind::Delete => self.delete_preview_material.clone(),
+            EditPreviewKind::Selection => self.selection_preview_material.clone(),
         }
     }
 }

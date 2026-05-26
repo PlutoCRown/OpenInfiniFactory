@@ -4,9 +4,15 @@ use serde::{Deserialize, Serialize};
 pub const BLOCK_SIZE: f32 = 1.0;
 pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
 
-pub const EDIT_BLOCKS: [BlockKind; 3] = [BlockKind::Solid, BlockKind::Glass, BlockKind::Goal];
+pub const EDIT_BLOCKS: [BlockKind; 4] = [
+    BlockKind::SelectionTool,
+    BlockKind::Solid,
+    BlockKind::Glass,
+    BlockKind::Goal,
+];
 
-pub const PLAY_BLOCKS: [BlockKind; 11] = [
+pub const PLAY_BLOCKS: [BlockKind; 12] = [
+    BlockKind::SelectionTool,
     BlockKind::Generator,
     BlockKind::Welder,
     BlockKind::Conveyor,
@@ -28,6 +34,7 @@ pub struct BlockData {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum BlockKind {
+    SelectionTool,
     Solid,
     Glass,
     Generator,
@@ -51,6 +58,7 @@ pub enum BlockKind {
 impl BlockKind {
     pub fn name_key(self) -> &'static str {
         match self {
+            BlockKind::SelectionTool => "block.selection_tool",
             BlockKind::Solid => "block.solid",
             BlockKind::Glass => "block.glass",
             BlockKind::Generator => "block.generator",
@@ -74,6 +82,7 @@ impl BlockKind {
 
     pub fn material(self) -> Color {
         match self {
+            BlockKind::SelectionTool => Color::srgb(0.30, 0.86, 0.82),
             BlockKind::Solid => Color::srgb(0.46, 0.48, 0.50),
             BlockKind::Glass => Color::srgba(0.55, 0.82, 0.95, 0.45),
             BlockKind::Generator => Color::srgb(0.52, 0.30, 0.68),
@@ -110,7 +119,10 @@ impl BlockKind {
     }
 
     pub fn has_collision(self) -> bool {
-        !matches!(self, BlockKind::WeldPoint | BlockKind::DrillHead)
+        !matches!(
+            self,
+            BlockKind::SelectionTool | BlockKind::WeldPoint | BlockKind::DrillHead
+        )
     }
 
     pub fn is_factory(self) -> bool {

@@ -3,11 +3,11 @@ use bevy::prelude::*;
 use crate::game::player::controller::{player_intersects_block, FlyCamera};
 use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, GameSettings, PlacementState,
-    SimulationState,
+    SelectionAxis, SelectionBounds, SelectionDrag, SimulationState,
 };
 use crate::game::ui::{InventoryItems, PendingKeyBind, HOTBAR_SLOTS};
 use crate::game::world::blocks::{BlockData, BlockKind};
-use crate::game::world::grid::{grid_to_world, raycast_blocks, WorldBlocks};
+use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::{
     despawn_edit_previews, spawn_block, spawn_edit_preview, BlockEntity, EditPreview,
     EditPreviewKind, HoverMarker, PlacementPreview, WorldRenderAssets,
@@ -63,7 +63,11 @@ pub fn gameplay_input(
         (KeyCode::Digit9, 8),
     ] {
         if keys.just_pressed(key) && index < HOTBAR_SLOTS {
-            placement.selected = index;
+            if placement.selected != index {
+                placement.selection.clear();
+                placement.edit_gesture = None;
+                placement.selected = index;
+            }
         }
     }
 
@@ -102,8 +106,30 @@ pub fn placement_input(
         return;
     }
 
+    if selected_kind(&inventory, &placement) != Some(BlockKind::SelectionTool) {
+        placement.selection.clear();
+    }
+
     let current_place_at = placement.target.map(|target| target.pos + target.normal);
     let current_delete_at = placement.target.map(|target| target.pos);
+    let current_target_pos = placement.target.map(|target| target.pos);
+
+    if selected_kind(&inventory, &placement) == Some(BlockKind::SelectionTool) {
+        handle_selection_tool_input(
+            &mouse_buttons,
+            current_target_pos,
+            &mut placement,
+            &mut world,
+            &block_entities,
+            &mut commands,
+            &render_assets,
+        );
+        despawn_edit_previews(&mut commands, &edit_previews);
+        spawn_selection_previews(&placement, &mut commands, &render_assets);
+        return;
+    }
+
+    placement.selection.clear();
 
     if mouse_buttons.just_pressed(delete_button) {
         match placement.edit_gesture.as_mut() {
@@ -198,6 +224,197 @@ fn selected_place_block(
         kind,
         facing: placement.facing,
     })
+}
+
+fn selected_kind(inventory: &InventoryItems, placement: &PlacementState) -> Option<BlockKind> {
+    inventory.hotbar[placement.selected]
+}
+
+fn handle_selection_tool_input(
+    mouse_buttons: &ButtonInput<MouseButton>,
+    current_target_pos: Option<IVec3>,
+    placement: &mut PlacementState,
+    world: &mut WorldBlocks,
+    block_entities: &Query<(Entity, &BlockEntity)>,
+    commands: &mut Commands,
+    render_assets: &WorldRenderAssets,
+) {
+    let place_button = MouseButton::Left;
+
+    if let Some(drag) = placement.selection.drag.as_mut() {
+        if let Some(current) = current_target_pos {
+            if let Some((axis, offset)) = selection_drag_offset(*drag, current) {
+                drag.axis = Some(axis);
+                drag.offset = offset;
+            }
+        }
+    }
+
+    if mouse_buttons.just_released(place_button) {
+        if let Some(drag) = placement.selection.drag.take() {
+            if drag.offset != IVec3::ZERO {
+                if let Some(bounds) = placement.selection.bounds {
+                    if move_selection(
+                        world,
+                        block_entities,
+                        commands,
+                        render_assets,
+                        bounds,
+                        drag.offset,
+                    ) {
+                        placement.selection.bounds = Some(bounds.moved(drag.offset));
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    if !mouse_buttons.just_pressed(place_button) {
+        return;
+    }
+
+    let Some(pos) = current_target_pos else {
+        return;
+    };
+
+    if let Some(bounds) = placement.selection.bounds {
+        if bounds.contains(pos) {
+            placement.selection.drag = Some(SelectionDrag {
+                start: pos,
+                axis: None,
+                offset: IVec3::ZERO,
+            });
+            return;
+        }
+    }
+
+    if let Some(first) = placement.selection.first_corner.take() {
+        placement.selection.bounds = Some(SelectionBounds::from_corners(first, pos));
+        placement.selection.drag = None;
+    } else {
+        placement.selection.first_corner = Some(pos);
+        placement.selection.bounds = None;
+        placement.selection.drag = None;
+    }
+}
+
+fn selection_drag_offset(drag: SelectionDrag, current: IVec3) -> Option<(SelectionAxis, IVec3)> {
+    let delta = current - drag.start;
+    if delta == IVec3::ZERO {
+        return None;
+    }
+    let axis = drag.axis.unwrap_or_else(|| strongest_axis(delta));
+    let offset = match axis {
+        SelectionAxis::X => axis.offset(delta.x),
+        SelectionAxis::Y => axis.offset(delta.y),
+        SelectionAxis::Z => axis.offset(delta.z),
+    };
+    Some((axis, offset))
+}
+
+fn strongest_axis(delta: IVec3) -> SelectionAxis {
+    if delta.x.abs() >= delta.y.abs() && delta.x.abs() >= delta.z.abs() {
+        SelectionAxis::X
+    } else if delta.y.abs() >= delta.z.abs() {
+        SelectionAxis::Y
+    } else {
+        SelectionAxis::Z
+    }
+}
+
+fn move_selection(
+    world: &mut WorldBlocks,
+    block_entities: &Query<(Entity, &BlockEntity)>,
+    commands: &mut Commands,
+    render_assets: &WorldRenderAssets,
+    bounds: SelectionBounds,
+    offset: IVec3,
+) -> bool {
+    let positions = bounds.positions();
+    let selected: Vec<(IVec3, BlockData)> = positions
+        .iter()
+        .filter_map(|pos| world.blocks.get(pos).copied().map(|block| (*pos, block)))
+        .collect();
+    if selected.is_empty() {
+        return true;
+    }
+
+    let selected_positions: std::collections::HashSet<IVec3> =
+        selected.iter().map(|(pos, _)| *pos).collect();
+    let updated_welds = moved_selection_welds(world, &selected_positions, offset);
+    if selected.iter().any(|(pos, block)| {
+        let target = *pos + offset;
+        target.y < 0
+            || (!selected_positions.contains(&target)
+                && world
+                    .blocks
+                    .get(&target)
+                    .is_some_and(|target_block| target_block.kind.has_collision()))
+            || !block.kind.has_collision()
+    }) {
+        return false;
+    }
+
+    for (pos, _) in &selected {
+        world.remove(pos);
+        if let Some((entity, _)) = block_entities
+            .iter()
+            .find(|(_, block_entity)| block_entity.pos == *pos)
+        {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+
+    for (pos, block) in selected {
+        let target = pos + offset;
+        world.insert(target, block);
+        spawn_block(commands, render_assets, world, target, block);
+    }
+    world.replace_material_welds(updated_welds);
+    true
+}
+
+fn moved_selection_welds(
+    world: &WorldBlocks,
+    selected_positions: &std::collections::HashSet<IVec3>,
+    offset: IVec3,
+) -> std::collections::HashSet<MaterialWeld> {
+    world
+        .material_welds
+        .iter()
+        .filter_map(|weld| {
+            let move_a = selected_positions.contains(&weld.a);
+            let move_b = selected_positions.contains(&weld.b);
+            if move_a != move_b {
+                return None;
+            }
+            let a = if move_a { weld.a + offset } else { weld.a };
+            let b = if move_b { weld.b + offset } else { weld.b };
+            (a != b).then_some(MaterialWeld::new(a, b))
+        })
+        .collect()
+}
+
+fn spawn_selection_previews(
+    placement: &PlacementState,
+    commands: &mut Commands,
+    render_assets: &WorldRenderAssets,
+) {
+    if let Some(first) = placement.selection.first_corner {
+        spawn_edit_preview(commands, render_assets, first, EditPreviewKind::Selection);
+    }
+
+    if let Some(bounds) = placement.selection.bounds {
+        let offset = placement
+            .selection
+            .drag
+            .map(|drag| drag.offset)
+            .unwrap_or(IVec3::ZERO);
+        for pos in bounds.moved(offset).positions() {
+            spawn_edit_preview(commands, render_assets, pos, EditPreviewKind::Selection);
+        }
+    }
 }
 
 fn can_place_block_at(
