@@ -7,6 +7,9 @@ use crate::shared::config::{ConfigAction, GameConfig};
 use crate::shared::i18n::I18n;
 use crate::shared::save::SaveState;
 
+use super::components::{
+    BUTTON_BG, BUTTON_BORDER, BUTTON_HOVER_BG, BUTTON_HOVER_BORDER, BUTTON_PRESSED_BG,
+};
 use super::types::{
     BackpackPanel, CarriedIcon, CarriedItem, CarriedLabel, Crosshair, CurrentSaveText,
     DeleteSelectionModeText, FovText, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText,
@@ -17,9 +20,6 @@ use super::types::{
     SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider,
     SettingsSliderFill, SettingsSliderKnob, SettingsStatusText, SettingsTab, SettingsValue,
     SettingsValueText, SimulationText, SlotArea, SlotLabel, UiScaleText,
-};
-use super::components::{
-    BUTTON_BG, BUTTON_BORDER, BUTTON_HOVER_BG, BUTTON_HOVER_BORDER, BUTTON_PRESSED_BG,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -707,6 +707,7 @@ pub fn update_inventory_slots(
     mut slot_query: Query<
         (
             &InventorySlot,
+            &Interaction,
             &Children,
             &mut BackgroundColor,
             &mut BorderColor,
@@ -715,7 +716,7 @@ pub fn update_inventory_slots(
     >,
     mut labels: Query<&mut Text, (With<SlotLabel>, Without<HotbarText>, Without<CarriedLabel>)>,
 ) {
-    for (slot, children, mut background, mut border) in &mut slot_query {
+    for (slot, interaction, children, mut background, mut border) in &mut slot_query {
         let item = match slot.area {
             SlotArea::Hotbar => inventory.hotbar[slot.index],
             SlotArea::Backpack => inventory.backpack[slot.index],
@@ -758,7 +759,15 @@ pub fn update_save_list_ui(
         Query<&mut Text, With<SaveListTitle>>,
         Query<&mut Text, With<SaveListLabel>>,
     )>,
-    mut slots: Query<(&SaveListAction, &Interaction, &Children, &mut BackgroundColor), With<Button>>,
+    mut slots: Query<
+        (
+            &SaveListAction,
+            &Interaction,
+            &Children,
+            &mut BackgroundColor,
+        ),
+        With<Button>,
+    >,
 ) {
     if let Ok(mut title) = text_sets.p0().get_single_mut() {
         title.sections[0].value = match *mode {
