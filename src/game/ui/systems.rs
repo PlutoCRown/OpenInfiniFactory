@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 
 use crate::game::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
 use crate::shared::config::{ConfigAction, GameConfig};
@@ -6,9 +7,9 @@ use crate::shared::i18n::I18n;
 use crate::shared::save::SaveState;
 
 use super::types::{
-    BackpackPanel, CarriedItem, CarriedLabel, Crosshair, CurrentSaveText, DeleteSelectionModeText,
-    FovText, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText, HotbarText,
-    InGameHudStyle, InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle,
+    BackpackPanel, CarriedIcon, CarriedItem, CarriedLabel, Crosshair, CurrentSaveText,
+    DeleteSelectionModeText, FovText, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText,
+    HotbarText, InGameHudStyle, InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle,
     KeyBindingButton, KeyBindingLabel, LanguageText, LocalizedText, MainMenuPanel, PausePanel,
     PendingKeyBind, PlaceSelectionModeText, SaveListAction, SaveListLabel, SaveListPanel,
     SaveListTitle, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
@@ -71,7 +72,6 @@ pub fn update_status_ui(
     simulation: Res<SimulationState>,
     settings: Res<GameSettings>,
     save_state: Res<SaveState>,
-    carried: Res<CarriedItem>,
     i18n: Res<I18n>,
     mut hotbar: Query<&mut Text, (With<HotbarText>, Without<SlotLabel>, Without<CarriedLabel>)>,
     mut inventory_title: Query<
@@ -86,25 +86,12 @@ pub fn update_status_ui(
             Without<CurrentSaveText>,
         ),
     >,
-    mut carried_label: Query<
-        &mut Text,
-        (
-            With<CarriedLabel>,
-            Without<SlotLabel>,
-            Without<HotbarText>,
-            Without<InventoryTitle>,
-            Without<FovText>,
-            Without<SimulationText>,
-            Without<CurrentSaveText>,
-        ),
-    >,
     mut fov_text: Query<
         &mut Text,
         (
             With<FovText>,
             Without<SlotLabel>,
             Without<HotbarText>,
-            Without<CarriedLabel>,
             Without<InventoryTitle>,
             Without<UiScaleText>,
             Without<SimulationText>,
@@ -171,13 +158,6 @@ pub fn update_status_ui(
         );
     }
 
-    if let Ok(mut text) = carried_label.get_single_mut() {
-        text.sections[0].value = carried
-            .item()
-            .map(|kind| i18n.fmt("inventory.holding", &[("item", i18n.text(kind.name_key()))]))
-            .unwrap_or_default();
-    }
-
     if let Ok(mut text) = fov_text.get_single_mut() {
         text.sections[0].value = format!("FOV {:.0}", settings.fov_degrees);
     }
@@ -214,6 +194,44 @@ pub fn update_status_ui(
             .as_ref()
             .map(|name| i18n.fmt("save.world", &[("name", name.clone())]))
             .unwrap_or_else(|| i18n.text("save.no_world_loaded"));
+    }
+}
+
+pub fn update_carried_item_ui(
+    carried: Res<CarriedItem>,
+    i18n: Res<I18n>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut icon: Query<(&mut Style, &mut BackgroundColor), With<CarriedIcon>>,
+    mut label: Query<&mut Text, With<CarriedLabel>>,
+) {
+    let Ok((mut style, mut background)) = icon.get_single_mut() else {
+        return;
+    };
+
+    let Some(item) = carried.item() else {
+        style.display = Display::None;
+        if let Ok(mut text) = label.get_single_mut() {
+            text.sections[0].value.clear();
+        }
+        return;
+    };
+
+    let Ok(window) = windows.get_single() else {
+        return;
+    };
+
+    let Some(cursor) = window.cursor_position() else {
+        style.display = Display::None;
+        return;
+    };
+
+    style.display = Display::Flex;
+    style.left = Val::Px(cursor.x + 14.0);
+    style.top = Val::Px(cursor.y + 14.0);
+    *background = slot_color(item).with_alpha(0.9).into();
+
+    if let Ok(mut text) = label.get_single_mut() {
+        text.sections[0].value = i18n.text(short_item_name(item));
     }
 }
 

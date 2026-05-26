@@ -169,6 +169,9 @@ pub(crate) struct SlotLabel;
 #[derive(Component)]
 pub(crate) struct CarriedLabel;
 
+#[derive(Component)]
+pub(crate) struct CarriedIcon;
+
 #[derive(Component, Clone, Copy)]
 pub(crate) struct InventorySlot {
     pub area: SlotArea,

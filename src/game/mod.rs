@@ -127,6 +127,7 @@ impl Plugin for GamePlugin {
                     ui::update_hud_visibility,
                     ui::update_generator_ui,
                     ui::update_inventory_slots,
+                    ui::update_carried_item_ui,
                     ui::update_save_list_ui,
                     ui::apply_ui_font,
                     sync_cursor_grab,

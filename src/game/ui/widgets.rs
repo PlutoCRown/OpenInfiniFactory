@@ -3,7 +3,7 @@ use bevy::prelude::*;
 
 use crate::game::world::blocks::BlockKind;
 
-use super::components::menu_button;
+use super::components::{default_button_size, default_font_size, menu_button};
 use super::types::{
     AreaKind, InventoryItem, InventorySlot, KeyBindingButton, KeyBindingLabel, LanguageText,
     MainMenuAction, PauseAction, SaveListAction, SaveListLabel, SettingsAction, SimulationAction,
@@ -15,8 +15,8 @@ pub(super) fn spawn_slot(parent: &mut ChildBuilder, area: SlotArea, index: usize
         .spawn((
             ButtonBundle {
                 style: Style {
-                    width: Val::Px(54.0),
-                    height: Val::Px(54.0),
+                    width: Val::Px(default_button_size(54.0)),
+                    height: Val::Px(default_button_size(54.0)),
                     border: UiRect::all(Val::Px(2.0)),
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
@@ -34,7 +34,7 @@ pub(super) fn spawn_slot(parent: &mut ChildBuilder, area: SlotArea, index: usize
                     text: Text::from_section(
                         "",
                         TextStyle {
-                            font_size: 12.0,
+                            font_size: default_font_size(12.0),
                             color: Color::WHITE,
                             ..default()
                         },
@@ -72,7 +72,7 @@ pub(super) fn spawn_language_settings_button(
                 TextBundle::from_section(
                     label,
                     TextStyle {
-                        font_size: 14.0,
+                        font_size: default_font_size(14.0),
                         color: Color::WHITE,
                         ..default()
                     },
@@ -95,7 +95,7 @@ pub(super) fn spawn_generator_button(
                 TextBundle::from_section(
                     label,
                     TextStyle {
-                        font_size: 14.0,
+                        font_size: default_font_size(14.0),
                         color: Color::WHITE,
                         ..default()
                     },
@@ -121,7 +121,7 @@ pub(super) fn spawn_localized_settings_button(
             TextBundle::from_section(
                 label,
                 TextStyle {
-                    font_size: 14.0,
+                    font_size: default_font_size(14.0),
                     color: Color::WHITE,
                     ..default()
                 },
@@ -160,7 +160,7 @@ pub(super) fn spawn_save_slot_button(parent: &mut ChildBuilder, index: usize) {
                 TextBundle::from_section(
                     "",
                     TextStyle {
-                        font_size: 15.0,
+                        font_size: default_font_size(15.0),
                         color: Color::WHITE,
                         ..default()
                     },
@@ -178,7 +178,7 @@ pub(super) fn spawn_save_back_button(parent: &mut ChildBuilder) {
                 TextBundle::from_section(
                     "",
                     TextStyle {
-                        font_size: 16.0,
+                        font_size: default_font_size(16.0),
                         color: Color::WHITE,
                         ..default()
                     },
@@ -202,7 +202,7 @@ fn spawn_localized_button<'a, A: Bundle>(
             TextBundle::from_section(
                 label,
                 TextStyle {
-                    font_size,
+                    font_size: default_font_size(font_size),
                     color: Color::WHITE,
                     ..default()
                 },

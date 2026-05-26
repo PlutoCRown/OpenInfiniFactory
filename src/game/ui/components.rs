@@ -6,6 +6,16 @@ use super::types::LocalizedText;
 
 const BUTTON_BG: Color = Color::srgba(0.22, 0.24, 0.26, 0.96);
 const BUTTON_BORDER: Color = Color::srgb(0.38, 0.39, 0.40);
+const DEFAULT_BUTTON_SCALE: f32 = 1.2;
+const DEFAULT_TEXT_SCALE: f32 = 1.5;
+
+pub fn default_font_size(font_size: f32) -> f32 {
+    font_size * DEFAULT_TEXT_SCALE
+}
+
+pub fn default_button_size(size: f32) -> f32 {
+    size * DEFAULT_BUTTON_SCALE
+}
 
 pub fn transparent_node(style: Style) -> NodeBundle {
     NodeBundle {
@@ -19,7 +29,7 @@ pub fn text(value: impl Into<String>, font_size: f32, color: Color) -> TextBundl
     TextBundle::from_section(
         value,
         TextStyle {
-            font_size,
+            font_size: default_font_size(font_size),
             color,
             ..default()
         },
@@ -42,8 +52,8 @@ pub fn menu_button(height: f32) -> ButtonBundle {
     ButtonBundle {
         style: Style {
             width: Val::Percent(100.0),
-            min_width: Val::Px(92.0),
-            height: Val::Px(height),
+            min_width: Val::Px(default_button_size(92.0)),
+            height: Val::Px(default_button_size(height)),
             border: UiRect::all(Val::Px(1.0)),
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
@@ -67,7 +77,7 @@ pub fn root_node() -> NodeBundle {
 pub fn flex_row(height: f32, column_gap: f32) -> NodeBundle {
     transparent_node(Style {
         width: Val::Percent(100.0),
-        height: Val::Px(height),
+        height: Val::Px(default_button_size(height)),
         display: Display::Flex,
         align_items: AlignItems::Center,
         column_gap: Val::Px(column_gap),

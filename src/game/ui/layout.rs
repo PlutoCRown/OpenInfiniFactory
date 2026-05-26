@@ -4,12 +4,15 @@ use crate::shared::config::ConfigAction;
 use crate::shared::i18n::I18n;
 use crate::shared::save::SAVE_SLOTS;
 
-use super::components::{flex_row, localized_text, root_node, text, transparent_node};
+use super::components::{
+    default_button_size, default_font_size, flex_row, localized_text, root_node, text,
+    transparent_node,
+};
 use super::theme::{absolute_text_bundle, panel_bundle, STATUS_TEXT};
 use super::types::{
-    BackpackPanel, CarriedLabel, Crosshair, CurrentSaveText, DeleteSelectionModeText, FovText,
-    GeneratorAction, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText, HotbarText,
-    InGameHudStyle, InGameHudVisibility, InventoryTitle, MainMenuAction, MainMenuPanel,
+    BackpackPanel, CarriedIcon, CarriedLabel, Crosshair, CurrentSaveText, DeleteSelectionModeText,
+    FovText, GeneratorAction, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText,
+    HotbarText, InGameHudStyle, InGameHudVisibility, InventoryTitle, MainMenuAction, MainMenuPanel,
     PauseAction, PausePanel, PlaceSelectionModeText, SaveListPanel, SaveListTitle, SettingsAction,
     SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsStatusText,
     SimulationAction, SimulationText, SlotArea, UiScaleText, BACKPACK_SLOTS, HOTBAR_SLOTS,
@@ -36,7 +39,7 @@ pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
 }
 
 fn spawn_generator_panel(root: &mut ChildBuilder, i18n: &I18n) {
-    root.spawn((panel_bundle(420.0, 250.0, -210.0, -125.0), GeneratorPanel))
+    root.spawn((panel_bundle(480.0, 320.0, -240.0, -160.0), GeneratorPanel))
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "generator.title", 26.0, Color::WHITE));
             panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
@@ -130,8 +133,8 @@ fn spawn_status_overlays(root: &mut ChildBuilder) {
 fn spawn_simulation_buttons(root: &mut ChildBuilder, i18n: &I18n) {
     root.spawn((
         transparent_node(Style {
-            width: Val::Px(260.0),
-            height: Val::Px(38.0),
+            width: Val::Px(default_button_size(260.0)),
+            height: Val::Px(default_button_size(38.0)),
             position_type: PositionType::Absolute,
             right: Val::Px(18.0),
             top: Val::Px(182.0),
@@ -161,13 +164,13 @@ fn spawn_hotbar(root: &mut ChildBuilder) {
     root.spawn((
         NodeBundle {
             style: Style {
-                width: Val::Px(540.0),
-                height: Val::Px(58.0),
+                width: Val::Px(default_button_size(540.0)),
+                height: Val::Px(default_button_size(58.0)),
                 position_type: PositionType::Absolute,
                 left: Val::Percent(50.0),
                 bottom: Val::Px(22.0),
                 margin: UiRect {
-                    left: Val::Px(-270.0),
+                    left: Val::Px(-default_button_size(270.0)),
                     ..default()
                 },
                 display: Display::Flex,
@@ -209,7 +212,7 @@ fn spawn_inventory_panel(root: &mut ChildBuilder, i18n: &I18n) {
 }
 
 fn spawn_pause_panel(root: &mut ChildBuilder, i18n: &I18n) {
-    root.spawn((panel_bundle(380.0, 450.0, -190.0, -225.0), PausePanel))
+    root.spawn((panel_bundle(420.0, 560.0, -210.0, -280.0), PausePanel))
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "state.paused", 30.0, Color::WHITE));
             for (key, action) in [
@@ -227,7 +230,7 @@ fn spawn_pause_panel(root: &mut ChildBuilder, i18n: &I18n) {
 }
 
 fn spawn_settings_panel(root: &mut ChildBuilder, i18n: &I18n) {
-    root.spawn((panel_bundle(760.0, 560.0, -380.0, -280.0), SettingsPanel))
+    root.spawn((panel_bundle(840.0, 660.0, -420.0, -330.0), SettingsPanel))
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "settings.title", 30.0, Color::WHITE));
             spawn_settings_tabs(panel, i18n);
@@ -353,7 +356,7 @@ fn spawn_settings_footer(panel: &mut ChildBuilder, i18n: &I18n) {
 }
 
 fn spawn_main_menu(root: &mut ChildBuilder, i18n: &I18n) {
-    root.spawn((panel_bundle(360.0, 260.0, -180.0, -130.0), MainMenuPanel))
+    root.spawn((panel_bundle(420.0, 340.0, -210.0, -170.0), MainMenuPanel))
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "main.title", 30.0, Color::WHITE));
             for (key, action) in [
@@ -367,7 +370,7 @@ fn spawn_main_menu(root: &mut ChildBuilder, i18n: &I18n) {
 }
 
 fn spawn_save_list(root: &mut ChildBuilder) {
-    root.spawn((panel_bundle(460.0, 460.0, -230.0, -230.0), SaveListPanel))
+    root.spawn((panel_bundle(520.0, 560.0, -260.0, -280.0), SaveListPanel))
         .with_children(|panel| {
             panel.spawn((text("", 26.0, Color::WHITE), SaveListTitle));
             for index in 0..SAVE_SLOTS {
@@ -379,43 +382,60 @@ fn spawn_save_list(root: &mut ChildBuilder) {
 
 fn spawn_carried_label(root: &mut ChildBuilder) {
     root.spawn((
-        TextBundle {
-            text: Text::from_section(
-                "",
-                TextStyle {
-                    font_size: 18.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
+        NodeBundle {
             style: Style {
                 position_type: PositionType::Absolute,
-                left: Val::Percent(50.0),
-                top: Val::Percent(50.0),
-                margin: UiRect {
-                    left: Val::Px(18.0),
-                    top: Val::Px(18.0),
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
+                width: Val::Px(default_button_size(46.0)),
+                height: Val::Px(default_button_size(46.0)),
+                display: Display::None,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(Val::Px(2.0)),
+                ..default()
+            },
+            border_color: Color::srgb(1.0, 1.0, 1.0).into(),
+            background_color: Color::srgba(0.18, 0.18, 0.19, 0.86).into(),
+            z_index: ZIndex::Global(100),
+            ..default()
+        },
+        CarriedIcon,
+    ))
+    .with_children(|icon| {
+        icon.spawn((
+            TextBundle {
+                text: Text::from_section(
+                    "",
+                    TextStyle {
+                        font_size: default_font_size(12.0),
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                )
+                .with_justify(JustifyText::Center),
+                style: Style {
+                    margin: UiRect::all(Val::Px(2.0)),
                     ..default()
                 },
                 ..default()
             },
-            ..default()
-        },
-        CarriedLabel,
-    ));
+            CarriedLabel,
+        ));
+    });
 }
 
 fn inventory_panel_bundle() -> NodeBundle {
     NodeBundle {
         style: Style {
-            width: Val::Px(540.0),
-            height: Val::Px(350.0),
+            width: Val::Px(640.0),
+            height: Val::Px(430.0),
             position_type: PositionType::Absolute,
             left: Val::Percent(50.0),
             top: Val::Percent(50.0),
             margin: UiRect {
-                left: Val::Px(-270.0),
-                top: Val::Px(-175.0),
+                left: Val::Px(-320.0),
+                top: Val::Px(-215.0),
                 ..default()
             },
             padding: UiRect::all(Val::Px(18.0)),
@@ -436,8 +456,8 @@ fn inventory_grid_bundle() -> NodeBundle {
         grid_template_rows: RepeatedGridTrack::flex(3, 1.0),
         row_gap: Val::Px(4.0),
         column_gap: Val::Px(4.0),
-        width: Val::Px(504.0),
-        height: Val::Px(164.0),
+        width: Val::Px(605.0),
+        height: Val::Px(197.0),
         ..default()
     })
 }
@@ -448,7 +468,7 @@ fn key_bindings_grid_bundle() -> NodeBundle {
         grid_template_columns: RepeatedGridTrack::flex(2, 1.0),
         grid_template_rows: RepeatedGridTrack::flex(6, 1.0),
         width: Val::Percent(100.0),
-        height: Val::Px(300.0),
+        height: Val::Px(360.0),
         row_gap: Val::Px(6.0),
         column_gap: Val::Px(8.0),
         ..default()

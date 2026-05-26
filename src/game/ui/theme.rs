@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+use super::components::default_font_size;
+
 pub const PANEL_BG: Color = Color::srgba(0.08, 0.09, 0.10, 0.96);
 pub const STATUS_TEXT: Color = Color::srgb(0.88, 0.96, 1.0);
 
@@ -40,7 +42,7 @@ pub fn absolute_text_bundle(
         text: Text::from_section(
             value,
             TextStyle {
-                font_size,
+                font_size: default_font_size(font_size),
                 color,
                 ..default()
             },
