@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 use std::collections::{HashSet, VecDeque};
 
-use crate::game::world::blocks::{BlockData, Facing};
+use crate::game::world::blocks::BlockData;
+use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialWeld, WorldBlocks};
 
 use super::signal_offsets;

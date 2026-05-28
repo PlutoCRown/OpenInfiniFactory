@@ -3,7 +3,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::game::state::{BuilderMode, SimulationState};
 use crate::game::world::animation::{pair_block_animations, SIMULATION_TURN_SECONDS};
-use crate::game::world::blocks::{BlockData, BlockKind, Facing, MaterialKind};
+use crate::game::world::blocks::{BlockData, BlockKind, MaterialKind};
+use crate::game::world::direction::Facing;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_with_animations, BlockEntity, WorldRenderAssets,
@@ -100,10 +101,11 @@ fn sync_generated_markers(
     let welders: Vec<(IVec3, IVec3, Facing)> = world
         .blocks
         .iter()
-        .filter_map(|(pos, block)| match block.kind {
-            BlockKind::Welder => Some((*pos, block.facing.forward_ivec3(), block.facing)),
-            BlockKind::DownWelder => Some((*pos, IVec3::NEG_Y, Facing::North)),
-            _ => None,
+        .filter_map(|(pos, block)| {
+            block
+                .kind
+                .weld_marker(block.facing)
+                .map(|(offset, facing)| (*pos, offset, facing))
         })
         .collect();
 
@@ -124,7 +126,10 @@ fn sync_generated_markers(
         .blocks
         .iter()
         .filter_map(|(pos, block)| {
-            (block.kind == BlockKind::Blocker).then_some((*pos, block.facing))
+            block
+                .kind
+                .blocker_marker(block.facing)
+                .map(|(_, facing)| (*pos, facing))
         })
         .collect();
 
@@ -148,7 +153,12 @@ fn sync_generated_markers(
     let drills: Vec<(IVec3, Facing)> = world
         .blocks
         .iter()
-        .filter_map(|(pos, block)| (block.kind == BlockKind::Drill).then_some((*pos, block.facing)))
+        .filter_map(|(pos, block)| {
+            block
+                .kind
+                .drill_marker(block.facing)
+                .map(|(_, facing)| (*pos, facing))
+        })
         .collect();
 
     for (pos, facing) in drills {
@@ -174,7 +184,7 @@ fn spawn_materials(world: &mut WorldBlocks, turn: u64) {
         .blocks
         .iter()
         .filter_map(|(pos, block)| {
-            (block.kind == BlockKind::Generator).then_some((*pos, block.facing))
+            block.kind.is_generator().then_some((*pos, block.facing))
         })
         .collect();
 
@@ -207,7 +217,7 @@ fn weld_material_structures(world: &mut WorldBlocks) {
     let weld_points: Vec<IVec3> = world
         .blocks
         .iter()
-        .filter_map(|(pos, block)| (block.kind == BlockKind::WeldPoint).then_some(*pos))
+        .filter_map(|(pos, block)| block.kind.is_weld_point().then_some(*pos))
         .collect();
 
     for weld_point in weld_points {
@@ -220,7 +230,7 @@ fn weld_material_structures(world: &mut WorldBlocks) {
             if !world
                 .blocks
                 .get(&neighbor)
-                .is_some_and(|block| block.kind == BlockKind::WeldPoint)
+                .is_some_and(|block| block.kind.is_weld_point())
             {
                 continue;
             }
@@ -252,11 +262,10 @@ fn move_conveyed_materials(world: &mut WorldBlocks) {
         .blocks
         .iter()
         .filter_map(|(pos, block)| {
-            match block.kind {
-                BlockKind::Conveyor => Some((*pos, block.facing, IVec3::Y)),
-                BlockKind::ReverseConveyor => Some((*pos, block.facing, IVec3::NEG_Y)),
-                _ => None,
-            }
+            block
+                .kind
+                .conveyor_source_offset()
+                .map(|source_offset| (*pos, block.facing, source_offset))
         })
         .collect();
 
@@ -281,7 +290,7 @@ fn lift_structures(world: &mut WorldBlocks) {
     let lifters: Vec<IVec3> = world
         .blocks
         .iter()
-        .filter_map(|(pos, block)| (block.kind == BlockKind::Lifter).then_some(*pos))
+        .filter_map(|(pos, block)| block.kind.is_lifter().then_some(*pos))
         .collect();
 
     for pos in lifters {
@@ -308,10 +317,11 @@ fn rotate_structures(world: &mut WorldBlocks) {
     let rotators: Vec<(IVec3, bool)> = world
         .blocks
         .iter()
-        .filter_map(|(pos, block)| match block.kind {
-            BlockKind::Rotator => Some((*pos, true)),
-            BlockKind::CounterRotator => Some((*pos, false)),
-            _ => None,
+        .filter_map(|(pos, block)| {
+            block
+                .kind
+                .rotation_direction()
+                .map(|direction| (*pos, direction.is_clockwise()))
         })
         .collect();
 
@@ -335,7 +345,7 @@ fn drill_materials(world: &mut WorldBlocks) {
     let drills: Vec<(IVec3, Facing)> = world
         .blocks
         .iter()
-        .filter_map(|(pos, block)| (block.kind == BlockKind::Drill).then_some((*pos, block.facing)))
+        .filter_map(|(pos, block)| block.kind.is_drill().then_some((*pos, block.facing)))
         .collect();
 
     for (pos, facing) in drills {
@@ -352,7 +362,7 @@ fn drill_materials(world: &mut WorldBlocks) {
     let drill_heads: Vec<IVec3> = world
         .blocks
         .iter()
-        .filter_map(|(pos, block)| (block.kind == BlockKind::DrillHead).then_some(*pos))
+        .filter_map(|(pos, block)| block.kind.is_drill_head().then_some(*pos))
         .collect();
 
     for pos in drill_heads {
@@ -377,7 +387,7 @@ fn fire_lasers(
     let lasers: Vec<(IVec3, Facing)> = world
         .blocks
         .iter()
-        .filter_map(|(pos, block)| (block.kind == BlockKind::Laser).then_some((*pos, block.facing)))
+        .filter_map(|(pos, block)| block.kind.is_laser().then_some((*pos, block.facing)))
         .collect();
 
     for (pos, facing) in lasers {
@@ -397,7 +407,7 @@ fn fire_lasers(
             }
             if block.kind.is_factory()
                 || block.kind.is_scene()
-                || block.kind == BlockKind::BlockerHead
+                || block.kind.is_blocker_head()
             {
                 break;
             }
@@ -414,7 +424,7 @@ fn push_powered_pistons(
         .blocks
         .iter()
         .filter_map(|(pos, block)| {
-            (block.kind == BlockKind::Piston).then_some((*pos, block.facing))
+            block.kind.is_piston().then_some((*pos, block.facing))
         })
         .collect();
 

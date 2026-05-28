@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::game::world::blocks::BlockData;
-use crate::game::world::blocks::Facing;
+use crate::game::world::direction::Facing;
 use crate::game::world::grid::TargetHit;
 
 #[derive(Resource)]

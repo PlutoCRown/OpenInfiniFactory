@@ -1,8 +1,6 @@
 use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
 
-use crate::game::world::blocks::BlockKind;
-
 use super::components::{default_button_size, default_font_size, menu_button};
 use super::types::{
     AreaKind, InventoryItem, InventorySlot, KeyBindingButton, KeyBindingLabel, MainMenuAction,
@@ -478,74 +476,13 @@ fn spawn_localized_button<'a, A: Bundle>(
 pub(super) fn slot_color(item: InventoryItem) -> Color {
     match item {
         InventoryItem::Area(AreaKind::Selection) => Color::srgb(0.22, 0.66, 0.62),
-        InventoryItem::Block(BlockKind::Solid) => Color::srgb(0.38, 0.39, 0.40),
-        InventoryItem::Block(kind) => block_slot_color(kind),
-    }
-}
-
-fn block_slot_color(kind: BlockKind) -> Color {
-    match kind {
-        BlockKind::Solid => Color::srgb(0.38, 0.39, 0.40),
-        BlockKind::Grass => Color::srgb(0.27, 0.56, 0.20),
-        BlockKind::Stone => Color::srgb(0.42, 0.42, 0.40),
-        BlockKind::Dirt => Color::srgb(0.42, 0.26, 0.14),
-        BlockKind::Planks => Color::srgb(0.62, 0.40, 0.20),
-        BlockKind::Glass => Color::srgb(0.42, 0.66, 0.76),
-        BlockKind::Generator => Color::srgb(0.42, 0.20, 0.56),
-        BlockKind::Welder => Color::srgb(0.62, 0.12, 0.12),
-        BlockKind::DownWelder => Color::srgb(0.78, 0.22, 0.14),
-        BlockKind::Conveyor => Color::srgb(0.08, 0.20, 0.26),
-        BlockKind::ReverseConveyor => Color::srgb(0.10, 0.26, 0.32),
-        BlockKind::Detector => Color::srgb(0.12, 0.34, 0.62),
-        BlockKind::Wire => Color::srgb(0.88, 0.62, 0.12),
-        BlockKind::Piston => Color::srgb(0.66, 0.43, 0.20),
-        BlockKind::Lifter => Color::srgb(0.18, 0.48, 0.62),
-        BlockKind::Rotator => Color::srgb(0.42, 0.26, 0.64),
-        BlockKind::CounterRotator => Color::srgb(0.54, 0.22, 0.68),
-        BlockKind::Blocker => Color::srgb(0.50, 0.32, 0.20),
-        BlockKind::Drill => Color::srgb(0.24, 0.26, 0.30),
-        BlockKind::Laser => Color::srgb(0.72, 0.12, 0.26),
-        BlockKind::Goal => Color::srgb(0.24, 0.56, 0.30),
-        BlockKind::Material => Color::srgb(0.74, 0.74, 0.78),
-        BlockKind::WeldPoint => Color::srgb(0.86, 0.16, 0.12),
-        BlockKind::BlockerHead => Color::srgb(0.58, 0.36, 0.18),
-        BlockKind::DrillHead => Color::srgb(0.10, 0.11, 0.12),
+        InventoryItem::Block(kind) => kind.slot_color(),
     }
 }
 
 pub(super) fn short_item_name(item: InventoryItem) -> &'static str {
     match item {
         InventoryItem::Area(AreaKind::Selection) => "short.area.selection",
-        InventoryItem::Block(kind) => short_block_name(kind),
-    }
-}
-
-fn short_block_name(kind: BlockKind) -> &'static str {
-    match kind {
-        BlockKind::Solid => "short.solid",
-        BlockKind::Grass => "short.grass",
-        BlockKind::Stone => "short.stone",
-        BlockKind::Dirt => "short.dirt",
-        BlockKind::Planks => "short.planks",
-        BlockKind::Glass => "short.glass",
-        BlockKind::Generator => "short.generator",
-        BlockKind::Welder => "short.welder",
-        BlockKind::DownWelder => "short.down_welder",
-        BlockKind::Conveyor => "short.conveyor",
-        BlockKind::ReverseConveyor => "short.reverse_conveyor",
-        BlockKind::Detector => "short.detector",
-        BlockKind::Wire => "short.wire",
-        BlockKind::Piston => "short.piston",
-        BlockKind::Lifter => "short.lifter",
-        BlockKind::Rotator => "short.rotator",
-        BlockKind::CounterRotator => "short.counter_rotator",
-        BlockKind::Blocker => "short.blocker",
-        BlockKind::Drill => "short.drill",
-        BlockKind::Laser => "short.laser",
-        BlockKind::Goal => "short.goal",
-        BlockKind::Material => "short.material",
-        BlockKind::WeldPoint => "short.weld_point",
-        BlockKind::BlockerHead => "short.blocker_head",
-        BlockKind::DrillHead => "short.drill_head",
+        InventoryItem::Block(kind) => kind.short_name_key(),
     }
 }

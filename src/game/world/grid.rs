@@ -2,7 +2,8 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::game::world::blocks::{BlockData, BlockKind, Facing, MaterialKind};
+use crate::game::world::blocks::{BlockData, BlockKind, MaterialKind};
+use crate::game::world::direction::Facing;
 
 pub const REACH: f32 = 12.0;
 pub const FLOOR_RADIUS: i32 = 12;
@@ -112,7 +113,7 @@ impl WorldBlocks {
         if !self
             .blocks
             .get(&pos)
-            .is_some_and(|block| block.kind == BlockKind::Generator)
+            .is_some_and(|block| block.kind.is_generator())
         {
             return;
         }

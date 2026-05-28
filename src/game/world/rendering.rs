@@ -3,7 +3,8 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::game::world::animation::{AnimatedBlock, BlockAnimation, EDIT_ANIMATION_SECONDS};
-use crate::game::world::blocks::{BlockData, BlockKind, Facing};
+use crate::game::world::blocks::{BlockData, BlockKind};
+use crate::game::world::direction::Facing;
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
 
@@ -261,7 +262,7 @@ fn spawn_block_model(
             });
         }
 
-        if data.kind == BlockKind::Goal {
+        if data.kind.has_goal_topper() {
             parent.spawn(PbrBundle {
                 mesh: assets.goal_top.clone(),
                 material: assets.goal_top_material.clone(),
@@ -270,7 +271,7 @@ fn spawn_block_model(
             });
         }
 
-        if data.kind == BlockKind::WeldPoint {
+        if data.kind.is_weld_point() {
             for offset in signal_offsets() {
                 let neighbor = pos + offset;
                 if world
@@ -289,7 +290,7 @@ fn spawn_block_model(
             }
         }
 
-        if data.kind == BlockKind::Wire {
+        if data.kind.is_wire() {
             for offset in signal_offsets() {
                 let neighbor = pos + offset;
                 if world
@@ -311,12 +312,9 @@ fn spawn_block_model(
 }
 
 fn weld_point_connects_to(block: &BlockData, connector_from_block: IVec3) -> bool {
-    match block.kind {
-        BlockKind::WeldPoint => true,
-        BlockKind::Welder => connector_from_block == block.facing.forward_ivec3(),
-        BlockKind::DownWelder => connector_from_block == IVec3::NEG_Y,
-        _ => false,
-    }
+    block
+        .kind
+        .connects_to_weld_point(*block, connector_from_block)
 }
 
 fn local_connector_offset(data: BlockData, offset: IVec3) -> IVec3 {
@@ -329,12 +327,8 @@ fn local_connector_offset(data: BlockData, offset: IVec3) -> IVec3 {
 
 fn wire_connects_to(block: &BlockData, wire_from_block: IVec3) -> bool {
     match block.kind {
-        BlockKind::Wire => true,
-        BlockKind::Detector
-        | BlockKind::Piston
-        | BlockKind::Blocker
-        | BlockKind::Laser
-        | BlockKind::Drill => wire_from_block != block.facing.forward_ivec3(),
+        kind if kind.is_wire() => true,
+        kind if kind.blocks_wire_connector() => wire_from_block != block.facing.forward_ivec3(),
         _ => false,
     }
 }

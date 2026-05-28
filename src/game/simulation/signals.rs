@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::game::world::blocks::{BlockKind, Facing};
+use crate::game::world::blocks::BlockKind;
+use crate::game::world::direction::Facing;
 use crate::game::world::grid::WorldBlocks;
 
 use super::signal_offsets;
@@ -28,7 +29,7 @@ impl SignalNetworkCache {
         self.initialized = true;
 
         for (&pos, block) in &world.blocks {
-            if block.kind != BlockKind::Wire || self.wire_components.contains_key(&pos) {
+            if !block.kind.is_wire() || self.wire_components.contains_key(&pos) {
                 continue;
             }
 
@@ -50,12 +51,10 @@ impl SignalNetworkCache {
         }
 
         for (&pos, block) in &world.blocks {
-            match block.kind {
-                BlockKind::Detector => self.cache_detector(pos, block.facing),
-                BlockKind::Piston | BlockKind::Blocker | BlockKind::Drill | BlockKind::Laser => {
-                    self.cache_powered_device(pos, block.facing)
-                }
-                _ => {}
+            if block.kind.is_detector() {
+                self.cache_detector(pos, block.facing);
+            } else if block.kind.is_powered_device() {
+                self.cache_powered_device(pos, block.facing);
             }
         }
     }
@@ -127,7 +126,7 @@ fn detector_is_active(world: &WorldBlocks, pos: IVec3) -> bool {
     let Some(block) = world.blocks.get(&pos) else {
         return false;
     };
-    if block.kind != BlockKind::Detector {
+    if !block.kind.is_detector() {
         return false;
     }
 
@@ -142,5 +141,5 @@ fn is_wire_at(world: &WorldBlocks, pos: IVec3) -> bool {
     world
         .blocks
         .get(&pos)
-        .is_some_and(|block| block.kind == BlockKind::Wire)
+        .is_some_and(|block| block.kind.is_wire())
 }

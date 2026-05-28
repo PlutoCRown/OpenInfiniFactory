@@ -155,7 +155,7 @@ pub fn placement_input(
             world
                 .blocks
                 .get(&pos)
-                .is_some_and(|block| block.kind == BlockKind::Generator)
+                .is_some_and(|block| block.kind.is_generator())
         })
     {
         placement.generator_panel = current_target_pos;
@@ -498,13 +498,14 @@ fn despawn_block_entities(commands: &mut Commands, block_entities: &Query<(Entit
 
 fn refresh_edit_generated_markers(world: &mut WorldBlocks) {
     world.clear_generated_markers();
-    let welders: Vec<(IVec3, IVec3, crate::game::world::blocks::Facing)> = world
+    let welders: Vec<(IVec3, IVec3, crate::game::world::direction::Facing)> = world
         .blocks
         .iter()
-        .filter_map(|(pos, block)| match block.kind {
-            BlockKind::Welder => Some((*pos, block.facing.forward_ivec3(), block.facing)),
-            BlockKind::DownWelder => Some((*pos, IVec3::NEG_Y, block.facing)),
-            _ => None,
+        .filter_map(|(pos, block)| {
+            block
+                .kind
+                .weld_marker(block.facing)
+                .map(|(offset, facing)| (*pos, offset, facing))
         })
         .collect();
 

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::game::world::blocks::Facing;
+use crate::game::world::direction::Facing;
 use crate::game::world::grid::grid_to_world;
 use crate::game::world::rendering::BlockEntity;
 
