@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::game::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
+use crate::game::world::grid::ConverterMode;
 use crate::game::{UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ConfigAction, GameConfig};
 use crate::shared::i18n::I18n;
@@ -12,12 +13,13 @@ use super::components::{
     BUTTON_BG, BUTTON_BORDER, BUTTON_HOVER_BG, BUTTON_HOVER_BORDER, BUTTON_PRESSED_BG,
 };
 use super::types::{
-    BackpackPanel, CarriedIcon, CarriedItem, CarriedLabel, Crosshair, CurrentSaveText,
-    DeleteSelectionModeText, FovText, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText,
-    HotbarText, InGameHudStyle, InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle,
-    KeyBindingButton, KeyBindingLabel, LabelerColorText, LabelerPanel, LocalizedText,
-    MainMenuPanel, OpenSettingsDropdown, PausePanel, PendingKeyBind, PlaceSelectionModeText,
-    SaveListAction, SaveListLabel,
+    BackpackPanel, CarriedIcon, CarriedItem, CarriedLabel, ConverterInputRow,
+    ConverterInputText, ConverterModeText, ConverterOutputText, ConverterPanel, Crosshair,
+    CurrentSaveText, DeleteSelectionModeText, FovText, GeneratorMaterialText, GeneratorPanel,
+    GeneratorPeriodText, HotbarText, InGameHudStyle, InGameHudVisibility, InventoryItems,
+    InventorySlot, InventoryTitle, KeyBindingButton, KeyBindingLabel, LabelerColorText,
+    LabelerPanel, LocalizedText, MainMenuPanel, OpenSettingsDropdown, PausePanel, PendingKeyBind,
+    PlaceSelectionModeText, SaveListAction, SaveListLabel,
     SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdownLabel, SettingsDropdownList,
     ScrollContainer, ScrollContent, SettingsGameplayGroup, SettingsKeyBindingsGroup,
     SettingsPanel, SettingsSlider, SettingsSliderFill, SettingsSliderKnob, SettingsStatusText,
@@ -373,6 +375,68 @@ pub fn update_labeler_ui(
             "labeler.color",
             &[("color", i18n.text(labeler_settings.color.name_key()))],
         );
+    }
+}
+
+pub fn update_converter_ui(
+    placement: Res<PlacementState>,
+    world: Res<crate::game::world::grid::WorldBlocks>,
+    i18n: Res<I18n>,
+    mut converter_mode_text: Query<
+        &mut Text,
+        (
+            With<ConverterModeText>,
+            Without<ConverterInputText>,
+            Without<ConverterOutputText>,
+        ),
+    >,
+    mut converter_input_text: Query<
+        &mut Text,
+        (
+            With<ConverterInputText>,
+            Without<ConverterModeText>,
+            Without<ConverterOutputText>,
+        ),
+    >,
+    mut converter_output_text: Query<
+        &mut Text,
+        (
+            With<ConverterOutputText>,
+            Without<ConverterModeText>,
+            Without<ConverterInputText>,
+        ),
+    >,
+    mut converter_input_row: Query<&mut Style, With<ConverterInputRow>>,
+) {
+    let Some(pos) = placement.converter_panel else {
+        return;
+    };
+
+    let settings = world.converter_settings(pos);
+    if let Ok(mut text) = converter_mode_text.get_single_mut() {
+        text.sections[0].value = i18n.fmt(
+            "converter.mode",
+            &[("mode", i18n.text(settings.mode.name_key()))],
+        );
+    }
+    if let Ok(mut text) = converter_input_text.get_single_mut() {
+        text.sections[0].value = i18n.fmt(
+            "converter.input",
+            &[("material", i18n.text(settings.input.name_key()))],
+        );
+    }
+    if let Ok(mut text) = converter_output_text.get_single_mut() {
+        text.sections[0].value = i18n.fmt(
+            "converter.output",
+            &[("material", i18n.text(settings.output.name_key()))],
+        );
+    }
+    for mut style in &mut converter_input_row {
+        style.display = if settings.mode == ConverterMode::SpecificInput {
+            Display::Flex
+        } else {
+            Display::None
+        };
     }
 }
 
@@ -746,6 +810,19 @@ pub fn update_labeler_panel_visibility(
 ) {
     for mut style in &mut labeler_panel {
         style.display = if *mode == GameMode::LabelerSettings {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+}
+
+pub fn update_converter_panel_visibility(
+    mode: Res<GameMode>,
+    mut converter_panel: Query<&mut Style, With<ConverterPanel>>,
+) {
+    for mut style in &mut converter_panel {
+        style.display = if *mode == GameMode::ConverterSettings {
             Display::Flex
         } else {
             Display::None

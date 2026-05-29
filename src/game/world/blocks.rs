@@ -3,6 +3,7 @@ mod registry;
 mod blocker;
 mod blocker_head;
 mod conveyor;
+mod converter;
 mod copper_material;
 mod counter_rotator;
 mod detector;
@@ -425,6 +426,7 @@ pub enum BlockKind {
     Laser,
     Stamper,
     Roller,
+    Converter,
     Goal,
     Material,
     IronMaterial,
@@ -498,7 +500,11 @@ impl BlockKind {
     pub fn is_system_layer(self) -> bool {
         matches!(
             self,
-            BlockKind::Generator | BlockKind::Goal | BlockKind::Stamper | BlockKind::Roller
+            BlockKind::Generator
+                | BlockKind::Goal
+                | BlockKind::Stamper
+                | BlockKind::Roller
+                | BlockKind::Converter
         )
     }
 

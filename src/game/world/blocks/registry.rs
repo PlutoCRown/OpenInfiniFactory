@@ -1,5 +1,5 @@
 use super::{
-    blocker::BLOCKER, blocker_head::BLOCKER_HEAD, conveyor::CONVEYOR,
+    blocker::BLOCKER, blocker_head::BLOCKER_HEAD, conveyor::CONVEYOR, converter::CONVERTER,
     copper_material::COPPER_MATERIAL, counter_rotator::COUNTER_ROTATOR, detector::DETECTOR,
     dirt::DIRT, down_detector::DOWN_DETECTOR, down_welder::DOWN_WELDER, drill::DRILL,
     drill_head::DRILL_HEAD, generator::GENERATOR, glass::GLASS, goal::GOAL, grass::GRASS,
@@ -9,7 +9,7 @@ use super::{
     weld_point::WELD_POINT, wire::WIRE, Block, BlockKind,
 };
 
-pub const EDIT_BLOCKS: [BlockKind; 9] = [
+pub const EDIT_BLOCKS: [BlockKind; 10] = [
     BlockKind::Grass,
     BlockKind::Stone,
     BlockKind::Dirt,
@@ -19,9 +19,10 @@ pub const EDIT_BLOCKS: [BlockKind; 9] = [
     BlockKind::Goal,
     BlockKind::Stamper,
     BlockKind::Roller,
+    BlockKind::Converter,
 ];
 
-pub const EDITABLE_BLOCKS: [BlockKind; 9] = EDIT_BLOCKS;
+pub const EDITABLE_BLOCKS: [BlockKind; 10] = EDIT_BLOCKS;
 
 pub const PLAY_BLOCKS: [BlockKind; 15] = [
     BlockKind::Solid,
@@ -41,7 +42,7 @@ pub const PLAY_BLOCKS: [BlockKind; 15] = [
     BlockKind::Laser,
 ];
 
-pub const ALL_BLOCKS: [BlockKind; 30] = [
+pub const ALL_BLOCKS: [BlockKind; 31] = [
     BlockKind::Grass,
     BlockKind::Stone,
     BlockKind::Dirt,
@@ -66,6 +67,7 @@ pub const ALL_BLOCKS: [BlockKind; 30] = [
     BlockKind::Laser,
     BlockKind::Stamper,
     BlockKind::Roller,
+    BlockKind::Converter,
     BlockKind::Material,
     BlockKind::IronMaterial,
     BlockKind::CopperMaterial,
@@ -74,7 +76,7 @@ pub const ALL_BLOCKS: [BlockKind; 30] = [
     BlockKind::DrillHead,
 ];
 
-pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 30] = [
+pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 31] = [
     &GRASS,
     &STONE,
     &DIRT,
@@ -99,6 +101,7 @@ pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 30] = [
     &LASER,
     &STAMPER,
     &ROLLER,
+    &CONVERTER,
     &MATERIAL,
     &IRON_MATERIAL,
     &COPPER_MATERIAL,

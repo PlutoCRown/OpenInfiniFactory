@@ -16,6 +16,7 @@ pub struct WorldBlocks {
     pub material_face_marks: HashMap<MaterialFace, MaterialFaceMark>,
     pub generator_settings: HashMap<IVec3, GeneratorSettings>,
     pub labeler_settings: HashMap<IVec3, LabelerSettings>,
+    pub converter_settings: HashMap<IVec3, ConverterSettings>,
     pub topology_revision: u64,
 }
 
@@ -28,6 +29,45 @@ pub struct GeneratorSettings {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct LabelerSettings {
     pub color: StampColor,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ConverterSettings {
+    pub mode: ConverterMode,
+    pub input: MaterialKind,
+    pub output: MaterialKind,
+}
+
+impl Default for ConverterSettings {
+    fn default() -> Self {
+        Self {
+            mode: ConverterMode::AnyInput,
+            input: MaterialKind::Basic,
+            output: MaterialKind::Iron,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ConverterMode {
+    AnyInput,
+    SpecificInput,
+}
+
+impl ConverterMode {
+    pub fn name_key(self) -> &'static str {
+        match self {
+            Self::AnyInput => "converter.mode.any",
+            Self::SpecificInput => "converter.mode.specific",
+        }
+    }
+
+    pub fn toggle(self) -> Self {
+        match self {
+            Self::AnyInput => Self::SpecificInput,
+            Self::SpecificInput => Self::AnyInput,
+        }
+    }
 }
 
 impl Default for LabelerSettings {
@@ -130,6 +170,7 @@ impl WorldBlocks {
         if removed.is_some() {
             self.generator_settings.remove(pos);
             self.labeler_settings.remove(pos);
+            self.converter_settings.remove(pos);
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
         removed
@@ -143,6 +184,7 @@ impl WorldBlocks {
             self.material_face_marks.clear();
             self.generator_settings.clear();
             self.labeler_settings.clear();
+            self.converter_settings.clear();
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -169,6 +211,8 @@ impl WorldBlocks {
             self.generator_settings
                 .retain(|pos, _| self.system_blocks.contains_key(pos));
             self.labeler_settings
+                .retain(|pos, _| self.system_blocks.contains_key(pos));
+            self.converter_settings
                 .retain(|pos, _| self.system_blocks.contains_key(pos));
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
@@ -210,6 +254,26 @@ impl WorldBlocks {
             return;
         }
         if self.labeler_settings.insert(pos, settings) != Some(settings) {
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+    }
+
+    pub fn converter_settings(&self, pos: IVec3) -> ConverterSettings {
+        self.converter_settings
+            .get(&pos)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub fn set_converter_settings(&mut self, pos: IVec3, settings: ConverterSettings) {
+        if !self
+            .system_blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind == BlockKind::Converter)
+        {
+            return;
+        }
+        if self.converter_settings.insert(pos, settings) != Some(settings) {
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }

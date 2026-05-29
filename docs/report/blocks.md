@@ -1,6 +1,6 @@
 # Blocks
 
-Total: 30
+Total: 31
 
 ## SceneBlock
 
@@ -48,6 +48,7 @@ Total: 30
 | Acceptance Block | 验收块 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
 | Stamper | 印花器 | ✅ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
 | Roller | 滚刷器 | ✅ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
+| Converter | 转换器 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
 | Weld Point | 焊接点 | ❌ | ❌ | `Block`, `SystemBlock` |
 | Blocker Head | 阻拦头 | ❌ | ❌ | `Block`, `SystemBlock` |
 | Drill Head | 钻头头 | ❌ | ❌ | `Block`, `SystemBlock` |

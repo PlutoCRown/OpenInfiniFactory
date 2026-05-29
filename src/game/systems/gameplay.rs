@@ -50,6 +50,10 @@ pub fn gameplay_input(
                 placement.labeler_panel = None;
                 GameMode::Playing
             }
+            GameMode::ConverterSettings => {
+                placement.converter_panel = None;
+                GameMode::Playing
+            }
             GameMode::Settings => GameMode::Paused,
             GameMode::SaveListPause => GameMode::Paused,
             GameMode::SaveListMain => GameMode::MainMenu,
@@ -188,6 +192,23 @@ pub fn placement_input(
         placement.edit_gesture = None;
         placement.selection.clear();
         *mode = GameMode::LabelerSettings;
+        despawn_edit_previews(&mut commands, &edit_previews);
+        return;
+    }
+
+    if mouse_buttons.just_pressed(place_button)
+        && selected_kind(&inventory, &placement).is_none()
+        && current_target_pos.is_some_and(|pos| {
+            world
+                .system_blocks
+                .get(&pos)
+                .is_some_and(|block| block.kind == BlockKind::Converter)
+        })
+    {
+        placement.converter_panel = current_target_pos;
+        placement.edit_gesture = None;
+        placement.selection.clear();
+        *mode = GameMode::ConverterSettings;
         despawn_edit_previews(&mut commands, &edit_previews);
         return;
     }

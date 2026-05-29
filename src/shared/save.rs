@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 
 use crate::game::world::blocks::BlockData;
 use crate::game::world::grid::{
-    GeneratorSettings, LabelerSettings, MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks,
+    ConverterSettings, GeneratorSettings, LabelerSettings, MaterialFace, MaterialFaceMark,
+    MaterialWeld, WorldBlocks,
 };
 
 pub const SAVE_DIR: &str = "saves";
@@ -37,6 +38,8 @@ struct SaveFile {
     generator_settings: Vec<SavedGeneratorSettings>,
     #[serde(default)]
     labeler_settings: Vec<SavedLabelerSettings>,
+    #[serde(default)]
+    converter_settings: Vec<SavedConverterSettings>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -61,6 +64,14 @@ struct SavedLabelerSettings {
     y: i32,
     z: i32,
     settings: LabelerSettings,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SavedConverterSettings {
+    x: i32,
+    y: i32,
+    z: i32,
+    settings: ConverterSettings,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -114,6 +125,16 @@ pub fn save_world(world: &WorldBlocks, name: &str) -> bool {
             .labeler_settings
             .iter()
             .map(|(pos, settings)| SavedLabelerSettings {
+                x: pos.x,
+                y: pos.y,
+                z: pos.z,
+                settings: *settings,
+            })
+            .collect(),
+        converter_settings: world
+            .converter_settings
+            .iter()
+            .map(|(pos, settings)| SavedConverterSettings {
                 x: pos.x,
                 y: pos.y,
                 z: pos.z,
@@ -179,6 +200,9 @@ pub fn load_world(world: &mut WorldBlocks, name: &str) -> bool {
     }
     for saved in save.labeler_settings {
         world.set_labeler_settings(IVec3::new(saved.x, saved.y, saved.z), saved.settings);
+    }
+    for saved in save.converter_settings {
+        world.set_converter_settings(IVec3::new(saved.x, saved.y, saved.z), saved.settings);
     }
     true
 }

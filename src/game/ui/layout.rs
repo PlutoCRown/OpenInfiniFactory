@@ -10,19 +10,20 @@ use super::components::{
 };
 use super::theme::{absolute_text_bundle, panel_bundle, STATUS_TEXT};
 use super::types::{
-    BackpackPanel, CarriedIcon, CarriedLabel, Crosshair, CurrentSaveText, GeneratorAction,
-    GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText, HotbarText, InGameHudStyle,
-    InGameHudVisibility, InventoryTitle, LabelerAction, LabelerColorText, LabelerPanel,
-    MainMenuAction, MainMenuPanel, PauseAction, PausePanel,
+    BackpackPanel, CarriedIcon, CarriedLabel, ConverterAction, ConverterInputRow,
+    ConverterInputText, ConverterModeText, ConverterOutputText, ConverterPanel, Crosshair,
+    CurrentSaveText, GeneratorAction, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText,
+    HotbarText, InGameHudStyle, InGameHudVisibility, InventoryTitle, LabelerAction,
+    LabelerColorText, LabelerPanel, MainMenuAction, MainMenuPanel, PauseAction, PausePanel,
     SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdown, SettingsGameplayGroup,
     SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider, SettingsStatusText, SimulationText,
     SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::widgets::{
-    scroll_container, scroll_content, spawn_generator_button, spawn_labeler_button,
-    spawn_localized_main_button, spawn_localized_pause_button, spawn_localized_settings_button,
-    spawn_save_back_button, spawn_save_slot_button, spawn_settings_dropdown,
-    spawn_settings_slider, spawn_settings_tab, spawn_slot,
+    scroll_container, scroll_content, spawn_converter_button, spawn_generator_button,
+    spawn_labeler_button, spawn_localized_main_button, spawn_localized_pause_button,
+    spawn_localized_settings_button, spawn_save_back_button, spawn_save_slot_button,
+    spawn_settings_dropdown, spawn_settings_slider, spawn_settings_tab, spawn_slot,
 };
 
 pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
@@ -32,6 +33,7 @@ pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
         spawn_inventory_panel(root, &i18n);
         spawn_generator_panel(root, &i18n);
         spawn_labeler_panel(root, &i18n);
+        spawn_converter_panel(root, &i18n);
         spawn_pause_panel(root, &i18n);
         spawn_settings_panel(root, &i18n);
         spawn_main_menu(root, &i18n);
@@ -73,6 +75,48 @@ fn spawn_generator_panel(root: &mut ChildBuilder, i18n: &I18n) {
                 i18n.text("button.close"),
                 "button.close",
                 GeneratorAction::Close,
+            );
+        });
+}
+
+fn spawn_converter_panel(root: &mut ChildBuilder, i18n: &I18n) {
+    root.spawn((panel_bundle(460.0, 320.0, -230.0, -160.0), ConverterPanel))
+        .with_children(|panel| {
+            panel.spawn(localized_text(i18n, "converter.title", 26.0, Color::WHITE));
+            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
+                spawn_converter_button(
+                    row,
+                    i18n.text("button.converter_mode"),
+                    "button.converter_mode",
+                    ConverterAction::ToggleMode,
+                );
+                row.spawn((text("", 18.0, Color::WHITE), ConverterModeText));
+            });
+            panel
+                .spawn((flex_row(40.0, 8.0), ConverterInputRow))
+                .with_children(|row| {
+                    spawn_converter_button(
+                        row,
+                        i18n.text("button.input_material"),
+                        "button.input_material",
+                        ConverterAction::InputNext,
+                    );
+                    row.spawn((text("", 18.0, Color::WHITE), ConverterInputText));
+                });
+            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
+                spawn_converter_button(
+                    row,
+                    i18n.text("button.output_material"),
+                    "button.output_material",
+                    ConverterAction::OutputNext,
+                );
+                row.spawn((text("", 18.0, Color::WHITE), ConverterOutputText));
+            });
+            spawn_converter_button(
+                panel,
+                i18n.text("button.close"),
+                "button.close",
+                ConverterAction::Close,
             );
         });
 }

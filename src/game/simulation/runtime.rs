@@ -42,6 +42,7 @@ pub fn run_turn(
     run_powered_marker_phase(world, &powered_devices);
     run_material_destroy_phase(world, &powered_devices);
     run_material_label_phase(world);
+    run_material_conversion_phase(world);
     run_weld_phase(world);
     run_material_source_phase(world, turn);
     run_material_movement_phase(world, &powered_devices);
@@ -220,6 +221,15 @@ fn material_block_kind(material: MaterialKind) -> BlockKind {
     }
 }
 
+fn block_material_kind(kind: BlockKind) -> Option<MaterialKind> {
+    match kind {
+        BlockKind::Material => Some(MaterialKind::Basic),
+        BlockKind::IronMaterial => Some(MaterialKind::Iron),
+        BlockKind::CopperMaterial => Some(MaterialKind::Copper),
+        _ => None,
+    }
+}
+
 fn run_weld_phase(world: &mut WorldBlocks) {
     let weld_points: Vec<IVec3> = world
         .blocks
@@ -364,6 +374,33 @@ fn run_material_label_phase(world: &mut WorldBlocks) {
                 source,
             },
         );
+    }
+}
+
+fn run_material_conversion_phase(world: &mut WorldBlocks) {
+    let converters: Vec<IVec3> = world
+        .system_blocks
+        .iter()
+        .filter_map(|(pos, block)| (block.kind == BlockKind::Converter).then_some(*pos))
+        .collect();
+
+    for pos in converters {
+        let Some(mut block) = world.blocks.get(&pos).copied() else {
+            continue;
+        };
+        let Some(input_material) = block_material_kind(block.kind) else {
+            continue;
+        };
+
+        let settings = world.converter_settings(pos);
+        if settings.mode == crate::game::world::grid::ConverterMode::SpecificInput
+            && input_material != settings.input
+        {
+            continue;
+        }
+
+        block.kind = material_block_kind(settings.output);
+        world.insert(pos, block);
     }
 }
 

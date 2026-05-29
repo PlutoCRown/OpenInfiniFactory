@@ -13,6 +13,7 @@ pub struct PlacementState {
     pub selection: SelectionState,
     pub generator_panel: Option<IVec3>,
     pub labeler_panel: Option<IVec3>,
+    pub converter_panel: Option<IVec3>,
 }
 
 impl Default for PlacementState {
@@ -25,6 +26,7 @@ impl Default for PlacementState {
             selection: SelectionState::default(),
             generator_panel: None,
             labeler_panel: None,
+            converter_panel: None,
         }
     }
 }
@@ -126,6 +128,7 @@ pub enum GameMode {
     SaveListPause,
     GeneratorSettings,
     LabelerSettings,
+    ConverterSettings,
     Settings,
     Playing,
     Inventory,

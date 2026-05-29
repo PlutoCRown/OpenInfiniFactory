@@ -45,6 +45,21 @@ pub struct LabelerPanel;
 pub struct LabelerColorText;
 
 #[derive(Component)]
+pub struct ConverterPanel;
+
+#[derive(Component)]
+pub struct ConverterInputRow;
+
+#[derive(Component)]
+pub struct ConverterModeText;
+
+#[derive(Component)]
+pub struct ConverterInputText;
+
+#[derive(Component)]
+pub struct ConverterOutputText;
+
+#[derive(Component)]
 pub struct SettingsStatusText;
 
 #[derive(Component)]
@@ -199,6 +214,14 @@ pub enum GeneratorAction {
 pub enum LabelerAction {
     PreviousColor,
     NextColor,
+    Close,
+}
+
+#[derive(Component, Clone, Copy)]
+pub enum ConverterAction {
+    ToggleMode,
+    InputNext,
+    OutputNext,
     Close,
 }
 

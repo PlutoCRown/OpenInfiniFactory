@@ -5,8 +5,8 @@ use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SettingsReturnMode, SimulationState,
 };
 use crate::game::ui::{
-    CarriedItem, GeneratorAction, InventoryItems, LabelerAction, MainMenuAction, OpenSettingsDropdown,
-    PauseAction, PendingKeyBind, SaveListAction, SettingsAction, SettingsTab,
+    CarriedItem, ConverterAction, GeneratorAction, InventoryItems, LabelerAction, MainMenuAction,
+    OpenSettingsDropdown, PauseAction, PendingKeyBind, SaveListAction, SettingsAction, SettingsTab,
 };
 use crate::game::world::blocks::{MaterialKind, StampColor};
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
@@ -446,6 +446,51 @@ pub fn labeler_menu_actions(
     }
 }
 
+pub fn converter_menu_actions(
+    mut mode: ResMut<GameMode>,
+    mut placement: ResMut<PlacementState>,
+    mut world: ResMut<WorldBlocks>,
+    mut interactions: Query<
+        (&Interaction, &ConverterAction),
+        (Changed<Interaction>, With<Button>),
+    >,
+) {
+    if *mode != GameMode::ConverterSettings {
+        return;
+    }
+
+    let Some(pos) = placement.converter_panel else {
+        *mode = GameMode::Playing;
+        return;
+    };
+
+    for (interaction, action) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        let mut settings = world.converter_settings(pos);
+        match *action {
+            ConverterAction::ToggleMode => {
+                settings.mode = settings.mode.toggle();
+                world.set_converter_settings(pos, settings);
+            }
+            ConverterAction::InputNext => {
+                settings.input = next_material(settings.input);
+                world.set_converter_settings(pos, settings);
+            }
+            ConverterAction::OutputNext => {
+                settings.output = next_material(settings.output);
+                world.set_converter_settings(pos, settings);
+            }
+            ConverterAction::Close => {
+                placement.converter_panel = None;
+                *mode = GameMode::Playing;
+            }
+        }
+    }
+}
+
 fn next_material(material: MaterialKind) -> MaterialKind {
     let all = MaterialKind::ALL;
     let index = all
@@ -486,5 +531,6 @@ fn reset_builder_state(
     placement.edit_gesture = None;
     placement.generator_panel = None;
     placement.labeler_panel = None;
+    placement.converter_panel = None;
     placement.selection.clear();
 }
