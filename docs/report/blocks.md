@@ -44,8 +44,8 @@ Total: 28
 
 | 方块 | 中文名 | 可四向旋转 | 编辑模式可放置 | 实现 Trait |
 | --- | --- | --- | --- | --- |
-| Generator | 生成器 | ✅ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
-| Goal | 目标 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
+| Generation Block | 生成块 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
+| Acceptance Block | 验收块 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
 | Weld Point | 焊接点 | ❌ | ❌ | `Block`, `SystemBlock` |
 | Blocker Head | 阻拦头 | ❌ | ❌ | `Block`, `SystemBlock` |
 | Drill Head | 钻头头 | ❌ | ❌ | `Block`, `SystemBlock` |

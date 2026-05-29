@@ -128,7 +128,7 @@ pub enum MarkerBehavior {
 
 #[derive(Clone, Copy)]
 pub enum MaterialSource {
-    Generator { output: IVec3 },
+    Generator,
 }
 
 #[derive(Clone, Copy)]
@@ -448,6 +448,14 @@ impl BlockKind {
 
     pub fn is_generated_marker(self) -> bool {
         self.definition().system_role == SystemBlockRole::GeneratedMarker
+    }
+
+    pub fn is_system_layer(self) -> bool {
+        matches!(self, BlockKind::Generator | BlockKind::Goal)
+    }
+
+    pub fn accepts_material(self) -> bool {
+        matches!(self, BlockKind::Goal)
     }
 
     pub fn is_editable(self) -> bool {

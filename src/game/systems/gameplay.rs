@@ -153,12 +153,12 @@ pub fn placement_input(
         && selected_kind(&inventory, &placement).is_none()
         && current_target_pos.is_some_and(|pos| {
             world
-                .blocks
+                .system_blocks
                 .get(&pos)
                 .is_some_and(|block| {
                     matches!(
                         block.kind.material_source(block.facing),
-                        Some(MaterialSource::Generator { .. })
+                        Some(MaterialSource::Generator)
                     )
                 })
         })
@@ -635,7 +635,15 @@ fn can_place_block_at(
     world: &WorldBlocks,
     player: &Query<&Transform, With<FlyCamera>>,
 ) -> bool {
-    if place_at.y < 0 || !world.can_place_solid_at(place_at) {
+    if place_at.y < 0 {
+        return false;
+    }
+
+    if block.kind.is_system_layer() {
+        if world.system_blocks.contains_key(&place_at) {
+            return false;
+        }
+    } else if !world.can_place_solid_at(place_at) {
         return false;
     }
 
@@ -687,7 +695,8 @@ fn commit_edit_gesture(
                 current_delete_at.unwrap_or(gesture.start),
             );
             for pos in positions {
-                if world.remove(&pos).is_some() {
+                let removed = world.remove(&pos).is_some() || world.remove_system(&pos).is_some();
+                if removed {
                     if let Some((entity, _)) = block_entities
                         .iter()
                         .find(|(_, block_entity)| block_entity.pos == pos)

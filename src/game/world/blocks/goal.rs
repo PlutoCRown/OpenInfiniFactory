@@ -17,6 +17,7 @@ impl Block for GoalBlock {
             rgb(0.35, 0.72, 0.42),
             rgb(0.24, 0.56, 0.30),
         )
+        .no_collision()
     }
 
     fn render_behavior(&self, _facing: super::Facing) -> RenderBehavior {

@@ -11,6 +11,7 @@ pub const FLOOR_RADIUS: i32 = 12;
 #[derive(Resource, Default, Clone)]
 pub struct WorldBlocks {
     pub blocks: HashMap<IVec3, BlockData>,
+    pub system_blocks: HashMap<IVec3, BlockData>,
     pub material_welds: HashSet<MaterialWeld>,
     pub generator_settings: HashMap<IVec3, GeneratorSettings>,
     pub topology_revision: u64,
@@ -63,7 +64,11 @@ impl MaterialWeld {
 
 impl WorldBlocks {
     pub fn insert(&mut self, pos: IVec3, block: BlockData) -> Option<BlockData> {
-        let previous = self.blocks.insert(pos, block);
+        let previous = if block.kind.is_system_layer() {
+            self.system_blocks.insert(pos, block)
+        } else {
+            self.blocks.insert(pos, block)
+        };
         if previous != Some(block) {
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
@@ -80,9 +85,19 @@ impl WorldBlocks {
         removed
     }
 
+    pub fn remove_system(&mut self, pos: &IVec3) -> Option<BlockData> {
+        let removed = self.system_blocks.remove(pos);
+        if removed.is_some() {
+            self.generator_settings.remove(pos);
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+        removed
+    }
+
     pub fn clear(&mut self) {
-        if !self.blocks.is_empty() {
+        if !self.blocks.is_empty() || !self.system_blocks.is_empty() {
             self.blocks.clear();
+            self.system_blocks.clear();
             self.material_welds.clear();
             self.generator_settings.clear();
             self.topology_revision = self.topology_revision.wrapping_add(1);
@@ -102,6 +117,16 @@ impl WorldBlocks {
         }
     }
 
+    pub fn retain_system(&mut self, mut keep: impl FnMut(&IVec3, &BlockData) -> bool) {
+        let before = self.system_blocks.len();
+        self.system_blocks.retain(|pos, block| keep(pos, block));
+        if self.system_blocks.len() != before {
+            self.generator_settings
+                .retain(|pos, _| self.system_blocks.contains_key(pos));
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+    }
+
     pub fn generator_settings(&self, pos: IVec3) -> GeneratorSettings {
         self.generator_settings
             .get(&pos)
@@ -111,7 +136,7 @@ impl WorldBlocks {
 
     pub fn set_generator_settings(&mut self, pos: IVec3, settings: GeneratorSettings) {
         if !self
-            .blocks
+            .system_blocks
             .get(&pos)
             .is_some_and(|block| block.kind.material_source(block.facing).is_some())
         {
@@ -164,6 +189,12 @@ impl WorldBlocks {
         self.blocks
             .get(&pos)
             .is_some_and(|block| block.kind.is_scene())
+    }
+
+    pub fn accepts_material_at(&self, pos: IVec3) -> bool {
+        self.system_blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.accepts_material())
     }
 
     pub fn clear_generated_markers(&mut self) {
@@ -230,6 +261,16 @@ pub fn raycast_blocks(origin: Vec3, dir: Vec3, world: &WorldBlocks) -> Option<Ta
             continue;
         }
 
+        let center = grid_to_world(*pos);
+        let min = center - Vec3::splat(0.5);
+        let max = center + Vec3::splat(0.5);
+        if let Some((distance, normal)) = ray_aabb(origin, dir, min, max, REACH) {
+            if best.map_or(true, |(best_distance, _)| distance < best_distance) {
+                best = Some((distance, TargetHit { pos: *pos, normal }));
+            }
+        }
+    }
+    for pos in world.system_blocks.keys() {
         let center = grid_to_world(*pos);
         let min = center - Vec3::splat(0.5);
         let max = center + Vec3::splat(0.5);

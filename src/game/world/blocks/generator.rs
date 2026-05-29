@@ -17,16 +17,12 @@ impl Block for GeneratorBlock {
             rgb(0.52, 0.30, 0.68),
             rgb(0.42, 0.20, 0.56),
         )
-    }
-
-    fn is_directional(&self) -> bool {
-        true
+        .no_collision()
     }
 
     fn material_source(&self, facing: super::Facing) -> Option<MaterialSource> {
-        Some(MaterialSource::Generator {
-            output: facing.forward_ivec3(),
-        })
+        let _ = facing;
+        Some(MaterialSource::Generator)
     }
 }
 

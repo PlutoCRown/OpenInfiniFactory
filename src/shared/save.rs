@@ -26,6 +26,8 @@ impl SaveState {
 struct SaveFile {
     blocks: Vec<SavedBlock>,
     #[serde(default)]
+    system_blocks: Vec<SavedBlock>,
+    #[serde(default)]
     material_welds: Vec<MaterialWeld>,
     #[serde(default)]
     generator_settings: Vec<SavedGeneratorSettings>,
@@ -51,6 +53,16 @@ pub fn save_world(world: &WorldBlocks, name: &str) -> bool {
     let save = SaveFile {
         blocks: world
             .blocks
+            .iter()
+            .map(|(pos, data)| SavedBlock {
+                x: pos.x,
+                y: pos.y,
+                z: pos.z,
+                data: *data,
+            })
+            .collect(),
+        system_blocks: world
+            .system_blocks
             .iter()
             .map(|(pos, data)| SavedBlock {
                 x: pos.x,
@@ -103,6 +115,9 @@ pub fn load_world(world: &mut WorldBlocks, name: &str) -> bool {
 
     world.clear();
     for saved in save.blocks {
+        world.insert(IVec3::new(saved.x, saved.y, saved.z), saved.data);
+    }
+    for saved in save.system_blocks {
         world.insert(IVec3::new(saved.x, saved.y, saved.z), saved.data);
     }
     world.replace_material_welds(

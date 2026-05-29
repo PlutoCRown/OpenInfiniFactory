@@ -43,6 +43,7 @@ pub fn run_turn(
     run_material_source_phase(world, turn);
     run_material_movement_phase(world, &powered_devices);
     run_gravity_phase(world);
+    run_material_acceptance_phase(world);
     signal_cache.refresh(world);
 
     let animations = pair_block_animations(&before, &animation_snapshot(world));
@@ -187,13 +188,13 @@ fn run_material_source_phase(world: &mut WorldBlocks, turn: u64) {
 
     for (pos, source) in sources {
         match source {
-            MaterialSource::Generator { output } => {
+            MaterialSource::Generator => {
                 let settings = world.generator_settings(pos);
                 if turn % settings.period.max(1) != 0 {
                     continue;
                 }
 
-                let spawn_pos = pos + output;
+                let spawn_pos = pos;
                 if world.can_place_solid_at(spawn_pos) {
                     world.insert(
                         spawn_pos,
@@ -302,8 +303,22 @@ fn move_material_structure(world: &mut WorldBlocks, source: IVec3, offset: IVec3
     }
 
     let structure = material_structure(world, source);
+    if structure
+        .iter()
+        .any(|pos| world.accepts_material_at(*pos + offset))
+    {
+        remove_material_structure(world, &structure);
+        return;
+    }
+
     if can_move_structure(world, &structure, offset) {
         move_structure(world, &structure, offset);
+    }
+}
+
+fn remove_material_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>) {
+    for pos in structure {
+        world.remove(pos);
     }
 }
 
@@ -384,4 +399,21 @@ fn fire_laser(world: &mut WorldBlocks, pos: IVec3, direction: IVec3, range: i32)
 fn run_gravity_phase(world: &mut WorldBlocks) {
     apply_material_gravity(world);
     apply_factory_gravity(world);
+}
+
+fn run_material_acceptance_phase(world: &mut WorldBlocks) {
+    let accepted: Vec<IVec3> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| {
+            (block.kind.is_material() && world.accepts_material_at(*pos)).then_some(*pos)
+        })
+        .collect();
+
+    for pos in accepted {
+        if world.is_material_at(pos) {
+            let structure = material_structure(world, pos);
+            remove_material_structure(world, &structure);
+        }
+    }
 }

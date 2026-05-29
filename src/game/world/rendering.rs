@@ -103,6 +103,9 @@ pub fn rebuild_world(commands: &mut Commands, world: &WorldBlocks, assets: &Worl
     for (pos, data) in &world.blocks {
         spawn_block(commands, assets, world, *pos, *data);
     }
+    for (pos, data) in &world.system_blocks {
+        spawn_block(commands, assets, world, *pos, *data);
+    }
 }
 
 pub fn despawn_world(commands: &mut Commands, block_entities: &Query<Entity, With<BlockEntity>>) {
@@ -243,6 +246,20 @@ pub fn rebuild_world_with_timed_animations(
             true,
         );
     }
+    for (pos, data) in &world.system_blocks {
+        spawn_block_model(
+            commands,
+            assets,
+            world,
+            *pos,
+            *data,
+            assets.block_material(data.kind),
+            None,
+            animations.get(pos).copied(),
+            timing,
+            true,
+        );
+    }
 }
 
 fn spawn_block_model(
@@ -326,6 +343,7 @@ fn spawn_block_model(
                 if world
                     .blocks
                     .get(&neighbor)
+                    .or_else(|| world.system_blocks.get(&neighbor))
                     .is_some_and(|block| weld_connects_to(block, -offset))
                 {
                     let local_offset = local_connector_offset(data, offset);
@@ -345,6 +363,7 @@ fn spawn_block_model(
                 if world
                     .blocks
                     .get(&neighbor)
+                    .or_else(|| world.system_blocks.get(&neighbor))
                     .is_some_and(|block| wire_connects_to(block, -offset))
                 {
                     let local_offset = local_connector_offset(data, offset);
