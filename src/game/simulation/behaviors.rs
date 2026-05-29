@@ -216,7 +216,7 @@ fn run_material_teleport_phase(world: &mut WorldBlocks) {
         let offset = exit - entrance;
         handled.extend(structure.iter().copied());
         handled.extend(structure.iter().map(|pos| *pos + offset));
-        execute_structure_moves(world, vec![StructureMove::translate(structure, offset)]);
+        let _ = execute_structure_moves(world, vec![StructureMove::translate(structure, offset)]);
     }
 }
 

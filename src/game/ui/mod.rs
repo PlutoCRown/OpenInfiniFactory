@@ -17,7 +17,7 @@ pub use systems::{
     update_teleport_ui,
 };
 pub use types::{
-    AreaKind, CarriedItem, ConverterAction, GeneratorAction, InventoryItems, LabelerAction,
-    MainMenuAction, OpenSettingsDropdown, PauseAction, PendingKeyBind, SaveListAction,
-    SettingsAction, SettingsTab, TeleportAction, HOTBAR_SLOTS,
+    ActiveSettingsSlider, AreaKind, CarriedItem, ConverterAction, GeneratorAction, InventoryItems,
+    LabelerAction, MainMenuAction, OpenSettingsDropdown, PauseAction, PendingKeyBind,
+    SaveListAction, SettingsAction, SettingsSlider, SettingsTab, TeleportAction, HOTBAR_SLOTS,
 };

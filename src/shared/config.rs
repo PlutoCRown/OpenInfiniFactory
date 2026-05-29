@@ -52,6 +52,18 @@ fn default_alternate_key() -> ConfigKey {
     ConfigKey::KeyC
 }
 
+fn default_simulation_step_key() -> ConfigKey {
+    ConfigKey::KeyC
+}
+
+fn default_simulation_fast_key() -> ConfigKey {
+    ConfigKey::KeyF
+}
+
+fn default_simulation_rollback_key() -> ConfigKey {
+    ConfigKey::KeyR
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Reflect, Serialize, Deserialize)]
 pub enum ConfigSelectionMode {
     #[default]
@@ -84,6 +96,12 @@ pub struct KeyBindings {
     pub alternate: ConfigKey,
     pub rotate_or_rollback: ConfigKey,
     pub simulate: ConfigKey,
+    #[serde(default = "default_simulation_step_key")]
+    pub simulation_step: ConfigKey,
+    #[serde(default = "default_simulation_fast_key")]
+    pub simulation_fast: ConfigKey,
+    #[serde(default = "default_simulation_rollback_key")]
+    pub simulation_rollback: ConfigKey,
     pub debug: ConfigKey,
     pub forward: ConfigKey,
     pub backward: ConfigKey,
@@ -107,6 +125,9 @@ impl Default for KeyBindings {
             alternate: default_alternate_key(),
             rotate_or_rollback: ConfigKey::KeyR,
             simulate: ConfigKey::KeyF,
+            simulation_step: default_simulation_step_key(),
+            simulation_fast: default_simulation_fast_key(),
+            simulation_rollback: default_simulation_rollback_key(),
             debug: ConfigKey::Slash,
             forward: ConfigKey::KeyW,
             backward: ConfigKey::KeyS,
@@ -140,6 +161,9 @@ pub enum ConfigAction {
     Alternate,
     RotateOrRollback,
     Simulate,
+    SimulationStep,
+    SimulationFast,
+    SimulationRollback,
     Debug,
     Forward,
     Backward,
@@ -153,12 +177,11 @@ pub enum ConfigAction {
 }
 
 impl ConfigAction {
-    pub const ALL: [ConfigAction; 15] = [
+    pub const GENERAL: [ConfigAction; 14] = [
         ConfigAction::Pause,
         ConfigAction::Inventory,
         ConfigAction::Alternate,
         ConfigAction::RotateOrRollback,
-        ConfigAction::Simulate,
         ConfigAction::Debug,
         ConfigAction::Forward,
         ConfigAction::Backward,
@@ -171,13 +194,23 @@ impl ConfigAction {
         ConfigAction::Pick,
     ];
 
+    pub const SIMULATION: [ConfigAction; 4] = [
+        ConfigAction::Simulate,
+        ConfigAction::SimulationStep,
+        ConfigAction::SimulationFast,
+        ConfigAction::SimulationRollback,
+    ];
+
     pub fn label_key(self) -> &'static str {
         match self {
             ConfigAction::Pause => "action.pause",
             ConfigAction::Inventory => "action.inventory",
             ConfigAction::Alternate => "action.alternate",
-            ConfigAction::RotateOrRollback => "action.rotate_or_rollback",
-            ConfigAction::Simulate => "action.simulate",
+            ConfigAction::RotateOrRollback => "action.rotate",
+            ConfigAction::Simulate => "action.simulation_start",
+            ConfigAction::SimulationStep => "action.simulation_step",
+            ConfigAction::SimulationFast => "action.simulation_fast",
+            ConfigAction::SimulationRollback => "action.simulation_rollback",
             ConfigAction::Debug => "action.debug",
             ConfigAction::Forward => "action.forward",
             ConfigAction::Backward => "action.backward",
@@ -320,6 +353,9 @@ impl GameConfig {
             ConfigAction::Alternate => self.key_bindings.alternate,
             ConfigAction::RotateOrRollback => self.key_bindings.rotate_or_rollback,
             ConfigAction::Simulate => self.key_bindings.simulate,
+            ConfigAction::SimulationStep => self.key_bindings.simulation_step,
+            ConfigAction::SimulationFast => self.key_bindings.simulation_fast,
+            ConfigAction::SimulationRollback => self.key_bindings.simulation_rollback,
             ConfigAction::Debug => self.key_bindings.debug,
             ConfigAction::Forward => self.key_bindings.forward,
             ConfigAction::Backward => self.key_bindings.backward,
@@ -346,6 +382,11 @@ impl GameConfig {
                 ConfigInput::Key(self.key_bindings.rotate_or_rollback)
             }
             ConfigAction::Simulate => ConfigInput::Key(self.key_bindings.simulate),
+            ConfigAction::SimulationStep => ConfigInput::Key(self.key_bindings.simulation_step),
+            ConfigAction::SimulationFast => ConfigInput::Key(self.key_bindings.simulation_fast),
+            ConfigAction::SimulationRollback => {
+                ConfigInput::Key(self.key_bindings.simulation_rollback)
+            }
             ConfigAction::Debug => ConfigInput::Key(self.key_bindings.debug),
             ConfigAction::Forward => ConfigInput::Key(self.key_bindings.forward),
             ConfigAction::Backward => ConfigInput::Key(self.key_bindings.backward),
@@ -366,6 +407,9 @@ impl GameConfig {
             ConfigAction::Alternate => self.key_bindings.alternate = key,
             ConfigAction::RotateOrRollback => self.key_bindings.rotate_or_rollback = key,
             ConfigAction::Simulate => self.key_bindings.simulate = key,
+            ConfigAction::SimulationStep => self.key_bindings.simulation_step = key,
+            ConfigAction::SimulationFast => self.key_bindings.simulation_fast = key,
+            ConfigAction::SimulationRollback => self.key_bindings.simulation_rollback = key,
             ConfigAction::Debug => self.key_bindings.debug = key,
             ConfigAction::Forward => self.key_bindings.forward = key,
             ConfigAction::Backward => self.key_bindings.backward = key,

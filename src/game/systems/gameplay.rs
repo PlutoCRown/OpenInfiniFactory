@@ -216,6 +216,7 @@ pub fn placement_input(
     }
 
     if *builder_mode == BuilderMode::Play
+        && !simulation.is_active()
         && keys.just_pressed(config.key_bindings.alternate.key_code())
     {
         if let Some(pos) = current_target_pos {

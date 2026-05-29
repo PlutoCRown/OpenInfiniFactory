@@ -21,7 +21,9 @@ pub fn simulation_controls(
     }
 
     let simulate_key = config.key(ConfigAction::Simulate).key_code();
-    let rollback_key = config.key(ConfigAction::RotateOrRollback).key_code();
+    let fast_key = config.key(ConfigAction::SimulationFast).key_code();
+    let rollback_key = config.key(ConfigAction::SimulationRollback).key_code();
+    let step_key = config.key(ConfigAction::SimulationStep).key_code();
 
     if keys.just_pressed(simulate_key) {
         if !simulation.is_active() {
@@ -29,7 +31,17 @@ pub fn simulation_controls(
         }
         simulation.running = true;
     }
-    simulation.speed = if simulation.running && keys.pressed(simulate_key) {
+
+    if simulation.is_active() && keys.just_pressed(step_key) {
+        if simulation.running {
+            simulation.running = false;
+            simulation.speed = 1.0;
+        } else {
+            simulation.step_requested = true;
+        }
+    }
+
+    simulation.speed = if simulation.running && keys.pressed(fast_key) {
         4.0
     } else {
         1.0
@@ -43,6 +55,7 @@ pub fn simulation_controls(
 }
 fn rollback_simulation(simulation: &mut SimulationState, world: &mut WorldBlocks) {
     simulation.running = false;
+    simulation.step_requested = false;
     simulation.turn = 0;
     simulation.accumulator = 0.0;
     if let Some(snapshot) = simulation.start_snapshot.take() {

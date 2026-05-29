@@ -1,14 +1,9 @@
-use std::collections::HashMap;
 use std::time::Instant;
 
 use bevy::prelude::*;
 
 use crate::game::state::{BuilderMode, SimulationState};
-use crate::game::world::animation::{
-    pair_block_animations, AnimationTiming, SIMULATION_TURN_SECONDS,
-};
-use crate::game::world::blocks::BlockKind;
-use crate::game::world::direction::Facing;
+use crate::game::world::animation::{AnimationTiming, SIMULATION_TURN_SECONDS};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_with_timed_animations, BlockEntity, WorldRenderAssets,
@@ -70,7 +65,6 @@ pub fn run_turn(
     let mut mark = total_start;
     let mut sample = SimulationStepStats::default();
 
-    let before = animation_snapshot(world);
     world.clear_generated_markers();
     sample.prep_ms = mark_elapsed_ms(&mut mark);
 
@@ -88,7 +82,7 @@ pub fn run_turn(
     movement_plan.extend(mark_material_movement_phase(world, &powered_devices));
     sample.movement_mark_ms = mark_elapsed_ms(&mut mark);
 
-    execute_structure_moves(world, movement_plan);
+    let animations = execute_structure_moves(world, movement_plan);
     sample.movement_execute_ms = mark_elapsed_ms(&mut mark);
 
     run_static_marker_phase(world);
@@ -101,7 +95,6 @@ pub fn run_turn(
     signal_cache.refresh(world);
     sample.signal_refresh_ms = mark_elapsed_ms(&mut mark);
 
-    let animations = pair_block_animations(&before, &animation_snapshot(world));
     despawn_world(commands, block_entities);
     rebuild_world_with_timed_animations(
         commands,
@@ -127,7 +120,24 @@ pub fn tick_simulation(
     block_entities: Query<Entity, With<BlockEntity>>,
     render_assets: Res<WorldRenderAssets>,
 ) {
-    if *builder_mode != BuilderMode::Play || !simulation.running {
+    if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
+        return;
+    }
+
+    if simulation.step_requested {
+        simulation.step_requested = false;
+        simulation.accumulator = 0.0;
+        simulation.turn += 1;
+        run_turn(
+            &mut world,
+            &mut signal_cache,
+            simulation.turn,
+            &mut commands,
+            &block_entities,
+            &render_assets,
+            SIMULATION_TURN_SECONDS,
+            &mut sim_stats,
+        );
         return;
     }
 
@@ -153,14 +163,4 @@ fn mark_elapsed_ms(mark: &mut Instant) -> f64 {
     let elapsed = now.saturating_duration_since(*mark).as_secs_f64() * 1000.0;
     *mark = now;
     elapsed
-}
-
-fn animation_snapshot(world: &WorldBlocks) -> HashMap<IVec3, (BlockKind, Facing)> {
-    world
-        .blocks
-        .iter()
-        .filter_map(|(pos, block)| {
-            (!block.kind.is_generated_marker()).then_some((*pos, (block.kind, block.facing)))
-        })
-        .collect()
 }

@@ -8,9 +8,9 @@ use crate::game::state::{
     SolutionState, TeleportRenameState,
 };
 use crate::game::ui::{
-    CarriedItem, ConverterAction, GeneratorAction, InventoryItems, LabelerAction, MainMenuAction,
-    OpenSettingsDropdown, PauseAction, PendingKeyBind, SaveListAction, SettingsAction, SettingsTab,
-    TeleportAction,
+    ActiveSettingsSlider, CarriedItem, ConverterAction, GeneratorAction, InventoryItems,
+    LabelerAction, MainMenuAction, OpenSettingsDropdown, PauseAction, PendingKeyBind,
+    SaveListAction, SettingsAction, SettingsSlider, SettingsTab, TeleportAction,
 };
 use crate::game::world::blocks::{MaterialKind, StampColor};
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
@@ -122,6 +122,7 @@ pub fn save_list_actions(
                     save_state.current_kind = Some(loaded.kind);
                     solution_state.puzzle_snapshot = loaded.puzzle_snapshot;
                     simulation.running = false;
+                    simulation.step_requested = false;
                     simulation.turn = 0;
                     simulation.accumulator = 0.0;
                     simulation.start_snapshot = None;
@@ -154,7 +155,6 @@ pub fn save_list_actions(
 }
 
 pub fn pause_menu_actions(
-    mut exit: EventWriter<AppExit>,
     mut builder_mode: ResMut<BuilderMode>,
     mut simulation: ResMut<SimulationState>,
     mut inventory: ResMut<InventoryItems>,
@@ -188,6 +188,7 @@ pub fn pause_menu_actions(
                 *builder_mode = match *builder_mode {
                     BuilderMode::Edit => {
                         simulation.running = false;
+                        simulation.step_requested = false;
                         simulation.accumulator = 0.0;
                         simulation.start_snapshot = None;
                         if save_state.current_kind == Some(SaveKind::Puzzle) {
@@ -244,6 +245,7 @@ pub fn pause_menu_actions(
                 if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
                     reset_solution_world(&mut world, puzzle_snapshot);
                     simulation.running = false;
+                    simulation.step_requested = false;
                     simulation.turn = 0;
                     simulation.accumulator = 0.0;
                     simulation.start_snapshot = None;
@@ -251,16 +253,13 @@ pub fn pause_menu_actions(
                     rebuild_world(&mut commands, &world, &render_assets);
                 }
             }
-            PauseAction::OpenSaveList => {
-                save_state.refresh();
-                *mode = GameMode::SaveListPause;
-            }
             PauseAction::OpenSettings => {
                 settings_return.0 = GameMode::Paused;
                 *mode = GameMode::Settings;
             }
             PauseAction::BackToMainMenu => {
                 simulation.running = false;
+                simulation.step_requested = false;
                 simulation.accumulator = 0.0;
                 simulation.start_snapshot = None;
                 placement.generator_panel = None;
@@ -271,9 +270,6 @@ pub fn pause_menu_actions(
                 despawn_world(&mut commands, &block_entities);
                 rebuild_world(&mut commands, &world, &render_assets);
                 *mode = GameMode::MainMenu;
-            }
-            PauseAction::Quit => {
-                exit.send(AppExit::Success);
             }
         }
     }
@@ -341,6 +337,7 @@ pub fn settings_menu_actions(
     mut settings_tab: ResMut<SettingsTab>,
     mut open_dropdown: ResMut<OpenSettingsDropdown>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
+    mut active_slider: ResMut<ActiveSettingsSlider>,
     mut interactions: Query<
         (Ref<Interaction>, &SettingsAction, &Node, &GlobalTransform),
         With<Button>,
@@ -349,6 +346,7 @@ pub fn settings_menu_actions(
     if *mode != GameMode::Settings {
         pending_key_bind.0 = None;
         open_dropdown.0 = None;
+        active_slider.0 = None;
         return;
     }
 
@@ -366,7 +364,31 @@ pub fn settings_menu_actions(
             .map(|cursor| Vec2::new(cursor.x, cursor.y))
     });
 
-    for (interaction, action, node, transform) in &mut interactions {
+    if mouse_buttons.just_released(MouseButton::Left) {
+        if let Some(slider) = active_slider.0.take() {
+            if let Some((_, _, node, transform)) = interactions.iter().find(|(_, action, _, _)| {
+                matches!(
+                    (*action, slider),
+                    (SettingsAction::FovSlider, SettingsSlider::Fov)
+                        | (SettingsAction::UiScaleSlider, SettingsSlider::UiScale)
+                        | (SettingsAction::GravitySlider, SettingsSlider::Gravity)
+                )
+            }) {
+                if let Some(percent) = slider_percent(cursor_position, node, transform) {
+                    apply_settings_slider(
+                        slider,
+                        percent,
+                        &mut settings,
+                        &mut ui_scale,
+                        &mut config,
+                    );
+                    save_config(&config);
+                }
+            }
+        }
+    }
+
+    for (interaction, action, _, _) in &mut interactions {
         if *interaction != Interaction::Pressed {
             continue;
         }
@@ -387,36 +409,13 @@ pub fn settings_menu_actions(
                 open_dropdown.0 = None;
             }
             SettingsAction::FovSlider => {
-                if let Some(percent) = slider_percent(cursor_position, node, transform) {
-                    settings.fov_degrees = (50.0 + percent * 60.0).round().clamp(50.0, 110.0);
-                    config.fov_degrees = settings.fov_degrees;
-                    save_config(&config);
-                }
+                active_slider.0 = Some(SettingsSlider::Fov);
             }
             SettingsAction::UiScaleSlider => {
-                if let Some(percent) = slider_percent(cursor_position, node, transform) {
-                    settings.ui_scale =
-                        ((UI_SCALE_MIN + percent * (UI_SCALE_MAX - UI_SCALE_MIN)) * 10.0).round()
-                            / 10.0;
-                    settings.ui_scale = settings.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
-                    ui_scale.0 = settings.ui_scale;
-                    config.ui_scale = settings.ui_scale;
-                    save_config(&config);
-                }
+                active_slider.0 = Some(SettingsSlider::UiScale);
             }
             SettingsAction::GravitySlider => {
-                if let Some(percent) = slider_percent(cursor_position, node, transform) {
-                    settings.gravity_scale = ((GRAVITY_SCALE_MIN
-                        + percent * (GRAVITY_SCALE_MAX - GRAVITY_SCALE_MIN))
-                        * 10.0)
-                        .round()
-                        / 10.0;
-                    settings.gravity_scale = settings
-                        .gravity_scale
-                        .clamp(GRAVITY_SCALE_MIN, GRAVITY_SCALE_MAX);
-                    config.gravity_scale = settings.gravity_scale;
-                    save_config(&config);
-                }
+                active_slider.0 = Some(SettingsSlider::Gravity);
             }
             SettingsAction::SetPlaceSelectionMode(selection_mode) => {
                 if !interaction.is_changed() {
@@ -505,6 +504,38 @@ fn slider_percent(
     }
     let left = transform.translation().x - width * 0.5;
     Some(((cursor_position.x - left) / width).clamp(0.0, 1.0))
+}
+
+fn apply_settings_slider(
+    slider: SettingsSlider,
+    percent: f32,
+    settings: &mut GameSettings,
+    ui_scale: &mut UiScale,
+    config: &mut GameConfig,
+) {
+    match slider {
+        SettingsSlider::Fov => {
+            settings.fov_degrees = (50.0 + percent * 60.0).round().clamp(50.0, 110.0);
+            config.fov_degrees = settings.fov_degrees;
+        }
+        SettingsSlider::UiScale => {
+            settings.ui_scale =
+                ((UI_SCALE_MIN + percent * (UI_SCALE_MAX - UI_SCALE_MIN)) * 10.0).round() / 10.0;
+            settings.ui_scale = settings.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
+            ui_scale.0 = settings.ui_scale;
+            config.ui_scale = settings.ui_scale;
+        }
+        SettingsSlider::Gravity => {
+            settings.gravity_scale =
+                ((GRAVITY_SCALE_MIN + percent * (GRAVITY_SCALE_MAX - GRAVITY_SCALE_MIN)) * 10.0)
+                    .round()
+                    / 10.0;
+            settings.gravity_scale = settings
+                .gravity_scale
+                .clamp(GRAVITY_SCALE_MIN, GRAVITY_SCALE_MAX);
+            config.gravity_scale = settings.gravity_scale;
+        }
+    }
 }
 
 pub fn generator_menu_actions(

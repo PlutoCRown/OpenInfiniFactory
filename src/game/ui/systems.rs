@@ -25,8 +25,8 @@ use super::types::{
     ScrollContainer, ScrollContent, SettingsAction, SettingsDropdownLabel, SettingsDropdownList,
     SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider,
     SettingsSliderFill, SettingsSliderKnob, SettingsStatusText, SettingsTab, SettingsValue,
-    SettingsValueText, SimulationText, SlotArea, SlotLabel, TeleportNameText, TeleportPairText,
-    TeleportPanel, UiScaleText,
+    SettingsValueText, SimulationStatusText, SimulationText, SlotArea, SlotLabel, TeleportNameText,
+    TeleportPairText, TeleportPanel, UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -194,6 +194,7 @@ pub fn update_status_ui(
     simulation: Res<SimulationState>,
     settings: Res<GameSettings>,
     save_state: Res<SaveState>,
+    config: Res<GameConfig>,
     i18n: Res<I18n>,
     mut hotbar: Query<&mut Text, (With<HotbarText>, Without<SlotLabel>, Without<CarriedLabel>)>,
     mut inventory_title: Query<
@@ -243,6 +244,20 @@ pub fn update_status_ui(
             Without<InventoryTitle>,
             Without<FovText>,
             Without<UiScaleText>,
+            Without<CurrentSaveText>,
+        ),
+    >,
+    mut simulation_status_text: Query<
+        &mut Text,
+        (
+            With<SimulationStatusText>,
+            Without<SlotLabel>,
+            Without<HotbarText>,
+            Without<CarriedLabel>,
+            Without<InventoryTitle>,
+            Without<FovText>,
+            Without<UiScaleText>,
+            Without<SimulationText>,
             Without<CurrentSaveText>,
         ),
     >,
@@ -310,6 +325,14 @@ pub fn update_status_ui(
         );
     }
 
+    if let Ok(mut text) = simulation_status_text.get_single_mut() {
+        text.sections[0].value = if *builder_mode == BuilderMode::Play {
+            simulation_status_text_value(&simulation, &config, &i18n)
+        } else {
+            String::new()
+        };
+    }
+
     if let Ok(mut text) = current_save_text.get_single_mut() {
         text.sections[0].value = save_state
             .current
@@ -317,6 +340,63 @@ pub fn update_status_ui(
             .map(|name| i18n.fmt("save.world", &[("name", name.clone())]))
             .unwrap_or_else(|| i18n.text("save.no_world_loaded"));
     }
+}
+
+fn simulation_status_text_value(
+    simulation: &SimulationState,
+    config: &GameConfig,
+    i18n: &I18n,
+) -> String {
+    let start = config.input(ConfigAction::Simulate).name().to_string();
+    let fast = config
+        .input(ConfigAction::SimulationFast)
+        .name()
+        .to_string();
+    let step = config
+        .input(ConfigAction::SimulationStep)
+        .name()
+        .to_string();
+    let rollback = config
+        .input(ConfigAction::SimulationRollback)
+        .name()
+        .to_string();
+
+    let (state_key, controls_key, controls_args): (&str, &str, Vec<(&str, String)>) =
+        if !simulation.is_active() {
+            (
+                "simulation_state.ready",
+                "simulation_controls.ready",
+                vec![("start", start)],
+            )
+        } else if simulation.running && simulation.speed > 1.0 {
+            (
+                "simulation_state.fast",
+                "simulation_controls.fast",
+                vec![("fast", fast), ("step", step), ("rollback", rollback)],
+            )
+        } else if simulation.running {
+            (
+                "simulation_state.playing",
+                "simulation_controls.playing",
+                vec![("step", step), ("fast", fast), ("rollback", rollback)],
+            )
+        } else {
+            (
+                "simulation_state.paused",
+                "simulation_controls.paused",
+                vec![("step", step), ("start", start), ("rollback", rollback)],
+            )
+        };
+    let controls = i18n.fmt(controls_key, &controls_args);
+
+    i18n.fmt(
+        "status.simulation_overlay",
+        &[
+            ("state", i18n.text(state_key)),
+            ("turns", simulation.turn.to_string()),
+            ("controls", controls),
+        ],
+    )
 }
 
 pub fn update_carried_item_ui(
@@ -359,12 +439,12 @@ pub fn update_carried_item_ui(
 
 pub fn update_scroll_containers(
     mode: Res<GameMode>,
-    settings_tab: Res<SettingsTab>,
+    _settings_tab: Res<SettingsTab>,
     mut mouse_wheel: EventReader<MouseWheel>,
     mut containers: Query<(&mut ScrollContainer, &Children, &Node)>,
     mut contents: Query<(&mut Style, &Node), With<ScrollContent>>,
 ) {
-    if *mode != GameMode::Settings || *settings_tab != SettingsTab::KeyBindings {
+    if *mode != GameMode::Settings {
         return;
     }
 
@@ -627,7 +707,7 @@ pub fn update_settings_text_ui(
                 (
                     "rollback",
                     config
-                        .input(ConfigAction::RotateOrRollback)
+                        .input(ConfigAction::SimulationRollback)
                         .name()
                         .to_string(),
                 ),

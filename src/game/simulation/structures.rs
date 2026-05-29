@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use crate::game::world::animation::BlockAnimation;
 use crate::game::world::blocks::BlockData;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks};
@@ -84,8 +85,12 @@ impl StructureMove {
     }
 }
 
-pub(super) fn execute_structure_moves(world: &mut WorldBlocks, moves: Vec<StructureMove>) {
+pub(super) fn execute_structure_moves(
+    world: &mut WorldBlocks,
+    moves: Vec<StructureMove>,
+) -> HashMap<IVec3, BlockAnimation> {
     let mut moved = HashSet::new();
+    let mut animations = HashMap::new();
     for movement in moves {
         match movement {
             StructureMove::Translate { structure, offset } => {
@@ -93,6 +98,21 @@ pub(super) fn execute_structure_moves(world: &mut WorldBlocks, moves: Vec<Struct
                     continue;
                 }
                 if can_move_structure(world, &structure, offset) {
+                    if offset.abs().element_sum() == 1 {
+                        for pos in &structure {
+                            if let Some(block) = world.blocks.get(pos) {
+                                animations.insert(
+                                    *pos + offset,
+                                    BlockAnimation {
+                                        from_pos: *pos,
+                                        to_pos: *pos + offset,
+                                        from_facing: block.facing,
+                                        to_facing: block.facing,
+                                    },
+                                );
+                            }
+                        }
+                    }
                     moved.extend(structure.iter().copied());
                     move_structure(world, &structure, offset);
                     moved.extend(structure.into_iter().map(|pos| pos + offset));
@@ -111,6 +131,20 @@ pub(super) fn execute_structure_moves(world: &mut WorldBlocks, moves: Vec<Struct
                         .iter()
                         .map(|pos| rotate_pos_y(*pos, pivot, clockwise))
                         .collect();
+                    for pos in &structure {
+                        if let Some(block) = world.blocks.get(pos) {
+                            let target = rotate_pos_y(*pos, pivot, clockwise);
+                            animations.insert(
+                                target,
+                                BlockAnimation {
+                                    from_pos: *pos,
+                                    to_pos: target,
+                                    from_facing: block.facing,
+                                    to_facing: rotate_facing(block.facing, clockwise),
+                                },
+                            );
+                        }
+                    }
                     moved.extend(structure.iter().copied());
                     rotate_structure(world, &structure, pivot, clockwise);
                     moved.extend(targets);
@@ -118,6 +152,7 @@ pub(super) fn execute_structure_moves(world: &mut WorldBlocks, moves: Vec<Struct
             }
         }
     }
+    animations
 }
 
 pub(super) fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {

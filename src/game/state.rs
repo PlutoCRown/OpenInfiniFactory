@@ -169,6 +169,7 @@ impl Default for BuilderMode {
 #[derive(Resource)]
 pub struct SimulationState {
     pub running: bool,
+    pub step_requested: bool,
     pub speed: f32,
     pub turn: u64,
     pub accumulator: f32,
@@ -179,6 +180,7 @@ impl Default for SimulationState {
     fn default() -> Self {
         Self {
             running: false,
+            step_requested: false,
             speed: 1.0,
             turn: 0,
             accumulator: 0.0,

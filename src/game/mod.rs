@@ -26,7 +26,10 @@ use systems::menus::{
     teleport_rename_input,
 };
 use systems::simulation_controls::simulation_controls;
-use ui::{CarriedItem, InventoryItems, OpenSettingsDropdown, PendingKeyBind, SettingsTab};
+use ui::{
+    ActiveSettingsSlider, CarriedItem, InventoryItems, OpenSettingsDropdown, PendingKeyBind,
+    SettingsTab,
+};
 use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
 use world::rendering::setup_scene;
@@ -80,6 +83,7 @@ impl Plugin for GamePlugin {
             .insert_resource(SettingsReturnMode::default())
             .insert_resource(OpenSettingsDropdown::default())
             .insert_resource(PendingKeyBind::default())
+            .insert_resource(ActiveSettingsSlider::default())
             .insert_resource(systems::debug::DebugState::default())
             .insert_resource(systems::debug::PerfStats::default())
             .insert_resource(CarriedItem::default())

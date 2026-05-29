@@ -1,6 +1,4 @@
 use bevy::prelude::*;
-use std::collections::HashMap;
-
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::grid_to_world;
 use crate::game::world::rendering::BlockEntity;
@@ -90,48 +88,4 @@ pub fn animate_blocks(
             commands.entity(entity).remove::<AnimatedBlock>();
         }
     }
-}
-
-pub fn pair_block_animations(
-    before: &HashMap<IVec3, (crate::game::world::blocks::BlockKind, Facing)>,
-    after: &HashMap<IVec3, (crate::game::world::blocks::BlockKind, Facing)>,
-) -> HashMap<IVec3, BlockAnimation> {
-    let mut animations = HashMap::new();
-    let mut used_before = std::collections::HashSet::new();
-
-    for (to_pos, (kind, to_facing)) in after {
-        let mut best = None;
-        let mut best_distance = i32::MAX;
-
-        for (from_pos, (from_kind, from_facing)) in before {
-            if used_before.contains(from_pos) || from_kind != kind {
-                continue;
-            }
-
-            let distance = (*to_pos - *from_pos).abs().element_sum();
-            if distance < best_distance {
-                best = Some((*from_pos, *from_facing));
-                best_distance = distance;
-            }
-        }
-
-        let Some((from_pos, from_facing)) = best else {
-            continue;
-        };
-
-        used_before.insert(from_pos);
-        if from_pos != *to_pos || from_facing != *to_facing {
-            animations.insert(
-                *to_pos,
-                BlockAnimation {
-                    from_pos,
-                    to_pos: *to_pos,
-                    from_facing,
-                    to_facing: *to_facing,
-                },
-            );
-        }
-    }
-
-    animations
 }

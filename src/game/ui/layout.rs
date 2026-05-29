@@ -16,9 +16,9 @@ use super::types::{
     HotbarText, InGameHudStyle, InGameHudVisibility, InventoryTitle, LabelerAction,
     LabelerColorText, LabelerPanel, MainMenuAction, MainMenuPanel, PauseAction, PausePanel,
     SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdown, SettingsGameplayGroup,
-    SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider, SettingsStatusText, SimulationText,
-    SlotArea, TeleportAction, TeleportNameText, TeleportPairText, TeleportPanel, BACKPACK_SLOTS,
-    HOTBAR_SLOTS,
+    SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider, SettingsStatusText,
+    SimulationStatusText, SimulationText, SlotArea, TeleportAction, TeleportNameText,
+    TeleportPairText, TeleportPanel, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::widgets::{
     scroll_container, scroll_content, spawn_converter_button, spawn_generator_button,
@@ -234,6 +234,19 @@ fn spawn_status_overlays(root: &mut ChildBuilder) {
         SimulationText,
         InGameHudVisibility,
     ));
+    root.spawn((
+        absolute_text_bundle(
+            "",
+            16.0,
+            STATUS_TEXT,
+            None,
+            Some(Val::Px(18.0)),
+            None,
+            Some(Val::Px(18.0)),
+        ),
+        SimulationStatusText,
+        InGameHudVisibility,
+    ));
 }
 
 fn spawn_hotbar(root: &mut ChildBuilder) {
@@ -305,10 +318,8 @@ fn spawn_pause_panel(root: &mut ChildBuilder, i18n: &I18n) {
                 ("button.cancel", PauseAction::CancelEditSwitch),
                 ("button.save_world", PauseAction::SaveWorld),
                 ("button.reset_solution", PauseAction::ResetSolution),
-                ("button.switch_save", PauseAction::OpenSaveList),
                 ("button.settings", PauseAction::OpenSettings),
                 ("button.back_to_main_menu", PauseAction::BackToMainMenu),
-                ("button.quit_game", PauseAction::Quit),
             ] {
                 spawn_localized_pause_button(panel, i18n.text(key), key, action);
             }
@@ -388,36 +399,56 @@ fn spawn_settings_row(
 }
 
 fn spawn_gameplay_settings(panel: &mut ChildBuilder, i18n: &I18n) {
-    spawn_settings_row(panel, i18n, "settings.fov", (), |controls| {
-        spawn_settings_slider(controls, SettingsSlider::Fov);
-    });
-    spawn_settings_row(panel, i18n, "settings.ui_scale_label", (), |controls| {
-        spawn_settings_slider(controls, SettingsSlider::UiScale);
-    });
-    spawn_settings_row(panel, i18n, "settings.gravity", (), |controls| {
-        spawn_settings_slider(controls, SettingsSlider::Gravity);
-    });
-    spawn_settings_row(panel, i18n, "settings.language", (), |controls| {
-        spawn_settings_dropdown(controls, SettingsDropdown::Language);
-    });
-    spawn_settings_row(
-        panel,
-        i18n,
-        "settings.place_selection_mode",
-        (),
-        |controls| {
-            spawn_settings_dropdown(controls, SettingsDropdown::PlaceSelectionMode);
-        },
-    );
-    spawn_settings_row(
-        panel,
-        i18n,
-        "settings.delete_selection_mode",
-        (),
-        |controls| {
-            spawn_settings_dropdown(controls, SettingsDropdown::DeleteSelectionMode);
-        },
-    );
+    panel
+        .spawn(scroll_container(430.0))
+        .insert(SettingsGameplayGroup)
+        .with_children(|container| {
+            container
+                .spawn((
+                    transparent_node(Style {
+                        width: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(8.0),
+                        ..default()
+                    }),
+                    scroll_content(),
+                ))
+                .with_children(|content| {
+                    spawn_settings_row(content, i18n, "settings.fov", (), |controls| {
+                        spawn_settings_slider(controls, SettingsSlider::Fov);
+                    });
+                    spawn_settings_row(content, i18n, "settings.ui_scale_label", (), |controls| {
+                        spawn_settings_slider(controls, SettingsSlider::UiScale);
+                    });
+                    spawn_settings_row(content, i18n, "settings.gravity", (), |controls| {
+                        spawn_settings_slider(controls, SettingsSlider::Gravity);
+                    });
+                    spawn_settings_row(content, i18n, "settings.language", (), |controls| {
+                        spawn_settings_dropdown(controls, SettingsDropdown::Language);
+                    });
+                    spawn_settings_row(
+                        content,
+                        i18n,
+                        "settings.place_selection_mode",
+                        (),
+                        |controls| {
+                            spawn_settings_dropdown(controls, SettingsDropdown::PlaceSelectionMode);
+                        },
+                    );
+                    spawn_settings_row(
+                        content,
+                        i18n,
+                        "settings.delete_selection_mode",
+                        (),
+                        |controls| {
+                            spawn_settings_dropdown(
+                                controls,
+                                SettingsDropdown::DeleteSelectionMode,
+                            );
+                        },
+                    );
+                });
+        });
 }
 
 fn spawn_key_bindings(panel: &mut ChildBuilder, i18n: &I18n) {
@@ -428,7 +459,29 @@ fn spawn_key_bindings(panel: &mut ChildBuilder, i18n: &I18n) {
             container
                 .spawn((key_bindings_grid_bundle(), scroll_content()))
                 .with_children(|grid| {
-                    for action in ConfigAction::ALL {
+                    grid.spawn(localized_text(
+                        i18n,
+                        "settings.group.general",
+                        18.0,
+                        Color::WHITE,
+                    ));
+                    grid.spawn(transparent_node(Style::default()));
+                    for action in ConfigAction::GENERAL {
+                        spawn_localized_settings_button(
+                            grid,
+                            i18n.text(action.label_key()),
+                            action.label_key(),
+                            SettingsAction::Bind(action),
+                        );
+                    }
+                    grid.spawn(localized_text(
+                        i18n,
+                        "settings.group.simulation",
+                        18.0,
+                        Color::WHITE,
+                    ));
+                    grid.spawn(transparent_node(Style::default()));
+                    for action in ConfigAction::SIMULATION {
                         spawn_localized_settings_button(
                             grid,
                             i18n.text(action.label_key()),
@@ -564,10 +617,10 @@ fn key_bindings_grid_bundle() -> NodeBundle {
     transparent_node(Style {
         display: Display::Grid,
         grid_template_columns: RepeatedGridTrack::flex(2, 1.0),
-        grid_template_rows: RepeatedGridTrack::flex(6, 1.0),
+        grid_template_rows: RepeatedGridTrack::flex(11, 1.0),
         position_type: PositionType::Absolute,
         width: Val::Percent(100.0),
-        height: Val::Px(360.0),
+        height: Val::Px(462.0),
         row_gap: Val::Px(6.0),
         column_gap: Val::Px(8.0),
         ..default()

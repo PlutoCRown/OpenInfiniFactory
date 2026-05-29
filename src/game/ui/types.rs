@@ -162,6 +162,9 @@ pub enum SettingsDropdown {
 pub struct SimulationText;
 
 #[derive(Component)]
+pub struct SimulationStatusText;
+
+#[derive(Component)]
 pub struct LocalizedText {
     pub key: &'static str,
 }
@@ -175,10 +178,8 @@ pub enum PauseAction {
     CancelEditSwitch,
     SaveWorld,
     ResetSolution,
-    OpenSaveList,
     OpenSettings,
     BackToMainMenu,
-    Quit,
 }
 
 #[derive(Component, Clone, Copy)]
@@ -211,6 +212,9 @@ pub enum SettingsAction {
     OpenFolder,
     Back,
 }
+
+#[derive(Resource, Default)]
+pub struct ActiveSettingsSlider(pub Option<SettingsSlider>);
 
 #[derive(Component, Clone, Copy)]
 pub enum GeneratorAction {
