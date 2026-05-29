@@ -1,7 +1,16 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, Facing, FactoryBlock, MarkerBehavior, RenderBehavior,
-    SignalBehavior, WireConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, Facing, FactoryBlock,
+    MarkerBehavior, ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior,
+    WireConnectorBehavior,
 };
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Large, ModelMaterial::Frame, [0.0, 0.38, 0.08]),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::DarkFrame, [0.0, 0.40, -0.34])
+        .scaled([1.15, 1.15, 0.50]),
+    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Power, [0.0, 0.40, -0.54])
+        .scaled([0.74, 0.86, 0.44]),
+];
 
 pub struct BlockerBlock;
 
@@ -44,6 +53,10 @@ impl Block for BlockerBlock {
             }),
             ..Default::default()
         }
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 
     fn alternate(&self) -> Option<BlockKind> {

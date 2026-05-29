@@ -1,9 +1,16 @@
 use bevy::prelude::*;
 
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, Facing, FactoryBlock, MarkerBehavior, RenderBehavior,
-    WeldConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, Facing, FactoryBlock,
+    MarkerBehavior, ModelMaterial, ModelMesh, RenderBehavior, WeldConnectorBehavior,
 };
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Medium, ModelMaterial::Frame, [0.0, 0.32, 0.0]),
+    BlockModelPart::new(ModelMesh::RodY, ModelMaterial::Welding, [0.0, -0.08, 0.0])
+        .scaled([0.85, 0.62, 0.85]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Welding, [0.0, -0.50, 0.0]),
+];
 
 pub struct DownWelderBlock;
 
@@ -36,6 +43,10 @@ impl Block for DownWelderBlock {
             weld_connector: Some(WeldConnectorBehavior::Offset(IVec3::NEG_Y)),
             ..Default::default()
         }
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 
     fn alternate(&self) -> Option<BlockKind> {

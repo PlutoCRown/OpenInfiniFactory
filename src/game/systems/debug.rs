@@ -22,6 +22,7 @@ pub struct DebugPanel;
 #[derive(Resource)]
 pub struct PerfStats {
     frame_started: Instant,
+    last_main_finished: Option<Instant>,
     mark: Instant,
     frame_ms: SmoothedMs,
     main_ms: SmoothedMs,
@@ -34,6 +35,7 @@ pub struct PerfStats {
     debug_ms: SmoothedMs,
     main_other_ms: SmoothedMs,
     render_other_ms: SmoothedMs,
+    render_gap_ms: SmoothedMs,
     display_timer: Timer,
     display_text: String,
 }
@@ -43,6 +45,7 @@ impl Default for PerfStats {
         let now = Instant::now();
         Self {
             frame_started: now,
+            last_main_finished: None,
             mark: now,
             frame_ms: SmoothedMs::default(),
             main_ms: SmoothedMs::default(),
@@ -55,6 +58,7 @@ impl Default for PerfStats {
             debug_ms: SmoothedMs::default(),
             main_other_ms: SmoothedMs::default(),
             render_other_ms: SmoothedMs::default(),
+            render_gap_ms: SmoothedMs::default(),
             display_timer: Timer::from_seconds(0.25, TimerMode::Repeating),
             display_text: String::new(),
         }
@@ -87,6 +91,10 @@ pub fn begin_perf_frame(mut perf: ResMut<PerfStats>) {
     let now = Instant::now();
     let frame_duration = now.saturating_duration_since(perf.frame_started);
     perf.frame_ms.sample(frame_duration);
+    if let Some(last_main_finished) = perf.last_main_finished {
+        perf.render_gap_ms
+            .sample(now.saturating_duration_since(last_main_finished));
+    }
     perf.frame_started = now;
     perf.mark = now;
 }
@@ -143,6 +151,7 @@ pub fn finish_perf_frame(mut perf: ResMut<PerfStats>) {
     perf.main_ms.sample_ms(main_ms);
     perf.main_other_ms.sample_ms(main_other_ms);
     perf.render_other_ms.sample_ms(render_other_ms);
+    perf.last_main_finished = Some(Instant::now());
 }
 
 impl PerfStats {
@@ -152,6 +161,10 @@ impl PerfStats {
         self.mark = now;
         elapsed
     }
+}
+
+fn micros(ms: f64) -> f64 {
+    ms * 1000.0
 }
 
 pub fn setup_debug_ui(mut commands: Commands) {
@@ -259,20 +272,24 @@ pub fn update_debug_ui(
         String::new()
     };
 
+    let render_remainder_ms = (perf.render_other_ms.value - perf.render_gap_ms.value).max(0.0);
+
     perf.display_text = format!(
-        "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n  Input: {:>5.2} ms\n  Menus: {:>5.2} ms\n  Sim Systems: {:>5.2} ms\n  View: {:>5.2} ms\n  Anim: {:>5.2} ms\n  UI: {:>5.2} ms\n  Debug UI: {:>5.2} ms\n  Schedule/Other: {:>5.2} ms\nRender/Engine: {:>5.2} ms{}\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
+        "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n  Input: {:>8.2} us\n  Menus: {:>8.2} us\n  Sim Systems: {:>8.2} us\n  View: {:>8.2} us\n  Anim: {:>8.2} us\n  UI: {:>8.2} us\n  Debug UI: {:>8.2} us\n  Schedule/Other: {:>8.2} us\nRender/Engine: {:>5.2} ms\n  Frame Gap: {:>5.2} ms\n  Timing Remainder: {:>5.2} ms{}\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
         fps,
         perf.frame_ms.value,
         perf.main_ms.value,
-        perf.input_ms.value,
-        perf.menu_ms.value,
-        perf.simulation_ms.value,
-        perf.view_ms.value,
-        perf.animation_ms.value,
-        perf.ui_ms.value,
-        perf.debug_ms.value,
-        perf.main_other_ms.value,
+        micros(perf.input_ms.value),
+        micros(perf.menu_ms.value),
+        micros(perf.simulation_ms.value),
+        micros(perf.view_ms.value),
+        micros(perf.animation_ms.value),
+        micros(perf.ui_ms.value),
+        micros(perf.debug_ms.value),
+        micros(perf.main_other_ms.value),
         perf.render_other_ms.value,
+        perf.render_gap_ms.value,
+        render_remainder_ms,
         sim_turn_text,
         world.blocks.len(),
         block_entities.iter().count(),

@@ -46,7 +46,8 @@ pub fn spawn_player(mut commands: Commands) {
             },
             tonemapping: Tonemapping::SomewhatBoringDisplayTransform,
             deband_dither: DebandDither::Enabled,
-            transform: Transform::from_xyz(3.0, SPAWN_EYE_Y, 7.0).looking_at(Vec3::ZERO, Vec3::Y),
+            transform: Transform::from_xyz(0.5, SPAWN_EYE_Y + 1.2, 10.5)
+                .looking_at(Vec3::new(0.5, 0.8, 0.5), Vec3::Y),
             ..default()
         },
         ScreenSpaceAmbientOcclusionSettings {

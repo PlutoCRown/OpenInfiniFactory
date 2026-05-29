@@ -1,7 +1,14 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, FactoryBlock, RenderBehavior, SignalBehavior,
-    WireConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, FactoryBlock,
+    ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior, WireConnectorBehavior,
 };
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Medium, ModelMaterial::Signal, [0.0, 0.52, 0.0]),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Signal, [0.0, 0.38, -0.34])
+        .scaled([0.72, 0.72, 0.55]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Power, [0.0, 0.38, -0.52]),
+];
 
 pub struct DetectorBlock;
 
@@ -39,6 +46,10 @@ impl Block for DetectorBlock {
             }),
             ..Default::default()
         }
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 
     fn alternate(&self) -> Option<BlockKind> {

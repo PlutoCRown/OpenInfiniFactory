@@ -105,6 +105,10 @@ pub trait Block: Send + Sync {
         RenderBehavior::default()
     }
 
+    fn model(&self) -> BlockModel {
+        BlockModel::Default
+    }
+
     fn alternate(&self) -> Option<BlockKind> {
         None
     }
@@ -218,6 +222,73 @@ pub enum WeldConnectorBehavior {
 pub enum WireConnectorBehavior {
     Wire,
     Device { blocked_offset: IVec3 },
+}
+
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+pub enum ModelMesh {
+    Large,
+    Medium,
+    Small,
+    Plate,
+    RodX,
+    RodY,
+    RodZ,
+}
+
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+pub enum ModelMaterial {
+    Frame,
+    DarkFrame,
+    Belt,
+    BeltStripe,
+    Welding,
+    Wire,
+    Signal,
+    Power,
+    Piston,
+    Lift,
+    Rotation,
+    Drill,
+    Laser,
+    System,
+    SystemAccent,
+    Goal,
+    TeleportIn,
+    TeleportOut,
+}
+
+#[derive(Clone, Copy)]
+pub struct BlockModelPart {
+    pub mesh: ModelMesh,
+    pub material: ModelMaterial,
+    pub translation: [f32; 3],
+    pub scale: [f32; 3],
+}
+
+impl BlockModelPart {
+    pub const fn new(mesh: ModelMesh, material: ModelMaterial, translation: [f32; 3]) -> Self {
+        Self {
+            mesh,
+            material,
+            translation,
+            scale: [1.0, 1.0, 1.0],
+        }
+    }
+
+    pub const fn scaled(mut self, scale: [f32; 3]) -> Self {
+        self.scale = scale;
+        self
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum BlockModel {
+    Default,
+    Parts(&'static [BlockModelPart]),
+    Asset {
+        path: &'static str,
+        fallback: &'static [BlockModelPart],
+    },
 }
 
 #[derive(Clone, Copy)]
@@ -604,5 +675,9 @@ impl BlockKind {
 
     pub fn render_behavior(self, facing: Facing) -> RenderBehavior {
         self.block().render_behavior(facing)
+    }
+
+    pub fn model(self) -> BlockModel {
+        self.block().model()
     }
 }

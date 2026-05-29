@@ -1,4 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, SceneBlock};
+use super::{rgb, Block, BlockDefinition, BlockKind, EditableBlock, SceneBlock};
 
 pub struct DirtBlock;
 
@@ -21,3 +21,4 @@ impl Block for DirtBlock {
 }
 
 impl SceneBlock for DirtBlock {}
+impl EditableBlock for DirtBlock {}

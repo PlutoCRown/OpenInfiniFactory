@@ -1,7 +1,15 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MovementRule, RenderBehavior,
-    SignalBehavior, WireConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, FactoryBlock,
+    ModelMaterial, ModelMesh, MovementRule, RenderBehavior, SignalBehavior, WireConnectorBehavior,
 };
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Large, ModelMaterial::Piston, [0.0, 0.42, 0.05]),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Piston, [0.0, 0.42, -0.30])
+        .scaled([0.82, 0.82, 0.70]),
+    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::DarkFrame, [0.0, 0.42, -0.54])
+        .scaled([0.68, 0.75, 0.45]),
+];
 
 pub struct PistonBlock;
 
@@ -44,6 +52,10 @@ impl Block for PistonBlock {
             }),
             ..Default::default()
         }
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 
     fn alternate(&self) -> Option<BlockKind> {

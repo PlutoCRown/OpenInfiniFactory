@@ -3,8 +3,9 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::game::world::animation::{AnimatedBlock, AnimationTiming, BlockAnimation};
-use crate::game::world::blocks::{BlockData, WeldConnectorBehavior, WireConnectorBehavior};
-use crate::game::world::direction::Facing;
+use crate::game::world::blocks::{
+    BlockData, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
+};
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
 
@@ -299,28 +300,7 @@ fn spawn_block_model(
     }
 
     entity.with_children(|parent| {
-        if data.kind.is_directional() {
-            let forward = Facing::North.forward();
-            parent.spawn(PbrBundle {
-                mesh: assets.arrow.clone(),
-                material: assets.arrow_material.clone(),
-                transform: Transform {
-                    translation: forward * 0.05 + Vec3::Y * 0.54,
-                    ..default()
-                },
-                ..default()
-            });
-
-            parent.spawn(PbrBundle {
-                mesh: assets.arrow_nose.clone(),
-                material: assets.arrow_nose_material.clone(),
-                transform: Transform {
-                    translation: forward * 0.42 + Vec3::Y * 0.56,
-                    ..default()
-                },
-                ..default()
-            });
-        }
+        spawn_model_parts(parent, assets, data);
 
         let render_behavior = data.kind.render_behavior(data.facing);
 
@@ -410,6 +390,31 @@ fn face_mark_transform(normal: IVec3) -> Transform {
     }
 }
 
+fn spawn_model_parts(parent: &mut ChildBuilder, assets: &WorldRenderAssets, data: BlockData) {
+    let parts = match data.kind.model() {
+        BlockModel::Default => &[],
+        BlockModel::Parts(parts) => parts,
+        BlockModel::Asset { path: _, fallback } => fallback,
+    };
+
+    for part in parts {
+        parent.spawn(PbrBundle {
+            mesh: assets.model_mesh(part.mesh),
+            material: assets.model_material(part.material),
+            transform: Transform {
+                translation: model_vec3(part.translation),
+                scale: model_vec3(part.scale),
+                ..default()
+            },
+            ..default()
+        });
+    }
+}
+
+fn model_vec3(value: [f32; 3]) -> Vec3 {
+    Vec3::new(value[0], value[1], value[2])
+}
+
 fn weld_connects_to(block: &BlockData, connector_from_block: IVec3) -> bool {
     match block.kind.render_behavior(block.facing).weld_connector {
         Some(WeldConnectorBehavior::AllSides) => true,
@@ -429,9 +434,7 @@ fn local_connector_offset(data: BlockData, offset: IVec3) -> IVec3 {
 fn wire_connects_to(block: &BlockData, wire_from_block: IVec3) -> bool {
     match block.kind.render_behavior(block.facing).wire_connector {
         Some(WireConnectorBehavior::Wire) => true,
-        Some(WireConnectorBehavior::Device { blocked_offset }) => {
-            wire_from_block != blocked_offset
-        }
+        Some(WireConnectorBehavior::Device { blocked_offset }) => wire_from_block != blocked_offset,
         None => false,
     }
 }

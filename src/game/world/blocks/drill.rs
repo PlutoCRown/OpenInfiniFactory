@@ -1,7 +1,17 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, Facing, FactoryBlock, MarkerBehavior,
-    MaterialDestroyer, RenderBehavior, SignalBehavior, WireConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, Facing, FactoryBlock,
+    MarkerBehavior, MaterialDestroyer, ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior,
+    WireConnectorBehavior,
 };
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Medium, ModelMaterial::Frame, [0.0, 0.42, 0.08]),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Drill, [0.0, 0.42, -0.30])
+        .scaled([0.65, 0.65, 0.68]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Drill, [-0.16, 0.42, -0.52]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Drill, [0.16, 0.42, -0.52]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Power, [0.0, 0.62, 0.08]),
+];
 
 pub struct DrillBlock;
 
@@ -50,6 +60,10 @@ impl Block for DrillBlock {
             }),
             ..Default::default()
         }
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 
     fn alternate(&self) -> Option<BlockKind> {

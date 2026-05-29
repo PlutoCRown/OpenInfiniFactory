@@ -1,9 +1,16 @@
 use bevy::prelude::*;
 
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, FactoryBlock, RenderBehavior, SignalBehavior,
-    WireConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, FactoryBlock,
+    ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior, WireConnectorBehavior,
 };
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Medium, ModelMaterial::Signal, [0.0, 0.30, 0.0]),
+    BlockModelPart::new(ModelMesh::RodY, ModelMaterial::Signal, [0.0, -0.10, 0.0])
+        .scaled([0.76, 0.62, 0.76]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Power, [0.0, -0.50, 0.0]),
+];
 
 pub struct DownDetectorBlock;
 
@@ -37,6 +44,10 @@ impl Block for DownDetectorBlock {
             }),
             ..Default::default()
         }
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 
     fn alternate(&self) -> Option<BlockKind> {

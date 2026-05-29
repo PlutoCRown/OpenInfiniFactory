@@ -1,5 +1,21 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, EditableBlock, SystemBlock};
+use super::{
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, EditableBlock,
+    ModelMaterial, ModelMesh, SystemBlock,
+};
 use crate::game::world::grid::{BlockSettings, TeleportSettings};
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::RodX, ModelMaterial::TeleportIn, [0.0, 0.22, -0.30])
+        .scaled([0.88, 0.72, 0.72]),
+    BlockModelPart::new(ModelMesh::RodX, ModelMaterial::TeleportIn, [0.0, 0.22, 0.30])
+        .scaled([0.88, 0.72, 0.72]),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::TeleportIn, [-0.30, 0.22, 0.0])
+        .scaled([0.72, 0.72, 0.88]),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::TeleportIn, [0.30, 0.22, 0.0])
+        .scaled([0.72, 0.72, 0.88]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::TeleportIn, [0.0, 0.42, 0.0])
+        .scaled([0.88, 0.88, 0.88]),
+];
 
 pub struct TeleportEntranceBlock;
 
@@ -23,6 +39,10 @@ impl Block for TeleportEntranceBlock {
 
     fn default_settings(&self, pos: bevy::prelude::IVec3) -> Option<BlockSettings> {
         Some(BlockSettings::Teleport(TeleportSettings::unnamed(pos)))
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 }
 

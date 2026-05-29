@@ -1,4 +1,15 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, MaterialDestroyer, SystemBlock};
+use super::{
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, MaterialDestroyer,
+    ModelMaterial, ModelMesh, SystemBlock,
+};
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Drill, [0.0, 0.0, 0.0]),
+    BlockModelPart::new(ModelMesh::RodX, ModelMaterial::Drill, [0.0, 0.0, 0.0])
+        .scaled([0.72, 0.42, 0.42]),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Drill, [0.0, 0.0, 0.0])
+        .scaled([0.42, 0.42, 0.72]),
+];
 
 pub struct DrillHeadBlock;
 
@@ -24,6 +35,10 @@ impl Block for DrillHeadBlock {
 
     fn material_destroyer(&self, _facing: super::Facing) -> Option<MaterialDestroyer> {
         Some(MaterialDestroyer::AdjacentDrillHead)
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 }
 

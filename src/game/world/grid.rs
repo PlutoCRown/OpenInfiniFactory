@@ -323,16 +323,18 @@ impl WorldBlocks {
                 (candidate.kind == target_kind).then_some(*candidate_pos)
             })
             .collect();
-        candidates.sort_by_key(|candidate| {
-            self.teleport_settings(*candidate).name
-        });
+        candidates.sort_by_key(|candidate| self.teleport_settings(*candidate).name);
 
         let current = self.teleport_settings(pos).pair;
         let next = if candidates.is_empty() {
             None
         } else {
             let index = current
-                .and_then(|current| candidates.iter().position(|candidate| *candidate == current))
+                .and_then(|current| {
+                    candidates
+                        .iter()
+                        .position(|candidate| *candidate == current)
+                })
                 .map(|index| (index + 1) % candidates.len())
                 .unwrap_or(0);
             Some(candidates[index])
@@ -361,9 +363,9 @@ impl WorldBlocks {
                     return None;
                 }
                 match settings {
-                        BlockSettings::Teleport(settings) => Some(settings.name.clone()),
-                        _ => None,
-                    }
+                    BlockSettings::Teleport(settings) => Some(settings.name.clone()),
+                    _ => None,
+                }
             })
             .collect();
 
@@ -393,10 +395,7 @@ impl WorldBlocks {
         }
     }
 
-    pub fn replace_material_face_marks(
-        &mut self,
-        marks: HashMap<MaterialFace, MaterialFaceMark>,
-    ) {
+    pub fn replace_material_face_marks(&mut self, marks: HashMap<MaterialFace, MaterialFaceMark>) {
         if self.material_face_marks != marks {
             self.material_face_marks = marks;
             self.topology_revision = self.topology_revision.wrapping_add(1);
@@ -470,34 +469,12 @@ pub fn seed_demo_world(world: &mut WorldBlocks) {
             world.insert(
                 IVec3::new(x, 0, z),
                 BlockData {
-                    kind: BlockKind::Solid,
+                    kind: BlockKind::Stone,
                     facing: Facing::North,
                 },
             );
         }
     }
-
-    world.insert(
-        IVec3::new(0, 1, 0),
-        BlockData {
-            kind: BlockKind::Conveyor,
-            facing: Facing::East,
-        },
-    );
-    world.insert(
-        IVec3::new(1, 1, 0),
-        BlockData {
-            kind: BlockKind::Piston,
-            facing: Facing::South,
-        },
-    );
-    world.insert(
-        IVec3::new(2, 1, 0),
-        BlockData {
-            kind: BlockKind::Goal,
-            facing: Facing::North,
-        },
-    );
 }
 
 pub fn grid_to_world(pos: IVec3) -> Vec3 {

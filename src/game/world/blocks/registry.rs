@@ -1,14 +1,13 @@
 use super::{
-    blocker::BLOCKER, blocker_head::BLOCKER_HEAD, conveyor::CONVEYOR, converter::CONVERTER,
+    blocker::BLOCKER, blocker_head::BLOCKER_HEAD, converter::CONVERTER, conveyor::CONVEYOR,
     copper_material::COPPER_MATERIAL, counter_rotator::COUNTER_ROTATOR, detector::DETECTOR,
     dirt::DIRT, down_detector::DOWN_DETECTOR, down_welder::DOWN_WELDER, drill::DRILL,
     drill_head::DRILL_HEAD, generator::GENERATOR, glass::GLASS, goal::GOAL, grass::GRASS,
-    iron_material::IRON_MATERIAL, laser::LASER, lifter::LIFTER, material::MATERIAL,
-    piston::PISTON, planks::PLANKS, reverse_conveyor::REVERSE_CONVEYOR, roller::ROLLER,
-    rotator::ROTATOR, solid::SOLID, stamper::STAMPER, stone::STONE,
-    teleport_entrance::TELEPORT_ENTRANCE, teleport_exit::TELEPORT_EXIT, welder::WELDER,
-    weld_point::WELD_POINT, wire::WIRE, Block, BlockKind, EditableBlock, FactoryBlock,
-    MaterialBlock, MaterialKind, SceneBlock, SystemBlock,
+    iron_material::IRON_MATERIAL, laser::LASER, lifter::LIFTER, material::MATERIAL, piston::PISTON,
+    planks::PLANKS, reverse_conveyor::REVERSE_CONVEYOR, roller::ROLLER, rotator::ROTATOR,
+    solid::SOLID, stamper::STAMPER, stone::STONE, teleport_entrance::TELEPORT_ENTRANCE,
+    teleport_exit::TELEPORT_EXIT, weld_point::WELD_POINT, welder::WELDER, wire::WIRE, Block,
+    BlockKind, EditableBlock, FactoryBlock, MaterialBlock, MaterialKind, SceneBlock, SystemBlock,
 };
 
 pub const EDIT_BLOCKS: [BlockKind; 12] = [
@@ -151,7 +150,12 @@ const SYSTEM_REGISTRY: [&'static (dyn SystemBlock + Send + Sync); 10] = [
     &BLOCKER_HEAD,
     &DRILL_HEAD,
 ];
-const EDITABLE_REGISTRY: [&'static (dyn EditableBlock + Send + Sync); 7] = [
+const EDITABLE_REGISTRY: [&'static (dyn EditableBlock + Send + Sync); 12] = [
+    &GRASS,
+    &STONE,
+    &DIRT,
+    &PLANKS,
+    &GLASS,
     &GENERATOR,
     &GOAL,
     &STAMPER,

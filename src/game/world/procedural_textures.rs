@@ -9,6 +9,10 @@ pub enum ProceduralTexture {
     Stone,
     Dirt,
     Planks,
+    Glass,
+    Material,
+    IronMaterial,
+    CopperMaterial,
 }
 
 pub fn block_texture(kind: ProceduralTexture) -> Image {
@@ -22,6 +26,10 @@ pub fn block_texture(kind: ProceduralTexture) -> Image {
                 ProceduralTexture::Stone => stone_pixel(x, y),
                 ProceduralTexture::Dirt => dirt_pixel(x, y),
                 ProceduralTexture::Planks => planks_pixel(x, y),
+                ProceduralTexture::Glass => glass_pixel(x, y),
+                ProceduralTexture::Material => material_pixel(x, y, [210, 188, 118], 131),
+                ProceduralTexture::IronMaterial => material_pixel(x, y, [158, 166, 170], 149),
+                ProceduralTexture::CopperMaterial => material_pixel(x, y, [201, 112, 58], 167),
             };
             data.extend_from_slice(&[r, g, b, 255]);
         }
@@ -91,6 +99,32 @@ fn planks_pixel(x: u32, y: u32) -> [u8; 3] {
         shade([154, 104, 55], noise, 18)
     } else {
         shade([178, 121, 65], noise, 20)
+    }
+}
+
+fn glass_pixel(x: u32, y: u32) -> [u8; 3] {
+    let noise = texture_noise(x, y, 127);
+    let edge = x < 3 || y < 3 || x > 28 || y > 28;
+    let glint = (x + y * 2 + noise as u32) % 31 == 0 || x == y;
+    if edge {
+        shade([126, 205, 226], noise, 16)
+    } else if glint {
+        shade([218, 250, 255], noise, 10)
+    } else {
+        shade([112, 184, 208], noise, 18)
+    }
+}
+
+fn material_pixel(x: u32, y: u32, base: [u8; 3], seed: u32) -> [u8; 3] {
+    let noise = texture_noise(x, y, seed);
+    let fleck = ((x * 11 + y * 17 + noise as u32) % 29) < 3;
+    let band = (x + y + seed) % 9 == 0;
+    if fleck {
+        shade(base, noise, 38)
+    } else if band {
+        shade(base, noise, -22)
+    } else {
+        shade(base, noise, 18)
     }
 }
 

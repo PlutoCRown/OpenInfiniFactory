@@ -1,7 +1,15 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, FactoryBlock, RenderBehavior, SignalBehavior,
-    WireConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, FactoryBlock,
+    ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior, WireConnectorBehavior,
 };
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::RodX, ModelMaterial::Wire, [0.0, 0.54, 0.0])
+        .scaled([0.90, 0.70, 0.70]),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Wire, [0.0, 0.54, 0.0])
+        .scaled([0.70, 0.70, 0.90]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Power, [0.0, 0.58, 0.0]),
+];
 
 pub struct WireBlock;
 
@@ -32,6 +40,10 @@ impl Block for WireBlock {
             wire_connector: Some(WireConnectorBehavior::Wire),
             ..Default::default()
         }
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 }
 

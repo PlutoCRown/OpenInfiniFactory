@@ -1,4 +1,12 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, SystemBlock};
+use super::{
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial, ModelMesh,
+    SystemBlock,
+};
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Power, [0.0, 0.0, 0.0])
+        .scaled([0.70, 1.15, 0.70]),
+];
 
 pub struct BlockerHeadBlock;
 
@@ -19,6 +27,9 @@ impl Block for BlockerHeadBlock {
         )
     }
 
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
+    }
 }
 
 impl SystemBlock for BlockerHeadBlock {}

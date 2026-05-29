@@ -1,7 +1,17 @@
 use super::{
-    rgb, rgba, Block, BlockDefinition, BlockKind, RenderBehavior, SystemBlock,
-    WeldBehavior, WeldConnectorBehavior,
+    rgb, rgba, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial,
+    ModelMesh, RenderBehavior, SystemBlock, WeldBehavior, WeldConnectorBehavior,
 };
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Welding, [0.0, 0.0, 0.0]),
+    BlockModelPart::new(ModelMesh::RodX, ModelMaterial::Welding, [0.0, 0.0, 0.0])
+        .scaled([0.58, 0.42, 0.42]),
+    BlockModelPart::new(ModelMesh::RodY, ModelMaterial::Welding, [0.0, 0.0, 0.0])
+        .scaled([0.42, 0.58, 0.42]),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Welding, [0.0, 0.0, 0.0])
+        .scaled([0.42, 0.42, 0.58]),
+];
 
 pub struct WeldPointBlock;
 
@@ -34,6 +44,10 @@ impl Block for WeldPointBlock {
 
     fn weld_behavior(&self) -> Option<WeldBehavior> {
         Some(WeldBehavior::Node)
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 }
 

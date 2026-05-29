@@ -1,4 +1,4 @@
-use super::{rgb, rgba, Block, BlockDefinition, BlockKind, SceneBlock};
+use super::{rgb, rgba, Block, BlockDefinition, BlockKind, EditableBlock, SceneBlock};
 
 pub struct GlassBlock;
 
@@ -22,3 +22,4 @@ impl Block for GlassBlock {
 }
 
 impl SceneBlock for GlassBlock {}
+impl EditableBlock for GlassBlock {}

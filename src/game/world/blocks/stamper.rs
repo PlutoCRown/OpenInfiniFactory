@@ -1,7 +1,16 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, EditableBlock, MaterialLabeler, SystemBlock,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, EditableBlock,
+    MaterialLabeler, ModelMaterial, ModelMesh, SystemBlock,
 };
 use crate::game::world::grid::{BlockSettings, LabelerSettings};
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Large, ModelMaterial::System, [0.0, 0.38, 0.04]),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::SystemAccent, [0.0, 0.38, -0.30])
+        .scaled([0.56, 0.56, 0.58]),
+    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Laser, [0.0, 0.38, -0.54])
+        .scaled([0.52, 0.70, 0.40]),
+];
 
 pub struct StamperBlock;
 
@@ -35,6 +44,10 @@ impl Block for StamperBlock {
 
     fn default_settings(&self, _pos: bevy::prelude::IVec3) -> Option<BlockSettings> {
         Some(BlockSettings::Labeler(LabelerSettings::default()))
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 }
 

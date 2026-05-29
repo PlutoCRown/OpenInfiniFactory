@@ -1,4 +1,14 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, EditableBlock, RenderBehavior, SystemBlock};
+use super::{
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, EditableBlock,
+    ModelMaterial, ModelMesh, RenderBehavior, SystemBlock,
+};
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Goal, [0.0, 0.18, 0.0]),
+    BlockModelPart::new(ModelMesh::Medium, ModelMaterial::Goal, [0.0, 0.44, 0.0])
+        .scaled([0.74, 0.74, 0.74]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Goal, [0.0, 0.66, 0.0]),
+];
 
 pub struct GoalBlock;
 
@@ -25,6 +35,10 @@ impl Block for GoalBlock {
             goal_topper: true,
             ..Default::default()
         }
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 }
 

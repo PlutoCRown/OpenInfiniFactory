@@ -1,7 +1,17 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MaterialDestroyer, RenderBehavior,
-    SignalBehavior, WireConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, FactoryBlock,
+    MaterialDestroyer, ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior,
+    WireConnectorBehavior,
 };
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Medium, ModelMaterial::DarkFrame, [0.0, 0.42, 0.08]),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Laser, [0.0, 0.42, -0.30])
+        .scaled([0.54, 0.54, 0.76]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Laser, [0.0, 0.42, -0.56]),
+    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Power, [0.0, 0.62, 0.08])
+        .scaled([0.58, 0.58, 0.58]),
+];
 
 pub struct LaserBlock;
 
@@ -44,6 +54,10 @@ impl Block for LaserBlock {
             }),
             ..Default::default()
         }
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 
     fn alternate(&self) -> Option<BlockKind> {

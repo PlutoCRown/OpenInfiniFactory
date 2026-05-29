@@ -1,4 +1,16 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock};
+use super::{
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, FactoryBlock,
+    ModelMaterial, ModelMesh,
+};
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::DarkFrame, [0.0, 0.54, 0.0]),
+    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::DarkFrame, [0.0, -0.54, 0.0]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Frame, [-0.28, 0.0, -0.28]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Frame, [0.28, 0.0, -0.28]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Frame, [-0.28, 0.0, 0.28]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Frame, [0.28, 0.0, 0.28]),
+];
 
 pub struct SolidBlock;
 
@@ -17,6 +29,10 @@ impl Block for SolidBlock {
             rgb(0.46, 0.48, 0.50),
             rgb(0.38, 0.39, 0.40),
         )
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 }
 

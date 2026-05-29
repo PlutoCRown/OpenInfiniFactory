@@ -1,7 +1,15 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, Facing, FactoryBlock, MarkerBehavior, RenderBehavior,
-    WeldConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, Facing, FactoryBlock,
+    MarkerBehavior, ModelMaterial, ModelMesh, RenderBehavior, WeldConnectorBehavior,
 };
+
+const MODEL: &[BlockModelPart] = &[
+    BlockModelPart::new(ModelMesh::Medium, ModelMaterial::Frame, [0.0, 0.48, 0.0]),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Welding, [0.0, 0.28, -0.34])
+        .scaled([0.75, 0.75, 0.52]),
+    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Welding, [0.0, 0.30, -0.52]),
+    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::DarkFrame, [0.0, -0.50, 0.0]),
+];
 
 pub struct WelderBlock;
 
@@ -38,6 +46,10 @@ impl Block for WelderBlock {
             weld_connector: Some(WeldConnectorBehavior::Offset(facing.forward_ivec3())),
             ..Default::default()
         }
+    }
+
+    fn model(&self) -> BlockModel {
+        BlockModel::Parts(MODEL)
     }
 
     fn alternate(&self) -> Option<BlockKind> {
