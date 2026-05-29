@@ -16,11 +16,16 @@ pub struct WorldBlocks {
     pub system_blocks: HashMap<IVec3, BlockData>,
     pub material_welds: HashSet<MaterialWeld>,
     pub material_face_marks: HashMap<MaterialFace, MaterialFaceMark>,
-    pub generator_settings: HashMap<IVec3, GeneratorSettings>,
-    pub labeler_settings: HashMap<IVec3, LabelerSettings>,
-    pub converter_settings: HashMap<IVec3, ConverterSettings>,
-    pub teleport_settings: HashMap<IVec3, TeleportSettings>,
+    pub block_settings: HashMap<IVec3, BlockSettings>,
     pub topology_revision: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum BlockSettings {
+    Generator(GeneratorSettings),
+    Labeler(LabelerSettings),
+    Converter(ConverterSettings),
+    Teleport(TeleportSettings),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -166,13 +171,13 @@ impl WorldBlocks {
         } else {
             self.blocks.insert(pos, block)
         };
-        if block.kind.is_teleport() && !self.teleport_settings.contains_key(&pos) {
-            self.teleport_settings.insert(
+        if block.kind.is_teleport() && !self.block_settings.contains_key(&pos) {
+            self.block_settings.insert(
                 pos,
-                TeleportSettings {
+                BlockSettings::Teleport(TeleportSettings {
                     name: self.next_teleport_name(block.kind),
                     pair: None,
-                },
+                }),
             );
         }
         if previous != Some(block) {
@@ -186,7 +191,6 @@ impl WorldBlocks {
         if removed.is_some() {
             self.material_welds.retain(|weld| !weld.contains(*pos));
             self.material_face_marks.retain(|face, _| face.pos != *pos);
-            self.generator_settings.remove(pos);
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
         removed
@@ -195,13 +199,12 @@ impl WorldBlocks {
     pub fn remove_system(&mut self, pos: &IVec3) -> Option<BlockData> {
         let removed = self.system_blocks.remove(pos);
         if removed.is_some() {
-            self.generator_settings.remove(pos);
-            self.labeler_settings.remove(pos);
-            self.converter_settings.remove(pos);
-            self.teleport_settings.remove(pos);
-            for settings in self.teleport_settings.values_mut() {
-                if settings.pair == Some(*pos) {
-                    settings.pair = None;
+            self.block_settings.remove(pos);
+            for settings in self.block_settings.values_mut() {
+                if let BlockSettings::Teleport(settings) = settings {
+                    if settings.pair == Some(*pos) {
+                        settings.pair = None;
+                    }
                 }
             }
             self.topology_revision = self.topology_revision.wrapping_add(1);
@@ -215,10 +218,7 @@ impl WorldBlocks {
             self.system_blocks.clear();
             self.material_welds.clear();
             self.material_face_marks.clear();
-            self.generator_settings.clear();
-            self.labeler_settings.clear();
-            self.converter_settings.clear();
-            self.teleport_settings.clear();
+            self.block_settings.clear();
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -232,8 +232,6 @@ impl WorldBlocks {
             });
             self.material_face_marks
                 .retain(|face, _| self.blocks.contains_key(&face.pos));
-            self.generator_settings
-                .retain(|pos, _| self.blocks.contains_key(pos));
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -242,18 +240,14 @@ impl WorldBlocks {
         let before = self.system_blocks.len();
         self.system_blocks.retain(|pos, block| keep(pos, block));
         if self.system_blocks.len() != before {
-            self.generator_settings
-                .retain(|pos, _| self.system_blocks.contains_key(pos));
-            self.labeler_settings
-                .retain(|pos, _| self.system_blocks.contains_key(pos));
-            self.converter_settings
-                .retain(|pos, _| self.system_blocks.contains_key(pos));
-            self.teleport_settings
+            self.block_settings
                 .retain(|pos, _| self.system_blocks.contains_key(pos));
             let existing: HashSet<IVec3> = self.system_blocks.keys().copied().collect();
-            for settings in self.teleport_settings.values_mut() {
-                if settings.pair.is_some_and(|pair| !existing.contains(&pair)) {
-                    settings.pair = None;
+            for settings in self.block_settings.values_mut() {
+                if let BlockSettings::Teleport(settings) = settings {
+                    if settings.pair.is_some_and(|pair| !existing.contains(&pair)) {
+                        settings.pair = None;
+                    }
                 }
             }
             self.topology_revision = self.topology_revision.wrapping_add(1);
@@ -261,84 +255,67 @@ impl WorldBlocks {
     }
 
     pub fn generator_settings(&self, pos: IVec3) -> GeneratorSettings {
-        self.generator_settings
-            .get(&pos)
-            .copied()
-            .unwrap_or_default()
+        match self.block_settings.get(&pos) {
+            Some(BlockSettings::Generator(settings)) => *settings,
+            _ => GeneratorSettings::default(),
+        }
+    }
+
+    pub fn set_block_settings(&mut self, pos: IVec3, settings: BlockSettings) {
+        let Some(block) = self.system_blocks.get(&pos).copied() else {
+            return;
+        };
+        let valid = match (&settings, block.kind) {
+            (BlockSettings::Generator(_), _) => block.kind.material_source(block.facing).is_some(),
+            (BlockSettings::Labeler(_), _) => block.kind.material_labeler(block.facing).is_some(),
+            (BlockSettings::Converter(_), BlockKind::Converter) => true,
+            (BlockSettings::Teleport(_), kind) => kind.is_teleport(),
+            _ => false,
+        };
+        if !valid {
+            return;
+        }
+        if self.block_settings.get(&pos) != Some(&settings) {
+            self.block_settings.insert(pos, settings);
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
     }
 
     pub fn set_generator_settings(&mut self, pos: IVec3, settings: GeneratorSettings) {
-        if !self
-            .system_blocks
-            .get(&pos)
-            .is_some_and(|block| block.kind.material_source(block.facing).is_some())
-        {
-            return;
-        }
-        if self.generator_settings.insert(pos, settings) != Some(settings) {
-            self.topology_revision = self.topology_revision.wrapping_add(1);
-        }
+        self.set_block_settings(pos, BlockSettings::Generator(settings));
     }
 
     pub fn labeler_settings(&self, pos: IVec3) -> LabelerSettings {
-        self.labeler_settings
-            .get(&pos)
-            .copied()
-            .unwrap_or_default()
+        match self.block_settings.get(&pos) {
+            Some(BlockSettings::Labeler(settings)) => *settings,
+            _ => LabelerSettings::default(),
+        }
     }
 
     pub fn set_labeler_settings(&mut self, pos: IVec3, settings: LabelerSettings) {
-        if !self
-            .system_blocks
-            .get(&pos)
-            .is_some_and(|block| block.kind.material_labeler(block.facing).is_some())
-        {
-            return;
-        }
-        if self.labeler_settings.insert(pos, settings) != Some(settings) {
-            self.topology_revision = self.topology_revision.wrapping_add(1);
-        }
+        self.set_block_settings(pos, BlockSettings::Labeler(settings));
     }
 
     pub fn converter_settings(&self, pos: IVec3) -> ConverterSettings {
-        self.converter_settings
-            .get(&pos)
-            .copied()
-            .unwrap_or_default()
+        match self.block_settings.get(&pos) {
+            Some(BlockSettings::Converter(settings)) => *settings,
+            _ => ConverterSettings::default(),
+        }
     }
 
     pub fn set_converter_settings(&mut self, pos: IVec3, settings: ConverterSettings) {
-        if !self
-            .system_blocks
-            .get(&pos)
-            .is_some_and(|block| block.kind == BlockKind::Converter)
-        {
-            return;
-        }
-        if self.converter_settings.insert(pos, settings) != Some(settings) {
-            self.topology_revision = self.topology_revision.wrapping_add(1);
-        }
+        self.set_block_settings(pos, BlockSettings::Converter(settings));
     }
 
     pub fn teleport_settings(&self, pos: IVec3) -> TeleportSettings {
-        self.teleport_settings
-            .get(&pos)
-            .cloned()
-            .unwrap_or_else(|| TeleportSettings::unnamed(pos))
+        match self.block_settings.get(&pos) {
+            Some(BlockSettings::Teleport(settings)) => settings.clone(),
+            _ => TeleportSettings::unnamed(pos),
+        }
     }
 
     pub fn set_teleport_settings(&mut self, pos: IVec3, settings: TeleportSettings) {
-        if !self
-            .system_blocks
-            .get(&pos)
-            .is_some_and(|block| block.kind.is_teleport())
-        {
-            return;
-        }
-        if self.teleport_settings.get(&pos) != Some(&settings) {
-            self.teleport_settings.insert(pos, settings);
-            self.topology_revision = self.topology_revision.wrapping_add(1);
-        }
+        self.set_block_settings(pos, BlockSettings::Teleport(settings));
     }
 
     pub fn cycle_teleport_pair(&mut self, pos: IVec3) {
@@ -384,13 +361,20 @@ impl WorldBlocks {
             _ => &[],
         };
         let used: HashSet<String> = self
-            .teleport_settings
+            .block_settings
             .iter()
             .filter_map(|(pos, settings)| {
-                self.system_blocks
+                if !self
+                    .system_blocks
                     .get(pos)
                     .is_some_and(|block| block.kind == kind)
-                    .then_some(settings.name.clone())
+                {
+                    return None;
+                }
+                match settings {
+                        BlockSettings::Teleport(settings) => Some(settings.name.clone()),
+                        _ => None,
+                    }
             })
             .collect();
 

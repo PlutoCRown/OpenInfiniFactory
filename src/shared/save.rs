@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 
 use crate::game::world::blocks::{BlockData, PersistentLayer};
 use crate::game::world::grid::{
-    ConverterSettings, GeneratorSettings, LabelerSettings, TeleportSettings, WorldBlocks,
+    BlockSettings, ConverterSettings, GeneratorSettings, LabelerSettings, TeleportSettings,
+    WorldBlocks,
 };
 
 pub const SAVE_DIR: &str = "saves";
@@ -43,6 +44,8 @@ struct SaveFile {
     #[serde(default)]
     system_blocks: Vec<SavedBlock>,
     #[serde(default)]
+    block_settings: Vec<SavedBlockSettings>,
+    #[serde(default)]
     generator_settings: Vec<SavedGeneratorSettings>,
     #[serde(default)]
     labeler_settings: Vec<SavedLabelerSettings>,
@@ -66,6 +69,8 @@ struct WorldLayer {
     #[serde(default)]
     system_blocks: Vec<SavedBlock>,
     #[serde(default)]
+    block_settings: Vec<SavedBlockSettings>,
+    #[serde(default)]
     generator_settings: Vec<SavedGeneratorSettings>,
     #[serde(default)]
     labeler_settings: Vec<SavedLabelerSettings>,
@@ -81,6 +86,14 @@ struct SavedBlock {
     y: i32,
     z: i32,
     data: BlockData,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct SavedBlockSettings {
+    x: i32,
+    y: i32,
+    z: i32,
+    settings: BlockSettings,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -167,6 +180,7 @@ impl SaveFile {
             factory_blocks: Vec::new(),
             blocks: puzzle.blocks,
             system_blocks: puzzle.system_blocks,
+            block_settings: puzzle.block_settings,
             generator_settings: puzzle.generator_settings,
             labeler_settings: puzzle.labeler_settings,
             converter_settings: puzzle.converter_settings,
@@ -181,6 +195,7 @@ impl SaveFile {
             factory_blocks: capture_factory_blocks(world),
             blocks: puzzle.blocks,
             system_blocks: puzzle.system_blocks,
+            block_settings: puzzle.block_settings,
             generator_settings: puzzle.generator_settings,
             labeler_settings: puzzle.labeler_settings,
             converter_settings: puzzle.converter_settings,
@@ -237,59 +252,43 @@ impl SaveFile {
                 .filter(|saved| saved.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle))
                 .cloned()
                 .collect(),
+            block_settings: self
+                .block_settings
+                .iter()
+                .filter(|saved| self.legacy_system_block_is_persistent(saved.pos()))
+                .cloned()
+                .collect(),
             generator_settings: self
                 .generator_settings
                 .iter()
-                .filter(|saved| {
-                    self.system_blocks
-                        .iter()
-                        .any(|block| {
-                            block.pos() == saved.pos()
-                                && block.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
-                        })
-                })
+                .filter(|saved| self.legacy_system_block_is_persistent(saved.pos()))
                 .cloned()
                 .collect(),
             labeler_settings: self
                 .labeler_settings
                 .iter()
-                .filter(|saved| {
-                    self.system_blocks
-                        .iter()
-                        .any(|block| {
-                            block.pos() == saved.pos()
-                                && block.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
-                        })
-                })
+                .filter(|saved| self.legacy_system_block_is_persistent(saved.pos()))
                 .cloned()
                 .collect(),
             converter_settings: self
                 .converter_settings
                 .iter()
-                .filter(|saved| {
-                    self.system_blocks
-                        .iter()
-                        .any(|block| {
-                            block.pos() == saved.pos()
-                                && block.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
-                        })
-                })
+                .filter(|saved| self.legacy_system_block_is_persistent(saved.pos()))
                 .cloned()
                 .collect(),
             teleport_settings: self
                 .teleport_settings
                 .iter()
-                .filter(|saved| {
-                    self.system_blocks
-                        .iter()
-                        .any(|block| {
-                            block.pos() == saved.pos()
-                                && block.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
-                        })
-                })
+                .filter(|saved| self.legacy_system_block_is_persistent(saved.pos()))
                 .cloned()
                 .collect(),
         }
+    }
+
+    fn legacy_system_block_is_persistent(&self, pos: IVec3) -> bool {
+        self.system_blocks.iter().any(|block| {
+            block.pos() == pos && block.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
+        })
     }
 }
 
@@ -336,8 +335,8 @@ fn capture_puzzle_layer(world: &WorldBlocks) -> WorldLayer {
     WorldLayer {
         blocks,
         system_blocks,
-        generator_settings: world
-            .generator_settings
+        block_settings: world
+            .block_settings
             .iter()
             .filter_map(|(pos, settings)| {
                 world
@@ -346,61 +345,7 @@ fn capture_puzzle_layer(world: &WorldBlocks) -> WorldLayer {
                     .is_some_and(|block| {
                         block.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
                     })
-                    .then_some(SavedGeneratorSettings {
-                        x: pos.x,
-                        y: pos.y,
-                        z: pos.z,
-                        settings: *settings,
-                    })
-            })
-            .collect(),
-        labeler_settings: world
-            .labeler_settings
-            .iter()
-            .filter_map(|(pos, settings)| {
-                world
-                    .system_blocks
-                    .get(pos)
-                    .is_some_and(|block| {
-                        block.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
-                    })
-                    .then_some(SavedLabelerSettings {
-                        x: pos.x,
-                        y: pos.y,
-                        z: pos.z,
-                        settings: *settings,
-                    })
-            })
-            .collect(),
-        converter_settings: world
-            .converter_settings
-            .iter()
-            .filter_map(|(pos, settings)| {
-                world
-                    .system_blocks
-                    .get(pos)
-                    .is_some_and(|block| {
-                        block.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
-                    })
-                    .then_some(SavedConverterSettings {
-                        x: pos.x,
-                        y: pos.y,
-                        z: pos.z,
-                        settings: *settings,
-                    })
-            })
-            .collect(),
-        teleport_settings: world
-            .teleport_settings
-            .iter()
-            .filter_map(|(pos, settings)| {
-                world
-                    .system_blocks
-                    .get(pos)
-                    .is_some_and(|block| {
-                        block.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
-                    })
-                    .then_some(SavedTeleportSettings {
+                    .then_some(SavedBlockSettings {
                         x: pos.x,
                         y: pos.y,
                         z: pos.z,
@@ -408,6 +353,10 @@ fn capture_puzzle_layer(world: &WorldBlocks) -> WorldLayer {
                     })
             })
             .collect(),
+        generator_settings: Vec::new(),
+        labeler_settings: Vec::new(),
+        converter_settings: Vec::new(),
+        teleport_settings: Vec::new(),
     }
 }
 
@@ -428,6 +377,9 @@ fn apply_layer(world: &mut WorldBlocks, layer: WorldLayer) {
     }
     for saved in layer.system_blocks {
         world.insert(saved.pos(), saved.data);
+    }
+    for saved in layer.block_settings {
+        world.set_block_settings(saved.pos(), saved.settings);
     }
     for saved in layer.generator_settings {
         world.set_generator_settings(IVec3::new(saved.x, saved.y, saved.z), saved.settings);
@@ -461,6 +413,12 @@ fn saved_block(pos: IVec3, data: BlockData) -> SavedBlock {
 }
 
 impl SavedBlock {
+    fn pos(&self) -> IVec3 {
+        IVec3::new(self.x, self.y, self.z)
+    }
+}
+
+impl SavedBlockSettings {
     fn pos(&self) -> IVec3 {
         IVec3::new(self.x, self.y, self.z)
     }
