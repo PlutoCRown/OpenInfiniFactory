@@ -347,6 +347,24 @@ impl InventoryItems {
 
         Self { hotbar, backpack }
     }
+
+    pub fn can_take_block(&self, kind: BlockKind) -> bool {
+        let item = Some(InventoryItem::Block(kind));
+        self.hotbar.contains(&item) || self.backpack.contains(&item)
+    }
+
+    pub fn hotbar_index_of_block(&self, kind: BlockKind) -> Option<usize> {
+        let item = Some(InventoryItem::Block(kind));
+        self.hotbar
+            .iter()
+            .position(|candidate| *candidate == item)
+    }
+
+    pub fn set_hotbar_block(&mut self, index: usize, kind: BlockKind) {
+        if let Some(slot) = self.hotbar.get_mut(index) {
+            *slot = Some(InventoryItem::Block(kind));
+        }
+    }
 }
 
 #[derive(Resource)]
@@ -365,6 +383,10 @@ impl CarriedItem {
 
     pub fn set(&mut self, item: Option<InventoryItem>) {
         self.0 = item;
+    }
+
+    pub fn take(&mut self) -> Option<InventoryItem> {
+        self.0.take()
     }
 }
 

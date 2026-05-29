@@ -129,7 +129,7 @@ pub fn placement_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
     mut world: ResMut<WorldBlocks>,
-    inventory: Res<InventoryItems>,
+    mut inventory: ResMut<InventoryItems>,
     config: Res<GameConfig>,
     builder_mode: Res<BuilderMode>,
     mut mode: ResMut<GameMode>,
@@ -142,6 +142,7 @@ pub fn placement_input(
 ) {
     let place_button = MouseButton::Left;
     let delete_button = MouseButton::Right;
+    let pick_button = MouseButton::Middle;
 
     if *mode != GameMode::Playing {
         placement.edit_gesture = None;
@@ -256,6 +257,15 @@ pub fn placement_input(
     }
 
     placement.selection.clear();
+
+    if mouse_buttons.just_pressed(pick_button) {
+        if let Some(pos) = current_target_pos {
+            pick_target_block(pos, &world, &mut placement, &mut inventory);
+        }
+        placement.edit_gesture = None;
+        despawn_edit_previews(&mut commands, &edit_previews);
+        return;
+    }
 
     if *builder_mode == BuilderMode::Play
         && keys.just_pressed(config.key_bindings.alternate.key_code())
@@ -407,6 +417,33 @@ fn selected_kind(inventory: &InventoryItems, placement: &PlacementState) -> Opti
 
 fn selected_area(inventory: &InventoryItems, placement: &PlacementState) -> Option<AreaKind> {
     inventory.hotbar[placement.selected].and_then(|item| item.area())
+}
+
+fn pick_target_block(
+    pos: IVec3,
+    world: &WorldBlocks,
+    placement: &mut PlacementState,
+    inventory: &mut InventoryItems,
+) {
+    let Some(kind) = world
+        .blocks
+        .get(&pos)
+        .or_else(|| world.system_blocks.get(&pos))
+        .map(|block| block.kind)
+    else {
+        return;
+    };
+    if !inventory.can_take_block(kind) {
+        return;
+    }
+
+    if let Some(index) = inventory.hotbar_index_of_block(kind) {
+        placement.selected = index;
+    } else {
+        inventory.set_hotbar_block(placement.selected, kind);
+    }
+    placement.selection.clear();
+    placement.edit_gesture = None;
 }
 
 fn handle_selection_area_input(

@@ -54,6 +54,7 @@ pub fn inventory_slot_clicks(
         (&Interaction, &InventorySlot),
         (Changed<Interaction>, With<Button>),
     >,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
@@ -68,6 +69,18 @@ pub fn inventory_slot_clicks(
             continue;
         }
 
+        if mouse_buttons.just_pressed(MouseButton::Middle) {
+            if slot.area == SlotArea::Hotbar {
+                inventory.hotbar[slot.index] = None;
+                if placement.selected == slot.index {
+                    carried.clear();
+                }
+            }
+            placement.selection.clear();
+            placement.edit_gesture = None;
+            continue;
+        }
+
         let clicked_item = match slot.area {
             SlotArea::Hotbar => inventory.hotbar[slot.index],
             SlotArea::Backpack => inventory.backpack[slot.index],
@@ -79,15 +92,44 @@ pub fn inventory_slot_clicks(
                 placement.selected = slot.index;
                 carried.clear();
             } else {
-                carried.set(clicked_item);
+                if let Some(item) = clicked_item {
+                    if place_in_backpack(&mut inventory, item) {
+                        inventory.hotbar[slot.index] = None;
+                        carried.clear();
+                    } else {
+                        carried.set(Some(item));
+                    }
+                } else {
+                    carried.clear();
+                }
                 placement.selected = slot.index;
             }
         } else {
-            carried.set(clicked_item);
+            if let Some(item) = carried.take() {
+                if inventory.backpack[slot.index].is_none() {
+                    inventory.backpack[slot.index] = Some(item);
+                } else {
+                    let previous = inventory.backpack[slot.index].replace(item);
+                    carried.set(previous);
+                }
+            } else {
+                carried.set(clicked_item);
+            }
         }
         placement.selection.clear();
         placement.edit_gesture = None;
     }
+}
+
+fn place_in_backpack(inventory: &mut InventoryItems, item: super::types::InventoryItem) -> bool {
+    if inventory.backpack.iter().any(|slot| *slot == Some(item)) {
+        return true;
+    }
+    if let Some(slot) = inventory.backpack.iter_mut().find(|slot| slot.is_none()) {
+        *slot = Some(item);
+        return true;
+    }
+    false
 }
 
 pub fn update_button_hover_ui(
