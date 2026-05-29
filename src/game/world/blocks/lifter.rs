@@ -17,7 +17,10 @@ impl Block for LifterBlock {
             rgb(0.25, 0.58, 0.72),
             rgb(0.18, 0.48, 0.62),
         )
-        .directional()
+    }
+
+    fn is_directional(&self) -> bool {
+        true
     }
 
     fn material_mover(&self, _facing: super::Facing) -> Option<MaterialMover> {

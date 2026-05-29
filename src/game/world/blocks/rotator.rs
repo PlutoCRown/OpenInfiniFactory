@@ -17,12 +17,18 @@ impl Block for RotatorBlock {
             rgb(0.48, 0.32, 0.72),
             rgb(0.42, 0.26, 0.64),
         )
-        .directional()
-        .alternate(BlockKind::CounterRotator)
+    }
+
+    fn is_directional(&self) -> bool {
+        true
     }
 
     fn material_mover(&self, _facing: super::Facing) -> Option<MaterialMover> {
         Some(MaterialMover::Rotator { clockwise: true })
+    }
+
+    fn alternate(&self) -> Option<BlockKind> {
+        Some(BlockKind::CounterRotator)
     }
 }
 

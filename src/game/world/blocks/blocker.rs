@@ -20,8 +20,10 @@ impl Block for BlockerBlock {
             rgb(0.58, 0.40, 0.24),
             rgb(0.50, 0.32, 0.20),
         )
-        .directional()
-        .alternate(BlockKind::Piston)
+    }
+
+    fn is_directional(&self) -> bool {
+        true
     }
 
     fn marker_behavior(&self, facing: Facing) -> Option<MarkerBehavior> {
@@ -42,6 +44,10 @@ impl Block for BlockerBlock {
             }),
             ..Default::default()
         }
+    }
+
+    fn alternate(&self) -> Option<BlockKind> {
+        Some(BlockKind::Piston)
     }
 }
 

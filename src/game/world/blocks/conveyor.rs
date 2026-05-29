@@ -19,8 +19,10 @@ impl Block for ConveyorBlock {
             rgb(0.10, 0.22, 0.28),
             rgb(0.08, 0.20, 0.26),
         )
-        .directional()
-        .alternate(BlockKind::ReverseConveyor)
+    }
+
+    fn is_directional(&self) -> bool {
+        true
     }
 
     fn material_mover(&self, facing: super::Facing) -> Option<MaterialMover> {
@@ -28,6 +30,10 @@ impl Block for ConveyorBlock {
             source: IVec3::Y,
             offset: facing.forward_ivec3(),
         })
+    }
+
+    fn alternate(&self) -> Option<BlockKind> {
+        Some(BlockKind::ReverseConveyor)
     }
 }
 

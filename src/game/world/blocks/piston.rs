@@ -20,8 +20,10 @@ impl Block for PistonBlock {
             rgb(0.78, 0.55, 0.28),
             rgb(0.66, 0.43, 0.20),
         )
-        .directional()
-        .alternate(BlockKind::Blocker)
+    }
+
+    fn is_directional(&self) -> bool {
+        true
     }
 
     fn material_mover(&self, facing: super::Facing) -> Option<MaterialMover> {
@@ -42,6 +44,10 @@ impl Block for PistonBlock {
             }),
             ..Default::default()
         }
+    }
+
+    fn alternate(&self) -> Option<BlockKind> {
+        Some(BlockKind::Blocker)
     }
 }
 

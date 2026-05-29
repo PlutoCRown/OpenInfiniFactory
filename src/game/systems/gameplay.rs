@@ -188,7 +188,9 @@ pub fn placement_input(
 
     placement.selection.clear();
 
-    if keys.just_pressed(config.key_bindings.alternate.key_code()) {
+    if *builder_mode == BuilderMode::Play
+        && keys.just_pressed(config.key_bindings.alternate.key_code())
+    {
         if let Some(pos) = current_target_pos {
             alternate_block_at(
                 pos,

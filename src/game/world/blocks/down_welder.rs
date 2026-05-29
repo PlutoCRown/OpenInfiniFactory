@@ -22,7 +22,6 @@ impl Block for DownWelderBlock {
             rgb(0.92, 0.32, 0.20),
             rgb(0.78, 0.22, 0.14),
         )
-        .alternate(BlockKind::Welder)
     }
 
     fn marker_behavior(&self, _facing: Facing) -> Option<MarkerBehavior> {
@@ -37,6 +36,10 @@ impl Block for DownWelderBlock {
             weld_connector: Some(WeldConnectorBehavior::Offset(IVec3::NEG_Y)),
             ..Default::default()
         }
+    }
+
+    fn alternate(&self) -> Option<BlockKind> {
+        Some(BlockKind::Welder)
     }
 }
 

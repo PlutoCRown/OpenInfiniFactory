@@ -5,6 +5,7 @@ mod blocker_head;
 mod conveyor;
 mod counter_rotator;
 mod detector;
+mod down_detector;
 mod dirt;
 mod down_welder;
 mod drill;
@@ -39,6 +40,10 @@ pub trait Block: Send + Sync {
     fn id(&self) -> BlockKind;
     fn definition(&self) -> BlockDefinition;
 
+    fn is_directional(&self) -> bool {
+        false
+    }
+
     fn marker_behavior(&self, _facing: Facing) -> Option<MarkerBehavior> {
         None
     }
@@ -66,6 +71,10 @@ pub trait Block: Send + Sync {
     fn render_behavior(&self, _facing: Facing) -> RenderBehavior {
         RenderBehavior::default()
     }
+
+    fn alternate(&self) -> Option<BlockKind> {
+        None
+    }
 }
 
 pub trait SceneBlock: Block {}
@@ -82,10 +91,8 @@ pub struct BlockDefinition {
     class: BlockClass,
     system_role: SystemBlockRole,
     shape: BlockShape,
-    directional: bool,
     collision: bool,
     transparent: bool,
-    alternate: Option<BlockKind>,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -279,16 +286,9 @@ impl BlockDefinition {
             class,
             system_role,
             shape: BlockShape::Cube,
-            directional: false,
             collision: true,
             transparent: false,
-            alternate: None,
         }
-    }
-
-    pub(crate) const fn directional(mut self) -> Self {
-        self.directional = true;
-        self
     }
 
     pub(crate) const fn node(mut self) -> Self {
@@ -303,11 +303,6 @@ impl BlockDefinition {
 
     pub(crate) const fn transparent(mut self) -> Self {
         self.transparent = true;
-        self
-    }
-
-    pub(crate) const fn alternate(mut self, alternate: BlockKind) -> Self {
-        self.alternate = Some(alternate);
         self
     }
 
@@ -368,6 +363,7 @@ pub enum BlockKind {
     Conveyor,
     ReverseConveyor,
     Detector,
+    DownDetector,
     Wire,
     Piston,
     Lifter,
@@ -417,7 +413,7 @@ impl BlockKind {
     }
 
     pub fn is_directional(self) -> bool {
-        self.definition().directional
+        self.block().is_directional()
     }
 
     pub fn has_collision(self) -> bool {
@@ -445,7 +441,7 @@ impl BlockKind {
     }
 
     pub fn alternate(self) -> Option<Self> {
-        self.definition().alternate
+        self.block().alternate()
     }
 
     pub fn marker_behavior(self, facing: Facing) -> Option<MarkerBehavior> {

@@ -17,7 +17,10 @@ impl Block for GeneratorBlock {
             rgb(0.52, 0.30, 0.68),
             rgb(0.42, 0.20, 0.56),
         )
-        .directional()
+    }
+
+    fn is_directional(&self) -> bool {
+        true
     }
 
     fn material_source(&self, facing: super::Facing) -> Option<MaterialSource> {

@@ -20,8 +20,10 @@ impl Block for LaserBlock {
             rgb(0.85, 0.20, 0.34),
             rgb(0.72, 0.12, 0.26),
         )
-        .directional()
-        .alternate(BlockKind::Drill)
+    }
+
+    fn is_directional(&self) -> bool {
+        true
     }
 
     fn material_destroyer(&self, facing: super::Facing) -> Option<MaterialDestroyer> {
@@ -42,6 +44,10 @@ impl Block for LaserBlock {
             }),
             ..Default::default()
         }
+    }
+
+    fn alternate(&self) -> Option<BlockKind> {
+        Some(BlockKind::Drill)
     }
 }
 

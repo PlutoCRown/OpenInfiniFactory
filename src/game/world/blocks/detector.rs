@@ -20,7 +20,10 @@ impl Block for DetectorBlock {
             rgb(0.15, 0.45, 0.72),
             rgb(0.12, 0.34, 0.62),
         )
-        .directional()
+    }
+
+    fn is_directional(&self) -> bool {
+        true
     }
 
     fn signal_behavior(&self, facing: super::Facing) -> Option<SignalBehavior> {
@@ -36,6 +39,10 @@ impl Block for DetectorBlock {
             }),
             ..Default::default()
         }
+    }
+
+    fn alternate(&self) -> Option<BlockKind> {
+        Some(BlockKind::DownDetector)
     }
 }
 

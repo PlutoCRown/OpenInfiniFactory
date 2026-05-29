@@ -20,8 +20,10 @@ impl Block for DrillBlock {
             rgb(0.32, 0.36, 0.40),
             rgb(0.24, 0.26, 0.30),
         )
-        .directional()
-        .alternate(BlockKind::Laser)
+    }
+
+    fn is_directional(&self) -> bool {
+        true
     }
 
     fn marker_behavior(&self, facing: Facing) -> Option<MarkerBehavior> {
@@ -48,6 +50,10 @@ impl Block for DrillBlock {
             }),
             ..Default::default()
         }
+    }
+
+    fn alternate(&self) -> Option<BlockKind> {
+        Some(BlockKind::Laser)
     }
 }
 

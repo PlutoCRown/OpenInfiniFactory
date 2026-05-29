@@ -20,8 +20,10 @@ impl Block for WelderBlock {
             rgb(0.76, 0.18, 0.16),
             rgb(0.62, 0.12, 0.12),
         )
-        .directional()
-        .alternate(BlockKind::DownWelder)
+    }
+
+    fn is_directional(&self) -> bool {
+        true
     }
 
     fn marker_behavior(&self, facing: Facing) -> Option<MarkerBehavior> {
@@ -36,6 +38,10 @@ impl Block for WelderBlock {
             weld_connector: Some(WeldConnectorBehavior::Offset(facing.forward_ivec3())),
             ..Default::default()
         }
+    }
+
+    fn alternate(&self) -> Option<BlockKind> {
+        Some(BlockKind::DownWelder)
     }
 }
 
