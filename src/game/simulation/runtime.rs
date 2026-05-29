@@ -2,7 +2,9 @@ use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 use crate::game::state::{BuilderMode, SimulationState};
-use crate::game::world::animation::{pair_block_animations, SIMULATION_TURN_SECONDS};
+use crate::game::world::animation::{
+    pair_block_animations, AnimationTiming, SIMULATION_TURN_SECONDS,
+};
 use crate::game::world::blocks::{
     BlockData, BlockKind, MarkerBehavior, MaterialDestroyer, MaterialKind, MaterialMover,
     MaterialSource,
@@ -10,7 +12,7 @@ use crate::game::world::blocks::{
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_world, rebuild_world_with_animations, BlockEntity, WorldRenderAssets,
+    despawn_world, rebuild_world_with_timed_animations, BlockEntity, WorldRenderAssets,
 };
 
 use super::signal_offsets;
@@ -27,6 +29,7 @@ pub fn run_turn(
     commands: &mut Commands,
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
+    animation_duration: f32,
 ) {
     let before = animation_snapshot(world);
     run_static_marker_phase(world);
@@ -44,7 +47,13 @@ pub fn run_turn(
 
     let animations = pair_block_animations(&before, &animation_snapshot(world));
     despawn_world(commands, block_entities);
-    rebuild_world_with_animations(commands, world, render_assets, &animations);
+    rebuild_world_with_timed_animations(
+        commands,
+        world,
+        render_assets,
+        &animations,
+        AnimationTiming::simulation(animation_duration),
+    );
 }
 
 pub fn reset_simulation(world: &mut WorldBlocks) {
@@ -77,6 +86,7 @@ pub fn tick_simulation(
             &mut commands,
             &block_entities,
             &render_assets,
+            SIMULATION_TURN_SECONDS / simulation.speed.max(0.001),
         );
     }
 }

@@ -2,7 +2,7 @@ use bevy::pbr::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::game::world::animation::{AnimatedBlock, BlockAnimation, EDIT_ANIMATION_SECONDS};
+use crate::game::world::animation::{AnimatedBlock, AnimationTiming, BlockAnimation};
 use crate::game::world::blocks::{BlockData, WeldConnectorBehavior, WireConnectorBehavior};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
@@ -150,6 +150,7 @@ pub fn spawn_block_preview(
         assets.block_preview_material(data.kind),
         Some(EditPreview),
         None,
+        AnimationTiming::edit(),
         false,
     );
 }
@@ -172,6 +173,26 @@ pub fn spawn_block_with_animation(
     data: BlockData,
     animation: Option<BlockAnimation>,
 ) {
+    spawn_block_with_timed_animation(
+        commands,
+        assets,
+        world,
+        pos,
+        data,
+        animation,
+        AnimationTiming::edit(),
+    );
+}
+
+pub fn spawn_block_with_timed_animation(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    world: &WorldBlocks,
+    pos: IVec3,
+    data: BlockData,
+    animation: Option<BlockAnimation>,
+    timing: AnimationTiming,
+) {
     spawn_block_model(
         commands,
         assets,
@@ -181,6 +202,7 @@ pub fn spawn_block_with_animation(
         assets.block_material(data.kind),
         None,
         animation,
+        timing,
         true,
     );
 }
@@ -191,14 +213,34 @@ pub fn rebuild_world_with_animations(
     assets: &WorldRenderAssets,
     animations: &HashMap<IVec3, BlockAnimation>,
 ) {
+    rebuild_world_with_timed_animations(
+        commands,
+        world,
+        assets,
+        animations,
+        AnimationTiming::edit(),
+    );
+}
+
+pub fn rebuild_world_with_timed_animations(
+    commands: &mut Commands,
+    world: &WorldBlocks,
+    assets: &WorldRenderAssets,
+    animations: &HashMap<IVec3, BlockAnimation>,
+    timing: AnimationTiming,
+) {
     for (pos, data) in &world.blocks {
-        spawn_block_with_animation(
+        spawn_block_model(
             commands,
             assets,
             world,
             *pos,
             *data,
+            assets.block_material(data.kind),
+            None,
             animations.get(pos).copied(),
+            timing,
+            true,
         );
     }
 }
@@ -212,6 +254,7 @@ fn spawn_block_model(
     material: Handle<StandardMaterial>,
     edit_preview: Option<EditPreview>,
     animation: Option<BlockAnimation>,
+    timing: AnimationTiming,
     with_block_entity: bool,
 ) {
     let mut transform = Transform::from_translation(grid_to_world(pos));
@@ -235,7 +278,7 @@ fn spawn_block_model(
     }
 
     if let Some(animation) = animation {
-        entity.insert(AnimatedBlock::new(animation, EDIT_ANIMATION_SECONDS));
+        entity.insert(AnimatedBlock::new(animation, timing));
     }
 
     entity.with_children(|parent| {
