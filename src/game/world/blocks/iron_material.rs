@@ -1,4 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, MaterialBlock};
+use super::{rgb, Block, BlockDefinition, BlockKind, MaterialBlock, MaterialKind};
 
 pub struct IronMaterialBlock;
 
@@ -17,6 +17,10 @@ impl Block for IronMaterialBlock {
             rgb(0.62, 0.64, 0.66),
             rgb(0.54, 0.56, 0.58),
         )
+    }
+
+    fn material_kind(&self) -> Option<MaterialKind> {
+        Some(MaterialKind::Iron)
     }
 }
 

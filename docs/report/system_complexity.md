@@ -8,16 +8,15 @@
 
 当前例子：`Material`、`IronMaterial`、`CopperMaterial`。
 
-最少修改文件数：**5 个**
+最少修改文件数：**4 个**
 
 典型修改文件：
 
 | 文件 | 修改原因 |
 | --- | --- |
 | `src/game/world/blocks/<new_material>.rs` | 新增 `Block` 实现，并实现 `MaterialBlock` 标记 trait。 |
-| `src/game/world/blocks.rs` | 增加模块声明、`BlockKind` 枚举项，通常还要增加 `MaterialKind` 枚举项和名称 key。 |
+| `src/game/world/blocks.rs` | 增加模块声明、`BlockKind` 枚举项，通常还要增加 `MaterialKind` 枚举项。 |
 | `src/game/world/blocks/registry.rs` | 加入 `ALL_BLOCKS` 和 `BLOCK_REGISTRY`。材料通常不加入编辑或游玩物品栏。 |
-| `src/game/simulation/behaviors.rs` | 增加 `MaterialKind -> BlockKind` 和 `BlockKind -> MaterialKind` 的映射。以前这项在 `runtime.rs`，现在已经迁移到行为阶段模块。 |
 | `assets/i18n/en.json` / `assets/i18n/zh-CN.json` | 增加完整名称、短名称，以及材料选择器中需要的名称。 |
 
 可能额外修改的文件：
@@ -30,7 +29,7 @@
 当前复杂度变化：
 
 - 两阶段存档后，材料方块仍然不会进入 `Puzzle` 或 `Solution` 的持久层，所以新增普通材料不再意味着要修改保存的块过滤规则。
-- 映射位置从 `runtime.rs` 变成 `behaviors.rs`，这比以前更符合职责边界，但重复 match 仍然存在。
+- 材料方块已经通过 `Block::material_kind()` 声明自己的 `MaterialKind`，`behaviors.rs` 不再维护材料双向 match。
 
 优化建议：
 
@@ -94,16 +93,16 @@
 
 | 文件 | 修改原因 |
 | --- | --- |
-| `src/game/world/blocks/<new_factory>.rs` | 新增 `Block` 实现，提供 `material_mover()`，必要时增加信号或渲染行为。 |
-| `src/game/world/blocks.rs` | 增加模块声明、`BlockKind` 枚举项；如果是新的移动行为，还要增加 `MaterialMover` 枚举项。 |
+| `src/game/world/blocks/<new_factory>.rs` | 新增 `Block` 实现，提供 `movement_rule()`，必要时增加信号或渲染行为。 |
+| `src/game/world/blocks.rs` | 增加模块声明、`BlockKind` 枚举项；如果是新的移动规则，还要增加 `MovementRule` 枚举项。 |
 | `src/game/world/blocks/registry.rs` | 注册到 `PLAY_BLOCKS`、`ALL_BLOCKS` 和 `BLOCK_REGISTRY`。 |
 | `assets/i18n/en.json` / `assets/i18n/zh-CN.json` | 增加完整名称和短名称。 |
 
-如果复用已有的 `MaterialMover` 变体，通常不需要改模拟执行代码。如果移动行为是全新的，还需要修改：
+如果复用已有的 `MovementRule` 变体，通常不需要改模拟执行代码。如果移动行为是全新的，还需要修改：
 
 | 文件 | 修改原因 |
 | --- | --- |
-| `src/game/simulation/movement.rs` | 对新的 `MaterialMover` 变体增加移动标记逻辑。以前这项在 `runtime.rs`，现在已经迁移到移动阶段模块。 |
+| `src/game/simulation/movement.rs` | 对新的 `MovementRule` 变体增加移动标记逻辑。以前这项在 `runtime.rs`，现在已经迁移到移动阶段模块。 |
 | `src/game/simulation/structures.rs` | 如果已有平移、旋转、碰撞原语无法表达新逻辑，需要增加新的结构操作 helper。 |
 
 可能额外修改的文件：
@@ -119,7 +118,7 @@
 
 - `Solution` 现在专门保存工厂方块层，所以普通工厂方块只要 `kind.is_factory()` 成立，就会自动进入 solution 保存，不需要改 `save.rs`。
 - 模拟回滚现在保存完整模拟开始快照，因此新增移动工厂方块时，不需要额外处理“停止模拟恢复位置”的保存逻辑。
-- 运行期移动逻辑从 `runtime.rs` 拆到 `movement.rs`，职责更清楚，但 `MaterialMover` 的中心化 match 仍然存在。
+- 运行期移动逻辑从 `runtime.rs` 拆到 `movement.rs`，职责更清楚；`MovementRule` 已经是规则语义，但 `movement.rs` 里仍有中心化 rule match。
 
 优化建议：
 
@@ -195,6 +194,13 @@
 
 下面这些 trait 可以把“新增方块”从多个中心化 match 中解耦出来。建议按优先级逐步做，不需要一次性全改。
 
+当前已落地的部分：
+
+- `Block::material_kind()` 已提供材料方块到 `MaterialKind` 的声明，`behaviors.rs` 不再维护材料反向 match。
+- `BlockKind::material_block_kind()` 已通过注册表从 `MaterialKind` 查找材料方块。
+- `Block::persistent_layer()` 和 `PersistentLayer` 已提供两阶段存档归属，`save.rs` 不再维护独立的 `is_puzzle_block()` 过滤逻辑。
+- `MaterialMover` 已重命名并数据化为 `MovementRule`，移动方块现在贡献移动规则而不是暴露方块类型名。
+
 ### 1. `BlockCatalogEntry`
 
 目的：把注册表、物品栏分类、名称 key、颜色、渲染基础数据统一到方块自身。
@@ -223,6 +229,8 @@ pub trait BlockCatalogEntry: Block {
 
 ### 2. `MaterialBlockBehavior`
 
+状态：**已部分落地**。当前作为 `Block::material_kind()` 默认方法实现，尚未拆成独立 trait。
+
 目的：解决材料新增时还要在 `behaviors.rs` 手写双向映射的问题。
 
 建议接口：
@@ -239,7 +247,7 @@ pub trait MaterialBlockBehavior: Block {
 - `block_material_kind(BlockKind)` 改成从 `BlockKind` 对应方块读取 `material_kind()`。
 - 生成块、转换器只依赖 `MaterialKind`，不需要知道具体 `BlockKind` match。
 
-优先级：**高**。改动小，能马上减少重复 match。
+优先级：**已执行第一步**。剩余优化是把材料注册表做成显式 catalog，而不是每次遍历 `BLOCK_REGISTRY`。
 
 ### 3. `ConfigurableBlock`
 
@@ -314,6 +322,8 @@ pub enum SettingsControl {
 
 ### 5. `MovesMaterial`
 
+状态：**已部分落地**。当前作为 `Block::movement_rule()` 默认方法实现，尚未拆成独立 trait。
+
 目的：把移动逻辑从 `MaterialMover` 中心化 match 变成方块贡献移动规则。
 
 建议接口：
@@ -331,14 +341,16 @@ pub enum MovementRule {
     Translate {
         source: IVec3,
         offset: IVec3,
-        requires_power: bool,
     },
     Lift {
         range: i32,
     },
     Rotate {
-        source: IVec3,
         clockwise: bool,
+    },
+    PoweredTranslate {
+        source: IVec3,
+        offset: IVec3,
     },
 }
 ```
@@ -347,10 +359,10 @@ pub enum MovementRule {
 
 | 当前位置 | 可迁移内容 |
 | --- | --- |
-| `MaterialMover` | 可以逐步改成 `MovementRule`，或者保留为兼容层。 |
-| `movement.rs` | match 分支可以变成通用 rule executor。 |
+| `MaterialMover` | 已改成 `MovementRule`。 |
+| `movement.rs` | 仍有 rule match，后续可以继续抽成 rule executor。 |
 
-优先级：**中**。当前移动方块还不算失控，但继续新增会明显膨胀。
+优先级：**已执行第一步**。剩余优化是把 `movement.rs` 的 match 进一步拆成 `MovementRule::to_structure_move()` 或 executor 方法。
 
 ### 6. `SimulationBehavior`
 
@@ -423,6 +435,8 @@ pub struct ConnectorSpec {
 
 ### 8. `PersistentBlockLayer`
 
+状态：**已部分落地**。当前作为 `Block::persistent_layer()` 默认方法实现，尚未拆成独立 trait。
+
 目的：把两阶段存档的保存归属从 `save.rs` 的过滤函数移动到方块自身。
 
 建议接口：
@@ -452,20 +466,22 @@ pub enum PersistentLayer {
 | MaterialBlock | 不保存 |
 | GeneratedMarker | 不保存 |
 
-优先级：**中低**。当前规则还能靠 class 推导，短期不急；但如果以后出现“可编辑但只保存到 solution”或“系统层但不保存”的特殊方块，就应该做这个 trait。
+优先级：**已执行第一步**。当前规则仍默认由 `BlockDefinition` 的 class 和 marker role 推导；如果以后出现特殊保存层方块，可以单独覆写 `persistent_layer()`。
 
 ## 建议实施顺序
 
 | 优先级 | 抽象 | 原因 |
 | --- | --- | --- |
 | 1 | `MaterialBlockBehavior` | 改动小，立刻减少材料双向映射。 |
-| 2 | `ConfigurableBlock` | 直接降低有 UI 系统方块和两阶段存档的复杂度。 |
-| 3 | `BlockSettingsPanel` | 能大幅压缩 UI 长文件，但实现量较大。 |
-| 4 | `BlockCatalogEntry` | 统一注册和分类，适合作为一次结构性重构。 |
-| 5 | `MovesMaterial` | 防止移动方块继续让 `movement.rs` 膨胀。 |
-| 6 | `SimulationBehavior` | 先类型化阶段，再迁移复杂行为。 |
-| 7 | `ConnectableBlock` | 统一信号和渲染连接规则，适合独立重构。 |
-| 8 | `PersistentBlockLayer` | 当前可以由 class 推导，等出现特殊保存层需求再做也可以。 |
+| 2 | `PersistentBlockLayer` | 把两阶段存档过滤规则移到方块元数据。 |
+| 3 | `MovesMaterial` | 防止移动方块继续让 `movement.rs` 膨胀。 |
+| 4 | `ConfigurableBlock` | 直接降低有 UI 系统方块和两阶段存档的复杂度。 |
+| 5 | `BlockSettingsPanel` | 能大幅压缩 UI 长文件，但实现量较大。 |
+| 6 | `BlockCatalogEntry` | 统一注册和分类，适合作为一次结构性重构。 |
+| 7 | `SimulationBehavior` | 先类型化阶段，再迁移复杂行为。 |
+| 8 | `ConnectableBlock` | 统一信号和渲染连接规则，适合独立重构。 |
+
+其中 1、2、3 已执行第一步，后续最值得继续的是 `ConfigurableBlock`。
 
 ## 总体观察
 

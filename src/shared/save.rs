@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::game::world::blocks::{BlockData, BlockKind};
+use crate::game::world::blocks::{BlockData, PersistentLayer};
 use crate::game::world::grid::{
     ConverterSettings, GeneratorSettings, LabelerSettings, TeleportSettings, WorldBlocks,
 };
@@ -228,13 +228,13 @@ impl SaveFile {
             blocks: self
                 .blocks
                 .iter()
-                .filter(|saved| is_puzzle_block(saved.data.kind))
+                .filter(|saved| saved.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle))
                 .cloned()
                 .collect(),
             system_blocks: self
                 .system_blocks
                 .iter()
-                .filter(|saved| is_puzzle_block(saved.data.kind))
+                .filter(|saved| saved.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle))
                 .cloned()
                 .collect(),
             generator_settings: self
@@ -243,7 +243,10 @@ impl SaveFile {
                 .filter(|saved| {
                     self.system_blocks
                         .iter()
-                        .any(|block| block.pos() == saved.pos() && is_puzzle_block(block.data.kind))
+                        .any(|block| {
+                            block.pos() == saved.pos()
+                                && block.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
+                        })
                 })
                 .cloned()
                 .collect(),
@@ -253,7 +256,10 @@ impl SaveFile {
                 .filter(|saved| {
                     self.system_blocks
                         .iter()
-                        .any(|block| block.pos() == saved.pos() && is_puzzle_block(block.data.kind))
+                        .any(|block| {
+                            block.pos() == saved.pos()
+                                && block.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
+                        })
                 })
                 .cloned()
                 .collect(),
@@ -263,7 +269,10 @@ impl SaveFile {
                 .filter(|saved| {
                     self.system_blocks
                         .iter()
-                        .any(|block| block.pos() == saved.pos() && is_puzzle_block(block.data.kind))
+                        .any(|block| {
+                            block.pos() == saved.pos()
+                                && block.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
+                        })
                 })
                 .cloned()
                 .collect(),
@@ -273,7 +282,10 @@ impl SaveFile {
                 .filter(|saved| {
                     self.system_blocks
                         .iter()
-                        .any(|block| block.pos() == saved.pos() && is_puzzle_block(block.data.kind))
+                        .any(|block| {
+                            block.pos() == saved.pos()
+                                && block.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
+                        })
                 })
                 .cloned()
                 .collect(),
@@ -307,12 +319,18 @@ fn capture_puzzle_layer(world: &WorldBlocks) -> WorldLayer {
     let blocks: Vec<SavedBlock> = world
         .blocks
         .iter()
-        .filter_map(|(pos, data)| is_puzzle_block(data.kind).then_some(saved_block(*pos, *data)))
+        .filter_map(|(pos, data)| {
+            (data.kind.persistent_layer() == Some(PersistentLayer::Puzzle))
+                .then_some(saved_block(*pos, *data))
+        })
         .collect();
     let system_blocks: Vec<SavedBlock> = world
         .system_blocks
         .iter()
-        .filter_map(|(pos, data)| is_puzzle_block(data.kind).then_some(saved_block(*pos, *data)))
+        .filter_map(|(pos, data)| {
+            (data.kind.persistent_layer() == Some(PersistentLayer::Puzzle))
+                .then_some(saved_block(*pos, *data))
+        })
         .collect();
 
     WorldLayer {
@@ -325,7 +343,9 @@ fn capture_puzzle_layer(world: &WorldBlocks) -> WorldLayer {
                 world
                     .system_blocks
                     .get(pos)
-                    .is_some_and(|block| is_puzzle_block(block.kind))
+                    .is_some_and(|block| {
+                        block.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
+                    })
                     .then_some(SavedGeneratorSettings {
                         x: pos.x,
                         y: pos.y,
@@ -341,7 +361,9 @@ fn capture_puzzle_layer(world: &WorldBlocks) -> WorldLayer {
                 world
                     .system_blocks
                     .get(pos)
-                    .is_some_and(|block| is_puzzle_block(block.kind))
+                    .is_some_and(|block| {
+                        block.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
+                    })
                     .then_some(SavedLabelerSettings {
                         x: pos.x,
                         y: pos.y,
@@ -357,7 +379,9 @@ fn capture_puzzle_layer(world: &WorldBlocks) -> WorldLayer {
                 world
                     .system_blocks
                     .get(pos)
-                    .is_some_and(|block| is_puzzle_block(block.kind))
+                    .is_some_and(|block| {
+                        block.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
+                    })
                     .then_some(SavedConverterSettings {
                         x: pos.x,
                         y: pos.y,
@@ -373,7 +397,9 @@ fn capture_puzzle_layer(world: &WorldBlocks) -> WorldLayer {
                 world
                     .system_blocks
                     .get(pos)
-                    .is_some_and(|block| is_puzzle_block(block.kind))
+                    .is_some_and(|block| {
+                        block.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
+                    })
                     .then_some(SavedTeleportSettings {
                         x: pos.x,
                         y: pos.y,
@@ -389,7 +415,10 @@ fn capture_factory_blocks(world: &WorldBlocks) -> Vec<SavedBlock> {
     world
         .blocks
         .iter()
-        .filter_map(|(pos, data)| data.kind.is_factory().then_some(saved_block(*pos, *data)))
+        .filter_map(|(pos, data)| {
+            (data.kind.persistent_layer() == Some(PersistentLayer::SolutionFactory))
+                .then_some(saved_block(*pos, *data))
+        })
         .collect()
 }
 
@@ -416,14 +445,10 @@ fn apply_layer(world: &mut WorldBlocks, layer: WorldLayer) {
 
 fn apply_factory_blocks(world: &mut WorldBlocks, factory_blocks: Vec<SavedBlock>) {
     for saved in factory_blocks {
-        if saved.data.kind.is_factory() {
+        if saved.data.kind.persistent_layer() == Some(PersistentLayer::SolutionFactory) {
             world.insert(saved.pos(), saved.data);
         }
     }
-}
-
-fn is_puzzle_block(kind: BlockKind) -> bool {
-    kind.is_scene() || kind.is_system_layer()
 }
 
 fn saved_block(pos: IVec3, data: BlockData) -> SavedBlock {

@@ -59,7 +59,24 @@ pub trait Block: Send + Sync {
         None
     }
 
-    fn material_mover(&self, _facing: Facing) -> Option<MaterialMover> {
+    fn material_kind(&self) -> Option<MaterialKind> {
+        None
+    }
+
+    fn persistent_layer(&self) -> Option<PersistentLayer> {
+        match self.definition().class() {
+            BlockClass::Scene => Some(PersistentLayer::Puzzle),
+            BlockClass::System
+                if self.definition().system_role != SystemBlockRole::GeneratedMarker =>
+            {
+                Some(PersistentLayer::Puzzle)
+            }
+            BlockClass::Factory => Some(PersistentLayer::SolutionFactory),
+            BlockClass::Material | BlockClass::System => None,
+        }
+    }
+
+    fn movement_rule(&self, _facing: Facing) -> Option<MovementRule> {
         None
     }
 
@@ -93,6 +110,12 @@ pub trait FactoryBlock: Block {}
 pub trait MaterialBlock: Block {}
 pub trait SystemBlock: Block {}
 pub trait EditableBlock: Block {}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum PersistentLayer {
+    Puzzle,
+    SolutionFactory,
+}
 
 #[derive(Clone, Copy)]
 pub struct BlockDefinition {
@@ -141,11 +164,11 @@ pub enum MaterialSource {
 }
 
 #[derive(Clone, Copy)]
-pub enum MaterialMover {
-    Conveyor { source: IVec3, offset: IVec3 },
-    Lifter,
-    Rotator { clockwise: bool },
-    Piston { source: IVec3, offset: IVec3 },
+pub enum MovementRule {
+    Translate { source: IVec3, offset: IVec3 },
+    Lift { range: i32 },
+    Rotate { clockwise: bool },
+    PoweredTranslate { source: IVec3, offset: IVec3 },
 }
 
 #[derive(Clone, Copy)]
@@ -538,8 +561,20 @@ impl BlockKind {
         self.block().material_source(facing)
     }
 
-    pub fn material_mover(self, facing: Facing) -> Option<MaterialMover> {
-        self.block().material_mover(facing)
+    pub fn material_kind(self) -> Option<MaterialKind> {
+        self.block().material_kind()
+    }
+
+    pub fn material_block_kind(material: MaterialKind) -> Option<Self> {
+        registry::material_block_kind(material)
+    }
+
+    pub fn persistent_layer(self) -> Option<PersistentLayer> {
+        self.block().persistent_layer()
+    }
+
+    pub fn movement_rule(self, facing: Facing) -> Option<MovementRule> {
+        self.block().movement_rule(facing)
     }
 
     pub fn material_destroyer(self, facing: Facing) -> Option<MaterialDestroyer> {

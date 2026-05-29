@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MaterialMover};
+use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MovementRule};
 
 pub struct ConveyorBlock;
 
@@ -25,8 +25,8 @@ impl Block for ConveyorBlock {
         true
     }
 
-    fn material_mover(&self, facing: super::Facing) -> Option<MaterialMover> {
-        Some(MaterialMover::Conveyor {
+    fn movement_rule(&self, facing: super::Facing) -> Option<MovementRule> {
+        Some(MovementRule::Translate {
             source: IVec3::Y,
             offset: facing.forward_ivec3(),
         })

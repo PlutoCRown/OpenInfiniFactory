@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 use crate::game::world::blocks::{
-    BlockData, BlockKind, MaterialDestroyer, MaterialKind, MaterialLabeler, MaterialSource,
+    BlockData, BlockKind, MaterialDestroyer, MaterialLabeler, MaterialSource,
 };
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{
@@ -53,33 +53,19 @@ fn run_material_source_phase(world: &mut WorldBlocks, turn: u64) {
 
                 let spawn_pos = pos;
                 if world.can_place_solid_at(spawn_pos) {
+                    let Some(kind) = BlockKind::material_block_kind(settings.material) else {
+                        continue;
+                    };
                     world.insert(
                         spawn_pos,
                         BlockData {
-                            kind: material_block_kind(settings.material),
+                            kind,
                             facing: Facing::North,
                         },
                     );
                 }
             }
         }
-    }
-}
-
-fn material_block_kind(material: MaterialKind) -> BlockKind {
-    match material {
-        MaterialKind::Basic => BlockKind::Material,
-        MaterialKind::Iron => BlockKind::IronMaterial,
-        MaterialKind::Copper => BlockKind::CopperMaterial,
-    }
-}
-
-fn block_material_kind(kind: BlockKind) -> Option<MaterialKind> {
-    match kind {
-        BlockKind::Material => Some(MaterialKind::Basic),
-        BlockKind::IronMaterial => Some(MaterialKind::Iron),
-        BlockKind::CopperMaterial => Some(MaterialKind::Copper),
-        _ => None,
     }
 }
 
@@ -186,7 +172,7 @@ fn run_material_conversion_phase(world: &mut WorldBlocks) {
         let Some(mut block) = world.blocks.get(&pos).copied() else {
             continue;
         };
-        let Some(input_material) = block_material_kind(block.kind) else {
+        let Some(input_material) = block.kind.material_kind() else {
             continue;
         };
 
@@ -195,7 +181,10 @@ fn run_material_conversion_phase(world: &mut WorldBlocks) {
             continue;
         }
 
-        block.kind = material_block_kind(settings.output);
+        let Some(output_kind) = BlockKind::material_block_kind(settings.output) else {
+            continue;
+        };
+        block.kind = output_kind;
         world.insert(pos, block);
     }
 }

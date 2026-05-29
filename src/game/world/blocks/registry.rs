@@ -7,7 +7,7 @@ use super::{
     piston::PISTON, planks::PLANKS, reverse_conveyor::REVERSE_CONVEYOR, roller::ROLLER,
     rotator::ROTATOR, solid::SOLID, stamper::STAMPER, stone::STONE,
     teleport_entrance::TELEPORT_ENTRANCE, teleport_exit::TELEPORT_EXIT, welder::WELDER,
-    weld_point::WELD_POINT, wire::WIRE, Block, BlockKind,
+    weld_point::WELD_POINT, wire::WIRE, Block, BlockKind, MaterialKind,
 };
 
 pub const EDIT_BLOCKS: [BlockKind; 12] = [
@@ -127,4 +127,10 @@ pub fn get(kind: BlockKind) -> &'static (dyn Block + Send + Sync) {
 
 pub fn is_editable(kind: BlockKind) -> bool {
     EDITABLE_BLOCKS.contains(&kind)
+}
+
+pub fn material_block_kind(material: MaterialKind) -> Option<BlockKind> {
+    BLOCK_REGISTRY
+        .iter()
+        .find_map(|block| (block.material_kind() == Some(material)).then_some(block.id()))
 }

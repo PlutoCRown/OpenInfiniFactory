@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::collections::HashSet;
 
-use crate::game::world::blocks::MaterialMover;
+use crate::game::world::blocks::MovementRule;
 use crate::game::world::grid::WorldBlocks;
 
 use super::structures::{material_structure, StructureMove};
@@ -10,13 +10,13 @@ pub(super) fn mark_material_movement_phase(
     world: &WorldBlocks,
     powered_devices: &HashSet<IVec3>,
 ) -> Vec<StructureMove> {
-    let movers: Vec<(IVec3, MaterialMover)> = world
+    let movers: Vec<(IVec3, MovementRule)> = world
         .blocks
         .iter()
         .filter_map(|(pos, block)| {
             block
                 .kind
-                .material_mover(block.facing)
+                .movement_rule(block.facing)
                 .map(|mover| (*pos, mover))
         })
         .collect();
@@ -24,22 +24,22 @@ pub(super) fn mark_material_movement_phase(
 
     for (pos, mover) in movers {
         match mover {
-            MaterialMover::Conveyor { source, offset } => {
+            MovementRule::Translate { source, offset } => {
                 if let Some(movement) = mark_material_translate(world, pos + source, offset) {
                     moves.push(movement);
                 }
             }
-            MaterialMover::Lifter => {
-                if let Some(movement) = mark_lift_material_structure(world, pos) {
+            MovementRule::Lift { range } => {
+                if let Some(movement) = mark_lift_material_structure(world, pos, range) {
                     moves.push(movement);
                 }
             }
-            MaterialMover::Rotator { clockwise } => {
+            MovementRule::Rotate { clockwise } => {
                 if let Some(movement) = mark_rotate_material_structure(world, pos, clockwise) {
                     moves.push(movement);
                 }
             }
-            MaterialMover::Piston { source, offset } => {
+            MovementRule::PoweredTranslate { source, offset } => {
                 if powered_devices.contains(&pos) {
                     if let Some(movement) = mark_material_translate(world, pos + source, offset) {
                         moves.push(movement);
@@ -64,8 +64,12 @@ fn mark_material_translate(
     Some(StructureMove::translate(structure, offset))
 }
 
-fn mark_lift_material_structure(world: &WorldBlocks, pos: IVec3) -> Option<StructureMove> {
-    let source = (1..=5)
+fn mark_lift_material_structure(
+    world: &WorldBlocks,
+    pos: IVec3,
+    range: i32,
+) -> Option<StructureMove> {
+    let source = (1..=range)
         .map(|height| pos + IVec3::Y * height)
         .find(|candidate| world.is_material_at(*candidate))?;
 

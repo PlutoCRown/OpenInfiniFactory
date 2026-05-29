@@ -1,4 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MaterialMover};
+use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MovementRule};
 
 pub struct RotatorBlock;
 
@@ -23,8 +23,8 @@ impl Block for RotatorBlock {
         true
     }
 
-    fn material_mover(&self, _facing: super::Facing) -> Option<MaterialMover> {
-        Some(MaterialMover::Rotator { clockwise: true })
+    fn movement_rule(&self, _facing: super::Facing) -> Option<MovementRule> {
+        Some(MovementRule::Rotate { clockwise: true })
     }
 
     fn alternate(&self) -> Option<BlockKind> {

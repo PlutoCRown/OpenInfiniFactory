@@ -1,4 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MaterialMover};
+use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MovementRule};
 
 pub struct LifterBlock;
 
@@ -23,8 +23,8 @@ impl Block for LifterBlock {
         true
     }
 
-    fn material_mover(&self, _facing: super::Facing) -> Option<MaterialMover> {
-        Some(MaterialMover::Lifter)
+    fn movement_rule(&self, _facing: super::Facing) -> Option<MovementRule> {
+        Some(MovementRule::Lift { range: 5 })
     }
 }
 

@@ -1,5 +1,5 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MaterialMover, RenderBehavior,
+    rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MovementRule, RenderBehavior,
     SignalBehavior, WireConnectorBehavior,
 };
 
@@ -26,8 +26,8 @@ impl Block for PistonBlock {
         true
     }
 
-    fn material_mover(&self, facing: super::Facing) -> Option<MaterialMover> {
-        Some(MaterialMover::Piston {
+    fn movement_rule(&self, facing: super::Facing) -> Option<MovementRule> {
+        Some(MovementRule::PoweredTranslate {
             source: facing.forward_ivec3(),
             offset: facing.forward_ivec3(),
         })
