@@ -12,6 +12,7 @@ pub struct PlacementState {
     pub edit_gesture: Option<EditGesture>,
     pub selection: SelectionState,
     pub generator_panel: Option<IVec3>,
+    pub labeler_panel: Option<IVec3>,
 }
 
 impl Default for PlacementState {
@@ -23,6 +24,7 @@ impl Default for PlacementState {
             edit_gesture: None,
             selection: SelectionState::default(),
             generator_panel: None,
+            labeler_panel: None,
         }
     }
 }
@@ -123,6 +125,7 @@ pub enum GameMode {
     SaveListMain,
     SaveListPause,
     GeneratorSettings,
+    LabelerSettings,
     Settings,
     Playing,
     Inventory,

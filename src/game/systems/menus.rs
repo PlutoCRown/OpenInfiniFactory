@@ -5,10 +5,10 @@ use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SettingsReturnMode, SimulationState,
 };
 use crate::game::ui::{
-    CarriedItem, GeneratorAction, InventoryItems, MainMenuAction, OpenSettingsDropdown,
+    CarriedItem, GeneratorAction, InventoryItems, LabelerAction, MainMenuAction, OpenSettingsDropdown,
     PauseAction, PendingKeyBind, SaveListAction, SettingsAction, SettingsTab,
 };
-use crate::game::world::blocks::MaterialKind;
+use crate::game::world::blocks::{MaterialKind, StampColor};
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
 use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
 use crate::game::{UI_SCALE_MAX, UI_SCALE_MIN};
@@ -408,6 +408,44 @@ pub fn generator_menu_actions(
     }
 }
 
+pub fn labeler_menu_actions(
+    mut mode: ResMut<GameMode>,
+    mut placement: ResMut<PlacementState>,
+    mut world: ResMut<WorldBlocks>,
+    mut interactions: Query<(&Interaction, &LabelerAction), (Changed<Interaction>, With<Button>)>,
+) {
+    if *mode != GameMode::LabelerSettings {
+        return;
+    }
+
+    let Some(pos) = placement.labeler_panel else {
+        *mode = GameMode::Playing;
+        return;
+    };
+
+    for (interaction, action) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        let mut settings = world.labeler_settings(pos);
+        match *action {
+            LabelerAction::PreviousColor => {
+                settings.color = previous_stamp_color(settings.color);
+                world.set_labeler_settings(pos, settings);
+            }
+            LabelerAction::NextColor => {
+                settings.color = next_stamp_color(settings.color);
+                world.set_labeler_settings(pos, settings);
+            }
+            LabelerAction::Close => {
+                placement.labeler_panel = None;
+                *mode = GameMode::Playing;
+            }
+        }
+    }
+}
+
 fn next_material(material: MaterialKind) -> MaterialKind {
     let all = MaterialKind::ALL;
     let index = all
@@ -415,6 +453,24 @@ fn next_material(material: MaterialKind) -> MaterialKind {
         .position(|candidate| *candidate == material)
         .unwrap_or(0);
     all[(index + 1) % all.len()]
+}
+
+fn next_stamp_color(color: StampColor) -> StampColor {
+    let all = StampColor::ALL;
+    let index = all
+        .iter()
+        .position(|candidate| *candidate == color)
+        .unwrap_or(0);
+    all[(index + 1) % all.len()]
+}
+
+fn previous_stamp_color(color: StampColor) -> StampColor {
+    let all = StampColor::ALL;
+    let index = all
+        .iter()
+        .position(|candidate| *candidate == color)
+        .unwrap_or(0);
+    all[(index + all.len() - 1) % all.len()]
 }
 
 fn reset_builder_state(
@@ -428,5 +484,7 @@ fn reset_builder_state(
     carried.clear();
     placement.selected = 0;
     placement.edit_gesture = None;
+    placement.generator_panel = None;
+    placement.labeler_panel = None;
     placement.selection.clear();
 }

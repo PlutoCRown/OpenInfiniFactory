@@ -4,12 +4,12 @@ use super::{
     dirt::DIRT, down_detector::DOWN_DETECTOR, down_welder::DOWN_WELDER, drill::DRILL,
     drill_head::DRILL_HEAD, generator::GENERATOR, glass::GLASS, goal::GOAL, grass::GRASS,
     iron_material::IRON_MATERIAL, laser::LASER, lifter::LIFTER, material::MATERIAL,
-    piston::PISTON, planks::PLANKS, reverse_conveyor::REVERSE_CONVEYOR, rotator::ROTATOR,
-    solid::SOLID, stone::STONE, welder::WELDER, weld_point::WELD_POINT, wire::WIRE, Block,
-    BlockKind,
+    piston::PISTON, planks::PLANKS, reverse_conveyor::REVERSE_CONVEYOR, roller::ROLLER,
+    rotator::ROTATOR, solid::SOLID, stamper::STAMPER, stone::STONE, welder::WELDER,
+    weld_point::WELD_POINT, wire::WIRE, Block, BlockKind,
 };
 
-pub const EDIT_BLOCKS: [BlockKind; 7] = [
+pub const EDIT_BLOCKS: [BlockKind; 9] = [
     BlockKind::Grass,
     BlockKind::Stone,
     BlockKind::Dirt,
@@ -17,9 +17,11 @@ pub const EDIT_BLOCKS: [BlockKind; 7] = [
     BlockKind::Glass,
     BlockKind::Generator,
     BlockKind::Goal,
+    BlockKind::Stamper,
+    BlockKind::Roller,
 ];
 
-pub const EDITABLE_BLOCKS: [BlockKind; 7] = EDIT_BLOCKS;
+pub const EDITABLE_BLOCKS: [BlockKind; 9] = EDIT_BLOCKS;
 
 pub const PLAY_BLOCKS: [BlockKind; 15] = [
     BlockKind::Solid,
@@ -39,7 +41,7 @@ pub const PLAY_BLOCKS: [BlockKind; 15] = [
     BlockKind::Laser,
 ];
 
-pub const ALL_BLOCKS: [BlockKind; 28] = [
+pub const ALL_BLOCKS: [BlockKind; 30] = [
     BlockKind::Grass,
     BlockKind::Stone,
     BlockKind::Dirt,
@@ -62,6 +64,8 @@ pub const ALL_BLOCKS: [BlockKind; 28] = [
     BlockKind::Blocker,
     BlockKind::Drill,
     BlockKind::Laser,
+    BlockKind::Stamper,
+    BlockKind::Roller,
     BlockKind::Material,
     BlockKind::IronMaterial,
     BlockKind::CopperMaterial,
@@ -70,7 +74,7 @@ pub const ALL_BLOCKS: [BlockKind; 28] = [
     BlockKind::DrillHead,
 ];
 
-pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 28] = [
+pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 30] = [
     &GRASS,
     &STONE,
     &DIRT,
@@ -93,6 +97,8 @@ pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 28] = [
     &BLOCKER,
     &DRILL,
     &LASER,
+    &STAMPER,
+    &ROLLER,
     &MATERIAL,
     &IRON_MATERIAL,
     &COPPER_MATERIAL,

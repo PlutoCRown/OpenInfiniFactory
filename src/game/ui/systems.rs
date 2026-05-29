@@ -15,8 +15,9 @@ use super::types::{
     BackpackPanel, CarriedIcon, CarriedItem, CarriedLabel, Crosshair, CurrentSaveText,
     DeleteSelectionModeText, FovText, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText,
     HotbarText, InGameHudStyle, InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle,
-    KeyBindingButton, KeyBindingLabel, LocalizedText, MainMenuPanel, OpenSettingsDropdown,
-    PausePanel, PendingKeyBind, PlaceSelectionModeText, SaveListAction, SaveListLabel,
+    KeyBindingButton, KeyBindingLabel, LabelerColorText, LabelerPanel, LocalizedText,
+    MainMenuPanel, OpenSettingsDropdown, PausePanel, PendingKeyBind, PlaceSelectionModeText,
+    SaveListAction, SaveListLabel,
     SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdownLabel, SettingsDropdownList,
     ScrollContainer, ScrollContent, SettingsGameplayGroup, SettingsKeyBindingsGroup,
     SettingsPanel, SettingsSlider, SettingsSliderFill, SettingsSliderKnob, SettingsStatusText,
@@ -352,6 +353,25 @@ pub fn update_generator_ui(
                 "material",
                 i18n.text(generator_settings.material.name_key()),
             )],
+        );
+    }
+}
+
+pub fn update_labeler_ui(
+    placement: Res<PlacementState>,
+    world: Res<crate::game::world::grid::WorldBlocks>,
+    i18n: Res<I18n>,
+    mut labeler_color_text: Query<&mut Text, With<LabelerColorText>>,
+) {
+    let Some(pos) = placement.labeler_panel else {
+        return;
+    };
+
+    let labeler_settings = world.labeler_settings(pos);
+    if let Ok(mut text) = labeler_color_text.get_single_mut() {
+        text.sections[0].value = i18n.fmt(
+            "labeler.color",
+            &[("color", i18n.text(labeler_settings.color.name_key()))],
         );
     }
 }
@@ -712,6 +732,20 @@ pub fn update_panel_visibility(
 
     for mut style in &mut style_sets.p7() {
         style.display = if *mode == GameMode::GeneratorSettings {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+}
+
+pub fn update_labeler_panel_visibility(
+    mode: Res<GameMode>,
+    mut labeler_panel: Query<&mut Style, With<LabelerPanel>>,
+) {
+    for mut style in &mut labeler_panel {
+        style.display = if *mode == GameMode::LabelerSettings {
             Display::Flex
         } else {
             Display::None

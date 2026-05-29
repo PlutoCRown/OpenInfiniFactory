@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-use crate::game::world::blocks::{BlockKind, BlockShape, ALL_BLOCKS, BLOCK_SIZE};
+use crate::game::world::blocks::{BlockKind, BlockShape, StampColor, ALL_BLOCKS, BLOCK_SIZE};
 use crate::game::world::procedural_textures::{block_texture, ProceduralTexture};
 
 #[derive(Resource, Clone)]
@@ -12,11 +12,13 @@ pub struct WorldRenderAssets {
     pub(crate) arrow: Handle<Mesh>,
     pub(crate) arrow_nose: Handle<Mesh>,
     pub(crate) goal_top: Handle<Mesh>,
+    pub(crate) face_mark: Handle<Mesh>,
     connector_x: Handle<Mesh>,
     connector_y: Handle<Mesh>,
     connector_z: Handle<Mesh>,
     block_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     preview_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
+    face_mark_materials: HashMap<StampColor, Handle<StandardMaterial>>,
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
     pub(crate) arrow_material: Handle<StandardMaterial>,
     pub(crate) arrow_nose_material: Handle<StandardMaterial>,
@@ -72,6 +74,20 @@ impl WorldRenderAssets {
                 (kind, materials.add(preview_block_material(kind, texture)))
             })
             .collect();
+        let face_mark_materials = StampColor::ALL
+            .into_iter()
+            .map(|color| {
+                (
+                    color,
+                    materials.add(StandardMaterial {
+                        base_color: color.color().with_alpha(0.82),
+                        alpha_mode: AlphaMode::Blend,
+                        unlit: true,
+                        ..default()
+                    }),
+                )
+            })
+            .collect();
 
         Self {
             block: meshes.add(Cuboid::new(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)),
@@ -83,11 +99,13 @@ impl WorldRenderAssets {
             arrow: meshes.add(Cuboid::new(0.18, 0.08, 0.72)),
             arrow_nose: meshes.add(Cuboid::new(0.42, 0.10, 0.18)),
             goal_top: meshes.add(Cuboid::new(0.62, 0.08, 0.62)),
+            face_mark: meshes.add(Cuboid::new(0.72, 0.012, 0.72)),
             connector_x: meshes.add(Cuboid::new(0.74, 0.10, 0.10)),
             connector_y: meshes.add(Cuboid::new(0.10, 0.74, 0.10)),
             connector_z: meshes.add(Cuboid::new(0.10, 0.10, 0.74)),
             block_materials,
             preview_materials,
+            face_mark_materials,
             wire_connector_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.88, 0.30),
                 emissive: Color::srgb(0.20, 0.12, 0.02).into(),
@@ -165,6 +183,13 @@ impl WorldRenderAssets {
         } else {
             self.connector_z.clone()
         }
+    }
+
+    pub(crate) fn face_mark_material(&self, color: StampColor) -> Handle<StandardMaterial> {
+        self.face_mark_materials
+            .get(&color)
+            .expect("every stamp color has a material")
+            .clone()
     }
 }
 

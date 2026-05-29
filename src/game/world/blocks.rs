@@ -22,8 +22,10 @@ mod material;
 mod piston;
 mod planks;
 mod reverse_conveyor;
+mod roller;
 mod rotator;
 mod solid;
+mod stamper;
 mod stone;
 mod weld_point;
 mod welder;
@@ -59,6 +61,10 @@ pub trait Block: Send + Sync {
     }
 
     fn material_destroyer(&self, _facing: Facing) -> Option<MaterialDestroyer> {
+        None
+    }
+
+    fn material_labeler(&self, _facing: Facing) -> Option<MaterialLabeler> {
         None
     }
 
@@ -144,6 +150,12 @@ pub enum MaterialDestroyer {
     Drill { target: IVec3 },
     AdjacentDrillHead,
     Laser { direction: IVec3, range: i32 },
+}
+
+#[derive(Clone, Copy)]
+pub enum MaterialLabeler {
+    Stamper { target: IVec3 },
+    Roller { target: IVec3 },
 }
 
 #[derive(Clone, Copy)]
@@ -357,6 +369,37 @@ impl MaterialKind {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub enum StampColor {
+    #[default]
+    Red,
+    Green,
+    Blue,
+    Yellow,
+}
+
+impl StampColor {
+    pub const ALL: [Self; 4] = [Self::Red, Self::Green, Self::Blue, Self::Yellow];
+
+    pub fn name_key(self) -> &'static str {
+        match self {
+            Self::Red => "stamp_color.red",
+            Self::Green => "stamp_color.green",
+            Self::Blue => "stamp_color.blue",
+            Self::Yellow => "stamp_color.yellow",
+        }
+    }
+
+    pub fn color(self) -> Color {
+        match self {
+            Self::Red => Color::srgb(0.95, 0.12, 0.10),
+            Self::Green => Color::srgb(0.20, 0.82, 0.28),
+            Self::Blue => Color::srgb(0.18, 0.42, 0.95),
+            Self::Yellow => Color::srgb(1.0, 0.84, 0.18),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum BlockKind {
     Solid,
@@ -380,6 +423,8 @@ pub enum BlockKind {
     Blocker,
     Drill,
     Laser,
+    Stamper,
+    Roller,
     Goal,
     Material,
     IronMaterial,
@@ -451,7 +496,10 @@ impl BlockKind {
     }
 
     pub fn is_system_layer(self) -> bool {
-        matches!(self, BlockKind::Generator | BlockKind::Goal)
+        matches!(
+            self,
+            BlockKind::Generator | BlockKind::Goal | BlockKind::Stamper | BlockKind::Roller
+        )
     }
 
     pub fn accepts_material(self) -> bool {
@@ -480,6 +528,10 @@ impl BlockKind {
 
     pub fn material_destroyer(self, facing: Facing) -> Option<MaterialDestroyer> {
         self.block().material_destroyer(facing)
+    }
+
+    pub fn material_labeler(self, facing: Facing) -> Option<MaterialLabeler> {
+        self.block().material_labeler(facing)
     }
 
     pub fn weld_behavior(self) -> Option<WeldBehavior> {

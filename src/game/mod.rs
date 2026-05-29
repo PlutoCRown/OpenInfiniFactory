@@ -20,8 +20,8 @@ use state::{
 };
 use systems::gameplay::{apply_fov, gameplay_input, placement_input, update_hover};
 use systems::menus::{
-    generator_menu_actions, main_menu_actions, pause_menu_actions, save_list_actions,
-    settings_menu_actions,
+    generator_menu_actions, labeler_menu_actions, main_menu_actions, pause_menu_actions,
+    save_list_actions, settings_menu_actions,
 };
 use systems::simulation_controls::simulation_controls;
 use ui::{CarriedItem, InventoryItems, OpenSettingsDropdown, PendingKeyBind, SettingsTab};
@@ -97,6 +97,7 @@ impl Plugin for GamePlugin {
                     save_list_actions,
                     pause_menu_actions,
                     generator_menu_actions,
+                    labeler_menu_actions,
                     settings_menu_actions,
                 )
                     .chain()
@@ -134,9 +135,18 @@ impl Plugin for GamePlugin {
                     ui::update_settings_dropdowns_ui,
                     ui::update_settings_tabs_ui,
                     ui::update_scroll_containers,
+                    ui::update_labeler_panel_visibility,
+                )
+                    .after(systems::debug::mark_perf_animation)
+                    .before(systems::debug::mark_perf_ui),
+            )
+            .add_systems(
+                Update,
+                (
                     ui::update_panel_visibility,
                     ui::update_hud_visibility,
                     ui::update_generator_ui,
+                    ui::update_labeler_ui,
                     ui::update_inventory_slots,
                     ui::update_carried_item_ui,
                     ui::update_save_list_ui,

@@ -7,10 +7,12 @@ use crate::game::world::animation::{
 };
 use crate::game::world::blocks::{
     BlockData, BlockKind, MarkerBehavior, MaterialDestroyer, MaterialKind, MaterialMover,
-    MaterialSource,
+    MaterialLabeler, MaterialSource,
 };
 use crate::game::world::direction::Facing;
-use crate::game::world::grid::WorldBlocks;
+use crate::game::world::grid::{
+    MaterialFace, MaterialFaceMark, MaterialFaceMarkSource, WorldBlocks,
+};
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_with_timed_animations, BlockEntity, WorldRenderAssets,
 };
@@ -39,6 +41,7 @@ pub fn run_turn(
 
     run_powered_marker_phase(world, &powered_devices);
     run_material_destroy_phase(world, &powered_devices);
+    run_material_label_phase(world);
     run_weld_phase(world);
     run_material_source_phase(world, turn);
     run_material_movement_phase(world, &powered_devices);
@@ -319,6 +322,48 @@ fn move_material_structure(world: &mut WorldBlocks, source: IVec3, offset: IVec3
 fn remove_material_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>) {
     for pos in structure {
         world.remove(pos);
+    }
+}
+
+fn run_material_label_phase(world: &mut WorldBlocks) {
+    let labelers: Vec<(IVec3, MaterialLabeler)> = world
+        .system_blocks
+        .iter()
+        .filter_map(|(pos, block)| {
+            block
+                .kind
+                .material_labeler(block.facing)
+                .map(|labeler| (*pos, labeler))
+        })
+        .collect();
+
+    for (pos, labeler) in labelers {
+        let (target_offset, source) = match labeler {
+            MaterialLabeler::Stamper { target } => (target, MaterialFaceMarkSource::Stamper),
+            MaterialLabeler::Roller { target } => (target, MaterialFaceMarkSource::Roller),
+        };
+        let target = pos + target_offset;
+        if !world.is_material_at(target) {
+            continue;
+        }
+
+        let face = MaterialFace::new(target, -target_offset);
+        if world
+            .material_face_marks
+            .get(&face)
+            .is_some_and(|mark| mark.source == MaterialFaceMarkSource::Stamper)
+        {
+            continue;
+        }
+
+        let settings = world.labeler_settings(pos);
+        world.set_material_face_mark(
+            face,
+            MaterialFaceMark {
+                color: settings.color,
+                source,
+            },
+        );
     }
 }
 

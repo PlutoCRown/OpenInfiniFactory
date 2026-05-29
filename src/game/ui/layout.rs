@@ -12,16 +12,17 @@ use super::theme::{absolute_text_bundle, panel_bundle, STATUS_TEXT};
 use super::types::{
     BackpackPanel, CarriedIcon, CarriedLabel, Crosshair, CurrentSaveText, GeneratorAction,
     GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText, HotbarText, InGameHudStyle,
-    InGameHudVisibility, InventoryTitle, MainMenuAction, MainMenuPanel, PauseAction, PausePanel,
+    InGameHudVisibility, InventoryTitle, LabelerAction, LabelerColorText, LabelerPanel,
+    MainMenuAction, MainMenuPanel, PauseAction, PausePanel,
     SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdown, SettingsGameplayGroup,
     SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider, SettingsStatusText, SimulationText,
     SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::widgets::{
-    spawn_generator_button, spawn_localized_main_button, spawn_localized_pause_button,
-    spawn_localized_settings_button, spawn_save_back_button, spawn_save_slot_button,
-    spawn_settings_dropdown, spawn_settings_slider, spawn_settings_tab, spawn_slot,
-    scroll_container, scroll_content,
+    scroll_container, scroll_content, spawn_generator_button, spawn_labeler_button,
+    spawn_localized_main_button, spawn_localized_pause_button, spawn_localized_settings_button,
+    spawn_save_back_button, spawn_save_slot_button, spawn_settings_dropdown,
+    spawn_settings_slider, spawn_settings_tab, spawn_slot,
 };
 
 pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
@@ -30,6 +31,7 @@ pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
         spawn_hotbar(root);
         spawn_inventory_panel(root, &i18n);
         spawn_generator_panel(root, &i18n);
+        spawn_labeler_panel(root, &i18n);
         spawn_pause_panel(root, &i18n);
         spawn_settings_panel(root, &i18n);
         spawn_main_menu(root, &i18n);
@@ -71,6 +73,34 @@ fn spawn_generator_panel(root: &mut ChildBuilder, i18n: &I18n) {
                 i18n.text("button.close"),
                 "button.close",
                 GeneratorAction::Close,
+            );
+        });
+}
+
+fn spawn_labeler_panel(root: &mut ChildBuilder, i18n: &I18n) {
+    root.spawn((panel_bundle(420.0, 240.0, -210.0, -120.0), LabelerPanel))
+        .with_children(|panel| {
+            panel.spawn(localized_text(i18n, "labeler.title", 26.0, Color::WHITE));
+            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
+                spawn_labeler_button(
+                    row,
+                    i18n.text("button.previous_color"),
+                    "button.previous_color",
+                    LabelerAction::PreviousColor,
+                );
+                row.spawn((text("", 18.0, Color::WHITE), LabelerColorText));
+                spawn_labeler_button(
+                    row,
+                    i18n.text("button.next_color"),
+                    "button.next_color",
+                    LabelerAction::NextColor,
+                );
+            });
+            spawn_labeler_button(
+                panel,
+                i18n.text("button.close"),
+                "button.close",
+                LabelerAction::Close,
             );
         });
 }

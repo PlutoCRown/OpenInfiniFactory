@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::game::world::blocks::{BlockData, BlockKind, MaterialKind};
+use crate::game::world::blocks::{BlockData, BlockKind, MaterialKind, StampColor};
 use crate::game::world::direction::Facing;
 
 pub const REACH: f32 = 12.0;
@@ -13,7 +13,9 @@ pub struct WorldBlocks {
     pub blocks: HashMap<IVec3, BlockData>,
     pub system_blocks: HashMap<IVec3, BlockData>,
     pub material_welds: HashSet<MaterialWeld>,
+    pub material_face_marks: HashMap<MaterialFace, MaterialFaceMark>,
     pub generator_settings: HashMap<IVec3, GeneratorSettings>,
+    pub labeler_settings: HashMap<IVec3, LabelerSettings>,
     pub topology_revision: u64,
 }
 
@@ -21,6 +23,43 @@ pub struct WorldBlocks {
 pub struct GeneratorSettings {
     pub period: u64,
     pub material: MaterialKind,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct LabelerSettings {
+    pub color: StampColor,
+}
+
+impl Default for LabelerSettings {
+    fn default() -> Self {
+        Self {
+            color: StampColor::Red,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct MaterialFace {
+    pub pos: IVec3,
+    pub normal: IVec3,
+}
+
+impl MaterialFace {
+    pub fn new(pos: IVec3, normal: IVec3) -> Self {
+        Self { pos, normal }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MaterialFaceMark {
+    pub color: StampColor,
+    pub source: MaterialFaceMarkSource,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum MaterialFaceMarkSource {
+    Stamper,
+    Roller,
 }
 
 impl Default for GeneratorSettings {
@@ -79,6 +118,7 @@ impl WorldBlocks {
         let removed = self.blocks.remove(pos);
         if removed.is_some() {
             self.material_welds.retain(|weld| !weld.contains(*pos));
+            self.material_face_marks.retain(|face, _| face.pos != *pos);
             self.generator_settings.remove(pos);
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
@@ -89,6 +129,7 @@ impl WorldBlocks {
         let removed = self.system_blocks.remove(pos);
         if removed.is_some() {
             self.generator_settings.remove(pos);
+            self.labeler_settings.remove(pos);
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
         removed
@@ -99,7 +140,9 @@ impl WorldBlocks {
             self.blocks.clear();
             self.system_blocks.clear();
             self.material_welds.clear();
+            self.material_face_marks.clear();
             self.generator_settings.clear();
+            self.labeler_settings.clear();
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -111,6 +154,8 @@ impl WorldBlocks {
             self.material_welds.retain(|weld| {
                 self.blocks.contains_key(&weld.a) && self.blocks.contains_key(&weld.b)
             });
+            self.material_face_marks
+                .retain(|face, _| self.blocks.contains_key(&face.pos));
             self.generator_settings
                 .retain(|pos, _| self.blocks.contains_key(pos));
             self.topology_revision = self.topology_revision.wrapping_add(1);
@@ -122,6 +167,8 @@ impl WorldBlocks {
         self.system_blocks.retain(|pos, block| keep(pos, block));
         if self.system_blocks.len() != before {
             self.generator_settings
+                .retain(|pos, _| self.system_blocks.contains_key(pos));
+            self.labeler_settings
                 .retain(|pos, _| self.system_blocks.contains_key(pos));
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
@@ -143,6 +190,45 @@ impl WorldBlocks {
             return;
         }
         if self.generator_settings.insert(pos, settings) != Some(settings) {
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+    }
+
+    pub fn labeler_settings(&self, pos: IVec3) -> LabelerSettings {
+        self.labeler_settings
+            .get(&pos)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub fn set_labeler_settings(&mut self, pos: IVec3, settings: LabelerSettings) {
+        if !self
+            .system_blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.material_labeler(block.facing).is_some())
+        {
+            return;
+        }
+        if self.labeler_settings.insert(pos, settings) != Some(settings) {
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+    }
+
+    pub fn set_material_face_mark(&mut self, face: MaterialFace, mark: MaterialFaceMark) {
+        if !self.is_material_at(face.pos) {
+            return;
+        }
+        if self.material_face_marks.insert(face, mark) != Some(mark) {
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+    }
+
+    pub fn replace_material_face_marks(
+        &mut self,
+        marks: HashMap<MaterialFace, MaterialFaceMark>,
+    ) {
+        if self.material_face_marks != marks {
+            self.material_face_marks = marks;
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }

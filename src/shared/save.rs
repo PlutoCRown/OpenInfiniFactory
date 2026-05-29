@@ -5,7 +5,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::game::world::blocks::BlockData;
-use crate::game::world::grid::{GeneratorSettings, MaterialWeld, WorldBlocks};
+use crate::game::world::grid::{
+    GeneratorSettings, LabelerSettings, MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks,
+};
 
 pub const SAVE_DIR: &str = "saves";
 pub const SAVE_SLOTS: usize = 8;
@@ -30,7 +32,11 @@ struct SaveFile {
     #[serde(default)]
     material_welds: Vec<MaterialWeld>,
     #[serde(default)]
+    material_face_marks: Vec<SavedMaterialFaceMark>,
+    #[serde(default)]
     generator_settings: Vec<SavedGeneratorSettings>,
+    #[serde(default)]
+    labeler_settings: Vec<SavedLabelerSettings>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -47,6 +53,20 @@ struct SavedGeneratorSettings {
     y: i32,
     z: i32,
     settings: GeneratorSettings,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SavedLabelerSettings {
+    x: i32,
+    y: i32,
+    z: i32,
+    settings: LabelerSettings,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SavedMaterialFaceMark {
+    face: MaterialFace,
+    mark: MaterialFaceMark,
 }
 
 pub fn save_world(world: &WorldBlocks, name: &str) -> bool {
@@ -72,10 +92,28 @@ pub fn save_world(world: &WorldBlocks, name: &str) -> bool {
             })
             .collect(),
         material_welds: world.material_welds.iter().copied().collect(),
+        material_face_marks: world
+            .material_face_marks
+            .iter()
+            .map(|(face, mark)| SavedMaterialFaceMark {
+                face: *face,
+                mark: *mark,
+            })
+            .collect(),
         generator_settings: world
             .generator_settings
             .iter()
             .map(|(pos, settings)| SavedGeneratorSettings {
+                x: pos.x,
+                y: pos.y,
+                z: pos.z,
+                settings: *settings,
+            })
+            .collect(),
+        labeler_settings: world
+            .labeler_settings
+            .iter()
+            .map(|(pos, settings)| SavedLabelerSettings {
                 x: pos.x,
                 y: pos.y,
                 z: pos.z,
@@ -126,8 +164,21 @@ pub fn load_world(world: &mut WorldBlocks, name: &str) -> bool {
             .filter(|weld| world.is_material_at(weld.a) && world.is_material_at(weld.b))
             .collect(),
     );
+    world.replace_material_face_marks(
+        save.material_face_marks
+            .into_iter()
+            .filter_map(|saved| {
+                world
+                    .is_material_at(saved.face.pos)
+                    .then_some((saved.face, saved.mark))
+            })
+            .collect(),
+    );
     for saved in save.generator_settings {
         world.set_generator_settings(IVec3::new(saved.x, saved.y, saved.z), saved.settings);
+    }
+    for saved in save.labeler_settings {
+        world.set_labeler_settings(IVec3::new(saved.x, saved.y, saved.z), saved.settings);
     }
     true
 }

@@ -376,7 +376,38 @@ fn spawn_block_model(
                 }
             }
         }
+
+        if data.kind.is_material() {
+            for (face, mark) in world
+                .material_face_marks
+                .iter()
+                .filter(|(face, _)| face.pos == pos)
+            {
+                parent.spawn(PbrBundle {
+                    mesh: assets.face_mark.clone(),
+                    material: assets.face_mark_material(mark.color),
+                    transform: face_mark_transform(face.normal),
+                    ..default()
+                });
+            }
+        }
     });
+}
+
+fn face_mark_transform(normal: IVec3) -> Transform {
+    let normal_vec = normal.as_vec3();
+    let rotation = if normal.x != 0 {
+        Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)
+    } else if normal.z != 0 {
+        Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)
+    } else {
+        Quat::IDENTITY
+    };
+    Transform {
+        translation: normal_vec * 0.506,
+        rotation,
+        ..default()
+    }
 }
 
 fn weld_connects_to(block: &BlockData, connector_from_block: IVec3) -> bool {

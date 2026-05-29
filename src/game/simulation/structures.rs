@@ -1,9 +1,9 @@
 use bevy::prelude::*;
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::game::world::blocks::BlockData;
 use crate::game::world::direction::Facing;
-use crate::game::world::grid::{MaterialWeld, WorldBlocks};
+use crate::game::world::grid::{MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks};
 
 use super::signal_offsets;
 
@@ -121,6 +121,10 @@ pub(super) fn can_move_structure(
 
 pub(super) fn move_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, offset: IVec3) {
     let updated_welds = moved_welds(world, structure, |pos| pos + offset);
+    let updated_marks = moved_face_marks(world, structure, |face| MaterialFace {
+        pos: face.pos + offset,
+        normal: face.normal,
+    });
     let blocks: Vec<(IVec3, BlockData)> = structure
         .iter()
         .filter_map(|pos| world.remove(pos).map(|block| (*pos, block)))
@@ -130,6 +134,7 @@ pub(super) fn move_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>
         world.insert(pos + offset, block);
     }
     world.replace_material_welds(updated_welds);
+    world.replace_material_face_marks(updated_marks);
 }
 
 fn move_block_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, offset: IVec3) {
@@ -162,6 +167,10 @@ pub(super) fn rotate_structure(
     clockwise: bool,
 ) {
     let updated_welds = moved_welds(world, structure, |pos| rotate_pos_y(pos, pivot, clockwise));
+    let updated_marks = moved_face_marks(world, structure, |face| MaterialFace {
+        pos: rotate_pos_y(face.pos, pivot, clockwise),
+        normal: rotate_offset_y(face.normal, clockwise),
+    });
     let blocks: Vec<(IVec3, BlockData)> = structure
         .iter()
         .filter_map(|pos| world.remove(pos).map(|block| (*pos, block)))
@@ -172,14 +181,19 @@ pub(super) fn rotate_structure(
         world.insert(rotate_pos_y(pos, pivot, clockwise), block);
     }
     world.replace_material_welds(updated_welds);
+    world.replace_material_face_marks(updated_marks);
 }
 
 fn rotate_pos_y(pos: IVec3, pivot: IVec3, clockwise: bool) -> IVec3 {
     let rel = pos - pivot;
+    pivot + rotate_offset_y(rel, clockwise)
+}
+
+fn rotate_offset_y(offset: IVec3, clockwise: bool) -> IVec3 {
     if clockwise {
-        pivot + IVec3::new(-rel.z, rel.y, rel.x)
+        IVec3::new(-offset.z, offset.y, offset.x)
     } else {
-        pivot + IVec3::new(rel.z, rel.y, -rel.x)
+        IVec3::new(offset.z, offset.y, -offset.x)
     }
 }
 
@@ -211,6 +225,25 @@ fn moved_welds(
                 weld.b
             };
             (a != b).then_some(MaterialWeld::new(a, b))
+        })
+        .collect()
+}
+
+fn moved_face_marks(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+    transform: impl Fn(MaterialFace) -> MaterialFace,
+) -> HashMap<MaterialFace, MaterialFaceMark> {
+    world
+        .material_face_marks
+        .iter()
+        .map(|(face, mark)| {
+            let face = if structure.contains(&face.pos) {
+                transform(*face)
+            } else {
+                *face
+            };
+            (face, *mark)
         })
         .collect()
 }

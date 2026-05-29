@@ -39,6 +39,12 @@ pub struct GeneratorPeriodText;
 pub struct GeneratorMaterialText;
 
 #[derive(Component)]
+pub struct LabelerPanel;
+
+#[derive(Component)]
+pub struct LabelerColorText;
+
+#[derive(Component)]
 pub struct SettingsStatusText;
 
 #[derive(Component)]
@@ -186,6 +192,13 @@ pub enum GeneratorAction {
     PeriodDown,
     PeriodUp,
     MaterialNext,
+    Close,
+}
+
+#[derive(Component, Clone, Copy)]
+pub enum LabelerAction {
+    PreviousColor,
+    NextColor,
     Close,
 }
 
