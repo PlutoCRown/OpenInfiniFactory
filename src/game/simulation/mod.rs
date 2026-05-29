@@ -1,3 +1,7 @@
+mod behaviors;
+mod gravity;
+mod markers;
+mod movement;
 pub mod runtime;
 mod signals;
 mod structures;

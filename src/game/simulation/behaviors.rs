@@ -1,0 +1,300 @@
+use bevy::prelude::*;
+use std::collections::HashSet;
+
+use crate::game::world::blocks::{
+    BlockData, BlockKind, MaterialDestroyer, MaterialKind, MaterialLabeler, MaterialSource,
+};
+use crate::game::world::direction::Facing;
+use crate::game::world::grid::{
+    ConverterMode, MaterialFace, MaterialFaceMark, MaterialFaceMarkSource, WorldBlocks,
+};
+
+use super::signal_offsets;
+use super::structures::{execute_structure_moves, material_structure, StructureMove};
+
+pub(super) fn run_material_behavior_phase(
+    world: &mut WorldBlocks,
+    turn: u64,
+    powered_devices: &HashSet<IVec3>,
+) {
+    run_material_acceptance_phase(world);
+    run_material_source_phase(world, turn);
+    run_weld_phase(world);
+    run_material_destroy_phase(world, powered_devices);
+    run_material_label_phase(world);
+    run_material_conversion_phase(world);
+    run_material_teleport_phase(world);
+    run_material_acceptance_phase(world);
+}
+
+fn run_material_source_phase(world: &mut WorldBlocks, turn: u64) {
+    if turn == 0 {
+        return;
+    }
+
+    let sources: Vec<(IVec3, MaterialSource)> = world
+        .system_blocks
+        .iter()
+        .filter_map(|(pos, block)| {
+            block
+                .kind
+                .material_source(block.facing)
+                .map(|source| (*pos, source))
+        })
+        .collect();
+
+    for (pos, source) in sources {
+        match source {
+            MaterialSource::Generator => {
+                let settings = world.generator_settings(pos);
+                if turn % settings.period.max(1) != 0 {
+                    continue;
+                }
+
+                let spawn_pos = pos;
+                if world.can_place_solid_at(spawn_pos) {
+                    world.insert(
+                        spawn_pos,
+                        BlockData {
+                            kind: material_block_kind(settings.material),
+                            facing: Facing::North,
+                        },
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn material_block_kind(material: MaterialKind) -> BlockKind {
+    match material {
+        MaterialKind::Basic => BlockKind::Material,
+        MaterialKind::Iron => BlockKind::IronMaterial,
+        MaterialKind::Copper => BlockKind::CopperMaterial,
+    }
+}
+
+fn block_material_kind(kind: BlockKind) -> Option<MaterialKind> {
+    match kind {
+        BlockKind::Material => Some(MaterialKind::Basic),
+        BlockKind::IronMaterial => Some(MaterialKind::Iron),
+        BlockKind::CopperMaterial => Some(MaterialKind::Copper),
+        _ => None,
+    }
+}
+
+fn run_weld_phase(world: &mut WorldBlocks) {
+    let weld_points: Vec<IVec3> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| block.kind.weld_behavior().is_some().then_some(*pos))
+        .collect();
+
+    for weld_point in weld_points {
+        let Some(material_a) = adjacent_material(world, weld_point) else {
+            continue;
+        };
+
+        for offset in signal_offsets() {
+            let neighbor = weld_point + offset;
+            if !world
+                .blocks
+                .get(&neighbor)
+                .is_some_and(|block| block.kind.weld_behavior().is_some())
+            {
+                continue;
+            }
+
+            let Some(material_b) = adjacent_material_except(world, neighbor, material_a) else {
+                continue;
+            };
+            world.weld_materials(material_a, material_b);
+        }
+    }
+}
+
+fn adjacent_material(world: &WorldBlocks, pos: IVec3) -> Option<IVec3> {
+    signal_offsets()
+        .into_iter()
+        .map(|offset| pos + offset)
+        .find(|candidate| world.is_material_at(*candidate))
+}
+
+fn adjacent_material_except(world: &WorldBlocks, pos: IVec3, except: IVec3) -> Option<IVec3> {
+    signal_offsets()
+        .into_iter()
+        .map(|offset| pos + offset)
+        .find(|candidate| *candidate != except && world.is_material_at(*candidate))
+}
+
+fn remove_material_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>) {
+    for pos in structure {
+        world.remove(pos);
+    }
+}
+
+fn run_material_label_phase(world: &mut WorldBlocks) {
+    let labelers: Vec<(IVec3, MaterialLabeler)> = world
+        .system_blocks
+        .iter()
+        .filter_map(|(pos, block)| {
+            block
+                .kind
+                .material_labeler(block.facing)
+                .map(|labeler| (*pos, labeler))
+        })
+        .collect();
+
+    for (pos, labeler) in labelers {
+        let (target_offset, source) = match labeler {
+            MaterialLabeler::Stamper { target } => (target, MaterialFaceMarkSource::Stamper),
+            MaterialLabeler::Roller { target } => (target, MaterialFaceMarkSource::Roller),
+        };
+        let target = pos + target_offset;
+        if !world.is_material_at(target) {
+            continue;
+        }
+
+        let face = MaterialFace::new(target, -target_offset);
+        if world
+            .material_face_marks
+            .get(&face)
+            .is_some_and(|mark| mark.source == MaterialFaceMarkSource::Stamper)
+        {
+            continue;
+        }
+
+        let settings = world.labeler_settings(pos);
+        world.set_material_face_mark(
+            face,
+            MaterialFaceMark {
+                color: settings.color,
+                source,
+            },
+        );
+    }
+}
+
+fn run_material_conversion_phase(world: &mut WorldBlocks) {
+    let converters: Vec<IVec3> = world
+        .system_blocks
+        .iter()
+        .filter_map(|(pos, block)| (block.kind == BlockKind::Converter).then_some(*pos))
+        .collect();
+
+    for pos in converters {
+        let Some(mut block) = world.blocks.get(&pos).copied() else {
+            continue;
+        };
+        let Some(input_material) = block_material_kind(block.kind) else {
+            continue;
+        };
+
+        let settings = world.converter_settings(pos);
+        if settings.mode == ConverterMode::SpecificInput && input_material != settings.input {
+            continue;
+        }
+
+        block.kind = material_block_kind(settings.output);
+        world.insert(pos, block);
+    }
+}
+
+fn run_material_teleport_phase(world: &mut WorldBlocks) {
+    let entrances: Vec<IVec3> = world
+        .system_blocks
+        .iter()
+        .filter_map(|(pos, block)| (block.kind == BlockKind::TeleportEntrance).then_some(*pos))
+        .collect();
+    let mut handled = HashSet::new();
+
+    for entrance in entrances {
+        if handled.contains(&entrance) || !world.is_material_at(entrance) {
+            continue;
+        }
+        let Some(exit) = world.teleport_settings(entrance).pair else {
+            continue;
+        };
+        if !world
+            .system_blocks
+            .get(&exit)
+            .is_some_and(|block| block.kind == BlockKind::TeleportExit)
+        {
+            continue;
+        }
+
+        let structure = material_structure(world, entrance);
+        let offset = exit - entrance;
+        handled.extend(structure.iter().copied());
+        handled.extend(structure.iter().map(|pos| *pos + offset));
+        execute_structure_moves(world, vec![StructureMove::translate(structure, offset)]);
+    }
+}
+
+fn run_material_destroy_phase(world: &mut WorldBlocks, powered_devices: &HashSet<IVec3>) {
+    let destroyers: Vec<(IVec3, MaterialDestroyer)> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| {
+            block
+                .kind
+                .material_destroyer(block.facing)
+                .map(|destroyer| (*pos, destroyer))
+        })
+        .collect();
+
+    for (pos, destroyer) in destroyers {
+        match destroyer {
+            MaterialDestroyer::Drill { target } => remove_material_at(world, pos + target),
+            MaterialDestroyer::AdjacentDrillHead => {
+                for offset in signal_offsets() {
+                    remove_material_at(world, pos + offset);
+                }
+            }
+            MaterialDestroyer::Laser { direction, range } => {
+                if powered_devices.contains(&pos) {
+                    fire_laser(world, pos, direction, range);
+                }
+            }
+        }
+    }
+}
+
+fn remove_material_at(world: &mut WorldBlocks, pos: IVec3) {
+    if world.is_material_at(pos) {
+        world.remove(&pos);
+    }
+}
+
+fn fire_laser(world: &mut WorldBlocks, pos: IVec3, direction: IVec3, range: i32) {
+    for distance in 1..=range {
+        let target = pos + direction * distance;
+        let Some(block) = world.blocks.get(&target).copied() else {
+            continue;
+        };
+        if block.kind.is_material() {
+            world.remove(&target);
+            continue;
+        }
+        if block.kind.blocks_laser() {
+            break;
+        }
+    }
+}
+
+fn run_material_acceptance_phase(world: &mut WorldBlocks) {
+    let accepted: Vec<IVec3> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| {
+            (block.kind.is_material() && world.accepts_material_at(*pos)).then_some(*pos)
+        })
+        .collect();
+
+    for pos in accepted {
+        if world.is_material_at(pos) {
+            let structure = material_structure(world, pos);
+            remove_material_structure(world, &structure);
+        }
+    }
+}
