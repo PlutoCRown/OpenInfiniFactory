@@ -3,6 +3,7 @@
 Total: 33
 
 ## SceneBlock
+模拟期重力效果：❌
 
 | 方块 | 中文名 | 可四向旋转 | 实现 Trait |
 | --- | --- | --- | --- |
@@ -13,6 +14,7 @@ Total: 33
 | Glass | 玻璃 | ❌ | `Block`, `SceneBlock` |
 
 ## MaterialBlock
+模拟期重力效果：✅
 
 | 方块 | 中文名 | 可四向旋转 | 可被生成器选择 | 实现 Trait |
 | --- | --- | --- | --- | --- |
@@ -21,6 +23,7 @@ Total: 33
 | Copper Material | 铜材料 | ❌ | ✅ | `Block`, `MaterialBlock` |
 
 ## FactoryBlock
+模拟期重力效果：✅
 
 | 方块 | 中文名 | 可四向旋转 | 替换方块 | 实现 Trait |
 | --- | --- | --- | --- | --- |
@@ -41,6 +44,7 @@ Total: 33
 | Laser | 激光 | ✅ | Drill | `Block`, `FactoryBlock` |
 
 ## SystemBlock
+模拟期重力效果：❌，有些是跟随工厂方块移动
 
 | 方块 | 中文名 | 可四向旋转 | 编辑模式可放置 | 实现 Trait |
 | --- | --- | --- | --- | --- |

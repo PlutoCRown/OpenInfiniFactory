@@ -4,7 +4,8 @@ use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
 use crate::game::player::controller::{player_collision_box, FlyCamera};
-use crate::game::state::GameMode;
+use crate::game::simulation::runtime::SimulationStepStats;
+use crate::game::state::{BuilderMode, GameMode, SimulationState};
 use crate::game::ui::PendingKeyBind;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockEntity;
@@ -199,6 +200,9 @@ pub fn update_debug_ui(
     mut perf: ResMut<PerfStats>,
     diagnostics: Res<DiagnosticsStore>,
     world: Res<WorldBlocks>,
+    builder_mode: Res<BuilderMode>,
+    simulation: Res<SimulationState>,
+    sim_stats: Res<SimulationStepStats>,
     player: Query<&Transform, With<FlyCamera>>,
     block_entities: Query<Entity, With<BlockEntity>>,
     mut panel: Query<(&mut Text, &mut Style), With<DebugPanel>>,
@@ -233,8 +237,30 @@ pub fn update_debug_ui(
         .map(|transform| transform.translation)
         .unwrap_or(Vec3::ZERO);
 
+    let sim_turn_text = if *builder_mode == BuilderMode::Play
+        && simulation.running
+        && sim_stats.has_sample
+    {
+        format!(
+            "\n\nSim Turn (last)\n  Total: {:>5.2} ms\n  Prep: {:>5.2} ms\n  Gravity: {:>5.2} ms\n  Signals: {:>5.2} ms\n  Markers A: {:>5.2} ms\n  Mark Move: {:>5.2} ms\n  Exec Move: {:>5.2} ms\n  Markers B: {:>5.2} ms\n  Behavior: {:>5.2} ms\n  Signals End: {:>5.2} ms\n  Rebuild: {:>5.2} ms",
+            sim_stats.total_ms,
+            sim_stats.prep_ms,
+            sim_stats.gravity_ms,
+            sim_stats.signal_ms,
+            sim_stats.marker_before_move_ms,
+            sim_stats.movement_mark_ms,
+            sim_stats.movement_execute_ms,
+            sim_stats.marker_after_move_ms,
+            sim_stats.behavior_ms,
+            sim_stats.signal_refresh_ms,
+            sim_stats.render_rebuild_ms,
+        )
+    } else {
+        String::new()
+    };
+
     perf.display_text = format!(
-        "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n  Input: {:>5.2} ms\n  Menus: {:>5.2} ms\n  Sim: {:>5.2} ms\n  View: {:>5.2} ms\n  Anim: {:>5.2} ms\n  UI: {:>5.2} ms\n  Debug: {:>5.2} ms\n  Other: {:>5.2} ms\nRender/Other: {:>5.2} ms\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
+        "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n  Input: {:>5.2} ms\n  Menus: {:>5.2} ms\n  Sim Systems: {:>5.2} ms\n  View: {:>5.2} ms\n  Anim: {:>5.2} ms\n  UI: {:>5.2} ms\n  Debug UI: {:>5.2} ms\n  Schedule/Other: {:>5.2} ms\nRender/Engine: {:>5.2} ms{}\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
         fps,
         perf.frame_ms.value,
         perf.main_ms.value,
@@ -247,6 +273,7 @@ pub fn update_debug_ui(
         perf.debug_ms.value,
         perf.main_other_ms.value,
         perf.render_other_ms.value,
+        sim_turn_text,
         world.blocks.len(),
         block_entities.iter().count(),
         player_pos.x,

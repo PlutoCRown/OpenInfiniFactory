@@ -255,7 +255,7 @@ pub fn rebuild_world_with_timed_animations(
             *data,
             assets.block_material(data.kind),
             None,
-            animations.get(pos).copied(),
+            None,
             timing,
             true,
         );
