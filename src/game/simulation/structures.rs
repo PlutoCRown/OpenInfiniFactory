@@ -7,7 +7,7 @@ use crate::game::world::grid::{MaterialFace, MaterialFaceMark, MaterialWeld, Wor
 
 use super::signal_offsets;
 
-pub(super) fn apply_material_gravity(world: &mut WorldBlocks) {
+pub(super) fn material_gravity_moves(world: &WorldBlocks) -> Vec<StructureMove> {
     let mut materials: Vec<IVec3> = world
         .blocks
         .iter()
@@ -16,6 +16,7 @@ pub(super) fn apply_material_gravity(world: &mut WorldBlocks) {
     materials.sort_by_key(|pos| pos.y);
 
     let mut handled = HashSet::new();
+    let mut moves = Vec::new();
     for pos in materials {
         if handled.contains(&pos) || !world.is_material_at(pos) {
             continue;
@@ -24,12 +25,13 @@ pub(super) fn apply_material_gravity(world: &mut WorldBlocks) {
         let structure = material_structure(world, pos);
         handled.extend(structure.iter().copied());
         if can_move_structure(world, &structure, IVec3::NEG_Y) {
-            move_structure(world, &structure, IVec3::NEG_Y);
+            moves.push(StructureMove::translate(structure, IVec3::NEG_Y));
         }
     }
+    moves
 }
 
-pub(super) fn apply_factory_gravity(world: &mut WorldBlocks) {
+pub(super) fn factory_gravity_moves(world: &WorldBlocks) -> Vec<StructureMove> {
     let mut factory_blocks: Vec<IVec3> = world
         .blocks
         .iter()
@@ -38,6 +40,7 @@ pub(super) fn apply_factory_gravity(world: &mut WorldBlocks) {
     factory_blocks.sort_by_key(|pos| pos.y);
 
     let mut handled = HashSet::new();
+    let mut moves = Vec::new();
     for pos in factory_blocks {
         if handled.contains(&pos) || !world.is_factory_at(pos) {
             continue;
@@ -49,7 +52,70 @@ pub(super) fn apply_factory_gravity(world: &mut WorldBlocks) {
             continue;
         }
         if can_move_structure(world, &structure, IVec3::NEG_Y) {
-            move_block_structure(world, &structure, IVec3::NEG_Y);
+            moves.push(StructureMove::translate(structure, IVec3::NEG_Y));
+        }
+    }
+    moves
+}
+
+pub(super) enum StructureMove {
+    Translate {
+        structure: HashSet<IVec3>,
+        offset: IVec3,
+    },
+    Rotate {
+        structure: HashSet<IVec3>,
+        pivot: IVec3,
+        clockwise: bool,
+    },
+}
+
+impl StructureMove {
+    pub(super) fn translate(structure: HashSet<IVec3>, offset: IVec3) -> Self {
+        Self::Translate { structure, offset }
+    }
+
+    pub(super) fn rotate(structure: HashSet<IVec3>, pivot: IVec3, clockwise: bool) -> Self {
+        Self::Rotate {
+            structure,
+            pivot,
+            clockwise,
+        }
+    }
+}
+
+pub(super) fn execute_structure_moves(world: &mut WorldBlocks, moves: Vec<StructureMove>) {
+    let mut moved = HashSet::new();
+    for movement in moves {
+        match movement {
+            StructureMove::Translate { structure, offset } => {
+                if structure.iter().any(|pos| moved.contains(pos)) {
+                    continue;
+                }
+                if can_move_structure(world, &structure, offset) {
+                    moved.extend(structure.iter().copied());
+                    move_structure(world, &structure, offset);
+                    moved.extend(structure.into_iter().map(|pos| pos + offset));
+                }
+            }
+            StructureMove::Rotate {
+                structure,
+                pivot,
+                clockwise,
+            } => {
+                if structure.iter().any(|pos| moved.contains(pos)) {
+                    continue;
+                }
+                if can_rotate_structure(world, &structure, pivot, clockwise) {
+                    let targets: Vec<IVec3> = structure
+                        .iter()
+                        .map(|pos| rotate_pos_y(*pos, pivot, clockwise))
+                        .collect();
+                    moved.extend(structure.iter().copied());
+                    rotate_structure(world, &structure, pivot, clockwise);
+                    moved.extend(targets);
+                }
+            }
         }
     }
 }
@@ -137,17 +203,6 @@ pub(super) fn move_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>
     world.replace_material_face_marks(updated_marks);
 }
 
-fn move_block_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, offset: IVec3) {
-    let blocks: Vec<(IVec3, BlockData)> = structure
-        .iter()
-        .filter_map(|pos| world.remove(pos).map(|block| (*pos, block)))
-        .collect();
-
-    for (pos, block) in blocks {
-        world.insert(pos + offset, block);
-    }
-}
-
 pub(super) fn can_rotate_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
@@ -184,7 +239,7 @@ pub(super) fn rotate_structure(
     world.replace_material_face_marks(updated_marks);
 }
 
-fn rotate_pos_y(pos: IVec3, pivot: IVec3, clockwise: bool) -> IVec3 {
+pub(super) fn rotate_pos_y(pos: IVec3, pivot: IVec3, clockwise: bool) -> IVec3 {
     let rel = pos - pivot;
     pivot + rotate_offset_y(rel, clockwise)
 }

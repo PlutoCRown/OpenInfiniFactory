@@ -20,8 +20,8 @@ use crate::game::world::rendering::{
 use super::signal_offsets;
 pub use super::signals::SignalNetworkCache;
 use super::structures::{
-    apply_factory_gravity, apply_material_gravity, can_move_structure, can_rotate_structure,
-    material_structure, move_structure, rotate_structure,
+    execute_structure_moves, factory_gravity_moves, material_gravity_moves, material_structure,
+    StructureMove,
 };
 
 pub fn run_turn(
@@ -34,21 +34,29 @@ pub fn run_turn(
     animation_duration: f32,
 ) {
     let before = animation_snapshot(world);
-    run_static_marker_phase(world);
+    world.clear_generated_markers();
+
+    let mut movement_plan = mark_gravity_phase(world);
+
     signal_cache.refresh(world);
     let powered_components = signal_cache.powered_components(world);
     let powered_devices = signal_cache.powered_devices(&powered_components);
 
     run_powered_marker_phase(world, &powered_devices);
+    movement_plan.extend(mark_material_movement_phase(world, &powered_devices));
+    execute_structure_moves(world, movement_plan);
+
+    run_static_marker_phase(world);
+    run_powered_marker_phase(world, &powered_devices);
+    run_material_acceptance_phase(world);
+    run_material_source_phase(world, turn);
+    run_weld_phase(world);
     run_material_destroy_phase(world, &powered_devices);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
     run_material_teleport_phase(world);
-    run_weld_phase(world);
-    run_material_source_phase(world, turn);
-    run_material_movement_phase(world, &powered_devices);
-    run_gravity_phase(world);
     run_material_acceptance_phase(world);
+
     signal_cache.refresh(world);
 
     let animations = pair_block_animations(&before, &animation_snapshot(world));
@@ -181,7 +189,7 @@ fn run_material_source_phase(world: &mut WorldBlocks, turn: u64) {
     }
 
     let sources: Vec<(IVec3, MaterialSource)> = world
-        .blocks
+        .system_blocks
         .iter()
         .filter_map(|(pos, block)| {
             block
@@ -281,7 +289,16 @@ fn adjacent_material_except(world: &WorldBlocks, pos: IVec3, except: IVec3) -> O
         .find(|candidate| *candidate != except && world.is_material_at(*candidate))
 }
 
-fn run_material_movement_phase(world: &mut WorldBlocks, powered_devices: &HashSet<IVec3>) {
+fn mark_gravity_phase(world: &WorldBlocks) -> Vec<StructureMove> {
+    let mut moves = material_gravity_moves(world);
+    moves.extend(factory_gravity_moves(world));
+    moves
+}
+
+fn mark_material_movement_phase(
+    world: &WorldBlocks,
+    powered_devices: &HashSet<IVec3>,
+) -> Vec<StructureMove> {
     let movers: Vec<(IVec3, MaterialMover)> = world
         .blocks
         .iter()
@@ -292,42 +309,48 @@ fn run_material_movement_phase(world: &mut WorldBlocks, powered_devices: &HashSe
                 .map(|mover| (*pos, mover))
         })
         .collect();
+    let mut moves = Vec::new();
 
     for (pos, mover) in movers {
         match mover {
             MaterialMover::Conveyor { source, offset } => {
-                move_material_structure(world, pos + source, offset);
+                if let Some(movement) = mark_material_translate(world, pos + source, offset) {
+                    moves.push(movement);
+                }
             }
-            MaterialMover::Lifter => lift_material_structure(world, pos),
+            MaterialMover::Lifter => {
+                if let Some(movement) = mark_lift_material_structure(world, pos) {
+                    moves.push(movement);
+                }
+            }
             MaterialMover::Rotator { clockwise } => {
-                rotate_material_structure(world, pos, clockwise);
+                if let Some(movement) = mark_rotate_material_structure(world, pos, clockwise) {
+                    moves.push(movement);
+                }
             }
             MaterialMover::Piston { source, offset } => {
                 if powered_devices.contains(&pos) {
-                    move_material_structure(world, pos + source, offset);
+                    if let Some(movement) = mark_material_translate(world, pos + source, offset) {
+                        moves.push(movement);
+                    }
                 }
             }
         }
     }
+    moves
 }
 
-fn move_material_structure(world: &mut WorldBlocks, source: IVec3, offset: IVec3) {
+fn mark_material_translate(
+    world: &WorldBlocks,
+    source: IVec3,
+    offset: IVec3,
+) -> Option<StructureMove> {
     if !world.is_material_at(source) {
-        return;
+        return None;
     }
 
     let structure = material_structure(world, source);
-    if structure
-        .iter()
-        .any(|pos| world.accepts_material_at(*pos + offset))
-    {
-        remove_material_structure(world, &structure);
-        return;
-    }
-
-    if can_move_structure(world, &structure, offset) {
-        move_structure(world, &structure, offset);
-    }
+    Some(StructureMove::translate(structure, offset))
 }
 
 fn remove_material_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>) {
@@ -430,34 +453,35 @@ fn run_material_teleport_phase(world: &mut WorldBlocks) {
 
         let structure = material_structure(world, entrance);
         let offset = exit - entrance;
-        if can_move_structure(world, &structure, offset) {
-            handled.extend(structure.iter().map(|pos| *pos + offset));
-            move_structure(world, &structure, offset);
-        }
+        handled.extend(structure.iter().copied());
+        handled.extend(structure.iter().map(|pos| *pos + offset));
+        execute_structure_moves(world, vec![StructureMove::translate(structure, offset)]);
     }
 }
 
-fn lift_material_structure(world: &mut WorldBlocks, pos: IVec3) {
+fn mark_lift_material_structure(world: &WorldBlocks, pos: IVec3) -> Option<StructureMove> {
     let Some(source) = (1..=5)
         .map(|height| pos + IVec3::Y * height)
         .find(|candidate| world.is_material_at(*candidate))
     else {
-        return;
+        return None;
     };
 
-    move_material_structure(world, source, IVec3::Y);
+    mark_material_translate(world, source, IVec3::Y)
 }
 
-fn rotate_material_structure(world: &mut WorldBlocks, pos: IVec3, clockwise: bool) {
+fn mark_rotate_material_structure(
+    world: &WorldBlocks,
+    pos: IVec3,
+    clockwise: bool,
+) -> Option<StructureMove> {
     let source = pos + IVec3::Y;
     if !world.is_material_at(source) {
-        return;
+        return None;
     }
 
     let structure = material_structure(world, source);
-    if can_rotate_structure(world, &structure, pos, clockwise) {
-        rotate_structure(world, &structure, pos, clockwise);
-    }
+    Some(StructureMove::rotate(structure, pos, clockwise))
 }
 
 fn run_material_destroy_phase(world: &mut WorldBlocks, powered_devices: &HashSet<IVec3>) {
@@ -509,11 +533,6 @@ fn fire_laser(world: &mut WorldBlocks, pos: IVec3, direction: IVec3, range: i32)
             break;
         }
     }
-}
-
-fn run_gravity_phase(world: &mut WorldBlocks) {
-    apply_material_gravity(world);
-    apply_factory_gravity(world);
 }
 
 fn run_material_acceptance_phase(world: &mut WorldBlocks) {
