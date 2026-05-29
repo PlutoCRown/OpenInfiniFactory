@@ -1,8 +1,11 @@
+use bevy::input::keyboard::{Key, KeyboardInput};
+use bevy::input::ButtonState;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SettingsReturnMode, SimulationState,
+    TeleportRenameState,
 };
 use crate::game::ui::{
     CarriedItem, ConverterAction, GeneratorAction, InventoryItems, LabelerAction, MainMenuAction,
@@ -495,6 +498,7 @@ pub fn converter_menu_actions(
 pub fn teleport_menu_actions(
     mut mode: ResMut<GameMode>,
     mut placement: ResMut<PlacementState>,
+    mut rename_state: ResMut<TeleportRenameState>,
     mut world: ResMut<WorldBlocks>,
     mut interactions: Query<(&Interaction, &TeleportAction), (Changed<Interaction>, With<Button>)>,
 ) {
@@ -514,13 +518,73 @@ pub fn teleport_menu_actions(
 
         match *action {
             TeleportAction::CyclePair => world.cycle_teleport_pair(pos),
-            TeleportAction::Rename => world.assign_next_teleport_name(pos),
+            TeleportAction::Rename => {
+                let settings = world.teleport_settings(pos);
+                rename_state.editing = Some(pos);
+                rename_state.buffer = settings.name;
+            }
             TeleportAction::Close => {
+                rename_state.editing = None;
                 placement.teleport_panel = None;
                 *mode = GameMode::Playing;
             }
         }
     }
+}
+
+pub fn teleport_rename_input(
+    mode: Res<GameMode>,
+    mut rename_state: ResMut<TeleportRenameState>,
+    mut world: ResMut<WorldBlocks>,
+    mut keyboard_input: EventReader<KeyboardInput>,
+) {
+    if *mode != GameMode::TeleportSettings || rename_state.editing.is_none() {
+        keyboard_input.clear();
+        return;
+    }
+
+    let pos = rename_state.editing.expect("checked above");
+    let mut confirm = false;
+    let mut cancel = false;
+
+    for event in keyboard_input.read() {
+        if event.state != ButtonState::Pressed {
+            continue;
+        }
+        match &event.logical_key {
+            Key::Enter => confirm = true,
+            Key::Escape => cancel = true,
+            Key::Backspace => {
+                rename_state.buffer.pop();
+            }
+            Key::Space => push_rename_char(&mut rename_state.buffer, ' '),
+            Key::Character(text) => {
+                for ch in text.chars() {
+                    push_rename_char(&mut rename_state.buffer, ch);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if confirm {
+        let mut settings = world.teleport_settings(pos);
+        let trimmed = rename_state.buffer.trim();
+        if !trimmed.is_empty() {
+            settings.name = trimmed.chars().take(24).collect();
+            world.set_teleport_settings(pos, settings);
+        }
+        rename_state.editing = None;
+    } else if cancel {
+        rename_state.editing = None;
+    }
+}
+
+fn push_rename_char(buffer: &mut String, ch: char) {
+    if buffer.chars().count() >= 24 || ch.is_control() {
+        return;
+    }
+    buffer.push(ch);
 }
 
 fn next_material(material: MaterialKind) -> MaterialKind {

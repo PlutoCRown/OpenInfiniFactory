@@ -167,6 +167,7 @@
   "status.hotbar": "Mode: {mode}   Selected: {selected}   Facing: {facing}   Inventory   Pause",
   "status.simulation": "Mode: {mode}\nTurns: {turns}\nSim: {state} x{speed}",
   "teleport.name": "Name: {name}",
+  "teleport.editing": "Name: {name}_",
   "teleport.none": "None",
   "teleport.pair": "Pair: {pair}",
   "teleport.title": "Teleport",

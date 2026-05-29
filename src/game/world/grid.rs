@@ -377,18 +377,6 @@ impl WorldBlocks {
         self.set_teleport_settings(pos, settings);
     }
 
-    pub fn assign_next_teleport_name(&mut self, pos: IVec3) {
-        let Some(block) = self.system_blocks.get(&pos).copied() else {
-            return;
-        };
-        if !block.kind.is_teleport() {
-            return;
-        }
-        let mut settings = self.teleport_settings(pos);
-        settings.name = self.next_teleport_name(block.kind);
-        self.set_teleport_settings(pos, settings);
-    }
-
     fn next_teleport_name(&self, kind: BlockKind) -> String {
         let base_names = match kind {
             BlockKind::TeleportEntrance => TELEPORT_ENTRANCE_NAMES,

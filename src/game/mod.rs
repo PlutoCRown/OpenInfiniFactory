@@ -17,11 +17,13 @@ use crate::shared::save::SaveState;
 use player::controller::{camera_look, camera_move, spawn_player, sync_cursor_grab};
 use state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SettingsReturnMode, SimulationState,
+    TeleportRenameState,
 };
 use systems::gameplay::{apply_fov, gameplay_input, placement_input, update_hover};
 use systems::menus::{
     converter_menu_actions, generator_menu_actions, labeler_menu_actions, main_menu_actions,
     pause_menu_actions, save_list_actions, settings_menu_actions, teleport_menu_actions,
+    teleport_rename_input,
 };
 use systems::simulation_controls::simulation_controls;
 use ui::{CarriedItem, InventoryItems, OpenSettingsDropdown, PendingKeyBind, SettingsTab};
@@ -52,6 +54,7 @@ impl Plugin for GamePlugin {
             .insert_resource(DirectionalLightShadowMap { size: 2048 })
             .insert_resource(WorldBlocks::default())
             .insert_resource(PlacementState::default())
+            .insert_resource(TeleportRenameState::default())
             .insert_resource(InventoryItems::default())
             .insert_resource(GameMode::MainMenu)
             .insert_resource(BuilderMode::default())
@@ -100,6 +103,7 @@ impl Plugin for GamePlugin {
                     labeler_menu_actions,
                     converter_menu_actions,
                     teleport_menu_actions,
+                    teleport_rename_input,
                     settings_menu_actions,
                 )
                     .chain()

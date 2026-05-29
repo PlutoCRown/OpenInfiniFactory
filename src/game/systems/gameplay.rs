@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use crate::game::player::controller::{player_intersects_block, FlyCamera};
 use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, GameSettings, PlacementState,
-    SelectionAxis, SelectionBounds, SelectionDrag, SimulationState,
+    SelectionAxis, SelectionBounds, SelectionDrag, SimulationState, TeleportRenameState,
 };
 use crate::game::ui::{AreaKind, CarriedItem, InventoryItems, PendingKeyBind, HOTBAR_SLOTS};
 use crate::game::world::animation::BlockAnimation;
@@ -25,6 +25,7 @@ pub fn gameplay_input(
     pending_key_bind: Res<PendingKeyBind>,
     mut mode: ResMut<GameMode>,
     mut placement: ResMut<PlacementState>,
+    mut teleport_rename: ResMut<TeleportRenameState>,
     mut carried: ResMut<CarriedItem>,
 ) {
     let bindings = &config.key_bindings;
@@ -35,6 +36,10 @@ pub fn gameplay_input(
     }
 
     if keys.just_pressed(bindings.pause.key_code()) {
+        if *mode == GameMode::TeleportSettings && teleport_rename.editing.is_some() {
+            teleport_rename.editing = None;
+            return;
+        }
         *mode = match *mode {
             GameMode::Playing => GameMode::Paused,
             GameMode::Inventory => {
@@ -55,6 +60,7 @@ pub fn gameplay_input(
                 GameMode::Playing
             }
             GameMode::TeleportSettings => {
+                teleport_rename.editing = None;
                 placement.teleport_panel = None;
                 GameMode::Playing
             }

@@ -2,7 +2,9 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::game::state::{BuilderMode, GameMode, GameSettings, PlacementState, SimulationState};
+use crate::game::state::{
+    BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, TeleportRenameState,
+};
 use crate::game::world::grid::ConverterMode;
 use crate::game::{UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ConfigAction, GameConfig};
@@ -442,6 +444,7 @@ pub fn update_converter_ui(
 
 pub fn update_teleport_ui(
     placement: Res<PlacementState>,
+    rename_state: Res<TeleportRenameState>,
     world: Res<crate::game::world::grid::WorldBlocks>,
     i18n: Res<I18n>,
     mut teleport_name_text: Query<
@@ -459,7 +462,12 @@ pub fn update_teleport_ui(
 
     let settings = world.teleport_settings(pos);
     if let Ok(mut text) = teleport_name_text.get_single_mut() {
-        text.sections[0].value = i18n.fmt("teleport.name", &[("name", settings.name.clone())]);
+        let name = if rename_state.editing == Some(pos) {
+            i18n.fmt("teleport.editing", &[("name", rename_state.buffer.clone())])
+        } else {
+            i18n.fmt("teleport.name", &[("name", settings.name.clone())])
+        };
+        text.sections[0].value = name;
     }
     if let Ok(mut text) = teleport_pair_text.get_single_mut() {
         let pair = settings

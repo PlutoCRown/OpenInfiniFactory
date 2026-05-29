@@ -167,6 +167,7 @@
   "status.hotbar": "模式：{mode}   已选：{selected}   朝向：{facing}   背包   暂停",
   "status.simulation": "模式：{mode}\n回合：{turns}\n模拟：{state} x{speed}",
   "teleport.name": "名称：{name}",
+  "teleport.editing": "名称：{name}_",
   "teleport.none": "无",
   "teleport.pair": "配对：{pair}",
   "teleport.title": "传送口",
