@@ -4,7 +4,8 @@ use bevy::prelude::*;
 use crate::game::player::controller::{player_intersects_block, FlyCamera};
 use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, GameSettings, PlacementState,
-    SelectionAxis, SelectionBounds, SelectionDrag, SimulationState, TeleportRenameState,
+    SelectionAxis, SelectionBounds, SelectionDrag, SimulationState, SolutionState,
+    TeleportRenameState,
 };
 use crate::game::ui::{AreaKind, CarriedItem, InventoryItems, PendingKeyBind, HOTBAR_SLOTS};
 use crate::game::world::animation::BlockAnimation;
@@ -65,7 +66,6 @@ pub fn gameplay_input(
                 GameMode::Playing
             }
             GameMode::Settings => GameMode::Paused,
-            GameMode::SaveListPause => GameMode::Paused,
             GameMode::SaveListMain => GameMode::MainMenu,
             other => other,
         };
@@ -129,6 +129,7 @@ pub fn placement_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
     mut world: ResMut<WorldBlocks>,
+    mut solution_state: ResMut<SolutionState>,
     mut inventory: ResMut<InventoryItems>,
     config: Res<GameConfig>,
     builder_mode: Res<BuilderMode>,
@@ -189,7 +190,7 @@ pub fn placement_input(
     }
 
     if selected_area(&inventory, &placement) == Some(AreaKind::Selection) {
-        handle_selection_area_input(
+        if handle_selection_area_input(
             &mouse_buttons,
             current_target_pos,
             place_button,
@@ -198,7 +199,9 @@ pub fn placement_input(
             &block_entities,
             &mut commands,
             &render_assets,
-        );
+        ) {
+            solution_state.dirty = true;
+        }
         despawn_edit_previews(&mut commands, &edit_previews);
         spawn_selection_previews(&placement, &mut commands, &render_assets);
         return;
@@ -220,13 +223,15 @@ pub fn placement_input(
         && keys.just_pressed(config.key_bindings.alternate.key_code())
     {
         if let Some(pos) = current_target_pos {
-            alternate_block_at(
+            if alternate_block_at(
                 pos,
                 &mut world,
                 &block_entities,
                 &mut commands,
                 &render_assets,
-            );
+            ) {
+                solution_state.dirty = true;
+            }
         }
         placement.edit_gesture = None;
         despawn_edit_previews(&mut commands, &edit_previews);
@@ -238,14 +243,16 @@ pub fn placement_input(
             if can_preview_place {
                 placement.facing = placement.facing.rotate();
             } else if let Some(pos) = current_target_pos {
-                rotate_block_at(
+                if rotate_block_at(
                     pos,
                     &mut world,
                     &mut placement,
                     &block_entities,
                     &mut commands,
                     &render_assets,
-                );
+                ) {
+                    solution_state.dirty = true;
+                }
             }
         }
     }
@@ -299,7 +306,7 @@ pub fn placement_input(
     if should_finish {
         if let Some(gesture) = placement.edit_gesture.take() {
             if !gesture.canceled {
-                commit_edit_gesture(
+                if commit_edit_gesture(
                     gesture,
                     current_place_at,
                     current_delete_at,
@@ -310,7 +317,9 @@ pub fn placement_input(
                     &mut commands,
                     &render_assets,
                     &block_entities,
-                );
+                ) {
+                    solution_state.dirty = true;
+                }
             }
         }
     }
@@ -439,7 +448,8 @@ fn handle_selection_area_input(
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
-) {
+) -> bool {
+    let mut changed = false;
     if let Some(drag) = placement.selection.drag.as_mut() {
         if let Some(current) = current_target_pos {
             if let Some((axis, offset)) = selection_drag_offset(*drag, current) {
@@ -462,19 +472,20 @@ fn handle_selection_area_input(
                         drag.offset,
                     ) {
                         placement.selection.bounds = Some(bounds.moved(drag.offset));
+                        changed = true;
                     }
                 }
             }
         }
-        return;
+        return changed;
     }
 
     if !mouse_buttons.just_pressed(place_button) {
-        return;
+        return false;
     }
 
     let Some(pos) = current_target_pos else {
-        return;
+        return false;
     };
 
     if let Some(bounds) = placement.selection.bounds {
@@ -484,7 +495,7 @@ fn handle_selection_area_input(
                 axis: None,
                 offset: IVec3::ZERO,
             });
-            return;
+            return false;
         }
     }
 
@@ -496,6 +507,7 @@ fn handle_selection_area_input(
         placement.selection.bounds = None;
         placement.selection.drag = None;
     }
+    false
 }
 
 fn selection_drag_offset(drag: SelectionDrag, current: IVec3) -> Option<(SelectionAxis, IVec3)> {
@@ -628,18 +640,19 @@ fn alternate_block_at(
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
-) {
+) -> bool {
     let Some(block) = world.blocks.get_mut(&pos) else {
-        return;
+        return false;
     };
     let Some(kind) = block.kind.alternate() else {
-        return;
+        return false;
     };
 
     block.kind = kind;
     refresh_edit_generated_markers(world);
     despawn_block_entities(commands, block_entities);
     rebuild_world(commands, world, render_assets);
+    true
 }
 
 fn rotate_block_at(
@@ -649,12 +662,12 @@ fn rotate_block_at(
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
-) {
+) -> bool {
     let Some(block) = world.blocks.get_mut(&pos) else {
-        return;
+        return false;
     };
     if !block.kind.is_directional() {
-        return;
+        return false;
     }
 
     let from_facing = block.facing;
@@ -679,6 +692,7 @@ fn rotate_block_at(
 
     despawn_block_entities(commands, block_entities);
     rebuild_world_with_animations(commands, world, render_assets, &animations);
+    true
 }
 
 fn moved_selection_welds(
@@ -766,7 +780,8 @@ fn commit_edit_gesture(
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
     block_entities: &Query<(Entity, &BlockEntity)>,
-) {
+) -> bool {
+    let mut changed = false;
     match gesture.kind {
         EditGestureKind::Place { block } => {
             let positions = selection_positions(
@@ -777,11 +792,14 @@ fn commit_edit_gesture(
             for pos in positions {
                 if can_place_block_at(pos, block, builder_mode, world, player) {
                     world.insert(pos, block);
+                    changed = true;
                 }
             }
-            refresh_edit_generated_markers(world);
-            despawn_block_entities(commands, block_entities);
-            rebuild_world(commands, world, render_assets);
+            if changed {
+                refresh_edit_generated_markers(world);
+                despawn_block_entities(commands, block_entities);
+                rebuild_world(commands, world, render_assets);
+            }
         }
         EditGestureKind::Delete => {
             let positions = selection_positions(
@@ -792,6 +810,7 @@ fn commit_edit_gesture(
             for pos in positions {
                 let removed = world.remove(&pos).is_some() || world.remove_system(&pos).is_some();
                 if removed {
+                    changed = true;
                     if let Some((entity, _)) = block_entities
                         .iter()
                         .find(|(_, block_entity)| block_entity.pos == pos)
@@ -800,11 +819,14 @@ fn commit_edit_gesture(
                     }
                 }
             }
-            refresh_edit_generated_markers(world);
-            despawn_block_entities(commands, block_entities);
-            rebuild_world(commands, world, render_assets);
+            if changed {
+                refresh_edit_generated_markers(world);
+                despawn_block_entities(commands, block_entities);
+                rebuild_world(commands, world, render_assets);
+            }
         }
     }
+    changed
 }
 
 fn spawn_gesture_previews(

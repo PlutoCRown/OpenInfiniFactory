@@ -18,12 +18,38 @@ pub struct SaveState {
     pub current: Option<String>,
     pub current_kind: Option<SaveKind>,
     pub slots: Vec<String>,
+    pub entries: Vec<SaveEntry>,
+    pub selected_puzzle: Option<String>,
+    pub pending_delete: Option<String>,
 }
 
 impl SaveState {
     pub fn refresh(&mut self) {
-        self.slots = list_saves();
+        self.entries = list_save_entries();
+        self.slots = self.entries.iter().map(|entry| entry.name.clone()).collect();
     }
+
+    pub fn puzzles(&self) -> Vec<&SaveEntry> {
+        self.entries
+            .iter()
+            .filter(|entry| entry.kind == SaveKind::Puzzle)
+            .collect()
+    }
+
+    pub fn solutions_for_puzzle(&self, puzzle: &str) -> Vec<&SaveEntry> {
+        self.entries
+            .iter()
+            .filter(|entry| {
+                entry.kind == SaveKind::Solution && solution_matches_puzzle(&entry.name, puzzle)
+            })
+            .collect()
+    }
+}
+
+#[derive(Clone)]
+pub struct SaveEntry {
+    pub name: String,
+    pub kind: SaveKind,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -161,13 +187,44 @@ pub fn load_world(world: &mut WorldBlocks, name: &str) -> Option<LoadedSave> {
     Some(loaded)
 }
 
+pub fn save_kind(name: &str) -> Option<SaveKind> {
+    let contents = fs::read_to_string(save_path(name)).ok()?;
+    let save = ron::from_str::<SaveFile>(&contents).ok()?;
+    Some(match save.kind {
+        SaveFileKind::Solution => SaveKind::Solution,
+        SaveFileKind::Puzzle | SaveFileKind::Legacy => SaveKind::Puzzle,
+    })
+}
+
+pub fn delete_save(name: &str) -> bool {
+    match fs::remove_file(save_path(name)) {
+        Ok(()) => true,
+        Err(error) => {
+            warn!("Failed to delete save {name}: {error}");
+            false
+        }
+    }
+}
+
+fn solution_matches_puzzle(solution: &str, puzzle: &str) -> bool {
+    let Some(solution) = read_save(solution) else {
+        return false;
+    };
+    if !matches!(solution.kind, SaveFileKind::Solution) {
+        return false;
+    }
+    let Some(puzzle_save) = read_save(puzzle) else {
+        return false;
+    };
+    solution.puzzle_signature() == puzzle_save.puzzle_signature()
+}
+
 pub fn reset_solution_world(world: &mut WorldBlocks, puzzle_snapshot: &WorldBlocks) {
     *world = puzzle_snapshot.clone();
 }
 
 #[derive(Clone)]
 pub struct LoadedSave {
-    pub kind: SaveKind,
     pub world: WorldBlocks,
     pub puzzle_snapshot: Option<WorldBlocks>,
 }
@@ -217,7 +274,6 @@ impl SaveFile {
                 apply_factory_blocks(&mut world, self.factory_blocks);
 
                 LoadedSave {
-                    kind: SaveKind::Solution,
                     world,
                     puzzle_snapshot: Some(puzzle_world),
                 }
@@ -230,12 +286,63 @@ impl SaveFile {
                 let mut world = WorldBlocks::default();
                 apply_layer(&mut world, puzzle);
                 LoadedSave {
-                    kind: SaveKind::Puzzle,
                     world,
                     puzzle_snapshot: None,
                 }
             }
         }
+    }
+
+    fn puzzle_signature(&self) -> Vec<String> {
+        let puzzle = self
+            .puzzle
+            .clone()
+            .unwrap_or_else(|| self.legacy_puzzle_layer());
+        let mut parts: Vec<String> = Vec::new();
+        for saved in puzzle.blocks {
+            parts.push(format!(
+                "b:{},{},{}:{:?}:{:?}",
+                saved.x, saved.y, saved.z, saved.data.kind, saved.data.facing
+            ));
+        }
+        for saved in puzzle.system_blocks {
+            parts.push(format!(
+                "s:{},{},{}:{:?}:{:?}",
+                saved.x, saved.y, saved.z, saved.data.kind, saved.data.facing
+            ));
+        }
+        for saved in puzzle.block_settings {
+            parts.push(format!(
+                "bs:{},{},{}:{:?}",
+                saved.x, saved.y, saved.z, saved.settings
+            ));
+        }
+        for saved in puzzle.generator_settings {
+            parts.push(format!(
+                "gs:{},{},{}:{:?}",
+                saved.x, saved.y, saved.z, saved.settings
+            ));
+        }
+        for saved in puzzle.labeler_settings {
+            parts.push(format!(
+                "ls:{},{},{}:{:?}",
+                saved.x, saved.y, saved.z, saved.settings
+            ));
+        }
+        for saved in puzzle.converter_settings {
+            parts.push(format!(
+                "cs:{},{},{}:{:?}",
+                saved.x, saved.y, saved.z, saved.settings
+            ));
+        }
+        for saved in puzzle.teleport_settings {
+            parts.push(format!(
+                "ts:{},{},{}:{:?}",
+                saved.x, saved.y, saved.z, saved.settings
+            ));
+        }
+        parts.sort();
+        parts
     }
 
     fn legacy_puzzle_layer(&self) -> WorldLayer {
@@ -312,6 +419,11 @@ fn write_save(name: &str, save: &SaveFile) -> bool {
             false
         }
     }
+}
+
+fn read_save(name: &str) -> Option<SaveFile> {
+    let contents = fs::read_to_string(save_path(name)).ok()?;
+    ron::from_str::<SaveFile>(&contents).ok()
 }
 
 fn capture_puzzle_layer(world: &WorldBlocks) -> WorldLayer {
@@ -459,6 +571,20 @@ pub fn list_saves() -> Vec<String> {
         .collect();
     saves.sort();
     saves
+}
+
+pub fn list_save_entries() -> Vec<SaveEntry> {
+    let mut entries: Vec<SaveEntry> = list_saves()
+        .into_iter()
+        .filter_map(|name| {
+            save_kind(&name).map(|kind| SaveEntry {
+                name,
+                kind,
+            })
+        })
+        .collect();
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    entries
 }
 
 pub fn next_world_name(existing: &[String]) -> String {

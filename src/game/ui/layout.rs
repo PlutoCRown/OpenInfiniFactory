@@ -15,15 +15,16 @@ use super::types::{
     CurrentSaveText, GeneratorAction, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText,
     HotbarText, InGameHudStyle, InGameHudVisibility, InventoryTitle, LabelerAction,
     LabelerColorText, LabelerPanel, MainMenuAction, MainMenuPanel, PauseAction, PausePanel,
-    SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdown, SettingsGameplayGroup,
-    SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider, SettingsStatusText,
+    SaveListAction, SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdown,
+    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider, SettingsStatusText,
     SimulationStatusText, SimulationText, SlotArea, TeleportAction, TeleportNameText,
     TeleportPairText, TeleportPanel, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::widgets::{
     scroll_container, scroll_content, spawn_converter_button, spawn_generator_button,
     spawn_labeler_button, spawn_localized_main_button, spawn_localized_pause_button,
-    spawn_localized_settings_button, spawn_save_back_button, spawn_save_slot_button,
+    spawn_localized_settings_button, spawn_save_back_button, spawn_save_row_button,
+    spawn_save_slot_button,
     spawn_settings_dropdown, spawn_settings_slider, spawn_settings_tab, spawn_slot,
     spawn_teleport_button,
 };
@@ -316,6 +317,9 @@ fn spawn_pause_panel(root: &mut ChildBuilder, i18n: &I18n) {
                     PauseAction::DiscardSolutionAndEdit,
                 ),
                 ("button.cancel", PauseAction::CancelEditSwitch),
+                ("button.save_and_back", PauseAction::SaveAndBackToMain),
+                ("button.discard_and_back", PauseAction::DiscardAndBackToMain),
+                ("button.cancel", PauseAction::CancelBackToMain),
                 ("button.save_world", PauseAction::SaveWorld),
                 ("button.reset_solution", PauseAction::ResetSolution),
                 ("button.settings", PauseAction::OpenSettings),
@@ -510,8 +514,8 @@ fn spawn_main_menu(root: &mut ChildBuilder, i18n: &I18n) {
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "main.title", 30.0, Color::WHITE));
             for (key, action) in [
-                ("button.create_new_world", MainMenuAction::NewWorld),
-                ("button.load_save", MainMenuAction::OpenSaveList),
+                ("button.edit_puzzle", MainMenuAction::EditPuzzle),
+                ("button.start_playing", MainMenuAction::Play),
                 ("button.settings", MainMenuAction::OpenSettings),
                 ("button.quit_game", MainMenuAction::Quit),
             ] {
@@ -521,12 +525,65 @@ fn spawn_main_menu(root: &mut ChildBuilder, i18n: &I18n) {
 }
 
 fn spawn_save_list(root: &mut ChildBuilder) {
-    root.spawn((panel_bundle(520.0, 560.0, -260.0, -280.0), SaveListPanel))
+    root.spawn((panel_bundle(900.0, 620.0, -450.0, -310.0), SaveListPanel))
         .with_children(|panel| {
             panel.spawn((text("", 26.0, Color::WHITE), SaveListTitle));
-            for index in 0..SAVE_SLOTS {
-                spawn_save_slot_button(panel, index);
-            }
+            panel
+                .spawn(flex_row(470.0, 12.0))
+                .with_children(|columns| {
+                    columns
+                        .spawn(transparent_node(Style {
+                            width: Val::Px(420.0),
+                            flex_direction: FlexDirection::Column,
+                            row_gap: Val::Px(6.0),
+                            ..default()
+                        }))
+                        .with_children(|left| {
+                            for index in 0..SAVE_SLOTS {
+                                left.spawn(flex_row(32.0, 6.0)).with_children(|row| {
+                                    spawn_save_row_button(
+                                        row,
+                                        SaveListAction::LoadPuzzle(index),
+                                        260.0,
+                                    );
+                                    spawn_save_row_button(
+                                        row,
+                                        SaveListAction::DeletePuzzle(index),
+                                        80.0,
+                                    );
+                                });
+                            }
+                            spawn_save_slot_button(left, SaveListAction::NewPuzzle);
+                        });
+                    columns
+                        .spawn(transparent_node(Style {
+                            width: Val::Px(420.0),
+                            flex_direction: FlexDirection::Column,
+                            row_gap: Val::Px(6.0),
+                            ..default()
+                        }))
+                        .with_children(|right| {
+                            for index in 0..SAVE_SLOTS {
+                                right.spawn(flex_row(32.0, 6.0)).with_children(|row| {
+                                    spawn_save_row_button(
+                                        row,
+                                        SaveListAction::LoadSolution(index),
+                                        260.0,
+                                    );
+                                    spawn_save_row_button(
+                                        row,
+                                        SaveListAction::DeleteSolution(index),
+                                        80.0,
+                                    );
+                                });
+                            }
+                            spawn_save_slot_button(right, SaveListAction::NewSolution);
+                        });
+                });
+            panel.spawn(flex_row(38.0, 8.0)).with_children(|row| {
+                spawn_save_slot_button(row, SaveListAction::ConfirmDelete);
+                spawn_save_slot_button(row, SaveListAction::CancelDelete);
+            });
             spawn_save_back_button(panel);
         });
 }

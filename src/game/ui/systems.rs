@@ -3,7 +3,8 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::game::state::{
-    BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, TeleportRenameState,
+    BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
+    TeleportRenameState, WorldEntryMode,
 };
 use crate::game::world::grid::ConverterMode;
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
@@ -167,7 +168,12 @@ pub fn update_button_hover_ui(
     }
 }
 
-fn pause_action_visible(mode: GameMode, save_state: &SaveState, action: PauseAction) -> bool {
+fn pause_action_visible(
+    mode: GameMode,
+    save_state: &SaveState,
+    solution_state: &SolutionState,
+    action: PauseAction,
+) -> bool {
     let confirming = mode == GameMode::ConfirmSaveSolutionBeforeEdit;
     if confirming {
         return matches!(
@@ -177,11 +183,23 @@ fn pause_action_visible(mode: GameMode, save_state: &SaveState, action: PauseAct
                 | PauseAction::CancelEditSwitch
         );
     }
+    if mode == GameMode::ConfirmBackToMain {
+        return matches!(
+            action,
+            PauseAction::SaveAndBackToMain
+                | PauseAction::DiscardAndBackToMain
+                | PauseAction::CancelBackToMain
+        );
+    }
 
     match action {
         PauseAction::ConfirmSaveSolutionAndEdit
         | PauseAction::DiscardSolutionAndEdit
-        | PauseAction::CancelEditSwitch => false,
+        | PauseAction::CancelEditSwitch
+        | PauseAction::SaveAndBackToMain
+        | PauseAction::DiscardAndBackToMain
+        | PauseAction::CancelBackToMain => false,
+        PauseAction::ToggleBuilderMode => solution_state.entry != WorldEntryMode::PlaySolution,
         PauseAction::ResetSolution => save_state.current_kind == Some(SaveKind::Solution),
         _ => true,
     }
@@ -902,20 +920,29 @@ fn settings_slider_percent(slider: SettingsSlider, settings: &GameSettings) -> f
 
 pub fn update_localized_ui(
     i18n: Res<I18n>,
+    save_state: Res<SaveState>,
     mut localized_text: Query<(&LocalizedText, &mut Text)>,
 ) {
-    if !i18n.is_changed() {
+    if !i18n.is_changed() && !save_state.is_changed() {
         return;
     }
 
     for (localized, mut text) in &mut localized_text {
-        text.sections[0].value = i18n.text(localized.key);
+        text.sections[0].value = if localized.key == "button.save_world" {
+            match save_state.current_kind {
+                Some(SaveKind::Solution) => i18n.text("button.save_solution"),
+                _ => i18n.text("button.save_puzzle"),
+            }
+        } else {
+            i18n.text(localized.key)
+        };
     }
 }
 
 pub fn update_panel_visibility(
     mode: Res<GameMode>,
     save_state: Res<SaveState>,
+    solution_state: Res<SolutionState>,
     settings_tab: Res<SettingsTab>,
     mut style_sets: ParamSet<(
         Query<&mut Style, (With<MainMenuPanel>, Without<PauseAction>)>,
@@ -938,7 +965,7 @@ pub fn update_panel_visibility(
     }
 
     for mut style in &mut style_sets.p1() {
-        style.display = if matches!(*mode, GameMode::SaveListMain | GameMode::SaveListPause) {
+        style.display = if *mode == GameMode::SaveListMain {
             Display::Flex
         } else {
             Display::None
@@ -981,7 +1008,7 @@ pub fn update_panel_visibility(
     for mut style in &mut style_sets.p6() {
         style.display = if matches!(
             *mode,
-            GameMode::Paused | GameMode::ConfirmSaveSolutionBeforeEdit
+            GameMode::Paused | GameMode::ConfirmSaveSolutionBeforeEdit | GameMode::ConfirmBackToMain
         ) {
             Display::Flex
         } else {
@@ -990,7 +1017,7 @@ pub fn update_panel_visibility(
     }
 
     for (action, mut style) in &mut pause_buttons {
-        style.display = if pause_action_visible(*mode, &save_state, *action) {
+        style.display = if pause_action_visible(*mode, &save_state, &solution_state, *action) {
             Display::Flex
         } else {
             Display::None
@@ -1135,6 +1162,7 @@ pub fn update_inventory_slots(
 pub fn update_save_list_ui(
     mode: Res<GameMode>,
     save_state: Res<SaveState>,
+    solution_state: Res<SolutionState>,
     i18n: Res<I18n>,
     mut text_sets: ParamSet<(
         Query<&mut Text, With<SaveListTitle>>,
@@ -1153,27 +1181,77 @@ pub fn update_save_list_ui(
     if let Ok(mut title) = text_sets.p0().get_single_mut() {
         title.sections[0].value = match *mode {
             GameMode::SaveListMain => i18n.text("save.title.main"),
-            GameMode::SaveListPause => i18n.text("save.title.pause"),
             _ => i18n.text("save.title.default"),
         };
     }
 
+    let puzzles = save_state.puzzles();
+    let solutions = save_state
+        .selected_puzzle
+        .as_deref()
+        .map(|puzzle| save_state.solutions_for_puzzle(puzzle))
+        .unwrap_or_default();
+    let play_flow = solution_state.save_list_entry == WorldEntryMode::PlaySolution;
+    let edit_flow = solution_state.save_list_entry == WorldEntryMode::EditPuzzle;
+
     for (action, interaction, children, mut background) in &mut slots {
         let label = match *action {
-            SaveListAction::Load(index) => save_state
-                .slots
+            SaveListAction::LoadPuzzle(index) => puzzles
                 .get(index)
-                .map(|name| i18n.fmt("save.load", &[("name", name.clone())]))
+                .map(|entry| {
+                    if save_state.selected_puzzle.as_deref() == Some(entry.name.as_str()) {
+                        i18n.fmt("save.selected_puzzle", &[("name", entry.name.clone())])
+                    } else if play_flow {
+                        i18n.fmt("save.select_puzzle", &[("name", entry.name.clone())])
+                    } else {
+                        i18n.fmt("save.load_puzzle", &[("name", entry.name.clone())])
+                    }
+                })
                 .unwrap_or_else(|| i18n.text("empty_slot")),
+            SaveListAction::LoadSolution(index) => solutions
+                .get(index)
+                .map(|entry| i18n.fmt("save.load_solution", &[("name", entry.name.clone())]))
+                .unwrap_or_else(|| i18n.text("empty_slot")),
+            SaveListAction::DeletePuzzle(_) | SaveListAction::DeleteSolution(_) => {
+                i18n.text("button.delete")
+            }
+            SaveListAction::NewPuzzle => i18n.text("button.new_puzzle"),
+            SaveListAction::NewSolution => i18n.text("button.new_solution"),
+            SaveListAction::ConfirmDelete => save_state
+                .pending_delete
+                .as_ref()
+                .map(|name| i18n.fmt("save.confirm_delete", &[("name", name.clone())]))
+                .unwrap_or_else(|| i18n.text("button.delete")),
+            SaveListAction::CancelDelete => i18n.text("button.cancel"),
             SaveListAction::Back => i18n.text("button.back"),
         };
 
         let enabled_load = match *action {
-            SaveListAction::Load(index) => save_state.slots.get(index).is_some(),
+            SaveListAction::LoadPuzzle(index) => puzzles.get(index).is_some(),
+            SaveListAction::LoadSolution(index) => play_flow && solutions.get(index).is_some(),
+            SaveListAction::DeletePuzzle(index) => puzzles.get(index).is_some(),
+            SaveListAction::DeleteSolution(index) => play_flow && solutions.get(index).is_some(),
+            SaveListAction::NewPuzzle => edit_flow,
+            SaveListAction::NewSolution => play_flow && save_state.selected_puzzle.is_some(),
+            SaveListAction::ConfirmDelete | SaveListAction::CancelDelete => {
+                save_state.pending_delete.is_some()
+            }
             SaveListAction::Back => true,
         };
+        let selected_puzzle_button = matches!(*action, SaveListAction::LoadPuzzle(_))
+            && match *action {
+                SaveListAction::LoadPuzzle(index) => puzzles
+                    .get(index)
+                    .is_some_and(|entry| {
+                        save_state.selected_puzzle.as_deref() == Some(entry.name.as_str())
+                    }),
+                _ => false,
+            };
+
         *background = if enabled_load && *interaction == Interaction::Hovered {
             BUTTON_HOVER_BG.into()
+        } else if enabled_load && selected_puzzle_button {
+            Color::srgba(0.22, 0.35, 0.32, 0.96).into()
         } else if enabled_load {
             BUTTON_BG.into()
         } else {

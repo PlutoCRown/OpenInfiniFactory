@@ -133,7 +133,7 @@ impl SelectionAxis {
 pub enum GameMode {
     MainMenu,
     SaveListMain,
-    SaveListPause,
+    ConfirmBackToMain,
     ConfirmSaveSolutionBeforeEdit,
     GeneratorSettings,
     LabelerSettings,
@@ -198,6 +198,16 @@ impl SimulationState {
 #[derive(Resource, Default)]
 pub struct SolutionState {
     pub puzzle_snapshot: Option<crate::game::world::grid::WorldBlocks>,
+    pub entry: WorldEntryMode,
+    pub dirty: bool,
+    pub save_list_entry: WorldEntryMode,
+}
+
+#[derive(Clone, Copy, Default, Eq, PartialEq)]
+pub enum WorldEntryMode {
+    #[default]
+    EditPuzzle,
+    PlaySolution,
 }
 
 #[derive(Resource)]

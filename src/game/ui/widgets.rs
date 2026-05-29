@@ -470,9 +470,9 @@ pub(super) fn scroll_content() -> ScrollContent {
     ScrollContent
 }
 
-pub(super) fn spawn_save_slot_button(parent: &mut ChildBuilder, index: usize) {
+pub(super) fn spawn_save_slot_button(parent: &mut ChildBuilder, action: SaveListAction) {
     parent
-        .spawn((menu_button(34.0), SaveListAction::Load(index)))
+        .spawn((menu_button(34.0), action))
         .with_children(|button| {
             button.spawn((
                 TextBundle::from_section(
@@ -486,6 +486,25 @@ pub(super) fn spawn_save_slot_button(parent: &mut ChildBuilder, index: usize) {
                 SaveListLabel,
             ));
         });
+}
+
+pub(super) fn spawn_save_row_button(parent: &mut ChildBuilder, action: SaveListAction, width: f32) {
+    let mut button = menu_button(30.0);
+    button.style.width = Val::Px(default_button_size(width));
+    button.style.min_width = Val::Px(default_button_size(width));
+    parent.spawn((button, action)).with_children(|button| {
+        button.spawn((
+            TextBundle::from_section(
+                "",
+                TextStyle {
+                    font_size: default_font_size(13.0),
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ),
+            SaveListLabel,
+        ));
+    });
 }
 
 pub(super) fn spawn_save_back_button(parent: &mut ChildBuilder) {

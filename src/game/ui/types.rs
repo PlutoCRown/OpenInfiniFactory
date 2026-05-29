@@ -176,6 +176,9 @@ pub enum PauseAction {
     ConfirmSaveSolutionAndEdit,
     DiscardSolutionAndEdit,
     CancelEditSwitch,
+    SaveAndBackToMain,
+    DiscardAndBackToMain,
+    CancelBackToMain,
     SaveWorld,
     ResetSolution,
     OpenSettings,
@@ -184,15 +187,22 @@ pub enum PauseAction {
 
 #[derive(Component, Clone, Copy)]
 pub enum MainMenuAction {
-    NewWorld,
-    OpenSaveList,
+    EditPuzzle,
+    Play,
     OpenSettings,
     Quit,
 }
 
 #[derive(Component, Clone, Copy)]
 pub enum SaveListAction {
-    Load(usize),
+    NewPuzzle,
+    NewSolution,
+    LoadPuzzle(usize),
+    LoadSolution(usize),
+    DeletePuzzle(usize),
+    DeleteSolution(usize),
+    ConfirmDelete,
+    CancelDelete,
     Back,
 }
 
