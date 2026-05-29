@@ -134,6 +134,7 @@ pub enum GameMode {
     MainMenu,
     SaveListMain,
     SaveListPause,
+    ConfirmSaveSolutionBeforeEdit,
     GeneratorSettings,
     LabelerSettings,
     ConverterSettings,
@@ -171,6 +172,7 @@ pub struct SimulationState {
     pub speed: f32,
     pub turn: u64,
     pub accumulator: f32,
+    pub start_snapshot: Option<crate::game::world::grid::WorldBlocks>,
 }
 
 impl Default for SimulationState {
@@ -180,6 +182,7 @@ impl Default for SimulationState {
             speed: 1.0,
             turn: 0,
             accumulator: 0.0,
+            start_snapshot: None,
         }
     }
 }
@@ -188,6 +191,11 @@ impl SimulationState {
     pub fn is_active(&self) -> bool {
         self.running || self.turn > 0
     }
+}
+
+#[derive(Resource, Default)]
+pub struct SolutionState {
+    pub puzzle_snapshot: Option<crate::game::world::grid::WorldBlocks>,
 }
 
 #[derive(Resource)]

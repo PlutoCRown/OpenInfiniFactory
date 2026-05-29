@@ -5,7 +5,7 @@ use bevy::window::PrimaryWindow;
 
 use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SettingsReturnMode, SimulationState,
-    TeleportRenameState,
+    SolutionState, TeleportRenameState,
 };
 use crate::game::ui::{
     CarriedItem, ConverterAction, GeneratorAction, InventoryItems, LabelerAction, MainMenuAction,
@@ -18,7 +18,10 @@ use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, W
 use crate::game::{UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{input_from_buttons, open_config_folder, save_config, GameConfig};
 use crate::shared::i18n::{resolve_language, I18n};
-use crate::shared::save::{load_world, next_world_name, save_world, SaveState};
+use crate::shared::save::{
+    load_world, next_world_name, reset_solution_world, save_solution_with_puzzle, save_world,
+    SaveKind, SaveState,
+};
 
 pub fn main_menu_actions(
     mut exit: EventWriter<AppExit>,
@@ -28,6 +31,7 @@ pub fn main_menu_actions(
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mut save_state: ResMut<SaveState>,
+    mut solution_state: ResMut<SolutionState>,
     mut settings_return: ResMut<SettingsReturnMode>,
     mut commands: Commands,
     mut world: ResMut<WorldBlocks>,
@@ -49,8 +53,10 @@ pub fn main_menu_actions(
                 let name = next_world_name(&save_state.slots);
                 world.clear();
                 seed_demo_world(&mut world);
-                save_world(&world, &name);
+                save_world(&world, &name, SaveKind::Puzzle);
                 save_state.current = Some(name);
+                save_state.current_kind = Some(SaveKind::Puzzle);
+                solution_state.puzzle_snapshot = None;
                 save_state.refresh();
                 reset_builder_state(
                     &mut builder_mode,
@@ -84,6 +90,7 @@ pub fn save_list_actions(
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mut save_state: ResMut<SaveState>,
+    mut solution_state: ResMut<SolutionState>,
     mut commands: Commands,
     mut world: ResMut<WorldBlocks>,
     mut simulation: ResMut<SimulationState>,
@@ -105,17 +112,32 @@ pub fn save_list_actions(
                 let Some(name) = save_state.slots.get(index).cloned() else {
                     continue;
                 };
-                if load_world(&mut world, &name) {
+                if let Some(mut loaded) = load_world(&mut world, &name) {
+                    let opening_from_play = *mode == GameMode::SaveListPause;
+                    if opening_from_play && loaded.kind == SaveKind::Puzzle {
+                        loaded.puzzle_snapshot = Some(loaded.world.clone());
+                        loaded.kind = SaveKind::Solution;
+                    }
                     save_state.current = Some(name);
+                    save_state.current_kind = Some(loaded.kind);
+                    solution_state.puzzle_snapshot = loaded.puzzle_snapshot;
                     simulation.running = false;
                     simulation.turn = 0;
                     simulation.accumulator = 0.0;
-                    reset_builder_state(
-                        &mut builder_mode,
-                        &mut inventory,
-                        &mut carried,
-                        &mut placement,
-                    );
+                    simulation.start_snapshot = None;
+                    if opening_from_play {
+                        *builder_mode = BuilderMode::Play;
+                        *inventory = InventoryItems::for_mode(*builder_mode);
+                        carried.clear();
+                        placement.selected = 0;
+                    } else {
+                        reset_builder_state(
+                            &mut builder_mode,
+                            &mut inventory,
+                            &mut carried,
+                            &mut placement,
+                        );
+                    }
                     despawn_world(&mut commands, &block_entities);
                     rebuild_world(&mut commands, &world, &render_assets);
                     *mode = GameMode::Playing;
@@ -140,6 +162,7 @@ pub fn pause_menu_actions(
     mut placement: ResMut<PlacementState>,
     mut mode: ResMut<GameMode>,
     mut save_state: ResMut<SaveState>,
+    mut solution_state: ResMut<SolutionState>,
     mut settings_return: ResMut<SettingsReturnMode>,
     mut world: ResMut<WorldBlocks>,
     mut commands: Commands,
@@ -147,7 +170,7 @@ pub fn pause_menu_actions(
     render_assets: Res<WorldRenderAssets>,
     mut interactions: Query<(&Interaction, &PauseAction), (Changed<Interaction>, With<Button>)>,
 ) {
-    if *mode != GameMode::Paused {
+    if !matches!(*mode, GameMode::Paused | GameMode::ConfirmSaveSolutionBeforeEdit) {
         return;
     }
 
@@ -163,22 +186,66 @@ pub fn pause_menu_actions(
                     BuilderMode::Edit => {
                         simulation.running = false;
                         simulation.accumulator = 0.0;
+                        simulation.start_snapshot = None;
+                        if save_state.current_kind == Some(SaveKind::Puzzle) {
+                            solution_state.puzzle_snapshot = Some(world.clone());
+                        }
+                        save_state.current_kind = Some(SaveKind::Solution);
                         BuilderMode::Play
                     }
-                    BuilderMode::Play => BuilderMode::Edit,
+                    BuilderMode::Play => {
+                        *mode = GameMode::ConfirmSaveSolutionBeforeEdit;
+                        continue;
+                    }
                 };
                 *inventory = InventoryItems::for_mode(*builder_mode);
                 carried.clear();
                 placement.selected = 0;
             }
+            PauseAction::ConfirmSaveSolutionAndEdit => {
+                save_current_world(&world, &mut save_state, &mut solution_state);
+                switch_to_edit_mode(
+                    &mut world,
+                    &mut builder_mode,
+                    &mut inventory,
+                    &mut carried,
+                    &mut placement,
+                    &mut mode,
+                    &mut save_state,
+                    &mut solution_state,
+                );
+                despawn_world(&mut commands, &block_entities);
+                rebuild_world(&mut commands, &world, &render_assets);
+            }
+            PauseAction::DiscardSolutionAndEdit => {
+                switch_to_edit_mode(
+                    &mut world,
+                    &mut builder_mode,
+                    &mut inventory,
+                    &mut carried,
+                    &mut placement,
+                    &mut mode,
+                    &mut save_state,
+                    &mut solution_state,
+                );
+                despawn_world(&mut commands, &block_entities);
+                rebuild_world(&mut commands, &world, &render_assets);
+            }
+            PauseAction::CancelEditSwitch => {
+                *mode = GameMode::Paused;
+            }
             PauseAction::SaveWorld => {
-                let name = save_state
-                    .current
-                    .clone()
-                    .unwrap_or_else(|| next_world_name(&save_state.slots));
-                if save_world(&world, &name) {
-                    save_state.current = Some(name);
-                    save_state.refresh();
+                save_current_world(&world, &mut save_state, &mut solution_state);
+            }
+            PauseAction::ResetSolution => {
+                if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
+                    reset_solution_world(&mut world, puzzle_snapshot);
+                    simulation.running = false;
+                    simulation.turn = 0;
+                    simulation.accumulator = 0.0;
+                    simulation.start_snapshot = None;
+                    despawn_world(&mut commands, &block_entities);
+                    rebuild_world(&mut commands, &world, &render_assets);
                 }
             }
             PauseAction::OpenSaveList => {
@@ -192,9 +259,12 @@ pub fn pause_menu_actions(
             PauseAction::BackToMainMenu => {
                 simulation.running = false;
                 simulation.accumulator = 0.0;
+                simulation.start_snapshot = None;
                 placement.generator_panel = None;
                 world.clear();
                 save_state.current = None;
+                save_state.current_kind = None;
+                solution_state.puzzle_snapshot = None;
                 despawn_world(&mut commands, &block_entities);
                 rebuild_world(&mut commands, &world, &render_assets);
                 *mode = GameMode::MainMenu;
@@ -204,6 +274,56 @@ pub fn pause_menu_actions(
             }
         }
     }
+}
+
+fn save_current_world(
+    world: &WorldBlocks,
+    save_state: &mut SaveState,
+    solution_state: &mut SolutionState,
+) {
+    let kind = save_state.current_kind.unwrap_or(SaveKind::Puzzle);
+    let name = save_state
+        .current
+        .clone()
+        .unwrap_or_else(|| next_world_name(&save_state.slots));
+    let saved = match kind {
+        SaveKind::Puzzle => save_world(world, &name, SaveKind::Puzzle),
+        SaveKind::Solution => {
+            if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
+                save_solution_with_puzzle(world, &name, puzzle_snapshot)
+            } else {
+                save_world(world, &name, SaveKind::Solution)
+            }
+        }
+    };
+    if saved {
+        save_state.current = Some(name);
+        save_state.current_kind = Some(kind);
+        save_state.refresh();
+    }
+}
+
+fn switch_to_edit_mode(
+    world: &mut WorldBlocks,
+    builder_mode: &mut BuilderMode,
+    inventory: &mut InventoryItems,
+    carried: &mut CarriedItem,
+    placement: &mut PlacementState,
+    mode: &mut GameMode,
+    save_state: &mut SaveState,
+    solution_state: &mut SolutionState,
+) {
+    if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
+        *world = puzzle_snapshot.clone();
+    }
+    *builder_mode = BuilderMode::Edit;
+    *inventory = InventoryItems::for_mode(*builder_mode);
+    carried.clear();
+    placement.selected = 0;
+    save_state.current = None;
+    save_state.current_kind = Some(SaveKind::Puzzle);
+    solution_state.puzzle_snapshot = None;
+    *mode = GameMode::Paused;
 }
 
 pub fn settings_menu_actions(

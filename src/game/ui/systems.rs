@@ -9,7 +9,7 @@ use crate::game::world::grid::ConverterMode;
 use crate::game::{UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ConfigAction, GameConfig};
 use crate::shared::i18n::I18n;
-use crate::shared::save::SaveState;
+use crate::shared::save::{SaveKind, SaveState};
 
 use super::components::{
     BUTTON_BG, BUTTON_BORDER, BUTTON_HOVER_BG, BUTTON_HOVER_BORDER, BUTTON_PRESSED_BG,
@@ -20,8 +20,8 @@ use super::types::{
     CurrentSaveText, DeleteSelectionModeText, FovText, GeneratorMaterialText, GeneratorPanel,
     GeneratorPeriodText, HotbarText, InGameHudStyle, InGameHudVisibility, InventoryItems,
     InventorySlot, InventoryTitle, KeyBindingButton, KeyBindingLabel, LabelerColorText,
-    LabelerPanel, LocalizedText, MainMenuPanel, OpenSettingsDropdown, PausePanel, PendingKeyBind,
-    PlaceSelectionModeText, SaveListAction, SaveListLabel,
+    LabelerPanel, LocalizedText, MainMenuPanel, OpenSettingsDropdown, PauseAction, PausePanel,
+    PendingKeyBind, PlaceSelectionModeText, SaveListAction, SaveListLabel,
     SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdownLabel, SettingsDropdownList,
     ScrollContainer, ScrollContent, SettingsGameplayGroup, SettingsKeyBindingsGroup,
     SettingsPanel, SettingsSlider, SettingsSliderFill, SettingsSliderKnob, SettingsStatusText,
@@ -164,6 +164,26 @@ pub fn update_button_hover_ui(
                 *border = BUTTON_BORDER.into();
             }
         }
+    }
+}
+
+fn pause_action_visible(mode: GameMode, save_state: &SaveState, action: PauseAction) -> bool {
+    let confirming = mode == GameMode::ConfirmSaveSolutionBeforeEdit;
+    if confirming {
+        return matches!(
+            action,
+            PauseAction::ConfirmSaveSolutionAndEdit
+                | PauseAction::DiscardSolutionAndEdit
+                | PauseAction::CancelEditSwitch
+        );
+    }
+
+    match action {
+        PauseAction::ConfirmSaveSolutionAndEdit
+        | PauseAction::DiscardSolutionAndEdit
+        | PauseAction::CancelEditSwitch => false,
+        PauseAction::ResetSolution => save_state.current_kind == Some(SaveKind::Solution),
+        _ => true,
     }
 }
 
@@ -810,17 +830,19 @@ pub fn update_localized_ui(
 
 pub fn update_panel_visibility(
     mode: Res<GameMode>,
+    save_state: Res<SaveState>,
     settings_tab: Res<SettingsTab>,
     mut style_sets: ParamSet<(
-        Query<&mut Style, With<MainMenuPanel>>,
-        Query<&mut Style, With<SaveListPanel>>,
-        Query<&mut Style, With<SettingsPanel>>,
-        Query<&mut Style, With<SettingsGameplayGroup>>,
-        Query<&mut Style, With<SettingsKeyBindingsGroup>>,
-        Query<&mut Style, With<BackpackPanel>>,
-        Query<&mut Style, With<PausePanel>>,
-        Query<&mut Style, With<GeneratorPanel>>,
+        Query<&mut Style, (With<MainMenuPanel>, Without<PauseAction>)>,
+        Query<&mut Style, (With<SaveListPanel>, Without<PauseAction>)>,
+        Query<&mut Style, (With<SettingsPanel>, Without<PauseAction>)>,
+        Query<&mut Style, (With<SettingsGameplayGroup>, Without<PauseAction>)>,
+        Query<&mut Style, (With<SettingsKeyBindingsGroup>, Without<PauseAction>)>,
+        Query<&mut Style, (With<BackpackPanel>, Without<PauseAction>)>,
+        Query<&mut Style, (With<PausePanel>, Without<PauseAction>)>,
+        Query<&mut Style, (With<GeneratorPanel>, Without<PauseAction>)>,
     )>,
+    mut pause_buttons: Query<(&PauseAction, &mut Style), With<Button>>,
 ) {
     for mut style in &mut style_sets.p0() {
         style.display = if *mode == GameMode::MainMenu {
@@ -872,7 +894,18 @@ pub fn update_panel_visibility(
     }
 
     for mut style in &mut style_sets.p6() {
-        style.display = if *mode == GameMode::Paused {
+        style.display = if matches!(
+            *mode,
+            GameMode::Paused | GameMode::ConfirmSaveSolutionBeforeEdit
+        ) {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    for (action, mut style) in &mut pause_buttons {
+        style.display = if pause_action_visible(*mode, &save_state, *action) {
             Display::Flex
         } else {
             Display::None

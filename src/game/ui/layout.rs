@@ -294,7 +294,17 @@ fn spawn_pause_panel(root: &mut ChildBuilder, i18n: &I18n) {
             for (key, action) in [
                 ("button.resume", PauseAction::Resume),
                 ("button.toggle_builder_mode", PauseAction::ToggleBuilderMode),
+                (
+                    "button.save_solution_and_edit",
+                    PauseAction::ConfirmSaveSolutionAndEdit,
+                ),
+                (
+                    "button.discard_solution_and_edit",
+                    PauseAction::DiscardSolutionAndEdit,
+                ),
+                ("button.cancel", PauseAction::CancelEditSwitch),
                 ("button.save_world", PauseAction::SaveWorld),
+                ("button.reset_solution", PauseAction::ResetSolution),
                 ("button.switch_save", PauseAction::OpenSaveList),
                 ("button.settings", PauseAction::OpenSettings),
                 ("button.back_to_main_menu", PauseAction::BackToMainMenu),

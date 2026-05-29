@@ -58,11 +58,6 @@ pub fn run_turn(
     );
 }
 
-pub fn reset_simulation(world: &mut WorldBlocks) {
-    world.retain(|_, block| !block.kind.is_material());
-    world.clear_generated_markers();
-}
-
 pub fn tick_simulation(
     time: Res<Time>,
     builder_mode: Res<BuilderMode>,

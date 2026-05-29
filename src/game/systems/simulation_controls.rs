@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 
-use crate::game::simulation::runtime::reset_simulation;
 use crate::game::state::{BuilderMode, GameMode, SimulationState};
 use crate::game::ui::SimulationAction;
 use crate::game::world::grid::WorldBlocks;
@@ -30,6 +29,9 @@ pub fn simulation_controls(
     let rollback_key = config.key(ConfigAction::RotateOrRollback).key_code();
 
     if keys.just_pressed(simulate_key) {
+        if !simulation.is_active() {
+            simulation.start_snapshot = Some(world.clone());
+        }
         simulation.running = true;
     }
     simulation.speed = if simulation.running && keys.pressed(simulate_key) {
@@ -65,5 +67,10 @@ fn rollback_simulation(simulation: &mut SimulationState, world: &mut WorldBlocks
     simulation.running = false;
     simulation.turn = 0;
     simulation.accumulator = 0.0;
-    reset_simulation(world);
+    if let Some(snapshot) = simulation.start_snapshot.take() {
+        *world = snapshot;
+    } else {
+        world.retain(|_, block| !block.kind.is_material());
+        world.clear_generated_markers();
+    }
 }

@@ -168,7 +168,11 @@ pub struct LocalizedText {
 pub enum PauseAction {
     Resume,
     ToggleBuilderMode,
+    ConfirmSaveSolutionAndEdit,
+    DiscardSolutionAndEdit,
+    CancelEditSwitch,
     SaveWorld,
+    ResetSolution,
     OpenSaveList,
     OpenSettings,
     BackToMainMenu,

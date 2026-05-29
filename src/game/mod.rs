@@ -17,7 +17,7 @@ use crate::shared::save::SaveState;
 use player::controller::{camera_look, camera_move, spawn_player, sync_cursor_grab};
 use state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SettingsReturnMode, SimulationState,
-    TeleportRenameState,
+    SolutionState, TeleportRenameState,
 };
 use systems::gameplay::{apply_fov, gameplay_input, placement_input, update_hover};
 use systems::menus::{
@@ -59,6 +59,7 @@ impl Plugin for GamePlugin {
             .insert_resource(GameMode::MainMenu)
             .insert_resource(BuilderMode::default())
             .insert_resource(SimulationState::default())
+            .insert_resource(SolutionState::default())
             .insert_resource(simulation::runtime::SignalNetworkCache::default())
             .insert_resource(settings)
             .insert_resource(UiScale(config.ui_scale))
