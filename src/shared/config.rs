@@ -92,6 +92,12 @@ pub struct KeyBindings {
     pub right: ConfigKey,
     pub jump_or_fly_up: ConfigKey,
     pub fly_down: ConfigKey,
+    #[serde(default = "default_place_button")]
+    pub place: ConfigInput,
+    #[serde(default = "default_delete_button")]
+    pub delete: ConfigInput,
+    #[serde(default = "default_pick_button")]
+    pub pick: ConfigInput,
 }
 
 impl Default for KeyBindings {
@@ -109,8 +115,23 @@ impl Default for KeyBindings {
             right: ConfigKey::KeyD,
             jump_or_fly_up: ConfigKey::Space,
             fly_down: ConfigKey::ShiftLeft,
+            place: default_place_button(),
+            delete: default_delete_button(),
+            pick: default_pick_button(),
         }
     }
+}
+
+fn default_place_button() -> ConfigInput {
+    ConfigInput::MouseLeft
+}
+
+fn default_delete_button() -> ConfigInput {
+    ConfigInput::MouseRight
+}
+
+fn default_pick_button() -> ConfigInput {
+    ConfigInput::MouseMiddle
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -127,10 +148,13 @@ pub enum ConfigAction {
     Right,
     JumpOrFlyUp,
     FlyDown,
+    Place,
+    Delete,
+    Pick,
 }
 
 impl ConfigAction {
-    pub const ALL: [ConfigAction; 12] = [
+    pub const ALL: [ConfigAction; 15] = [
         ConfigAction::Pause,
         ConfigAction::Inventory,
         ConfigAction::Alternate,
@@ -143,6 +167,9 @@ impl ConfigAction {
         ConfigAction::Right,
         ConfigAction::JumpOrFlyUp,
         ConfigAction::FlyDown,
+        ConfigAction::Place,
+        ConfigAction::Delete,
+        ConfigAction::Pick,
     ];
 
     pub fn label_key(self) -> &'static str {
@@ -159,6 +186,44 @@ impl ConfigAction {
             ConfigAction::Right => "action.right",
             ConfigAction::JumpOrFlyUp => "action.jump_or_fly_up",
             ConfigAction::FlyDown => "action.fly_down",
+            ConfigAction::Place => "action.place",
+            ConfigAction::Delete => "action.delete",
+            ConfigAction::Pick => "action.pick",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ConfigInput {
+    Key(ConfigKey),
+    MouseLeft,
+    MouseRight,
+    MouseMiddle,
+}
+
+impl ConfigInput {
+    pub fn key_code(self) -> Option<KeyCode> {
+        match self {
+            Self::Key(key) => Some(key.key_code()),
+            Self::MouseLeft | Self::MouseRight | Self::MouseMiddle => None,
+        }
+    }
+
+    pub fn mouse_button(self) -> Option<MouseButton> {
+        match self {
+            Self::MouseLeft => Some(MouseButton::Left),
+            Self::MouseRight => Some(MouseButton::Right),
+            Self::MouseMiddle => Some(MouseButton::Middle),
+            Self::Key(_) => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Key(key) => key.name(),
+            Self::MouseLeft => "Mouse Left",
+            Self::MouseRight => "Mouse Right",
+            Self::MouseMiddle => "Mouse Middle",
         }
     }
 }
@@ -263,6 +328,29 @@ impl GameConfig {
             ConfigAction::Right => self.key_bindings.right,
             ConfigAction::JumpOrFlyUp => self.key_bindings.jump_or_fly_up,
             ConfigAction::FlyDown => self.key_bindings.fly_down,
+            ConfigAction::Place | ConfigAction::Delete | ConfigAction::Pick => {
+                return self.input(action).key_code().map(key_from_code).unwrap_or(ConfigKey::KeyI)
+            }
+        }
+    }
+
+    pub fn input(&self, action: ConfigAction) -> ConfigInput {
+        match action {
+            ConfigAction::Pause => ConfigInput::Key(self.key_bindings.pause),
+            ConfigAction::Inventory => ConfigInput::Key(self.key_bindings.inventory),
+            ConfigAction::Alternate => ConfigInput::Key(self.key_bindings.alternate),
+            ConfigAction::RotateOrRollback => ConfigInput::Key(self.key_bindings.rotate_or_rollback),
+            ConfigAction::Simulate => ConfigInput::Key(self.key_bindings.simulate),
+            ConfigAction::Debug => ConfigInput::Key(self.key_bindings.debug),
+            ConfigAction::Forward => ConfigInput::Key(self.key_bindings.forward),
+            ConfigAction::Backward => ConfigInput::Key(self.key_bindings.backward),
+            ConfigAction::Left => ConfigInput::Key(self.key_bindings.left),
+            ConfigAction::Right => ConfigInput::Key(self.key_bindings.right),
+            ConfigAction::JumpOrFlyUp => ConfigInput::Key(self.key_bindings.jump_or_fly_up),
+            ConfigAction::FlyDown => ConfigInput::Key(self.key_bindings.fly_down),
+            ConfigAction::Place => self.key_bindings.place,
+            ConfigAction::Delete => self.key_bindings.delete,
+            ConfigAction::Pick => self.key_bindings.pick,
         }
     }
 
@@ -280,8 +368,28 @@ impl GameConfig {
             ConfigAction::Right => self.key_bindings.right = key,
             ConfigAction::JumpOrFlyUp => self.key_bindings.jump_or_fly_up = key,
             ConfigAction::FlyDown => self.key_bindings.fly_down = key,
+            ConfigAction::Place | ConfigAction::Delete | ConfigAction::Pick => {
+                self.set_input(action, ConfigInput::Key(key));
+            }
         }
     }
+
+    pub fn set_input(&mut self, action: ConfigAction, input: ConfigInput) {
+        match action {
+            ConfigAction::Place => self.key_bindings.place = input,
+            ConfigAction::Delete => self.key_bindings.delete = input,
+            ConfigAction::Pick => self.key_bindings.pick = input,
+            _ => {
+                if let ConfigInput::Key(key) = input {
+                    self.set_key(action, key);
+                }
+            }
+        }
+    }
+}
+
+fn key_from_code(key_code: KeyCode) -> ConfigKey {
+    key_from_input_code(key_code).unwrap_or(ConfigKey::KeyI)
 }
 
 pub fn load_config() -> GameConfig {
@@ -355,4 +463,50 @@ pub fn key_from_input(keys: &ButtonInput<KeyCode>) -> Option<ConfigKey> {
     ]
     .into_iter()
     .find(|key| keys.just_pressed(key.key_code()))
+}
+
+pub fn input_from_buttons(
+    keys: &ButtonInput<KeyCode>,
+    mouse_buttons: &ButtonInput<MouseButton>,
+) -> Option<ConfigInput> {
+    if mouse_buttons.just_pressed(MouseButton::Left) {
+        return Some(ConfigInput::MouseLeft);
+    }
+    if mouse_buttons.just_pressed(MouseButton::Right) {
+        return Some(ConfigInput::MouseRight);
+    }
+    if mouse_buttons.just_pressed(MouseButton::Middle) {
+        return Some(ConfigInput::MouseMiddle);
+    }
+    key_from_input(keys).map(ConfigInput::Key)
+}
+
+fn key_from_input_code(key_code: KeyCode) -> Option<ConfigKey> {
+    [
+        ConfigKey::Escape,
+        ConfigKey::Space,
+        ConfigKey::ShiftLeft,
+        ConfigKey::ShiftRight,
+        ConfigKey::Slash,
+        ConfigKey::KeyA,
+        ConfigKey::KeyC,
+        ConfigKey::KeyD,
+        ConfigKey::KeyE,
+        ConfigKey::KeyF,
+        ConfigKey::KeyI,
+        ConfigKey::KeyR,
+        ConfigKey::KeyS,
+        ConfigKey::KeyW,
+        ConfigKey::Digit1,
+        ConfigKey::Digit2,
+        ConfigKey::Digit3,
+        ConfigKey::Digit4,
+        ConfigKey::Digit5,
+        ConfigKey::Digit6,
+        ConfigKey::Digit7,
+        ConfigKey::Digit8,
+        ConfigKey::Digit9,
+    ]
+    .into_iter()
+    .find(|key| key.key_code() == key_code)
 }

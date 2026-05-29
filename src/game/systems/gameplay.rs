@@ -140,9 +140,18 @@ pub fn placement_input(
     edit_previews: Query<Entity, With<EditPreview>>,
     player: Query<&Transform, With<FlyCamera>>,
 ) {
-    let place_button = MouseButton::Left;
-    let delete_button = MouseButton::Right;
-    let pick_button = MouseButton::Middle;
+    let place_button = config
+        .input(crate::shared::config::ConfigAction::Place)
+        .mouse_button()
+        .unwrap_or(MouseButton::Left);
+    let delete_button = config
+        .input(crate::shared::config::ConfigAction::Delete)
+        .mouse_button()
+        .unwrap_or(MouseButton::Right);
+    let pick_button = config
+        .input(crate::shared::config::ConfigAction::Pick)
+        .mouse_button()
+        .unwrap_or(MouseButton::Middle);
 
     if *mode != GameMode::Playing {
         placement.edit_gesture = None;
@@ -168,75 +177,13 @@ pub fn placement_input(
             .is_some_and(|block| can_place_block_at(pos, block, *builder_mode, &world, &player))
     });
 
+    let force_place = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     if mouse_buttons.just_pressed(place_button)
-        && selected_kind(&inventory, &placement).is_none()
-        && current_target_pos.is_some_and(|pos| {
-            world
-                .system_blocks
-                .get(&pos)
-                .is_some_and(|block| {
-                    matches!(
-                        block.kind.material_source(block.facing),
-                        Some(MaterialSource::Generator)
-                    )
-                })
-        })
+        && !force_place
+        && open_target_block_ui(current_target_pos, &world, &mut placement, &mut mode)
     {
-        placement.generator_panel = current_target_pos;
         placement.edit_gesture = None;
         placement.selection.clear();
-        *mode = GameMode::GeneratorSettings;
-        despawn_edit_previews(&mut commands, &edit_previews);
-        return;
-    }
-
-    if mouse_buttons.just_pressed(place_button)
-        && selected_kind(&inventory, &placement).is_none()
-        && current_target_pos.is_some_and(|pos| {
-            world
-                .system_blocks
-                .get(&pos)
-                .is_some_and(|block| block.kind.material_labeler(block.facing).is_some())
-        })
-    {
-        placement.labeler_panel = current_target_pos;
-        placement.edit_gesture = None;
-        placement.selection.clear();
-        *mode = GameMode::LabelerSettings;
-        despawn_edit_previews(&mut commands, &edit_previews);
-        return;
-    }
-
-    if mouse_buttons.just_pressed(place_button)
-        && selected_kind(&inventory, &placement).is_none()
-        && current_target_pos.is_some_and(|pos| {
-            world
-                .system_blocks
-                .get(&pos)
-                .is_some_and(|block| block.kind == BlockKind::Converter)
-        })
-    {
-        placement.converter_panel = current_target_pos;
-        placement.edit_gesture = None;
-        placement.selection.clear();
-        *mode = GameMode::ConverterSettings;
-        despawn_edit_previews(&mut commands, &edit_previews);
-        return;
-    }
-
-    if mouse_buttons.just_pressed(place_button)
-        && selected_kind(&inventory, &placement).is_none()
-        && current_target_pos.is_some_and(|pos| {
-            world
-                .system_blocks
-                .get(&pos)
-                .is_some_and(|block| block.kind.is_teleport())
-        })
-    {
-        placement.teleport_panel = current_target_pos;
-        placement.edit_gesture = None;
-        placement.selection.clear();
-        *mode = GameMode::TeleportSettings;
         despawn_edit_previews(&mut commands, &edit_previews);
         return;
     }
@@ -245,6 +192,7 @@ pub fn placement_input(
         handle_selection_area_input(
             &mouse_buttons,
             current_target_pos,
+            place_button,
             &mut placement,
             &mut world,
             &block_entities,
@@ -411,12 +359,47 @@ fn selected_place_block(
     })
 }
 
-fn selected_kind(inventory: &InventoryItems, placement: &PlacementState) -> Option<BlockKind> {
-    inventory.hotbar[placement.selected].and_then(|item| item.block())
-}
-
 fn selected_area(inventory: &InventoryItems, placement: &PlacementState) -> Option<AreaKind> {
     inventory.hotbar[placement.selected].and_then(|item| item.area())
+}
+
+fn open_target_block_ui(
+    target: Option<IVec3>,
+    world: &WorldBlocks,
+    placement: &mut PlacementState,
+    mode: &mut GameMode,
+) -> bool {
+    let Some(pos) = target else {
+        return false;
+    };
+    let Some(block) = world.system_blocks.get(&pos) else {
+        return false;
+    };
+
+    if matches!(
+        block.kind.material_source(block.facing),
+        Some(MaterialSource::Generator)
+    ) {
+        placement.generator_panel = Some(pos);
+        *mode = GameMode::GeneratorSettings;
+        return true;
+    }
+    if block.kind.material_labeler(block.facing).is_some() {
+        placement.labeler_panel = Some(pos);
+        *mode = GameMode::LabelerSettings;
+        return true;
+    }
+    if block.kind == BlockKind::Converter {
+        placement.converter_panel = Some(pos);
+        *mode = GameMode::ConverterSettings;
+        return true;
+    }
+    if block.kind.is_teleport() {
+        placement.teleport_panel = Some(pos);
+        *mode = GameMode::TeleportSettings;
+        return true;
+    }
+    false
 }
 
 fn pick_target_block(
@@ -449,14 +432,13 @@ fn pick_target_block(
 fn handle_selection_area_input(
     mouse_buttons: &ButtonInput<MouseButton>,
     current_target_pos: Option<IVec3>,
+    place_button: MouseButton,
     placement: &mut PlacementState,
     world: &mut WorldBlocks,
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
 ) {
-    let place_button = MouseButton::Left;
-
     if let Some(drag) = placement.selection.drag.as_mut() {
         if let Some(current) = current_target_pos {
             if let Some((axis, offset)) = selection_drag_offset(*drag, current) {

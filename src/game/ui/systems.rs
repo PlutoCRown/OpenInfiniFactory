@@ -55,6 +55,7 @@ pub fn inventory_slot_clicks(
         (Changed<Interaction>, With<Button>),
     >,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
+    config: Res<GameConfig>,
     mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
@@ -69,7 +70,11 @@ pub fn inventory_slot_clicks(
             continue;
         }
 
-        if mouse_buttons.just_pressed(MouseButton::Middle) {
+        let pick_button = config
+            .input(ConfigAction::Pick)
+            .mouse_button()
+            .unwrap_or(MouseButton::Middle);
+        if mouse_buttons.just_pressed(pick_button) {
             if slot.area == SlotArea::Hotbar {
                 inventory.hotbar[slot.index] = None;
                 if placement.selected == slot.index {
@@ -603,24 +608,24 @@ pub fn update_settings_text_ui(
                 ("pending", pending),
                 (
                     "simulate",
-                    config.key(ConfigAction::Simulate).name().to_string(),
+                    config.input(ConfigAction::Simulate).name().to_string(),
                 ),
                 (
                     "rollback",
                     config
-                        .key(ConfigAction::RotateOrRollback)
+                        .input(ConfigAction::RotateOrRollback)
                         .name()
                         .to_string(),
                 ),
                 (
                     "inventory",
-                    config.key(ConfigAction::Inventory).name().to_string(),
+                    config.input(ConfigAction::Inventory).name().to_string(),
                 ),
                 (
                     "alternate",
-                    config.key(ConfigAction::Alternate).name().to_string(),
+                    config.input(ConfigAction::Alternate).name().to_string(),
                 ),
-                ("pause", config.key(ConfigAction::Pause).name().to_string()),
+                ("pause", config.input(ConfigAction::Pause).name().to_string()),
             ],
         );
     }
@@ -633,7 +638,7 @@ pub fn update_settings_text_ui(
             .0
             .filter(|pending| *pending == button.0)
             .map(|_| "...")
-            .unwrap_or(config.key(button.0).name());
+            .unwrap_or(config.input(button.0).name());
         text.sections[0].value = format!("{}: {suffix}", i18n.text(button.0.label_key()));
     }
 

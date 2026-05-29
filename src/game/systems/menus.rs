@@ -16,7 +16,7 @@ use crate::game::world::blocks::{MaterialKind, StampColor};
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
 use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
 use crate::game::{UI_SCALE_MAX, UI_SCALE_MIN};
-use crate::shared::config::{key_from_input, open_config_folder, save_config, GameConfig};
+use crate::shared::config::{input_from_buttons, open_config_folder, save_config, GameConfig};
 use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::save::{load_world, next_world_name, save_world, SaveState};
 
@@ -208,6 +208,7 @@ pub fn pause_menu_actions(
 
 pub fn settings_menu_actions(
     keys: Res<ButtonInput<KeyCode>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut mode: ResMut<GameMode>,
     settings_return: Res<SettingsReturnMode>,
@@ -230,8 +231,8 @@ pub fn settings_menu_actions(
     }
 
     if let Some(action) = pending_key_bind.0 {
-        if let Some(key) = key_from_input(&keys) {
-            config.set_key(action, key);
+        if let Some(input) = input_from_buttons(&keys, &mouse_buttons) {
+            config.set_input(action, input);
             save_config(&config);
             pending_key_bind.0 = None;
         }
