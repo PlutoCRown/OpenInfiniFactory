@@ -6,11 +6,13 @@ use crate::game::world::blocks::{
     BlockKind, BlockShape, ModelMaterial, ModelMesh, StampColor, ALL_BLOCKS, BLOCK_SIZE,
 };
 use crate::game::world::procedural_textures::{block_texture, ProceduralTexture};
+use crate::game::world::scene_material::SceneBlockMaterial;
 
 #[derive(Resource, Clone)]
 pub struct WorldRenderAssets {
     pub(crate) block: Handle<Mesh>,
     node: Handle<Mesh>,
+    wire_node: Handle<Mesh>,
     pub(crate) arrow: Handle<Mesh>,
     pub(crate) arrow_nose: Handle<Mesh>,
     pub(crate) goal_top: Handle<Mesh>,
@@ -18,6 +20,9 @@ pub struct WorldRenderAssets {
     connector_x: Handle<Mesh>,
     connector_y: Handle<Mesh>,
     connector_z: Handle<Mesh>,
+    wire_connector_x: Handle<Mesh>,
+    wire_connector_y: Handle<Mesh>,
+    wire_connector_z: Handle<Mesh>,
     part_large: Handle<Mesh>,
     part_medium: Handle<Mesh>,
     part_small: Handle<Mesh>,
@@ -25,8 +30,11 @@ pub struct WorldRenderAssets {
     part_rod_x: Handle<Mesh>,
     part_rod_y: Handle<Mesh>,
     part_rod_z: Handle<Mesh>,
+    part_piston_body: Handle<Mesh>,
+    part_piston_head: Handle<Mesh>,
     block_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     preview_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
+    scene_materials: HashMap<BlockKind, Handle<SceneBlockMaterial>>,
     face_mark_materials: HashMap<StampColor, Handle<StandardMaterial>>,
     model_materials: HashMap<ModelMaterial, Handle<StandardMaterial>>,
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
@@ -47,22 +55,13 @@ impl WorldRenderAssets {
     pub(crate) fn new(
         meshes: &mut Assets<Mesh>,
         materials: &mut Assets<StandardMaterial>,
+        scene_materials: &mut Assets<SceneBlockMaterial>,
         images: &mut Assets<Image>,
     ) -> Self {
-        let grass_texture = images.add(block_texture(ProceduralTexture::Grass));
-        let stone_texture = images.add(block_texture(ProceduralTexture::Stone));
-        let dirt_texture = images.add(block_texture(ProceduralTexture::Dirt));
-        let planks_texture = images.add(block_texture(ProceduralTexture::Planks));
-        let glass_texture = images.add(block_texture(ProceduralTexture::Glass));
         let material_texture = images.add(block_texture(ProceduralTexture::Material));
         let iron_texture = images.add(block_texture(ProceduralTexture::IronMaterial));
         let copper_texture = images.add(block_texture(ProceduralTexture::CopperMaterial));
         let textures = [
-            (BlockKind::Grass, grass_texture.clone()),
-            (BlockKind::Stone, stone_texture.clone()),
-            (BlockKind::Dirt, dirt_texture.clone()),
-            (BlockKind::Planks, planks_texture.clone()),
-            (BlockKind::Glass, glass_texture.clone()),
             (BlockKind::Material, material_texture.clone()),
             (BlockKind::IronMaterial, iron_texture.clone()),
             (BlockKind::CopperMaterial, copper_texture.clone()),
@@ -70,11 +69,9 @@ impl WorldRenderAssets {
         let block_materials = ALL_BLOCKS
             .into_iter()
             .map(|kind| {
-                let texture = textures
-                    .iter()
-                    .find_map(|(texture_kind, texture)| {
-                        (*texture_kind == kind).then_some(texture.clone())
-                    });
+                let texture = textures.iter().find_map(|(texture_kind, texture)| {
+                    (*texture_kind == kind).then_some(texture.clone())
+                });
                 let material = texture
                     .map(|texture| textured_block_material(kind, texture))
                     .unwrap_or_else(|| block_material(kind));
@@ -84,14 +81,49 @@ impl WorldRenderAssets {
         let preview_materials = ALL_BLOCKS
             .into_iter()
             .map(|kind| {
-                let texture = textures
-                    .iter()
-                    .find_map(|(texture_kind, texture)| {
-                        (*texture_kind == kind).then_some(texture.clone())
-                    });
+                let texture = textures.iter().find_map(|(texture_kind, texture)| {
+                    (*texture_kind == kind).then_some(texture.clone())
+                });
                 (kind, materials.add(preview_block_material(kind, texture)))
             })
             .collect();
+        let scene_block_materials = [
+            (
+                BlockKind::Grass,
+                scene_block_material(
+                    Color::srgb(0.28, 0.55, 0.20),
+                    Color::srgb(0.46, 0.72, 0.28),
+                    0,
+                ),
+            ),
+            (
+                BlockKind::Stone,
+                scene_block_material(
+                    Color::srgb(0.42, 0.43, 0.42),
+                    Color::srgb(0.64, 0.65, 0.62),
+                    1,
+                ),
+            ),
+            (
+                BlockKind::Dirt,
+                scene_block_material(
+                    Color::srgb(0.34, 0.22, 0.13),
+                    Color::srgb(0.54, 0.36, 0.20),
+                    2,
+                ),
+            ),
+            (
+                BlockKind::Planks,
+                scene_block_material(
+                    Color::srgb(0.54, 0.32, 0.13),
+                    Color::srgb(0.82, 0.55, 0.28),
+                    3,
+                ),
+            ),
+        ]
+        .into_iter()
+        .map(|(kind, material)| (kind, scene_materials.add(material)))
+        .collect();
         let face_mark_materials = StampColor::ALL
             .into_iter()
             .map(|color| {
@@ -107,24 +139,61 @@ impl WorldRenderAssets {
             })
             .collect();
         let model_materials = [
-            (ModelMaterial::Frame, srgb_material(0.32, 0.34, 0.36)),
+            (ModelMaterial::Frame, srgb_material(0.42, 0.44, 0.44)),
             (ModelMaterial::DarkFrame, srgb_material(0.12, 0.13, 0.15)),
-            (ModelMaterial::Belt, srgb_material(0.06, 0.07, 0.08)),
-            (ModelMaterial::BeltStripe, emissive_material(0.96, 0.72, 0.18, 0.18, 0.10, 0.02)),
-            (ModelMaterial::Welding, emissive_material(1.0, 0.26, 0.12, 0.24, 0.05, 0.02)),
-            (ModelMaterial::Wire, emissive_material(1.0, 0.88, 0.30, 0.20, 0.12, 0.02)),
-            (ModelMaterial::Signal, emissive_material(0.12, 0.78, 1.0, 0.02, 0.18, 0.24)),
-            (ModelMaterial::Power, emissive_material(1.0, 0.52, 0.20, 0.22, 0.08, 0.02)),
-            (ModelMaterial::Piston, srgb_material(0.82, 0.62, 0.34)),
-            (ModelMaterial::Lift, emissive_material(0.35, 0.82, 1.0, 0.03, 0.16, 0.22)),
-            (ModelMaterial::Rotation, emissive_material(0.70, 0.36, 1.0, 0.11, 0.04, 0.20)),
+            (ModelMaterial::Belt, srgb_material(0.86, 0.46, 0.14)),
+            (
+                ModelMaterial::BeltStripe,
+                emissive_material(1.0, 0.76, 0.28, 0.18, 0.10, 0.02),
+            ),
+            (
+                ModelMaterial::Welding,
+                emissive_material(0.18, 0.58, 1.0, 0.02, 0.12, 0.26),
+            ),
+            (
+                ModelMaterial::Wire,
+                emissive_material(1.0, 0.88, 0.30, 0.20, 0.12, 0.02),
+            ),
+            (
+                ModelMaterial::Signal,
+                emissive_material(0.12, 0.78, 1.0, 0.02, 0.18, 0.24),
+            ),
+            (
+                ModelMaterial::Power,
+                emissive_material(1.0, 0.52, 0.20, 0.22, 0.08, 0.02),
+            ),
+            (ModelMaterial::Piston, srgb_material(0.54, 0.56, 0.54)),
+            (ModelMaterial::Wood, srgb_material(0.72, 0.46, 0.22)),
+            (
+                ModelMaterial::Lift,
+                emissive_material(0.35, 0.82, 1.0, 0.03, 0.16, 0.22),
+            ),
+            (
+                ModelMaterial::Rotation,
+                emissive_material(0.70, 0.36, 1.0, 0.11, 0.04, 0.20),
+            ),
             (ModelMaterial::Drill, srgb_material(0.06, 0.07, 0.08)),
-            (ModelMaterial::Laser, emissive_material(1.0, 0.10, 0.22, 0.35, 0.01, 0.04)),
+            (
+                ModelMaterial::Laser,
+                emissive_material(1.0, 0.10, 0.22, 0.35, 0.01, 0.04),
+            ),
             (ModelMaterial::System, srgb_material(0.35, 0.28, 0.48)),
-            (ModelMaterial::SystemAccent, emissive_material(0.72, 0.58, 1.0, 0.12, 0.08, 0.24)),
-            (ModelMaterial::Goal, emissive_material(0.55, 1.0, 0.36, 0.05, 0.22, 0.04)),
-            (ModelMaterial::TeleportIn, emissive_material(0.18, 0.62, 1.0, 0.02, 0.10, 0.34)),
-            (ModelMaterial::TeleportOut, emissive_material(1.0, 0.54, 0.18, 0.34, 0.10, 0.02)),
+            (
+                ModelMaterial::SystemAccent,
+                emissive_material(0.72, 0.58, 1.0, 0.12, 0.08, 0.24),
+            ),
+            (
+                ModelMaterial::Goal,
+                emissive_material(0.55, 1.0, 0.36, 0.05, 0.22, 0.04),
+            ),
+            (
+                ModelMaterial::TeleportIn,
+                emissive_material(0.18, 0.62, 1.0, 0.02, 0.10, 0.34),
+            ),
+            (
+                ModelMaterial::TeleportOut,
+                emissive_material(1.0, 0.54, 0.18, 0.34, 0.10, 0.02),
+            ),
         ]
         .into_iter()
         .map(|(kind, material)| (kind, materials.add(material)))
@@ -137,6 +206,11 @@ impl WorldRenderAssets {
                 BLOCK_SIZE * 0.38,
                 BLOCK_SIZE * 0.38,
             )),
+            wire_node: meshes.add(Cuboid::new(
+                BLOCK_SIZE * 0.304,
+                BLOCK_SIZE * 0.304,
+                BLOCK_SIZE * 0.304,
+            )),
             arrow: meshes.add(Cuboid::new(0.18, 0.08, 0.72)),
             arrow_nose: meshes.add(Cuboid::new(0.42, 0.10, 0.18)),
             goal_top: meshes.add(Cuboid::new(0.62, 0.08, 0.62)),
@@ -144,6 +218,9 @@ impl WorldRenderAssets {
             connector_x: meshes.add(Cuboid::new(0.74, 0.10, 0.10)),
             connector_y: meshes.add(Cuboid::new(0.10, 0.74, 0.10)),
             connector_z: meshes.add(Cuboid::new(0.10, 0.10, 0.74)),
+            wire_connector_x: meshes.add(Cuboid::new(0.74, 0.304, 0.304)),
+            wire_connector_y: meshes.add(Cuboid::new(0.304, 0.74, 0.304)),
+            wire_connector_z: meshes.add(Cuboid::new(0.304, 0.304, 0.74)),
             part_large: meshes.add(Cuboid::new(0.72, 0.22, 0.72)),
             part_medium: meshes.add(Cuboid::new(0.44, 0.20, 0.44)),
             part_small: meshes.add(Cuboid::new(0.22, 0.22, 0.22)),
@@ -151,8 +228,11 @@ impl WorldRenderAssets {
             part_rod_x: meshes.add(Cuboid::new(0.72, 0.12, 0.12)),
             part_rod_y: meshes.add(Cuboid::new(0.12, 0.72, 0.12)),
             part_rod_z: meshes.add(Cuboid::new(0.12, 0.12, 0.72)),
+            part_piston_body: meshes.add(Cuboid::new(0.80, 0.80, 0.80)),
+            part_piston_head: meshes.add(Cuboid::new(0.82, 0.82, 0.20)),
             block_materials,
             preview_materials,
+            scene_materials: scene_block_materials,
             face_mark_materials,
             model_materials,
             wire_connector_material: materials.add(StandardMaterial {
@@ -197,6 +277,10 @@ impl WorldRenderAssets {
     }
 
     pub(crate) fn block_mesh(&self, kind: BlockKind) -> Handle<Mesh> {
+        if kind == BlockKind::Wire {
+            return self.wire_node.clone();
+        }
+
         match kind.shape() {
             BlockShape::Cube => self.block.clone(),
             BlockShape::Node => self.node.clone(),
@@ -224,6 +308,10 @@ impl WorldRenderAssets {
             .clone()
     }
 
+    pub(crate) fn scene_material(&self, kind: BlockKind) -> Option<Handle<SceneBlockMaterial>> {
+        self.scene_materials.get(&kind).cloned()
+    }
+
     pub(crate) fn connector_mesh(&self, offset: IVec3) -> Handle<Mesh> {
         if offset.x != 0 {
             self.connector_x.clone()
@@ -231,6 +319,16 @@ impl WorldRenderAssets {
             self.connector_y.clone()
         } else {
             self.connector_z.clone()
+        }
+    }
+
+    pub(crate) fn wire_connector_mesh(&self, offset: IVec3) -> Handle<Mesh> {
+        if offset.x != 0 {
+            self.wire_connector_x.clone()
+        } else if offset.y != 0 {
+            self.wire_connector_y.clone()
+        } else {
+            self.wire_connector_z.clone()
         }
     }
 
@@ -250,6 +348,8 @@ impl WorldRenderAssets {
             ModelMesh::RodX => self.part_rod_x.clone(),
             ModelMesh::RodY => self.part_rod_y.clone(),
             ModelMesh::RodZ => self.part_rod_z.clone(),
+            ModelMesh::PistonBody => self.part_piston_body.clone(),
+            ModelMesh::PistonHead => self.part_piston_head.clone(),
         }
     }
 
@@ -293,6 +393,18 @@ fn preview_block_material(kind: BlockKind, texture: Option<Handle<Image>>) -> St
         perceptual_roughness: 0.94,
         reflectance: 0.08,
         ..default()
+    }
+}
+
+fn scene_block_material(
+    base_color: Color,
+    accent_color: Color,
+    texture_kind: u32,
+) -> SceneBlockMaterial {
+    SceneBlockMaterial {
+        base_color: base_color.to_linear(),
+        accent_color: accent_color.to_linear(),
+        texture_kind,
     }
 }
 

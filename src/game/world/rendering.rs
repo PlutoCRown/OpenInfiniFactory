@@ -8,6 +8,7 @@ use crate::game::world::blocks::{
 };
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
+use crate::game::world::scene_material::SceneBlockMaterial;
 
 #[derive(Component)]
 pub struct BlockEntity {
@@ -27,6 +28,7 @@ pub fn setup_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut scene_materials: ResMut<Assets<SceneBlockMaterial>>,
     mut images: ResMut<Assets<Image>>,
 ) {
     commands.spawn(PointLightBundle {
@@ -59,7 +61,12 @@ pub fn setup_scene(
         ..default()
     });
 
-    let render_assets = WorldRenderAssets::new(&mut meshes, &mut materials, &mut images);
+    let render_assets = WorldRenderAssets::new(
+        &mut meshes,
+        &mut materials,
+        &mut scene_materials,
+        &mut images,
+    );
     commands.insert_resource(render_assets);
 
     let marker_mesh = meshes.add(Cuboid::new(1.04, 1.04, 1.04));
@@ -280,12 +287,21 @@ fn spawn_block_model(
         transform.rotation = Quat::from_rotation_y(data.facing.yaw());
     }
 
-    let mut entity = commands.spawn(PbrBundle {
-        mesh: assets.block_mesh(data.kind),
-        material,
-        transform,
-        ..default()
-    });
+    let mut entity = if let Some(scene_material) = assets.scene_material(data.kind) {
+        commands.spawn(MaterialMeshBundle::<SceneBlockMaterial> {
+            mesh: assets.block_mesh(data.kind),
+            material: scene_material,
+            transform,
+            ..default()
+        })
+    } else {
+        commands.spawn(PbrBundle {
+            mesh: assets.block_mesh(data.kind),
+            material,
+            transform,
+            ..default()
+        })
+    };
 
     if with_block_entity {
         entity.insert(BlockEntity { pos });
@@ -348,7 +364,7 @@ fn spawn_block_model(
                 {
                     let local_offset = local_connector_offset(data, offset);
                     parent.spawn(PbrBundle {
-                        mesh: assets.connector_mesh(local_offset),
+                        mesh: assets.wire_connector_mesh(local_offset),
                         material: assets.wire_connector_material.clone(),
                         transform: Transform::from_translation(local_offset.as_vec3() * 0.34),
                         ..default()
@@ -403,6 +419,7 @@ fn spawn_model_parts(parent: &mut ChildBuilder, assets: &WorldRenderAssets, data
             material: assets.model_material(part.material),
             transform: Transform {
                 translation: model_vec3(part.translation),
+                rotation: Quat::from_rotation_y(part.yaw_radians),
                 scale: model_vec3(part.scale),
                 ..default()
             },

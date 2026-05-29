@@ -237,6 +237,7 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildBuilder, slider: SettingsS
         SettingsValueText(match slider {
             SettingsSlider::Fov => SettingsValue::Fov,
             SettingsSlider::UiScale => SettingsValue::UiScale,
+            SettingsSlider::Gravity => SettingsValue::Gravity,
         }),
     ));
     parent
@@ -257,6 +258,7 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildBuilder, slider: SettingsS
             match slider {
                 SettingsSlider::Fov => SettingsAction::FovSlider,
                 SettingsSlider::UiScale => SettingsAction::UiScaleSlider,
+                SettingsSlider::Gravity => SettingsAction::GravitySlider,
             },
         ))
         .with_children(|track| {

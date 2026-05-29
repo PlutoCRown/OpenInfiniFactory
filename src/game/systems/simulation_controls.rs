@@ -40,7 +40,6 @@ pub fn simulation_controls(
         despawn_world(&mut commands, &block_entities);
         rebuild_world(&mut commands, &world, &render_assets);
     }
-
 }
 fn rollback_simulation(simulation: &mut SimulationState, world: &mut WorldBlocks) {
     simulation.running = false;

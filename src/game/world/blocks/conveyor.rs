@@ -7,11 +7,20 @@ use super::{
 
 const MODEL: &[BlockModelPart] = &[
     BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Belt, [0.0, 0.54, 0.0]),
-    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::BeltStripe, [-0.24, 0.59, -0.08])
-        .scaled([0.52, 0.36, 0.54]),
-    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::BeltStripe, [0.24, 0.59, -0.08])
-        .scaled([0.52, 0.36, 0.54]),
-    BlockModelPart::new(ModelMesh::Small, ModelMaterial::BeltStripe, [0.0, 0.62, -0.38]),
+    BlockModelPart::new(
+        ModelMesh::RodX,
+        ModelMaterial::BeltStripe,
+        [-0.13, 0.59, -0.28],
+    )
+    .scaled([0.46, 0.30, 0.42])
+    .yawed(0.7853982),
+    BlockModelPart::new(
+        ModelMesh::RodX,
+        ModelMaterial::BeltStripe,
+        [0.13, 0.59, -0.28],
+    )
+    .scaled([0.46, 0.30, 0.42])
+    .yawed(-0.7853982),
 ];
 
 pub struct ConveyorBlock;
@@ -28,8 +37,8 @@ impl Block for ConveyorBlock {
             self.id(),
             "block.conveyor",
             "short.conveyor",
-            rgb(0.10, 0.22, 0.28),
-            rgb(0.08, 0.20, 0.26),
+            rgb(0.86, 0.46, 0.14),
+            rgb(0.70, 0.34, 0.08),
         )
     }
 

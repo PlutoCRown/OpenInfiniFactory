@@ -1,16 +1,7 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, EditableBlock,
-    MaterialSource, ModelMaterial, ModelMesh, SystemBlock,
+    rgba, Block, BlockDefinition, BlockKind, EditableBlock, MaterialSource, SystemBlock,
 };
 use crate::game::world::grid::{BlockSettings, GeneratorSettings};
-
-const MODEL: &[BlockModelPart] = &[
-    BlockModelPart::new(ModelMesh::Medium, ModelMaterial::System, [0.0, 0.40, 0.0]),
-    BlockModelPart::new(ModelMesh::Small, ModelMaterial::SystemAccent, [-0.22, 0.56, 0.0]),
-    BlockModelPart::new(ModelMesh::Small, ModelMaterial::SystemAccent, [0.22, 0.56, 0.0]),
-    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::SystemAccent, [0.0, 0.20, 0.0])
-        .scaled([0.56, 0.70, 0.56]),
-];
 
 pub struct GeneratorBlock;
 
@@ -26,10 +17,11 @@ impl Block for GeneratorBlock {
             self.id(),
             "block.generator",
             "short.generator",
-            rgb(0.52, 0.30, 0.68),
-            rgb(0.42, 0.20, 0.56),
+            rgba(0.42, 0.62, 1.0, 0.30),
+            rgba(0.32, 0.48, 0.82, 0.46),
         )
         .no_collision()
+        .transparent()
     }
 
     fn material_source(&self, facing: super::Facing) -> Option<MaterialSource> {
@@ -39,10 +31,6 @@ impl Block for GeneratorBlock {
 
     fn default_settings(&self, _pos: bevy::prelude::IVec3) -> Option<BlockSettings> {
         Some(BlockSettings::Generator(GeneratorSettings::default()))
-    }
-
-    fn model(&self) -> BlockModel {
-        BlockModel::Parts(MODEL)
     }
 }
 

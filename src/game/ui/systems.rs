@@ -6,7 +6,7 @@ use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, TeleportRenameState,
 };
 use crate::game::world::grid::ConverterMode;
-use crate::game::{UI_SCALE_MAX, UI_SCALE_MIN};
+use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ConfigAction, GameConfig};
 use crate::shared::i18n::I18n;
 use crate::shared::save::{SaveKind, SaveState};
@@ -15,18 +15,18 @@ use super::components::{
     BUTTON_BG, BUTTON_BORDER, BUTTON_HOVER_BG, BUTTON_HOVER_BORDER, BUTTON_PRESSED_BG,
 };
 use super::types::{
-    BackpackPanel, CarriedIcon, CarriedItem, CarriedLabel, ConverterInputRow,
-    ConverterInputText, ConverterModeText, ConverterOutputText, ConverterPanel, Crosshair,
-    CurrentSaveText, DeleteSelectionModeText, FovText, GeneratorMaterialText, GeneratorPanel,
-    GeneratorPeriodText, HotbarText, InGameHudStyle, InGameHudVisibility, InventoryItems,
-    InventorySlot, InventoryTitle, KeyBindingButton, KeyBindingLabel, LabelerColorText,
-    LabelerPanel, LocalizedText, MainMenuPanel, OpenSettingsDropdown, PauseAction, PausePanel,
-    PendingKeyBind, PlaceSelectionModeText, SaveListAction, SaveListLabel,
-    SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdownLabel, SettingsDropdownList,
-    ScrollContainer, ScrollContent, SettingsGameplayGroup, SettingsKeyBindingsGroup,
-    SettingsPanel, SettingsSlider, SettingsSliderFill, SettingsSliderKnob, SettingsStatusText,
-    SettingsTab, SettingsValue, SettingsValueText, SimulationText, SlotArea, SlotLabel,
-    TeleportNameText, TeleportPairText, TeleportPanel, UiScaleText,
+    BackpackPanel, CarriedIcon, CarriedItem, CarriedLabel, ConverterInputRow, ConverterInputText,
+    ConverterModeText, ConverterOutputText, ConverterPanel, Crosshair, CurrentSaveText,
+    DeleteSelectionModeText, FovText, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText,
+    HotbarText, InGameHudStyle, InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle,
+    KeyBindingButton, KeyBindingLabel, LabelerColorText, LabelerPanel, LocalizedText,
+    MainMenuPanel, OpenSettingsDropdown, PauseAction, PausePanel, PendingKeyBind,
+    PlaceSelectionModeText, SaveListAction, SaveListLabel, SaveListPanel, SaveListTitle,
+    ScrollContainer, ScrollContent, SettingsAction, SettingsDropdownLabel, SettingsDropdownList,
+    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider,
+    SettingsSliderFill, SettingsSliderKnob, SettingsStatusText, SettingsTab, SettingsValue,
+    SettingsValueText, SimulationText, SlotArea, SlotLabel, TeleportNameText, TeleportPairText,
+    TeleportPanel, UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -514,14 +514,8 @@ pub fn update_teleport_ui(
     rename_state: Res<TeleportRenameState>,
     world: Res<crate::game::world::grid::WorldBlocks>,
     i18n: Res<I18n>,
-    mut teleport_name_text: Query<
-        &mut Text,
-        (With<TeleportNameText>, Without<TeleportPairText>),
-    >,
-    mut teleport_pair_text: Query<
-        &mut Text,
-        (With<TeleportPairText>, Without<TeleportNameText>),
-    >,
+    mut teleport_name_text: Query<&mut Text, (With<TeleportNameText>, Without<TeleportPairText>)>,
+    mut teleport_pair_text: Query<&mut Text, (With<TeleportPairText>, Without<TeleportNameText>)>,
 ) {
     let Some(pos) = placement.teleport_panel else {
         return;
@@ -645,7 +639,10 @@ pub fn update_settings_text_ui(
                     "alternate",
                     config.input(ConfigAction::Alternate).name().to_string(),
                 ),
-                ("pause", config.input(ConfigAction::Pause).name().to_string()),
+                (
+                    "pause",
+                    config.input(ConfigAction::Pause).name().to_string(),
+                ),
             ],
         );
     }
@@ -742,6 +739,10 @@ pub fn update_settings_dropdowns_ui(
                 "settings.ui_scale",
                 &[("scale", format!("{:.1}", settings.ui_scale))],
             ),
+            SettingsValue::Gravity => i18n.fmt(
+                "settings.gravity_value",
+                &[("scale", format!("{:.1}", settings.gravity_scale))],
+            ),
         };
     }
 
@@ -812,6 +813,10 @@ fn settings_slider_percent(slider: SettingsSlider, settings: &GameSettings) -> f
             ((settings.ui_scale - UI_SCALE_MIN) / (UI_SCALE_MAX - UI_SCALE_MIN) * 100.0)
                 .clamp(0.0, 100.0)
         }
+        SettingsSlider::Gravity => ((settings.gravity_scale - GRAVITY_SCALE_MIN)
+            / (GRAVITY_SCALE_MAX - GRAVITY_SCALE_MIN)
+            * 100.0)
+            .clamp(0.0, 100.0),
     }
 }
 
@@ -919,7 +924,6 @@ pub fn update_panel_visibility(
             Display::None
         };
     }
-
 }
 
 pub fn update_labeler_panel_visibility(

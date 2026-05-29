@@ -5,7 +5,11 @@ use super::{
 };
 
 const MODEL: &[BlockModelPart] = &[
-    BlockModelPart::new(ModelMesh::Medium, ModelMaterial::DarkFrame, [0.0, 0.42, 0.08]),
+    BlockModelPart::new(
+        ModelMesh::Medium,
+        ModelMaterial::DarkFrame,
+        [0.0, 0.42, 0.08],
+    ),
     BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Laser, [0.0, 0.42, -0.30])
         .scaled([0.54, 0.54, 0.76]),
     BlockModelPart::new(ModelMesh::Small, ModelMaterial::Laser, [0.0, 0.42, -0.56]),

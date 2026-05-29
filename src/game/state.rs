@@ -202,6 +202,7 @@ pub struct SolutionState {
 pub struct GameSettings {
     pub fov_degrees: f32,
     pub ui_scale: f32,
+    pub gravity_scale: f32,
 }
 
 impl Default for GameSettings {
@@ -209,6 +210,7 @@ impl Default for GameSettings {
         Self {
             fov_degrees: 70.0,
             ui_scale: 1.0,
+            gravity_scale: crate::game::GRAVITY_SCALE_DEFAULT,
         }
     }
 }

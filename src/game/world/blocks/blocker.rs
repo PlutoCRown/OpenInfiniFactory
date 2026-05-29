@@ -5,11 +5,8 @@ use super::{
 };
 
 const MODEL: &[BlockModelPart] = &[
-    BlockModelPart::new(ModelMesh::Large, ModelMaterial::Frame, [0.0, 0.38, 0.08]),
-    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::DarkFrame, [0.0, 0.40, -0.34])
-        .scaled([1.15, 1.15, 0.50]),
-    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Power, [0.0, 0.40, -0.54])
-        .scaled([0.74, 0.86, 0.44]),
+    BlockModelPart::new(ModelMesh::PistonBody, ModelMaterial::Frame, [0.0, 0.0, 0.10]),
+    BlockModelPart::new(ModelMesh::PistonHead, ModelMaterial::Wood, [0.0, 0.0, -0.42]),
 ];
 
 pub struct BlockerBlock;
@@ -26,8 +23,8 @@ impl Block for BlockerBlock {
             self.id(),
             "block.blocker",
             "short.blocker",
-            rgb(0.58, 0.40, 0.24),
-            rgb(0.50, 0.32, 0.20),
+            rgb(0.54, 0.56, 0.54),
+            rgb(0.42, 0.44, 0.42),
         )
     }
 

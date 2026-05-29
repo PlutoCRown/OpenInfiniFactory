@@ -28,8 +28,10 @@ impl SignalNetworkCache {
         self.initialized = true;
 
         for (&pos, block) in &world.blocks {
-            if !matches!(block.kind.signal_behavior(block.facing), Some(SignalBehavior::Wire))
-                || self.wire_components.contains_key(&pos)
+            if !matches!(
+                block.kind.signal_behavior(block.facing),
+                Some(SignalBehavior::Wire)
+            ) || self.wire_components.contains_key(&pos)
             {
                 continue;
             }

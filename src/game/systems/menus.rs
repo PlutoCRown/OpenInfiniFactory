@@ -15,7 +15,7 @@ use crate::game::ui::{
 use crate::game::world::blocks::{MaterialKind, StampColor};
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
 use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
-use crate::game::{UI_SCALE_MAX, UI_SCALE_MIN};
+use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{input_from_buttons, open_config_folder, save_config, GameConfig};
 use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::save::{
@@ -170,7 +170,10 @@ pub fn pause_menu_actions(
     render_assets: Res<WorldRenderAssets>,
     mut interactions: Query<(&Interaction, &PauseAction), (Changed<Interaction>, With<Button>)>,
 ) {
-    if !matches!(*mode, GameMode::Paused | GameMode::ConfirmSaveSolutionBeforeEdit) {
+    if !matches!(
+        *mode,
+        GameMode::Paused | GameMode::ConfirmSaveSolutionBeforeEdit
+    ) {
         return;
     }
 
@@ -320,7 +323,6 @@ fn switch_to_edit_mode(
     *inventory = InventoryItems::for_mode(*builder_mode);
     carried.clear();
     placement.selected = 0;
-    save_state.current = None;
     save_state.current_kind = Some(SaveKind::Puzzle);
     solution_state.puzzle_snapshot = None;
     *mode = GameMode::Paused;
@@ -358,14 +360,11 @@ pub fn settings_menu_actions(
         }
     }
 
-    let cursor_position = windows
-        .get_single()
-        .ok()
-        .and_then(|window| {
-            window
-                .cursor_position()
-                .map(|cursor| Vec2::new(cursor.x - window.width() * 0.5, cursor.y))
-        });
+    let cursor_position = windows.get_single().ok().and_then(|window| {
+        window
+            .cursor_position()
+            .map(|cursor| Vec2::new(cursor.x, cursor.y))
+    });
 
     for (interaction, action, node, transform) in &mut interactions {
         if *interaction != Interaction::Pressed {
@@ -402,6 +401,20 @@ pub fn settings_menu_actions(
                     settings.ui_scale = settings.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
                     ui_scale.0 = settings.ui_scale;
                     config.ui_scale = settings.ui_scale;
+                    save_config(&config);
+                }
+            }
+            SettingsAction::GravitySlider => {
+                if let Some(percent) = slider_percent(cursor_position, node, transform) {
+                    settings.gravity_scale = ((GRAVITY_SCALE_MIN
+                        + percent * (GRAVITY_SCALE_MAX - GRAVITY_SCALE_MIN))
+                        * 10.0)
+                        .round()
+                        / 10.0;
+                    settings.gravity_scale = settings
+                        .gravity_scale
+                        .clamp(GRAVITY_SCALE_MIN, GRAVITY_SCALE_MAX);
+                    config.gravity_scale = settings.gravity_scale;
                     save_config(&config);
                 }
             }
@@ -453,6 +466,9 @@ pub fn settings_menu_actions(
                 *config = GameConfig::default();
                 settings.fov_degrees = config.fov_degrees;
                 settings.ui_scale = config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
+                settings.gravity_scale = config
+                    .gravity_scale
+                    .clamp(GRAVITY_SCALE_MIN, GRAVITY_SCALE_MAX);
                 ui_scale.0 = settings.ui_scale;
                 i18n.set_language(resolve_language(config.language));
                 open_dropdown.0 = None;
@@ -575,10 +591,7 @@ pub fn converter_menu_actions(
     mut mode: ResMut<GameMode>,
     mut placement: ResMut<PlacementState>,
     mut world: ResMut<WorldBlocks>,
-    mut interactions: Query<
-        (&Interaction, &ConverterAction),
-        (Changed<Interaction>, With<Button>),
-    >,
+    mut interactions: Query<(&Interaction, &ConverterAction), (Changed<Interaction>, With<Button>)>,
 ) {
     if *mode != GameMode::ConverterSettings {
         return;

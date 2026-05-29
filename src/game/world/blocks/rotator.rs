@@ -5,12 +5,24 @@ use super::{
 
 const MODEL: &[BlockModelPart] = &[
     BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Rotation, [0.0, 0.54, 0.0]),
-    BlockModelPart::new(ModelMesh::RodX, ModelMaterial::Rotation, [-0.18, 0.62, -0.14])
-        .scaled([0.68, 0.55, 0.55]),
+    BlockModelPart::new(
+        ModelMesh::RodX,
+        ModelMaterial::Rotation,
+        [-0.18, 0.62, -0.14],
+    )
+    .scaled([0.68, 0.55, 0.55]),
     BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Rotation, [0.18, 0.62, 0.14])
         .scaled([0.55, 0.55, 0.68]),
-    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Rotation, [0.18, 0.64, -0.34]),
-    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Rotation, [-0.18, 0.64, 0.34]),
+    BlockModelPart::new(
+        ModelMesh::Small,
+        ModelMaterial::Rotation,
+        [0.18, 0.64, -0.34],
+    ),
+    BlockModelPart::new(
+        ModelMesh::Small,
+        ModelMaterial::Rotation,
+        [-0.18, 0.64, 0.34],
+    ),
 ];
 
 pub struct RotatorBlock;

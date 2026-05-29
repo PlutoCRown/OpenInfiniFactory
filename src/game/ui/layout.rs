@@ -394,6 +394,9 @@ fn spawn_gameplay_settings(panel: &mut ChildBuilder, i18n: &I18n) {
     spawn_settings_row(panel, i18n, "settings.ui_scale_label", (), |controls| {
         spawn_settings_slider(controls, SettingsSlider::UiScale);
     });
+    spawn_settings_row(panel, i18n, "settings.gravity", (), |controls| {
+        spawn_settings_slider(controls, SettingsSlider::Gravity);
+    });
     spawn_settings_row(panel, i18n, "settings.language", (), |controls| {
         spawn_settings_dropdown(controls, SettingsDropdown::Language);
     });

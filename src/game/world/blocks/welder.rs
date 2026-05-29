@@ -8,7 +8,11 @@ const MODEL: &[BlockModelPart] = &[
     BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Welding, [0.0, 0.28, -0.34])
         .scaled([0.75, 0.75, 0.52]),
     BlockModelPart::new(ModelMesh::Small, ModelMaterial::Welding, [0.0, 0.30, -0.52]),
-    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::DarkFrame, [0.0, -0.50, 0.0]),
+    BlockModelPart::new(
+        ModelMesh::Plate,
+        ModelMaterial::DarkFrame,
+        [0.0, -0.50, 0.0],
+    ),
 ];
 
 pub struct WelderBlock;
@@ -25,8 +29,8 @@ impl Block for WelderBlock {
             self.id(),
             "block.welder",
             "short.welder",
-            rgb(0.76, 0.18, 0.16),
-            rgb(0.62, 0.12, 0.12),
+            rgb(0.14, 0.38, 0.74),
+            rgb(0.08, 0.26, 0.58),
         )
     }
 

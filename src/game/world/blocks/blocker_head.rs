@@ -3,10 +3,11 @@ use super::{
     SystemBlock,
 };
 
-const MODEL: &[BlockModelPart] = &[
-    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Power, [0.0, 0.0, 0.0])
-        .scaled([0.70, 1.15, 0.70]),
-];
+const MODEL: &[BlockModelPart] =
+    &[
+        BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Power, [0.0, 0.0, 0.0])
+            .scaled([0.70, 1.15, 0.70]),
+    ];
 
 pub struct BlockerHeadBlock;
 

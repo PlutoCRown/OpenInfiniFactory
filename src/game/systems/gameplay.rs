@@ -596,12 +596,12 @@ fn refresh_edit_generated_markers(world: &mut WorldBlocks) {
     let weld_points: Vec<(IVec3, IVec3, crate::game::world::direction::Facing)> = world
         .blocks
         .iter()
-        .filter_map(|(pos, block)| {
-            match block.kind.marker_behavior(block.facing) {
+        .filter_map(
+            |(pos, block)| match block.kind.marker_behavior(block.facing) {
                 Some(MarkerBehavior::WeldPoint { offset, facing }) => Some((*pos, offset, facing)),
                 _ => None,
-            }
-        })
+            },
+        )
         .collect();
 
     for (pos, offset, facing) in weld_points {

@@ -120,6 +120,7 @@ pub struct SettingsValueText(pub SettingsValue);
 pub enum SettingsValue {
     Fov,
     UiScale,
+    Gravity,
 }
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
@@ -147,6 +148,7 @@ pub struct ScrollContent;
 pub enum SettingsSlider {
     Fov,
     UiScale,
+    Gravity,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -199,6 +201,7 @@ pub enum SettingsAction {
     TabKeyBindings,
     FovSlider,
     UiScaleSlider,
+    GravitySlider,
     SetPlaceSelectionMode(ConfigSelectionMode),
     SetDeleteSelectionMode(ConfigSelectionMode),
     SetLanguage(Language),
@@ -358,9 +361,7 @@ impl InventoryItems {
 
     pub fn hotbar_index_of_block(&self, kind: BlockKind) -> Option<usize> {
         let item = Some(InventoryItem::Block(kind));
-        self.hotbar
-            .iter()
-            .position(|candidate| *candidate == item)
+        self.hotbar.iter().position(|candidate| *candidate == item)
     }
 
     pub fn set_hotbar_block(&mut self, index: usize, kind: BlockKind) {

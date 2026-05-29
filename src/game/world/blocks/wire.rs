@@ -4,11 +4,10 @@ use super::{
 };
 
 const MODEL: &[BlockModelPart] = &[
-    BlockModelPart::new(ModelMesh::RodX, ModelMaterial::Wire, [0.0, 0.54, 0.0])
-        .scaled([0.90, 0.70, 0.70]),
-    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Wire, [0.0, 0.54, 0.0])
-        .scaled([0.70, 0.70, 0.90]),
-    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Power, [0.0, 0.58, 0.0]),
+    BlockModelPart::new(ModelMesh::RodX, ModelMaterial::Wire, [0.0, 0.0, 0.0])
+        .scaled([1.03, 2.53, 2.53]),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Wire, [0.0, 0.0, 0.0])
+        .scaled([2.53, 2.53, 1.03]),
 ];
 
 pub struct WireBlock;

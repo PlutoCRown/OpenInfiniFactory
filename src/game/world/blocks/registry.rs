@@ -2,20 +2,20 @@ use super::{
     blocker::BLOCKER, blocker_head::BLOCKER_HEAD, converter::CONVERTER, conveyor::CONVEYOR,
     copper_material::COPPER_MATERIAL, counter_rotator::COUNTER_ROTATOR, detector::DETECTOR,
     dirt::DIRT, down_detector::DOWN_DETECTOR, down_welder::DOWN_WELDER, drill::DRILL,
-    drill_head::DRILL_HEAD, generator::GENERATOR, glass::GLASS, goal::GOAL, grass::GRASS,
-    iron_material::IRON_MATERIAL, laser::LASER, lifter::LIFTER, material::MATERIAL, piston::PISTON,
-    planks::PLANKS, reverse_conveyor::REVERSE_CONVEYOR, roller::ROLLER, rotator::ROTATOR,
-    solid::SOLID, stamper::STAMPER, stone::STONE, teleport_entrance::TELEPORT_ENTRANCE,
-    teleport_exit::TELEPORT_EXIT, weld_point::WELD_POINT, welder::WELDER, wire::WIRE, Block,
-    BlockKind, EditableBlock, FactoryBlock, MaterialBlock, MaterialKind, SceneBlock, SystemBlock,
+    drill_head::DRILL_HEAD, generator::GENERATOR, goal::GOAL, grass::GRASS,
+    iron_material::IRON_MATERIAL, laser::LASER, lifter::LIFTER, material::MATERIAL,
+    piston::PISTON, planks::PLANKS, reverse_conveyor::REVERSE_CONVEYOR, roller::ROLLER,
+    rotator::ROTATOR, solid::SOLID, stamper::STAMPER, stone::STONE,
+    teleport_entrance::TELEPORT_ENTRANCE, teleport_exit::TELEPORT_EXIT,
+    weld_point::WELD_POINT, welder::WELDER, wire::WIRE, Block, BlockKind, EditableBlock,
+    FactoryBlock, MaterialBlock, MaterialKind, SceneBlock, SystemBlock,
 };
 
-pub const EDIT_BLOCKS: [BlockKind; 12] = [
+pub const EDIT_BLOCKS: [BlockKind; 11] = [
     BlockKind::Grass,
     BlockKind::Stone,
     BlockKind::Dirt,
     BlockKind::Planks,
-    BlockKind::Glass,
     BlockKind::Generator,
     BlockKind::Goal,
     BlockKind::Stamper,
@@ -25,7 +25,7 @@ pub const EDIT_BLOCKS: [BlockKind; 12] = [
     BlockKind::TeleportExit,
 ];
 
-pub const EDITABLE_BLOCKS: [BlockKind; 12] = EDIT_BLOCKS;
+pub const EDITABLE_BLOCKS: [BlockKind; 11] = EDIT_BLOCKS;
 
 pub const PLAY_BLOCKS: [BlockKind; 15] = [
     BlockKind::Solid,
@@ -45,12 +45,11 @@ pub const PLAY_BLOCKS: [BlockKind; 15] = [
     BlockKind::Laser,
 ];
 
-pub const ALL_BLOCKS: [BlockKind; 33] = [
+pub const ALL_BLOCKS: [BlockKind; 32] = [
     BlockKind::Grass,
     BlockKind::Stone,
     BlockKind::Dirt,
     BlockKind::Planks,
-    BlockKind::Glass,
     BlockKind::Generator,
     BlockKind::Goal,
     BlockKind::Solid,
@@ -81,12 +80,11 @@ pub const ALL_BLOCKS: [BlockKind; 33] = [
     BlockKind::DrillHead,
 ];
 
-pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 33] = [
+pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 32] = [
     &GRASS,
     &STONE,
     &DIRT,
     &PLANKS,
-    &GLASS,
     &GENERATOR,
     &GOAL,
     &SOLID,
@@ -117,8 +115,8 @@ pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 33] = [
     &DRILL_HEAD,
 ];
 
-const SCENE_REGISTRY: [&'static (dyn SceneBlock + Send + Sync); 5] =
-    [&GRASS, &STONE, &DIRT, &PLANKS, &GLASS];
+const SCENE_REGISTRY: [&'static (dyn SceneBlock + Send + Sync); 4] =
+    [&GRASS, &STONE, &DIRT, &PLANKS];
 const FACTORY_REGISTRY: [&'static (dyn FactoryBlock + Send + Sync); 15] = [
     &SOLID,
     &WELDER,
@@ -150,12 +148,11 @@ const SYSTEM_REGISTRY: [&'static (dyn SystemBlock + Send + Sync); 10] = [
     &BLOCKER_HEAD,
     &DRILL_HEAD,
 ];
-const EDITABLE_REGISTRY: [&'static (dyn EditableBlock + Send + Sync); 12] = [
+const EDITABLE_REGISTRY: [&'static (dyn EditableBlock + Send + Sync); 11] = [
     &GRASS,
     &STONE,
     &DIRT,
     &PLANKS,
-    &GLASS,
     &GENERATOR,
     &GOAL,
     &STAMPER,

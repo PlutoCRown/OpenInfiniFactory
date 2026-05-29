@@ -7,7 +7,7 @@ pub mod world;
 
 use bevy::core_pipeline::experimental::taa::TemporalAntiAliasPlugin;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
-use bevy::pbr::DirectionalLightShadowMap;
+use bevy::pbr::{DirectionalLightShadowMap, MaterialPlugin};
 use bevy::prelude::*;
 
 use crate::shared::config::load_config;
@@ -35,6 +35,9 @@ pub struct GamePlugin;
 
 pub const UI_SCALE_MIN: f32 = 1.0;
 pub const UI_SCALE_MAX: f32 = 3.0;
+pub const GRAVITY_SCALE_MIN: f32 = 1.0;
+pub const GRAVITY_SCALE_MAX: f32 = 2.0;
+pub const GRAVITY_SCALE_DEFAULT: f32 = 1.2;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
@@ -42,10 +45,14 @@ impl Plugin for GamePlugin {
 
         let mut config = load_config();
         config.ui_scale = config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
+        config.gravity_scale = config
+            .gravity_scale
+            .clamp(GRAVITY_SCALE_MIN, GRAVITY_SCALE_MAX);
         let i18n = I18n::new(resolve_language(config.language));
         let settings = GameSettings {
             fov_degrees: config.fov_degrees,
             ui_scale: config.ui_scale,
+            gravity_scale: config.gravity_scale,
         };
 
         app.insert_resource(ClearColor(Color::srgb(0.58, 0.68, 0.76)))
@@ -77,6 +84,7 @@ impl Plugin for GamePlugin {
             .insert_resource(systems::debug::PerfStats::default())
             .insert_resource(CarriedItem::default())
             .add_plugins((FrameTimeDiagnosticsPlugin, TemporalAntiAliasPlugin))
+            .add_plugins(MaterialPlugin::<world::scene_material::SceneBlockMaterial>::default())
             .add_systems(
                 Startup,
                 (

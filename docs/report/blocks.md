@@ -44,7 +44,6 @@
 | Stone | 石头 | ❌ | `Block`, `SceneBlock` | 无 |
 | Dirt | 泥土 | ❌ | `Block`, `SceneBlock` | 无 |
 | Planks | 木板 | ❌ | `Block`, `SceneBlock` | 无 |
-| Glass | 玻璃 | ❌ | `Block`, `SceneBlock` | 无 |
 
 ## MaterialBlock
 

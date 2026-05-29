@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use bevy::render::camera::TemporalJitter;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 
-use crate::game::state::GameMode;
+use crate::game::state::{GameMode, GameSettings};
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::config::{ConfigAction, GameConfig};
 
@@ -75,6 +75,7 @@ pub fn camera_move(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     config: Res<GameConfig>,
+    settings: Res<GameSettings>,
     mode: Res<GameMode>,
     world: Res<WorldBlocks>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
@@ -149,7 +150,7 @@ pub fn camera_move(
             );
         }
     } else {
-        camera.velocity_y -= GRAVITY * time.delta_seconds();
+        camera.velocity_y -= GRAVITY * settings.gravity_scale * time.delta_seconds();
         let vertical_delta = Vec3::Y * camera.velocity_y * time.delta_seconds();
         let before = transform.translation;
         move_with_collision(&mut transform.translation, vertical_delta, &world);

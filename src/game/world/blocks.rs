@@ -2,8 +2,8 @@ mod registry;
 
 mod blocker;
 mod blocker_head;
-mod conveyor;
 mod converter;
+mod conveyor;
 mod copper_material;
 mod counter_rotator;
 mod detector;
@@ -13,7 +13,6 @@ mod down_welder;
 mod drill;
 mod drill_head;
 mod generator;
-mod glass;
 mod goal;
 mod grass;
 mod iron_material;
@@ -37,9 +36,9 @@ mod wire;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::game::world::grid::BlockSettings;
 pub use self::registry::{assert_registry_consistent, ALL_BLOCKS, EDIT_BLOCKS, PLAY_BLOCKS};
 pub use crate::game::world::direction::Facing;
+use crate::game::world::grid::BlockSettings;
 
 pub const BLOCK_SIZE: f32 = 1.0;
 pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
@@ -233,6 +232,8 @@ pub enum ModelMesh {
     RodX,
     RodY,
     RodZ,
+    PistonBody,
+    PistonHead,
 }
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
@@ -246,6 +247,7 @@ pub enum ModelMaterial {
     Signal,
     Power,
     Piston,
+    Wood,
     Lift,
     Rotation,
     Drill,
@@ -263,6 +265,7 @@ pub struct BlockModelPart {
     pub material: ModelMaterial,
     pub translation: [f32; 3],
     pub scale: [f32; 3],
+    pub yaw_radians: f32,
 }
 
 impl BlockModelPart {
@@ -272,11 +275,17 @@ impl BlockModelPart {
             material,
             translation,
             scale: [1.0, 1.0, 1.0],
+            yaw_radians: 0.0,
         }
     }
 
     pub const fn scaled(mut self, scale: [f32; 3]) -> Self {
         self.scale = scale;
+        self
+    }
+
+    pub const fn yawed(mut self, yaw_radians: f32) -> Self {
+        self.yaw_radians = yaw_radians;
         self
     }
 }
@@ -509,7 +518,6 @@ pub enum BlockKind {
     Stone,
     Dirt,
     Planks,
-    Glass,
     Generator,
     Welder,
     DownWelder,

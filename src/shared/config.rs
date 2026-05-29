@@ -15,6 +15,8 @@ pub struct GameConfig {
     pub fov_degrees: f32,
     #[serde(default = "default_ui_scale")]
     pub ui_scale: f32,
+    #[serde(default = "default_gravity_scale")]
+    pub gravity_scale: f32,
     #[serde(default)]
     pub language: Option<Language>,
     #[serde(default)]
@@ -29,6 +31,7 @@ impl Default for GameConfig {
         Self {
             fov_degrees: 70.0,
             ui_scale: default_ui_scale(),
+            gravity_scale: default_gravity_scale(),
             language: None,
             place_selection_mode: ConfigSelectionMode::Point,
             delete_selection_mode: ConfigSelectionMode::Point,
@@ -39,6 +42,10 @@ impl Default for GameConfig {
 
 fn default_ui_scale() -> f32 {
     1.0
+}
+
+fn default_gravity_scale() -> f32 {
+    1.2
 }
 
 fn default_alternate_key() -> ConfigKey {
@@ -321,7 +328,11 @@ impl GameConfig {
             ConfigAction::JumpOrFlyUp => self.key_bindings.jump_or_fly_up,
             ConfigAction::FlyDown => self.key_bindings.fly_down,
             ConfigAction::Place | ConfigAction::Delete | ConfigAction::Pick => {
-                return self.input(action).key_code().map(key_from_code).unwrap_or(ConfigKey::KeyI)
+                return self
+                    .input(action)
+                    .key_code()
+                    .map(key_from_code)
+                    .unwrap_or(ConfigKey::KeyI)
             }
         }
     }
@@ -331,7 +342,9 @@ impl GameConfig {
             ConfigAction::Pause => ConfigInput::Key(self.key_bindings.pause),
             ConfigAction::Inventory => ConfigInput::Key(self.key_bindings.inventory),
             ConfigAction::Alternate => ConfigInput::Key(self.key_bindings.alternate),
-            ConfigAction::RotateOrRollback => ConfigInput::Key(self.key_bindings.rotate_or_rollback),
+            ConfigAction::RotateOrRollback => {
+                ConfigInput::Key(self.key_bindings.rotate_or_rollback)
+            }
             ConfigAction::Simulate => ConfigInput::Key(self.key_bindings.simulate),
             ConfigAction::Debug => ConfigInput::Key(self.key_bindings.debug),
             ConfigAction::Forward => ConfigInput::Key(self.key_bindings.forward),

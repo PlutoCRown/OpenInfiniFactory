@@ -26,8 +26,8 @@ impl Block for DownWelderBlock {
             self.id(),
             "block.down_welder",
             "short.down_welder",
-            rgb(0.92, 0.32, 0.20),
-            rgb(0.78, 0.22, 0.14),
+            rgb(0.14, 0.38, 0.74),
+            rgb(0.08, 0.26, 0.58),
         )
     }
 
