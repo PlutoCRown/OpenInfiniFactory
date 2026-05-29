@@ -63,7 +63,7 @@ pub const ALL_BLOCKS: [BlockKind; 25] = [
     BlockKind::DrillHead,
 ];
 
-pub static BLOCK_REGISTRY: [&'static dyn Block; 25] = [
+pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 25] = [
     &GRASS,
     &STONE,
     &DIRT,
@@ -91,7 +91,7 @@ pub static BLOCK_REGISTRY: [&'static dyn Block; 25] = [
     &DRILL_HEAD,
 ];
 
-pub fn get(kind: BlockKind) -> &'static dyn Block {
+pub fn get(kind: BlockKind) -> &'static (dyn Block + Send + Sync) {
     BLOCK_REGISTRY
         .iter()
         .copied()

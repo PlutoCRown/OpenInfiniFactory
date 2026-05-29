@@ -1,4 +1,7 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock};
+use super::{
+    rgb, Block, BlockDefinition, BlockKind, FactoryBlock, RenderBehavior, SignalBehavior,
+    WireConnectorBehavior,
+};
 
 pub struct DetectorBlock;
 
@@ -20,12 +23,19 @@ impl Block for DetectorBlock {
         .directional()
     }
 
-    fn is_detector(&self) -> bool {
-        true
+    fn signal_behavior(&self, facing: super::Facing) -> Option<SignalBehavior> {
+        Some(SignalBehavior::Detector {
+            detection_pos: facing.forward_ivec3(),
+        })
     }
 
-    fn blocks_wire_connector(&self) -> bool {
-        true
+    fn render_behavior(&self, facing: super::Facing) -> RenderBehavior {
+        RenderBehavior {
+            wire_connector: Some(WireConnectorBehavior::Device {
+                blocked_offset: facing.forward_ivec3(),
+            }),
+            ..Default::default()
+        }
     }
 }
 

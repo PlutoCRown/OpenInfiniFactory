@@ -1,4 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, SystemBlock};
+use super::{rgb, Block, BlockDefinition, BlockKind, MaterialDestroyer, SystemBlock};
 
 pub struct DrillHeadBlock;
 
@@ -22,8 +22,8 @@ impl Block for DrillHeadBlock {
         .no_collision()
     }
 
-    fn is_drill_head(&self) -> bool {
-        true
+    fn material_destroyer(&self, _facing: super::Facing) -> Option<MaterialDestroyer> {
+        Some(MaterialDestroyer::AdjacentDrillHead)
     }
 }
 

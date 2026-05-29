@@ -1,4 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, SceneBlock};
+use super::{rgb, Block, BlockDefinition, BlockKind, MaterialSource, SceneBlock};
 
 pub struct GeneratorBlock;
 
@@ -20,8 +20,10 @@ impl Block for GeneratorBlock {
         .directional()
     }
 
-    fn is_generator(&self) -> bool {
-        true
+    fn material_source(&self, facing: super::Facing) -> Option<MaterialSource> {
+        Some(MaterialSource::Generator {
+            output: facing.forward_ivec3(),
+        })
     }
 }
 

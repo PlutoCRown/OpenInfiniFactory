@@ -1,4 +1,7 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock};
+use super::{
+    rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MaterialMover, RenderBehavior,
+    SignalBehavior, WireConnectorBehavior,
+};
 
 pub struct PistonBlock;
 
@@ -21,16 +24,24 @@ impl Block for PistonBlock {
         .alternate(BlockKind::Blocker)
     }
 
-    fn is_powered_device(&self) -> bool {
-        true
+    fn material_mover(&self, facing: super::Facing) -> Option<MaterialMover> {
+        Some(MaterialMover::Piston {
+            source: facing.forward_ivec3(),
+            offset: facing.forward_ivec3(),
+        })
     }
 
-    fn is_piston(&self) -> bool {
-        true
+    fn signal_behavior(&self, _facing: super::Facing) -> Option<SignalBehavior> {
+        Some(SignalBehavior::PoweredDevice)
     }
 
-    fn blocks_wire_connector(&self) -> bool {
-        true
+    fn render_behavior(&self, facing: super::Facing) -> RenderBehavior {
+        RenderBehavior {
+            wire_connector: Some(WireConnectorBehavior::Device {
+                blocked_offset: facing.forward_ivec3(),
+            }),
+            ..Default::default()
+        }
     }
 }
 

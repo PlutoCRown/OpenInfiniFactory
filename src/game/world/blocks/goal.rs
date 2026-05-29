@@ -1,4 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, SceneBlock};
+use super::{rgb, Block, BlockDefinition, BlockKind, RenderBehavior, SceneBlock};
 
 pub struct GoalBlock;
 
@@ -19,8 +19,11 @@ impl Block for GoalBlock {
         )
     }
 
-    fn has_goal_topper(&self) -> bool {
-        true
+    fn render_behavior(&self, _facing: super::Facing) -> RenderBehavior {
+        RenderBehavior {
+            goal_topper: true,
+            ..Default::default()
+        }
     }
 }
 

@@ -29,90 +29,42 @@ mod wire;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-pub use crate::game::world::direction::{Facing, RotationDirection};
+pub use crate::game::world::direction::Facing;
 pub use self::registry::{ALL_BLOCKS, EDIT_BLOCKS, PLAY_BLOCKS};
 
 pub const BLOCK_SIZE: f32 = 1.0;
 pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
 
-pub trait Block: Sync {
+pub trait Block: Send + Sync {
     fn id(&self) -> BlockKind;
     fn definition(&self) -> BlockDefinition;
 
-    fn weld_marker(&self, _facing: Facing) -> Option<(IVec3, Facing)> {
+    fn marker_behavior(&self, _facing: Facing) -> Option<MarkerBehavior> {
         None
     }
 
-    fn blocker_marker(&self, _facing: Facing) -> Option<(IVec3, Facing)> {
+    fn material_source(&self, _facing: Facing) -> Option<MaterialSource> {
         None
     }
 
-    fn drill_marker(&self, _facing: Facing) -> Option<(IVec3, Facing)> {
+    fn material_mover(&self, _facing: Facing) -> Option<MaterialMover> {
         None
     }
 
-    fn conveyor_source_offset(&self) -> Option<IVec3> {
+    fn material_destroyer(&self, _facing: Facing) -> Option<MaterialDestroyer> {
         None
     }
 
-    fn rotation_direction(&self) -> Option<RotationDirection> {
+    fn weld_behavior(&self) -> Option<WeldBehavior> {
         None
     }
 
-    fn is_wire(&self) -> bool {
-        false
+    fn signal_behavior(&self, _facing: Facing) -> Option<SignalBehavior> {
+        None
     }
 
-    fn is_detector(&self) -> bool {
-        false
-    }
-
-    fn is_generator(&self) -> bool {
-        false
-    }
-
-    fn is_weld_point(&self) -> bool {
-        false
-    }
-
-    fn is_blocker_head(&self) -> bool {
-        false
-    }
-
-    fn is_drill_head(&self) -> bool {
-        false
-    }
-
-    fn has_goal_topper(&self) -> bool {
-        false
-    }
-
-    fn is_powered_device(&self) -> bool {
-        false
-    }
-
-    fn is_lifter(&self) -> bool {
-        false
-    }
-
-    fn is_piston(&self) -> bool {
-        false
-    }
-
-    fn is_drill(&self) -> bool {
-        false
-    }
-
-    fn is_laser(&self) -> bool {
-        false
-    }
-
-    fn blocks_wire_connector(&self) -> bool {
-        false
-    }
-
-    fn connects_to_weld_point(&self, _block: BlockData, _connector_from_block: IVec3) -> bool {
-        false
+    fn render_behavior(&self, _facing: Facing) -> RenderBehavior {
+        RenderBehavior::default()
     }
 }
 
@@ -154,6 +106,64 @@ enum SystemBlockRole {
 pub enum BlockShape {
     Cube,
     Node,
+}
+
+#[derive(Clone, Copy)]
+pub enum MarkerBehavior {
+    WeldPoint { offset: IVec3, facing: Facing },
+    BlockerHead { offset: IVec3, facing: Facing },
+    DrillHead { offset: IVec3, facing: Facing },
+}
+
+#[derive(Clone, Copy)]
+pub enum MaterialSource {
+    Generator { output: IVec3 },
+}
+
+#[derive(Clone, Copy)]
+pub enum MaterialMover {
+    Conveyor { source: IVec3, offset: IVec3 },
+    Lifter,
+    Rotator { clockwise: bool },
+    Piston { source: IVec3, offset: IVec3 },
+}
+
+#[derive(Clone, Copy)]
+pub enum MaterialDestroyer {
+    Drill { target: IVec3 },
+    AdjacentDrillHead,
+    Laser { direction: IVec3, range: i32 },
+}
+
+#[derive(Clone, Copy)]
+pub enum WeldBehavior {
+    Node,
+}
+
+#[derive(Clone, Copy)]
+pub enum SignalBehavior {
+    Wire,
+    Detector { detection_pos: IVec3 },
+    PoweredDevice,
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct RenderBehavior {
+    pub goal_topper: bool,
+    pub weld_connector: Option<WeldConnectorBehavior>,
+    pub wire_connector: Option<WireConnectorBehavior>,
+}
+
+#[derive(Clone, Copy)]
+pub enum WeldConnectorBehavior {
+    AllSides,
+    Offset(IVec3),
+}
+
+#[derive(Clone, Copy)]
+pub enum WireConnectorBehavior {
+    Wire,
+    Device { blocked_offset: IVec3 },
 }
 
 #[derive(Clone, Copy)]
@@ -374,7 +384,7 @@ pub enum BlockKind {
 }
 
 impl BlockKind {
-    fn block(self) -> &'static dyn Block {
+    fn block(self) -> &'static (dyn Block + Send + Sync) {
         registry::get(self)
     }
 
@@ -414,6 +424,10 @@ impl BlockKind {
         self.definition().collision
     }
 
+    pub fn blocks_laser(self) -> bool {
+        self.has_collision() && !self.is_material()
+    }
+
     pub fn is_factory(self) -> bool {
         self.definition().class() == BlockClass::Factory
     }
@@ -434,80 +448,31 @@ impl BlockKind {
         self.definition().alternate
     }
 
-    pub fn weld_marker(self, facing: Facing) -> Option<(IVec3, Facing)> {
-        self.block().weld_marker(facing)
+    pub fn marker_behavior(self, facing: Facing) -> Option<MarkerBehavior> {
+        self.block().marker_behavior(facing)
     }
 
-    pub fn blocker_marker(self, facing: Facing) -> Option<(IVec3, Facing)> {
-        self.block().blocker_marker(facing)
+    pub fn material_source(self, facing: Facing) -> Option<MaterialSource> {
+        self.block().material_source(facing)
     }
 
-    pub fn drill_marker(self, facing: Facing) -> Option<(IVec3, Facing)> {
-        self.block().drill_marker(facing)
+    pub fn material_mover(self, facing: Facing) -> Option<MaterialMover> {
+        self.block().material_mover(facing)
     }
 
-    pub fn conveyor_source_offset(self) -> Option<IVec3> {
-        self.block().conveyor_source_offset()
+    pub fn material_destroyer(self, facing: Facing) -> Option<MaterialDestroyer> {
+        self.block().material_destroyer(facing)
     }
 
-    pub fn rotation_direction(self) -> Option<RotationDirection> {
-        self.block().rotation_direction()
+    pub fn weld_behavior(self) -> Option<WeldBehavior> {
+        self.block().weld_behavior()
     }
 
-    pub fn is_wire(self) -> bool {
-        self.block().is_wire()
+    pub fn signal_behavior(self, facing: Facing) -> Option<SignalBehavior> {
+        self.block().signal_behavior(facing)
     }
 
-    pub fn is_detector(self) -> bool {
-        self.block().is_detector()
-    }
-
-    pub fn is_generator(self) -> bool {
-        self.block().is_generator()
-    }
-
-    pub fn is_weld_point(self) -> bool {
-        self.block().is_weld_point()
-    }
-
-    pub fn is_blocker_head(self) -> bool {
-        self.block().is_blocker_head()
-    }
-
-    pub fn is_drill_head(self) -> bool {
-        self.block().is_drill_head()
-    }
-
-    pub fn has_goal_topper(self) -> bool {
-        self.block().has_goal_topper()
-    }
-
-    pub fn is_powered_device(self) -> bool {
-        self.block().is_powered_device()
-    }
-
-    pub fn is_lifter(self) -> bool {
-        self.block().is_lifter()
-    }
-
-    pub fn is_piston(self) -> bool {
-        self.block().is_piston()
-    }
-
-    pub fn is_drill(self) -> bool {
-        self.block().is_drill()
-    }
-
-    pub fn is_laser(self) -> bool {
-        self.block().is_laser()
-    }
-
-    pub fn blocks_wire_connector(self) -> bool {
-        self.block().blocks_wire_connector()
-    }
-
-    pub fn connects_to_weld_point(self, block: BlockData, connector_from_block: IVec3) -> bool {
-        self.block()
-            .connects_to_weld_point(block, connector_from_block)
+    pub fn render_behavior(self, facing: Facing) -> RenderBehavior {
+        self.block().render_behavior(facing)
     }
 }

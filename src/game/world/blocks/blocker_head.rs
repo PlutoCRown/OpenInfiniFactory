@@ -19,9 +19,6 @@ impl Block for BlockerHeadBlock {
         )
     }
 
-    fn is_blocker_head(&self) -> bool {
-        true
-    }
 }
 
 impl SystemBlock for BlockerHeadBlock {}

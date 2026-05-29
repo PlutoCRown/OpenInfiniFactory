@@ -288,7 +288,7 @@ pub fn update_carried_item_ui(
 pub fn update_scroll_containers(
     mode: Res<GameMode>,
     settings_tab: Res<SettingsTab>,
-    mouse_wheel: EventReader<MouseWheel>,
+    mut mouse_wheel: EventReader<MouseWheel>,
     mut containers: Query<(&mut ScrollContainer, &Children, &Node)>,
     mut contents: Query<(&mut Style, &Node), With<ScrollContent>>,
 ) {

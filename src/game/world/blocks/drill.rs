@@ -1,6 +1,7 @@
-use bevy::prelude::*;
-
-use super::{rgb, Block, BlockDefinition, BlockKind, Facing, FactoryBlock};
+use super::{
+    rgb, Block, BlockDefinition, BlockKind, Facing, FactoryBlock, MarkerBehavior,
+    MaterialDestroyer, RenderBehavior, SignalBehavior, WireConnectorBehavior,
+};
 
 pub struct DrillBlock;
 
@@ -23,20 +24,30 @@ impl Block for DrillBlock {
         .alternate(BlockKind::Laser)
     }
 
-    fn drill_marker(&self, facing: Facing) -> Option<(IVec3, Facing)> {
-        Some((facing.forward_ivec3(), facing))
+    fn marker_behavior(&self, facing: Facing) -> Option<MarkerBehavior> {
+        Some(MarkerBehavior::DrillHead {
+            offset: facing.forward_ivec3(),
+            facing,
+        })
     }
 
-    fn is_powered_device(&self) -> bool {
-        true
+    fn material_destroyer(&self, facing: Facing) -> Option<MaterialDestroyer> {
+        Some(MaterialDestroyer::Drill {
+            target: facing.forward_ivec3(),
+        })
     }
 
-    fn is_drill(&self) -> bool {
-        true
+    fn signal_behavior(&self, _facing: Facing) -> Option<SignalBehavior> {
+        Some(SignalBehavior::PoweredDevice)
     }
 
-    fn blocks_wire_connector(&self) -> bool {
-        true
+    fn render_behavior(&self, facing: Facing) -> RenderBehavior {
+        RenderBehavior {
+            wire_connector: Some(WireConnectorBehavior::Device {
+                blocked_offset: facing.forward_ivec3(),
+            }),
+            ..Default::default()
+        }
     }
 }
 

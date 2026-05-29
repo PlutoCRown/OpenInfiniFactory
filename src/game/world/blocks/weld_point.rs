@@ -1,6 +1,7 @@
-use bevy::prelude::*;
-
-use super::{rgb, rgba, Block, BlockData, BlockDefinition, BlockKind, SystemBlock};
+use super::{
+    rgb, rgba, Block, BlockDefinition, BlockKind, RenderBehavior, SystemBlock,
+    WeldBehavior, WeldConnectorBehavior,
+};
 
 pub struct WeldPointBlock;
 
@@ -24,12 +25,15 @@ impl Block for WeldPointBlock {
         .no_collision()
     }
 
-    fn is_weld_point(&self) -> bool {
-        true
+    fn render_behavior(&self, _facing: super::Facing) -> RenderBehavior {
+        RenderBehavior {
+            weld_connector: Some(WeldConnectorBehavior::AllSides),
+            ..Default::default()
+        }
     }
 
-    fn connects_to_weld_point(&self, _block: BlockData, _connector_from_block: IVec3) -> bool {
-        true
+    fn weld_behavior(&self) -> Option<WeldBehavior> {
+        Some(WeldBehavior::Node)
     }
 }
 

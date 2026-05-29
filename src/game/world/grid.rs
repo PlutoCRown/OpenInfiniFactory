@@ -113,7 +113,7 @@ impl WorldBlocks {
         if !self
             .blocks
             .get(&pos)
-            .is_some_and(|block| block.kind.is_generator())
+            .is_some_and(|block| block.kind.material_source(block.facing).is_some())
         {
             return;
         }

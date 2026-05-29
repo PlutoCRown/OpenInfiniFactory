@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::game::world::animation::{AnimatedBlock, BlockAnimation, EDIT_ANIMATION_SECONDS};
-use crate::game::world::blocks::{BlockData, BlockKind};
+use crate::game::world::blocks::{BlockData, WeldConnectorBehavior, WireConnectorBehavior};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
@@ -262,7 +262,9 @@ fn spawn_block_model(
             });
         }
 
-        if data.kind.has_goal_topper() {
+        let render_behavior = data.kind.render_behavior(data.facing);
+
+        if render_behavior.goal_topper {
             parent.spawn(PbrBundle {
                 mesh: assets.goal_top.clone(),
                 material: assets.goal_top_material.clone(),
@@ -271,13 +273,17 @@ fn spawn_block_model(
             });
         }
 
-        if data.kind.is_weld_point() {
-            for offset in signal_offsets() {
+        if let Some(weld_connector) = render_behavior.weld_connector {
+            let offsets = match weld_connector {
+                WeldConnectorBehavior::AllSides => signal_offsets().to_vec(),
+                WeldConnectorBehavior::Offset(offset) => vec![offset],
+            };
+            for offset in offsets {
                 let neighbor = pos + offset;
                 if world
                     .blocks
                     .get(&neighbor)
-                    .is_some_and(|block| weld_point_connects_to(block, -offset))
+                    .is_some_and(|block| weld_connects_to(block, -offset))
                 {
                     let local_offset = local_connector_offset(data, offset);
                     parent.spawn(PbrBundle {
@@ -290,7 +296,7 @@ fn spawn_block_model(
             }
         }
 
-        if data.kind.is_wire() {
+        if render_behavior.wire_connector.is_some() {
             for offset in signal_offsets() {
                 let neighbor = pos + offset;
                 if world
@@ -311,10 +317,12 @@ fn spawn_block_model(
     });
 }
 
-fn weld_point_connects_to(block: &BlockData, connector_from_block: IVec3) -> bool {
-    block
-        .kind
-        .connects_to_weld_point(*block, connector_from_block)
+fn weld_connects_to(block: &BlockData, connector_from_block: IVec3) -> bool {
+    match block.kind.render_behavior(block.facing).weld_connector {
+        Some(WeldConnectorBehavior::AllSides) => true,
+        Some(WeldConnectorBehavior::Offset(offset)) => connector_from_block == offset,
+        None => false,
+    }
 }
 
 fn local_connector_offset(data: BlockData, offset: IVec3) -> IVec3 {
@@ -326,10 +334,12 @@ fn local_connector_offset(data: BlockData, offset: IVec3) -> IVec3 {
 }
 
 fn wire_connects_to(block: &BlockData, wire_from_block: IVec3) -> bool {
-    match block.kind {
-        kind if kind.is_wire() => true,
-        kind if kind.blocks_wire_connector() => wire_from_block != block.facing.forward_ivec3(),
-        _ => false,
+    match block.kind.render_behavior(block.facing).wire_connector {
+        Some(WireConnectorBehavior::Wire) => true,
+        Some(WireConnectorBehavior::Device { blocked_offset }) => {
+            wire_from_block != blocked_offset
+        }
+        None => false,
     }
 }
 

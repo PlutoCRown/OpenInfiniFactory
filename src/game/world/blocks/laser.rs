@@ -1,4 +1,7 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock};
+use super::{
+    rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MaterialDestroyer, RenderBehavior,
+    SignalBehavior, WireConnectorBehavior,
+};
 
 pub struct LaserBlock;
 
@@ -21,16 +24,24 @@ impl Block for LaserBlock {
         .alternate(BlockKind::Drill)
     }
 
-    fn is_powered_device(&self) -> bool {
-        true
+    fn material_destroyer(&self, facing: super::Facing) -> Option<MaterialDestroyer> {
+        Some(MaterialDestroyer::Laser {
+            direction: facing.forward_ivec3(),
+            range: 30,
+        })
     }
 
-    fn is_laser(&self) -> bool {
-        true
+    fn signal_behavior(&self, _facing: super::Facing) -> Option<SignalBehavior> {
+        Some(SignalBehavior::PoweredDevice)
     }
 
-    fn blocks_wire_connector(&self) -> bool {
-        true
+    fn render_behavior(&self, facing: super::Facing) -> RenderBehavior {
+        RenderBehavior {
+            wire_connector: Some(WireConnectorBehavior::Device {
+                blocked_offset: facing.forward_ivec3(),
+            }),
+            ..Default::default()
+        }
     }
 }
 

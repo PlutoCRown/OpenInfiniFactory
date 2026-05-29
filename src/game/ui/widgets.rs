@@ -395,21 +395,8 @@ pub(super) fn scroll_container(height: f32) -> (NodeBundle, ScrollContainer) {
     )
 }
 
-pub(super) fn scroll_content() -> (NodeBundle, ScrollContent) {
-    (
-        NodeBundle {
-            style: Style {
-                width: Val::Percent(100.0),
-                position_type: PositionType::Absolute,
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(6.0),
-                ..default()
-            },
-            background_color: Color::NONE.into(),
-            ..default()
-        },
-        ScrollContent,
-    )
+pub(super) fn scroll_content() -> ScrollContent {
+    ScrollContent
 }
 
 pub(super) fn spawn_save_slot_button(parent: &mut ChildBuilder, index: usize) {

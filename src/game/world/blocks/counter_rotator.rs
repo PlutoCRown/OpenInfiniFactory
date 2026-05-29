@@ -1,4 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock, RotationDirection};
+use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MaterialMover};
 
 pub struct CounterRotatorBlock;
 
@@ -21,8 +21,8 @@ impl Block for CounterRotatorBlock {
         .alternate(BlockKind::Rotator)
     }
 
-    fn rotation_direction(&self) -> Option<RotationDirection> {
-        Some(RotationDirection::CounterClockwise)
+    fn material_mover(&self, _facing: super::Facing) -> Option<MaterialMover> {
+        Some(MaterialMover::Rotator { clockwise: false })
     }
 }
 

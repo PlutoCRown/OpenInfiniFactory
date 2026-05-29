@@ -1,4 +1,7 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock};
+use super::{
+    rgb, Block, BlockDefinition, BlockKind, FactoryBlock, RenderBehavior, SignalBehavior,
+    WireConnectorBehavior,
+};
 
 pub struct WireBlock;
 
@@ -20,8 +23,15 @@ impl Block for WireBlock {
         .node()
     }
 
-    fn is_wire(&self) -> bool {
-        true
+    fn signal_behavior(&self, _facing: super::Facing) -> Option<SignalBehavior> {
+        Some(SignalBehavior::Wire)
+    }
+
+    fn render_behavior(&self, _facing: super::Facing) -> RenderBehavior {
+        RenderBehavior {
+            wire_connector: Some(WireConnectorBehavior::Wire),
+            ..Default::default()
+        }
     }
 }
 

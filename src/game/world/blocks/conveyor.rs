@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock};
+use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MaterialMover};
 
 pub struct ConveyorBlock;
 
@@ -23,8 +23,11 @@ impl Block for ConveyorBlock {
         .alternate(BlockKind::ReverseConveyor)
     }
 
-    fn conveyor_source_offset(&self) -> Option<IVec3> {
-        Some(IVec3::Y)
+    fn material_mover(&self, facing: super::Facing) -> Option<MaterialMover> {
+        Some(MaterialMover::Conveyor {
+            source: IVec3::Y,
+            offset: facing.forward_ivec3(),
+        })
     }
 }
 

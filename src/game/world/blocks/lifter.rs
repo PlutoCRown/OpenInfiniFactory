@@ -1,4 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock};
+use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock, MaterialMover};
 
 pub struct LifterBlock;
 
@@ -20,8 +20,8 @@ impl Block for LifterBlock {
         .directional()
     }
 
-    fn is_lifter(&self) -> bool {
-        true
+    fn material_mover(&self, _facing: super::Facing) -> Option<MaterialMover> {
+        Some(MaterialMover::Lifter)
     }
 }
 

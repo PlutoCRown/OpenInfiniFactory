@@ -10,13 +10,12 @@ use super::components::{
 };
 use super::theme::{absolute_text_bundle, panel_bundle, STATUS_TEXT};
 use super::types::{
-    BackpackPanel, CarriedIcon, CarriedLabel, Crosshair, CurrentSaveText, DeleteSelectionModeText,
-    FovText, GeneratorAction, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText,
-    HotbarText, InGameHudStyle, InGameHudVisibility, InventoryTitle, MainMenuAction, MainMenuPanel,
-    PauseAction, PausePanel, PlaceSelectionModeText, SaveListPanel, SaveListTitle, SettingsAction,
-    SettingsDropdown, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
-    SettingsSlider, SettingsStatusText, SimulationText, SlotArea, UiScaleText, BACKPACK_SLOTS,
-    HOTBAR_SLOTS,
+    BackpackPanel, CarriedIcon, CarriedLabel, Crosshair, CurrentSaveText, GeneratorAction,
+    GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText, HotbarText, InGameHudStyle,
+    InGameHudVisibility, InventoryTitle, MainMenuAction, MainMenuPanel, PauseAction, PausePanel,
+    SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdown, SettingsGameplayGroup,
+    SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider, SettingsStatusText, SimulationText,
+    SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::widgets::{
     spawn_generator_button, spawn_localized_main_button, spawn_localized_pause_button,
@@ -447,6 +446,7 @@ fn key_bindings_grid_bundle() -> NodeBundle {
         display: Display::Grid,
         grid_template_columns: RepeatedGridTrack::flex(2, 1.0),
         grid_template_rows: RepeatedGridTrack::flex(6, 1.0),
+        position_type: PositionType::Absolute,
         width: Val::Percent(100.0),
         height: Val::Px(360.0),
         row_gap: Val::Px(6.0),

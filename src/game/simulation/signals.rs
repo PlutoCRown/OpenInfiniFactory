@@ -1,8 +1,7 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::game::world::blocks::BlockKind;
-use crate::game::world::direction::Facing;
+use crate::game::world::blocks::SignalBehavior;
 use crate::game::world::grid::WorldBlocks;
 
 use super::signal_offsets;
@@ -29,7 +28,9 @@ impl SignalNetworkCache {
         self.initialized = true;
 
         for (&pos, block) in &world.blocks {
-            if !block.kind.is_wire() || self.wire_components.contains_key(&pos) {
+            if !matches!(block.kind.signal_behavior(block.facing), Some(SignalBehavior::Wire))
+                || self.wire_components.contains_key(&pos)
+            {
                 continue;
             }
 
@@ -41,7 +42,7 @@ impl SignalNetworkCache {
             while let Some(wire_pos) = queue.pop_front() {
                 for offset in signal_offsets() {
                     let neighbor = wire_pos + offset;
-                    if is_wire_at(world, neighbor)
+                    if carries_signal_at(world, neighbor)
                         && self.wire_components.insert(neighbor, component).is_none()
                     {
                         queue.push_back(neighbor);
@@ -51,18 +52,22 @@ impl SignalNetworkCache {
         }
 
         for (&pos, block) in &world.blocks {
-            if block.kind.is_detector() {
-                self.cache_detector(pos, block.facing);
-            } else if block.kind.is_powered_device() {
-                self.cache_powered_device(pos, block.facing);
+            match block.kind.signal_behavior(block.facing) {
+                Some(SignalBehavior::Detector { detection_pos }) => {
+                    self.cache_detector(pos, detection_pos);
+                }
+                Some(SignalBehavior::PoweredDevice) => {
+                    self.cache_powered_device(pos, block.facing.forward_ivec3());
+                }
+                Some(SignalBehavior::Wire) | None => {}
             }
         }
     }
 
-    fn cache_detector(&mut self, pos: IVec3, facing: Facing) {
+    fn cache_detector(&mut self, pos: IVec3, blocked_offset: IVec3) {
         let mut connected_components = HashSet::new();
         for offset in signal_offsets() {
-            if offset == facing.forward_ivec3() {
+            if offset == blocked_offset {
                 continue;
             }
 
@@ -75,11 +80,11 @@ impl SignalNetworkCache {
         }
     }
 
-    fn cache_powered_device(&mut self, pos: IVec3, facing: Facing) {
+    fn cache_powered_device(&mut self, pos: IVec3, blocked_offset: IVec3) {
         let mut components = Vec::new();
         let mut seen = HashSet::new();
         for offset in signal_offsets() {
-            if offset == facing.forward_ivec3() {
+            if offset == blocked_offset {
                 continue;
             }
 
@@ -109,16 +114,16 @@ impl SignalNetworkCache {
             .collect()
     }
 
-    pub(super) fn is_device_powered(
-        &self,
-        pos: IVec3,
-        powered_components: &HashSet<usize>,
-    ) -> bool {
-        self.device_components.get(&pos).is_some_and(|components| {
-            components
-                .iter()
-                .any(|component| powered_components.contains(component))
-        })
+    pub(super) fn powered_devices(&self, powered_components: &HashSet<usize>) -> HashSet<IVec3> {
+        self.device_components
+            .iter()
+            .filter_map(|(pos, components)| {
+                components
+                    .iter()
+                    .any(|component| powered_components.contains(component))
+                    .then_some(*pos)
+            })
+            .collect()
     }
 }
 
@@ -126,20 +131,19 @@ fn detector_is_active(world: &WorldBlocks, pos: IVec3) -> bool {
     let Some(block) = world.blocks.get(&pos) else {
         return false;
     };
-    if !block.kind.is_detector() {
+    let Some(SignalBehavior::Detector { detection_pos }) = block.kind.signal_behavior(block.facing)
+    else {
         return false;
-    }
+    };
 
-    let detected_pos = pos + block.facing.forward_ivec3();
-    world
-        .blocks
-        .get(&detected_pos)
-        .is_some_and(|detected| detected.kind.is_material())
+    world.is_material_at(pos + detection_pos)
 }
 
-fn is_wire_at(world: &WorldBlocks, pos: IVec3) -> bool {
-    world
-        .blocks
-        .get(&pos)
-        .is_some_and(|block| block.kind.is_wire())
+fn carries_signal_at(world: &WorldBlocks, pos: IVec3) -> bool {
+    world.blocks.get(&pos).is_some_and(|block| {
+        matches!(
+            block.kind.signal_behavior(block.facing),
+            Some(SignalBehavior::Wire)
+        )
+    })
 }

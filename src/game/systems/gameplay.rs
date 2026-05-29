@@ -8,7 +8,7 @@ use crate::game::state::{
 };
 use crate::game::ui::{AreaKind, CarriedItem, InventoryItems, PendingKeyBind, HOTBAR_SLOTS};
 use crate::game::world::animation::BlockAnimation;
-use crate::game::world::blocks::{BlockData, BlockKind};
+use crate::game::world::blocks::{BlockData, BlockKind, MarkerBehavior, MaterialSource};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::{
     despawn_edit_previews, rebuild_world, rebuild_world_with_animations, spawn_block_preview,
@@ -155,7 +155,12 @@ pub fn placement_input(
             world
                 .blocks
                 .get(&pos)
-                .is_some_and(|block| block.kind.is_generator())
+                .is_some_and(|block| {
+                    matches!(
+                        block.kind.material_source(block.facing),
+                        Some(MaterialSource::Generator { .. })
+                    )
+                })
         })
     {
         placement.generator_panel = current_target_pos;
@@ -498,18 +503,18 @@ fn despawn_block_entities(commands: &mut Commands, block_entities: &Query<(Entit
 
 fn refresh_edit_generated_markers(world: &mut WorldBlocks) {
     world.clear_generated_markers();
-    let welders: Vec<(IVec3, IVec3, crate::game::world::direction::Facing)> = world
+    let weld_points: Vec<(IVec3, IVec3, crate::game::world::direction::Facing)> = world
         .blocks
         .iter()
         .filter_map(|(pos, block)| {
-            block
-                .kind
-                .weld_marker(block.facing)
-                .map(|(offset, facing)| (*pos, offset, facing))
+            match block.kind.marker_behavior(block.facing) {
+                Some(MarkerBehavior::WeldPoint { offset, facing }) => Some((*pos, offset, facing)),
+                _ => None,
+            }
         })
         .collect();
 
-    for (pos, offset, facing) in welders {
+    for (pos, offset, facing) in weld_points {
         let point_pos = pos + offset;
         if !world.is_occupied(point_pos) {
             world.insert(

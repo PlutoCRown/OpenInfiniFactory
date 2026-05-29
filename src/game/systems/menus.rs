@@ -215,7 +215,7 @@ pub fn settings_menu_actions(
     mut open_dropdown: ResMut<OpenSettingsDropdown>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut interactions: Query<
-        (&Interaction, &SettingsAction, &Node, &GlobalTransform),
+        (Ref<Interaction>, &SettingsAction, &Node, &GlobalTransform),
         With<Button>,
     >,
 ) {

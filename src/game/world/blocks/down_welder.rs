@@ -1,6 +1,9 @@
 use bevy::prelude::*;
 
-use super::{rgb, Block, BlockData, BlockDefinition, BlockKind, Facing, FactoryBlock};
+use super::{
+    rgb, Block, BlockDefinition, BlockKind, Facing, FactoryBlock, MarkerBehavior, RenderBehavior,
+    WeldConnectorBehavior,
+};
 
 pub struct DownWelderBlock;
 
@@ -22,12 +25,18 @@ impl Block for DownWelderBlock {
         .alternate(BlockKind::Welder)
     }
 
-    fn weld_marker(&self, _facing: Facing) -> Option<(IVec3, Facing)> {
-        Some((IVec3::NEG_Y, Facing::North))
+    fn marker_behavior(&self, _facing: Facing) -> Option<MarkerBehavior> {
+        Some(MarkerBehavior::WeldPoint {
+            offset: IVec3::NEG_Y,
+            facing: Facing::North,
+        })
     }
 
-    fn connects_to_weld_point(&self, _block: BlockData, connector_from_block: IVec3) -> bool {
-        connector_from_block == IVec3::NEG_Y
+    fn render_behavior(&self, _facing: Facing) -> RenderBehavior {
+        RenderBehavior {
+            weld_connector: Some(WeldConnectorBehavior::Offset(IVec3::NEG_Y)),
+            ..Default::default()
+        }
     }
 }
 
