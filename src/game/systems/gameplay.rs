@@ -894,7 +894,7 @@ pub fn update_hover(
 
 fn can_place_in_mode(kind: BlockKind, mode: BuilderMode) -> bool {
     match mode {
-        BuilderMode::Edit => kind.is_scene(),
+        BuilderMode::Edit => kind.is_editable(),
         BuilderMode::Play => kind.is_factory(),
     }
 }

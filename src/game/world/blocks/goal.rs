@@ -1,4 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, RenderBehavior, SceneBlock};
+use super::{rgb, Block, BlockDefinition, BlockKind, EditableBlock, RenderBehavior, SystemBlock};
 
 pub struct GoalBlock;
 
@@ -10,7 +10,7 @@ impl Block for GoalBlock {
     }
 
     fn definition(&self) -> BlockDefinition {
-        BlockDefinition::scene(
+        BlockDefinition::marker(
             self.id(),
             "block.goal",
             "short.goal",
@@ -27,4 +27,5 @@ impl Block for GoalBlock {
     }
 }
 
-impl SceneBlock for GoalBlock {}
+impl SystemBlock for GoalBlock {}
+impl EditableBlock for GoalBlock {}

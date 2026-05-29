@@ -1,6 +1,6 @@
 # Blocks
 
-Total: 25
+Total: 28
 
 ## SceneBlock
 
@@ -11,8 +11,14 @@ Total: 25
 | Dirt | 泥土 | ❌ | `Block`, `SceneBlock` |
 | Planks | 木板 | ❌ | `Block`, `SceneBlock` |
 | Glass | 玻璃 | ❌ | `Block`, `SceneBlock` |
-| Generator | 生成器 | ✅ | `Block`, `SceneBlock` |
-| Goal | 目标 | ❌ | `Block`, `SceneBlock` |
+
+## MaterialBlock
+
+| 方块 | 中文名 | 可四向旋转 | 可被生成器选择 | 实现 Trait |
+| --- | --- | --- | --- | --- |
+| Material | 材料 | ❌ | ✅ | `Block`, `MaterialBlock` |
+| Iron Material | 铁材料 | ❌ | ✅ | `Block`, `MaterialBlock` |
+| Copper Material | 铜材料 | ❌ | ✅ | `Block`, `MaterialBlock` |
 
 ## FactoryBlock
 
@@ -23,7 +29,8 @@ Total: 25
 | Down Welder | 向下焊接器 | ❌ | Welder | `Block`, `FactoryBlock` |
 | Conveyor | 传送带 | ✅ | Reverse Conveyor | `Block`, `FactoryBlock` |
 | Reverse Conveyor | 反向传送带 | ✅ | Conveyor | `Block`, `FactoryBlock` |
-| Detector | 方块识别器 | ✅ |  | `Block`, `FactoryBlock` |
+| Detector | 方块识别器 | ✅ | Down Detector | `Block`, `FactoryBlock` |
+| Down Detector | 向下方块识别器 | ❌ | Detector | `Block`, `FactoryBlock` |
 | Wire | 电线 | ❌ |  | `Block`, `FactoryBlock` |
 | Piston | 活塞 | ✅ | Blocker | `Block`, `FactoryBlock` |
 | Lifter | 抬升器 | ✅ |  | `Block`, `FactoryBlock` |
@@ -35,9 +42,10 @@ Total: 25
 
 ## SystemBlock
 
-| 方块 | 中文名 | 可四向旋转 | 实现 Trait |
-| --- | --- | --- | --- |
-| Material | 材料 | ❌ | `Block`, `SystemBlock` |
-| Weld Point | 焊接点 | ❌ | `Block`, `SystemBlock` |
-| Blocker Head | 阻拦头 | ❌ | `Block`, `SystemBlock` |
-| Drill Head | 钻头头 | ❌ | `Block`, `SystemBlock` |
+| 方块 | 中文名 | 可四向旋转 | 编辑模式可放置 | 实现 Trait |
+| --- | --- | --- | --- | --- |
+| Generator | 生成器 | ✅ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
+| Goal | 目标 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
+| Weld Point | 焊接点 | ❌ | ❌ | `Block`, `SystemBlock` |
+| Blocker Head | 阻拦头 | ❌ | ❌ | `Block`, `SystemBlock` |
+| Drill Head | 钻头头 | ❌ | ❌ | `Block`, `SystemBlock` |

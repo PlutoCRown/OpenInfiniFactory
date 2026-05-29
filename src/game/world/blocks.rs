@@ -3,10 +3,11 @@ mod registry;
 mod blocker;
 mod blocker_head;
 mod conveyor;
+mod copper_material;
 mod counter_rotator;
 mod detector;
-mod down_detector;
 mod dirt;
+mod down_detector;
 mod down_welder;
 mod drill;
 mod drill_head;
@@ -14,6 +15,7 @@ mod generator;
 mod glass;
 mod goal;
 mod grass;
+mod iron_material;
 mod laser;
 mod lifter;
 mod material;
@@ -23,15 +25,15 @@ mod reverse_conveyor;
 mod rotator;
 mod solid;
 mod stone;
-mod welder;
 mod weld_point;
+mod welder;
 mod wire;
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-pub use crate::game::world::direction::Facing;
 pub use self::registry::{ALL_BLOCKS, EDIT_BLOCKS, PLAY_BLOCKS};
+pub use crate::game::world::direction::Facing;
 
 pub const BLOCK_SIZE: f32 = 1.0;
 pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
@@ -79,7 +81,9 @@ pub trait Block: Send + Sync {
 
 pub trait SceneBlock: Block {}
 pub trait FactoryBlock: Block {}
+pub trait MaterialBlock: Block {}
 pub trait SystemBlock: Block {}
+pub trait EditableBlock: Block {}
 
 #[derive(Clone, Copy)]
 pub struct BlockDefinition {
@@ -99,13 +103,13 @@ pub struct BlockDefinition {
 pub enum BlockClass {
     Scene,
     Factory,
+    Material,
     System,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum SystemBlockRole {
     None,
-    Material,
     GeneratedMarker,
 }
 
@@ -245,8 +249,8 @@ impl BlockDefinition {
             short_name_key,
             color,
             slot_color,
-            BlockClass::System,
-            SystemBlockRole::Material,
+            BlockClass::Material,
+            SystemBlockRole::None,
         )
     }
 
@@ -337,14 +341,18 @@ pub struct BlockData {
 pub enum MaterialKind {
     #[default]
     Basic,
+    Iron,
+    Copper,
 }
 
 impl MaterialKind {
-    pub const ALL: [Self; 1] = [Self::Basic];
+    pub const ALL: [Self; 3] = [Self::Basic, Self::Iron, Self::Copper];
 
     pub fn name_key(self) -> &'static str {
         match self {
             Self::Basic => "material.basic",
+            Self::Iron => "material.iron",
+            Self::Copper => "material.copper",
         }
     }
 }
@@ -374,6 +382,8 @@ pub enum BlockKind {
     Laser,
     Goal,
     Material,
+    IronMaterial,
+    CopperMaterial,
     WeldPoint,
     BlockerHead,
     DrillHead,
@@ -433,11 +443,15 @@ impl BlockKind {
     }
 
     pub fn is_material(self) -> bool {
-        self.definition().system_role == SystemBlockRole::Material
+        self.definition().class() == BlockClass::Material
     }
 
     pub fn is_generated_marker(self) -> bool {
         self.definition().system_role == SystemBlockRole::GeneratedMarker
+    }
+
+    pub fn is_editable(self) -> bool {
+        registry::is_editable(self)
     }
 
     pub fn alternate(self) -> Option<Self> {

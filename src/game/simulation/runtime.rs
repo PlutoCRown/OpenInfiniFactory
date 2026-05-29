@@ -201,6 +201,8 @@ fn run_material_source_phase(world: &mut WorldBlocks, turn: u64) {
 fn material_block_kind(material: MaterialKind) -> BlockKind {
     match material {
         MaterialKind::Basic => BlockKind::Material,
+        MaterialKind::Iron => BlockKind::IronMaterial,
+        MaterialKind::Copper => BlockKind::CopperMaterial,
     }
 }
 

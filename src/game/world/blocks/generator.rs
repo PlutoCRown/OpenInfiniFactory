@@ -1,4 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, MaterialSource, SceneBlock};
+use super::{rgb, Block, BlockDefinition, BlockKind, EditableBlock, MaterialSource, SystemBlock};
 
 pub struct GeneratorBlock;
 
@@ -10,7 +10,7 @@ impl Block for GeneratorBlock {
     }
 
     fn definition(&self) -> BlockDefinition {
-        BlockDefinition::scene(
+        BlockDefinition::marker(
             self.id(),
             "block.generator",
             "short.generator",
@@ -30,4 +30,5 @@ impl Block for GeneratorBlock {
     }
 }
 
-impl SceneBlock for GeneratorBlock {}
+impl SystemBlock for GeneratorBlock {}
+impl EditableBlock for GeneratorBlock {}

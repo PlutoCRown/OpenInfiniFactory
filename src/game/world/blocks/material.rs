@@ -1,10 +1,10 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, SystemBlock};
+use super::{rgb, Block, BlockDefinition, BlockKind, MaterialBlock};
 
-pub struct MaterialBlock;
+pub struct BasicMaterialBlock;
 
-pub static MATERIAL: MaterialBlock = MaterialBlock;
+pub static MATERIAL: BasicMaterialBlock = BasicMaterialBlock;
 
-impl Block for MaterialBlock {
+impl Block for BasicMaterialBlock {
     fn id(&self) -> BlockKind {
         BlockKind::Material
     }
@@ -20,4 +20,4 @@ impl Block for MaterialBlock {
     }
 }
 
-impl SystemBlock for MaterialBlock {}
+impl MaterialBlock for BasicMaterialBlock {}
