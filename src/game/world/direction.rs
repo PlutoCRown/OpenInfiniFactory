@@ -1,18 +1,6 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub enum RotationDirection {
-    Clockwise,
-    CounterClockwise,
-}
-
-impl RotationDirection {
-    pub fn is_clockwise(self) -> bool {
-        self == Self::Clockwise
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Facing {
     North,

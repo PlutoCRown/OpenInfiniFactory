@@ -19,5 +19,5 @@ pub use systems::{
 pub use types::{
     AreaKind, CarriedItem, ConverterAction, GeneratorAction, InventoryItems, LabelerAction,
     MainMenuAction, OpenSettingsDropdown, PauseAction, PendingKeyBind, SaveListAction,
-    SettingsAction, SettingsTab, SimulationAction, TeleportAction, HOTBAR_SLOTS,
+    SettingsAction, SettingsTab, TeleportAction, HOTBAR_SLOTS,
 };

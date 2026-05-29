@@ -38,7 +38,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::game::world::grid::BlockSettings;
-pub use self::registry::{ALL_BLOCKS, EDIT_BLOCKS, PLAY_BLOCKS};
+pub use self::registry::{assert_registry_consistent, ALL_BLOCKS, EDIT_BLOCKS, PLAY_BLOCKS};
 pub use crate::game::world::direction::Facing;
 
 pub const BLOCK_SIZE: f32 = 1.0;

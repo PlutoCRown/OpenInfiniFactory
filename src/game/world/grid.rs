@@ -247,24 +247,6 @@ impl WorldBlocks {
         }
     }
 
-    pub fn retain_system(&mut self, mut keep: impl FnMut(&IVec3, &BlockData) -> bool) {
-        let before = self.system_blocks.len();
-        self.system_blocks.retain(|pos, block| keep(pos, block));
-        if self.system_blocks.len() != before {
-            self.block_settings
-                .retain(|pos, _| self.system_blocks.contains_key(pos));
-            let existing: HashSet<IVec3> = self.system_blocks.keys().copied().collect();
-            for settings in self.block_settings.values_mut() {
-                if let BlockSettings::Teleport(settings) = settings {
-                    if settings.pair.is_some_and(|pair| !existing.contains(&pair)) {
-                        settings.pair = None;
-                    }
-                }
-            }
-            self.topology_revision = self.topology_revision.wrapping_add(1);
-        }
-    }
-
     pub fn generator_settings(&self, pos: IVec3) -> GeneratorSettings {
         match self.block_settings.get(&pos) {
             Some(BlockSettings::Generator(settings)) => *settings,

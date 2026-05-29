@@ -180,12 +180,6 @@ pub enum PauseAction {
 }
 
 #[derive(Component, Clone, Copy)]
-pub enum SimulationAction {
-    ToggleRun,
-    Rollback,
-}
-
-#[derive(Component, Clone, Copy)]
 pub enum MainMenuAction {
     NewWorld,
     OpenSaveList,
@@ -347,6 +341,11 @@ impl InventoryItems {
         let mut backpack = [None; BACKPACK_SLOTS];
         for (index, kind) in blocks.iter().take(BACKPACK_SLOTS).enumerate() {
             backpack[index] = Some(InventoryItem::Block(*kind));
+        }
+        if mode == BuilderMode::Edit {
+            if let Some(slot) = backpack.iter_mut().find(|slot| slot.is_none()) {
+                *slot = Some(InventoryItem::Area(AreaKind::Selection));
+            }
         }
 
         Self { hotbar, backpack }

@@ -27,13 +27,6 @@ impl Language {
         }
     }
 
-    pub fn next(self) -> Self {
-        let index = Self::ALL
-            .iter()
-            .position(|language| *language == self)
-            .unwrap_or(0);
-        Self::ALL[(index + 1) % Self::ALL.len()]
-    }
 }
 
 #[derive(Resource)]

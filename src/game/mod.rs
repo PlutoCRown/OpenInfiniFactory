@@ -38,6 +38,8 @@ pub const UI_SCALE_MAX: f32 = 3.0;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
+        world::blocks::assert_registry_consistent();
+
         let mut config = load_config();
         config.ui_scale = config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
         let i18n = I18n::new(resolve_language(config.language));

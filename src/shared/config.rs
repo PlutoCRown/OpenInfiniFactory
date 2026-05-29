@@ -60,14 +60,6 @@ impl ConfigSelectionMode {
         ConfigSelectionMode::Plane,
     ];
 
-    pub fn next(self) -> Self {
-        match self {
-            Self::Point => Self::Line,
-            Self::Line => Self::Plane,
-            Self::Plane => Self::Point,
-        }
-    }
-
     pub fn label_key(self) -> &'static str {
         match self {
             Self::Point => "selection_mode.point",

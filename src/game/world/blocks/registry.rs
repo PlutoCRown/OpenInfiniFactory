@@ -7,7 +7,8 @@ use super::{
     piston::PISTON, planks::PLANKS, reverse_conveyor::REVERSE_CONVEYOR, roller::ROLLER,
     rotator::ROTATOR, solid::SOLID, stamper::STAMPER, stone::STONE,
     teleport_entrance::TELEPORT_ENTRANCE, teleport_exit::TELEPORT_EXIT, welder::WELDER,
-    weld_point::WELD_POINT, wire::WIRE, Block, BlockKind, MaterialKind,
+    weld_point::WELD_POINT, wire::WIRE, Block, BlockKind, EditableBlock, FactoryBlock,
+    MaterialBlock, MaterialKind, SceneBlock, SystemBlock,
 };
 
 pub const EDIT_BLOCKS: [BlockKind; 12] = [
@@ -117,6 +118,49 @@ pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 33] = [
     &DRILL_HEAD,
 ];
 
+const SCENE_REGISTRY: [&'static (dyn SceneBlock + Send + Sync); 5] =
+    [&GRASS, &STONE, &DIRT, &PLANKS, &GLASS];
+const FACTORY_REGISTRY: [&'static (dyn FactoryBlock + Send + Sync); 15] = [
+    &SOLID,
+    &WELDER,
+    &DOWN_WELDER,
+    &CONVEYOR,
+    &REVERSE_CONVEYOR,
+    &DETECTOR,
+    &DOWN_DETECTOR,
+    &WIRE,
+    &PISTON,
+    &LIFTER,
+    &ROTATOR,
+    &COUNTER_ROTATOR,
+    &BLOCKER,
+    &DRILL,
+    &LASER,
+];
+const MATERIAL_REGISTRY: [&'static (dyn MaterialBlock + Send + Sync); 3] =
+    [&MATERIAL, &IRON_MATERIAL, &COPPER_MATERIAL];
+const SYSTEM_REGISTRY: [&'static (dyn SystemBlock + Send + Sync); 10] = [
+    &GENERATOR,
+    &GOAL,
+    &STAMPER,
+    &ROLLER,
+    &CONVERTER,
+    &TELEPORT_ENTRANCE,
+    &TELEPORT_EXIT,
+    &WELD_POINT,
+    &BLOCKER_HEAD,
+    &DRILL_HEAD,
+];
+const EDITABLE_REGISTRY: [&'static (dyn EditableBlock + Send + Sync); 7] = [
+    &GENERATOR,
+    &GOAL,
+    &STAMPER,
+    &ROLLER,
+    &CONVERTER,
+    &TELEPORT_ENTRANCE,
+    &TELEPORT_EXIT,
+];
+
 pub fn get(kind: BlockKind) -> &'static (dyn Block + Send + Sync) {
     BLOCK_REGISTRY
         .iter()
@@ -126,11 +170,26 @@ pub fn get(kind: BlockKind) -> &'static (dyn Block + Send + Sync) {
 }
 
 pub fn is_editable(kind: BlockKind) -> bool {
-    EDITABLE_BLOCKS.contains(&kind)
+    EDITABLE_REGISTRY.iter().any(|block| block.id() == kind)
 }
 
 pub fn material_block_kind(material: MaterialKind) -> Option<BlockKind> {
-    BLOCK_REGISTRY
+    MATERIAL_REGISTRY
         .iter()
         .find_map(|block| (block.material_kind() == Some(material)).then_some(block.id()))
+}
+
+pub fn assert_registry_consistent() {
+    let _ = SCENE_REGISTRY;
+    let _ = FACTORY_REGISTRY;
+    let _ = SYSTEM_REGISTRY;
+
+    for block in BLOCK_REGISTRY {
+        let definition = block.definition();
+        debug_assert_eq!(definition.kind, block.id());
+    }
+
+    for kind in EDITABLE_BLOCKS {
+        debug_assert!(is_editable(kind));
+    }
 }
