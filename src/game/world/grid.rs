@@ -28,6 +28,18 @@ pub enum BlockSettings {
     Teleport(TeleportSettings),
 }
 
+impl BlockSettings {
+    fn matches_kind(&self, other: &Self) -> bool {
+        matches!(
+            (self, other),
+            (Self::Generator(_), Self::Generator(_))
+                | (Self::Labeler(_), Self::Labeler(_))
+                | (Self::Converter(_), Self::Converter(_))
+                | (Self::Teleport(_), Self::Teleport(_))
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GeneratorSettings {
     pub period: u64,
@@ -69,7 +81,7 @@ pub struct TeleportSettings {
 }
 
 impl TeleportSettings {
-    fn unnamed(pos: IVec3) -> Self {
+    pub fn unnamed(pos: IVec3) -> Self {
         Self {
             name: format!("Portal {}", pos_hash(pos)),
             pair: None,
@@ -171,14 +183,13 @@ impl WorldBlocks {
         } else {
             self.blocks.insert(pos, block)
         };
-        if block.kind.is_teleport() && !self.block_settings.contains_key(&pos) {
-            self.block_settings.insert(
-                pos,
-                BlockSettings::Teleport(TeleportSettings {
-                    name: self.next_teleport_name(block.kind),
-                    pair: None,
-                }),
-            );
+        if !self.block_settings.contains_key(&pos) {
+            if let Some(mut settings) = block.kind.default_settings(pos) {
+                if let BlockSettings::Teleport(teleport_settings) = &mut settings {
+                    teleport_settings.name = self.next_teleport_name(block.kind);
+                }
+                self.block_settings.insert(pos, settings);
+            }
         }
         if previous != Some(block) {
             self.topology_revision = self.topology_revision.wrapping_add(1);
@@ -265,14 +276,10 @@ impl WorldBlocks {
         let Some(block) = self.system_blocks.get(&pos).copied() else {
             return;
         };
-        let valid = match (&settings, block.kind) {
-            (BlockSettings::Generator(_), _) => block.kind.material_source(block.facing).is_some(),
-            (BlockSettings::Labeler(_), _) => block.kind.material_labeler(block.facing).is_some(),
-            (BlockSettings::Converter(_), BlockKind::Converter) => true,
-            (BlockSettings::Teleport(_), kind) => kind.is_teleport(),
-            _ => false,
+        let Some(default_settings) = block.kind.default_settings(pos) else {
+            return;
         };
-        if !valid {
+        if !settings.matches_kind(&default_settings) {
             return;
         }
         if self.block_settings.get(&pos) != Some(&settings) {

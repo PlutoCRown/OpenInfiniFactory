@@ -37,6 +37,7 @@ mod wire;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::game::world::grid::BlockSettings;
 pub use self::registry::{ALL_BLOCKS, EDIT_BLOCKS, PLAY_BLOCKS};
 pub use crate::game::world::direction::Facing;
 
@@ -74,6 +75,10 @@ pub trait Block: Send + Sync {
             BlockClass::Factory => Some(PersistentLayer::SolutionFactory),
             BlockClass::Material | BlockClass::System => None,
         }
+    }
+
+    fn default_settings(&self, _pos: IVec3) -> Option<BlockSettings> {
+        None
     }
 
     fn movement_rule(&self, _facing: Facing) -> Option<MovementRule> {
@@ -571,6 +576,10 @@ impl BlockKind {
 
     pub fn persistent_layer(self) -> Option<PersistentLayer> {
         self.block().persistent_layer()
+    }
+
+    pub fn default_settings(self, pos: IVec3) -> Option<BlockSettings> {
+        self.block().default_settings(pos)
     }
 
     pub fn movement_rule(self, facing: Facing) -> Option<MovementRule> {

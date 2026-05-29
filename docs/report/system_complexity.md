@@ -202,6 +202,7 @@
 - `MaterialMover` 已重命名并数据化为 `MovementRule`，移动方块现在贡献移动规则而不是暴露方块类型名。
 - `WorldBlocks` 已把多个逐位置设置 map 收敛到 `block_settings: HashMap<IVec3, BlockSettings>`。
 - `save.rs` 已新增统一的 `block_settings` 存档列表，同时保留旧字段读取兼容。
+- `Block::default_settings(pos)` 已让可配置方块在方块侧声明默认设置类型，`WorldBlocks` 不再用方块类型 match 判断设置种类。
 
 ### 1. `BlockCatalogEntry`
 
@@ -253,7 +254,7 @@ pub trait MaterialBlockBehavior: Block {
 
 ### 3. `ConfigurableBlock`
 
-状态：**已部分落地**。当前已经有统一 `BlockSettings` 存储和存档 schema，但还没有把默认设置和 schema 声明移动到方块 trait。
+状态：**已部分落地**。当前已经有统一 `BlockSettings` 存储和存档 schema，默认设置也已经通过 `Block::default_settings(pos)` 移到方块侧；还没有实现设置 schema 描述。
 
 目的：统一逐位置设置、默认值、保存和加载，降低有 UI 系统方块的成本。
 
@@ -283,9 +284,9 @@ pub enum BlockSettings {
 | --- | --- |
 | `WorldBlocks` | 多个 settings map 已合并为 `HashMap<IVec3, BlockSettings>`。 |
 | `save.rs` | 已新增统一 `block_settings` 列表；旧 `generator_settings`、`labeler_settings`、`converter_settings`、`teleport_settings` 仍作为兼容读取字段保留。 |
-| `menus.rs` | 设置读取 / 写回可以通过统一 API 完成。 |
+| `menus.rs` | 设置读取 / 写回仍保留旧 getter/setter facade，内部已通过统一 `set_block_settings` 写入。 |
 
-优先级：**已执行第一步**。剩余优化是让方块通过 trait 声明默认设置和设置 schema，并让 UI 面板直接消费 schema。
+优先级：**已执行第二步**。剩余优化是让方块通过 trait 声明设置 schema，并让 UI 面板直接消费 schema。
 
 ### 4. `BlockSettingsPanel`
 
@@ -479,13 +480,13 @@ pub enum PersistentLayer {
 | 1 | `MaterialBlockBehavior` | 改动小，立刻减少材料双向映射。 |
 | 2 | `PersistentBlockLayer` | 把两阶段存档过滤规则移到方块元数据。 |
 | 3 | `MovesMaterial` | 防止移动方块继续让 `movement.rs` 膨胀。 |
-| 4 | `ConfigurableBlock` | 已统一存储和存档 schema，下一步是方块侧声明默认设置和 schema。 |
+| 4 | `ConfigurableBlock` | 已统一存储、存档 schema 和默认设置声明，下一步是方块侧声明设置 schema。 |
 | 5 | `BlockSettingsPanel` | 能大幅压缩 UI 长文件，但实现量较大。 |
 | 6 | `BlockCatalogEntry` | 统一注册和分类，适合作为一次结构性重构。 |
 | 7 | `SimulationBehavior` | 先类型化阶段，再迁移复杂行为。 |
 | 8 | `ConnectableBlock` | 统一信号和渲染连接规则，适合独立重构。 |
 
-其中 1、2、3、4 已执行第一步，后续最值得继续的是 `BlockSettingsPanel`。
+其中 1、2、3 已执行第一步，4 已执行到默认设置声明。后续最值得继续的是 `BlockSettingsPanel`，但需要先设计设置 schema。
 
 ## 总体观察
 

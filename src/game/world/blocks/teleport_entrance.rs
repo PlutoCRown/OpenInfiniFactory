@@ -1,4 +1,5 @@
 use super::{rgb, Block, BlockDefinition, BlockKind, EditableBlock, SystemBlock};
+use crate::game::world::grid::{BlockSettings, TeleportSettings};
 
 pub struct TeleportEntranceBlock;
 
@@ -18,6 +19,10 @@ impl Block for TeleportEntranceBlock {
             rgb(0.06, 0.42, 0.72),
         )
         .no_collision()
+    }
+
+    fn default_settings(&self, pos: bevy::prelude::IVec3) -> Option<BlockSettings> {
+        Some(BlockSettings::Teleport(TeleportSettings::unnamed(pos)))
     }
 }
 

@@ -1,4 +1,5 @@
 use super::{rgb, Block, BlockDefinition, BlockKind, EditableBlock, SystemBlock};
+use crate::game::world::grid::{BlockSettings, ConverterSettings};
 
 pub struct ConverterBlock;
 
@@ -18,6 +19,10 @@ impl Block for ConverterBlock {
             rgb(0.36, 0.24, 0.62),
         )
         .no_collision()
+    }
+
+    fn default_settings(&self, _pos: bevy::prelude::IVec3) -> Option<BlockSettings> {
+        Some(BlockSettings::Converter(ConverterSettings::default()))
     }
 }
 

@@ -1,6 +1,7 @@
 use super::{
     rgb, Block, BlockDefinition, BlockKind, EditableBlock, MaterialLabeler, SystemBlock,
 };
+use crate::game::world::grid::{BlockSettings, LabelerSettings};
 
 pub struct RollerBlock;
 
@@ -30,6 +31,10 @@ impl Block for RollerBlock {
         Some(MaterialLabeler::Roller {
             target: facing.forward_ivec3(),
         })
+    }
+
+    fn default_settings(&self, _pos: bevy::prelude::IVec3) -> Option<BlockSettings> {
+        Some(BlockSettings::Labeler(LabelerSettings::default()))
     }
 }
 
