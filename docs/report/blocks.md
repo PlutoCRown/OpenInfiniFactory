@@ -1,6 +1,6 @@
 # Blocks
 
-Total: 31
+Total: 33
 
 ## SceneBlock
 
@@ -49,6 +49,8 @@ Total: 31
 | Stamper | 印花器 | ✅ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
 | Roller | 滚刷器 | ✅ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
 | Converter | 转换器 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
+| Teleport Entrance | 传送入口块 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
+| Teleport Exit | 传送出口块 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` |
 | Weld Point | 焊接点 | ❌ | ❌ | `Block`, `SystemBlock` |
 | Blocker Head | 阻拦头 | ❌ | ❌ | `Block`, `SystemBlock` |
 | Drill Head | 钻头头 | ❌ | ❌ | `Block`, `SystemBlock` |

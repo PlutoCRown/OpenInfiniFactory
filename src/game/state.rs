@@ -14,6 +14,7 @@ pub struct PlacementState {
     pub generator_panel: Option<IVec3>,
     pub labeler_panel: Option<IVec3>,
     pub converter_panel: Option<IVec3>,
+    pub teleport_panel: Option<IVec3>,
 }
 
 impl Default for PlacementState {
@@ -27,6 +28,7 @@ impl Default for PlacementState {
             generator_panel: None,
             labeler_panel: None,
             converter_panel: None,
+            teleport_panel: None,
         }
     }
 }
@@ -129,6 +131,7 @@ pub enum GameMode {
     GeneratorSettings,
     LabelerSettings,
     ConverterSettings,
+    TeleportSettings,
     Settings,
     Playing,
     Inventory,

@@ -43,6 +43,7 @@ pub fn run_turn(
     run_material_destroy_phase(world, &powered_devices);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
+    run_material_teleport_phase(world);
     run_weld_phase(world);
     run_material_source_phase(world, turn);
     run_material_movement_phase(world, &powered_devices);
@@ -401,6 +402,38 @@ fn run_material_conversion_phase(world: &mut WorldBlocks) {
 
         block.kind = material_block_kind(settings.output);
         world.insert(pos, block);
+    }
+}
+
+fn run_material_teleport_phase(world: &mut WorldBlocks) {
+    let entrances: Vec<IVec3> = world
+        .system_blocks
+        .iter()
+        .filter_map(|(pos, block)| (block.kind == BlockKind::TeleportEntrance).then_some(*pos))
+        .collect();
+    let mut handled = HashSet::new();
+
+    for entrance in entrances {
+        if handled.contains(&entrance) || !world.is_material_at(entrance) {
+            continue;
+        }
+        let Some(exit) = world.teleport_settings(entrance).pair else {
+            continue;
+        };
+        if !world
+            .system_blocks
+            .get(&exit)
+            .is_some_and(|block| block.kind == BlockKind::TeleportExit)
+        {
+            continue;
+        }
+
+        let structure = material_structure(world, entrance);
+        let offset = exit - entrance;
+        if can_move_structure(world, &structure, offset) {
+            handled.extend(structure.iter().map(|pos| *pos + offset));
+            move_structure(world, &structure, offset);
+        }
     }
 }
 

@@ -28,6 +28,8 @@ mod rotator;
 mod solid;
 mod stamper;
 mod stone;
+mod teleport_entrance;
+mod teleport_exit;
 mod weld_point;
 mod welder;
 mod wire;
@@ -427,6 +429,8 @@ pub enum BlockKind {
     Stamper,
     Roller,
     Converter,
+    TeleportEntrance,
+    TeleportExit,
     Goal,
     Material,
     IronMaterial,
@@ -505,7 +509,13 @@ impl BlockKind {
                 | BlockKind::Stamper
                 | BlockKind::Roller
                 | BlockKind::Converter
+                | BlockKind::TeleportEntrance
+                | BlockKind::TeleportExit
         )
+    }
+
+    pub fn is_teleport(self) -> bool {
+        matches!(self, BlockKind::TeleportEntrance | BlockKind::TeleportExit)
     }
 
     pub fn accepts_material(self) -> bool {

@@ -5,11 +5,12 @@ use super::{
     drill_head::DRILL_HEAD, generator::GENERATOR, glass::GLASS, goal::GOAL, grass::GRASS,
     iron_material::IRON_MATERIAL, laser::LASER, lifter::LIFTER, material::MATERIAL,
     piston::PISTON, planks::PLANKS, reverse_conveyor::REVERSE_CONVEYOR, roller::ROLLER,
-    rotator::ROTATOR, solid::SOLID, stamper::STAMPER, stone::STONE, welder::WELDER,
+    rotator::ROTATOR, solid::SOLID, stamper::STAMPER, stone::STONE,
+    teleport_entrance::TELEPORT_ENTRANCE, teleport_exit::TELEPORT_EXIT, welder::WELDER,
     weld_point::WELD_POINT, wire::WIRE, Block, BlockKind,
 };
 
-pub const EDIT_BLOCKS: [BlockKind; 10] = [
+pub const EDIT_BLOCKS: [BlockKind; 12] = [
     BlockKind::Grass,
     BlockKind::Stone,
     BlockKind::Dirt,
@@ -20,9 +21,11 @@ pub const EDIT_BLOCKS: [BlockKind; 10] = [
     BlockKind::Stamper,
     BlockKind::Roller,
     BlockKind::Converter,
+    BlockKind::TeleportEntrance,
+    BlockKind::TeleportExit,
 ];
 
-pub const EDITABLE_BLOCKS: [BlockKind; 10] = EDIT_BLOCKS;
+pub const EDITABLE_BLOCKS: [BlockKind; 12] = EDIT_BLOCKS;
 
 pub const PLAY_BLOCKS: [BlockKind; 15] = [
     BlockKind::Solid,
@@ -42,7 +45,7 @@ pub const PLAY_BLOCKS: [BlockKind; 15] = [
     BlockKind::Laser,
 ];
 
-pub const ALL_BLOCKS: [BlockKind; 31] = [
+pub const ALL_BLOCKS: [BlockKind; 33] = [
     BlockKind::Grass,
     BlockKind::Stone,
     BlockKind::Dirt,
@@ -68,6 +71,8 @@ pub const ALL_BLOCKS: [BlockKind; 31] = [
     BlockKind::Stamper,
     BlockKind::Roller,
     BlockKind::Converter,
+    BlockKind::TeleportEntrance,
+    BlockKind::TeleportExit,
     BlockKind::Material,
     BlockKind::IronMaterial,
     BlockKind::CopperMaterial,
@@ -76,7 +81,7 @@ pub const ALL_BLOCKS: [BlockKind; 31] = [
     BlockKind::DrillHead,
 ];
 
-pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 31] = [
+pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 33] = [
     &GRASS,
     &STONE,
     &DIRT,
@@ -102,6 +107,8 @@ pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 31] = [
     &STAMPER,
     &ROLLER,
     &CONVERTER,
+    &TELEPORT_ENTRANCE,
+    &TELEPORT_EXIT,
     &MATERIAL,
     &IRON_MATERIAL,
     &COPPER_MATERIAL,

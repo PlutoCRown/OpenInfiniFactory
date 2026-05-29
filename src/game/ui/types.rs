@@ -60,6 +60,15 @@ pub struct ConverterInputText;
 pub struct ConverterOutputText;
 
 #[derive(Component)]
+pub struct TeleportPanel;
+
+#[derive(Component)]
+pub struct TeleportNameText;
+
+#[derive(Component)]
+pub struct TeleportPairText;
+
+#[derive(Component)]
 pub struct SettingsStatusText;
 
 #[derive(Component)]
@@ -222,6 +231,13 @@ pub enum ConverterAction {
     ToggleMode,
     InputNext,
     OutputNext,
+    Close,
+}
+
+#[derive(Component, Clone, Copy)]
+pub enum TeleportAction {
+    CyclePair,
+    Rename,
     Close,
 }
 

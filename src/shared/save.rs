@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::game::world::blocks::BlockData;
 use crate::game::world::grid::{
     ConverterSettings, GeneratorSettings, LabelerSettings, MaterialFace, MaterialFaceMark,
-    MaterialWeld, WorldBlocks,
+    MaterialWeld, TeleportSettings, WorldBlocks,
 };
 
 pub const SAVE_DIR: &str = "saves";
@@ -40,6 +40,8 @@ struct SaveFile {
     labeler_settings: Vec<SavedLabelerSettings>,
     #[serde(default)]
     converter_settings: Vec<SavedConverterSettings>,
+    #[serde(default)]
+    teleport_settings: Vec<SavedTeleportSettings>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -72,6 +74,14 @@ struct SavedConverterSettings {
     y: i32,
     z: i32,
     settings: ConverterSettings,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SavedTeleportSettings {
+    x: i32,
+    y: i32,
+    z: i32,
+    settings: TeleportSettings,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -141,6 +151,16 @@ pub fn save_world(world: &WorldBlocks, name: &str) -> bool {
                 settings: *settings,
             })
             .collect(),
+        teleport_settings: world
+            .teleport_settings
+            .iter()
+            .map(|(pos, settings)| SavedTeleportSettings {
+                x: pos.x,
+                y: pos.y,
+                z: pos.z,
+                settings: settings.clone(),
+            })
+            .collect(),
     };
 
     if let Err(error) = fs::create_dir_all(SAVE_DIR) {
@@ -203,6 +223,9 @@ pub fn load_world(world: &mut WorldBlocks, name: &str) -> bool {
     }
     for saved in save.converter_settings {
         world.set_converter_settings(IVec3::new(saved.x, saved.y, saved.z), saved.settings);
+    }
+    for saved in save.teleport_settings {
+        world.set_teleport_settings(IVec3::new(saved.x, saved.y, saved.z), saved.settings);
     }
     true
 }

@@ -7,6 +7,8 @@ use crate::game::world::direction::Facing;
 
 pub const REACH: f32 = 12.0;
 pub const FLOOR_RADIUS: i32 = 12;
+const TELEPORT_ENTRANCE_NAMES: &[&str] = &["Alpha In", "Beta In", "Gamma In", "Delta In"];
+const TELEPORT_EXIT_NAMES: &[&str] = &["Alpha Out", "Beta Out", "Gamma Out", "Delta Out"];
 
 #[derive(Resource, Default, Clone)]
 pub struct WorldBlocks {
@@ -17,6 +19,7 @@ pub struct WorldBlocks {
     pub generator_settings: HashMap<IVec3, GeneratorSettings>,
     pub labeler_settings: HashMap<IVec3, LabelerSettings>,
     pub converter_settings: HashMap<IVec3, ConverterSettings>,
+    pub teleport_settings: HashMap<IVec3, TeleportSettings>,
     pub topology_revision: u64,
 }
 
@@ -52,6 +55,21 @@ impl Default for ConverterSettings {
 pub enum ConverterMode {
     AnyInput,
     SpecificInput,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct TeleportSettings {
+    pub name: String,
+    pub pair: Option<IVec3>,
+}
+
+impl TeleportSettings {
+    fn unnamed(pos: IVec3) -> Self {
+        Self {
+            name: format!("Portal {}", pos_hash(pos)),
+            pair: None,
+        }
+    }
 }
 
 impl ConverterMode {
@@ -148,6 +166,15 @@ impl WorldBlocks {
         } else {
             self.blocks.insert(pos, block)
         };
+        if block.kind.is_teleport() && !self.teleport_settings.contains_key(&pos) {
+            self.teleport_settings.insert(
+                pos,
+                TeleportSettings {
+                    name: self.next_teleport_name(block.kind),
+                    pair: None,
+                },
+            );
+        }
         if previous != Some(block) {
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
@@ -171,6 +198,12 @@ impl WorldBlocks {
             self.generator_settings.remove(pos);
             self.labeler_settings.remove(pos);
             self.converter_settings.remove(pos);
+            self.teleport_settings.remove(pos);
+            for settings in self.teleport_settings.values_mut() {
+                if settings.pair == Some(*pos) {
+                    settings.pair = None;
+                }
+            }
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
         removed
@@ -185,6 +218,7 @@ impl WorldBlocks {
             self.generator_settings.clear();
             self.labeler_settings.clear();
             self.converter_settings.clear();
+            self.teleport_settings.clear();
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -214,6 +248,14 @@ impl WorldBlocks {
                 .retain(|pos, _| self.system_blocks.contains_key(pos));
             self.converter_settings
                 .retain(|pos, _| self.system_blocks.contains_key(pos));
+            self.teleport_settings
+                .retain(|pos, _| self.system_blocks.contains_key(pos));
+            let existing: HashSet<IVec3> = self.system_blocks.keys().copied().collect();
+            for settings in self.teleport_settings.values_mut() {
+                if settings.pair.is_some_and(|pair| !existing.contains(&pair)) {
+                    settings.pair = None;
+                }
+            }
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -276,6 +318,109 @@ impl WorldBlocks {
         if self.converter_settings.insert(pos, settings) != Some(settings) {
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
+    }
+
+    pub fn teleport_settings(&self, pos: IVec3) -> TeleportSettings {
+        self.teleport_settings
+            .get(&pos)
+            .cloned()
+            .unwrap_or_else(|| TeleportSettings::unnamed(pos))
+    }
+
+    pub fn set_teleport_settings(&mut self, pos: IVec3, settings: TeleportSettings) {
+        if !self
+            .system_blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.is_teleport())
+        {
+            return;
+        }
+        if self.teleport_settings.get(&pos) != Some(&settings) {
+            self.teleport_settings.insert(pos, settings);
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+    }
+
+    pub fn cycle_teleport_pair(&mut self, pos: IVec3) {
+        let Some(block) = self.system_blocks.get(&pos).copied() else {
+            return;
+        };
+        let target_kind = match block.kind {
+            BlockKind::TeleportEntrance => BlockKind::TeleportExit,
+            BlockKind::TeleportExit => BlockKind::TeleportEntrance,
+            _ => return,
+        };
+        let mut candidates: Vec<IVec3> = self
+            .system_blocks
+            .iter()
+            .filter_map(|(candidate_pos, candidate)| {
+                (candidate.kind == target_kind).then_some(*candidate_pos)
+            })
+            .collect();
+        candidates.sort_by_key(|candidate| {
+            self.teleport_settings(*candidate).name
+        });
+
+        let current = self.teleport_settings(pos).pair;
+        let next = if candidates.is_empty() {
+            None
+        } else {
+            let index = current
+                .and_then(|current| candidates.iter().position(|candidate| *candidate == current))
+                .map(|index| (index + 1) % candidates.len())
+                .unwrap_or(0);
+            Some(candidates[index])
+        };
+
+        let mut settings = self.teleport_settings(pos);
+        settings.pair = next;
+        self.set_teleport_settings(pos, settings);
+    }
+
+    pub fn assign_next_teleport_name(&mut self, pos: IVec3) {
+        let Some(block) = self.system_blocks.get(&pos).copied() else {
+            return;
+        };
+        if !block.kind.is_teleport() {
+            return;
+        }
+        let mut settings = self.teleport_settings(pos);
+        settings.name = self.next_teleport_name(block.kind);
+        self.set_teleport_settings(pos, settings);
+    }
+
+    fn next_teleport_name(&self, kind: BlockKind) -> String {
+        let base_names = match kind {
+            BlockKind::TeleportEntrance => TELEPORT_ENTRANCE_NAMES,
+            BlockKind::TeleportExit => TELEPORT_EXIT_NAMES,
+            _ => &[],
+        };
+        let used: HashSet<String> = self
+            .teleport_settings
+            .iter()
+            .filter_map(|(pos, settings)| {
+                self.system_blocks
+                    .get(pos)
+                    .is_some_and(|block| block.kind == kind)
+                    .then_some(settings.name.clone())
+            })
+            .collect();
+
+        for name in base_names {
+            if !used.contains(*name) {
+                return (*name).to_owned();
+            }
+        }
+
+        for index in 2.. {
+            for name in base_names {
+                let candidate = format!("{name} {index}");
+                if !used.contains(&candidate) {
+                    return candidate;
+                }
+            }
+        }
+        unreachable!()
     }
 
     pub fn set_material_face_mark(&mut self, face: MaterialFace, mark: MaterialFaceMark) {
@@ -396,6 +541,10 @@ pub fn seed_demo_world(world: &mut WorldBlocks) {
 
 pub fn grid_to_world(pos: IVec3) -> Vec3 {
     pos.as_vec3() + Vec3::splat(0.5)
+}
+
+fn pos_hash(pos: IVec3) -> i32 {
+    pos.x.abs() * 31 + pos.y.abs() * 17 + pos.z.abs() * 13
 }
 
 pub fn raycast_blocks(origin: Vec3, dir: Vec3, world: &WorldBlocks) -> Option<TargetHit> {

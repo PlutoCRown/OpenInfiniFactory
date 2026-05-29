@@ -17,13 +17,15 @@ use super::types::{
     LabelerColorText, LabelerPanel, MainMenuAction, MainMenuPanel, PauseAction, PausePanel,
     SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdown, SettingsGameplayGroup,
     SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider, SettingsStatusText, SimulationText,
-    SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
+    SlotArea, TeleportAction, TeleportNameText, TeleportPairText, TeleportPanel, BACKPACK_SLOTS,
+    HOTBAR_SLOTS,
 };
 use super::widgets::{
     scroll_container, scroll_content, spawn_converter_button, spawn_generator_button,
     spawn_labeler_button, spawn_localized_main_button, spawn_localized_pause_button,
     spawn_localized_settings_button, spawn_save_back_button, spawn_save_slot_button,
     spawn_settings_dropdown, spawn_settings_slider, spawn_settings_tab, spawn_slot,
+    spawn_teleport_button,
 };
 
 pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
@@ -34,6 +36,7 @@ pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
         spawn_generator_panel(root, &i18n);
         spawn_labeler_panel(root, &i18n);
         spawn_converter_panel(root, &i18n);
+        spawn_teleport_panel(root, &i18n);
         spawn_pause_panel(root, &i18n);
         spawn_settings_panel(root, &i18n);
         spawn_main_menu(root, &i18n);
@@ -75,6 +78,35 @@ fn spawn_generator_panel(root: &mut ChildBuilder, i18n: &I18n) {
                 i18n.text("button.close"),
                 "button.close",
                 GeneratorAction::Close,
+            );
+        });
+}
+
+fn spawn_teleport_panel(root: &mut ChildBuilder, i18n: &I18n) {
+    root.spawn((panel_bundle(460.0, 280.0, -230.0, -140.0), TeleportPanel))
+        .with_children(|panel| {
+            panel.spawn(localized_text(i18n, "teleport.title", 26.0, Color::WHITE));
+            panel.spawn((text("", 18.0, Color::WHITE), TeleportNameText));
+            panel.spawn((text("", 18.0, Color::WHITE), TeleportPairText));
+            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
+                spawn_teleport_button(
+                    row,
+                    i18n.text("button.teleport_pair"),
+                    "button.teleport_pair",
+                    TeleportAction::CyclePair,
+                );
+                spawn_teleport_button(
+                    row,
+                    i18n.text("button.teleport_rename"),
+                    "button.teleport_rename",
+                    TeleportAction::Rename,
+                );
+            });
+            spawn_teleport_button(
+                panel,
+                i18n.text("button.close"),
+                "button.close",
+                TeleportAction::Close,
             );
         });
 }

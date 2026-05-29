@@ -24,7 +24,7 @@ use super::types::{
     ScrollContainer, ScrollContent, SettingsGameplayGroup, SettingsKeyBindingsGroup,
     SettingsPanel, SettingsSlider, SettingsSliderFill, SettingsSliderKnob, SettingsStatusText,
     SettingsTab, SettingsValue, SettingsValueText, SimulationText, SlotArea, SlotLabel,
-    UiScaleText,
+    TeleportNameText, TeleportPairText, TeleportPanel, UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -440,6 +440,36 @@ pub fn update_converter_ui(
     }
 }
 
+pub fn update_teleport_ui(
+    placement: Res<PlacementState>,
+    world: Res<crate::game::world::grid::WorldBlocks>,
+    i18n: Res<I18n>,
+    mut teleport_name_text: Query<
+        &mut Text,
+        (With<TeleportNameText>, Without<TeleportPairText>),
+    >,
+    mut teleport_pair_text: Query<
+        &mut Text,
+        (With<TeleportPairText>, Without<TeleportNameText>),
+    >,
+) {
+    let Some(pos) = placement.teleport_panel else {
+        return;
+    };
+
+    let settings = world.teleport_settings(pos);
+    if let Ok(mut text) = teleport_name_text.get_single_mut() {
+        text.sections[0].value = i18n.fmt("teleport.name", &[("name", settings.name.clone())]);
+    }
+    if let Ok(mut text) = teleport_pair_text.get_single_mut() {
+        let pair = settings
+            .pair
+            .map(|pair| world.teleport_settings(pair).name)
+            .unwrap_or_else(|| i18n.text("teleport.none"));
+        text.sections[0].value = i18n.fmt("teleport.pair", &[("pair", pair)]);
+    }
+}
+
 fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
     match mode {
         BuilderMode::Edit => i18n.text("mode.edit"),
@@ -823,6 +853,19 @@ pub fn update_converter_panel_visibility(
 ) {
     for mut style in &mut converter_panel {
         style.display = if *mode == GameMode::ConverterSettings {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+}
+
+pub fn update_teleport_panel_visibility(
+    mode: Res<GameMode>,
+    mut teleport_panel: Query<&mut Style, With<TeleportPanel>>,
+) {
+    for mut style in &mut teleport_panel {
+        style.display = if *mode == GameMode::TeleportSettings {
             Display::Flex
         } else {
             Display::None

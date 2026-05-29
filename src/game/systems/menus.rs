@@ -7,6 +7,7 @@ use crate::game::state::{
 use crate::game::ui::{
     CarriedItem, ConverterAction, GeneratorAction, InventoryItems, LabelerAction, MainMenuAction,
     OpenSettingsDropdown, PauseAction, PendingKeyBind, SaveListAction, SettingsAction, SettingsTab,
+    TeleportAction,
 };
 use crate::game::world::blocks::{MaterialKind, StampColor};
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
@@ -491,6 +492,37 @@ pub fn converter_menu_actions(
     }
 }
 
+pub fn teleport_menu_actions(
+    mut mode: ResMut<GameMode>,
+    mut placement: ResMut<PlacementState>,
+    mut world: ResMut<WorldBlocks>,
+    mut interactions: Query<(&Interaction, &TeleportAction), (Changed<Interaction>, With<Button>)>,
+) {
+    if *mode != GameMode::TeleportSettings {
+        return;
+    }
+
+    let Some(pos) = placement.teleport_panel else {
+        *mode = GameMode::Playing;
+        return;
+    };
+
+    for (interaction, action) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        match *action {
+            TeleportAction::CyclePair => world.cycle_teleport_pair(pos),
+            TeleportAction::Rename => world.assign_next_teleport_name(pos),
+            TeleportAction::Close => {
+                placement.teleport_panel = None;
+                *mode = GameMode::Playing;
+            }
+        }
+    }
+}
+
 fn next_material(material: MaterialKind) -> MaterialKind {
     let all = MaterialKind::ALL;
     let index = all
@@ -532,5 +564,6 @@ fn reset_builder_state(
     placement.generator_panel = None;
     placement.labeler_panel = None;
     placement.converter_panel = None;
+    placement.teleport_panel = None;
     placement.selection.clear();
 }
