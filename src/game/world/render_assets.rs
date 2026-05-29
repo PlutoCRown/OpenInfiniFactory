@@ -277,14 +277,14 @@ impl WorldRenderAssets {
     }
 
     pub(crate) fn block_mesh(&self, kind: BlockKind) -> Handle<Mesh> {
-        if kind == BlockKind::Wire {
-            return self.wire_node.clone();
-        }
-
         match kind.shape() {
             BlockShape::Cube => self.block.clone(),
             BlockShape::Node => self.node.clone(),
         }
+    }
+
+    pub(crate) fn wire_node_mesh(&self) -> Handle<Mesh> {
+        self.wire_node.clone()
     }
 
     pub(crate) fn block_material(&self, kind: BlockKind) -> Handle<StandardMaterial> {

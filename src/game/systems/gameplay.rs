@@ -579,6 +579,9 @@ fn move_selection(
                 to_pos: target,
                 from_facing: block.facing,
                 to_facing: block.facing,
+                kind: crate::game::world::animation::BlockAnimationKind::Move,
+                duration: None,
+                progress: None,
             }),
         );
     }
@@ -668,6 +671,9 @@ fn rotate_block_at(
             to_pos: pos,
             from_facing,
             to_facing: updated.facing,
+            kind: crate::game::world::animation::BlockAnimationKind::Move,
+            duration: None,
+            progress: None,
         },
     );
 

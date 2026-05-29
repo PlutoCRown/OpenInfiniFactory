@@ -74,6 +74,7 @@ impl Plugin for GamePlugin {
             .insert_resource(SolutionState::default())
             .insert_resource(simulation::runtime::SignalNetworkCache::default())
             .insert_resource(simulation::runtime::SimulationStepStats::default())
+            .insert_resource(simulation::runtime::PendingGeneratedMaterials::default())
             .insert_resource(settings)
             .insert_resource(UiScale(config.ui_scale))
             .insert_resource(config)

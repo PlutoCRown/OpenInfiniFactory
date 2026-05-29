@@ -16,20 +16,35 @@ pub(super) fn run_material_behavior_phase(
     world: &mut WorldBlocks,
     turn: u64,
     powered_devices: &HashSet<IVec3>,
-) {
+    blocked_generation: &HashSet<IVec3>,
+) -> Vec<GeneratedMaterial> {
+    let mut generated = Vec::new();
     run_material_acceptance_phase(world);
-    run_material_source_phase(world, turn);
+    generated.extend(run_material_source_phase(world, turn, blocked_generation));
     run_weld_phase(world);
     run_material_destroy_phase(world, powered_devices);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
     run_material_teleport_phase(world);
     run_material_acceptance_phase(world);
+    generated
 }
 
-fn run_material_source_phase(world: &mut WorldBlocks, turn: u64) {
+#[derive(Clone, Copy)]
+pub(super) struct GeneratedMaterial {
+    pub pos: IVec3,
+    pub block: BlockData,
+    pub period: u64,
+}
+
+fn run_material_source_phase(
+    world: &mut WorldBlocks,
+    turn: u64,
+    blocked_generation: &HashSet<IVec3>,
+) -> Vec<GeneratedMaterial> {
+    let mut generated = Vec::new();
     if turn == 0 {
-        return;
+        return generated;
     }
 
     let sources: Vec<(IVec3, MaterialSource)> = world
@@ -52,21 +67,23 @@ fn run_material_source_phase(world: &mut WorldBlocks, turn: u64) {
                 }
 
                 let spawn_pos = pos;
-                if world.can_place_solid_at(spawn_pos) {
+                if world.can_place_solid_at(spawn_pos) && !blocked_generation.contains(&spawn_pos) {
                     let Some(kind) = BlockKind::material_block_kind(settings.material) else {
                         continue;
                     };
-                    world.insert(
-                        spawn_pos,
-                        BlockData {
+                    generated.push(GeneratedMaterial {
+                        pos: spawn_pos,
+                        block: BlockData {
                             kind,
                             facing: Facing::North,
                         },
-                    );
+                        period: settings.period.max(1),
+                    });
                 }
             }
         }
     }
+    generated
 }
 
 fn run_weld_phase(world: &mut WorldBlocks) {

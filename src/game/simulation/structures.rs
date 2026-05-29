@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::game::world::animation::BlockAnimation;
+use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PistonAnimation};
 use crate::game::world::blocks::BlockData;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks};
@@ -63,6 +63,7 @@ pub(super) enum StructureMove {
     Translate {
         structure: HashSet<IVec3>,
         offset: IVec3,
+        actor: Option<IVec3>,
     },
     Rotate {
         structure: HashSet<IVec3>,
@@ -73,7 +74,23 @@ pub(super) enum StructureMove {
 
 impl StructureMove {
     pub(super) fn translate(structure: HashSet<IVec3>, offset: IVec3) -> Self {
-        Self::Translate { structure, offset }
+        Self::Translate {
+            structure,
+            offset,
+            actor: None,
+        }
+    }
+
+    pub(super) fn translate_by_actor(
+        structure: HashSet<IVec3>,
+        offset: IVec3,
+        actor: IVec3,
+    ) -> Self {
+        Self::Translate {
+            structure,
+            offset,
+            actor: Some(actor),
+        }
     }
 
     pub(super) fn rotate(structure: HashSet<IVec3>, pivot: IVec3, clockwise: bool) -> Self {
@@ -89,11 +106,23 @@ pub(super) fn execute_structure_moves(
     world: &mut WorldBlocks,
     moves: Vec<StructureMove>,
 ) -> HashMap<IVec3, BlockAnimation> {
+    execute_structure_moves_with_pistons(world, moves).0
+}
+
+pub(super) fn execute_structure_moves_with_pistons(
+    world: &mut WorldBlocks,
+    moves: Vec<StructureMove>,
+) -> (HashMap<IVec3, BlockAnimation>, HashMap<IVec3, PistonAnimation>) {
     let mut moved = HashSet::new();
     let mut animations = HashMap::new();
+    let mut piston_animations = HashMap::new();
     for movement in moves {
         match movement {
-            StructureMove::Translate { structure, offset } => {
+            StructureMove::Translate {
+                structure,
+                offset,
+                actor,
+            } => {
                 if structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
                 }
@@ -108,10 +137,22 @@ pub(super) fn execute_structure_moves(
                                         to_pos: *pos + offset,
                                         from_facing: block.facing,
                                         to_facing: block.facing,
+                                        kind: BlockAnimationKind::Move,
+                                        duration: None,
+                                        progress: None,
                                     },
                                 );
                             }
                         }
+                    }
+                    if let Some(actor) = actor {
+                        piston_animations.insert(
+                            actor,
+                            PistonAnimation {
+                                direction: offset,
+                                duration: 0.0,
+                            },
+                        );
                     }
                     moved.extend(structure.iter().copied());
                     move_structure(world, &structure, offset);
@@ -141,6 +182,9 @@ pub(super) fn execute_structure_moves(
                                     to_pos: target,
                                     from_facing: block.facing,
                                     to_facing: rotate_facing(block.facing, clockwise),
+                                    kind: BlockAnimationKind::Move,
+                                    duration: None,
+                                    progress: None,
                                 },
                             );
                         }
@@ -152,7 +196,7 @@ pub(super) fn execute_structure_moves(
             }
         }
     }
-    animations
+    (animations, piston_animations)
 }
 
 pub(super) fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {

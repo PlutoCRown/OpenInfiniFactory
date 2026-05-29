@@ -2,7 +2,9 @@ use bevy::pbr::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::game::world::animation::{AnimatedBlock, AnimationTiming, BlockAnimation};
+use crate::game::world::animation::{
+    AnimatedBlock, AnimatedPiston, AnimationTiming, BlockAnimation, PistonAnimation,
+};
 use crate::game::world::blocks::{
     BlockData, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
 };
@@ -23,6 +25,9 @@ pub struct PlacementPreview;
 
 #[derive(Component)]
 pub struct EditPreview;
+
+#[derive(Component)]
+pub struct PendingGeneratedPreview;
 
 pub fn setup_scene(
     mut commands: Commands,
@@ -128,6 +133,15 @@ pub fn despawn_edit_previews(commands: &mut Commands, previews: &Query<Entity, W
     }
 }
 
+pub fn despawn_pending_generated_previews(
+    commands: &mut Commands,
+    previews: &Query<Entity, With<PendingGeneratedPreview>>,
+) {
+    for entity in previews {
+        commands.entity(entity).despawn_recursive();
+    }
+}
+
 pub fn spawn_edit_preview(
     commands: &mut Commands,
     assets: &WorldRenderAssets,
@@ -161,7 +175,9 @@ pub fn spawn_block_preview(
         assets.block_preview_material(data.kind),
         Some(EditPreview),
         None,
+        None,
         AnimationTiming::edit(),
+        false,
         false,
     );
 }
@@ -213,7 +229,34 @@ pub fn spawn_block_with_timed_animation(
         assets.block_material(data.kind),
         None,
         animation,
+        None,
         timing,
+        true,
+        false,
+    );
+}
+
+pub fn spawn_pending_generated_block(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    world: &WorldBlocks,
+    pos: IVec3,
+    data: BlockData,
+    animation: Option<BlockAnimation>,
+    timing: AnimationTiming,
+) {
+    spawn_block_model(
+        commands,
+        assets,
+        world,
+        pos,
+        data,
+        assets.block_material(data.kind),
+        None,
+        animation,
+        None,
+        timing,
+        false,
         true,
     );
 }
@@ -250,8 +293,10 @@ pub fn rebuild_world_with_timed_animations(
             assets.block_material(data.kind),
             None,
             animations.get(pos).copied(),
+            None,
             timing,
             true,
+            false,
         );
     }
     for (pos, data) in &world.system_blocks {
@@ -264,8 +309,52 @@ pub fn rebuild_world_with_timed_animations(
             assets.block_material(data.kind),
             None,
             None,
+            None,
             timing,
             true,
+            false,
+        );
+    }
+}
+
+pub fn rebuild_world_with_runtime_animations(
+    commands: &mut Commands,
+    world: &WorldBlocks,
+    assets: &WorldRenderAssets,
+    animations: &HashMap<IVec3, BlockAnimation>,
+    piston_animations: &HashMap<IVec3, PistonAnimation>,
+    timing: AnimationTiming,
+) {
+    for (pos, data) in &world.blocks {
+        spawn_block_model(
+            commands,
+            assets,
+            world,
+            *pos,
+            *data,
+            assets.block_material(data.kind),
+            None,
+            animations.get(pos).copied(),
+            piston_animations.get(pos).copied(),
+            timing,
+            true,
+            false,
+        );
+    }
+    for (pos, data) in &world.system_blocks {
+        spawn_block_model(
+            commands,
+            assets,
+            world,
+            *pos,
+            *data,
+            assets.block_material(data.kind),
+            None,
+            None,
+            None,
+            timing,
+            true,
+            false,
         );
     }
 }
@@ -279,15 +368,22 @@ fn spawn_block_model(
     material: Handle<StandardMaterial>,
     edit_preview: Option<EditPreview>,
     animation: Option<BlockAnimation>,
+    piston_animation: Option<PistonAnimation>,
     timing: AnimationTiming,
     with_block_entity: bool,
+    pending_generated_preview: bool,
 ) {
     let mut transform = Transform::from_translation(grid_to_world(pos));
     if animation.is_none() {
         transform.rotation = Quat::from_rotation_y(data.facing.yaw());
     }
 
-    let mut entity = if let Some(scene_material) = assets.scene_material(data.kind) {
+    let mut entity = if data.kind == crate::game::world::blocks::BlockKind::Wire {
+        commands.spawn(SpatialBundle {
+            transform,
+            ..default()
+        })
+    } else if let Some(scene_material) = assets.scene_material(data.kind) {
         commands.spawn(MaterialMeshBundle::<SceneBlockMaterial> {
             mesh: assets.block_mesh(data.kind),
             material: scene_material,
@@ -297,7 +393,7 @@ fn spawn_block_model(
     } else {
         commands.spawn(PbrBundle {
             mesh: assets.block_mesh(data.kind),
-            material,
+            material: material.clone(),
             transform,
             ..default()
         })
@@ -305,6 +401,10 @@ fn spawn_block_model(
 
     if with_block_entity {
         entity.insert(BlockEntity { pos });
+    }
+
+    if pending_generated_preview {
+        entity.insert(PendingGeneratedPreview);
     }
 
     if let Some(edit_preview) = edit_preview {
@@ -316,7 +416,13 @@ fn spawn_block_model(
     }
 
     entity.with_children(|parent| {
-        spawn_model_parts(parent, assets, data);
+        let mut model_root = parent.spawn(SpatialBundle::default());
+        if let Some(piston_animation) = piston_animation {
+            model_root.insert(AnimatedPiston::new(piston_animation));
+        }
+        model_root.with_children(|parent| {
+            spawn_model_parts(parent, assets, data);
+        });
 
         let render_behavior = data.kind.render_behavior(data.facing);
 
@@ -354,6 +460,7 @@ fn spawn_block_model(
         }
 
         if render_behavior.wire_connector.is_some() {
+            let mut connected_offsets = Vec::new();
             for offset in signal_offsets() {
                 let neighbor = pos + offset;
                 if world
@@ -362,6 +469,7 @@ fn spawn_block_model(
                     .or_else(|| world.system_blocks.get(&neighbor))
                     .is_some_and(|block| wire_connects_to(block, -offset))
                 {
+                    connected_offsets.push(offset);
                     let local_offset = local_connector_offset(data, offset);
                     parent.spawn(PbrBundle {
                         mesh: assets.wire_connector_mesh(local_offset),
@@ -370,6 +478,16 @@ fn spawn_block_model(
                         ..default()
                     });
                 }
+            }
+
+            if data.kind == crate::game::world::blocks::BlockKind::Wire
+                && connected_offsets.is_empty()
+            {
+                parent.spawn(PbrBundle {
+                    mesh: assets.wire_node_mesh(),
+                    material,
+                    ..default()
+                });
             }
         }
 

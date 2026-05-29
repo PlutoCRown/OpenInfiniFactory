@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::game::state::{BuilderMode, GameMode, SimulationState};
+use crate::game::simulation::runtime::PendingGeneratedMaterials;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
 use crate::shared::config::{ConfigAction, GameConfig};
@@ -12,6 +13,7 @@ pub fn simulation_controls(
     builder_mode: Res<BuilderMode>,
     mode: Res<GameMode>,
     mut simulation: ResMut<SimulationState>,
+    mut pending_generated: ResMut<PendingGeneratedMaterials>,
     mut world: ResMut<WorldBlocks>,
     block_entities: Query<Entity, With<BlockEntity>>,
     render_assets: Res<WorldRenderAssets>,
@@ -49,6 +51,7 @@ pub fn simulation_controls(
 
     if keys.just_pressed(rollback_key) && simulation.is_active() {
         rollback_simulation(&mut simulation, &mut world);
+        pending_generated.clear();
         despawn_world(&mut commands, &block_entities);
         rebuild_world(&mut commands, &world, &render_assets);
     }
