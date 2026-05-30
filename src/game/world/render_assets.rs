@@ -38,6 +38,7 @@ pub struct WorldRenderAssets {
     face_mark_materials: HashMap<StampColor, Handle<StandardMaterial>>,
     model_materials: HashMap<ModelMaterial, Handle<StandardMaterial>>,
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
+    pub(crate) active_wire_material: Handle<StandardMaterial>,
     pub(crate) arrow_material: Handle<StandardMaterial>,
     pub(crate) arrow_nose_material: Handle<StandardMaterial>,
     pub(crate) goal_top_material: Handle<StandardMaterial>,
@@ -240,6 +241,11 @@ impl WorldRenderAssets {
             wire_connector_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.88, 0.30),
                 emissive: Color::srgb(0.20, 0.12, 0.02).into(),
+                ..default()
+            }),
+            active_wire_material: materials.add(StandardMaterial {
+                base_color: Color::srgb(1.0, 0.08, 0.04),
+                emissive: Color::srgb(0.34, 0.02, 0.01).into(),
                 ..default()
             }),
             arrow_material: materials.add(StandardMaterial {

@@ -127,6 +127,13 @@ impl SignalNetworkCache {
             })
             .collect()
     }
+
+    pub(super) fn powered_wires(&self, powered_components: &HashSet<usize>) -> HashSet<IVec3> {
+        self.wire_components
+            .iter()
+            .filter_map(|(pos, component)| powered_components.contains(component).then_some(*pos))
+            .collect()
+    }
 }
 
 fn detector_is_active(world: &WorldBlocks, pos: IVec3) -> bool {

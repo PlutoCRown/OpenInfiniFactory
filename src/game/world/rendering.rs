@@ -1,6 +1,6 @@
 use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::game::simulation::factory_activity::{
     FactoryActivity, FactoryStructureState, StructureKind,
@@ -11,7 +11,7 @@ use crate::game::world::animation::{
     BlockAnimationKind, PistonAnimation,
 };
 use crate::game::world::blocks::{
-    BlockData, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
+    BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
 };
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
@@ -380,15 +380,17 @@ pub fn rebuild_world_with_runtime_animations(
     animations: &HashMap<IVec3, BlockAnimation>,
     piston_animations: &HashMap<IVec3, PistonAnimation>,
     timing: AnimationTiming,
+    powered_wires: &HashSet<IVec3>,
 ) {
     for (pos, data) in &world.blocks {
+        let material = block_render_material(assets, *data, powered_wires.contains(pos));
         spawn_block_model(
             commands,
             assets,
             world,
             *pos,
             *data,
-            assets.block_material(data.kind),
+            material,
             None,
             animations.get(pos).copied(),
             piston_animations.get(pos).copied(),
@@ -424,6 +426,7 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
     timing: AnimationTiming,
     debug: &DebugState,
     factory_structures: &FactoryStructureState,
+    powered_wires: &HashSet<IVec3>,
 ) {
     if debug.factory_activity {
         rebuild_world_with_factory_activity_debug(commands, world, assets, factory_structures);
@@ -435,7 +438,28 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
             animations,
             piston_animations,
             timing,
+            powered_wires,
         );
+    }
+}
+
+fn block_render_material(
+    assets: &WorldRenderAssets,
+    data: BlockData,
+    powered_wire: bool,
+) -> Handle<StandardMaterial> {
+    if powered_wire && data.kind == BlockKind::Wire {
+        assets.active_wire_material.clone()
+    } else {
+        assets.block_material(data.kind)
+    }
+}
+
+fn render_rotation(data: BlockData, facing: crate::game::world::direction::Facing) -> Quat {
+    if data.kind.is_directional() {
+        Quat::from_rotation_y(facing.yaw())
+    } else {
+        Quat::IDENTITY
     }
 }
 
@@ -462,14 +486,14 @@ fn spawn_block_model(
         };
         transform.translation =
             grid_to_world(animation.from_pos).lerp(grid_to_world(animation.to_pos), eased);
-        transform.rotation = Quat::from_rotation_y(animation.from_facing.yaw())
-            .slerp(Quat::from_rotation_y(animation.to_facing.yaw()), eased);
+        transform.rotation = render_rotation(data, animation.from_facing)
+            .slerp(render_rotation(data, animation.to_facing), eased);
         transform.scale = match animation.kind {
             BlockAnimationKind::Move => Vec3::ONE,
             BlockAnimationKind::SpawnScale => Vec3::splat(eased),
         };
     } else {
-        transform.rotation = Quat::from_rotation_y(data.facing.yaw());
+        transform.rotation = render_rotation(data, data.facing);
     }
 
     let mut entity = if data.kind == crate::game::world::blocks::BlockKind::Wire {
@@ -560,7 +584,11 @@ fn spawn_block_model(
                     let local_offset = local_connector_offset(data, offset);
                     parent.spawn((
                         Mesh3d(assets.wire_connector_mesh(local_offset)),
-                        MeshMaterial3d(assets.wire_connector_material.clone()),
+                        MeshMaterial3d(if data.kind == BlockKind::Wire {
+                            material.clone()
+                        } else {
+                            assets.wire_connector_material.clone()
+                        }),
                         Transform::from_translation(local_offset.as_vec3() * 0.34),
                     ));
                 }

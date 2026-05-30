@@ -6,7 +6,6 @@ use super::{
 };
 
 const MODEL: &[BlockModelPart] = &[
-    BlockModelPart::new(ModelMesh::Medium, ModelMaterial::Frame, [0.0, 0.32, 0.0]),
     BlockModelPart::new(ModelMesh::RodY, ModelMaterial::Welding, [0.0, -0.08, 0.0])
         .scaled([0.85, 0.62, 0.85]),
     BlockModelPart::new(ModelMesh::Small, ModelMaterial::Welding, [0.0, -0.50, 0.0]),

@@ -93,6 +93,7 @@ pub fn run_turn(
     let mut sample = SimulationStepStats::default();
 
     world.clear_generated_markers();
+    let generated_animations = place_ready_generated_materials(world, pending_generated, turn);
     sample.prep_ms = mark_elapsed_ms(&mut mark);
 
     let mut movement_plan = mark_gravity_phase(world, factory_structures);
@@ -116,8 +117,9 @@ pub fn run_turn(
     );
     sample.movement_mark_ms = mark_elapsed_ms(&mut mark);
 
-    let (animations, piston_animations) =
+    let (mut animations, piston_animations) =
         execute_structure_moves_with_pistons(world, movement_plan, factory_structures);
+    merge_generated_animations(&mut animations, generated_animations);
     let piston_animations = piston_animations
         .into_iter()
         .map(|(pos, mut animation)| {
@@ -131,13 +133,14 @@ pub fn run_turn(
     run_powered_marker_phase(world, &powered_devices);
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
-    place_ready_generated_materials(world, pending_generated, turn);
     run_material_behavior_phase(world, &powered_devices, factory_structures);
 
     prepare_upcoming_generation(world, pending_generated, turn + 1);
     sample.behavior_ms = mark_elapsed_ms(&mut mark);
 
     signal_cache.refresh(world);
+    let render_powered_components = signal_cache.powered_components(world);
+    let powered_wires = signal_cache.powered_wires(&render_powered_components);
     sample.signal_refresh_ms = mark_elapsed_ms(&mut mark);
 
     despawn_world(commands, block_entities);
@@ -150,6 +153,7 @@ pub fn run_turn(
         AnimationTiming::simulation(animation_duration),
         debug,
         factory_structures,
+        &powered_wires,
     );
     sample.render_rebuild_ms = mark_elapsed_ms(&mut mark);
     sample.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
@@ -269,7 +273,7 @@ fn place_ready_generated_materials(
     world: &mut WorldBlocks,
     pending_generated: &mut PendingGeneratedMaterials,
     turn: u64,
-) {
+) -> HashMap<IVec3, BlockAnimation> {
     let mut ready = Vec::new();
     for (pos, pending) in &pending_generated.pending {
         if pending.ready_turn <= turn {
@@ -277,12 +281,40 @@ fn place_ready_generated_materials(
         }
     }
 
+    let mut animations = HashMap::new();
     for pos in ready {
         let Some(pending) = pending_generated.pending.remove(&pos) else {
             continue;
         };
         if world.can_place_solid_at(pos) {
             world.insert(pos, pending.block);
+            animations.insert(
+                pos,
+                BlockAnimation {
+                    from_pos: pos,
+                    to_pos: pos,
+                    from_facing: pending.block.facing,
+                    to_facing: pending.block.facing,
+                    kind: BlockAnimationKind::SpawnScale,
+                    duration: None,
+                    progress: None,
+                },
+            );
+        }
+    }
+    animations
+}
+
+fn merge_generated_animations(
+    animations: &mut HashMap<IVec3, BlockAnimation>,
+    generated_animations: HashMap<IVec3, BlockAnimation>,
+) {
+    for (generated_pos, generated_animation) in generated_animations {
+        let moved_target = animations.iter().find_map(|(target, animation)| {
+            (animation.from_pos == generated_pos).then_some(*target)
+        });
+        if moved_target.is_none() {
+            animations.insert(generated_pos, generated_animation);
         }
     }
 }

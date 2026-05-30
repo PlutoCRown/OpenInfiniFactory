@@ -67,9 +67,9 @@ impl Facing {
     pub fn inverse_rotate_offset(self, offset: IVec3) -> IVec3 {
         match self {
             Facing::North => offset,
-            Facing::East => IVec3::new(-offset.z, offset.y, offset.x),
+            Facing::East => IVec3::new(offset.z, offset.y, -offset.x),
             Facing::South => IVec3::new(-offset.x, offset.y, -offset.z),
-            Facing::West => IVec3::new(offset.z, offset.y, -offset.x),
+            Facing::West => IVec3::new(-offset.z, offset.y, offset.x),
         }
     }
 }
