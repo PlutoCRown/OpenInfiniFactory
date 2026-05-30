@@ -419,12 +419,26 @@ impl WorldBlocks {
     }
 
     pub fn is_occupied(&self, pos: IVec3) -> bool {
+        self.system_blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.has_collision())
+            || self
+                .blocks
+                .get(&pos)
+                .is_some_and(|block| block.kind.has_collision())
+    }
+
+    pub fn is_platform_occupied(&self, pos: IVec3) -> bool {
         self.blocks
             .get(&pos)
             .is_some_and(|block| block.kind.has_collision())
     }
 
     pub fn can_place_platform_at(&self, pos: IVec3) -> bool {
+        !self.is_platform_occupied(pos)
+    }
+
+    pub fn can_move_into(&self, pos: IVec3) -> bool {
         !self.is_occupied(pos)
     }
 

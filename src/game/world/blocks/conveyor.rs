@@ -6,20 +6,29 @@ use super::{
 };
 
 const MODEL: &[BlockModelPart] = &[
-    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Belt, [0.0, 0.54, 0.0]),
+    BlockModelPart::new(
+        ModelMesh::ConveyorBase,
+        ModelMaterial::Belt,
+        [0.0, 0.0, 0.0],
+    ),
+    BlockModelPart::new(
+        ModelMesh::ConveyorBelt,
+        ModelMaterial::ConveyorBelt,
+        [0.0, 0.50, 0.0],
+    ),
     BlockModelPart::new(
         ModelMesh::RodX,
         ModelMaterial::BeltStripe,
-        [-0.13, 0.59, -0.28],
+        [-0.09, 0.56, -0.24],
     )
-    .scaled([0.46, 0.30, 0.42])
+    .scaled([0.62, 0.16, 0.42])
     .yawed(0.7853982),
     BlockModelPart::new(
         ModelMesh::RodX,
         ModelMaterial::BeltStripe,
-        [0.13, 0.59, -0.28],
+        [0.09, 0.56, -0.24],
     )
-    .scaled([0.46, 0.30, 0.42])
+    .scaled([0.62, 0.16, 0.42])
     .yawed(-0.7853982),
 ];
 
@@ -54,7 +63,7 @@ impl Block for ConveyorBlock {
     }
 
     fn model(&self) -> BlockModel {
-        BlockModel::Parts(MODEL)
+        BlockModel::PartsOnly(MODEL)
     }
 
     fn alternate(&self) -> Option<BlockKind> {

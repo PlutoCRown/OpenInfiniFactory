@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use bevy::asset::RenderAssetUsages;
+use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
 use crate::game::world::blocks::{
@@ -22,10 +24,17 @@ pub struct WorldRenderAssets {
     wire_connector_x: Handle<Mesh>,
     wire_connector_y: Handle<Mesh>,
     wire_connector_z: Handle<Mesh>,
+    part_conveyor_base: Handle<Mesh>,
+    part_conveyor_belt: Handle<Mesh>,
+    part_drill_body: Handle<Mesh>,
+    part_drill_tip: Handle<Mesh>,
     part_large: Handle<Mesh>,
     part_medium: Handle<Mesh>,
     part_small: Handle<Mesh>,
     part_plate: Handle<Mesh>,
+    part_rotator_base: Handle<Mesh>,
+    part_rotator_disk: Handle<Mesh>,
+    part_rotator_ring: Handle<Mesh>,
     part_rod_x: Handle<Mesh>,
     part_rod_y: Handle<Mesh>,
     part_rod_z: Handle<Mesh>,
@@ -61,7 +70,12 @@ impl WorldRenderAssets {
         let material_texture = images.add(block_texture(ProceduralTexture::Material));
         let iron_texture = images.add(block_texture(ProceduralTexture::IronMaterial));
         let copper_texture = images.add(block_texture(ProceduralTexture::CopperMaterial));
+        let platform_texture = images.add(block_texture(ProceduralTexture::Platform));
+        let stone_texture = images.add(block_texture(ProceduralTexture::Stone));
+        let wood_texture = images.add(block_texture(ProceduralTexture::Wood));
+        let bordered_wood_texture = images.add(block_texture(ProceduralTexture::BorderedWood));
         let textures = [
+            (BlockKind::Platform, platform_texture.clone()),
             (BlockKind::Material, material_texture.clone()),
             (BlockKind::IronMaterial, iron_texture.clone()),
             (BlockKind::CopperMaterial, copper_texture.clone()),
@@ -139,12 +153,19 @@ impl WorldRenderAssets {
             })
             .collect();
         let model_materials = [
+            (ModelMaterial::ConveyorBase, srgb_material(0.16, 0.18, 0.18)),
+            (ModelMaterial::ConveyorBelt, srgb_material(0.02, 0.02, 0.02)),
+            (ModelMaterial::DrillTip, srgb_material(0.82, 0.84, 0.82)),
             (ModelMaterial::Frame, srgb_material(0.42, 0.44, 0.44)),
             (ModelMaterial::DarkFrame, srgb_material(0.12, 0.13, 0.15)),
             (ModelMaterial::Belt, srgb_material(0.86, 0.46, 0.14)),
             (
                 ModelMaterial::BeltStripe,
                 emissive_material(1.0, 0.76, 0.28, 0.18, 0.10, 0.02),
+            ),
+            (
+                ModelMaterial::WeldCore,
+                emissive_material(1.0, 0.22, 0.10, 0.22, 0.04, 0.02),
             ),
             (
                 ModelMaterial::Welding,
@@ -163,7 +184,24 @@ impl WorldRenderAssets {
                 emissive_material(1.0, 0.52, 0.20, 0.22, 0.08, 0.02),
             ),
             (ModelMaterial::Pusher, srgb_material(0.54, 0.56, 0.54)),
+            (
+                ModelMaterial::Platform,
+                textured_model_material(Color::WHITE, platform_texture.clone()),
+            ),
+            (ModelMaterial::PlatformBase, block_material(BlockKind::Platform)),
             (ModelMaterial::Wood, srgb_material(0.72, 0.46, 0.22)),
+            (
+                ModelMaterial::WoodTexture,
+                textured_model_material(Color::WHITE, wood_texture),
+            ),
+            (
+                ModelMaterial::BorderedWoodTexture,
+                textured_model_material(Color::WHITE, bordered_wood_texture),
+            ),
+            (
+                ModelMaterial::StoneTexture,
+                textured_model_material(Color::WHITE, stone_texture),
+            ),
             (
                 ModelMaterial::Lift,
                 emissive_material(0.35, 0.82, 1.0, 0.03, 0.16, 0.22),
@@ -220,15 +258,22 @@ impl WorldRenderAssets {
             wire_connector_x: meshes.add(Cuboid::new(0.652, 0.304, 0.304)),
             wire_connector_y: meshes.add(Cuboid::new(0.304, 0.652, 0.304)),
             wire_connector_z: meshes.add(Cuboid::new(0.304, 0.304, 0.652)),
+            part_conveyor_base: meshes.add(Cuboid::new(1.0, 0.90, 1.0)),
+            part_conveyor_belt: meshes.add(Cuboid::new(0.90, 0.10, 1.0)),
+            part_drill_body: meshes.add(Cuboid::new(1.0, 1.0, 0.80)),
+            part_drill_tip: meshes.add(drill_tip_mesh(0.34, 1.0, 48)),
             part_large: meshes.add(Cuboid::new(0.72, 0.22, 0.72)),
             part_medium: meshes.add(Cuboid::new(0.44, 0.20, 0.44)),
             part_small: meshes.add(Cuboid::new(0.22, 0.22, 0.22)),
             part_plate: meshes.add(Cuboid::new(0.78, 0.06, 0.78)),
+            part_rotator_base: meshes.add(Cuboid::new(1.0, 0.80, 1.0)),
+            part_rotator_disk: meshes.add(Cylinder::new(0.40, 0.20).mesh().resolution(48)),
+            part_rotator_ring: meshes.add(rotator_ring_mesh(0.50, 0.40, 0.20, 64)),
             part_rod_x: meshes.add(Cuboid::new(0.72, 0.12, 0.12)),
             part_rod_y: meshes.add(Cuboid::new(0.12, 0.72, 0.12)),
             part_rod_z: meshes.add(Cuboid::new(0.12, 0.12, 0.72)),
-            part_pusher_body: meshes.add(Cuboid::new(0.80, 0.80, 0.80)),
-            part_pusher_head: meshes.add(Cuboid::new(0.82, 0.82, 0.20)),
+            part_pusher_body: meshes.add(cover_cuboid_mesh(Vec3::new(1.0, 1.0, 0.80))),
+            part_pusher_head: meshes.add(cover_cuboid_mesh(Vec3::new(1.0, 1.0, 0.20))),
             block_materials,
             preview_materials,
             scene_materials: scene_block_materials,
@@ -353,10 +398,17 @@ impl WorldRenderAssets {
 
     pub(crate) fn model_mesh(&self, mesh: ModelMesh) -> Handle<Mesh> {
         match mesh {
+            ModelMesh::ConveyorBase => self.part_conveyor_base.clone(),
+            ModelMesh::ConveyorBelt => self.part_conveyor_belt.clone(),
+            ModelMesh::DrillBody => self.part_drill_body.clone(),
+            ModelMesh::DrillTip => self.part_drill_tip.clone(),
             ModelMesh::Large => self.part_large.clone(),
             ModelMesh::Medium => self.part_medium.clone(),
             ModelMesh::Small => self.part_small.clone(),
             ModelMesh::Plate => self.part_plate.clone(),
+            ModelMesh::RotatorBase => self.part_rotator_base.clone(),
+            ModelMesh::RotatorDisk => self.part_rotator_disk.clone(),
+            ModelMesh::RotatorRing => self.part_rotator_ring.clone(),
             ModelMesh::RodX => self.part_rod_x.clone(),
             ModelMesh::RodY => self.part_rod_y.clone(),
             ModelMesh::RodZ => self.part_rod_z.clone(),
@@ -429,6 +481,122 @@ fn srgb_material(r: f32, g: f32, b: f32) -> StandardMaterial {
     }
 }
 
+fn textured_model_material(base_color: Color, texture: Handle<Image>) -> StandardMaterial {
+    StandardMaterial {
+        base_color,
+        base_color_texture: Some(texture),
+        perceptual_roughness: 0.90,
+        reflectance: 0.12,
+        ..default()
+    }
+}
+
+fn cover_cuboid_mesh(size: Vec3) -> Mesh {
+    let min = -size * 0.5;
+    let max = size * 0.5;
+    let faces = [
+        (
+            [
+                [min.x, min.y, max.z],
+                [max.x, min.y, max.z],
+                [max.x, max.y, max.z],
+                [min.x, max.y, max.z],
+            ],
+            [0.0, 0.0, 1.0],
+            size.x,
+            size.y,
+        ),
+        (
+            [
+                [min.x, max.y, min.z],
+                [max.x, max.y, min.z],
+                [max.x, min.y, min.z],
+                [min.x, min.y, min.z],
+            ],
+            [0.0, 0.0, -1.0],
+            size.x,
+            size.y,
+        ),
+        (
+            [
+                [max.x, min.y, min.z],
+                [max.x, max.y, min.z],
+                [max.x, max.y, max.z],
+                [max.x, min.y, max.z],
+            ],
+            [1.0, 0.0, 0.0],
+            size.z,
+            size.y,
+        ),
+        (
+            [
+                [min.x, min.y, max.z],
+                [min.x, max.y, max.z],
+                [min.x, max.y, min.z],
+                [min.x, min.y, min.z],
+            ],
+            [-1.0, 0.0, 0.0],
+            size.z,
+            size.y,
+        ),
+        (
+            [
+                [max.x, max.y, min.z],
+                [min.x, max.y, min.z],
+                [min.x, max.y, max.z],
+                [max.x, max.y, max.z],
+            ],
+            [0.0, 1.0, 0.0],
+            size.x,
+            size.z,
+        ),
+        (
+            [
+                [max.x, min.y, max.z],
+                [min.x, min.y, max.z],
+                [min.x, min.y, min.z],
+                [max.x, min.y, min.z],
+            ],
+            [0.0, -1.0, 0.0],
+            size.x,
+            size.z,
+        ),
+    ];
+
+    let mut positions = Vec::with_capacity(24);
+    let mut normals = Vec::with_capacity(24);
+    let mut uvs = Vec::with_capacity(24);
+    let mut indices = Vec::with_capacity(36);
+
+    for (face_index, (face_positions, normal, width, height)) in faces.into_iter().enumerate() {
+        let base = face_index as u32 * 4;
+        positions.extend_from_slice(&face_positions);
+        normals.extend_from_slice(&[normal; 4]);
+        uvs.extend_from_slice(&cover_uvs(width, height));
+        indices.extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 3, base]);
+    }
+
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+    .with_inserted_indices(Indices::U32(indices))
+}
+
+fn cover_uvs(width: f32, height: f32) -> [[f32; 2]; 4] {
+    let min_side = width.min(height).max(f32::EPSILON);
+    let u_span = width / min_side;
+    let v_span = height / min_side;
+    let u0 = 0.5 - u_span * 0.5;
+    let u1 = 0.5 + u_span * 0.5;
+    let v0 = 0.5 - v_span * 0.5;
+    let v1 = 0.5 + v_span * 0.5;
+    [[u0, v0], [u1, v0], [u1, v1], [u0, v1]]
+}
+
 fn emissive_material(r: f32, g: f32, b: f32, er: f32, eg: f32, eb: f32) -> StandardMaterial {
     StandardMaterial {
         base_color: Color::srgb(r, g, b),
@@ -437,4 +605,143 @@ fn emissive_material(r: f32, g: f32, b: f32, er: f32, eg: f32, eb: f32) -> Stand
         reflectance: 0.10,
         ..default()
     }
+}
+
+fn rotator_ring_mesh(outer_radius: f32, inner_radius: f32, height: f32, segments: u32) -> Mesh {
+    let half_height = height * 0.5;
+    let mut positions = Vec::with_capacity((segments * 8) as usize);
+    let mut normals = Vec::with_capacity((segments * 8) as usize);
+    let mut uvs = Vec::with_capacity((segments * 8) as usize);
+    let mut indices = Vec::with_capacity((segments * 24) as usize);
+
+    for i in 0..segments {
+        let angle = i as f32 / segments as f32 * std::f32::consts::TAU;
+        let (sin, cos) = angle.sin_cos();
+        let outer = [cos * outer_radius, sin * outer_radius];
+        let inner = [cos * inner_radius, sin * inner_radius];
+
+        positions.extend_from_slice(&[
+            [outer[0], half_height, outer[1]],
+            [inner[0], half_height, inner[1]],
+            [outer[0], -half_height, outer[1]],
+            [inner[0], -half_height, inner[1]],
+            [outer[0], half_height, outer[1]],
+            [outer[0], -half_height, outer[1]],
+            [inner[0], half_height, inner[1]],
+            [inner[0], -half_height, inner[1]],
+        ]);
+        normals.extend_from_slice(&[
+            [0.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [cos, 0.0, sin],
+            [cos, 0.0, sin],
+            [-cos, 0.0, -sin],
+            [-cos, 0.0, -sin],
+        ]);
+        let u = i as f32 / segments as f32;
+        uvs.extend_from_slice(&[
+            [u, 1.0],
+            [u, 0.0],
+            [u, 1.0],
+            [u, 0.0],
+            [u, 1.0],
+            [u, 0.0],
+            [u, 1.0],
+            [u, 0.0],
+        ]);
+    }
+
+    for i in 0..segments {
+        let next = (i + 1) % segments;
+        let a = i * 8;
+        let b = next * 8;
+        indices.extend_from_slice(&[
+            a,
+            b,
+            a + 1,
+            a + 1,
+            b,
+            b + 1,
+            a + 2,
+            a + 3,
+            b + 2,
+            a + 3,
+            b + 3,
+            b + 2,
+            a + 4,
+            b + 4,
+            a + 5,
+            a + 5,
+            b + 4,
+            b + 5,
+            a + 6,
+            a + 7,
+            b + 6,
+            a + 7,
+            b + 7,
+            b + 6,
+        ]);
+    }
+
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_indices(Indices::U32(indices))
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+}
+
+fn drill_tip_mesh(radius: f32, length: f32, segments: u32) -> Mesh {
+    let base_z = 0.0;
+    let tip_z = -length;
+    let mut positions = Vec::with_capacity((segments * 2 + 2) as usize);
+    let mut normals = Vec::with_capacity((segments * 2 + 2) as usize);
+    let mut uvs = Vec::with_capacity((segments * 2 + 2) as usize);
+    let mut indices = Vec::with_capacity((segments * 6) as usize);
+
+    positions.push([0.0, 0.0, tip_z]);
+    normals.push([0.0, 0.0, -1.0]);
+    uvs.push([0.5, 0.5]);
+
+    for i in 0..segments {
+        let angle = i as f32 / segments as f32 * std::f32::consts::TAU;
+        let (sin, cos) = angle.sin_cos();
+        let normal = Vec3::new(cos, sin, radius / length).normalize();
+        positions.push([cos * radius, sin * radius, base_z]);
+        normals.push(normal.to_array());
+        uvs.push([i as f32 / segments as f32, 1.0]);
+    }
+
+    let base_center = positions.len() as u32;
+    positions.push([0.0, 0.0, base_z]);
+    normals.push([0.0, 0.0, 1.0]);
+    uvs.push([0.5, 0.5]);
+
+    let base_start = positions.len() as u32;
+    for i in 0..segments {
+        let angle = i as f32 / segments as f32 * std::f32::consts::TAU;
+        let (sin, cos) = angle.sin_cos();
+        positions.push([cos * radius, sin * radius, base_z]);
+        normals.push([0.0, 0.0, 1.0]);
+        uvs.push([0.5 + cos * 0.5, 0.5 + sin * 0.5]);
+    }
+
+    for i in 0..segments {
+        let next = if i + 1 == segments { 0 } else { i + 1 };
+        indices.extend_from_slice(&[0, 1 + i, 1 + next]);
+        indices.extend_from_slice(&[base_center, base_start + next, base_start + i]);
+    }
+
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_indices(Indices::U32(indices))
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
 }

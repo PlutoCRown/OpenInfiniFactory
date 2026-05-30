@@ -274,7 +274,7 @@ fn spawn_block_icon_model(
 ) {
     let data = BlockData {
         kind,
-        facing: crate::game::world::direction::Facing::North,
+        facing: crate::game::world::direction::Facing::South,
     };
     spawn_block_model(
         commands,
@@ -410,7 +410,7 @@ pub fn spawn_edit_preview(
     commands.spawn((
         Mesh3d(assets.block.clone()),
         MeshMaterial3d(assets.edit_preview_material(kind)),
-        Transform::from_translation(grid_to_world(pos)),
+        Transform::from_translation(grid_to_world(pos)).with_scale(Vec3::splat(1.03)),
         EditPreview,
     ));
 }
@@ -707,8 +707,16 @@ fn spawn_block_model(
         transform.translation += origin;
     }
 
-    let mut entity = if data.kind == crate::game::world::blocks::BlockKind::Wire {
+    let mut entity = if data.kind == crate::game::world::blocks::BlockKind::Wire
+        || matches!(data.kind.model(), BlockModel::PartsOnly(_))
+    {
         commands.spawn((transform, Visibility::default()))
+    } else if data.kind == BlockKind::Platform {
+        commands.spawn((
+            Mesh3d(assets.block_mesh(data.kind)),
+            MeshMaterial3d(assets.model_material(crate::game::world::blocks::ModelMaterial::Platform)),
+            transform,
+        ))
     } else if let Some(scene_material) = assets.scene_material(data.kind) {
         commands.spawn((
             Mesh3d(assets.block_mesh(data.kind)),
@@ -748,11 +756,14 @@ fn spawn_block_model(
         if let Some((_, icon_layer)) = icon_render {
             model_root.insert((icon_layer.clone(), BlockIconRenderEntity));
         }
-        if let Some(pusher_animation) = pusher_animation {
-            model_root.insert(AnimatedPusher::new(pusher_animation));
-        }
         model_root.with_children(|parent| {
-            spawn_model_parts(parent, assets, data, icon_render.map(|(_, layer)| layer));
+            spawn_model_parts(
+                parent,
+                assets,
+                data,
+                pusher_animation,
+                icon_render.map(|(_, layer)| layer),
+            );
         });
 
         let render_behavior = data.kind.render_behavior(data.facing);
@@ -866,11 +877,13 @@ fn spawn_model_parts(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
     data: BlockData,
+    pusher_animation: Option<PusherAnimation>,
     icon_layer: Option<&RenderLayers>,
 ) {
     let parts = match data.kind.model() {
         BlockModel::Default => &[],
         BlockModel::Parts(parts) => parts,
+        BlockModel::PartsOnly(parts) => parts,
     };
 
     for part in parts {
@@ -886,6 +899,11 @@ fn spawn_model_parts(
         ));
         if let Some(icon_layer) = icon_layer {
             child.insert((icon_layer.clone(), BlockIconRenderEntity));
+        }
+        if part.mesh == crate::game::world::blocks::ModelMesh::PusherHead {
+            if let Some(pusher_animation) = pusher_animation {
+                child.insert(AnimatedPusher::new(pusher_animation));
+            }
         }
     }
 }

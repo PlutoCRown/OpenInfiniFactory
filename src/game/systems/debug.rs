@@ -37,6 +37,12 @@ pub struct PerfStats {
     animation_ms: SmoothedMs,
     ui_ms: SmoothedMs,
     debug_ms: SmoothedMs,
+    pre_update_ms: SmoothedMs,
+    update_tail_ms: SmoothedMs,
+    post_update_ui_ms: SmoothedMs,
+    post_update_transform_ms: SmoothedMs,
+    post_update_visibility_ms: SmoothedMs,
+    last_ms: SmoothedMs,
     main_other_ms: SmoothedMs,
     render_other_ms: SmoothedMs,
     render_gap_ms: SmoothedMs,
@@ -60,6 +66,12 @@ impl Default for PerfStats {
             animation_ms: SmoothedMs::default(),
             ui_ms: SmoothedMs::default(),
             debug_ms: SmoothedMs::default(),
+            pre_update_ms: SmoothedMs::default(),
+            update_tail_ms: SmoothedMs::default(),
+            post_update_ui_ms: SmoothedMs::default(),
+            post_update_transform_ms: SmoothedMs::default(),
+            post_update_visibility_ms: SmoothedMs::default(),
+            last_ms: SmoothedMs::default(),
             main_other_ms: SmoothedMs::default(),
             render_other_ms: SmoothedMs::default(),
             render_gap_ms: SmoothedMs::default(),
@@ -108,6 +120,11 @@ pub fn mark_perf_input(mut perf: ResMut<PerfStats>) {
     perf.input_ms.sample(elapsed);
 }
 
+pub fn mark_perf_pre_update(mut perf: ResMut<PerfStats>) {
+    let elapsed = perf.mark_elapsed();
+    perf.pre_update_ms.sample(elapsed);
+}
+
 pub fn mark_perf_menus(mut perf: ResMut<PerfStats>) {
     let elapsed = perf.mark_elapsed();
     perf.menu_ms.sample(elapsed);
@@ -138,6 +155,31 @@ pub fn mark_perf_debug(mut perf: ResMut<PerfStats>) {
     perf.debug_ms.sample(elapsed);
 }
 
+pub fn mark_perf_post_update_start(mut perf: ResMut<PerfStats>) {
+    let elapsed = perf.mark_elapsed();
+    perf.update_tail_ms.sample(elapsed);
+}
+
+pub fn mark_perf_post_update_ui(mut perf: ResMut<PerfStats>) {
+    let elapsed = perf.mark_elapsed();
+    perf.post_update_ui_ms.sample(elapsed);
+}
+
+pub fn mark_perf_post_update_transform(mut perf: ResMut<PerfStats>) {
+    let elapsed = perf.mark_elapsed();
+    perf.post_update_transform_ms.sample(elapsed);
+}
+
+pub fn mark_perf_post_update_visibility(mut perf: ResMut<PerfStats>) {
+    let elapsed = perf.mark_elapsed();
+    perf.post_update_visibility_ms.sample(elapsed);
+}
+
+pub fn mark_perf_last(mut perf: ResMut<PerfStats>) {
+    let elapsed = perf.mark_elapsed();
+    perf.last_ms.sample(elapsed);
+}
+
 pub fn finish_perf_frame(mut perf: ResMut<PerfStats>) {
     let main_ms = Instant::now()
         .saturating_duration_since(perf.frame_started)
@@ -150,7 +192,13 @@ pub fn finish_perf_frame(mut perf: ResMut<PerfStats>) {
         + perf.view_ms.value
         + perf.animation_ms.value
         + perf.ui_ms.value
-        + perf.debug_ms.value;
+        + perf.debug_ms.value
+        + perf.pre_update_ms.value
+        + perf.update_tail_ms.value
+        + perf.post_update_ui_ms.value
+        + perf.post_update_transform_ms.value
+        + perf.post_update_visibility_ms.value
+        + perf.last_ms.value;
     let main_other_ms = (main_ms - measured_main_ms).max(0.0);
     perf.main_ms.sample_ms(main_ms);
     perf.main_other_ms.sample_ms(main_other_ms);
@@ -301,10 +349,11 @@ pub fn update_debug_ui(
     let render_remainder_ms = (perf.render_other_ms.value - perf.render_gap_ms.value).max(0.0);
 
     perf.display_text = format!(
-        "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n  Input: {:>8.2} us\n  Menus: {:>8.2} us\n  Sim Systems: {:>8.2} us\n  View: {:>8.2} us\n  Anim: {:>8.2} us\n  UI: {:>8.2} us\n  Debug UI: {:>8.2} us\n  Schedule/Other: {:>8.2} us\nRender/Engine: {:>5.2} ms\n  Frame Gap: {:>5.2} ms\n  Timing Remainder: {:>5.2} ms{}\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
+        "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n  PreUpdate/Input Plumbing: {:>8.2} us\n  Input: {:>8.2} us\n  Menus: {:>8.2} us\n  Sim Systems: {:>8.2} us\n  View: {:>8.2} us\n  Anim: {:>8.2} us\n  UI: {:>8.2} us\n  Debug UI: {:>8.2} us\n  Update Tail: {:>8.2} us\n  PostUpdate/UI Layout: {:>8.2} us\n  PostUpdate/Transform: {:>8.2} us\n  PostUpdate/Visibility: {:>8.2} us\n  Last: {:>8.2} us\n  Schedule/Untracked: {:>8.2} us\nRender/Engine: {:>5.2} ms\n  Frame Gap: {:>5.2} ms\n  Timing Remainder: {:>5.2} ms{}\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
         fps,
         perf.frame_ms.value,
         perf.main_ms.value,
+        micros(perf.pre_update_ms.value),
         micros(perf.input_ms.value),
         micros(perf.menu_ms.value),
         micros(perf.simulation_ms.value),
@@ -312,6 +361,11 @@ pub fn update_debug_ui(
         micros(perf.animation_ms.value),
         micros(perf.ui_ms.value),
         micros(perf.debug_ms.value),
+        micros(perf.update_tail_ms.value),
+        micros(perf.post_update_ui_ms.value),
+        micros(perf.post_update_transform_ms.value),
+        micros(perf.post_update_visibility_ms.value),
+        micros(perf.last_ms.value),
         micros(perf.main_other_ms.value),
         perf.render_other_ms.value,
         perf.render_gap_ms.value,

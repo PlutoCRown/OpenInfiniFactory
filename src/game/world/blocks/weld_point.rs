@@ -1,9 +1,13 @@
 use super::{
-    rgb, rgba, Block, BlockDefinition, BlockKind, BlockModel, RenderBehavior, SystemBlock,
-    WeldBehavior, WeldConnectorBehavior,
+    rgb, rgba, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial,
+    ModelMesh, RenderBehavior, SystemBlock, WeldBehavior, WeldConnectorBehavior,
 };
 
-const MODEL: &[super::BlockModelPart] = &[];
+const MODEL: &[BlockModelPart] = &[BlockModelPart::new(
+    ModelMesh::Small,
+    ModelMaterial::WeldCore,
+    [0.0, 0.0, 0.0],
+)];
 
 pub struct WeldPointBlock;
 
@@ -39,7 +43,7 @@ impl Block for WeldPointBlock {
     }
 
     fn model(&self) -> BlockModel {
-        BlockModel::Parts(MODEL)
+        BlockModel::PartsOnly(MODEL)
     }
 }
 

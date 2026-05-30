@@ -783,7 +783,7 @@ fn commit_edit_gesture(
                 current_delete_at.unwrap_or(gesture.start),
             );
             for pos in positions {
-                let removed = world.remove(&pos).is_some() || world.remove_system(&pos).is_some();
+                let removed = delete_block_at(pos, builder_mode, world);
                 if removed {
                     changed = true;
                     if let Some((entity, _)) = block_entities
@@ -845,7 +845,7 @@ fn spawn_gesture_previews(
                 current_delete_at.unwrap_or(gesture.start),
             );
             for pos in positions {
-                if world.is_occupied(pos) {
+                if can_delete_at(pos, builder_mode, world) {
                     spawn_edit_preview(commands, render_assets, pos, EditPreviewKind::Delete);
                 }
             }
@@ -1079,5 +1079,31 @@ fn can_place_in_mode(kind: BlockKind, mode: BuilderMode) -> bool {
     match mode {
         BuilderMode::Edit => kind.is_editable(),
         BuilderMode::Play => kind.is_factory(),
+    }
+}
+
+fn can_delete_at(pos: IVec3, mode: BuilderMode, world: &WorldBlocks) -> bool {
+    match mode {
+        BuilderMode::Edit => world.is_occupied(pos),
+        BuilderMode::Play => world
+            .blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.is_factory()),
+    }
+}
+
+fn delete_block_at(pos: IVec3, mode: BuilderMode, world: &mut WorldBlocks) -> bool {
+    match mode {
+        BuilderMode::Edit => world.remove(&pos).is_some() || world.remove_system(&pos).is_some(),
+        BuilderMode::Play => {
+            if !world
+                .blocks
+                .get(&pos)
+                .is_some_and(|block| block.kind.is_factory())
+            {
+                return false;
+            }
+            world.remove(&pos).is_some()
+        }
     }
 }

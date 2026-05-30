@@ -4,24 +4,20 @@ use super::{
 };
 
 const MODEL: &[BlockModelPart] = &[
-    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Rotation, [0.0, 0.54, 0.0]),
     BlockModelPart::new(
-        ModelMesh::RodX,
-        ModelMaterial::Rotation,
-        [-0.18, 0.62, -0.14],
-    )
-    .scaled([0.68, 0.55, 0.55]),
-    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Rotation, [0.18, 0.62, 0.14])
-        .scaled([0.55, 0.55, 0.68]),
-    BlockModelPart::new(
-        ModelMesh::Small,
-        ModelMaterial::Rotation,
-        [0.18, 0.64, -0.34],
+        ModelMesh::RotatorBase,
+        ModelMaterial::PlatformBase,
+        [0.0, 0.0, 0.0],
     ),
     BlockModelPart::new(
-        ModelMesh::Small,
-        ModelMaterial::Rotation,
-        [-0.18, 0.64, 0.34],
+        ModelMesh::RotatorDisk,
+        ModelMaterial::ConveyorBelt,
+        [0.0, 0.50, 0.0],
+    ),
+    BlockModelPart::new(
+        ModelMesh::RotatorRing,
+        ModelMaterial::Belt,
+        [0.0, 0.48, 0.0],
     ),
 ];
 
@@ -53,7 +49,7 @@ impl Block for RotatorBlock {
     }
 
     fn model(&self) -> BlockModel {
-        BlockModel::Parts(MODEL)
+        BlockModel::PartsOnly(MODEL)
     }
 
     fn alternate(&self) -> Option<BlockKind> {

@@ -17,15 +17,18 @@ pub(super) fn run_material_behavior_phase(
     world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
     factory_structures: &mut FactoryStructureState,
-) -> Vec<IVec3> {
+) {
     run_material_acceptance_phase(world);
-    let weld_sparks = run_weld_phase(world);
     run_material_destroy_phase(world, powered_devices);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
     run_material_teleport_phase(world, factory_structures);
     run_material_acceptance_phase(world);
-    weld_sparks
+}
+
+pub(super) fn run_weld_behavior_phase(world: &mut WorldBlocks) -> Vec<IVec3> {
+    run_material_acceptance_phase(world);
+    run_weld_phase(world)
 }
 
 #[derive(Clone, Copy)]

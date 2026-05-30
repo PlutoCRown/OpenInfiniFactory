@@ -222,29 +222,45 @@ pub enum WireConnectorBehavior {
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub enum ModelMesh {
+    ConveyorBase,
+    ConveyorBelt,
+    DrillBody,
+    DrillTip,
+    PusherBody,
+    PusherHead,
     Large,
     Medium,
     Small,
     Plate,
+    RotatorBase,
+    RotatorDisk,
+    RotatorRing,
     RodX,
     RodY,
     RodZ,
-    PusherBody,
-    PusherHead,
 }
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub enum ModelMaterial {
+    ConveyorBase,
+    ConveyorBelt,
+    DrillTip,
     Frame,
     DarkFrame,
     Belt,
     BeltStripe,
+    WeldCore,
     Welding,
     Wire,
     Signal,
     Power,
     Pusher,
+    Platform,
+    PlatformBase,
     Wood,
+    WoodTexture,
+    BorderedWoodTexture,
+    StoneTexture,
     Lift,
     Rotation,
     Drill,
@@ -291,6 +307,7 @@ impl BlockModelPart {
 pub enum BlockModel {
     Default,
     Parts(&'static [BlockModelPart]),
+    PartsOnly(&'static [BlockModelPart]),
 }
 
 #[derive(Clone, Copy)]

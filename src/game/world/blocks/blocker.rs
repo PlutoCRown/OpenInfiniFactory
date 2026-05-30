@@ -7,13 +7,13 @@ use super::{
 const MODEL: &[BlockModelPart] = &[
     BlockModelPart::new(
         ModelMesh::PusherBody,
-        ModelMaterial::Frame,
+        ModelMaterial::StoneTexture,
         [0.0, 0.0, 0.10],
     ),
     BlockModelPart::new(
         ModelMesh::PusherHead,
-        ModelMaterial::Wood,
-        [0.0, 0.0, -0.42],
+        ModelMaterial::BorderedWoodTexture,
+        [0.0, 0.0, -0.40],
     ),
 ];
 
@@ -61,7 +61,7 @@ impl Block for BlockerBlock {
     }
 
     fn model(&self) -> BlockModel {
-        BlockModel::Parts(MODEL)
+        BlockModel::PartsOnly(MODEL)
     }
 
     fn alternate(&self) -> Option<BlockKind> {

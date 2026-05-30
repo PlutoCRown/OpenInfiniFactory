@@ -6,10 +6,13 @@ pub mod ui;
 pub mod world;
 
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+use bevy::camera::visibility::VisibilitySystems;
 use bevy::input_focus::InputDispatchPlugin;
 use bevy::light::{DirectionalLightShadowMap, GlobalAmbientLight};
 use bevy::pbr::MaterialPlugin;
 use bevy::prelude::*;
+use bevy::transform::TransformSystems;
+use bevy::ui::UiSystems;
 use bevy::ui_widgets::{slider_self_update, UiWidgetsPlugins};
 
 use crate::shared::config::load_config;
@@ -106,13 +109,17 @@ impl Plugin for GamePlugin {
             )
             .add_systems(First, systems::debug::begin_perf_frame)
             .add_systems(
+                PreUpdate,
+                systems::debug::mark_perf_pre_update.after(UiSystems::Focus),
+            )
+            .add_systems(
                 Update,
                 (camera_move, camera_look, gameplay_input, placement_input)
                     .chain()
                     .before(systems::debug::mark_perf_input),
             )
             .add_systems(Update, systems::debug::mark_perf_input)
-            .add_systems(Last, app_exit_requests)
+            .add_systems(Last, app_exit_requests.before(systems::debug::mark_perf_last))
             .add_systems(
                 Update,
                 (main_menu_actions, save_list_actions, pause_menu_actions)
@@ -154,6 +161,31 @@ impl Plugin for GamePlugin {
                     .before(systems::debug::mark_perf_debug),
             )
             .add_systems(Update, systems::debug::mark_perf_debug)
+            .add_systems(
+                PostUpdate,
+                systems::debug::mark_perf_post_update_start.before(UiSystems::Prepare),
+            )
+            .add_systems(
+                PostUpdate,
+                systems::debug::mark_perf_post_update_ui
+                    .after(UiSystems::Layout)
+                    .before(TransformSystems::Propagate),
+            )
+            .add_systems(
+                PostUpdate,
+                systems::debug::mark_perf_post_update_transform
+                    .after(TransformSystems::Propagate)
+                    .before(VisibilitySystems::UpdateFrusta),
+            )
+            .add_systems(
+                PostUpdate,
+                systems::debug::mark_perf_post_update_visibility
+                    .after(VisibilitySystems::MarkNewlyHiddenEntitiesInvisible),
+            )
+            .add_systems(
+                Last,
+                systems::debug::mark_perf_last.before(systems::debug::finish_perf_frame),
+            )
             .add_systems(Last, systems::debug::finish_perf_frame);
     }
 }

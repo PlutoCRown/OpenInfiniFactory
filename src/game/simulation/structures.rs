@@ -264,13 +264,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                         }
                     }
                     if let Some(actor) = actor {
-                        pusher_animations.insert(
-                            actor,
-                            PusherAnimation {
-                                direction: offset,
-                                duration: 0.0,
-                            },
-                        );
+                        pusher_animations.insert(actor, PusherAnimation { duration: 0.0 });
                     }
                     moved.extend(structure.iter().copied());
                     move_structure(world, &structure, offset);
@@ -372,7 +366,7 @@ fn expanded_move_structure(
         if target.y < 0 || expanded.contains(&target) {
             continue;
         }
-        if world.can_place_platform_at(target) {
+        if world.can_move_into(target) {
             continue;
         }
 
@@ -410,7 +404,7 @@ fn can_move_structure_without_push(
 ) -> bool {
     structure.iter().all(|pos| {
         let target = *pos + offset;
-        target.y >= 0 && (structure.contains(&target) || world.can_place_platform_at(target))
+        target.y >= 0 && (structure.contains(&target) || world.can_move_into(target))
     })
 }
 

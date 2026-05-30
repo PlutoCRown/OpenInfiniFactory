@@ -16,7 +16,9 @@ use crate::game::world::rendering::{
     spawn_weld_sparks, BlockEntity, PendingGeneratedPreview, WorldRenderAssets,
 };
 
-use super::behaviors::{material_source_generation, run_material_behavior_phase};
+use super::behaviors::{
+    material_source_generation, run_material_behavior_phase, run_weld_behavior_phase,
+};
 use super::factory_activity::FactoryStructureState;
 use super::gravity::mark_gravity_phase;
 use super::markers::{run_powered_marker_phase, run_static_marker_phase};
@@ -94,6 +96,8 @@ pub fn run_turn(
 
     world.clear_generated_markers();
     let generated_animations = place_ready_generated_materials(world, pending_generated, turn);
+    run_static_marker_phase(world);
+    let weld_sparks = run_weld_behavior_phase(world);
     sample.prep_ms = mark_elapsed_ms(&mut mark);
 
     let mut movement_plan = mark_gravity_phase(world, factory_structures);
@@ -102,6 +106,7 @@ pub fn run_turn(
     signal_cache.refresh(world);
     let powered_components = signal_cache.powered_components(world);
     let powered_devices = signal_cache.powered_devices(&powered_components);
+    let render_powered_wires = signal_cache.powered_wires(&powered_components);
     sample.signal_ms = mark_elapsed_ms(&mut mark);
 
     run_powered_marker_phase(world, &powered_devices);
@@ -133,14 +138,12 @@ pub fn run_turn(
     run_powered_marker_phase(world, &powered_devices);
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
-    let weld_sparks = run_material_behavior_phase(world, &powered_devices, factory_structures);
+    run_material_behavior_phase(world, &powered_devices, factory_structures);
 
     prepare_upcoming_generation(world, pending_generated, turn + 1);
     sample.behavior_ms = mark_elapsed_ms(&mut mark);
 
     signal_cache.refresh(world);
-    let render_powered_components = signal_cache.powered_components(world);
-    let powered_wires = signal_cache.powered_wires(&render_powered_components);
     sample.signal_refresh_ms = mark_elapsed_ms(&mut mark);
 
     despawn_world(commands, block_entities);
@@ -153,7 +156,7 @@ pub fn run_turn(
         AnimationTiming::simulation(animation_duration),
         debug,
         factory_structures,
-        &powered_wires,
+        &render_powered_wires,
     );
     spawn_weld_sparks(commands, render_assets, &weld_sparks);
     sample.render_rebuild_ms = mark_elapsed_ms(&mut mark);

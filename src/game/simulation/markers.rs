@@ -46,7 +46,7 @@ pub(super) fn run_powered_marker_phase(world: &mut WorldBlocks, powered_devices:
         if !matches!(marker, MarkerBehavior::BlockerHead { .. }) {
             continue;
         }
-        if !powered_devices.contains(&pos) {
+        if powered_devices.contains(&pos) {
             place_generated_marker(world, pos, marker);
         }
     }

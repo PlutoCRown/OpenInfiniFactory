@@ -64,7 +64,6 @@ pub struct AnimatedBlock {
 
 #[derive(Clone, Copy)]
 pub struct PusherAnimation {
-    pub direction: IVec3,
     pub duration: f32,
 }
 
@@ -85,7 +84,7 @@ pub struct WeldSpark {
 impl AnimatedPusher {
     pub fn new(animation: PusherAnimation) -> Self {
         Self {
-            direction: animation.direction.as_vec3(),
+            direction: Vec3::NEG_Z,
             elapsed: 0.0,
             duration: animation.duration,
         }
@@ -159,7 +158,7 @@ pub fn animate_blocks(
         animation.elapsed += time.delta_secs();
         let t = (animation.elapsed / animation.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
         let extension = if t < 0.5 { t * 2.0 } else { (1.0 - t) * 2.0 };
-        transform.translation = animation.direction * extension * 0.20;
+        transform.translation = animation.direction * extension;
 
         if t >= 1.0 {
             transform.translation = Vec3::ZERO;

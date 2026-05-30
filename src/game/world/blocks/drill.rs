@@ -5,12 +5,16 @@ use super::{
 };
 
 const MODEL: &[BlockModelPart] = &[
-    BlockModelPart::new(ModelMesh::Medium, ModelMaterial::Frame, [0.0, 0.42, 0.08]),
-    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Drill, [0.0, 0.42, -0.30])
-        .scaled([0.65, 0.65, 0.68]),
-    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Drill, [-0.16, 0.42, -0.52]),
-    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Drill, [0.16, 0.42, -0.52]),
-    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Power, [0.0, 0.62, 0.08]),
+    BlockModelPart::new(
+        ModelMesh::DrillBody,
+        ModelMaterial::Platform,
+        [0.0, 0.0, 0.10],
+    ),
+    BlockModelPart::new(
+        ModelMesh::DrillTip,
+        ModelMaterial::DrillTip,
+        [0.0, 0.0, -0.34],
+    ),
 ];
 
 pub struct DrillBlock;
@@ -63,7 +67,7 @@ impl Block for DrillBlock {
     }
 
     fn model(&self) -> BlockModel {
-        BlockModel::Parts(MODEL)
+        BlockModel::PartsOnly(MODEL)
     }
 
     fn alternate(&self) -> Option<BlockKind> {
