@@ -2,7 +2,9 @@ use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::game::simulation::factory_activity::{FactoryActivity, FactoryStructureState};
+use crate::game::simulation::factory_activity::{
+    FactoryActivity, FactoryStructureState, StructureKind,
+};
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     AnimatedBlock, AnimatedPiston, AnimationEasing, AnimationTiming, BlockAnimation,
@@ -25,7 +27,14 @@ pub struct HoverMarker;
 
 #[derive(Resource, Default, Clone, Copy)]
 pub struct HoverStructureBounds {
-    pub bounds: Option<(IVec3, IVec3)>,
+    pub bounds: Option<StructureBounds>,
+}
+
+#[derive(Clone, Copy)]
+pub struct StructureBounds {
+    pub kind: StructureKind,
+    pub min: IVec3,
+    pub max: IVec3,
 }
 
 #[derive(Component)]

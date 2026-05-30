@@ -28,7 +28,7 @@ pub(super) fn mark_structure_movement_phase(
         match mover {
             MovementRule::Translate { source, offset } => {
                 if let Some(movement) =
-                    mark_structure_translate(world, factory_structures, pos + source, offset)
+                    mark_structure_translate(world, factory_structures, pos, pos + source, offset)
                 {
                     moves.push(movement);
                 }
@@ -45,9 +45,13 @@ pub(super) fn mark_structure_movement_phase(
             }
             MovementRule::PoweredTranslate { source, offset } => {
                 if powered_devices.contains(&pos) {
-                    if let Some(movement) =
-                        mark_structure_translate(world, factory_structures, pos + source, offset)
-                    {
+                    if let Some(movement) = mark_structure_translate(
+                        world,
+                        factory_structures,
+                        pos,
+                        pos + source,
+                        offset,
+                    ) {
                         if kind == BlockKind::Piston {
                             moves.push(movement.with_actor(pos));
                         } else {
@@ -79,6 +83,7 @@ impl StructureMoveActorExt for StructureMove {
 fn mark_structure_translate(
     world: &WorldBlocks,
     factory_structures: &FactoryStructureState,
+    actor: IVec3,
     source: IVec3,
     offset: IVec3,
 ) -> Option<StructureMove> {
@@ -89,6 +94,9 @@ fn mark_structure_translate(
         ));
     }
 
+    if factory_structures.structure_contains(source, actor) {
+        return None;
+    }
     let structure = factory_structures.active_structure_at(source, offset)?;
     Some(StructureMove::translate(structure, offset))
 }
@@ -108,7 +116,7 @@ fn mark_lift_structure(
                     .is_some()
         })?;
 
-    mark_structure_translate(world, factory_structures, source, IVec3::Y)
+    mark_structure_translate(world, factory_structures, pos, source, IVec3::Y)
 }
 
 fn mark_rotate_material_structure(

@@ -17,6 +17,12 @@ pub enum StructureFreedom {
     All,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StructureKind {
+    Material,
+    Factory,
+}
+
 impl StructureFreedom {
     pub fn can_translate(self, _offset: IVec3) -> bool {
         self == Self::All
@@ -25,6 +31,7 @@ impl StructureFreedom {
 
 #[derive(Clone)]
 pub struct FactoryStructure {
+    pub kind: StructureKind,
     pub positions: HashSet<IVec3>,
     pub activity: FactoryActivity,
     pub freedom: StructureFreedom,
@@ -74,6 +81,7 @@ impl FactoryStructureState {
                 structure_by_pos.insert(*pos, index);
             }
             structures.push(FactoryStructure {
+                kind: StructureKind::Factory,
                 positions,
                 activity: FactoryActivity::Active,
                 freedom: StructureFreedom::All,
@@ -174,6 +182,15 @@ impl FactoryStructureState {
 
     pub fn freedom_at(&self, pos: IVec3) -> Option<StructureFreedom> {
         Some(self.structure(pos)?.freedom)
+    }
+
+    pub fn kind_at(&self, pos: IVec3) -> Option<StructureKind> {
+        Some(self.structure(pos)?.kind)
+    }
+
+    pub fn structure_contains(&self, pos: IVec3, candidate: IVec3) -> bool {
+        self.structure(pos)
+            .is_some_and(|structure| structure.positions.contains(&candidate))
     }
 
     fn structure(&self, pos: IVec3) -> Option<&FactoryStructure> {

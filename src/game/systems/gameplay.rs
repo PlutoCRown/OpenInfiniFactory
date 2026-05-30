@@ -3,7 +3,9 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
 use crate::game::player::controller::{player_intersects_block, FlyCamera};
-use crate::game::simulation::factory_activity::{FactoryStructureState, StructureFreedom};
+use crate::game::simulation::factory_activity::{
+    FactoryStructureState, StructureFreedom, StructureKind,
+};
 use crate::game::simulation::structures::material_structure;
 use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, GameSettings, PlacementState,
@@ -16,7 +18,8 @@ use crate::game::ui::{
 };
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::blocks::{BlockData, BlockKind, Facing, MarkerBehavior};
-use crate::game::world::grid::{raycast_blocks, MaterialWeld, WorldBlocks};
+use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
+use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
     despawn_edit_previews, rebuild_world_for_debug_state, rebuild_world_with_animations,
     spawn_block_preview, spawn_block_with_animation, spawn_edit_preview, BlockEntity, EditPreview,
@@ -194,7 +197,7 @@ pub fn placement_input(
             &mut commands,
             &render_assets,
             &debug,
-            &factory_structures,
+            &mut factory_structures,
         ) {
             solution_state.dirty = true;
         }
@@ -226,7 +229,7 @@ pub fn placement_input(
                 &mut commands,
                 &render_assets,
                 &debug,
-                &factory_structures,
+                &mut factory_structures,
             ) {
                 solution_state.dirty = true;
             }
@@ -245,7 +248,7 @@ pub fn placement_input(
                 &mut commands,
                 &render_assets,
                 &debug,
-                &factory_structures,
+                &mut factory_structures,
             ) {
                 solution_state.dirty = true;
             }
@@ -312,7 +315,7 @@ pub fn placement_input(
                     &mut commands,
                     &render_assets,
                     &debug,
-                    &factory_structures,
+                    &mut factory_structures,
                     &block_entities,
                 ) {
                     solution_state.dirty = true;
@@ -415,7 +418,7 @@ fn handle_selection_area_input(
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
-    factory_structures: &FactoryStructureState,
+    factory_structures: &mut FactoryStructureState,
 ) -> bool {
     let mut changed = false;
     if let Some(drag) = placement.selection.drag.as_mut() {
@@ -510,7 +513,7 @@ fn move_selection(
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
-    factory_structures: &FactoryStructureState,
+    factory_structures: &mut FactoryStructureState,
     bounds: SelectionBounds,
     offset: IVec3,
 ) -> bool {
@@ -570,6 +573,7 @@ fn move_selection(
         );
     }
     world.replace_material_welds(updated_welds);
+    factory_structures.rebuild_from_world(world);
     if debug.factory_activity {
         despawn_block_entities(commands, block_entities);
         rebuild_world_for_debug_state(commands, world, render_assets, debug, factory_structures);
@@ -617,7 +621,7 @@ fn alternate_block_at(
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
-    factory_structures: &FactoryStructureState,
+    factory_structures: &mut FactoryStructureState,
 ) -> bool {
     let Some(block) = world.blocks.get_mut(&pos) else {
         return false;
@@ -628,6 +632,7 @@ fn alternate_block_at(
 
     block.kind = kind;
     refresh_edit_generated_markers(world);
+    factory_structures.rebuild_from_world(world);
     despawn_block_entities(commands, block_entities);
     rebuild_world_for_debug_state(commands, world, render_assets, debug, factory_structures);
     true
@@ -640,7 +645,7 @@ fn rotate_block_at(
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
-    factory_structures: &FactoryStructureState,
+    factory_structures: &mut FactoryStructureState,
 ) -> bool {
     let Some(block) = world.blocks.get_mut(&pos) else {
         return false;
@@ -654,6 +659,7 @@ fn rotate_block_at(
     let updated = *block;
 
     refresh_edit_generated_markers(world);
+    factory_structures.rebuild_from_world(world);
     let mut animations = std::collections::HashMap::new();
     animations.insert(
         pos,
@@ -762,7 +768,7 @@ fn commit_edit_gesture(
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
-    factory_structures: &FactoryStructureState,
+    factory_structures: &mut FactoryStructureState,
     block_entities: &Query<(Entity, &BlockEntity)>,
 ) -> bool {
     let mut changed = false;
@@ -781,6 +787,7 @@ fn commit_edit_gesture(
             }
             if changed {
                 refresh_edit_generated_markers(world);
+                factory_structures.rebuild_from_world(world);
                 despawn_block_entities(commands, block_entities);
                 rebuild_world_for_debug_state(
                     commands,
@@ -811,6 +818,7 @@ fn commit_edit_gesture(
             }
             if changed {
                 refresh_edit_generated_markers(world);
+                factory_structures.rebuild_from_world(world);
                 despawn_block_entities(commands, block_entities);
                 rebuild_world_for_debug_state(
                     commands,
@@ -948,6 +956,7 @@ pub fn update_hover(
     mut placement: ResMut<PlacementState>,
     mode: Res<GameMode>,
     ui_runtime: Res<UiRuntime>,
+    debug: Res<DebugState>,
     inventory: Res<InventoryItems>,
     builder_mode: Res<BuilderMode>,
     camera: Query<&Transform, (With<FlyCamera>, Without<HoverMarker>)>,
@@ -1007,9 +1016,14 @@ pub fn update_hover(
     *marker_visibility = Visibility::Hidden;
 
     if placement.edit_gesture.is_none() {
-        hover_bounds.bounds = placement
-            .target
-            .and_then(|target| hover_structure_bounds(&world, &factory_structures, target.pos));
+        hover_bounds.bounds = placement.target.and_then(|target| {
+            hover_structure_bounds(
+                &world,
+                &factory_structures,
+                debug.factory_activity,
+                target.pos,
+            )
+        });
     } else {
         hover_bounds.bounds = None;
     }
@@ -1026,25 +1040,38 @@ pub fn update_hover(
 fn hover_structure_bounds(
     world: &WorldBlocks,
     factory_structures: &FactoryStructureState,
+    debug_factory: bool,
     pos: IVec3,
-) -> Option<(IVec3, IVec3)> {
+) -> Option<StructureBounds> {
     let block = world.blocks.get(&pos)?;
     if block.kind.is_scene() {
         return None;
     }
     if block.kind.is_material() {
-        return structure_bounds(material_structure(world, pos).into_iter());
+        return structure_bounds(
+            StructureKind::Material,
+            material_structure(world, pos).into_iter(),
+        );
     }
     if block.kind.is_factory() {
+        if !debug_factory {
+            return None;
+        }
         if factory_structures.freedom_at(pos) == Some(StructureFreedom::None) {
             return None;
         }
-        return structure_bounds(factory_structures.movable_structure_at(pos)?.into_iter());
+        return structure_bounds(
+            factory_structures.kind_at(pos)?,
+            factory_structures.movable_structure_at(pos)?.into_iter(),
+        );
     }
     None
 }
 
-fn structure_bounds(mut positions: impl Iterator<Item = IVec3>) -> Option<(IVec3, IVec3)> {
+fn structure_bounds(
+    kind: StructureKind,
+    mut positions: impl Iterator<Item = IVec3>,
+) -> Option<StructureBounds> {
     let first = positions.next()?;
     let mut min = first;
     let mut max = first;
@@ -1052,21 +1079,27 @@ fn structure_bounds(mut positions: impl Iterator<Item = IVec3>) -> Option<(IVec3
         min = IVec3::new(min.x.min(pos.x), min.y.min(pos.y), min.z.min(pos.z));
         max = IVec3::new(max.x.max(pos.x), max.y.max(pos.y), max.z.max(pos.z));
     }
-    Some((min, max))
+    Some(StructureBounds { kind, min, max })
 }
 
 pub fn draw_hover_structure_bounds(bounds: Res<HoverStructureBounds>, mut gizmos: Gizmos) {
-    let Some((min, max)) = bounds.bounds else {
+    let Some(bounds) = bounds.bounds else {
         return;
     };
-    let min = min.as_vec3() - Vec3::splat(0.5);
-    let max = max.as_vec3() + Vec3::splat(0.5);
-    let center = (min + max) * 0.5;
-    let size = max - min;
-    gizmos.cube(
-        Transform::from_translation(center).with_scale(size),
-        Color::srgba(1.0, 1.0, 1.0, 0.92),
-    );
+    let min = bounds.min;
+    let max = bounds.max;
+    let center = (grid_to_world(min) + grid_to_world(max)) * 0.5;
+    let size = (max - min + IVec3::ONE).as_vec3() + Vec3::splat(0.04);
+    let color = match bounds.kind {
+        StructureKind::Material => Color::srgba(1.0, 1.0, 1.0, 0.95),
+        StructureKind::Factory => Color::srgba(0.35, 1.0, 0.45, 0.95),
+    };
+    for inset in [0.0, 0.012, -0.012] {
+        gizmos.cube(
+            Transform::from_translation(center).with_scale(size + Vec3::splat(inset)),
+            color,
+        );
+    }
 }
 
 fn can_place_in_mode(kind: BlockKind, mode: BuilderMode) -> bool {
