@@ -5,6 +5,7 @@ use bevy::ui_widgets::SliderValue;
 use bevy::window::{PrimaryWindow, Window};
 
 use crate::game::simulation::factory_activity::FactoryStructureState;
+use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
     TeleportRenameState, WorldEntryMode,
@@ -455,6 +456,7 @@ pub fn pause_menu_actions(
             PauseAction::ConfirmResetSolution => {
                 if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
                     reset_solution_world(&mut world, puzzle_snapshot);
+                    refresh_static_generated_markers(&mut world);
                     simulation.running = false;
                     simulation.step_requested = false;
                     simulation.turn = 0;
@@ -586,6 +588,7 @@ fn open_loaded_world(
         WorldEntryMode::PlaySolution => loaded.puzzle_snapshot.or_else(|| Some(loaded.world)),
     };
 
+    refresh_static_generated_markers(world);
     factory_structures.clear();
     factory_structures.ensure_current_world(world);
     despawn_world(commands, block_entities);
@@ -637,6 +640,7 @@ fn switch_to_edit_mode(
 ) {
     if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
         *world = puzzle_snapshot.clone();
+        refresh_static_generated_markers(world);
     }
     *builder_mode = BuilderMode::Edit;
     *inventory = InventoryItems::for_mode(*builder_mode);

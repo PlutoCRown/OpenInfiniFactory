@@ -1,7 +1,7 @@
 mod behaviors;
 pub mod factory_activity;
 mod gravity;
-mod markers;
+pub mod markers;
 mod movement;
 pub mod runtime;
 mod signals;

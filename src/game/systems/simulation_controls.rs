@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::game::simulation::factory_activity::FactoryStructureState;
+use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::runtime::PendingGeneratedMaterials;
 use crate::game::state::{BuilderMode, GameMode, SimulationState};
 use crate::game::systems::debug::DebugState;
@@ -63,6 +64,7 @@ pub fn simulation_controls(
 
     if keys.just_pressed(rollback_key) && simulation.is_active() {
         rollback_simulation(&mut simulation, &mut world);
+        refresh_static_generated_markers(&mut world);
         pending_generated.clear();
         factory_structures.clear();
         despawn_world(&mut commands, &block_entities);

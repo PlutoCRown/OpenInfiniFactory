@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use crate::game::world::blocks::{BlockData, BlockKind, MarkerBehavior};
 use crate::game::world::grid::WorldBlocks;
 
-pub(super) fn run_static_marker_phase(world: &mut WorldBlocks) {
+pub fn refresh_static_generated_markers(world: &mut WorldBlocks) {
     world.clear_generated_markers();
 
     let markers: Vec<(IVec3, MarkerBehavior)> = world
@@ -24,6 +24,10 @@ pub(super) fn run_static_marker_phase(world: &mut WorldBlocks) {
         }
         place_generated_marker(world, pos, marker);
     }
+}
+
+pub(super) fn run_static_marker_phase(world: &mut WorldBlocks) {
+    refresh_static_generated_markers(world);
 }
 
 pub(super) fn run_powered_marker_phase(world: &mut WorldBlocks, powered_devices: &HashSet<IVec3>) {

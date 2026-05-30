@@ -6,6 +6,7 @@ use crate::game::player::controller::{player_intersects_block, FlyCamera};
 use crate::game::simulation::factory_activity::{
     FactoryStructureState, StructureFreedom, StructureKind,
 };
+use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structures::material_structure;
 use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, GameSettings, PlacementState,
@@ -17,7 +18,7 @@ use crate::game::ui::{
     AreaKind, CarriedItem, InventoryItems, PendingKeyBind, UiRuntime, HOTBAR_SLOTS,
 };
 use crate::game::world::animation::BlockAnimation;
-use crate::game::world::blocks::{BlockData, BlockKind, Facing, MarkerBehavior};
+use crate::game::world::blocks::{BlockData, BlockKind, Facing};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
@@ -588,30 +589,7 @@ fn despawn_block_entities(commands: &mut Commands, block_entities: &Query<(Entit
 }
 
 fn refresh_edit_generated_markers(world: &mut WorldBlocks) {
-    world.clear_generated_markers();
-    let weld_points: Vec<(IVec3, IVec3, crate::game::world::direction::Facing)> = world
-        .blocks
-        .iter()
-        .filter_map(
-            |(pos, block)| match block.kind.marker_behavior(block.facing) {
-                Some(MarkerBehavior::WeldPoint { offset, facing }) => Some((*pos, offset, facing)),
-                _ => None,
-            },
-        )
-        .collect();
-
-    for (pos, offset, facing) in weld_points {
-        let point_pos = pos + offset;
-        if !world.is_occupied(point_pos) {
-            world.insert(
-                point_pos,
-                BlockData {
-                    kind: BlockKind::WeldPoint,
-                    facing,
-                },
-            );
-        }
-    }
+    refresh_static_generated_markers(world);
 }
 
 fn alternate_block_at(
