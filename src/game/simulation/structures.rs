@@ -6,9 +6,12 @@ use crate::game::world::blocks::BlockData;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks};
 
-use super::factory_activity::{active_factory_structure, factory_activity_map};
+use super::factory_activity::FactoryStructureState;
 
-pub(super) fn material_gravity_moves(world: &WorldBlocks) -> Vec<StructureMove> {
+pub(super) fn material_gravity_moves(
+    world: &WorldBlocks,
+    factory_structures: &FactoryStructureState,
+) -> Vec<StructureMove> {
     let mut materials: Vec<IVec3> = world
         .blocks
         .iter()
@@ -25,14 +28,17 @@ pub(super) fn material_gravity_moves(world: &WorldBlocks) -> Vec<StructureMove> 
 
         let structure = material_structure(world, pos);
         handled.extend(structure.iter().copied());
-        if can_move_structure(world, &structure, IVec3::NEG_Y) {
+        if can_move_structure(world, &structure, IVec3::NEG_Y, factory_structures) {
             moves.push(StructureMove::translate(structure, IVec3::NEG_Y));
         }
     }
     moves
 }
 
-pub(super) fn factory_gravity_moves(world: &WorldBlocks) -> Vec<StructureMove> {
+pub(super) fn factory_gravity_moves(
+    world: &WorldBlocks,
+    factory_structures: &FactoryStructureState,
+) -> Vec<StructureMove> {
     let mut factory_blocks: Vec<IVec3> = world
         .blocks
         .iter()
@@ -42,17 +48,16 @@ pub(super) fn factory_gravity_moves(world: &WorldBlocks) -> Vec<StructureMove> {
 
     let mut handled = HashSet::new();
     let mut moves = Vec::new();
-    let activity = factory_activity_map(world);
     for pos in factory_blocks {
         if handled.contains(&pos) || !world.is_factory_at(pos) {
             continue;
         };
 
-        let Some(structure) = active_factory_structure(world, &activity, pos) else {
+        let Some(structure) = factory_structures.active_structure_at(pos, IVec3::NEG_Y) else {
             continue;
         };
         handled.extend(structure.iter().copied());
-        if can_move_structure(world, &structure, IVec3::NEG_Y) {
+        if can_move_structure(world, &structure, IVec3::NEG_Y, factory_structures) {
             moves.push(StructureMove::translate(structure, IVec3::NEG_Y));
         }
     }
@@ -105,13 +110,15 @@ impl StructureMove {
 pub(super) fn execute_structure_moves(
     world: &mut WorldBlocks,
     moves: Vec<StructureMove>,
+    factory_structures: &mut FactoryStructureState,
 ) -> HashMap<IVec3, BlockAnimation> {
-    execute_structure_moves_with_pistons(world, moves).0
+    execute_structure_moves_with_pistons(world, moves, factory_structures).0
 }
 
 pub(super) fn execute_structure_moves_with_pistons(
     world: &mut WorldBlocks,
     moves: Vec<StructureMove>,
+    factory_structures: &mut FactoryStructureState,
 ) -> (
     HashMap<IVec3, BlockAnimation>,
     HashMap<IVec3, PistonAnimation>,
@@ -129,7 +136,9 @@ pub(super) fn execute_structure_moves_with_pistons(
                 if structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
                 }
-                if let Some(structure) = expanded_move_structure(world, &structure, offset) {
+                if let Some(structure) =
+                    expanded_move_structure(world, &structure, offset, factory_structures)
+                {
                     if offset.abs().element_sum() == 1 {
                         for pos in &structure {
                             if let Some(block) = world.blocks.get(pos) {
@@ -159,6 +168,7 @@ pub(super) fn execute_structure_moves_with_pistons(
                     }
                     moved.extend(structure.iter().copied());
                     move_structure(world, &structure, offset);
+                    factory_structures.move_positions(&structure, offset);
                     moved.extend(structure.into_iter().map(|pos| pos + offset));
                 }
             }
@@ -202,7 +212,7 @@ pub(super) fn execute_structure_moves_with_pistons(
     (animations, piston_animations)
 }
 
-pub(super) fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
+pub(crate) fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     let mut structure = HashSet::new();
     let mut queue = VecDeque::from([start]);
     structure.insert(start);
@@ -233,21 +243,22 @@ pub(super) fn can_move_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,
+    factory_structures: &FactoryStructureState,
 ) -> bool {
-    expanded_move_structure(world, structure, offset).is_some()
+    expanded_move_structure(world, structure, offset, factory_structures).is_some()
 }
 
 fn expanded_move_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,
+    factory_structures: &FactoryStructureState,
 ) -> Option<HashSet<IVec3>> {
     if offset.abs().element_sum() != 1 {
         return can_move_structure_without_push(world, structure, offset)
             .then(|| structure.clone());
     }
 
-    let activity = factory_activity_map(world);
     let mut expanded = structure.clone();
     let mut queue: VecDeque<IVec3> = structure.iter().copied().collect();
     while let Some(pos) = queue.pop_front() {
@@ -263,7 +274,7 @@ fn expanded_move_structure(
         if !block.kind.is_factory() {
             return None;
         }
-        let pushed = active_factory_structure(world, &activity, target)?;
+        let pushed = factory_structures.active_structure_at(target, offset)?;
         for pushed_pos in pushed {
             if expanded.insert(pushed_pos) {
                 queue.push_back(pushed_pos);

@@ -21,13 +21,15 @@ use state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
     TeleportRenameState,
 };
-use systems::gameplay::{apply_fov, gameplay_input, placement_input, update_hover};
+use systems::gameplay::{
+    apply_fov, draw_hover_structure_bounds, gameplay_input, placement_input, update_hover,
+};
 use systems::menus::{app_exit_requests, main_menu_actions, pause_menu_actions, save_list_actions};
 use systems::simulation_controls::simulation_controls;
 use ui::{GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
-use world::rendering::setup_scene;
+use world::rendering::{setup_scene, HoverStructureBounds};
 
 pub struct GamePlugin;
 
@@ -61,6 +63,7 @@ impl Plugin for GamePlugin {
             })
             .insert_resource(DirectionalLightShadowMap { size: 2048 })
             .insert_resource(WorldBlocks::default())
+            .insert_resource(HoverStructureBounds::default())
             .insert_resource(PlacementState::default())
             .insert_resource(TeleportRenameState::default())
             .insert_resource(InventoryItems::default())
@@ -71,6 +74,7 @@ impl Plugin for GamePlugin {
             .insert_resource(simulation::runtime::SignalNetworkCache::default())
             .insert_resource(simulation::runtime::SimulationStepStats::default())
             .insert_resource(simulation::runtime::PendingGeneratedMaterials::default())
+            .insert_resource(simulation::factory_activity::FactoryStructureState::default())
             .insert_resource(settings)
             .insert_resource(UiScale(config.ui_scale))
             .insert_resource(config)
@@ -124,7 +128,7 @@ impl Plugin for GamePlugin {
             .add_systems(Update, systems::debug::mark_perf_simulation)
             .add_systems(
                 Update,
-                (apply_fov, update_hover)
+                (apply_fov, update_hover, draw_hover_structure_bounds)
                     .chain()
                     .after(systems::debug::mark_perf_simulation)
                     .before(systems::debug::mark_perf_view),

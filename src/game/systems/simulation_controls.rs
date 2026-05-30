@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::game::simulation::factory_activity::FactoryStructureState;
 use crate::game::simulation::runtime::PendingGeneratedMaterials;
 use crate::game::state::{BuilderMode, GameMode, SimulationState};
 use crate::game::systems::debug::DebugState;
@@ -19,6 +20,7 @@ pub fn simulation_controls(
     ui_runtime: Res<UiRuntime>,
     mut simulation: ResMut<SimulationState>,
     mut pending_generated: ResMut<PendingGeneratedMaterials>,
+    mut factory_structures: ResMut<FactoryStructureState>,
     mut world: ResMut<WorldBlocks>,
     block_entities: Query<Entity, With<BlockEntity>>,
     render_assets: Res<WorldRenderAssets>,
@@ -39,6 +41,7 @@ pub fn simulation_controls(
     if keys.just_pressed(simulate_key) {
         if !simulation.is_active() {
             simulation.start_snapshot = Some(world.clone());
+            factory_structures.rebuild_from_world(&world);
         }
         simulation.running = true;
     }
@@ -61,8 +64,15 @@ pub fn simulation_controls(
     if keys.just_pressed(rollback_key) && simulation.is_active() {
         rollback_simulation(&mut simulation, &mut world);
         pending_generated.clear();
+        factory_structures.clear();
         despawn_world(&mut commands, &block_entities);
-        rebuild_world_for_debug_state(&mut commands, &world, &render_assets, &debug);
+        rebuild_world_for_debug_state(
+            &mut commands,
+            &world,
+            &render_assets,
+            &debug,
+            &factory_structures,
+        );
     }
 }
 fn rollback_simulation(simulation: &mut SimulationState, world: &mut WorldBlocks) {

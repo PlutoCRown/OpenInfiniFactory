@@ -5,7 +5,7 @@ mod markers;
 mod movement;
 pub mod runtime;
 mod signals;
-mod structures;
+pub mod structures;
 
 use bevy::prelude::*;
 

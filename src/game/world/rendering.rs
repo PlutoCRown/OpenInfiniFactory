@@ -2,7 +2,7 @@ use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::game::simulation::factory_activity::{factory_activity_map, FactoryActivity};
+use crate::game::simulation::factory_activity::{FactoryActivity, FactoryStructureState};
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     AnimatedBlock, AnimatedPiston, AnimationEasing, AnimationTiming, BlockAnimation,
@@ -22,6 +22,11 @@ pub struct BlockEntity {
 
 #[derive(Component)]
 pub struct HoverMarker;
+
+#[derive(Resource, Default, Clone, Copy)]
+pub struct HoverStructureBounds {
+    pub bounds: Option<(IVec3, IVec3)>,
+}
 
 #[derive(Component)]
 pub struct PlacementPreview;
@@ -120,11 +125,11 @@ pub fn rebuild_world_with_factory_activity_debug(
     commands: &mut Commands,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
+    factory_structures: &FactoryStructureState,
 ) {
-    let activity = factory_activity_map(world);
     for (pos, data) in &world.blocks {
         if data.kind.is_factory() {
-            let material = match activity.get(pos) {
+            let material = match factory_structures.activity_at(*pos) {
                 Some(FactoryActivity::Active) => assets.active_factory_debug_material(),
                 _ => assets.inactive_factory_debug_material(),
             };
@@ -143,9 +148,10 @@ pub fn rebuild_world_for_debug_state(
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     debug: &DebugState,
+    factory_structures: &FactoryStructureState,
 ) {
     if debug.factory_activity {
-        rebuild_world_with_factory_activity_debug(commands, world, assets);
+        rebuild_world_with_factory_activity_debug(commands, world, assets, factory_structures);
     } else {
         rebuild_world(commands, world, assets);
     }
@@ -408,9 +414,10 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
     piston_animations: &HashMap<IVec3, PistonAnimation>,
     timing: AnimationTiming,
     debug: &DebugState,
+    factory_structures: &FactoryStructureState,
 ) {
     if debug.factory_activity {
-        rebuild_world_with_factory_activity_debug(commands, world, assets);
+        rebuild_world_with_factory_activity_debug(commands, world, assets, factory_structures);
     } else {
         rebuild_world_with_runtime_animations(
             commands,

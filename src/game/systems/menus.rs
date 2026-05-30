@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use bevy::ui_widgets::SliderValue;
 use bevy::window::{PrimaryWindow, Window};
 
+use crate::game::simulation::factory_activity::FactoryStructureState;
 use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
     TeleportRenameState, WorldEntryMode,
@@ -131,6 +132,7 @@ pub fn save_list_actions(
     mut simulation: ResMut<SimulationState>,
     render_assets: Res<WorldRenderAssets>,
     debug: Res<DebugState>,
+    mut factory_structures: ResMut<FactoryStructureState>,
     block_entities: Query<Entity, With<BlockEntity>>,
     mut interactions: Query<(&Interaction, &SaveListAction), (Changed<Interaction>, With<Button>)>,
 ) {
@@ -168,6 +170,7 @@ pub fn save_list_actions(
                     &block_entities,
                     &render_assets,
                     &debug,
+                    &mut factory_structures,
                     &mut mode,
                 );
             }
@@ -200,6 +203,7 @@ pub fn save_list_actions(
                     &block_entities,
                     &render_assets,
                     &debug,
+                    &mut factory_structures,
                     &mut mode,
                 );
             }
@@ -225,6 +229,7 @@ pub fn save_list_actions(
                         &block_entities,
                         &render_assets,
                         &debug,
+                        &mut factory_structures,
                         &mut mode,
                     );
                 } else {
@@ -261,6 +266,7 @@ pub fn save_list_actions(
                     &block_entities,
                     &render_assets,
                     &debug,
+                    &mut factory_structures,
                     &mut mode,
                 );
             }
@@ -312,6 +318,7 @@ pub fn pause_menu_actions(
     block_entities: Query<Entity, With<BlockEntity>>,
     render_assets: Res<WorldRenderAssets>,
     debug: Res<DebugState>,
+    mut factory_structures: ResMut<FactoryStructureState>,
     mut interactions: Query<(&Interaction, &PauseAction), (Changed<Interaction>, With<Button>)>,
 ) {
     if !matches!(
@@ -370,7 +377,15 @@ pub fn pause_menu_actions(
                     &mut solution_state,
                 );
                 despawn_world(&mut commands, &block_entities);
-                rebuild_world_for_debug_state(&mut commands, &world, &render_assets, &debug);
+                factory_structures.clear();
+                factory_structures.ensure_current_world(&world);
+                rebuild_world_for_debug_state(
+                    &mut commands,
+                    &world,
+                    &render_assets,
+                    &debug,
+                    &factory_structures,
+                );
             }
             PauseAction::DiscardSolutionAndEdit => {
                 switch_to_edit_mode(
@@ -384,7 +399,15 @@ pub fn pause_menu_actions(
                     &mut solution_state,
                 );
                 despawn_world(&mut commands, &block_entities);
-                rebuild_world_for_debug_state(&mut commands, &world, &render_assets, &debug);
+                factory_structures.clear();
+                factory_structures.ensure_current_world(&world);
+                rebuild_world_for_debug_state(
+                    &mut commands,
+                    &world,
+                    &render_assets,
+                    &debug,
+                    &factory_structures,
+                );
             }
             PauseAction::CancelEditSwitch => {
                 *mode = GameMode::Paused;
@@ -404,6 +427,7 @@ pub fn pause_menu_actions(
                     &block_entities,
                     &render_assets,
                     &debug,
+                    &mut factory_structures,
                 );
                 *mode = GameMode::MainMenu;
             }
@@ -418,6 +442,7 @@ pub fn pause_menu_actions(
                     &block_entities,
                     &render_assets,
                     &debug,
+                    &mut factory_structures,
                 );
                 *mode = GameMode::MainMenu;
             }
@@ -435,8 +460,16 @@ pub fn pause_menu_actions(
                     simulation.turn = 0;
                     simulation.accumulator = 0.0;
                     simulation.start_snapshot = None;
+                    factory_structures.clear();
+                    factory_structures.ensure_current_world(&world);
                     despawn_world(&mut commands, &block_entities);
-                    rebuild_world_for_debug_state(&mut commands, &world, &render_assets, &debug);
+                    rebuild_world_for_debug_state(
+                        &mut commands,
+                        &world,
+                        &render_assets,
+                        &debug,
+                        &factory_structures,
+                    );
                 }
                 *mode = GameMode::Paused;
             }
@@ -463,6 +496,7 @@ pub fn pause_menu_actions(
                         &block_entities,
                         &render_assets,
                         &debug,
+                        &mut factory_structures,
                     );
                     *mode = GameMode::MainMenu;
                 }
@@ -514,6 +548,7 @@ fn open_loaded_world(
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
+    factory_structures: &mut FactoryStructureState,
     mode: &mut GameMode,
 ) {
     let Some(loaded) = load_world(world, name) else {
@@ -551,8 +586,10 @@ fn open_loaded_world(
         WorldEntryMode::PlaySolution => loaded.puzzle_snapshot.or_else(|| Some(loaded.world)),
     };
 
+    factory_structures.clear();
+    factory_structures.ensure_current_world(world);
     despawn_world(commands, block_entities);
-    rebuild_world_for_debug_state(commands, world, render_assets, debug);
+    rebuild_world_for_debug_state(commands, world, render_assets, debug, factory_structures);
     *mode = GameMode::Playing;
 }
 
@@ -566,6 +603,7 @@ fn clear_loaded_world(
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
+    factory_structures: &mut FactoryStructureState,
 ) {
     simulation.running = false;
     simulation.step_requested = false;
@@ -581,8 +619,10 @@ fn clear_loaded_world(
     solution_state.puzzle_snapshot = None;
     solution_state.dirty = false;
     solution_state.entry = WorldEntryMode::EditPuzzle;
+    factory_structures.clear();
+    factory_structures.ensure_current_world(world);
     despawn_world(commands, block_entities);
-    rebuild_world_for_debug_state(commands, world, render_assets, debug);
+    rebuild_world_for_debug_state(commands, world, render_assets, debug, factory_structures);
 }
 
 fn switch_to_edit_mode(

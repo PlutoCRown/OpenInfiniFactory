@@ -17,9 +17,10 @@ use crate::game::world::rendering::{
 };
 
 use super::behaviors::{material_source_generation, run_material_behavior_phase};
+use super::factory_activity::FactoryStructureState;
 use super::gravity::mark_gravity_phase;
 use super::markers::{run_powered_marker_phase, run_static_marker_phase};
-use super::movement::mark_material_movement_phase;
+use super::movement::mark_structure_movement_phase;
 pub use super::signals::SignalNetworkCache;
 use super::structures::execute_structure_moves_with_pistons;
 
@@ -84,6 +85,7 @@ pub fn run_turn(
     render_assets: &WorldRenderAssets,
     animation_duration: f32,
     debug: &DebugState,
+    factory_structures: &mut FactoryStructureState,
     stats: &mut SimulationStepStats,
 ) {
     let total_start = Instant::now();
@@ -93,7 +95,7 @@ pub fn run_turn(
     world.clear_generated_markers();
     sample.prep_ms = mark_elapsed_ms(&mut mark);
 
-    let mut movement_plan = mark_gravity_phase(world);
+    let mut movement_plan = mark_gravity_phase(world, factory_structures);
     sample.gravity_ms = mark_elapsed_ms(&mut mark);
 
     signal_cache.refresh(world);
@@ -104,11 +106,15 @@ pub fn run_turn(
     run_powered_marker_phase(world, &powered_devices);
     sample.marker_before_move_ms = mark_elapsed_ms(&mut mark);
 
-    movement_plan.extend(mark_material_movement_phase(world, &powered_devices));
+    movement_plan.extend(mark_structure_movement_phase(
+        world,
+        &powered_devices,
+        factory_structures,
+    ));
     sample.movement_mark_ms = mark_elapsed_ms(&mut mark);
 
     let (animations, piston_animations) =
-        execute_structure_moves_with_pistons(world, movement_plan);
+        execute_structure_moves_with_pistons(world, movement_plan, factory_structures);
     let piston_animations = piston_animations
         .into_iter()
         .map(|(pos, mut animation)| {
@@ -123,7 +129,7 @@ pub fn run_turn(
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
     place_ready_generated_materials(world, pending_generated, turn);
-    run_material_behavior_phase(world, &powered_devices);
+    run_material_behavior_phase(world, &powered_devices, factory_structures);
 
     prepare_upcoming_generation(world, pending_generated, turn + 1);
     sample.behavior_ms = mark_elapsed_ms(&mut mark);
@@ -140,6 +146,7 @@ pub fn run_turn(
         &piston_animations,
         AnimationTiming::simulation(animation_duration),
         debug,
+        factory_structures,
     );
     sample.render_rebuild_ms = mark_elapsed_ms(&mut mark);
     sample.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
@@ -160,6 +167,7 @@ pub fn tick_simulation(
     pending_previews: Query<Entity, With<PendingGeneratedPreview>>,
     render_assets: Res<WorldRenderAssets>,
     debug: Res<DebugState>,
+    mut factory_structures: ResMut<FactoryStructureState>,
 ) {
     if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
         prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
@@ -189,6 +197,7 @@ pub fn tick_simulation(
             &render_assets,
             SIMULATION_TURN_SECONDS,
             &debug,
+            &mut factory_structures,
             &mut sim_stats,
         );
         prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
@@ -218,6 +227,7 @@ pub fn tick_simulation(
             &render_assets,
             SIMULATION_TURN_SECONDS / simulation.speed.max(0.001),
             &debug,
+            &mut factory_structures,
             &mut sim_stats,
         );
     }

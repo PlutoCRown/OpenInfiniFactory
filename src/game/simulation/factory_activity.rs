@@ -11,81 +11,179 @@ pub enum FactoryActivity {
     Inactive,
 }
 
-pub fn factory_activity_map(world: &WorldBlocks) -> HashMap<IVec3, FactoryActivity> {
-    let mut structures = Vec::new();
-    let mut structure_by_pos = HashMap::new();
-    let mut handled = HashSet::new();
-    let mut starts: Vec<IVec3> = world
-        .blocks
-        .iter()
-        .filter_map(|(pos, block)| block.kind.is_factory().then_some(*pos))
-        .collect();
-    starts.sort_by_key(|pos| (pos.x, pos.y, pos.z));
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StructureFreedom {
+    None,
+    All,
+}
 
-    for start in starts {
-        if handled.contains(&start) || !world.is_factory_at(start) {
-            continue;
-        }
+impl StructureFreedom {
+    pub fn can_translate(self, _offset: IVec3) -> bool {
+        self == Self::All
+    }
+}
 
-        let structure = factory_structure(world, start);
-        let index = structures.len();
-        for pos in &structure {
-            handled.insert(*pos);
-            structure_by_pos.insert(*pos, index);
-        }
-        structures.push(structure);
+#[derive(Clone)]
+pub struct FactoryStructure {
+    pub positions: HashSet<IVec3>,
+    pub activity: FactoryActivity,
+    pub freedom: StructureFreedom,
+}
+
+#[derive(Resource, Default, Clone)]
+pub struct FactoryStructureState {
+    structures: Vec<FactoryStructure>,
+    structure_by_pos: HashMap<IVec3, usize>,
+}
+
+impl FactoryStructureState {
+    pub fn rebuild_from_world(&mut self, world: &WorldBlocks) {
+        *self = Self::from_world(world);
     }
 
-    let mut inactive = vec![false; structures.len()];
-    let mut queue = VecDeque::new();
-    for (index, structure) in structures.iter().enumerate() {
-        if touches_scene(world, structure) {
-            inactive[index] = true;
-            queue.push_back(index);
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+
+    pub fn ensure_current_world(&mut self, world: &WorldBlocks) {
+        if self.structure_by_pos.is_empty() {
+            self.rebuild_from_world(world);
         }
     }
 
-    while let Some(index) = queue.pop_front() {
-        for pos in &structures[index] {
-            for offset in signal_offsets() {
-                let neighbor = *pos + offset;
-                let Some(neighbor_index) = structure_by_pos.get(&neighbor).copied() else {
-                    continue;
-                };
-                if !inactive[neighbor_index] {
-                    inactive[neighbor_index] = true;
-                    queue.push_back(neighbor_index);
+    pub fn from_world(world: &WorldBlocks) -> Self {
+        let mut structures = Vec::new();
+        let mut structure_by_pos = HashMap::new();
+        let mut handled = HashSet::new();
+        let mut starts: Vec<IVec3> = world
+            .blocks
+            .iter()
+            .filter_map(|(pos, block)| block.kind.is_factory().then_some(*pos))
+            .collect();
+        starts.sort_by_key(|pos| (pos.x, pos.y, pos.z));
+
+        for start in starts {
+            if handled.contains(&start) || !world.is_factory_at(start) {
+                continue;
+            }
+
+            let positions = factory_structure(world, start);
+            let index = structures.len();
+            for pos in &positions {
+                handled.insert(*pos);
+                structure_by_pos.insert(*pos, index);
+            }
+            structures.push(FactoryStructure {
+                positions,
+                activity: FactoryActivity::Active,
+                freedom: StructureFreedom::All,
+            });
+        }
+
+        let mut inactive = vec![false; structures.len()];
+        let mut queue = VecDeque::new();
+        for (index, structure) in structures.iter().enumerate() {
+            if touches_scene(world, &structure.positions) {
+                inactive[index] = true;
+                queue.push_back(index);
+            }
+        }
+
+        while let Some(index) = queue.pop_front() {
+            for pos in &structures[index].positions {
+                for offset in signal_offsets() {
+                    let neighbor = *pos + offset;
+                    let Some(neighbor_index) = structure_by_pos.get(&neighbor).copied() else {
+                        continue;
+                    };
+                    if !inactive[neighbor_index] {
+                        inactive[neighbor_index] = true;
+                        queue.push_back(neighbor_index);
+                    }
                 }
+            }
+        }
+
+        for (index, structure) in structures.iter_mut().enumerate() {
+            if inactive[index] {
+                structure.activity = FactoryActivity::Inactive;
+                structure.freedom = StructureFreedom::None;
+            }
+        }
+
+        Self {
+            structures,
+            structure_by_pos,
+        }
+    }
+
+    pub fn activity_at(&self, pos: IVec3) -> Option<FactoryActivity> {
+        Some(self.structure(pos)?.activity)
+    }
+
+    pub fn active_structure_at(&self, pos: IVec3, offset: IVec3) -> Option<HashSet<IVec3>> {
+        let structure = self.structure(pos)?;
+        if structure.activity != FactoryActivity::Active || !structure.freedom.can_translate(offset)
+        {
+            return None;
+        }
+        Some(structure.positions.clone())
+    }
+
+    pub fn move_positions(&mut self, positions: &HashSet<IVec3>, offset: IVec3) {
+        let mut changed_indices = HashSet::new();
+        for pos in positions {
+            if let Some(index) = self.structure_by_pos.get(pos).copied() {
+                changed_indices.insert(index);
+            }
+        }
+        for index in changed_indices {
+            let Some(structure) = self.structures.get_mut(index) else {
+                continue;
+            };
+            let should_move = structure
+                .positions
+                .iter()
+                .any(|pos| positions.contains(pos));
+            if !should_move {
+                continue;
+            }
+            for pos in &structure.positions {
+                self.structure_by_pos.remove(pos);
+            }
+            structure.positions = structure
+                .positions
+                .iter()
+                .map(|pos| *pos + offset)
+                .collect();
+            for pos in &structure.positions {
+                self.structure_by_pos.insert(*pos, index);
             }
         }
     }
 
-    let mut activity = HashMap::new();
-    for (index, structure) in structures.into_iter().enumerate() {
-        let value = if inactive[index] {
-            FactoryActivity::Inactive
-        } else {
-            FactoryActivity::Active
-        };
-        for pos in structure {
-            activity.insert(pos, value);
+    pub fn movable_structure_at(&self, pos: IVec3) -> Option<HashSet<IVec3>> {
+        let structure = self.structure(pos)?;
+        if structure.activity != FactoryActivity::Active
+            || structure.freedom == StructureFreedom::None
+        {
+            return None;
         }
+        Some(structure.positions.clone())
     }
-    activity
+
+    pub fn freedom_at(&self, pos: IVec3) -> Option<StructureFreedom> {
+        Some(self.structure(pos)?.freedom)
+    }
+
+    fn structure(&self, pos: IVec3) -> Option<&FactoryStructure> {
+        self.structure_by_pos
+            .get(&pos)
+            .and_then(|index| self.structures.get(*index))
+    }
 }
 
-pub(super) fn active_factory_structure(
-    world: &WorldBlocks,
-    activity: &HashMap<IVec3, FactoryActivity>,
-    start: IVec3,
-) -> Option<HashSet<IVec3>> {
-    if activity.get(&start) != Some(&FactoryActivity::Active) {
-        return None;
-    }
-    Some(factory_structure(world, start))
-}
-
-pub(super) fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
+pub fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     let mut structure = HashSet::new();
     let mut queue = VecDeque::from([start]);
     structure.insert(start);

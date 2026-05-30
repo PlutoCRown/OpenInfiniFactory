@@ -9,19 +9,21 @@ use crate::game::world::grid::{
     ConverterMode, MaterialFace, MaterialFaceMark, MaterialFaceMarkSource, WorldBlocks,
 };
 
+use super::factory_activity::FactoryStructureState;
 use super::signal_offsets;
 use super::structures::{execute_structure_moves, material_structure, StructureMove};
 
 pub(super) fn run_material_behavior_phase(
     world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
+    factory_structures: &mut FactoryStructureState,
 ) {
     run_material_acceptance_phase(world);
     run_weld_phase(world);
     run_material_destroy_phase(world, powered_devices);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
-    run_material_teleport_phase(world);
+    run_material_teleport_phase(world, factory_structures);
     run_material_acceptance_phase(world);
 }
 
@@ -199,7 +201,10 @@ fn run_material_conversion_phase(world: &mut WorldBlocks) {
     }
 }
 
-fn run_material_teleport_phase(world: &mut WorldBlocks) {
+fn run_material_teleport_phase(
+    world: &mut WorldBlocks,
+    factory_structures: &mut FactoryStructureState,
+) {
     let entrances: Vec<IVec3> = world
         .system_blocks
         .iter()
@@ -226,7 +231,11 @@ fn run_material_teleport_phase(world: &mut WorldBlocks) {
         let offset = exit - entrance;
         handled.extend(structure.iter().copied());
         handled.extend(structure.iter().map(|pos| *pos + offset));
-        let _ = execute_structure_moves(world, vec![StructureMove::translate(structure, offset)]);
+        let _ = execute_structure_moves(
+            world,
+            vec![StructureMove::translate(structure, offset)],
+            factory_structures,
+        );
     }
 }
 

@@ -4,6 +4,7 @@ use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
 use crate::game::player::controller::{player_collision_box, FlyCamera};
+use crate::game::simulation::factory_activity::FactoryStructureState;
 use crate::game::simulation::runtime::SimulationStepStats;
 use crate::game::state::{BuilderMode, SimulationState};
 use crate::game::ui::PendingKeyBind;
@@ -208,6 +209,7 @@ pub fn toggle_factory_activity_debug(
     keys: Res<ButtonInput<KeyCode>>,
     pending_key_bind: Res<PendingKeyBind>,
     mut debug: ResMut<DebugState>,
+    mut factory_structures: ResMut<FactoryStructureState>,
     mut commands: Commands,
     world: Res<WorldBlocks>,
     render_assets: Res<WorldRenderAssets>,
@@ -219,8 +221,15 @@ pub fn toggle_factory_activity_debug(
 
     if keys.just_pressed(KeyCode::KeyP) {
         debug.factory_activity = !debug.factory_activity;
+        factory_structures.ensure_current_world(&world);
         despawn_world(&mut commands, &block_entities);
-        rebuild_world_for_debug_state(&mut commands, &world, &render_assets, &debug);
+        rebuild_world_for_debug_state(
+            &mut commands,
+            &world,
+            &render_assets,
+            &debug,
+            &factory_structures,
+        );
     }
 }
 
