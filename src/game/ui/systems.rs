@@ -24,14 +24,14 @@ use super::types::{
     ConverterInputText, ConverterModeText, ConverterOutputText, Crosshair, CurrentSaveText,
     DeleteSelectionModeText, FovText, GeneratorMaterialText, GeneratorPeriodText, HotbarText,
     InGameHudStyle, InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle,
-    KeyBindingButton, KeyBindingLabel, LabelerColorText, LocalizedText, MainMenuPanel,
-    OpenSettingsDropdown, PauseAction, PausePanel, PendingKeyBind, PlaceSelectionModeText,
-    SaveListAction, SaveListLabel, SaveListPanel, SaveListTitle, ScrollContainer, ScrollContent,
-    SettingsAction, SettingsDropdownLabel, SettingsDropdownList, SettingsGameplayGroup,
-    SettingsKeyBindingsGroup, SettingsSlider, SettingsSliderFill, SettingsSliderKnob,
-    SettingsStatusText, SettingsTab, SettingsValue, SettingsValueText, SimulationStatusText,
-    SimulationText, SlotArea, SlotIcon, SlotLabel, TeleportNameText, TeleportPairText,
-    UiPanelBinding, UiRuntime, UiScaleText,
+    InventoryTooltip, InventoryTooltipText, KeyBindingButton, KeyBindingLabel, LabelerColorText,
+    LocalizedText, MainMenuPanel, OpenSettingsDropdown, PauseAction, PausePanel, PendingKeyBind,
+    PlaceSelectionModeText, SaveListAction, SaveListLabel, SaveListPanel, SaveListTitle,
+    ScrollContainer, ScrollContent, SettingsAction, SettingsDropdownLabel, SettingsDropdownList,
+    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsSlider, SettingsSliderFill,
+    SettingsSliderKnob, SettingsStatusText, SettingsTab, SettingsValue, SettingsValueText,
+    SimulationStatusText, SimulationText, SlotArea, SlotIcon, SlotLabel, TeleportNameText,
+    TeleportPairText, UiPanelBinding, UiRuntime, UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -1183,21 +1183,44 @@ pub fn update_inventory_slots(
         ),
         With<Button>,
     >,
-    mut labels: Query<&mut Text, (With<SlotLabel>, Without<HotbarText>, Without<CarriedLabel>)>,
+    mut labels: Query<
+        &mut Text,
+        (
+            With<SlotLabel>,
+            Without<HotbarText>,
+            Without<CarriedLabel>,
+            Without<InventoryTooltipText>,
+        ),
+    >,
     mut icons: Query<&mut ImageNode, With<SlotIcon>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut tooltip: Query<&mut Node, (With<InventoryTooltip>, Without<SlotIcon>)>,
+    mut tooltip_text: Query<&mut Text, (With<InventoryTooltipText>, Without<SlotLabel>)>,
 ) {
+    let mut hovered_item = None;
     for (slot, interaction, children, mut background, mut border) in &mut slot_query {
         let item = match slot.area {
             SlotArea::Hotbar => inventory.hotbar[slot.index],
             SlotArea::Backpack => inventory.backpack[slot.index],
         };
+        let icon_handle = item
+            .and_then(|item| item.block())
+            .and_then(|kind| block_icons.as_deref().and_then(|icons| icons.get(kind)));
+        let has_icon = icon_handle.is_some();
+        if *interaction == Interaction::Hovered {
+            hovered_item = item;
+        }
 
         let selected_hotbar = slot.area == SlotArea::Hotbar && slot.index == placement.selected;
         let base_color = item
             .map(slot_color)
             .unwrap_or(Color::srgba(0.16, 0.16, 0.17, 0.92));
-        *background = if *interaction == Interaction::Hovered && item.is_none() {
-            Color::srgba(0.24, 0.26, 0.28, 0.96).into()
+        *background = if has_icon && *interaction == Interaction::Hovered {
+            Color::srgba(1.0, 1.0, 1.0, 0.06).into()
+        } else if has_icon {
+            Color::NONE.into()
+        } else if *interaction == Interaction::Hovered && item.is_none() {
+            Color::srgba(0.18, 0.19, 0.20, 0.70).into()
         } else if *interaction == Interaction::Hovered {
             base_color.with_alpha(1.0).into()
         } else {
@@ -1213,12 +1236,6 @@ pub fn update_inventory_slots(
 
         for child in children.iter() {
             if let Ok(mut text) = labels.get_mut(child) {
-                let has_icon = item.and_then(|item| item.block()).is_some_and(|kind| {
-                    block_icons
-                        .as_deref()
-                        .and_then(|icons| icons.get(kind))
-                        .is_some()
-                });
                 text.0 = if has_icon {
                     String::new()
                 } else {
@@ -1227,13 +1244,32 @@ pub fn update_inventory_slots(
                 };
             }
             if let Ok(mut image) = icons.get_mut(child) {
-                *image = item
-                    .and_then(|item| item.block())
-                    .and_then(|kind| block_icons.as_deref().and_then(|icons| icons.get(kind)))
-                    .map(ImageNode::new)
-                    .unwrap_or_default();
+                *image = icon_handle.clone().map(ImageNode::new).unwrap_or_default();
             }
         }
+    }
+
+    let Ok(mut tooltip_node) = tooltip.single_mut() else {
+        return;
+    };
+    let Some(item) = hovered_item else {
+        tooltip_node.display = Display::None;
+        return;
+    };
+    let Ok(window) = windows.single() else {
+        tooltip_node.display = Display::None;
+        return;
+    };
+    let Some(cursor) = window.cursor_position() else {
+        tooltip_node.display = Display::None;
+        return;
+    };
+
+    tooltip_node.display = Display::Flex;
+    tooltip_node.left = Val::Px(cursor.x + 16.0);
+    tooltip_node.top = Val::Px(cursor.y + 16.0);
+    if let Ok(mut text) = tooltip_text.single_mut() {
+        text.0 = i18n.text(item.name_key());
     }
 }
 

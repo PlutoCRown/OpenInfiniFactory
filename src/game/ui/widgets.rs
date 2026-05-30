@@ -56,14 +56,14 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
             slot.spawn((
                 ImageNode::default(),
                 Node {
-                    width: Val::Px(default_button_size(42.0)),
-                    height: Val::Px(default_button_size(42.0)),
+                    width: Val::Px(default_button_size(64.0)),
+                    height: Val::Px(default_button_size(64.0)),
                     position_type: PositionType::Absolute,
                     left: Val::Percent(50.0),
                     top: Val::Percent(50.0),
                     margin: UiRect {
-                        left: Val::Px(-default_button_size(21.0)),
-                        top: Val::Px(-default_button_size(21.0)),
+                        left: Val::Px(-default_button_size(32.0)),
+                        top: Val::Px(-default_button_size(32.0)),
                         ..default()
                     },
                     ..default()

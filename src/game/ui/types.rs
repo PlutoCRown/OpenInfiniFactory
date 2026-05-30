@@ -492,6 +492,12 @@ pub(crate) struct SlotLabel;
 pub(crate) struct SlotIcon;
 
 #[derive(Component)]
+pub(crate) struct InventoryTooltip;
+
+#[derive(Component)]
+pub(crate) struct InventoryTooltipText;
+
+#[derive(Component)]
 pub(crate) struct CarriedLabel;
 
 #[derive(Component)]

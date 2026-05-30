@@ -775,17 +775,12 @@ fn spawn_block_model(
             };
             for offset in offsets {
                 let neighbor = pos + offset;
-                if world
-                    .blocks
-                    .get(&neighbor)
-                    .or_else(|| world.system_blocks.get(&neighbor))
-                    .is_some_and(|block| weld_connects_to(block, -offset))
-                {
+                if weld_neighbor_connects_to(world, neighbor, -offset) {
                     let local_offset = local_connector_offset(data, offset);
                     let mut child = parent.spawn((
                         Mesh3d(assets.connector_mesh(local_offset)),
                         MeshMaterial3d(assets.weld_connector_material.clone()),
-                        Transform::from_translation(local_offset.as_vec3() * 0.34),
+                        Transform::from_translation(local_offset.as_vec3() * 0.225),
                     ));
                     if let Some((_, icon_layer)) = icon_render {
                         child.insert((icon_layer.clone(), BlockIconRenderEntity));
@@ -813,7 +808,7 @@ fn spawn_block_model(
                         } else {
                             assets.wire_connector_material.clone()
                         }),
-                        Transform::from_translation(local_offset.as_vec3() * 0.34),
+                        Transform::from_translation(local_offset.as_vec3() * 0.174),
                     ));
                     if let Some((_, icon_layer)) = icon_render {
                         child.insert((icon_layer.clone(), BlockIconRenderEntity));
@@ -905,6 +900,21 @@ fn weld_connects_to(block: &BlockData, connector_from_block: IVec3) -> bool {
         Some(WeldConnectorBehavior::Offset(offset)) => connector_from_block == offset,
         None => false,
     }
+}
+
+fn weld_neighbor_connects_to(
+    world: &WorldBlocks,
+    neighbor: IVec3,
+    connector_from_block: IVec3,
+) -> bool {
+    if let Some(block) = world.system_blocks.get(&neighbor) {
+        return weld_connects_to(block, connector_from_block);
+    }
+
+    world
+        .blocks
+        .get(&neighbor)
+        .is_some_and(|block| weld_connects_to(block, connector_from_block))
 }
 
 fn local_connector_offset(data: BlockData, offset: IVec3) -> IVec3 {

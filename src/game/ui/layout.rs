@@ -15,12 +15,12 @@ use super::types::{
     ConverterAction, ConverterInputRow, ConverterInputText, ConverterModeText, ConverterOutputText,
     ConverterPanel, Crosshair, CurrentSaveText, GeneratorAction, GeneratorMaterialText,
     GeneratorPanel, GeneratorPeriodText, HotbarText, InGameHudStyle, InGameHudVisibility,
-    InventoryTitle, LabelerAction, LabelerColorText, LabelerPanel, MainMenuAction, MainMenuPanel,
-    PauseAction, PausePanel, SaveListAction, SaveListPanel, SaveListTitle, SettingsAction,
-    SettingsDropdown, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
-    SettingsSlider, SettingsStatusText, SimulationStatusText, SimulationText, SlotArea,
-    TeleportAction, TeleportNameText, TeleportPairText, TeleportPanel, UiPanelBinding, UiPanelId,
-    BACKPACK_SLOTS, HOTBAR_SLOTS,
+    InventoryTitle, InventoryTooltip, InventoryTooltipText, LabelerAction, LabelerColorText,
+    LabelerPanel, MainMenuAction, MainMenuPanel, PauseAction, PausePanel, SaveListAction,
+    SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdown, SettingsGameplayGroup,
+    SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider, SettingsStatusText,
+    SimulationStatusText, SimulationText, SlotArea, TeleportAction, TeleportNameText,
+    TeleportPairText, TeleportPanel, UiPanelBinding, UiPanelId, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::widgets::{
     scroll_container, scroll_content, spawn_confirm_dialog_button, spawn_converter_button,
@@ -45,6 +45,7 @@ pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
         spawn_main_menu(root, &i18n);
         spawn_save_list(root);
         spawn_carried_label(root);
+        spawn_inventory_tooltip(root);
     });
 }
 
@@ -555,14 +556,14 @@ fn spawn_carried_label(root: &mut ChildSpawnerCommands) {
         icon.spawn((
             ImageNode::default(),
             Node {
-                width: Val::Px(default_button_size(42.0)),
-                height: Val::Px(default_button_size(42.0)),
+                width: Val::Px(default_button_size(64.0)),
+                height: Val::Px(default_button_size(64.0)),
                 position_type: PositionType::Absolute,
                 left: Val::Percent(50.0),
                 top: Val::Percent(50.0),
                 margin: UiRect {
-                    left: Val::Px(-default_button_size(21.0)),
-                    top: Val::Px(-default_button_size(21.0)),
+                    left: Val::Px(-default_button_size(32.0)),
+                    top: Val::Px(-default_button_size(32.0)),
                     ..default()
                 },
                 ..default()
@@ -581,6 +582,31 @@ fn spawn_carried_label(root: &mut ChildSpawnerCommands) {
                 ..default()
             },
             CarriedLabel,
+        ));
+    });
+}
+
+fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
+    root.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            top: Val::Px(0.0),
+            display: Display::None,
+            padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
+            border: UiRect::all(Val::Px(1.0)),
+            ..default()
+        },
+        BorderColor::all(Color::srgba(0.72, 0.82, 0.88, 0.75)),
+        BackgroundColor(Color::srgba(0.05, 0.06, 0.07, 0.92)),
+        ZIndex(140),
+        InventoryTooltip,
+    ))
+    .with_children(|tooltip| {
+        tooltip.spawn((
+            text("", 14.0, Color::WHITE),
+            TextLayout::new_with_justify(Justify::Center),
+            InventoryTooltipText,
         ));
     });
 }
