@@ -24,6 +24,7 @@ pub fn simulation_controls(
     mut factory_structures: ResMut<FactoryStructureState>,
     mut world: ResMut<WorldBlocks>,
     block_entities: Query<Entity, With<BlockEntity>>,
+    mut meshes: ResMut<Assets<Mesh>>,
     render_assets: Res<WorldRenderAssets>,
     debug: Res<DebugState>,
 ) {
@@ -70,6 +71,7 @@ pub fn simulation_controls(
         despawn_world(&mut commands, &block_entities);
         rebuild_world_for_debug_state(
             &mut commands,
+            &mut meshes,
             &world,
             &render_assets,
             &debug,

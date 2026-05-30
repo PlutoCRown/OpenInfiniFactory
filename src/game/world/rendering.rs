@@ -1,6 +1,8 @@
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::{RenderTarget, ScalingMode};
 use bevy::light::CascadeShadowConfigBuilder;
+use bevy::asset::RenderAssetUsages;
+use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::render::render_resource::TextureFormat;
 use std::collections::{HashMap, HashSet};
@@ -19,7 +21,6 @@ use crate::game::world::blocks::{
 };
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
-use crate::game::world::scene_material::SceneBlockMaterial;
 
 const ICON_TEXTURE_SIZE: u32 = 256;
 const ICON_RENDER_LAYER: usize = 3;
@@ -81,7 +82,6 @@ pub fn setup_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut scene_materials: ResMut<Assets<SceneBlockMaterial>>,
     mut images: ResMut<Assets<Image>>,
 ) {
     commands.spawn((
@@ -112,12 +112,7 @@ pub fn setup_scene(
         .build(),
     ));
 
-    let render_assets = WorldRenderAssets::new(
-        &mut meshes,
-        &mut materials,
-        &mut scene_materials,
-        &mut images,
-    );
+    let render_assets = WorldRenderAssets::new(&mut meshes, &mut materials, &mut images);
     commands.insert_resource(render_assets);
 
     let marker_mesh = meshes.add(Cuboid::new(1.04, 1.04, 1.04));
@@ -155,6 +150,7 @@ pub fn setup_scene(
 pub fn setup_block_icons(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
+    mut meshes: ResMut<Assets<Mesh>>,
     assets: Res<WorldRenderAssets>,
 ) {
     let icon_layer = RenderLayers::layer(ICON_RENDER_LAYER);
@@ -186,6 +182,7 @@ pub fn setup_block_icons(
         let origin = Vec3::new(index as f32 * ICON_SPACING, -100.0, 0.0);
         spawn_block_icon_model(
             &mut commands,
+            &mut meshes,
             &assets,
             &icon_world,
             kind,
@@ -266,6 +263,7 @@ pub fn retire_block_icon_renderers(
 
 fn spawn_block_icon_model(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     assets: &WorldRenderAssets,
     world: &WorldBlocks,
     kind: BlockKind,
@@ -278,6 +276,7 @@ fn spawn_block_icon_model(
     };
     spawn_block_model(
         commands,
+        meshes,
         assets,
         world,
         IVec3::ZERO,
@@ -293,17 +292,23 @@ fn spawn_block_icon_model(
     );
 }
 
-pub fn rebuild_world(commands: &mut Commands, world: &WorldBlocks, assets: &WorldRenderAssets) {
+pub fn rebuild_world(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    world: &WorldBlocks,
+    assets: &WorldRenderAssets,
+) {
     for (pos, data) in &world.blocks {
-        spawn_block(commands, assets, world, *pos, *data);
+        spawn_block(commands, meshes, assets, world, *pos, *data);
     }
     for (pos, data) in &world.system_blocks {
-        spawn_block(commands, assets, world, *pos, *data);
+        spawn_block(commands, meshes, assets, world, *pos, *data);
     }
 }
 
 pub fn rebuild_world_with_factory_activity_debug(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     factory_structures: &FactoryStructureState,
@@ -316,25 +321,26 @@ pub fn rebuild_world_with_factory_activity_debug(
             };
             spawn_debug_factory_block(commands, assets, *pos, material);
         } else {
-            spawn_block(commands, assets, world, *pos, *data);
+            spawn_block(commands, meshes, assets, world, *pos, *data);
         }
     }
     for (pos, data) in &world.system_blocks {
-        spawn_block(commands, assets, world, *pos, *data);
+        spawn_block(commands, meshes, assets, world, *pos, *data);
     }
 }
 
 pub fn rebuild_world_for_debug_state(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     debug: &DebugState,
     factory_structures: &FactoryStructureState,
 ) {
     if debug.factory_activity {
-        rebuild_world_with_factory_activity_debug(commands, world, assets, factory_structures);
+        rebuild_world_with_factory_activity_debug(commands, meshes, world, assets, factory_structures);
     } else {
-        rebuild_world(commands, world, assets);
+        rebuild_world(commands, meshes, world, assets);
     }
 }
 
@@ -417,6 +423,7 @@ pub fn spawn_edit_preview(
 
 pub fn spawn_block_preview(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     assets: &WorldRenderAssets,
     world: &WorldBlocks,
     pos: IVec3,
@@ -424,6 +431,7 @@ pub fn spawn_block_preview(
 ) {
     spawn_block_model(
         commands,
+        meshes,
         assets,
         world,
         pos,
@@ -441,16 +449,18 @@ pub fn spawn_block_preview(
 
 pub fn spawn_block(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     assets: &WorldRenderAssets,
     world: &WorldBlocks,
     pos: IVec3,
     data: BlockData,
 ) {
-    spawn_block_with_animation(commands, assets, world, pos, data, None);
+    spawn_block_with_animation(commands, meshes, assets, world, pos, data, None);
 }
 
 pub fn spawn_block_with_animation(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     assets: &WorldRenderAssets,
     world: &WorldBlocks,
     pos: IVec3,
@@ -459,6 +469,7 @@ pub fn spawn_block_with_animation(
 ) {
     spawn_block_with_timed_animation(
         commands,
+        meshes,
         assets,
         world,
         pos,
@@ -470,6 +481,7 @@ pub fn spawn_block_with_animation(
 
 pub fn spawn_block_with_timed_animation(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     assets: &WorldRenderAssets,
     world: &WorldBlocks,
     pos: IVec3,
@@ -479,6 +491,7 @@ pub fn spawn_block_with_timed_animation(
 ) {
     spawn_block_model(
         commands,
+        meshes,
         assets,
         world,
         pos,
@@ -496,6 +509,7 @@ pub fn spawn_block_with_timed_animation(
 
 pub fn spawn_pending_generated_block(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     assets: &WorldRenderAssets,
     world: &WorldBlocks,
     pos: IVec3,
@@ -505,6 +519,7 @@ pub fn spawn_pending_generated_block(
 ) {
     spawn_block_model(
         commands,
+        meshes,
         assets,
         world,
         pos,
@@ -522,12 +537,14 @@ pub fn spawn_pending_generated_block(
 
 pub fn rebuild_world_with_animations(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     animations: &HashMap<IVec3, BlockAnimation>,
 ) {
     rebuild_world_with_timed_animations(
         commands,
+        meshes,
         world,
         assets,
         animations,
@@ -537,6 +554,7 @@ pub fn rebuild_world_with_animations(
 
 pub fn rebuild_world_with_timed_animations(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     animations: &HashMap<IVec3, BlockAnimation>,
@@ -545,6 +563,7 @@ pub fn rebuild_world_with_timed_animations(
     for (pos, data) in &world.blocks {
         spawn_block_model(
             commands,
+            meshes,
             assets,
             world,
             *pos,
@@ -562,6 +581,7 @@ pub fn rebuild_world_with_timed_animations(
     for (pos, data) in &world.system_blocks {
         spawn_block_model(
             commands,
+            meshes,
             assets,
             world,
             *pos,
@@ -580,6 +600,7 @@ pub fn rebuild_world_with_timed_animations(
 
 pub fn rebuild_world_with_runtime_animations(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     animations: &HashMap<IVec3, BlockAnimation>,
@@ -591,6 +612,7 @@ pub fn rebuild_world_with_runtime_animations(
         let material = block_render_material(assets, *data, powered_wires.contains(pos));
         spawn_block_model(
             commands,
+            meshes,
             assets,
             world,
             *pos,
@@ -608,6 +630,7 @@ pub fn rebuild_world_with_runtime_animations(
     for (pos, data) in &world.system_blocks {
         spawn_block_model(
             commands,
+            meshes,
             assets,
             world,
             *pos,
@@ -626,6 +649,7 @@ pub fn rebuild_world_with_runtime_animations(
 
 pub fn rebuild_world_with_runtime_animations_for_debug_state(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     animations: &HashMap<IVec3, BlockAnimation>,
@@ -636,10 +660,11 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
     powered_wires: &HashSet<IVec3>,
 ) {
     if debug.factory_activity {
-        rebuild_world_with_factory_activity_debug(commands, world, assets, factory_structures);
+        rebuild_world_with_factory_activity_debug(commands, meshes, world, assets, factory_structures);
     } else {
         rebuild_world_with_runtime_animations(
             commands,
+            meshes,
             world,
             assets,
             animations,
@@ -662,6 +687,126 @@ fn block_render_material(
     }
 }
 
+fn scene_block_mesh(pos: IVec3) -> Mesh {
+    let min = Vec3::splat(-0.5);
+    let max = Vec3::splat(0.5);
+    let world_min = pos.as_vec3();
+    let world_max = world_min + Vec3::ONE;
+    let faces = [
+        (
+            [
+                [min.x, min.y, max.z],
+                [max.x, min.y, max.z],
+                [max.x, max.y, max.z],
+                [min.x, max.y, max.z],
+            ],
+            [0.0, 0.0, 1.0],
+            [
+                [world_min.x, world_min.y],
+                [world_max.x, world_min.y],
+                [world_max.x, world_max.y],
+                [world_min.x, world_max.y],
+            ],
+        ),
+        (
+            [
+                [max.x, min.y, min.z],
+                [min.x, min.y, min.z],
+                [min.x, max.y, min.z],
+                [max.x, max.y, min.z],
+            ],
+            [0.0, 0.0, -1.0],
+            [
+                [world_max.x, world_min.y],
+                [world_min.x, world_min.y],
+                [world_min.x, world_max.y],
+                [world_max.x, world_max.y],
+            ],
+        ),
+        (
+            [
+                [max.x, min.y, max.z],
+                [max.x, min.y, min.z],
+                [max.x, max.y, min.z],
+                [max.x, max.y, max.z],
+            ],
+            [1.0, 0.0, 0.0],
+            [
+                [world_max.z, world_min.y],
+                [world_min.z, world_min.y],
+                [world_min.z, world_max.y],
+                [world_max.z, world_max.y],
+            ],
+        ),
+        (
+            [
+                [min.x, min.y, min.z],
+                [min.x, min.y, max.z],
+                [min.x, max.y, max.z],
+                [min.x, max.y, min.z],
+            ],
+            [-1.0, 0.0, 0.0],
+            [
+                [world_min.z, world_min.y],
+                [world_max.z, world_min.y],
+                [world_max.z, world_max.y],
+                [world_min.z, world_max.y],
+            ],
+        ),
+        (
+            [
+                [min.x, max.y, max.z],
+                [max.x, max.y, max.z],
+                [max.x, max.y, min.z],
+                [min.x, max.y, min.z],
+            ],
+            [0.0, 1.0, 0.0],
+            [
+                [world_min.x, world_max.z],
+                [world_max.x, world_max.z],
+                [world_max.x, world_min.z],
+                [world_min.x, world_min.z],
+            ],
+        ),
+        (
+            [
+                [min.x, min.y, min.z],
+                [max.x, min.y, min.z],
+                [max.x, min.y, max.z],
+                [min.x, min.y, max.z],
+            ],
+            [0.0, -1.0, 0.0],
+            [
+                [world_min.x, world_min.z],
+                [world_max.x, world_min.z],
+                [world_max.x, world_max.z],
+                [world_min.x, world_max.z],
+            ],
+        ),
+    ];
+
+    let mut positions = Vec::with_capacity(24);
+    let mut normals = Vec::with_capacity(24);
+    let mut uvs = Vec::with_capacity(24);
+    let mut indices = Vec::with_capacity(36);
+    for (face_index, (face_positions, normal, face_uvs)) in faces.into_iter().enumerate() {
+        let base = (face_index * 4) as u32;
+        positions.extend_from_slice(&face_positions);
+        normals.extend_from_slice(&[normal; 4]);
+        uvs.extend_from_slice(&face_uvs);
+        indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_indices(Indices::U32(indices))
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+}
+
 fn render_rotation(data: BlockData, facing: crate::game::world::direction::Facing) -> Quat {
     if data.kind.is_directional() {
         Quat::from_rotation_y(facing.yaw())
@@ -672,6 +817,7 @@ fn render_rotation(data: BlockData, facing: crate::game::world::direction::Facin
 
 fn spawn_block_model(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     assets: &WorldRenderAssets,
     world: &WorldBlocks,
     pos: IVec3,
@@ -718,9 +864,14 @@ fn spawn_block_model(
             transform,
         ))
     } else if let Some(scene_material) = assets.scene_material(data.kind) {
+        let mesh = if icon_render.is_some() {
+            assets.block_mesh(data.kind)
+        } else {
+            meshes.add(scene_block_mesh(pos))
+        };
         commands.spawn((
-            Mesh3d(assets.block_mesh(data.kind)),
-            MeshMaterial3d::<SceneBlockMaterial>(scene_material),
+            Mesh3d(mesh),
+            MeshMaterial3d(scene_material),
             transform,
         ))
     } else {

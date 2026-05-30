@@ -1,13 +1,9 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, Facing, FactoryBlock,
-    MarkerBehavior, ModelMaterial, ModelMesh, RenderBehavior, WeldConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, Facing, FactoryBlock, MarkerBehavior,
+    RenderBehavior, WeldConnectorBehavior,
 };
 
-const MODEL: &[BlockModelPart] = &[
-    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Welding, [0.0, 0.28, -0.34])
-        .scaled([0.75, 0.75, 0.52]),
-    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Welding, [0.0, 0.30, -0.52]),
-];
+const MODEL: &[super::BlockModelPart] = &[];
 
 pub struct WelderBlock;
 

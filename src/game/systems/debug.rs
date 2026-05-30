@@ -260,6 +260,7 @@ pub fn toggle_factory_activity_debug(
     mut factory_structures: ResMut<FactoryStructureState>,
     mut commands: Commands,
     world: Res<WorldBlocks>,
+    mut meshes: ResMut<Assets<Mesh>>,
     render_assets: Res<WorldRenderAssets>,
     block_entities: Query<Entity, With<BlockEntity>>,
 ) {
@@ -273,6 +274,7 @@ pub fn toggle_factory_activity_debug(
         despawn_world(&mut commands, &block_entities);
         rebuild_world_for_debug_state(
             &mut commands,
+            &mut meshes,
             &world,
             &render_assets,
             &debug,

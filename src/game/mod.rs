@@ -9,7 +9,6 @@ use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::input_focus::InputDispatchPlugin;
 use bevy::light::{DirectionalLightShadowMap, GlobalAmbientLight};
-use bevy::pbr::MaterialPlugin;
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 use bevy::ui::UiSystems;
@@ -63,7 +62,7 @@ impl Plugin for GamePlugin {
         app.insert_resource(ClearColor(Color::srgb(0.58, 0.68, 0.76)))
             .insert_resource(GlobalAmbientLight {
                 color: Color::srgb(0.78, 0.86, 1.0),
-                brightness: 260.0,
+                brightness: 420.0,
                 affects_lightmapped_meshes: true,
             })
             .insert_resource(DirectionalLightShadowMap { size: 2048 })
@@ -93,7 +92,6 @@ impl Plugin for GamePlugin {
             .add_plugins(UiWidgetsPlugins)
             .add_plugins(GameUiPlugin)
             .add_observer(slider_self_update)
-            .add_plugins(MaterialPlugin::<world::scene_material::SceneBlockMaterial>::default())
             .add_systems(
                 Startup,
                 (

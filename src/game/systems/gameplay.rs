@@ -30,6 +30,7 @@ use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
 #[derive(SystemParam)]
 pub struct PlacementQueries<'w, 's> {
+    meshes: ResMut<'w, Assets<Mesh>>,
     block_entities: Query<'w, 's, (Entity, &'static BlockEntity)>,
     edit_previews: Query<'w, 's, Entity, With<EditPreview>>,
     player: Query<'w, 's, &'static Transform, With<FlyCamera>>,
@@ -45,6 +46,7 @@ pub fn gameplay_input(
     mut teleport_rename: ResMut<TeleportRenameState>,
     mut carried: ResMut<CarriedItem>,
     mut ui_runtime: ResMut<UiRuntime>,
+    mut simulation: ResMut<SimulationState>,
 ) {
     let bindings = &config.key_bindings;
 
@@ -63,7 +65,12 @@ pub fn gameplay_input(
             return;
         }
         *mode = match *mode {
-            GameMode::Playing => GameMode::Paused,
+            GameMode::Playing => {
+                simulation.running = false;
+                simulation.step_requested = false;
+                simulation.speed = 1.0;
+                GameMode::Paused
+            }
             GameMode::Inventory => {
                 carried.clear();
                 GameMode::Playing
@@ -140,6 +147,7 @@ pub fn placement_input(
 ) {
     factory_structures.ensure_current_world(&world);
     let PlacementQueries {
+        mut meshes,
         block_entities,
         edit_previews,
         player,
@@ -196,6 +204,7 @@ pub fn placement_input(
             &mut world,
             &block_entities,
             &mut commands,
+            &mut meshes,
             &render_assets,
             &debug,
             &mut factory_structures,
@@ -228,6 +237,7 @@ pub fn placement_input(
                 &mut world,
                 &block_entities,
                 &mut commands,
+                &mut meshes,
                 &render_assets,
                 &debug,
                 &mut factory_structures,
@@ -247,6 +257,7 @@ pub fn placement_input(
                 &mut world,
                 &block_entities,
                 &mut commands,
+                &mut meshes,
                 &render_assets,
                 &debug,
                 &mut factory_structures,
@@ -314,6 +325,7 @@ pub fn placement_input(
                     *builder_mode,
                     &player,
                     &mut commands,
+                    &mut meshes,
                     &render_assets,
                     &debug,
                     &mut factory_structures,
@@ -337,6 +349,7 @@ pub fn placement_input(
                 *builder_mode,
                 &player,
                 &mut commands,
+                &mut meshes,
                 &render_assets,
             );
         }
@@ -417,6 +430,7 @@ fn handle_selection_area_input(
     world: &mut WorldBlocks,
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
@@ -439,6 +453,7 @@ fn handle_selection_area_input(
                         world,
                         block_entities,
                         commands,
+                        meshes,
                         render_assets,
                         debug,
                         factory_structures,
@@ -512,6 +527,7 @@ fn move_selection(
     world: &mut WorldBlocks,
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
@@ -558,6 +574,7 @@ fn move_selection(
         world.insert(target, block);
         spawn_block_with_animation(
             commands,
+            meshes,
             render_assets,
             world,
             target,
@@ -577,7 +594,14 @@ fn move_selection(
     factory_structures.rebuild_from_world(world);
     if debug.factory_activity {
         despawn_block_entities(commands, block_entities);
-        rebuild_world_for_debug_state(commands, world, render_assets, debug, factory_structures);
+        rebuild_world_for_debug_state(
+            commands,
+            meshes,
+            world,
+            render_assets,
+            debug,
+            factory_structures,
+        );
     }
     true
 }
@@ -597,6 +621,7 @@ fn alternate_block_at(
     world: &mut WorldBlocks,
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
@@ -612,7 +637,14 @@ fn alternate_block_at(
     refresh_edit_generated_markers(world);
     factory_structures.rebuild_from_world(world);
     despawn_block_entities(commands, block_entities);
-    rebuild_world_for_debug_state(commands, world, render_assets, debug, factory_structures);
+    rebuild_world_for_debug_state(
+        commands,
+        meshes,
+        world,
+        render_assets,
+        debug,
+        factory_structures,
+    );
     true
 }
 
@@ -621,6 +653,7 @@ fn rotate_block_at(
     world: &mut WorldBlocks,
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
@@ -654,9 +687,16 @@ fn rotate_block_at(
 
     despawn_block_entities(commands, block_entities);
     if debug.factory_activity {
-        rebuild_world_for_debug_state(commands, world, render_assets, debug, factory_structures);
+        rebuild_world_for_debug_state(
+            commands,
+            meshes,
+            world,
+            render_assets,
+            debug,
+            factory_structures,
+        );
     } else {
-        rebuild_world_with_animations(commands, world, render_assets, &animations);
+        rebuild_world_with_animations(commands, meshes, world, render_assets, &animations);
     }
     true
 }
@@ -744,6 +784,7 @@ fn commit_edit_gesture(
     builder_mode: BuilderMode,
     player: &Query<&Transform, With<FlyCamera>>,
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
@@ -769,6 +810,7 @@ fn commit_edit_gesture(
                 despawn_block_entities(commands, block_entities);
                 rebuild_world_for_debug_state(
                     commands,
+                    meshes,
                     world,
                     render_assets,
                     debug,
@@ -800,6 +842,7 @@ fn commit_edit_gesture(
                 despawn_block_entities(commands, block_entities);
                 rebuild_world_for_debug_state(
                     commands,
+                    meshes,
                     world,
                     render_assets,
                     debug,
@@ -820,6 +863,7 @@ fn spawn_gesture_previews(
     builder_mode: BuilderMode,
     player: &Query<&Transform, With<FlyCamera>>,
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
 ) {
     match gesture.kind {
@@ -835,7 +879,7 @@ fn spawn_gesture_previews(
                 .collect();
             let preview_world = preview_world(world, &positions, block);
             for pos in positions {
-                spawn_block_preview(commands, render_assets, &preview_world, pos, block);
+                spawn_block_preview(commands, meshes, render_assets, &preview_world, pos, block);
             }
         }
         EditGestureKind::Delete => {

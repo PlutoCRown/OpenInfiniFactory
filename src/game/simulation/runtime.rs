@@ -83,6 +83,7 @@ pub fn run_turn(
     signal_cache: &mut SignalNetworkCache,
     turn: u64,
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
     animation_duration: f32,
@@ -149,6 +150,7 @@ pub fn run_turn(
     despawn_world(commands, block_entities);
     rebuild_world_with_runtime_animations_for_debug_state(
         commands,
+        meshes,
         world,
         render_assets,
         &animations,
@@ -174,6 +176,7 @@ pub fn tick_simulation(
     mut signal_cache: ResMut<SignalNetworkCache>,
     mut sim_stats: ResMut<SimulationStepStats>,
     mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
     block_entities: Query<Entity, With<BlockEntity>>,
     pending_previews: Query<Entity, With<PendingGeneratedPreview>>,
     render_assets: Res<WorldRenderAssets>,
@@ -184,6 +187,7 @@ pub fn tick_simulation(
         prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
         refresh_pending_generated_previews(
             &mut commands,
+            &mut meshes,
             &pending_previews,
             &render_assets,
             &world,
@@ -204,6 +208,7 @@ pub fn tick_simulation(
             &mut signal_cache,
             simulation.turn,
             &mut commands,
+            &mut meshes,
             &block_entities,
             &render_assets,
             SIMULATION_TURN_SECONDS,
@@ -214,6 +219,7 @@ pub fn tick_simulation(
         prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
         refresh_pending_generated_previews(
             &mut commands,
+            &mut meshes,
             &pending_previews,
             &render_assets,
             &world,
@@ -234,6 +240,7 @@ pub fn tick_simulation(
             &mut signal_cache,
             simulation.turn,
             &mut commands,
+            &mut meshes,
             &block_entities,
             &render_assets,
             SIMULATION_TURN_SECONDS / simulation.speed.max(0.001),
@@ -246,6 +253,7 @@ pub fn tick_simulation(
     prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
     refresh_pending_generated_previews(
         &mut commands,
+        &mut meshes,
         &pending_previews,
         &render_assets,
         &world,
@@ -325,6 +333,7 @@ fn merge_generated_animations(
 
 fn refresh_pending_generated_previews(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     pending_previews: &Query<Entity, With<PendingGeneratedPreview>>,
     render_assets: &WorldRenderAssets,
     world: &WorldBlocks,
@@ -335,6 +344,7 @@ fn refresh_pending_generated_previews(
     despawn_pending_generated_previews(commands, pending_previews);
     spawn_pending_generated_previews(
         commands,
+        meshes,
         render_assets,
         world,
         pending_generated,
@@ -345,6 +355,7 @@ fn refresh_pending_generated_previews(
 
 fn spawn_pending_generated_previews(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
     world: &WorldBlocks,
     pending_generated: &PendingGeneratedMaterials,
@@ -363,6 +374,7 @@ fn spawn_pending_generated_previews(
 
         spawn_pending_generated_block(
             commands,
+            meshes,
             render_assets,
             world,
             *pos,

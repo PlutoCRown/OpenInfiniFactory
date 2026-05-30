@@ -1,5 +1,5 @@
 use bevy::asset::RenderAssetUsages;
-use bevy::image::ImageSampler;
+use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
@@ -9,7 +9,9 @@ pub enum ProceduralTexture {
     IronMaterial,
     CopperMaterial,
     Platform,
+    Grass,
     Stone,
+    Dirt,
     Wood,
     BorderedWood,
 }
@@ -25,7 +27,9 @@ pub fn block_texture(kind: ProceduralTexture) -> Image {
                 ProceduralTexture::IronMaterial => material_pixel(x, y, [158, 166, 170], 149),
                 ProceduralTexture::CopperMaterial => material_pixel(x, y, [201, 112, 58], 167),
                 ProceduralTexture::Platform => platform_pixel(x, y, SIZE),
+                ProceduralTexture::Grass => grass_pixel(x, y),
                 ProceduralTexture::Stone => material_pixel(x, y, [124, 128, 132], 89),
+                ProceduralTexture::Dirt => material_pixel(x, y, [118, 82, 45], 173),
                 ProceduralTexture::Wood => wood_pixel(x, y),
                 ProceduralTexture::BorderedWood => bordered_wood_pixel(x, y, SIZE),
             };
@@ -44,7 +48,9 @@ pub fn block_texture(kind: ProceduralTexture) -> Image {
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::default(),
     );
-    image.sampler = ImageSampler::linear();
+    let mut sampler = ImageSamplerDescriptor::linear();
+    sampler.set_address_mode(ImageAddressMode::Repeat);
+    image.sampler = ImageSampler::Descriptor(sampler);
     image
 }
 
@@ -58,6 +64,16 @@ fn platform_pixel(x: u32, y: u32, size: u32) -> [u8; 3] {
     } else {
         let edge_t = ((t - 0.60) / 0.40).clamp(0.0, 1.0);
         lerp_rgb([110, 180, 216], [84, 141, 185], edge_t)
+    }
+}
+
+fn grass_pixel(x: u32, y: u32) -> [u8; 3] {
+    let noise = texture_noise(x, y, 197);
+    let fleck = ((x * 7 + y * 19 + noise as u32) % 31) < 4;
+    if fleck {
+        shade([93, 157, 58], noise, 30)
+    } else {
+        shade([66, 128, 45], noise, 22)
     }
 }
 

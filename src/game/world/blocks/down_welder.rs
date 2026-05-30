@@ -1,15 +1,11 @@
 use bevy::prelude::*;
 
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, Facing, FactoryBlock,
-    MarkerBehavior, ModelMaterial, ModelMesh, RenderBehavior, WeldConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, Facing, FactoryBlock, MarkerBehavior,
+    RenderBehavior, WeldConnectorBehavior,
 };
 
-const MODEL: &[BlockModelPart] = &[
-    BlockModelPart::new(ModelMesh::RodY, ModelMaterial::Welding, [0.0, -0.08, 0.0])
-        .scaled([0.85, 0.62, 0.85]),
-    BlockModelPart::new(ModelMesh::Small, ModelMaterial::Welding, [0.0, -0.50, 0.0]),
-];
+const MODEL: &[super::BlockModelPart] = &[];
 
 pub struct DownWelderBlock;
 

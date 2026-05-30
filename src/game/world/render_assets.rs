@@ -8,7 +8,6 @@ use crate::game::world::blocks::{
     BlockKind, BlockShape, ModelMaterial, ModelMesh, StampColor, ALL_BLOCKS, BLOCK_SIZE,
 };
 use crate::game::world::procedural_textures::{block_texture, ProceduralTexture};
-use crate::game::world::scene_material::SceneBlockMaterial;
 
 #[derive(Resource, Clone)]
 pub struct WorldRenderAssets {
@@ -42,7 +41,7 @@ pub struct WorldRenderAssets {
     part_pusher_head: Handle<Mesh>,
     block_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     preview_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
-    scene_materials: HashMap<BlockKind, Handle<SceneBlockMaterial>>,
+    scene_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     face_mark_materials: HashMap<StampColor, Handle<StandardMaterial>>,
     model_materials: HashMap<ModelMaterial, Handle<StandardMaterial>>,
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
@@ -64,7 +63,6 @@ impl WorldRenderAssets {
     pub(crate) fn new(
         meshes: &mut Assets<Mesh>,
         materials: &mut Assets<StandardMaterial>,
-        scene_materials: &mut Assets<SceneBlockMaterial>,
         images: &mut Assets<Image>,
     ) -> Self {
         let material_texture = images.add(block_texture(ProceduralTexture::Material));
@@ -101,42 +99,38 @@ impl WorldRenderAssets {
                 (kind, materials.add(preview_block_material(kind, texture)))
             })
             .collect();
+        let scene_textures = [
+            (
+                BlockKind::Grass,
+                images.add(block_texture(ProceduralTexture::Grass)),
+            ),
+            (BlockKind::Stone, stone_texture.clone()),
+            (
+                BlockKind::Dirt,
+                images.add(block_texture(ProceduralTexture::Dirt)),
+            ),
+            (BlockKind::Planks, wood_texture.clone()),
+        ];
         let scene_block_materials = [
             (
                 BlockKind::Grass,
-                scene_block_material(
-                    Color::srgb(0.28, 0.55, 0.20),
-                    Color::srgb(0.46, 0.72, 0.28),
-                    0,
-                ),
+                textured_scene_material(Color::srgb(0.28, 0.55, 0.20), scene_textures[0].1.clone()),
             ),
             (
                 BlockKind::Stone,
-                scene_block_material(
-                    Color::srgb(0.42, 0.43, 0.42),
-                    Color::srgb(0.64, 0.65, 0.62),
-                    1,
-                ),
+                textured_scene_material(Color::srgb(0.42, 0.43, 0.42), scene_textures[1].1.clone()),
             ),
             (
                 BlockKind::Dirt,
-                scene_block_material(
-                    Color::srgb(0.34, 0.22, 0.13),
-                    Color::srgb(0.54, 0.36, 0.20),
-                    2,
-                ),
+                textured_scene_material(Color::srgb(0.34, 0.22, 0.13), scene_textures[2].1.clone()),
             ),
             (
                 BlockKind::Planks,
-                scene_block_material(
-                    Color::srgb(0.54, 0.32, 0.13),
-                    Color::srgb(0.82, 0.55, 0.28),
-                    3,
-                ),
+                textured_scene_material(Color::srgb(0.54, 0.32, 0.13), scene_textures[3].1.clone()),
             ),
         ]
         .into_iter()
-        .map(|(kind, material)| (kind, scene_materials.add(material)))
+        .map(|(kind, material)| (kind, materials.add(material)))
         .collect();
         let face_mark_materials = StampColor::ALL
             .into_iter()
@@ -188,7 +182,10 @@ impl WorldRenderAssets {
                 ModelMaterial::Platform,
                 textured_model_material(Color::WHITE, platform_texture.clone()),
             ),
-            (ModelMaterial::PlatformBase, block_material(BlockKind::Platform)),
+            (
+                ModelMaterial::PlatformBase,
+                block_material(BlockKind::Platform),
+            ),
             (ModelMaterial::Wood, srgb_material(0.72, 0.46, 0.22)),
             (
                 ModelMaterial::WoodTexture,
@@ -365,7 +362,7 @@ impl WorldRenderAssets {
             .clone()
     }
 
-    pub(crate) fn scene_material(&self, kind: BlockKind) -> Option<Handle<SceneBlockMaterial>> {
+    pub(crate) fn scene_material(&self, kind: BlockKind) -> Option<Handle<StandardMaterial>> {
         self.scene_materials.get(&kind).cloned()
     }
 
@@ -460,15 +457,13 @@ fn preview_block_material(kind: BlockKind, texture: Option<Handle<Image>>) -> St
     }
 }
 
-fn scene_block_material(
-    base_color: Color,
-    accent_color: Color,
-    texture_kind: u32,
-) -> SceneBlockMaterial {
-    SceneBlockMaterial {
-        base_color: base_color.to_linear(),
-        accent_color: accent_color.to_linear(),
-        texture_kind,
+fn textured_scene_material(base_color: Color, texture: Handle<Image>) -> StandardMaterial {
+    StandardMaterial {
+        base_color,
+        base_color_texture: Some(texture),
+        perceptual_roughness: 0.96,
+        reflectance: 0.08,
+        ..default()
     }
 }
 
@@ -659,17 +654,17 @@ fn rotator_ring_mesh(outer_radius: f32, inner_radius: f32, height: f32, segments
         let b = next * 8;
         indices.extend_from_slice(&[
             a,
-            b,
-            a + 1,
             a + 1,
             b,
+            a + 1,
             b + 1,
+            b,
             a + 2,
-            a + 3,
             b + 2,
             a + 3,
+            a + 3,
+            b + 2,
             b + 3,
-            b + 2,
             a + 4,
             b + 4,
             a + 5,

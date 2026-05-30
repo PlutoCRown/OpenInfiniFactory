@@ -19,14 +19,14 @@ const MODEL: &[BlockModelPart] = &[
     BlockModelPart::new(
         ModelMesh::RodX,
         ModelMaterial::BeltStripe,
-        [-0.09, -0.56, 0.24],
+        [-0.11, -0.56, 0.26],
     )
     .scaled([0.62, 0.16, 0.42])
     .yawed(-0.7853982),
     BlockModelPart::new(
         ModelMesh::RodX,
         ModelMaterial::BeltStripe,
-        [0.09, -0.56, 0.24],
+        [0.11, -0.56, 0.26],
     )
     .scaled([0.62, 0.16, 0.42])
     .yawed(0.7853982),

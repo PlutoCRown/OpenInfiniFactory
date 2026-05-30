@@ -35,6 +35,7 @@ use crate::shared::save::{
 #[derive(SystemParam)]
 pub struct WorldMenuParams<'w, 's> {
     pub commands: Commands<'w, 's>,
+    pub meshes: ResMut<'w, Assets<Mesh>>,
     pub world: ResMut<'w, WorldBlocks>,
     pub render_assets: Res<'w, WorldRenderAssets>,
     pub debug: Res<'w, DebugState>,
@@ -175,6 +176,7 @@ pub fn save_list_actions(
                     &mut solution_state,
                     &mut simulation,
                     &mut world_menu.commands,
+                    &mut world_menu.meshes,
                     &world_menu.block_entities,
                     &world_menu.render_assets,
                     &world_menu.debug,
@@ -209,6 +211,7 @@ pub fn save_list_actions(
                     &mut solution_state,
                     &mut simulation,
                     &mut world_menu.commands,
+                    &mut world_menu.meshes,
                     &world_menu.block_entities,
                     &world_menu.render_assets,
                     &world_menu.debug,
@@ -235,6 +238,7 @@ pub fn save_list_actions(
                         &mut solution_state,
                         &mut simulation,
                         &mut world_menu.commands,
+                        &mut world_menu.meshes,
                         &world_menu.block_entities,
                         &world_menu.render_assets,
                         &world_menu.debug,
@@ -272,6 +276,7 @@ pub fn save_list_actions(
                     &mut solution_state,
                     &mut simulation,
                     &mut world_menu.commands,
+                    &mut world_menu.meshes,
                     &world_menu.block_entities,
                     &world_menu.render_assets,
                     &world_menu.debug,
@@ -382,6 +387,7 @@ pub fn pause_menu_actions(
                         &mut solution_state,
                         &mut simulation,
                         &mut world_menu.commands,
+                        &mut world_menu.meshes,
                         &world_menu.block_entities,
                         &world_menu.render_assets,
                         &world_menu.debug,
@@ -433,6 +439,7 @@ pub fn confirm_dialog_actions(
                     &mut world_menu.world,
                     &mut simulation,
                     &mut world_menu.commands,
+                    &mut world_menu.meshes,
                     &world_menu.block_entities,
                     &world_menu.render_assets,
                     &world_menu.debug,
@@ -455,6 +462,7 @@ pub fn confirm_dialog_actions(
                     &mut solution_state,
                     &mut simulation,
                     &mut world_menu.commands,
+                    &mut world_menu.meshes,
                     &world_menu.block_entities,
                     &world_menu.render_assets,
                     &world_menu.debug,
@@ -470,6 +478,7 @@ pub fn confirm_dialog_actions(
                     &mut solution_state,
                     &mut simulation,
                     &mut world_menu.commands,
+                    &mut world_menu.meshes,
                     &world_menu.block_entities,
                     &world_menu.render_assets,
                     &world_menu.debug,
@@ -494,6 +503,7 @@ pub fn confirm_dialog_actions(
                     &mut save_state,
                     &mut solution_state,
                     &mut world_menu.commands,
+                    &mut world_menu.meshes,
                     &world_menu.block_entities,
                     &world_menu.render_assets,
                     &world_menu.debug,
@@ -511,6 +521,7 @@ pub fn confirm_dialog_actions(
                     &mut save_state,
                     &mut solution_state,
                     &mut world_menu.commands,
+                    &mut world_menu.meshes,
                     &world_menu.block_entities,
                     &world_menu.render_assets,
                     &world_menu.debug,
@@ -563,6 +574,7 @@ fn switch_to_edit_mode_and_rebuild(
     save_state: &mut SaveState,
     solution_state: &mut SolutionState,
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
@@ -581,13 +593,21 @@ fn switch_to_edit_mode_and_rebuild(
     despawn_world(commands, block_entities);
     factory_structures.clear();
     factory_structures.ensure_current_world(world);
-    rebuild_world_for_debug_state(commands, world, render_assets, debug, factory_structures);
+    rebuild_world_for_debug_state(
+        commands,
+        meshes,
+        world,
+        render_assets,
+        debug,
+        factory_structures,
+    );
 }
 
 fn reset_current_solution(
     world: &mut WorldBlocks,
     simulation: &mut SimulationState,
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
@@ -605,7 +625,14 @@ fn reset_current_solution(
         factory_structures.clear();
         factory_structures.ensure_current_world(world);
         despawn_world(commands, block_entities);
-        rebuild_world_for_debug_state(commands, world, render_assets, debug, factory_structures);
+        rebuild_world_for_debug_state(
+            commands,
+            meshes,
+            world,
+            render_assets,
+            debug,
+            factory_structures,
+        );
     }
 }
 
@@ -616,6 +643,7 @@ fn return_to_main_menu(
     solution_state: &mut SolutionState,
     simulation: &mut SimulationState,
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
@@ -629,6 +657,7 @@ fn return_to_main_menu(
         solution_state,
         simulation,
         commands,
+        meshes,
         block_entities,
         render_assets,
         debug,
@@ -649,6 +678,7 @@ fn open_loaded_world(
     solution_state: &mut SolutionState,
     simulation: &mut SimulationState,
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
@@ -696,7 +726,14 @@ fn open_loaded_world(
     factory_structures.clear();
     factory_structures.ensure_current_world(world);
     despawn_world(commands, block_entities);
-    rebuild_world_for_debug_state(commands, world, render_assets, debug, factory_structures);
+    rebuild_world_for_debug_state(
+        commands,
+        meshes,
+        world,
+        render_assets,
+        debug,
+        factory_structures,
+    );
     *mode = GameMode::Playing;
 }
 
@@ -707,6 +744,7 @@ fn clear_loaded_world(
     solution_state: &mut SolutionState,
     simulation: &mut SimulationState,
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
@@ -728,7 +766,14 @@ fn clear_loaded_world(
     factory_structures.clear();
     factory_structures.ensure_current_world(world);
     despawn_world(commands, block_entities);
-    rebuild_world_for_debug_state(commands, world, render_assets, debug, factory_structures);
+    rebuild_world_for_debug_state(
+        commands,
+        meshes,
+        world,
+        render_assets,
+        debug,
+        factory_structures,
+    );
 }
 
 fn switch_to_edit_mode(
