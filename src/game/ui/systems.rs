@@ -8,6 +8,7 @@ use crate::game::state::{
     TeleportRenameState, WorldEntryMode,
 };
 use crate::game::world::grid::ConverterMode;
+use crate::game::world::rendering::BlockIconAssets;
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ConfigAction, GameConfig};
 use crate::shared::i18n::I18n;
@@ -29,8 +30,8 @@ use super::types::{
     SettingsAction, SettingsDropdownLabel, SettingsDropdownList, SettingsGameplayGroup,
     SettingsKeyBindingsGroup, SettingsSlider, SettingsSliderFill, SettingsSliderKnob,
     SettingsStatusText, SettingsTab, SettingsValue, SettingsValueText, SimulationStatusText,
-    SimulationText, SlotArea, SlotLabel, TeleportNameText, TeleportPairText, UiPanelBinding,
-    UiRuntime, UiScaleText,
+    SimulationText, SlotArea, SlotIcon, SlotLabel, TeleportNameText, TeleportPairText,
+    UiPanelBinding, UiRuntime, UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -407,11 +408,13 @@ fn simulation_status_text_value(
 pub fn update_carried_item_ui(
     carried: Res<CarriedItem>,
     i18n: Res<I18n>,
+    block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut icon: Query<(&mut Node, &mut BackgroundColor), With<CarriedIcon>>,
+    mut icon: Query<(&mut Node, &mut BackgroundColor, &Children), With<CarriedIcon>>,
+    mut icon_images: Query<&mut ImageNode, Without<CarriedIcon>>,
     mut label: Query<&mut Text, With<CarriedLabel>>,
 ) {
-    let Ok((mut style, mut background)) = icon.single_mut() else {
+    let Ok((mut style, mut background, children)) = icon.single_mut() else {
         return;
     };
 
@@ -419,6 +422,11 @@ pub fn update_carried_item_ui(
         style.display = Display::None;
         if let Ok(mut text) = label.single_mut() {
             text.0.clear();
+        }
+        for child in children.iter() {
+            if let Ok(mut image) = icon_images.get_mut(child) {
+                *image = ImageNode::default();
+            }
         }
         return;
     };
@@ -437,8 +445,24 @@ pub fn update_carried_item_ui(
     style.top = Val::Px(cursor.y + 4.0);
     *background = slot_color(item).with_alpha(0.9).into();
 
+    let icon_handle = item
+        .block()
+        .and_then(|kind| block_icons.as_deref().and_then(|icons| icons.get(kind)));
+    for child in children.iter() {
+        if let Ok(mut image) = icon_images.get_mut(child) {
+            *image = icon_handle
+                .as_ref()
+                .map(|handle| ImageNode::new(handle.clone()))
+                .unwrap_or_default();
+        }
+    }
+
     if let Ok(mut text) = label.single_mut() {
-        text.0 = i18n.text(short_item_name(item));
+        text.0 = if icon_handle.is_some() {
+            String::new()
+        } else {
+            i18n.text(short_item_name(item))
+        };
     }
 }
 
@@ -1148,6 +1172,7 @@ pub fn update_inventory_slots(
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
     i18n: Res<I18n>,
+    block_icons: Option<Res<BlockIconAssets>>,
     mut slot_query: Query<
         (
             &InventorySlot,
@@ -1159,6 +1184,7 @@ pub fn update_inventory_slots(
         With<Button>,
     >,
     mut labels: Query<&mut Text, (With<SlotLabel>, Without<HotbarText>, Without<CarriedLabel>)>,
+    mut icons: Query<&mut ImageNode, With<SlotIcon>>,
 ) {
     for (slot, interaction, children, mut background, mut border) in &mut slot_query {
         let item = match slot.area {
@@ -1187,8 +1213,24 @@ pub fn update_inventory_slots(
 
         for child in children.iter() {
             if let Ok(mut text) = labels.get_mut(child) {
-                text.0 = item
-                    .map(|kind| i18n.text(short_item_name(kind)))
+                let has_icon = item.and_then(|item| item.block()).is_some_and(|kind| {
+                    block_icons
+                        .as_deref()
+                        .and_then(|icons| icons.get(kind))
+                        .is_some()
+                });
+                text.0 = if has_icon {
+                    String::new()
+                } else {
+                    item.map(|kind| i18n.text(short_item_name(kind)))
+                        .unwrap_or_default()
+                };
+            }
+            if let Ok(mut image) = icons.get_mut(child) {
+                *image = item
+                    .and_then(|item| item.block())
+                    .and_then(|kind| block_icons.as_deref().and_then(|icons| icons.get(kind)))
+                    .map(ImageNode::new)
                     .unwrap_or_default();
             }
         }

@@ -5,7 +5,7 @@ use crate::shared::i18n::I18n;
 use crate::shared::save::SAVE_SLOTS;
 
 use super::components::{
-    default_button_size, default_font_size, flex_row, localized_text, menu_button, root_node, text,
+    default_button_size, default_font_size, flex_row, localized_text, root_node, text,
     transparent_node,
 };
 use super::theme::{absolute_text_bundle, panel_bundle, STATUS_TEXT};
@@ -15,19 +15,19 @@ use super::types::{
     ConverterAction, ConverterInputRow, ConverterInputText, ConverterModeText, ConverterOutputText,
     ConverterPanel, Crosshair, CurrentSaveText, GeneratorAction, GeneratorMaterialText,
     GeneratorPanel, GeneratorPeriodText, HotbarText, InGameHudStyle, InGameHudVisibility,
-    InventoryTitle, LabelerAction, LabelerColorText, LabelerPanel, LocalizedText, MainMenuAction,
-    MainMenuPanel, PauseAction, PausePanel, SaveListAction, SaveListPanel, SaveListTitle,
-    SettingsAction, SettingsDropdown, SettingsGameplayGroup, SettingsKeyBindingsGroup,
-    SettingsPanel, SettingsSlider, SettingsStatusText, SimulationStatusText, SimulationText,
-    SlotArea, TeleportAction, TeleportNameText, TeleportPairText, TeleportPanel, UiPanelBinding,
-    UiPanelId, BACKPACK_SLOTS, HOTBAR_SLOTS,
+    InventoryTitle, LabelerAction, LabelerColorText, LabelerPanel, MainMenuAction, MainMenuPanel,
+    PauseAction, PausePanel, SaveListAction, SaveListPanel, SaveListTitle, SettingsAction,
+    SettingsDropdown, SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel,
+    SettingsSlider, SettingsStatusText, SimulationStatusText, SimulationText, SlotArea,
+    TeleportAction, TeleportNameText, TeleportPairText, TeleportPanel, UiPanelBinding, UiPanelId,
+    BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::widgets::{
-    scroll_container, scroll_content, spawn_converter_button, spawn_generator_button,
-    spawn_labeler_button, spawn_localized_main_button, spawn_localized_pause_button,
-    spawn_localized_settings_button, spawn_save_back_button, spawn_save_row_button,
-    spawn_save_slot_button, spawn_settings_dropdown, spawn_settings_slider, spawn_settings_tab,
-    spawn_slot, spawn_teleport_button,
+    scroll_container, scroll_content, spawn_confirm_dialog_button, spawn_converter_button,
+    spawn_generator_button, spawn_labeler_button, spawn_localized_main_button,
+    spawn_localized_pause_button, spawn_localized_settings_button, spawn_save_back_button,
+    spawn_save_row_button, spawn_save_slot_button, spawn_settings_dropdown, spawn_settings_slider,
+    spawn_settings_tab, spawn_slot, spawn_teleport_button,
 };
 
 pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
@@ -41,7 +41,7 @@ pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
         spawn_teleport_panel(root, &i18n);
         spawn_pause_panel(root, &i18n);
         spawn_settings_panel(root, &i18n);
-        spawn_confirm_dialog(root, &i18n);
+        spawn_confirm_dialog(root);
         spawn_main_menu(root, &i18n);
         spawn_save_list(root);
         spawn_carried_label(root);
@@ -57,35 +57,15 @@ fn spawn_generator_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     .with_children(|panel| {
         panel.spawn(localized_text(i18n, "generator.title", 26.0, Color::WHITE));
         panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-            spawn_generator_button(
-                row,
-                i18n.text("button.period_down"),
-                "button.period_down",
-                GeneratorAction::PeriodDown,
-            );
+            spawn_generator_button(row, GeneratorAction::PeriodDown);
             row.spawn((text("", 18.0, Color::WHITE), GeneratorPeriodText));
-            spawn_generator_button(
-                row,
-                i18n.text("button.period_up"),
-                "button.period_up",
-                GeneratorAction::PeriodUp,
-            );
+            spawn_generator_button(row, GeneratorAction::PeriodUp);
         });
         panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-            spawn_generator_button(
-                row,
-                i18n.text("button.material_next"),
-                "button.material_next",
-                GeneratorAction::MaterialNext,
-            );
+            spawn_generator_button(row, GeneratorAction::MaterialNext);
             row.spawn((text("", 18.0, Color::WHITE), GeneratorMaterialText));
         });
-        spawn_generator_button(
-            panel,
-            i18n.text("button.close"),
-            "button.close",
-            GeneratorAction::Close,
-        );
+        spawn_generator_button(panel, GeneratorAction::Close);
     });
 }
 
@@ -100,25 +80,10 @@ fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         panel.spawn((text("", 18.0, Color::WHITE), TeleportNameText));
         panel.spawn((text("", 18.0, Color::WHITE), TeleportPairText));
         panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-            spawn_teleport_button(
-                row,
-                i18n.text("button.teleport_pair"),
-                "button.teleport_pair",
-                TeleportAction::CyclePair,
-            );
-            spawn_teleport_button(
-                row,
-                i18n.text("button.teleport_rename"),
-                "button.teleport_rename",
-                TeleportAction::Rename,
-            );
+            spawn_teleport_button(row, TeleportAction::CyclePair);
+            spawn_teleport_button(row, TeleportAction::Rename);
         });
-        spawn_teleport_button(
-            panel,
-            i18n.text("button.close"),
-            "button.close",
-            TeleportAction::Close,
-        );
+        spawn_teleport_button(panel, TeleportAction::Close);
     });
 }
 
@@ -131,40 +96,20 @@ fn spawn_converter_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     .with_children(|panel| {
         panel.spawn(localized_text(i18n, "converter.title", 26.0, Color::WHITE));
         panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-            spawn_converter_button(
-                row,
-                i18n.text("button.converter_mode"),
-                "button.converter_mode",
-                ConverterAction::ToggleMode,
-            );
+            spawn_converter_button(row, ConverterAction::ToggleMode);
             row.spawn((text("", 18.0, Color::WHITE), ConverterModeText));
         });
         panel
             .spawn((flex_row(40.0, 8.0), ConverterInputRow))
             .with_children(|row| {
-                spawn_converter_button(
-                    row,
-                    i18n.text("button.input_material"),
-                    "button.input_material",
-                    ConverterAction::InputNext,
-                );
+                spawn_converter_button(row, ConverterAction::InputNext);
                 row.spawn((text("", 18.0, Color::WHITE), ConverterInputText));
             });
         panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-            spawn_converter_button(
-                row,
-                i18n.text("button.output_material"),
-                "button.output_material",
-                ConverterAction::OutputNext,
-            );
+            spawn_converter_button(row, ConverterAction::OutputNext);
             row.spawn((text("", 18.0, Color::WHITE), ConverterOutputText));
         });
-        spawn_converter_button(
-            panel,
-            i18n.text("button.close"),
-            "button.close",
-            ConverterAction::Close,
-        );
+        spawn_converter_button(panel, ConverterAction::Close);
     });
 }
 
@@ -177,26 +122,11 @@ fn spawn_labeler_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     .with_children(|panel| {
         panel.spawn(localized_text(i18n, "labeler.title", 26.0, Color::WHITE));
         panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-            spawn_labeler_button(
-                row,
-                i18n.text("button.previous_color"),
-                "button.previous_color",
-                LabelerAction::PreviousColor,
-            );
+            spawn_labeler_button(row, LabelerAction::PreviousColor);
             row.spawn((text("", 18.0, Color::WHITE), LabelerColorText));
-            spawn_labeler_button(
-                row,
-                i18n.text("button.next_color"),
-                "button.next_color",
-                LabelerAction::NextColor,
-            );
+            spawn_labeler_button(row, LabelerAction::NextColor);
         });
-        spawn_labeler_button(
-            panel,
-            i18n.text("button.close"),
-            "button.close",
-            LabelerAction::Close,
-        );
+        spawn_labeler_button(panel, LabelerAction::Close);
     });
 }
 
@@ -320,20 +250,20 @@ fn spawn_pause_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((panel_bundle(420.0, 560.0, -210.0, -280.0), PausePanel))
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "state.paused", 30.0, Color::WHITE));
-            for (key, action) in [
-                ("button.resume", PauseAction::Resume),
-                ("button.toggle_builder_mode", PauseAction::ToggleBuilderMode),
-                ("button.save_world", PauseAction::SaveWorld),
-                ("button.reset_solution", PauseAction::ResetSolution),
-                ("button.settings", PauseAction::OpenSettings),
-                ("button.back_to_main_menu", PauseAction::BackToMainMenu),
+            for action in [
+                PauseAction::Resume,
+                PauseAction::ToggleBuilderMode,
+                PauseAction::SaveWorld,
+                PauseAction::ResetSolution,
+                PauseAction::OpenSettings,
+                PauseAction::BackToMainMenu,
             ] {
-                spawn_localized_pause_button(panel, i18n.text(key), key, action);
+                spawn_localized_pause_button(panel, action);
             }
         });
 }
 
-fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
     root.spawn((
         panel_bundle(460.0, 250.0, -230.0, -125.0),
         ConfirmDialogPanel,
@@ -351,26 +281,17 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands, i18n: &I18n) {
             ConfirmDialogMessage,
         ));
         panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-            row.spawn((menu_button(34.0), ConfirmDialogAction::Primary))
-                .with_children(|button| {
-                    button.spawn((
-                        text(i18n.text("button.confirm"), 15.0, Color::WHITE),
-                        ConfirmDialogPrimaryLabel,
-                    ));
-                });
-            row.spawn((menu_button(34.0), ConfirmDialogAction::Secondary))
-                .with_children(|button| {
-                    button.spawn((text("", 15.0, Color::WHITE), ConfirmDialogSecondaryLabel));
-                });
-            row.spawn((menu_button(34.0), ConfirmDialogAction::Cancel))
-                .with_children(|button| {
-                    button.spawn((
-                        text(i18n.text("button.cancel"), 15.0, Color::WHITE),
-                        LocalizedText {
-                            key: "button.cancel",
-                        },
-                    ));
-                });
+            spawn_confirm_dialog_button(
+                row,
+                ConfirmDialogAction::Primary,
+                ConfirmDialogPrimaryLabel,
+            );
+            spawn_confirm_dialog_button(
+                row,
+                ConfirmDialogAction::Secondary,
+                ConfirmDialogSecondaryLabel,
+            );
+            spawn_confirm_dialog_button(row, ConfirmDialogAction::Cancel, ());
         });
     });
 }
@@ -383,18 +304,18 @@ fn spawn_settings_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     ))
     .with_children(|panel| {
         panel.spawn(localized_text(i18n, "settings.title", 30.0, Color::WHITE));
-        spawn_settings_tabs(panel, i18n);
+        spawn_settings_tabs(panel);
         panel.spawn((
             text("", 16.0, Color::srgb(0.84, 0.92, 1.0)),
             SettingsStatusText,
         ));
         spawn_gameplay_settings(panel, i18n);
         spawn_key_bindings(panel, i18n);
-        spawn_settings_footer(panel, i18n);
+        spawn_settings_footer(panel);
     });
 }
 
-fn spawn_settings_tabs(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
+fn spawn_settings_tabs(panel: &mut ChildSpawnerCommands) {
     panel
         .spawn(transparent_node(Node {
             width: Val::Percent(100.0),
@@ -404,18 +325,8 @@ fn spawn_settings_tabs(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
             ..default()
         }))
         .with_children(|tabs| {
-            spawn_settings_tab(
-                tabs,
-                i18n.text("button.gameplay"),
-                "button.gameplay",
-                SettingsAction::TabGameplay,
-            );
-            spawn_settings_tab(
-                tabs,
-                i18n.text("button.key_bindings"),
-                "button.key_bindings",
-                SettingsAction::TabKeyBindings,
-            );
+            spawn_settings_tab(tabs, SettingsAction::TabGameplay);
+            spawn_settings_tab(tabs, SettingsAction::TabKeyBindings);
         });
 }
 
@@ -520,12 +431,7 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
                     ));
                     grid.spawn(transparent_node(Node::default()));
                     for action in ConfigAction::GENERAL {
-                        spawn_localized_settings_button(
-                            grid,
-                            i18n.text(action.label_key()),
-                            action.label_key(),
-                            SettingsAction::Bind(action),
-                        );
+                        spawn_localized_settings_button(grid, SettingsAction::Bind(action));
                     }
                     grid.spawn(localized_text(
                         i18n,
@@ -535,25 +441,20 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
                     ));
                     grid.spawn(transparent_node(Node::default()));
                     for action in ConfigAction::SIMULATION {
-                        spawn_localized_settings_button(
-                            grid,
-                            i18n.text(action.label_key()),
-                            action.label_key(),
-                            SettingsAction::Bind(action),
-                        );
+                        spawn_localized_settings_button(grid, SettingsAction::Bind(action));
                     }
                 });
         });
 }
 
-fn spawn_settings_footer(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
+fn spawn_settings_footer(panel: &mut ChildSpawnerCommands) {
     panel.spawn(flex_row(42.0, 8.0)).with_children(|row| {
-        for (key, action) in [
-            ("button.reset_defaults", SettingsAction::ResetDefaults),
-            ("button.open_config_folder", SettingsAction::OpenFolder),
-            ("button.back", SettingsAction::Back),
+        for action in [
+            SettingsAction::ResetDefaults,
+            SettingsAction::OpenFolder,
+            SettingsAction::Back,
         ] {
-            spawn_localized_settings_button(row, i18n.text(key), key, action);
+            spawn_localized_settings_button(row, action);
         }
     });
 }
@@ -562,13 +463,13 @@ fn spawn_main_menu(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((panel_bundle(420.0, 340.0, -210.0, -170.0), MainMenuPanel))
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "main.title", 30.0, Color::WHITE));
-            for (key, action) in [
-                ("button.edit_puzzle", MainMenuAction::EditPuzzle),
-                ("button.start_playing", MainMenuAction::Play),
-                ("button.settings", MainMenuAction::OpenSettings),
-                ("button.quit_game", MainMenuAction::Quit),
+            for action in [
+                MainMenuAction::EditPuzzle,
+                MainMenuAction::Play,
+                MainMenuAction::OpenSettings,
+                MainMenuAction::Quit,
             ] {
-                spawn_localized_main_button(panel, i18n.text(key), key, action);
+                spawn_localized_main_button(panel, action);
             }
         });
 }
@@ -651,6 +552,22 @@ fn spawn_carried_label(root: &mut ChildSpawnerCommands) {
         CarriedIcon,
     ))
     .with_children(|icon| {
+        icon.spawn((
+            ImageNode::default(),
+            Node {
+                width: Val::Px(default_button_size(42.0)),
+                height: Val::Px(default_button_size(42.0)),
+                position_type: PositionType::Absolute,
+                left: Val::Percent(50.0),
+                top: Val::Percent(50.0),
+                margin: UiRect {
+                    left: Val::Px(-default_button_size(21.0)),
+                    top: Val::Px(-default_button_size(21.0)),
+                    ..default()
+                },
+                ..default()
+            },
+        ));
         icon.spawn((
             Text::new(""),
             TextFont {

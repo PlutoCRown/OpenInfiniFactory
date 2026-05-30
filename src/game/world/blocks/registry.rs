@@ -3,9 +3,9 @@ use super::{
     copper_material::COPPER_MATERIAL, counter_rotator::COUNTER_ROTATOR, detector::DETECTOR,
     dirt::DIRT, down_detector::DOWN_DETECTOR, down_welder::DOWN_WELDER, drill::DRILL,
     drill_head::DRILL_HEAD, generator::GENERATOR, goal::GOAL, grass::GRASS,
-    iron_material::IRON_MATERIAL, laser::LASER, lifter::LIFTER, material::MATERIAL, pusher::PUSHER,
-    planks::PLANKS, reverse_conveyor::REVERSE_CONVEYOR, roller::ROLLER, rotator::ROTATOR,
-    platform::PLATFORM, stamper::STAMPER, stone::STONE, teleport_entrance::TELEPORT_ENTRANCE,
+    iron_material::IRON_MATERIAL, laser::LASER, lifter::LIFTER, material::MATERIAL, planks::PLANKS,
+    platform::PLATFORM, pusher::PUSHER, reverse_conveyor::REVERSE_CONVEYOR, roller::ROLLER,
+    rotator::ROTATOR, stamper::STAMPER, stone::STONE, teleport_entrance::TELEPORT_ENTRANCE,
     teleport_exit::TELEPORT_EXIT, weld_point::WELD_POINT, welder::WELDER, wire::WIRE, Block,
     BlockKind, EditableBlock, FactoryBlock, MaterialBlock, MaterialKind, SceneBlock, SystemBlock,
 };

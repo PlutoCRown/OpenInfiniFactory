@@ -1,5 +1,8 @@
+use bevy::camera::visibility::RenderLayers;
+use bevy::camera::{RenderTarget, ScalingMode};
 use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
+use bevy::render::render_resource::TextureFormat;
 use std::collections::{HashMap, HashSet};
 
 use crate::game::simulation::factory_activity::{
@@ -11,15 +14,43 @@ use crate::game::world::animation::{
     BlockAnimationKind, PusherAnimation, WeldSpark,
 };
 use crate::game::world::blocks::{
-    BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
+    BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior, EDIT_BLOCKS,
+    PLAY_BLOCKS,
 };
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
 use crate::game::world::scene_material::SceneBlockMaterial;
 
+const ICON_TEXTURE_SIZE: u32 = 256;
+const ICON_RENDER_LAYER: usize = 3;
+const ICON_SPACING: f32 = 4.0;
+const ICON_RENDER_FRAMES: u8 = 3;
+
 #[derive(Component)]
 pub struct BlockEntity {
     pub pos: IVec3,
+}
+
+#[derive(Resource, Default)]
+pub struct BlockIconAssets {
+    icons: HashMap<BlockKind, Handle<Image>>,
+}
+
+impl BlockIconAssets {
+    pub fn get(&self, kind: BlockKind) -> Option<Handle<Image>> {
+        self.icons.get(&kind).cloned()
+    }
+}
+
+#[derive(Component)]
+pub(crate) struct BlockIconRenderEntity;
+
+#[derive(Component)]
+pub(crate) struct BlockIconRenderCamera;
+
+#[derive(Resource)]
+pub struct BlockIconRenderState {
+    frames_remaining: u8,
 }
 
 #[derive(Component)]
@@ -119,6 +150,147 @@ pub fn setup_scene(
         Visibility::Hidden,
         PlacementPreview,
     ));
+}
+
+pub fn setup_block_icons(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    assets: Res<WorldRenderAssets>,
+) {
+    let icon_layer = RenderLayers::layer(ICON_RENDER_LAYER);
+    let mut icon_assets = BlockIconAssets::default();
+    let icon_world = WorldBlocks::default();
+    let icon_kinds = block_icon_kinds();
+
+    commands.spawn((
+        DirectionalLight {
+            illuminance: 7800.0,
+            shadows_enabled: false,
+            ..default()
+        },
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.85, -0.55, -0.25)),
+        icon_layer.clone(),
+        BlockIconRenderEntity,
+    ));
+
+    for (index, kind) in icon_kinds.into_iter().enumerate() {
+        let image = Image::new_target_texture(
+            ICON_TEXTURE_SIZE,
+            ICON_TEXTURE_SIZE,
+            TextureFormat::Rgba8Unorm,
+            Some(TextureFormat::Rgba8UnormSrgb),
+        );
+        let image_handle = images.add(image);
+        icon_assets.icons.insert(kind, image_handle.clone());
+
+        let origin = Vec3::new(index as f32 * ICON_SPACING, -100.0, 0.0);
+        spawn_block_icon_model(
+            &mut commands,
+            &assets,
+            &icon_world,
+            kind,
+            origin,
+            &icon_layer,
+        );
+
+        commands.spawn((
+            Camera3d::default(),
+            Camera {
+                order: -2,
+                clear_color: Color::NONE.into(),
+                ..default()
+            },
+            RenderTarget::Image(image_handle.into()),
+            Projection::Orthographic(OrthographicProjection {
+                scaling_mode: ScalingMode::Fixed {
+                    width: 2.45,
+                    height: 2.45,
+                },
+                ..OrthographicProjection::default_3d()
+            }),
+            Transform::from_translation(origin + Vec3::new(2.8, 2.2, 2.8))
+                .looking_at(origin, Vec3::Y),
+            AmbientLight {
+                color: Color::WHITE,
+                brightness: 520.0,
+                ..default()
+            },
+            icon_layer.clone(),
+            BlockIconRenderEntity,
+            BlockIconRenderCamera,
+        ));
+    }
+
+    commands.insert_resource(icon_assets);
+    commands.insert_resource(BlockIconRenderState {
+        frames_remaining: ICON_RENDER_FRAMES,
+    });
+}
+
+fn block_icon_kinds() -> Vec<BlockKind> {
+    let mut kinds = Vec::new();
+    for kind in EDIT_BLOCKS.into_iter().chain(PLAY_BLOCKS).chain([
+        BlockKind::Material,
+        BlockKind::IronMaterial,
+        BlockKind::CopperMaterial,
+    ]) {
+        if !kinds.contains(&kind) {
+            kinds.push(kind);
+        }
+    }
+    kinds
+}
+
+pub fn retire_block_icon_renderers(
+    mut commands: Commands,
+    state: Option<ResMut<BlockIconRenderState>>,
+    render_entities: Query<Entity, With<BlockIconRenderEntity>>,
+    mut cameras: Query<&mut Camera, With<BlockIconRenderCamera>>,
+) {
+    let Some(mut state) = state else {
+        return;
+    };
+    if state.frames_remaining > 0 {
+        state.frames_remaining -= 1;
+        return;
+    }
+
+    for mut camera in &mut cameras {
+        camera.is_active = false;
+    }
+    for entity in &render_entities {
+        commands.entity(entity).despawn();
+    }
+    commands.remove_resource::<BlockIconRenderState>();
+}
+
+fn spawn_block_icon_model(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    world: &WorldBlocks,
+    kind: BlockKind,
+    origin: Vec3,
+    icon_layer: &RenderLayers,
+) {
+    let data = BlockData {
+        kind,
+        facing: crate::game::world::direction::Facing::North,
+    };
+    spawn_block_model(
+        commands,
+        assets,
+        world,
+        IVec3::ZERO,
+        data,
+        assets.block_material(data.kind),
+        None,
+        None,
+        None,
+        AnimationTiming::edit(),
+        false,
+        false,
+        Some((origin - Vec3::splat(0.5), icon_layer)),
+    );
 }
 
 pub fn rebuild_world(commands: &mut Commands, world: &WorldBlocks, assets: &WorldRenderAssets) {
@@ -263,6 +435,7 @@ pub fn spawn_block_preview(
         AnimationTiming::edit(),
         false,
         false,
+        None,
     );
 }
 
@@ -317,6 +490,7 @@ pub fn spawn_block_with_timed_animation(
         timing,
         true,
         false,
+        None,
     );
 }
 
@@ -342,6 +516,7 @@ pub fn spawn_pending_generated_block(
         timing,
         false,
         true,
+        None,
     );
 }
 
@@ -381,6 +556,7 @@ pub fn rebuild_world_with_timed_animations(
             timing,
             true,
             false,
+            None,
         );
     }
     for (pos, data) in &world.system_blocks {
@@ -397,6 +573,7 @@ pub fn rebuild_world_with_timed_animations(
             timing,
             true,
             false,
+            None,
         );
     }
 }
@@ -425,6 +602,7 @@ pub fn rebuild_world_with_runtime_animations(
             timing,
             true,
             false,
+            None,
         );
     }
     for (pos, data) in &world.system_blocks {
@@ -441,6 +619,7 @@ pub fn rebuild_world_with_runtime_animations(
             timing,
             true,
             false,
+            None,
         );
     }
 }
@@ -504,6 +683,7 @@ fn spawn_block_model(
     timing: AnimationTiming,
     with_block_entity: bool,
     pending_generated_preview: bool,
+    icon_render: Option<(Vec3, &RenderLayers)>,
 ) {
     let mut transform = Transform::from_translation(grid_to_world(pos));
     if let Some(animation) = animation {
@@ -523,6 +703,9 @@ fn spawn_block_model(
     } else {
         transform.rotation = render_rotation(data, data.facing);
     }
+    if let Some((origin, _)) = icon_render {
+        transform.translation += origin;
+    }
 
     let mut entity = if data.kind == crate::game::world::blocks::BlockKind::Wire {
         commands.spawn((transform, Visibility::default()))
@@ -539,6 +722,10 @@ fn spawn_block_model(
             transform,
         ))
     };
+
+    if let Some((_, icon_layer)) = icon_render {
+        entity.insert((icon_layer.clone(), BlockIconRenderEntity));
+    }
 
     if with_block_entity {
         entity.insert(BlockEntity { pos });
@@ -558,21 +745,27 @@ fn spawn_block_model(
 
     entity.with_children(|parent| {
         let mut model_root = parent.spawn((Transform::default(), Visibility::default()));
+        if let Some((_, icon_layer)) = icon_render {
+            model_root.insert((icon_layer.clone(), BlockIconRenderEntity));
+        }
         if let Some(pusher_animation) = pusher_animation {
             model_root.insert(AnimatedPusher::new(pusher_animation));
         }
         model_root.with_children(|parent| {
-            spawn_model_parts(parent, assets, data);
+            spawn_model_parts(parent, assets, data, icon_render.map(|(_, layer)| layer));
         });
 
         let render_behavior = data.kind.render_behavior(data.facing);
 
         if render_behavior.goal_topper {
-            parent.spawn((
+            let mut child = parent.spawn((
                 Mesh3d(assets.goal_top.clone()),
                 MeshMaterial3d(assets.goal_top_material.clone()),
                 Transform::from_xyz(0.0, 0.55, 0.0),
             ));
+            if let Some((_, icon_layer)) = icon_render {
+                child.insert((icon_layer.clone(), BlockIconRenderEntity));
+            }
         }
 
         if let Some(weld_connector) = render_behavior.weld_connector {
@@ -589,11 +782,14 @@ fn spawn_block_model(
                     .is_some_and(|block| weld_connects_to(block, -offset))
                 {
                     let local_offset = local_connector_offset(data, offset);
-                    parent.spawn((
+                    let mut child = parent.spawn((
                         Mesh3d(assets.connector_mesh(local_offset)),
                         MeshMaterial3d(assets.weld_connector_material.clone()),
                         Transform::from_translation(local_offset.as_vec3() * 0.34),
                     ));
+                    if let Some((_, icon_layer)) = icon_render {
+                        child.insert((icon_layer.clone(), BlockIconRenderEntity));
+                    }
                 }
             }
         }
@@ -610,7 +806,7 @@ fn spawn_block_model(
                 {
                     connected_offsets.push(offset);
                     let local_offset = local_connector_offset(data, offset);
-                    parent.spawn((
+                    let mut child = parent.spawn((
                         Mesh3d(assets.wire_connector_mesh(local_offset)),
                         MeshMaterial3d(if data.kind == BlockKind::Wire {
                             material.clone()
@@ -619,13 +815,20 @@ fn spawn_block_model(
                         }),
                         Transform::from_translation(local_offset.as_vec3() * 0.34),
                     ));
+                    if let Some((_, icon_layer)) = icon_render {
+                        child.insert((icon_layer.clone(), BlockIconRenderEntity));
+                    }
                 }
             }
 
             if data.kind == crate::game::world::blocks::BlockKind::Wire
                 && connected_offsets.is_empty()
             {
-                parent.spawn((Mesh3d(assets.wire_node_mesh()), MeshMaterial3d(material)));
+                let mut child =
+                    parent.spawn((Mesh3d(assets.wire_node_mesh()), MeshMaterial3d(material)));
+                if let Some((_, icon_layer)) = icon_render {
+                    child.insert((icon_layer.clone(), BlockIconRenderEntity));
+                }
             }
         }
 
@@ -635,11 +838,14 @@ fn spawn_block_model(
                 .iter()
                 .filter(|(face, _)| face.pos == pos)
             {
-                parent.spawn((
+                let mut child = parent.spawn((
                     Mesh3d(assets.face_mark.clone()),
                     MeshMaterial3d(assets.face_mark_material(mark.color)),
                     face_mark_transform(face.normal),
                 ));
+                if let Some((_, icon_layer)) = icon_render {
+                    child.insert((icon_layer.clone(), BlockIconRenderEntity));
+                }
             }
         }
     });
@@ -665,6 +871,7 @@ fn spawn_model_parts(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
     data: BlockData,
+    icon_layer: Option<&RenderLayers>,
 ) {
     let parts = match data.kind.model() {
         BlockModel::Default => &[],
@@ -672,7 +879,7 @@ fn spawn_model_parts(
     };
 
     for part in parts {
-        parent.spawn((
+        let mut child = parent.spawn((
             Mesh3d(assets.model_mesh(part.mesh)),
             MeshMaterial3d(assets.model_material(part.material)),
             Transform {
@@ -682,6 +889,9 @@ fn spawn_model_parts(
                 ..default()
             },
         ));
+        if let Some(icon_layer) = icon_layer {
+            child.insert((icon_layer.clone(), BlockIconRenderEntity));
+        }
     }
 }
 

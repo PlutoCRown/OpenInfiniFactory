@@ -29,7 +29,9 @@ use systems::simulation_controls::simulation_controls;
 use ui::{GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
-use world::rendering::{setup_scene, HoverStructureBounds};
+use world::rendering::{
+    retire_block_icon_renderers, setup_block_icons, setup_scene, HoverStructureBounds,
+};
 
 pub struct GamePlugin;
 
@@ -93,6 +95,7 @@ impl Plugin for GamePlugin {
                 Startup,
                 (
                     setup_scene,
+                    setup_block_icons,
                     spawn_player,
                     refresh_saves_on_startup,
                     ui::load_ui_font,
@@ -137,6 +140,7 @@ impl Plugin for GamePlugin {
             .add_systems(Update, animate_blocks.after(systems::debug::mark_perf_view))
             .add_systems(Update, systems::debug::mark_perf_animation)
             .add_systems(Update, systems::debug::mark_perf_ui)
+            .add_systems(Update, retire_block_icon_renderers)
             .add_systems(
                 Update,
                 (

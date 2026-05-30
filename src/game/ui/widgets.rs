@@ -4,10 +4,11 @@ use bevy::ui_widgets::{Slider, SliderRange, SliderThumb, SliderValue, TrackClick
 
 use super::components::{default_button_size, default_font_size, menu_button};
 use super::types::{
-    AreaKind, InventoryItem, InventorySlot, KeyBindingButton, KeyBindingLabel, MainMenuAction,
-    PauseAction, SaveListAction, SaveListLabel, ScrollContainer, ScrollContent, SettingsAction,
-    SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList, SettingsSlider,
-    SettingsSliderFill, SettingsSliderKnob, SettingsValue, SettingsValueText, SlotArea, SlotLabel,
+    AreaKind, ConfirmDialogAction, InventoryItem, InventorySlot, KeyBindingButton, KeyBindingLabel,
+    MainMenuAction, PauseAction, SaveListAction, SaveListLabel, ScrollContainer, ScrollContent,
+    SettingsAction, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList, SettingsSlider,
+    SettingsSliderFill, SettingsSliderKnob, SettingsValue, SettingsValueText, SlotArea, SlotIcon,
+    SlotLabel, UiActionLabel,
 };
 
 fn label_text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bundle {
@@ -53,6 +54,23 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
         ))
         .with_children(|slot| {
             slot.spawn((
+                ImageNode::default(),
+                Node {
+                    width: Val::Px(default_button_size(42.0)),
+                    height: Val::Px(default_button_size(42.0)),
+                    position_type: PositionType::Absolute,
+                    left: Val::Percent(50.0),
+                    top: Val::Percent(50.0),
+                    margin: UiRect {
+                        left: Val::Px(-default_button_size(21.0)),
+                        top: Val::Px(-default_button_size(21.0)),
+                        ..default()
+                    },
+                    ..default()
+                },
+                SlotIcon,
+            ));
+            slot.spawn((
                 label_text("", 12.0, Color::WHITE),
                 TextLayout::new_with_justify(Justify::Center),
                 Node {
@@ -64,65 +82,68 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
         });
 }
 
-pub(super) fn spawn_localized_pause_button(
-    parent: &mut ChildSpawnerCommands,
-    label: String,
-    key: &'static str,
-    action: PauseAction,
-) {
-    spawn_localized_button(parent, 38.0, 16.0, label, key, action);
+pub(super) fn spawn_localized_pause_button(parent: &mut ChildSpawnerCommands, action: PauseAction) {
+    spawn_localized_button(parent, 38.0, 16.0, action);
 }
 
 pub(super) fn spawn_generator_button(
     parent: &mut ChildSpawnerCommands,
-    label: String,
-    key: &'static str,
     action: super::types::GeneratorAction,
 ) {
-    spawn_localized_button(parent, 36.0, 14.0, label, key, action);
+    spawn_localized_button(parent, 36.0, 14.0, action);
 }
 
 pub(super) fn spawn_labeler_button(
     parent: &mut ChildSpawnerCommands,
-    label: String,
-    key: &'static str,
     action: super::types::LabelerAction,
 ) {
-    spawn_localized_button(parent, 36.0, 14.0, label, key, action);
+    spawn_localized_button(parent, 36.0, 14.0, action);
 }
 
 pub(super) fn spawn_converter_button(
     parent: &mut ChildSpawnerCommands,
-    label: String,
-    key: &'static str,
     action: super::types::ConverterAction,
 ) {
-    spawn_localized_button(parent, 36.0, 14.0, label, key, action);
+    spawn_localized_button(parent, 36.0, 14.0, action);
 }
 
 pub(super) fn spawn_teleport_button(
     parent: &mut ChildSpawnerCommands,
-    label: String,
-    key: &'static str,
     action: super::types::TeleportAction,
 ) {
-    spawn_localized_button(parent, 36.0, 14.0, label, key, action);
+    spawn_localized_button(parent, 36.0, 14.0, action);
+}
+
+pub(super) fn spawn_confirm_dialog_button(
+    parent: &mut ChildSpawnerCommands,
+    action: ConfirmDialogAction,
+    label_marker: impl Bundle,
+) {
+    let key = action.label_key();
+    parent
+        .spawn((menu_button(34.0), action))
+        .with_children(|button| {
+            button.spawn((
+                label_text(key, 15.0, Color::WHITE),
+                super::types::LocalizedText { key },
+                label_marker,
+            ));
+        });
 }
 
 pub(super) fn spawn_localized_settings_button(
     parent: &mut ChildSpawnerCommands,
-    label: String,
-    key: &'static str,
     action: SettingsAction,
 ) {
     let is_binding = matches!(action, SettingsAction::Bind(_));
+    let key = action.label_key();
     let mut button = parent.spawn((menu_button(36.0), action));
     if let SettingsAction::Bind(action) = action {
         button.insert(KeyBindingButton(action));
     }
     button.with_children(|button| {
         let mut label_entity = button.spawn((
-            label_text(label, 14.0, Color::WHITE),
+            label_text(key, 14.0, Color::WHITE),
             super::types::LocalizedText { key },
         ));
         if is_binding {
@@ -131,12 +152,8 @@ pub(super) fn spawn_localized_settings_button(
     });
 }
 
-pub(super) fn spawn_settings_tab(
-    parent: &mut ChildSpawnerCommands,
-    label: String,
-    key: &'static str,
-    action: SettingsAction,
-) {
+pub(super) fn spawn_settings_tab(parent: &mut ChildSpawnerCommands, action: SettingsAction) {
+    let key = action.label_key();
     parent
         .spawn((
             styled_button(
@@ -161,7 +178,7 @@ pub(super) fn spawn_settings_tab(
         ))
         .with_children(|tab| {
             tab.spawn((
-                label_text(label, 15.0, Color::WHITE),
+                label_text(key, 15.0, Color::WHITE),
                 super::types::LocalizedText { key },
             ));
         });
@@ -357,11 +374,9 @@ fn spawn_localized_dropdown_option(
 
 pub(super) fn spawn_localized_main_button(
     parent: &mut ChildSpawnerCommands,
-    label: String,
-    key: &'static str,
     action: MainMenuAction,
 ) {
-    spawn_localized_button(parent, 44.0, 17.0, label, key, action);
+    spawn_localized_button(parent, 44.0, 17.0, action);
 }
 
 pub(super) fn scroll_container(height: f32) -> (impl Bundle, ScrollContainer) {
@@ -430,18 +445,20 @@ pub(super) fn spawn_save_back_button(parent: &mut ChildSpawnerCommands) {
         });
 }
 
-fn spawn_localized_button<'a, A: Bundle>(
+fn spawn_localized_button<'a, A>(
     parent: &'a mut ChildSpawnerCommands,
     height: f32,
     font_size: f32,
-    label: String,
-    key: &'static str,
     action: A,
-) -> EntityCommands<'a> {
+) -> EntityCommands<'a>
+where
+    A: Bundle + Copy + UiActionLabel,
+{
+    let key = action.label_key();
     let mut entity = parent.spawn((menu_button(height), action));
     entity.with_children(|button| {
         button.spawn((
-            label_text(label, font_size, Color::WHITE),
+            label_text(key, font_size, Color::WHITE),
             super::types::LocalizedText { key },
         ));
     });

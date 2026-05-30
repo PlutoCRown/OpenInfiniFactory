@@ -81,7 +81,6 @@ impl UiRuntime {
             _ => None,
         }
     }
-
 }
 
 #[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
@@ -248,6 +247,10 @@ pub struct LocalizedText {
     pub key: &'static str,
 }
 
+pub trait UiActionLabel {
+    fn label_key(self) -> &'static str;
+}
+
 #[derive(Component, Clone, Copy)]
 pub enum PauseAction {
     Resume,
@@ -258,12 +261,36 @@ pub enum PauseAction {
     BackToMainMenu,
 }
 
+impl UiActionLabel for PauseAction {
+    fn label_key(self) -> &'static str {
+        match self {
+            Self::Resume => "button.resume",
+            Self::ToggleBuilderMode => "button.toggle_builder_mode",
+            Self::SaveWorld => "button.save_world",
+            Self::ResetSolution => "button.reset_solution",
+            Self::OpenSettings => "button.settings",
+            Self::BackToMainMenu => "button.back_to_main_menu",
+        }
+    }
+}
+
 #[derive(Component, Clone, Copy)]
 pub enum MainMenuAction {
     EditPuzzle,
     Play,
     OpenSettings,
     Quit,
+}
+
+impl UiActionLabel for MainMenuAction {
+    fn label_key(self) -> &'static str {
+        match self {
+            Self::EditPuzzle => "button.edit_puzzle",
+            Self::Play => "button.start_playing",
+            Self::OpenSettings => "button.settings",
+            Self::Quit => "button.quit_game",
+        }
+    }
 }
 
 #[derive(Component, Clone, Copy)]
@@ -282,6 +309,16 @@ pub enum ConfirmDialogAction {
     Primary,
     Secondary,
     Cancel,
+}
+
+impl UiActionLabel for ConfirmDialogAction {
+    fn label_key(self) -> &'static str {
+        match self {
+            Self::Primary => "button.confirm",
+            Self::Secondary => "button.confirm",
+            Self::Cancel => "button.cancel",
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -329,6 +366,26 @@ pub enum SettingsAction {
     Back,
 }
 
+impl UiActionLabel for SettingsAction {
+    fn label_key(self) -> &'static str {
+        match self {
+            Self::TabGameplay => "button.gameplay",
+            Self::TabKeyBindings => "button.key_bindings",
+            Self::Bind(action) => action.label_key(),
+            Self::ResetDefaults => "button.reset_defaults",
+            Self::OpenFolder => "button.open_config_folder",
+            Self::Back => "button.back",
+            Self::FovSlider
+            | Self::UiScaleSlider
+            | Self::GravitySlider
+            | Self::SetPlaceSelectionMode(_)
+            | Self::SetDeleteSelectionMode(_)
+            | Self::SetLanguage(_)
+            | Self::ToggleDropdown(_) => "",
+        }
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct ActiveSettingsSlider(pub Option<SettingsSlider>);
 
@@ -340,11 +397,32 @@ pub enum GeneratorAction {
     Close,
 }
 
+impl UiActionLabel for GeneratorAction {
+    fn label_key(self) -> &'static str {
+        match self {
+            Self::PeriodDown => "button.period_down",
+            Self::PeriodUp => "button.period_up",
+            Self::MaterialNext => "button.material_next",
+            Self::Close => "button.close",
+        }
+    }
+}
+
 #[derive(Component, Clone, Copy)]
 pub enum LabelerAction {
     PreviousColor,
     NextColor,
     Close,
+}
+
+impl UiActionLabel for LabelerAction {
+    fn label_key(self) -> &'static str {
+        match self {
+            Self::PreviousColor => "button.previous_color",
+            Self::NextColor => "button.next_color",
+            Self::Close => "button.close",
+        }
+    }
 }
 
 #[derive(Component, Clone, Copy)]
@@ -355,11 +433,32 @@ pub enum ConverterAction {
     Close,
 }
 
+impl UiActionLabel for ConverterAction {
+    fn label_key(self) -> &'static str {
+        match self {
+            Self::ToggleMode => "button.converter_mode",
+            Self::InputNext => "button.input_material",
+            Self::OutputNext => "button.output_material",
+            Self::Close => "button.close",
+        }
+    }
+}
+
 #[derive(Component, Clone, Copy)]
 pub enum TeleportAction {
     CyclePair,
     Rename,
     Close,
+}
+
+impl UiActionLabel for TeleportAction {
+    fn label_key(self) -> &'static str {
+        match self {
+            Self::CyclePair => "button.teleport_pair",
+            Self::Rename => "button.teleport_rename",
+            Self::Close => "button.close",
+        }
+    }
 }
 
 #[derive(Resource, Clone, Copy, Eq, PartialEq)]
@@ -388,6 +487,9 @@ impl Default for SettingsTab {
 
 #[derive(Component)]
 pub(crate) struct SlotLabel;
+
+#[derive(Component)]
+pub(crate) struct SlotIcon;
 
 #[derive(Component)]
 pub(crate) struct CarriedLabel;
