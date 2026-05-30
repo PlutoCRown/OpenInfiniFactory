@@ -1,6 +1,6 @@
-use bevy::prelude::*;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::grid_to_world;
+use bevy::prelude::*;
 
 pub const EDIT_ANIMATION_SECONDS: f32 = 0.3;
 pub const SIMULATION_TURN_SECONDS: f32 = 0.5;
@@ -101,11 +101,7 @@ impl AnimatedBlock {
                 BlockAnimationKind::SpawnScale => Vec3::ZERO,
             },
             to_scale: Vec3::ONE,
-            elapsed: animation
-                .progress
-                .unwrap_or(0.0)
-                .clamp(0.0, 1.0)
-                * timing.duration,
+            elapsed: animation.progress.unwrap_or(0.0).clamp(0.0, 1.0) * timing.duration,
             timing,
         }
     }

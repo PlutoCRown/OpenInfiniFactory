@@ -2,6 +2,8 @@ use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+use crate::game::simulation::factory_activity::{factory_activity_map, FactoryActivity};
+use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     AnimatedBlock, AnimatedPiston, AnimationEasing, AnimationTiming, BlockAnimation,
     BlockAnimationKind, PistonAnimation,
@@ -114,10 +116,59 @@ pub fn rebuild_world(commands: &mut Commands, world: &WorldBlocks, assets: &Worl
     }
 }
 
+pub fn rebuild_world_with_factory_activity_debug(
+    commands: &mut Commands,
+    world: &WorldBlocks,
+    assets: &WorldRenderAssets,
+) {
+    let activity = factory_activity_map(world);
+    for (pos, data) in &world.blocks {
+        if data.kind.is_factory() {
+            let material = match activity.get(pos) {
+                Some(FactoryActivity::Active) => assets.active_factory_debug_material(),
+                _ => assets.inactive_factory_debug_material(),
+            };
+            spawn_debug_factory_block(commands, assets, *pos, material);
+        } else {
+            spawn_block(commands, assets, world, *pos, *data);
+        }
+    }
+    for (pos, data) in &world.system_blocks {
+        spawn_block(commands, assets, world, *pos, *data);
+    }
+}
+
+pub fn rebuild_world_for_debug_state(
+    commands: &mut Commands,
+    world: &WorldBlocks,
+    assets: &WorldRenderAssets,
+    debug: &DebugState,
+) {
+    if debug.factory_activity {
+        rebuild_world_with_factory_activity_debug(commands, world, assets);
+    } else {
+        rebuild_world(commands, world, assets);
+    }
+}
+
 pub fn despawn_world(commands: &mut Commands, block_entities: &Query<Entity, With<BlockEntity>>) {
     for entity in block_entities {
         commands.entity(entity).despawn();
     }
+}
+
+fn spawn_debug_factory_block(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    pos: IVec3,
+    material: Handle<StandardMaterial>,
+) {
+    commands.spawn((
+        Mesh3d(assets.block.clone()),
+        MeshMaterial3d(material),
+        Transform::from_translation(grid_to_world(pos)),
+        BlockEntity { pos },
+    ));
 }
 
 pub fn despawn_edit_previews(commands: &mut Commands, previews: &Query<Entity, With<EditPreview>>) {
@@ -345,6 +396,29 @@ pub fn rebuild_world_with_runtime_animations(
             timing,
             true,
             false,
+        );
+    }
+}
+
+pub fn rebuild_world_with_runtime_animations_for_debug_state(
+    commands: &mut Commands,
+    world: &WorldBlocks,
+    assets: &WorldRenderAssets,
+    animations: &HashMap<IVec3, BlockAnimation>,
+    piston_animations: &HashMap<IVec3, PistonAnimation>,
+    timing: AnimationTiming,
+    debug: &DebugState,
+) {
+    if debug.factory_activity {
+        rebuild_world_with_factory_activity_debug(commands, world, assets);
+    } else {
+        rebuild_world_with_runtime_animations(
+            commands,
+            world,
+            assets,
+            animations,
+            piston_animations,
+            timing,
         );
     }
 }

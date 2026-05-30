@@ -137,6 +137,7 @@ impl Plugin for GamePlugin {
                 Update,
                 (
                     systems::debug::toggle_debug,
+                    systems::debug::toggle_factory_activity_debug,
                     systems::debug::update_debug_ui,
                     systems::debug::draw_player_collider,
                 )

@@ -8,15 +8,18 @@ use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
     TeleportRenameState, WorldEntryMode,
 };
+use crate::game::systems::debug::DebugState;
 use crate::game::ui::{
     ActiveSettingsSlider, CarriedItem, ConverterAction, GeneratorAction, InventoryItems,
-    LabelerAction, MainMenuAction, OpenSettingsDropdown, PauseAction, PendingKeyBind,
-    PendingAppExit, SaveListAction, SettingsAction, SettingsSlider, SettingsTab, TeleportAction,
+    LabelerAction, MainMenuAction, OpenSettingsDropdown, PauseAction, PendingAppExit,
+    PendingKeyBind, SaveListAction, SettingsAction, SettingsSlider, SettingsTab, TeleportAction,
     UiPanelContext, UiPanelId, UiPanelResult, UiRuntime,
 };
 use crate::game::world::blocks::{MaterialKind, StampColor};
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
-use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
+use crate::game::world::rendering::{
+    despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
+};
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{input_from_buttons, open_config_folder, save_config, GameConfig};
 use crate::shared::i18n::{resolve_language, I18n};
@@ -127,6 +130,7 @@ pub fn save_list_actions(
     mut world: ResMut<WorldBlocks>,
     mut simulation: ResMut<SimulationState>,
     render_assets: Res<WorldRenderAssets>,
+    debug: Res<DebugState>,
     block_entities: Query<Entity, With<BlockEntity>>,
     mut interactions: Query<(&Interaction, &SaveListAction), (Changed<Interaction>, With<Button>)>,
 ) {
@@ -163,6 +167,7 @@ pub fn save_list_actions(
                     &mut commands,
                     &block_entities,
                     &render_assets,
+                    &debug,
                     &mut mode,
                 );
             }
@@ -194,6 +199,7 @@ pub fn save_list_actions(
                     &mut commands,
                     &block_entities,
                     &render_assets,
+                    &debug,
                     &mut mode,
                 );
             }
@@ -218,6 +224,7 @@ pub fn save_list_actions(
                         &mut commands,
                         &block_entities,
                         &render_assets,
+                        &debug,
                         &mut mode,
                     );
                 } else {
@@ -253,6 +260,7 @@ pub fn save_list_actions(
                     &mut commands,
                     &block_entities,
                     &render_assets,
+                    &debug,
                     &mut mode,
                 );
             }
@@ -303,6 +311,7 @@ pub fn pause_menu_actions(
     mut commands: Commands,
     block_entities: Query<Entity, With<BlockEntity>>,
     render_assets: Res<WorldRenderAssets>,
+    debug: Res<DebugState>,
     mut interactions: Query<(&Interaction, &PauseAction), (Changed<Interaction>, With<Button>)>,
 ) {
     if !matches!(
@@ -361,7 +370,7 @@ pub fn pause_menu_actions(
                     &mut solution_state,
                 );
                 despawn_world(&mut commands, &block_entities);
-                rebuild_world(&mut commands, &world, &render_assets);
+                rebuild_world_for_debug_state(&mut commands, &world, &render_assets, &debug);
             }
             PauseAction::DiscardSolutionAndEdit => {
                 switch_to_edit_mode(
@@ -375,7 +384,7 @@ pub fn pause_menu_actions(
                     &mut solution_state,
                 );
                 despawn_world(&mut commands, &block_entities);
-                rebuild_world(&mut commands, &world, &render_assets);
+                rebuild_world_for_debug_state(&mut commands, &world, &render_assets, &debug);
             }
             PauseAction::CancelEditSwitch => {
                 *mode = GameMode::Paused;
@@ -394,6 +403,7 @@ pub fn pause_menu_actions(
                     &mut commands,
                     &block_entities,
                     &render_assets,
+                    &debug,
                 );
                 *mode = GameMode::MainMenu;
             }
@@ -407,6 +417,7 @@ pub fn pause_menu_actions(
                     &mut commands,
                     &block_entities,
                     &render_assets,
+                    &debug,
                 );
                 *mode = GameMode::MainMenu;
             }
@@ -425,7 +436,7 @@ pub fn pause_menu_actions(
                     simulation.accumulator = 0.0;
                     simulation.start_snapshot = None;
                     despawn_world(&mut commands, &block_entities);
-                    rebuild_world(&mut commands, &world, &render_assets);
+                    rebuild_world_for_debug_state(&mut commands, &world, &render_assets, &debug);
                 }
                 *mode = GameMode::Paused;
             }
@@ -451,6 +462,7 @@ pub fn pause_menu_actions(
                         &mut commands,
                         &block_entities,
                         &render_assets,
+                        &debug,
                     );
                     *mode = GameMode::MainMenu;
                 }
@@ -501,6 +513,7 @@ fn open_loaded_world(
     commands: &mut Commands,
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
+    debug: &DebugState,
     mode: &mut GameMode,
 ) {
     let Some(loaded) = load_world(world, name) else {
@@ -539,7 +552,7 @@ fn open_loaded_world(
     };
 
     despawn_world(commands, block_entities);
-    rebuild_world(commands, world, render_assets);
+    rebuild_world_for_debug_state(commands, world, render_assets, debug);
     *mode = GameMode::Playing;
 }
 
@@ -552,6 +565,7 @@ fn clear_loaded_world(
     commands: &mut Commands,
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
+    debug: &DebugState,
 ) {
     simulation.running = false;
     simulation.step_requested = false;
@@ -568,7 +582,7 @@ fn clear_loaded_world(
     solution_state.dirty = false;
     solution_state.entry = WorldEntryMode::EditPuzzle;
     despawn_world(commands, block_entities);
-    rebuild_world(commands, world, render_assets);
+    rebuild_world_for_debug_state(commands, world, render_assets, debug);
 }
 
 fn switch_to_edit_mode(
@@ -606,7 +620,10 @@ pub fn settings_menu_actions(
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut active_slider: ResMut<ActiveSettingsSlider>,
     mut ui_runtime: ResMut<UiRuntime>,
-    mut interactions: Query<(Ref<Interaction>, &SettingsAction, Option<&SliderValue>), With<Button>>,
+    mut interactions: Query<
+        (Ref<Interaction>, &SettingsAction, Option<&SliderValue>),
+        With<Button>,
+    >,
 ) {
     if !ui_runtime.is_settings_open() {
         pending_key_bind.0 = None;

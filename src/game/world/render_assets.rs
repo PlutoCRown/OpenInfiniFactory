@@ -44,6 +44,8 @@ pub struct WorldRenderAssets {
     pub(crate) weld_connector_material: Handle<StandardMaterial>,
     delete_preview_material: Handle<StandardMaterial>,
     selection_preview_material: Handle<StandardMaterial>,
+    active_factory_debug_material: Handle<StandardMaterial>,
+    inactive_factory_debug_material: Handle<StandardMaterial>,
 }
 
 pub enum EditPreviewKind {
@@ -273,6 +275,16 @@ impl WorldRenderAssets {
                 unlit: true,
                 ..default()
             }),
+            active_factory_debug_material: materials.add(StandardMaterial {
+                base_color: Color::srgb(0.12, 0.90, 0.22),
+                unlit: true,
+                ..default()
+            }),
+            inactive_factory_debug_material: materials.add(StandardMaterial {
+                base_color: Color::srgb(0.95, 0.12, 0.08),
+                unlit: true,
+                ..default()
+            }),
         }
     }
 
@@ -292,6 +304,14 @@ impl WorldRenderAssets {
             .get(&kind)
             .expect("every block kind has a material")
             .clone()
+    }
+
+    pub(crate) fn active_factory_debug_material(&self) -> Handle<StandardMaterial> {
+        self.active_factory_debug_material.clone()
+    }
+
+    pub(crate) fn inactive_factory_debug_material(&self) -> Handle<StandardMaterial> {
+        self.inactive_factory_debug_material.clone()
     }
 
     pub(crate) fn edit_preview_material(&self, kind: EditPreviewKind) -> Handle<StandardMaterial> {

@@ -8,12 +8,15 @@ use crate::game::simulation::runtime::SimulationStepStats;
 use crate::game::state::{BuilderMode, SimulationState};
 use crate::game::ui::PendingKeyBind;
 use crate::game::world::grid::WorldBlocks;
-use crate::game::world::rendering::BlockEntity;
+use crate::game::world::rendering::{
+    despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
+};
 use crate::shared::config::{ConfigAction, GameConfig};
 
 #[derive(Resource, Default)]
 pub struct DebugState {
     pub enabled: bool,
+    pub factory_activity: bool,
 }
 
 #[derive(Component)]
@@ -198,6 +201,26 @@ pub fn toggle_debug(
 
     if keys.just_pressed(config.key(ConfigAction::Debug).key_code()) {
         debug.enabled = !debug.enabled;
+    }
+}
+
+pub fn toggle_factory_activity_debug(
+    keys: Res<ButtonInput<KeyCode>>,
+    pending_key_bind: Res<PendingKeyBind>,
+    mut debug: ResMut<DebugState>,
+    mut commands: Commands,
+    world: Res<WorldBlocks>,
+    render_assets: Res<WorldRenderAssets>,
+    block_entities: Query<Entity, With<BlockEntity>>,
+) {
+    if pending_key_bind.0.is_some() {
+        return;
+    }
+
+    if keys.just_pressed(KeyCode::KeyP) {
+        debug.factory_activity = !debug.factory_activity;
+        despawn_world(&mut commands, &block_entities);
+        rebuild_world_for_debug_state(&mut commands, &world, &render_assets, &debug);
     }
 }
 

@@ -4,14 +4,16 @@ use std::time::Instant;
 use bevy::prelude::*;
 
 use crate::game::state::{BuilderMode, SimulationState};
+use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     AnimationTiming, BlockAnimation, BlockAnimationKind, SIMULATION_TURN_SECONDS,
 };
 use crate::game::world::blocks::BlockData;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_pending_generated_previews, despawn_world, rebuild_world_with_runtime_animations,
-    spawn_pending_generated_block, BlockEntity, PendingGeneratedPreview, WorldRenderAssets,
+    despawn_pending_generated_previews, despawn_world,
+    rebuild_world_with_runtime_animations_for_debug_state, spawn_pending_generated_block,
+    BlockEntity, PendingGeneratedPreview, WorldRenderAssets,
 };
 
 use super::behaviors::{material_source_generation, run_material_behavior_phase};
@@ -81,6 +83,7 @@ pub fn run_turn(
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: &WorldRenderAssets,
     animation_duration: f32,
+    debug: &DebugState,
     stats: &mut SimulationStepStats,
 ) {
     let total_start = Instant::now();
@@ -129,13 +132,14 @@ pub fn run_turn(
     sample.signal_refresh_ms = mark_elapsed_ms(&mut mark);
 
     despawn_world(commands, block_entities);
-    rebuild_world_with_runtime_animations(
+    rebuild_world_with_runtime_animations_for_debug_state(
         commands,
         world,
         render_assets,
         &animations,
         &piston_animations,
         AnimationTiming::simulation(animation_duration),
+        debug,
     );
     sample.render_rebuild_ms = mark_elapsed_ms(&mut mark);
     sample.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
@@ -155,6 +159,7 @@ pub fn tick_simulation(
     block_entities: Query<Entity, With<BlockEntity>>,
     pending_previews: Query<Entity, With<PendingGeneratedPreview>>,
     render_assets: Res<WorldRenderAssets>,
+    debug: Res<DebugState>,
 ) {
     if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
         prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
@@ -183,6 +188,7 @@ pub fn tick_simulation(
             &block_entities,
             &render_assets,
             SIMULATION_TURN_SECONDS,
+            &debug,
             &mut sim_stats,
         );
         prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
@@ -211,6 +217,7 @@ pub fn tick_simulation(
             &block_entities,
             &render_assets,
             SIMULATION_TURN_SECONDS / simulation.speed.max(0.001),
+            &debug,
             &mut sim_stats,
         );
     }

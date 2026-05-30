@@ -6,7 +6,7 @@ use crate::game::world::blocks::BlockData;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks};
 
-use super::signal_offsets;
+use super::factory_activity::{active_factory_structure, factory_activity_map};
 
 pub(super) fn material_gravity_moves(world: &WorldBlocks) -> Vec<StructureMove> {
     let mut materials: Vec<IVec3> = world
@@ -42,16 +42,16 @@ pub(super) fn factory_gravity_moves(world: &WorldBlocks) -> Vec<StructureMove> {
 
     let mut handled = HashSet::new();
     let mut moves = Vec::new();
+    let activity = factory_activity_map(world);
     for pos in factory_blocks {
         if handled.contains(&pos) || !world.is_factory_at(pos) {
             continue;
         };
 
-        let structure = factory_structure(world, pos);
-        handled.extend(structure.iter().copied());
-        if factory_structure_is_anchored(world, &structure) {
+        let Some(structure) = active_factory_structure(world, &activity, pos) else {
             continue;
-        }
+        };
+        handled.extend(structure.iter().copied());
         if can_move_structure(world, &structure, IVec3::NEG_Y) {
             moves.push(StructureMove::translate(structure, IVec3::NEG_Y));
         }
@@ -112,7 +112,10 @@ pub(super) fn execute_structure_moves(
 pub(super) fn execute_structure_moves_with_pistons(
     world: &mut WorldBlocks,
     moves: Vec<StructureMove>,
-) -> (HashMap<IVec3, BlockAnimation>, HashMap<IVec3, PistonAnimation>) {
+) -> (
+    HashMap<IVec3, BlockAnimation>,
+    HashMap<IVec3, PistonAnimation>,
+) {
     let mut moved = HashSet::new();
     let mut animations = HashMap::new();
     let mut piston_animations = HashMap::new();
@@ -126,7 +129,7 @@ pub(super) fn execute_structure_moves_with_pistons(
                 if structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
                 }
-                if can_move_structure(world, &structure, offset) {
+                if let Some(structure) = expanded_move_structure(world, &structure, offset) {
                     if offset.abs().element_sum() == 1 {
                         for pos in &structure {
                             if let Some(block) = world.blocks.get(pos) {
@@ -217,33 +220,6 @@ pub(super) fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<I
     structure
 }
 
-fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
-    let mut structure = HashSet::new();
-    let mut queue = VecDeque::from([start]);
-    structure.insert(start);
-
-    while let Some(pos) = queue.pop_front() {
-        for offset in signal_offsets() {
-            let neighbor = pos + offset;
-            if structure.contains(&neighbor) || !world.is_factory_at(neighbor) {
-                continue;
-            }
-            structure.insert(neighbor);
-            queue.push_back(neighbor);
-        }
-    }
-
-    structure
-}
-
-fn factory_structure_is_anchored(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
-    structure.iter().any(|pos| {
-        signal_offsets()
-            .into_iter()
-            .any(|offset| world.is_scene_at(*pos + offset))
-    })
-}
-
 fn welded_neighbors(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
     world
         .material_welds
@@ -254,6 +230,51 @@ fn welded_neighbors(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
 }
 
 pub(super) fn can_move_structure(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+    offset: IVec3,
+) -> bool {
+    expanded_move_structure(world, structure, offset).is_some()
+}
+
+fn expanded_move_structure(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+    offset: IVec3,
+) -> Option<HashSet<IVec3>> {
+    if offset.abs().element_sum() != 1 {
+        return can_move_structure_without_push(world, structure, offset)
+            .then(|| structure.clone());
+    }
+
+    let activity = factory_activity_map(world);
+    let mut expanded = structure.clone();
+    let mut queue: VecDeque<IVec3> = structure.iter().copied().collect();
+    while let Some(pos) = queue.pop_front() {
+        let target = pos + offset;
+        if target.y < 0 || expanded.contains(&target) {
+            continue;
+        }
+        if world.can_place_solid_at(target) {
+            continue;
+        }
+
+        let block = world.blocks.get(&target)?;
+        if !block.kind.is_factory() {
+            return None;
+        }
+        let pushed = active_factory_structure(world, &activity, target)?;
+        for pushed_pos in pushed {
+            if expanded.insert(pushed_pos) {
+                queue.push_back(pushed_pos);
+            }
+        }
+    }
+
+    can_move_structure_without_push(world, &expanded, offset).then_some(expanded)
+}
+
+fn can_move_structure_without_push(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,

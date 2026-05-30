@@ -1,6 +1,4 @@
-use super::{
-    rgba, Block, BlockDefinition, BlockKind, EditableBlock, MaterialSource, SystemBlock,
-};
+use super::{rgba, Block, BlockDefinition, BlockKind, EditableBlock, MaterialSource, SystemBlock};
 use crate::game::ui::UiPanelId;
 use crate::game::world::grid::{BlockSettings, GeneratorSettings};
 

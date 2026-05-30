@@ -22,7 +22,12 @@ fn label_text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bu
 }
 
 fn styled_button(style: Node, border: Color, background: Color) -> impl Bundle {
-    (Button, style, BorderColor::all(border), BackgroundColor(background))
+    (
+        Button,
+        style,
+        BorderColor::all(border),
+        BackgroundColor(background),
+    )
 }
 
 fn plain_node(style: Node) -> impl Bundle {
@@ -238,7 +243,10 @@ fn settings_slider_initial_value(slider: SettingsSlider) -> f32 {
     }
 }
 
-pub(super) fn spawn_settings_dropdown(parent: &mut ChildSpawnerCommands, dropdown: SettingsDropdown) {
+pub(super) fn spawn_settings_dropdown(
+    parent: &mut ChildSpawnerCommands,
+    dropdown: SettingsDropdown,
+) {
     parent
         .spawn((
             plain_node(Node {
@@ -269,7 +277,10 @@ pub(super) fn spawn_settings_dropdown(parent: &mut ChildSpawnerCommands, dropdow
                     SettingsAction::ToggleDropdown(dropdown),
                 ))
                 .with_children(|button| {
-                    button.spawn((label_text("", 14.0, Color::WHITE), SettingsDropdownLabel(dropdown)));
+                    button.spawn((
+                        label_text("", 14.0, Color::WHITE),
+                        SettingsDropdownLabel(dropdown),
+                    ));
                     button.spawn(label_text("v", 12.0, Color::srgb(0.72, 0.80, 0.84)));
                 });
             container

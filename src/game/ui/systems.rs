@@ -22,13 +22,12 @@ use super::types::{
     FovText, GeneratorMaterialText, GeneratorPeriodText, HotbarText, InGameHudStyle,
     InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle, KeyBindingButton,
     KeyBindingLabel, LabelerColorText, LocalizedText, MainMenuPanel, OpenSettingsDropdown,
-    PauseAction, PausePanel, PendingKeyBind,
-    PlaceSelectionModeText, SaveListAction, SaveListLabel, SaveListPanel, SaveListTitle,
-    ScrollContainer, ScrollContent, SettingsAction, SettingsDropdownLabel, SettingsDropdownList,
-    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsSlider, SettingsSliderFill,
-    SettingsSliderKnob, SettingsStatusText, SettingsTab, SettingsValue, SettingsValueText,
-    SimulationStatusText, SimulationText, SlotArea, SlotLabel, TeleportNameText,
-    TeleportPairText, UiPanelBinding, UiRuntime, UiScaleText,
+    PauseAction, PausePanel, PendingKeyBind, PlaceSelectionModeText, SaveListAction, SaveListLabel,
+    SaveListPanel, SaveListTitle, ScrollContainer, ScrollContent, SettingsAction,
+    SettingsDropdownLabel, SettingsDropdownList, SettingsGameplayGroup, SettingsKeyBindingsGroup,
+    SettingsSlider, SettingsSliderFill, SettingsSliderKnob, SettingsStatusText, SettingsTab,
+    SettingsValue, SettingsValueText, SimulationStatusText, SimulationText, SlotArea, SlotLabel,
+    TeleportNameText, TeleportPairText, UiPanelBinding, UiRuntime, UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -479,10 +478,7 @@ pub fn update_scroll_containers(
     let wheel_delta: f32 = mouse_wheel.read().map(|event| event.y).sum();
 
     for (mut container, children, node) in &mut containers {
-        let Some(child) = children
-            .iter()
-            .find(|child| contents.get(*child).is_ok())
-        else {
+        let Some(child) = children.iter().find(|child| contents.get(*child).is_ok()) else {
             continue;
         };
         let Ok((mut style, content_node)) = contents.get_mut(child) else {
@@ -810,7 +806,12 @@ pub fn update_settings_sliders_ui(
 
 pub fn update_settings_slider_drag_ui(
     slider_values: Query<
-        (&SettingsAction, &SliderValue, &SliderRange, &CoreSliderDragState),
+        (
+            &SettingsAction,
+            &SliderValue,
+            &SliderRange,
+            &CoreSliderDragState,
+        ),
         (With<Button>, Changed<SliderValue>),
     >,
     mut slider_fills: Query<
@@ -1292,11 +1293,9 @@ pub fn update_save_list_ui(
         };
         let selected_puzzle_button = matches!(*action, SaveListAction::LoadPuzzle(_))
             && match *action {
-                SaveListAction::LoadPuzzle(index) => puzzles
-                    .get(index)
-                    .is_some_and(|entry| {
-                        save_state.selected_puzzle.as_deref() == Some(entry.name.as_str())
-                    }),
+                SaveListAction::LoadPuzzle(index) => puzzles.get(index).is_some_and(|entry| {
+                    save_state.selected_puzzle.as_deref() == Some(entry.name.as_str())
+                }),
                 _ => false,
             };
 

@@ -5,8 +5,16 @@ use super::{
 };
 
 const MODEL: &[BlockModelPart] = &[
-    BlockModelPart::new(ModelMesh::PistonBody, ModelMaterial::Frame, [0.0, 0.0, 0.10]),
-    BlockModelPart::new(ModelMesh::PistonHead, ModelMaterial::Wood, [0.0, 0.0, -0.42]),
+    BlockModelPart::new(
+        ModelMesh::PistonBody,
+        ModelMaterial::Frame,
+        [0.0, 0.0, 0.10],
+    ),
+    BlockModelPart::new(
+        ModelMesh::PistonHead,
+        ModelMaterial::Wood,
+        [0.0, 0.0, -0.42],
+    ),
 ];
 
 pub struct BlockerBlock;

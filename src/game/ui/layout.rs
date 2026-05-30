@@ -25,9 +25,8 @@ use super::widgets::{
     scroll_container, scroll_content, spawn_converter_button, spawn_generator_button,
     spawn_labeler_button, spawn_localized_main_button, spawn_localized_pause_button,
     spawn_localized_settings_button, spawn_save_back_button, spawn_save_row_button,
-    spawn_save_slot_button,
-    spawn_settings_dropdown, spawn_settings_slider, spawn_settings_tab, spawn_slot,
-    spawn_teleport_button,
+    spawn_save_slot_button, spawn_settings_dropdown, spawn_settings_slider, spawn_settings_tab,
+    spawn_slot, spawn_teleport_button,
 };
 
 pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
@@ -53,39 +52,39 @@ fn spawn_generator_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         GeneratorPanel,
         UiPanelBinding(UiPanelId::Generator),
     ))
-        .with_children(|panel| {
-            panel.spawn(localized_text(i18n, "generator.title", 26.0, Color::WHITE));
-            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-                spawn_generator_button(
-                    row,
-                    i18n.text("button.period_down"),
-                    "button.period_down",
-                    GeneratorAction::PeriodDown,
-                );
-                row.spawn((text("", 18.0, Color::WHITE), GeneratorPeriodText));
-                spawn_generator_button(
-                    row,
-                    i18n.text("button.period_up"),
-                    "button.period_up",
-                    GeneratorAction::PeriodUp,
-                );
-            });
-            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-                spawn_generator_button(
-                    row,
-                    i18n.text("button.material_next"),
-                    "button.material_next",
-                    GeneratorAction::MaterialNext,
-                );
-                row.spawn((text("", 18.0, Color::WHITE), GeneratorMaterialText));
-            });
+    .with_children(|panel| {
+        panel.spawn(localized_text(i18n, "generator.title", 26.0, Color::WHITE));
+        panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
             spawn_generator_button(
-                panel,
-                i18n.text("button.close"),
-                "button.close",
-                GeneratorAction::Close,
+                row,
+                i18n.text("button.period_down"),
+                "button.period_down",
+                GeneratorAction::PeriodDown,
+            );
+            row.spawn((text("", 18.0, Color::WHITE), GeneratorPeriodText));
+            spawn_generator_button(
+                row,
+                i18n.text("button.period_up"),
+                "button.period_up",
+                GeneratorAction::PeriodUp,
             );
         });
+        panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
+            spawn_generator_button(
+                row,
+                i18n.text("button.material_next"),
+                "button.material_next",
+                GeneratorAction::MaterialNext,
+            );
+            row.spawn((text("", 18.0, Color::WHITE), GeneratorMaterialText));
+        });
+        spawn_generator_button(
+            panel,
+            i18n.text("button.close"),
+            "button.close",
+            GeneratorAction::Close,
+        );
+    });
 }
 
 fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
@@ -94,31 +93,31 @@ fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         TeleportPanel,
         UiPanelBinding(UiPanelId::Teleport),
     ))
-        .with_children(|panel| {
-            panel.spawn(localized_text(i18n, "teleport.title", 26.0, Color::WHITE));
-            panel.spawn((text("", 18.0, Color::WHITE), TeleportNameText));
-            panel.spawn((text("", 18.0, Color::WHITE), TeleportPairText));
-            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-                spawn_teleport_button(
-                    row,
-                    i18n.text("button.teleport_pair"),
-                    "button.teleport_pair",
-                    TeleportAction::CyclePair,
-                );
-                spawn_teleport_button(
-                    row,
-                    i18n.text("button.teleport_rename"),
-                    "button.teleport_rename",
-                    TeleportAction::Rename,
-                );
-            });
+    .with_children(|panel| {
+        panel.spawn(localized_text(i18n, "teleport.title", 26.0, Color::WHITE));
+        panel.spawn((text("", 18.0, Color::WHITE), TeleportNameText));
+        panel.spawn((text("", 18.0, Color::WHITE), TeleportPairText));
+        panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
             spawn_teleport_button(
-                panel,
-                i18n.text("button.close"),
-                "button.close",
-                TeleportAction::Close,
+                row,
+                i18n.text("button.teleport_pair"),
+                "button.teleport_pair",
+                TeleportAction::CyclePair,
+            );
+            spawn_teleport_button(
+                row,
+                i18n.text("button.teleport_rename"),
+                "button.teleport_rename",
+                TeleportAction::Rename,
             );
         });
+        spawn_teleport_button(
+            panel,
+            i18n.text("button.close"),
+            "button.close",
+            TeleportAction::Close,
+        );
+    });
 }
 
 fn spawn_converter_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
@@ -127,44 +126,44 @@ fn spawn_converter_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         ConverterPanel,
         UiPanelBinding(UiPanelId::Converter),
     ))
-        .with_children(|panel| {
-            panel.spawn(localized_text(i18n, "converter.title", 26.0, Color::WHITE));
-            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-                spawn_converter_button(
-                    row,
-                    i18n.text("button.converter_mode"),
-                    "button.converter_mode",
-                    ConverterAction::ToggleMode,
-                );
-                row.spawn((text("", 18.0, Color::WHITE), ConverterModeText));
-            });
-            panel
-                .spawn((flex_row(40.0, 8.0), ConverterInputRow))
-                .with_children(|row| {
-                    spawn_converter_button(
-                        row,
-                        i18n.text("button.input_material"),
-                        "button.input_material",
-                        ConverterAction::InputNext,
-                    );
-                    row.spawn((text("", 18.0, Color::WHITE), ConverterInputText));
-                });
-            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-                spawn_converter_button(
-                    row,
-                    i18n.text("button.output_material"),
-                    "button.output_material",
-                    ConverterAction::OutputNext,
-                );
-                row.spawn((text("", 18.0, Color::WHITE), ConverterOutputText));
-            });
+    .with_children(|panel| {
+        panel.spawn(localized_text(i18n, "converter.title", 26.0, Color::WHITE));
+        panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
             spawn_converter_button(
-                panel,
-                i18n.text("button.close"),
-                "button.close",
-                ConverterAction::Close,
+                row,
+                i18n.text("button.converter_mode"),
+                "button.converter_mode",
+                ConverterAction::ToggleMode,
             );
+            row.spawn((text("", 18.0, Color::WHITE), ConverterModeText));
         });
+        panel
+            .spawn((flex_row(40.0, 8.0), ConverterInputRow))
+            .with_children(|row| {
+                spawn_converter_button(
+                    row,
+                    i18n.text("button.input_material"),
+                    "button.input_material",
+                    ConverterAction::InputNext,
+                );
+                row.spawn((text("", 18.0, Color::WHITE), ConverterInputText));
+            });
+        panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
+            spawn_converter_button(
+                row,
+                i18n.text("button.output_material"),
+                "button.output_material",
+                ConverterAction::OutputNext,
+            );
+            row.spawn((text("", 18.0, Color::WHITE), ConverterOutputText));
+        });
+        spawn_converter_button(
+            panel,
+            i18n.text("button.close"),
+            "button.close",
+            ConverterAction::Close,
+        );
+    });
 }
 
 fn spawn_labeler_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
@@ -173,30 +172,30 @@ fn spawn_labeler_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         LabelerPanel,
         UiPanelBinding(UiPanelId::Labeler),
     ))
-        .with_children(|panel| {
-            panel.spawn(localized_text(i18n, "labeler.title", 26.0, Color::WHITE));
-            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-                spawn_labeler_button(
-                    row,
-                    i18n.text("button.previous_color"),
-                    "button.previous_color",
-                    LabelerAction::PreviousColor,
-                );
-                row.spawn((text("", 18.0, Color::WHITE), LabelerColorText));
-                spawn_labeler_button(
-                    row,
-                    i18n.text("button.next_color"),
-                    "button.next_color",
-                    LabelerAction::NextColor,
-                );
-            });
+    .with_children(|panel| {
+        panel.spawn(localized_text(i18n, "labeler.title", 26.0, Color::WHITE));
+        panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
             spawn_labeler_button(
-                panel,
-                i18n.text("button.close"),
-                "button.close",
-                LabelerAction::Close,
+                row,
+                i18n.text("button.previous_color"),
+                "button.previous_color",
+                LabelerAction::PreviousColor,
+            );
+            row.spawn((text("", 18.0, Color::WHITE), LabelerColorText));
+            spawn_labeler_button(
+                row,
+                i18n.text("button.next_color"),
+                "button.next_color",
+                LabelerAction::NextColor,
             );
         });
+        spawn_labeler_button(
+            panel,
+            i18n.text("button.close"),
+            "button.close",
+            LabelerAction::Close,
+        );
+    });
 }
 
 fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
@@ -355,17 +354,17 @@ fn spawn_settings_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         SettingsPanel,
         UiPanelBinding(UiPanelId::Settings),
     ))
-        .with_children(|panel| {
-            panel.spawn(localized_text(i18n, "settings.title", 30.0, Color::WHITE));
-            spawn_settings_tabs(panel, i18n);
-            panel.spawn((
-                text("", 16.0, Color::srgb(0.84, 0.92, 1.0)),
-                SettingsStatusText,
-            ));
-            spawn_gameplay_settings(panel, i18n);
-            spawn_key_bindings(panel, i18n);
-            spawn_settings_footer(panel, i18n);
-        });
+    .with_children(|panel| {
+        panel.spawn(localized_text(i18n, "settings.title", 30.0, Color::WHITE));
+        spawn_settings_tabs(panel, i18n);
+        panel.spawn((
+            text("", 16.0, Color::srgb(0.84, 0.92, 1.0)),
+            SettingsStatusText,
+        ));
+        spawn_gameplay_settings(panel, i18n);
+        spawn_key_bindings(panel, i18n);
+        spawn_settings_footer(panel, i18n);
+    });
 }
 
 fn spawn_settings_tabs(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
@@ -551,58 +550,56 @@ fn spawn_save_list(root: &mut ChildSpawnerCommands) {
     root.spawn((panel_bundle(900.0, 620.0, -450.0, -310.0), SaveListPanel))
         .with_children(|panel| {
             panel.spawn((text("", 26.0, Color::WHITE), SaveListTitle));
-            panel
-                .spawn(flex_row(470.0, 12.0))
-                .with_children(|columns| {
-                    columns
-                        .spawn(transparent_node(Node {
-                            width: Val::Px(420.0),
-                            flex_direction: FlexDirection::Column,
-                            row_gap: Val::Px(6.0),
-                            ..default()
-                        }))
-                        .with_children(|left| {
-                            for index in 0..SAVE_SLOTS {
-                                left.spawn(flex_row(32.0, 6.0)).with_children(|row| {
-                                    spawn_save_row_button(
-                                        row,
-                                        SaveListAction::LoadPuzzle(index),
-                                        260.0,
-                                    );
-                                    spawn_save_row_button(
-                                        row,
-                                        SaveListAction::DeletePuzzle(index),
-                                        80.0,
-                                    );
-                                });
-                            }
-                            spawn_save_slot_button(left, SaveListAction::NewPuzzle);
-                        });
-                    columns
-                        .spawn(transparent_node(Node {
-                            width: Val::Px(420.0),
-                            flex_direction: FlexDirection::Column,
-                            row_gap: Val::Px(6.0),
-                            ..default()
-                        }))
-                        .with_children(|right| {
-                            for index in 0..SAVE_SLOTS {
-                                right.spawn(flex_row(32.0, 6.0)).with_children(|row| {
-                                    spawn_save_row_button(
-                                        row,
-                                        SaveListAction::LoadSolution(index),
-                                        260.0,
-                                    );
-                                    spawn_save_row_button(
-                                        row,
-                                        SaveListAction::DeleteSolution(index),
-                                        80.0,
-                                    );
-                                });
-                            }
-                            spawn_save_slot_button(right, SaveListAction::NewSolution);
-                        });
-                });
+            panel.spawn(flex_row(470.0, 12.0)).with_children(|columns| {
+                columns
+                    .spawn(transparent_node(Node {
+                        width: Val::Px(420.0),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(6.0),
+                        ..default()
+                    }))
+                    .with_children(|left| {
+                        for index in 0..SAVE_SLOTS {
+                            left.spawn(flex_row(32.0, 6.0)).with_children(|row| {
+                                spawn_save_row_button(
+                                    row,
+                                    SaveListAction::LoadPuzzle(index),
+                                    260.0,
+                                );
+                                spawn_save_row_button(
+                                    row,
+                                    SaveListAction::DeletePuzzle(index),
+                                    80.0,
+                                );
+                            });
+                        }
+                        spawn_save_slot_button(left, SaveListAction::NewPuzzle);
+                    });
+                columns
+                    .spawn(transparent_node(Node {
+                        width: Val::Px(420.0),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(6.0),
+                        ..default()
+                    }))
+                    .with_children(|right| {
+                        for index in 0..SAVE_SLOTS {
+                            right.spawn(flex_row(32.0, 6.0)).with_children(|row| {
+                                spawn_save_row_button(
+                                    row,
+                                    SaveListAction::LoadSolution(index),
+                                    260.0,
+                                );
+                                spawn_save_row_button(
+                                    row,
+                                    SaveListAction::DeleteSolution(index),
+                                    80.0,
+                                );
+                            });
+                        }
+                        spawn_save_slot_button(right, SaveListAction::NewSolution);
+                    });
+            });
             panel.spawn(flex_row(38.0, 8.0)).with_children(|row| {
                 spawn_save_slot_button(row, SaveListAction::ConfirmDelete);
                 spawn_save_slot_button(row, SaveListAction::CancelDelete);

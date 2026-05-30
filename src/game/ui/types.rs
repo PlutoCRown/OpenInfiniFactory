@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 use std::collections::VecDeque;
 
-use crate::game::state::{BuilderMode, GameMode};
 pub use crate::game::state::UiPanelId;
+use crate::game::state::{BuilderMode, GameMode};
 use crate::game::world::blocks::{BlockKind, EDIT_BLOCKS, PLAY_BLOCKS};
 use crate::shared::config::{ConfigAction, ConfigSelectionMode};
 use crate::shared::i18n::Language;

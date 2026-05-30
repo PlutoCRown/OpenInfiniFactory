@@ -1,4 +1,5 @@
 mod behaviors;
+pub mod factory_activity;
 mod gravity;
 mod markers;
 mod movement;

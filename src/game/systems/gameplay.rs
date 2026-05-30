@@ -1,3 +1,4 @@
+use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
@@ -7,6 +8,7 @@ use crate::game::state::{
     SelectionAxis, SelectionBounds, SelectionDrag, SimulationState, SolutionState,
     TeleportRenameState,
 };
+use crate::game::systems::debug::DebugState;
 use crate::game::ui::{
     AreaKind, CarriedItem, InventoryItems, PendingKeyBind, UiRuntime, HOTBAR_SLOTS,
 };
@@ -14,11 +16,18 @@ use crate::game::world::animation::BlockAnimation;
 use crate::game::world::blocks::{BlockData, BlockKind, Facing, MarkerBehavior};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::{
-    despawn_edit_previews, rebuild_world, rebuild_world_with_animations, spawn_block_preview,
-    spawn_block_with_animation, spawn_edit_preview, BlockEntity, EditPreview, EditPreviewKind,
-    HoverMarker, PlacementPreview, WorldRenderAssets,
+    despawn_edit_previews, rebuild_world_for_debug_state, rebuild_world_with_animations,
+    spawn_block_preview, spawn_block_with_animation, spawn_edit_preview, BlockEntity, EditPreview,
+    EditPreviewKind, HoverMarker, PlacementPreview, WorldRenderAssets,
 };
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
+
+#[derive(SystemParam)]
+pub struct PlacementQueries<'w, 's> {
+    block_entities: Query<'w, 's, (Entity, &'static BlockEntity)>,
+    edit_previews: Query<'w, 's, Entity, With<EditPreview>>,
+    player: Query<'w, 's, &'static Transform, With<FlyCamera>>,
+}
 
 pub fn gameplay_input(
     keys: Res<ButtonInput<KeyCode>>,
@@ -119,10 +128,14 @@ pub fn placement_input(
     mut placement: ResMut<PlacementState>,
     mut ui_runtime: ResMut<UiRuntime>,
     render_assets: Res<WorldRenderAssets>,
-    block_entities: Query<(Entity, &BlockEntity)>,
-    edit_previews: Query<Entity, With<EditPreview>>,
-    player: Query<&Transform, With<FlyCamera>>,
+    debug: Res<DebugState>,
+    queries: PlacementQueries,
 ) {
+    let PlacementQueries {
+        block_entities,
+        edit_previews,
+        player,
+    } = queries;
     let place_button = config
         .input(crate::shared::config::ConfigAction::Place)
         .mouse_button()
@@ -176,6 +189,7 @@ pub fn placement_input(
             &block_entities,
             &mut commands,
             &render_assets,
+            &debug,
         ) {
             solution_state.dirty = true;
         }
@@ -206,6 +220,7 @@ pub fn placement_input(
                 &block_entities,
                 &mut commands,
                 &render_assets,
+                &debug,
             ) {
                 solution_state.dirty = true;
             }
@@ -223,6 +238,7 @@ pub fn placement_input(
                 &block_entities,
                 &mut commands,
                 &render_assets,
+                &debug,
             ) {
                 solution_state.dirty = true;
             }
@@ -288,6 +304,7 @@ pub fn placement_input(
                     &player,
                     &mut commands,
                     &render_assets,
+                    &debug,
                     &block_entities,
                 ) {
                     solution_state.dirty = true;
@@ -389,6 +406,7 @@ fn handle_selection_area_input(
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
+    debug: &DebugState,
 ) -> bool {
     let mut changed = false;
     if let Some(drag) = placement.selection.drag.as_mut() {
@@ -409,6 +427,7 @@ fn handle_selection_area_input(
                         block_entities,
                         commands,
                         render_assets,
+                        debug,
                         bounds,
                         drag.offset,
                     ) {
@@ -480,6 +499,7 @@ fn move_selection(
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
+    debug: &DebugState,
     bounds: SelectionBounds,
     offset: IVec3,
 ) -> bool {
@@ -539,6 +559,10 @@ fn move_selection(
         );
     }
     world.replace_material_welds(updated_welds);
+    if debug.factory_activity {
+        despawn_block_entities(commands, block_entities);
+        rebuild_world_for_debug_state(commands, world, render_assets, debug);
+    }
     true
 }
 
@@ -581,6 +605,7 @@ fn alternate_block_at(
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
+    debug: &DebugState,
 ) -> bool {
     let Some(block) = world.blocks.get_mut(&pos) else {
         return false;
@@ -592,7 +617,7 @@ fn alternate_block_at(
     block.kind = kind;
     refresh_edit_generated_markers(world);
     despawn_block_entities(commands, block_entities);
-    rebuild_world(commands, world, render_assets);
+    rebuild_world_for_debug_state(commands, world, render_assets, debug);
     true
 }
 
@@ -602,6 +627,7 @@ fn rotate_block_at(
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
+    debug: &DebugState,
 ) -> bool {
     let Some(block) = world.blocks.get_mut(&pos) else {
         return false;
@@ -630,7 +656,11 @@ fn rotate_block_at(
     );
 
     despawn_block_entities(commands, block_entities);
-    rebuild_world_with_animations(commands, world, render_assets, &animations);
+    if debug.factory_activity {
+        rebuild_world_for_debug_state(commands, world, render_assets, debug);
+    } else {
+        rebuild_world_with_animations(commands, world, render_assets, &animations);
+    }
     true
 }
 
@@ -718,6 +748,7 @@ fn commit_edit_gesture(
     player: &Query<&Transform, With<FlyCamera>>,
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
+    debug: &DebugState,
     block_entities: &Query<(Entity, &BlockEntity)>,
 ) -> bool {
     let mut changed = false;
@@ -737,7 +768,7 @@ fn commit_edit_gesture(
             if changed {
                 refresh_edit_generated_markers(world);
                 despawn_block_entities(commands, block_entities);
-                rebuild_world(commands, world, render_assets);
+                rebuild_world_for_debug_state(commands, world, render_assets, debug);
             }
         }
         EditGestureKind::Delete => {
@@ -761,7 +792,7 @@ fn commit_edit_gesture(
             if changed {
                 refresh_edit_generated_markers(world);
                 despawn_block_entities(commands, block_entities);
-                rebuild_world(commands, world, render_assets);
+                rebuild_world_for_debug_state(commands, world, render_assets, debug);
             }
         }
     }
@@ -897,11 +928,19 @@ pub fn update_hover(
     world: Res<WorldBlocks>,
     player: Query<&Transform, With<FlyCamera>>,
     mut marker: Query<
-        (&mut Transform, &mut Visibility, &MeshMaterial3d<StandardMaterial>),
+        (
+            &mut Transform,
+            &mut Visibility,
+            &MeshMaterial3d<StandardMaterial>,
+        ),
         (With<HoverMarker>, Without<FlyCamera>),
     >,
     mut preview: Query<
-        (&mut Transform, &mut Visibility, &MeshMaterial3d<StandardMaterial>),
+        (
+            &mut Transform,
+            &mut Visibility,
+            &MeshMaterial3d<StandardMaterial>,
+        ),
         (
             With<PlacementPreview>,
             Without<HoverMarker>,
@@ -932,8 +971,7 @@ pub fn update_hover(
         &world,
     );
 
-    let Ok((mut marker_transform, mut marker_visibility, marker_material)) =
-        marker.single_mut()
+    let Ok((mut marker_transform, mut marker_visibility, marker_material)) = marker.single_mut()
     else {
         return;
     };

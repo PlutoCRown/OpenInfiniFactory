@@ -7,6 +7,7 @@ mod widgets;
 
 use bevy::prelude::*;
 
+pub use crate::game::state::UiPanelId;
 pub use layout::setup_ui;
 pub use systems::{
     apply_ui_font, inventory_slot_clicks, load_ui_font, update_button_hover_ui,
@@ -18,11 +19,10 @@ pub use systems::{
 };
 pub use types::{
     ActiveSettingsSlider, AreaKind, CarriedItem, ConverterAction, GeneratorAction, InventoryItems,
-    LabelerAction, MainMenuAction, OpenSettingsDropdown, PauseAction, PendingKeyBind,
-    PendingAppExit, SaveListAction, SettingsAction, SettingsSlider, SettingsTab, TeleportAction,
+    LabelerAction, MainMenuAction, OpenSettingsDropdown, PauseAction, PendingAppExit,
+    PendingKeyBind, SaveListAction, SettingsAction, SettingsSlider, SettingsTab, TeleportAction,
     UiPanelContext, UiPanelResult, UiRuntime, HOTBAR_SLOTS,
 };
-pub use crate::game::state::UiPanelId;
 
 use crate::game::systems::menus::{
     converter_menu_actions, generator_menu_actions, labeler_menu_actions, settings_menu_actions,
