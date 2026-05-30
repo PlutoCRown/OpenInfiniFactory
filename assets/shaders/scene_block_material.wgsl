@@ -6,7 +6,7 @@ struct SceneBlockMaterial {
     texture_kind: u32,
 };
 
-@group(2) @binding(0)
+@group(#{MATERIAL_BIND_GROUP}) @binding(0)
 var<uniform> material: SceneBlockMaterial;
 
 fn hash3(p: vec3<f32>) -> f32 {

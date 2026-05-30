@@ -1,5 +1,6 @@
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
+use bevy::ui_widgets::{CoreSliderDragState, SliderRange, SliderValue};
 use bevy::window::PrimaryWindow;
 
 use crate::game::state::{
@@ -776,13 +777,63 @@ pub fn update_settings_sliders_ui(
         (&SettingsSliderKnob, &mut Node),
         (Without<SettingsSliderFill>, Without<SettingsDropdownList>),
     >,
+    slider_values: Query<(Entity, &SettingsAction, &SliderValue), With<Button>>,
+    mut commands: Commands,
 ) {
+    if settings.is_changed() {
+        for (entity, action, value) in &slider_values {
+            if let Some(slider) = settings_action_slider(*action) {
+                let next_value = settings_slider_percent(slider, &settings);
+                if (value.0 - next_value).abs() > f32::EPSILON {
+                    commands.entity(entity).insert(SliderValue(next_value));
+                }
+            }
+        }
+    }
+
     for (fill, mut style) in &mut slider_fills {
         style.width = Val::Percent(settings_slider_percent(fill.0, &settings));
     }
 
     for (knob, mut style) in &mut slider_knobs {
         style.left = Val::Percent(settings_slider_percent(knob.0, &settings));
+    }
+}
+
+pub fn update_settings_slider_drag_ui(
+    slider_values: Query<
+        (&SettingsAction, &SliderValue, &SliderRange, &CoreSliderDragState),
+        (With<Button>, Changed<SliderValue>),
+    >,
+    mut slider_fills: Query<
+        (&SettingsSliderFill, &mut Node),
+        (Without<SettingsSliderKnob>, Without<SettingsDropdownList>),
+    >,
+    mut slider_knobs: Query<
+        (&SettingsSliderKnob, &mut Node),
+        (Without<SettingsSliderFill>, Without<SettingsDropdownList>),
+    >,
+) {
+    for (action, value, range, drag_state) in &slider_values {
+        if !drag_state.dragging {
+            continue;
+        }
+        let Some(slider) = settings_action_slider(*action) else {
+            continue;
+        };
+        let percent = (range.thumb_position(value.0) * 100.0).clamp(0.0, 100.0);
+
+        for (fill, mut style) in &mut slider_fills {
+            if fill.0 == slider {
+                style.width = Val::Percent(percent);
+            }
+        }
+
+        for (knob, mut style) in &mut slider_knobs {
+            if knob.0 == slider {
+                style.left = Val::Percent(percent);
+            }
+        }
     }
 }
 
@@ -915,6 +966,15 @@ fn settings_slider_percent(slider: SettingsSlider, settings: &GameSettings) -> f
             / (GRAVITY_SCALE_MAX - GRAVITY_SCALE_MIN)
             * 100.0)
             .clamp(0.0, 100.0),
+    }
+}
+
+fn settings_action_slider(action: SettingsAction) -> Option<SettingsSlider> {
+    match action {
+        SettingsAction::FovSlider => Some(SettingsSlider::Fov),
+        SettingsAction::UiScaleSlider => Some(SettingsSlider::UiScale),
+        SettingsAction::GravitySlider => Some(SettingsSlider::Gravity),
+        _ => None,
     }
 }
 

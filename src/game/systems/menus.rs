@@ -1,7 +1,7 @@
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::ButtonState;
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
+use bevy::ui_widgets::SliderValue;
 
 use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SettingsReturnMode, SimulationState,
@@ -543,7 +543,6 @@ fn switch_to_edit_mode(
 pub fn settings_menu_actions(
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    windows: Query<&Window, With<PrimaryWindow>>,
     mut mode: ResMut<GameMode>,
     settings_return: Res<SettingsReturnMode>,
     mut settings: ResMut<GameSettings>,
@@ -554,15 +553,7 @@ pub fn settings_menu_actions(
     mut open_dropdown: ResMut<OpenSettingsDropdown>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut active_slider: ResMut<ActiveSettingsSlider>,
-    mut interactions: Query<
-        (
-            Ref<Interaction>,
-            &SettingsAction,
-            &ComputedNode,
-            &GlobalTransform,
-        ),
-        With<Button>,
-    >,
+    mut interactions: Query<(Ref<Interaction>, &SettingsAction, Option<&SliderValue>), With<Button>>,
 ) {
     if *mode != GameMode::Settings {
         pending_key_bind.0 = None;
@@ -579,15 +570,9 @@ pub fn settings_menu_actions(
         }
     }
 
-    let cursor_position = windows.single().ok().and_then(|window| {
-        window
-            .cursor_position()
-            .map(|cursor| Vec2::new(cursor.x, cursor.y))
-    });
-
     if mouse_buttons.just_released(MouseButton::Left) {
         if let Some(slider) = active_slider.0.take() {
-            if let Some((_, _, node, transform)) = interactions.iter().find(|(_, action, _, _)| {
+            if let Some((_, _, value)) = interactions.iter().find(|(_, action, _)| {
                 matches!(
                     (*action, slider),
                     (SettingsAction::FovSlider, SettingsSlider::Fov)
@@ -595,10 +580,10 @@ pub fn settings_menu_actions(
                         | (SettingsAction::GravitySlider, SettingsSlider::Gravity)
                 )
             }) {
-                if let Some(percent) = slider_percent(cursor_position, node, transform) {
+                if let Some(value) = value {
                     apply_settings_slider(
                         slider,
-                        percent,
+                        value.0 / 100.0,
                         &mut settings,
                         &mut ui_scale,
                         &mut config,
@@ -609,7 +594,7 @@ pub fn settings_menu_actions(
         }
     }
 
-    for (interaction, action, _, _) in &mut interactions {
+    for (interaction, action, _) in &mut interactions {
         if *interaction != Interaction::Pressed {
             continue;
         }
@@ -711,20 +696,6 @@ pub fn settings_menu_actions(
             }
         }
     }
-}
-
-fn slider_percent(
-    cursor_position: Option<Vec2>,
-    node: &ComputedNode,
-    transform: &GlobalTransform,
-) -> Option<f32> {
-    let cursor_position = cursor_position?;
-    let width = node.size().x;
-    if width <= 0.0 {
-        return None;
-    }
-    let left = transform.translation().x - width * 0.5;
-    Some(((cursor_position.x - left) / width).clamp(0.0, 1.0))
 }
 
 fn apply_settings_slider(

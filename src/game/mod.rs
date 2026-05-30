@@ -6,9 +6,11 @@ pub mod ui;
 pub mod world;
 
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+use bevy::input_focus::InputDispatchPlugin;
 use bevy::light::{DirectionalLightShadowMap, GlobalAmbientLight};
 use bevy::pbr::MaterialPlugin;
 use bevy::prelude::*;
+use bevy::ui_widgets::{slider_self_update, UiWidgetsPlugins};
 
 use crate::shared::config::load_config;
 use crate::shared::i18n::{resolve_language, I18n};
@@ -90,6 +92,9 @@ impl Plugin for GamePlugin {
             .insert_resource(systems::debug::PerfStats::default())
             .insert_resource(CarriedItem::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
+            .add_plugins(InputDispatchPlugin)
+            .add_plugins(UiWidgetsPlugins)
+            .add_observer(slider_self_update)
             .add_plugins(MaterialPlugin::<world::scene_material::SceneBlockMaterial>::default())
             .add_systems(
                 Startup,
@@ -156,6 +161,7 @@ impl Plugin for GamePlugin {
                     ui::update_button_hover_ui,
                     ui::update_settings_text_ui,
                     ui::update_settings_sliders_ui,
+                    ui::update_settings_slider_drag_ui,
                     ui::update_settings_dropdowns_ui,
                     ui::update_settings_tabs_ui,
                     ui::update_scroll_containers,

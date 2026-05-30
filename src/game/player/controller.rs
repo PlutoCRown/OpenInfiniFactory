@@ -39,6 +39,7 @@ pub fn spawn_player(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
         Camera::default(),
+        Msaa::Off,
         Tonemapping::SomewhatBoringDisplayTransform,
         DebandDither::Enabled,
         Transform::from_xyz(0.5, SPAWN_EYE_Y + 1.2, 10.5)

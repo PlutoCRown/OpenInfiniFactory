@@ -383,7 +383,7 @@ fn spawn_block_model(
     }
 
     let mut entity = if data.kind == crate::game::world::blocks::BlockKind::Wire {
-        commands.spawn(transform)
+        commands.spawn((transform, Visibility::default()))
     } else if let Some(scene_material) = assets.scene_material(data.kind) {
         commands.spawn((
             Mesh3d(assets.block_mesh(data.kind)),
@@ -415,7 +415,7 @@ fn spawn_block_model(
     }
 
     entity.with_children(|parent| {
-        let mut model_root = parent.spawn(Transform::default());
+        let mut model_root = parent.spawn((Transform::default(), Visibility::default()));
         if let Some(piston_animation) = piston_animation {
             model_root.insert(AnimatedPiston::new(piston_animation));
         }

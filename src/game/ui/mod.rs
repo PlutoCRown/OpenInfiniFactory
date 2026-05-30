@@ -12,9 +12,9 @@ pub use systems::{
     update_generator_ui, update_hud_visibility, update_inventory_slots,
     update_labeler_panel_visibility, update_labeler_ui, update_localized_ui,
     update_panel_visibility, update_save_list_ui, update_scroll_containers,
-    update_settings_dropdowns_ui, update_settings_sliders_ui, update_settings_tabs_ui,
-    update_settings_text_ui, update_status_ui, update_teleport_panel_visibility,
-    update_teleport_ui,
+    update_settings_dropdowns_ui, update_settings_slider_drag_ui, update_settings_sliders_ui,
+    update_settings_tabs_ui, update_settings_text_ui, update_status_ui,
+    update_teleport_panel_visibility, update_teleport_ui,
 };
 pub use types::{
     ActiveSettingsSlider, AreaKind, CarriedItem, ConverterAction, GeneratorAction, InventoryItems,

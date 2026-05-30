@@ -1,5 +1,6 @@
 use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
+use bevy::ui_widgets::{Slider, SliderRange, SliderThumb, SliderValue, TrackClick};
 
 use super::components::{default_button_size, default_font_size, menu_button};
 use super::types::{
@@ -184,6 +185,11 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, slider: S
                 Color::srgb(0.42, 0.44, 0.46),
                 Color::srgba(0.10, 0.11, 0.12, 0.98),
             ),
+            Slider {
+                track_click: TrackClick::Snap,
+            },
+            SliderValue(settings_slider_initial_value(slider)),
+            SliderRange::new(0.0, 100.0),
             match slider {
                 SettingsSlider::Fov => SettingsAction::FovSlider,
                 SettingsSlider::UiScale => SettingsAction::UiScaleSlider,
@@ -219,8 +225,17 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, slider: S
                     BackgroundColor(Color::srgb(0.90, 0.96, 1.0)),
                 ),
                 SettingsSliderKnob(slider),
+                SliderThumb,
             ));
         });
+}
+
+fn settings_slider_initial_value(slider: SettingsSlider) -> f32 {
+    match slider {
+        SettingsSlider::Fov => 50.0,
+        SettingsSlider::UiScale => 0.0,
+        SettingsSlider::Gravity => 20.0,
+    }
 }
 
 pub(super) fn spawn_settings_dropdown(parent: &mut ChildSpawnerCommands, dropdown: SettingsDropdown) {
