@@ -185,6 +185,12 @@ fn pause_action_visible(
                 | PauseAction::CancelEditSwitch
         );
     }
+    if mode == GameMode::ConfirmResetSolution {
+        return matches!(
+            action,
+            PauseAction::ConfirmResetSolution | PauseAction::CancelResetSolution
+        );
+    }
     if mode == GameMode::ConfirmBackToMain {
         return matches!(
             action,
@@ -200,7 +206,9 @@ fn pause_action_visible(
         | PauseAction::CancelEditSwitch
         | PauseAction::SaveAndBackToMain
         | PauseAction::DiscardAndBackToMain
-        | PauseAction::CancelBackToMain => false,
+        | PauseAction::CancelBackToMain
+        | PauseAction::ConfirmResetSolution
+        | PauseAction::CancelResetSolution => false,
         PauseAction::ToggleBuilderMode => solution_state.entry != WorldEntryMode::PlaySolution,
         PauseAction::ResetSolution => save_state.current_kind == Some(SaveKind::Solution),
         _ => true,
@@ -299,17 +307,11 @@ pub fn update_status_ui(
         let selected = selected_item
             .map(|item| i18n.text(item.name_key()))
             .unwrap_or_else(|| i18n.text("empty"));
-        let facing = selected_item
-            .and_then(|item| item.block())
-            .filter(|kind| kind.is_directional())
-            .map(|_| i18n.fmt("status.facing", &[("facing", i18n.text(placement.facing.name_key()))]))
-            .unwrap_or_default();
         text.0 = i18n.fmt(
             "status.hotbar",
             &[
                 ("mode", builder_mode_name(*builder_mode, &i18n)),
                 ("selected", selected),
-                ("facing", facing),
             ],
         );
     }
@@ -1092,7 +1094,10 @@ pub fn update_panel_visibility(
     for mut style in &mut style_sets.p5() {
         style.display = if matches!(
             *mode,
-            GameMode::Paused | GameMode::ConfirmSaveSolutionBeforeEdit | GameMode::ConfirmBackToMain
+            GameMode::Paused
+                | GameMode::ConfirmSaveSolutionBeforeEdit
+                | GameMode::ConfirmBackToMain
+                | GameMode::ConfirmResetSolution
         ) {
             Display::Flex
         } else {

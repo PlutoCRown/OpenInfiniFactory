@@ -305,6 +305,8 @@ pub enum PauseAction {
     CancelBackToMain,
     SaveWorld,
     ResetSolution,
+    ConfirmResetSolution,
+    CancelResetSolution,
     OpenSettings,
     BackToMainMenu,
 }

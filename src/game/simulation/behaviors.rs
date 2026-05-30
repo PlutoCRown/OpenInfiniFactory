@@ -14,31 +14,25 @@ use super::structures::{execute_structure_moves, material_structure, StructureMo
 
 pub(super) fn run_material_behavior_phase(
     world: &mut WorldBlocks,
-    turn: u64,
     powered_devices: &HashSet<IVec3>,
-    blocked_generation: &HashSet<IVec3>,
-) -> Vec<GeneratedMaterial> {
-    let mut generated = Vec::new();
+) {
     run_material_acceptance_phase(world);
-    generated.extend(run_material_source_phase(world, turn, blocked_generation));
     run_weld_phase(world);
     run_material_destroy_phase(world, powered_devices);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
     run_material_teleport_phase(world);
     run_material_acceptance_phase(world);
-    generated
 }
 
 #[derive(Clone, Copy)]
 pub(super) struct GeneratedMaterial {
     pub pos: IVec3,
     pub block: BlockData,
-    pub period: u64,
 }
 
-fn run_material_source_phase(
-    world: &mut WorldBlocks,
+pub(super) fn material_source_generation(
+    world: &WorldBlocks,
     turn: u64,
     blocked_generation: &HashSet<IVec3>,
 ) -> Vec<GeneratedMaterial> {
@@ -77,7 +71,6 @@ fn run_material_source_phase(
                             kind,
                             facing: Facing::North,
                         },
-                        period: settings.period.max(1),
                     });
                 }
             }

@@ -1,5 +1,5 @@
-use std::time::Instant;
 use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 use bevy::prelude::*;
 
@@ -14,7 +14,7 @@ use crate::game::world::rendering::{
     spawn_pending_generated_block, BlockEntity, PendingGeneratedPreview, WorldRenderAssets,
 };
 
-use super::behaviors::run_material_behavior_phase;
+use super::behaviors::{material_source_generation, run_material_behavior_phase};
 use super::gravity::mark_gravity_phase;
 use super::markers::{run_powered_marker_phase, run_static_marker_phase};
 use super::movement::mark_material_movement_phase;
@@ -50,8 +50,7 @@ impl PendingGeneratedMaterials {
 
 struct PendingGeneratedMaterial {
     block: BlockData,
-    duration: f32,
-    remaining: f32,
+    ready_turn: u64,
 }
 
 impl Default for SimulationStepStats {
@@ -105,7 +104,8 @@ pub fn run_turn(
     movement_plan.extend(mark_material_movement_phase(world, &powered_devices));
     sample.movement_mark_ms = mark_elapsed_ms(&mut mark);
 
-    let (animations, piston_animations) = execute_structure_moves_with_pistons(world, movement_plan);
+    let (animations, piston_animations) =
+        execute_structure_moves_with_pistons(world, movement_plan);
     let piston_animations = piston_animations
         .into_iter()
         .map(|(pos, mut animation)| {
@@ -119,18 +119,10 @@ pub fn run_turn(
     run_powered_marker_phase(world, &powered_devices);
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
-    let blocked_generation: HashSet<IVec3> = pending_generated.pending.keys().copied().collect();
-    let generated = run_material_behavior_phase(world, turn, &powered_devices, &blocked_generation);
-    for generated in generated {
-        pending_generated.pending.insert(
-            generated.pos,
-            PendingGeneratedMaterial {
-                block: generated.block,
-                duration: animation_duration * generated.period as f32,
-                remaining: animation_duration * generated.period as f32,
-            },
-        );
-    }
+    place_ready_generated_materials(world, pending_generated, turn);
+    run_material_behavior_phase(world, &powered_devices);
+
+    prepare_upcoming_generation(world, pending_generated, turn + 1);
     sample.behavior_ms = mark_elapsed_ms(&mut mark);
 
     signal_cache.refresh(world);
@@ -164,11 +156,17 @@ pub fn tick_simulation(
     pending_previews: Query<Entity, With<PendingGeneratedPreview>>,
     render_assets: Res<WorldRenderAssets>,
 ) {
-    despawn_pending_generated_previews(&mut commands, &pending_previews);
-    tick_pending_generated(time.delta_secs(), &mut world, &mut pending_generated);
-    spawn_pending_generated_previews(&mut commands, &render_assets, &world, &pending_generated);
-
     if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
+        prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
+        refresh_pending_generated_previews(
+            &mut commands,
+            &pending_previews,
+            &render_assets,
+            &world,
+            &pending_generated,
+            simulation.turn,
+            simulation.accumulator,
+        );
         return;
     }
 
@@ -186,6 +184,16 @@ pub fn tick_simulation(
             &render_assets,
             SIMULATION_TURN_SECONDS,
             &mut sim_stats,
+        );
+        prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
+        refresh_pending_generated_previews(
+            &mut commands,
+            &pending_previews,
+            &render_assets,
+            &world,
+            &pending_generated,
+            simulation.turn,
+            simulation.accumulator,
         );
         return;
     }
@@ -206,17 +214,45 @@ pub fn tick_simulation(
             &mut sim_stats,
         );
     }
+
+    prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
+    refresh_pending_generated_previews(
+        &mut commands,
+        &pending_previews,
+        &render_assets,
+        &world,
+        &pending_generated,
+        simulation.turn,
+        simulation.accumulator,
+    );
 }
 
-fn tick_pending_generated(
-    delta_seconds: f32,
+fn prepare_upcoming_generation(
+    world: &WorldBlocks,
+    pending_generated: &mut PendingGeneratedMaterials,
+    ready_turn: u64,
+) {
+    let blocked_generation: HashSet<IVec3> = pending_generated.pending.keys().copied().collect();
+    let generated = material_source_generation(world, ready_turn, &blocked_generation);
+    for generated in generated {
+        pending_generated
+            .pending
+            .entry(generated.pos)
+            .or_insert(PendingGeneratedMaterial {
+                block: generated.block,
+                ready_turn,
+            });
+    }
+}
+
+fn place_ready_generated_materials(
     world: &mut WorldBlocks,
     pending_generated: &mut PendingGeneratedMaterials,
+    turn: u64,
 ) {
     let mut ready = Vec::new();
-    for (pos, pending) in &mut pending_generated.pending {
-        pending.remaining -= delta_seconds;
-        if pending.remaining <= 0.0 {
+    for (pos, pending) in &pending_generated.pending {
+        if pending.ready_turn <= turn {
             ready.push(*pos);
         }
     }
@@ -231,13 +267,44 @@ fn tick_pending_generated(
     }
 }
 
+fn refresh_pending_generated_previews(
+    commands: &mut Commands,
+    pending_previews: &Query<Entity, With<PendingGeneratedPreview>>,
+    render_assets: &WorldRenderAssets,
+    world: &WorldBlocks,
+    pending_generated: &PendingGeneratedMaterials,
+    turn: u64,
+    accumulator: f32,
+) {
+    despawn_pending_generated_previews(commands, pending_previews);
+    spawn_pending_generated_previews(
+        commands,
+        render_assets,
+        world,
+        pending_generated,
+        turn,
+        accumulator,
+    );
+}
+
 fn spawn_pending_generated_previews(
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
     world: &WorldBlocks,
     pending_generated: &PendingGeneratedMaterials,
+    turn: u64,
+    accumulator: f32,
 ) {
     for (pos, pending) in &pending_generated.pending {
+        let progress = if pending.ready_turn <= turn {
+            1.0
+        } else if pending.ready_turn == turn + 1 {
+            accumulator
+        } else {
+            0.0
+        }
+        .clamp(0.0, 1.0);
+
         spawn_pending_generated_block(
             commands,
             render_assets,
@@ -250,10 +317,10 @@ fn spawn_pending_generated_previews(
                 from_facing: pending.block.facing,
                 to_facing: pending.block.facing,
                 kind: BlockAnimationKind::SpawnScale,
-                duration: Some(pending.duration),
-                progress: Some(1.0 - pending.remaining / pending.duration.max(f32::EPSILON)),
+                duration: Some(SIMULATION_TURN_SECONDS),
+                progress: Some(progress),
             }),
-            AnimationTiming::simulation(pending.remaining.max(0.0)),
+            AnimationTiming::simulation(SIMULATION_TURN_SECONDS),
         );
     }
 }

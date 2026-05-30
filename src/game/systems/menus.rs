@@ -307,7 +307,10 @@ pub fn pause_menu_actions(
 ) {
     if !matches!(
         *mode,
-        GameMode::Paused | GameMode::ConfirmSaveSolutionBeforeEdit | GameMode::ConfirmBackToMain
+        GameMode::Paused
+            | GameMode::ConfirmSaveSolutionBeforeEdit
+            | GameMode::ConfirmBackToMain
+            | GameMode::ConfirmResetSolution
     ) {
         return;
     }
@@ -411,6 +414,9 @@ pub fn pause_menu_actions(
                 *mode = GameMode::Paused;
             }
             PauseAction::ResetSolution => {
+                *mode = GameMode::ConfirmResetSolution;
+            }
+            PauseAction::ConfirmResetSolution => {
                 if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
                     reset_solution_world(&mut world, puzzle_snapshot);
                     simulation.running = false;
@@ -421,6 +427,10 @@ pub fn pause_menu_actions(
                     despawn_world(&mut commands, &block_entities);
                     rebuild_world(&mut commands, &world, &render_assets);
                 }
+                *mode = GameMode::Paused;
+            }
+            PauseAction::CancelResetSolution => {
+                *mode = GameMode::Paused;
             }
             PauseAction::OpenSettings => {
                 ui_runtime.open(

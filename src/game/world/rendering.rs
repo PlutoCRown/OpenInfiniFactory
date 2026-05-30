@@ -410,7 +410,7 @@ fn spawn_block_model(
         entity.insert(edit_preview);
     }
 
-    if let Some(animation) = animation {
+    if let Some(animation) = animation.filter(|_| !pending_generated_preview) {
         entity.insert(AnimatedBlock::new(animation, timing));
     }
 

@@ -336,6 +336,11 @@ fn spawn_pause_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                 ("button.cancel", PauseAction::CancelBackToMain),
                 ("button.save_world", PauseAction::SaveWorld),
                 ("button.reset_solution", PauseAction::ResetSolution),
+                (
+                    "button.confirm_reset_solution",
+                    PauseAction::ConfirmResetSolution,
+                ),
+                ("button.cancel", PauseAction::CancelResetSolution),
                 ("button.settings", PauseAction::OpenSettings),
                 ("button.back_to_main_menu", PauseAction::BackToMainMenu),
             ] {

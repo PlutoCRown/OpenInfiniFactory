@@ -24,9 +24,7 @@ pub fn gameplay_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut mouse_wheel: MessageReader<MouseWheel>,
     config: Res<GameConfig>,
-    simulation: Res<SimulationState>,
     pending_key_bind: Res<PendingKeyBind>,
-    inventory: Res<InventoryItems>,
     mut mode: ResMut<GameMode>,
     mut placement: ResMut<PlacementState>,
     mut teleport_rename: ResMut<TeleportRenameState>,
@@ -105,14 +103,6 @@ pub fn gameplay_input(
             placement.selected = selected as usize;
         }
     }
-
-    if keys.just_pressed(bindings.rotate_or_rollback.key_code())
-        && !simulation.is_active()
-        && placement.target.is_none()
-        && selected_block_is_directional(&inventory, &placement)
-    {
-        placement.facing = placement.facing.rotate();
-    }
 }
 
 pub fn placement_input(
@@ -165,11 +155,6 @@ pub fn placement_input(
     let current_place_at = placement.target.map(|target| target.pos + target.normal);
     let current_delete_at = placement.target.map(|target| target.pos);
     let current_target_pos = placement.target.map(|target| target.pos);
-    let can_preview_place = current_place_at.is_some_and(|pos| {
-        selected_place_block(&inventory, *builder_mode, &placement)
-            .is_some_and(|block| can_place_block_at(pos, block, *builder_mode, &world, &player))
-    });
-
     let force_place = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     if mouse_buttons.just_pressed(place_button)
         && !force_place
@@ -231,20 +216,15 @@ pub fn placement_input(
     }
 
     if keys.just_pressed(config.key_bindings.rotate_or_rollback.key_code()) {
-        if !rotate_pending_place_preview(&mut placement) {
-            if can_preview_place && selected_block_is_directional(&inventory, &placement) {
-                placement.facing = placement.facing.rotate();
-            } else if let Some(pos) = current_target_pos {
-                if rotate_block_at(
-                    pos,
-                    &mut world,
-                    &mut placement,
-                    &block_entities,
-                    &mut commands,
-                    &render_assets,
-                ) {
-                    solution_state.dirty = true;
-                }
+        if let Some(pos) = current_target_pos {
+            if rotate_block_at(
+                pos,
+                &mut world,
+                &block_entities,
+                &mut commands,
+                &render_assets,
+            ) {
+                solution_state.dirty = true;
             }
         }
     }
@@ -334,24 +314,6 @@ pub fn placement_input(
     }
 }
 
-fn rotate_pending_place_preview(placement: &mut PlacementState) -> bool {
-    let Some(EditGesture {
-        kind: EditGestureKind::Place { block },
-        ..
-    }) = placement.edit_gesture.as_mut()
-    else {
-        return false;
-    };
-
-    if !block.kind.is_directional() {
-        return true;
-    }
-
-    block.facing = block.facing.rotate();
-    placement.facing = block.facing;
-    true
-}
-
 fn selected_place_block(
     inventory: &InventoryItems,
     builder_mode: BuilderMode,
@@ -359,21 +321,10 @@ fn selected_place_block(
 ) -> Option<BlockData> {
     let kind = inventory.hotbar[placement.selected]?;
     let kind = kind.block()?;
-    let facing = if kind.is_directional() {
-        placement.facing
-    } else {
-        Facing::North
-    };
     can_place_in_mode(kind, builder_mode).then_some(BlockData {
         kind,
-        facing,
+        facing: Facing::North,
     })
-}
-
-fn selected_block_is_directional(inventory: &InventoryItems, placement: &PlacementState) -> bool {
-    inventory.hotbar[placement.selected]
-        .and_then(|item| item.block())
-        .is_some_and(BlockKind::is_directional)
 }
 
 fn selected_area(inventory: &InventoryItems, placement: &PlacementState) -> Option<AreaKind> {
@@ -424,9 +375,6 @@ fn pick_target_block(
         placement.selected = index;
     } else {
         inventory.set_hotbar_block(placement.selected, kind);
-    }
-    if kind.is_directional() {
-        placement.facing = block.facing;
     }
     placement.selection.clear();
     placement.edit_gesture = None;
@@ -651,7 +599,6 @@ fn alternate_block_at(
 fn rotate_block_at(
     pos: IVec3,
     world: &mut WorldBlocks,
-    placement: &mut PlacementState,
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     render_assets: &WorldRenderAssets,
@@ -666,7 +613,6 @@ fn rotate_block_at(
     let from_facing = block.facing;
     block.facing = block.facing.rotate();
     let updated = *block;
-    placement.facing = updated.facing;
 
     refresh_edit_generated_markers(world);
     let mut animations = std::collections::HashMap::new();
