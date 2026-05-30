@@ -20,7 +20,7 @@ impl Block for GoalBlock {
     }
 
     fn definition(&self) -> BlockDefinition {
-        BlockDefinition::marker(
+        BlockDefinition::puzzle_system(
             self.id(),
             "block.goal",
             "short.goal",

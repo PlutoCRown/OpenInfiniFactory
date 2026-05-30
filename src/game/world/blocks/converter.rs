@@ -34,7 +34,7 @@ impl Block for ConverterBlock {
     }
 
     fn definition(&self) -> BlockDefinition {
-        BlockDefinition::marker(
+        BlockDefinition::puzzle_system(
             self.id(),
             "block.converter",
             "short.converter",

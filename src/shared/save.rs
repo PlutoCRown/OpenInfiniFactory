@@ -5,10 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::game::world::blocks::{BlockData, PersistentLayer};
-use crate::game::world::grid::{
-    BlockSettings, ConverterSettings, GeneratorSettings, LabelerSettings, TeleportSettings,
-    WorldBlocks,
-};
+use crate::game::world::grid::{BlockSettings, WorldBlocks};
 
 pub const SAVE_DIR: &str = "saves";
 pub const SAVE_SLOTS: usize = 8;
@@ -71,14 +68,6 @@ struct SaveFile {
     system_blocks: Vec<SavedBlock>,
     #[serde(default)]
     block_settings: Vec<SavedBlockSettings>,
-    #[serde(default)]
-    generator_settings: Vec<SavedGeneratorSettings>,
-    #[serde(default)]
-    labeler_settings: Vec<SavedLabelerSettings>,
-    #[serde(default)]
-    converter_settings: Vec<SavedConverterSettings>,
-    #[serde(default)]
-    teleport_settings: Vec<SavedTeleportSettings>,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -96,14 +85,6 @@ struct WorldLayer {
     system_blocks: Vec<SavedBlock>,
     #[serde(default)]
     block_settings: Vec<SavedBlockSettings>,
-    #[serde(default)]
-    generator_settings: Vec<SavedGeneratorSettings>,
-    #[serde(default)]
-    labeler_settings: Vec<SavedLabelerSettings>,
-    #[serde(default)]
-    converter_settings: Vec<SavedConverterSettings>,
-    #[serde(default)]
-    teleport_settings: Vec<SavedTeleportSettings>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -120,38 +101,6 @@ struct SavedBlockSettings {
     y: i32,
     z: i32,
     settings: BlockSettings,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct SavedGeneratorSettings {
-    x: i32,
-    y: i32,
-    z: i32,
-    settings: GeneratorSettings,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct SavedLabelerSettings {
-    x: i32,
-    y: i32,
-    z: i32,
-    settings: LabelerSettings,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct SavedConverterSettings {
-    x: i32,
-    y: i32,
-    z: i32,
-    settings: ConverterSettings,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct SavedTeleportSettings {
-    x: i32,
-    y: i32,
-    z: i32,
-    settings: TeleportSettings,
 }
 
 pub fn save_world(world: &WorldBlocks, name: &str, kind: SaveKind) -> bool {
@@ -238,10 +187,6 @@ impl SaveFile {
             blocks: puzzle.blocks,
             system_blocks: puzzle.system_blocks,
             block_settings: puzzle.block_settings,
-            generator_settings: puzzle.generator_settings,
-            labeler_settings: puzzle.labeler_settings,
-            converter_settings: puzzle.converter_settings,
-            teleport_settings: puzzle.teleport_settings,
         }
     }
 
@@ -253,10 +198,6 @@ impl SaveFile {
             blocks: puzzle.blocks,
             system_blocks: puzzle.system_blocks,
             block_settings: puzzle.block_settings,
-            generator_settings: puzzle.generator_settings,
-            labeler_settings: puzzle.labeler_settings,
-            converter_settings: puzzle.converter_settings,
-            teleport_settings: puzzle.teleport_settings,
         }
     }
 
@@ -317,30 +258,6 @@ impl SaveFile {
                 saved.x, saved.y, saved.z, saved.settings
             ));
         }
-        for saved in puzzle.generator_settings {
-            parts.push(format!(
-                "gs:{},{},{}:{:?}",
-                saved.x, saved.y, saved.z, saved.settings
-            ));
-        }
-        for saved in puzzle.labeler_settings {
-            parts.push(format!(
-                "ls:{},{},{}:{:?}",
-                saved.x, saved.y, saved.z, saved.settings
-            ));
-        }
-        for saved in puzzle.converter_settings {
-            parts.push(format!(
-                "cs:{},{},{}:{:?}",
-                saved.x, saved.y, saved.z, saved.settings
-            ));
-        }
-        for saved in puzzle.teleport_settings {
-            parts.push(format!(
-                "ts:{},{},{}:{:?}",
-                saved.x, saved.y, saved.z, saved.settings
-            ));
-        }
         parts.sort();
         parts
     }
@@ -361,30 +278,6 @@ impl SaveFile {
                 .collect(),
             block_settings: self
                 .block_settings
-                .iter()
-                .filter(|saved| self.legacy_system_block_is_persistent(saved.pos()))
-                .cloned()
-                .collect(),
-            generator_settings: self
-                .generator_settings
-                .iter()
-                .filter(|saved| self.legacy_system_block_is_persistent(saved.pos()))
-                .cloned()
-                .collect(),
-            labeler_settings: self
-                .labeler_settings
-                .iter()
-                .filter(|saved| self.legacy_system_block_is_persistent(saved.pos()))
-                .cloned()
-                .collect(),
-            converter_settings: self
-                .converter_settings
-                .iter()
-                .filter(|saved| self.legacy_system_block_is_persistent(saved.pos()))
-                .cloned()
-                .collect(),
-            teleport_settings: self
-                .teleport_settings
                 .iter()
                 .filter(|saved| self.legacy_system_block_is_persistent(saved.pos()))
                 .cloned()
@@ -465,10 +358,6 @@ fn capture_puzzle_layer(world: &WorldBlocks) -> WorldLayer {
                     })
             })
             .collect(),
-        generator_settings: Vec::new(),
-        labeler_settings: Vec::new(),
-        converter_settings: Vec::new(),
-        teleport_settings: Vec::new(),
     }
 }
 
@@ -492,18 +381,6 @@ fn apply_layer(world: &mut WorldBlocks, layer: WorldLayer) {
     }
     for saved in layer.block_settings {
         world.set_block_settings(saved.pos(), saved.settings);
-    }
-    for saved in layer.generator_settings {
-        world.set_generator_settings(IVec3::new(saved.x, saved.y, saved.z), saved.settings);
-    }
-    for saved in layer.labeler_settings {
-        world.set_labeler_settings(IVec3::new(saved.x, saved.y, saved.z), saved.settings);
-    }
-    for saved in layer.converter_settings {
-        world.set_converter_settings(IVec3::new(saved.x, saved.y, saved.z), saved.settings);
-    }
-    for saved in layer.teleport_settings {
-        world.set_teleport_settings(IVec3::new(saved.x, saved.y, saved.z), saved.settings);
     }
 }
 
@@ -531,30 +408,6 @@ impl SavedBlock {
 }
 
 impl SavedBlockSettings {
-    fn pos(&self) -> IVec3 {
-        IVec3::new(self.x, self.y, self.z)
-    }
-}
-
-impl SavedGeneratorSettings {
-    fn pos(&self) -> IVec3 {
-        IVec3::new(self.x, self.y, self.z)
-    }
-}
-
-impl SavedLabelerSettings {
-    fn pos(&self) -> IVec3 {
-        IVec3::new(self.x, self.y, self.z)
-    }
-}
-
-impl SavedConverterSettings {
-    fn pos(&self) -> IVec3 {
-        IVec3::new(self.x, self.y, self.z)
-    }
-}
-
-impl SavedTeleportSettings {
     fn pos(&self) -> IVec3 {
         IVec3::new(self.x, self.y, self.z)
     }
@@ -616,4 +469,130 @@ fn sanitize_save_name(name: &str) -> String {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::game::world::blocks::{BlockData, BlockKind, Facing, MaterialKind, StampColor};
+    use crate::game::world::grid::{
+        ConverterMode, ConverterSettings, GeneratorSettings, LabelerSettings, TeleportSettings,
+    };
+
+    #[test]
+    fn puzzle_layer_round_trips_edit_system_blocks_and_settings() {
+        let generator = IVec3::new(1, 1, 0);
+        let goal = IVec3::new(2, 1, 0);
+        let stamper = IVec3::new(3, 1, 0);
+        let roller = IVec3::new(4, 1, 0);
+        let converter = IVec3::new(5, 1, 0);
+        let entrance = IVec3::new(6, 1, 0);
+        let exit = IVec3::new(7, 1, 0);
+        let generated_marker = IVec3::new(8, 1, 0);
+
+        let mut world = WorldBlocks::default();
+        for (pos, kind) in [
+            (generator, BlockKind::Generator),
+            (goal, BlockKind::Goal),
+            (stamper, BlockKind::Stamper),
+            (roller, BlockKind::Roller),
+            (converter, BlockKind::Converter),
+            (entrance, BlockKind::TeleportEntrance),
+            (exit, BlockKind::TeleportExit),
+            (generated_marker, BlockKind::WeldPoint),
+        ] {
+            world.insert(
+                pos,
+                BlockData {
+                    kind,
+                    facing: Facing::North,
+                },
+            );
+        }
+
+        world.set_generator_settings(
+            generator,
+            GeneratorSettings {
+                period: 9,
+                material: MaterialKind::Copper,
+            },
+        );
+        world.set_labeler_settings(
+            stamper,
+            LabelerSettings {
+                color: StampColor::Blue,
+            },
+        );
+        world.set_labeler_settings(
+            roller,
+            LabelerSettings {
+                color: StampColor::Yellow,
+            },
+        );
+        world.set_converter_settings(
+            converter,
+            ConverterSettings {
+                mode: ConverterMode::SpecificInput,
+                input: MaterialKind::Iron,
+                output: MaterialKind::Copper,
+            },
+        );
+        world.set_teleport_settings(
+            entrance,
+            TeleportSettings {
+                name: "Entrance".to_string(),
+                pair: Some(exit),
+            },
+        );
+        world.set_teleport_settings(
+            exit,
+            TeleportSettings {
+                name: "Exit".to_string(),
+                pair: Some(entrance),
+            },
+        );
+
+        let loaded = SaveFile::puzzle(capture_puzzle_layer(&world)).into_loaded();
+        let round_trip = loaded.world;
+
+        for pos in [generator, goal, stamper, roller, converter, entrance, exit] {
+            assert!(
+                round_trip.system_blocks.contains_key(&pos),
+                "expected {pos:?} to be saved as a puzzle system block"
+            );
+        }
+        assert!(!round_trip.system_blocks.contains_key(&generated_marker));
+
+        assert_eq!(
+            round_trip.generator_settings(generator),
+            GeneratorSettings {
+                period: 9,
+                material: MaterialKind::Copper,
+            }
+        );
+        assert_eq!(
+            round_trip.labeler_settings(stamper),
+            LabelerSettings {
+                color: StampColor::Blue,
+            }
+        );
+        assert_eq!(
+            round_trip.labeler_settings(roller),
+            LabelerSettings {
+                color: StampColor::Yellow,
+            }
+        );
+        assert_eq!(
+            round_trip.converter_settings(converter),
+            ConverterSettings {
+                mode: ConverterMode::SpecificInput,
+                input: MaterialKind::Iron,
+                output: MaterialKind::Copper,
+            }
+        );
+        assert_eq!(round_trip.teleport_settings(entrance).name, "Entrance");
+        assert_eq!(round_trip.teleport_settings(entrance).pair, Some(exit));
+        assert_eq!(round_trip.teleport_settings(exit).name, "Exit");
+        assert_eq!(round_trip.teleport_settings(exit).pair, Some(entrance));
+    }
 }

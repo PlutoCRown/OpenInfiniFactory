@@ -26,7 +26,7 @@ impl Block for RollerBlock {
     }
 
     fn definition(&self) -> BlockDefinition {
-        BlockDefinition::marker(
+        BlockDefinition::puzzle_system(
             self.id(),
             "block.roller",
             "short.roller",

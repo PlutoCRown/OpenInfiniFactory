@@ -13,7 +13,7 @@ impl Block for GeneratorBlock {
     }
 
     fn definition(&self) -> BlockDefinition {
-        BlockDefinition::marker(
+        BlockDefinition::puzzle_system(
             self.id(),
             "block.generator",
             "short.generator",

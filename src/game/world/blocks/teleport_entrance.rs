@@ -47,7 +47,7 @@ impl Block for TeleportEntranceBlock {
     }
 
     fn definition(&self) -> BlockDefinition {
-        BlockDefinition::marker(
+        BlockDefinition::puzzle_system(
             self.id(),
             "block.teleport_entrance",
             "short.teleport_entrance",

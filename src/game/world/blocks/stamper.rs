@@ -26,7 +26,7 @@ impl Block for StamperBlock {
     }
 
     fn definition(&self) -> BlockDefinition {
-        BlockDefinition::marker(
+        BlockDefinition::puzzle_system(
             self.id(),
             "block.stamper",
             "short.stamper",

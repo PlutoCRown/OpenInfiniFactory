@@ -47,7 +47,7 @@ impl Block for TeleportExitBlock {
     }
 
     fn definition(&self) -> BlockDefinition {
-        BlockDefinition::marker(
+        BlockDefinition::puzzle_system(
             self.id(),
             "block.teleport_exit",
             "short.teleport_exit",

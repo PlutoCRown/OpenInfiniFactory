@@ -64,16 +64,7 @@ pub trait Block: Send + Sync {
     }
 
     fn persistent_layer(&self) -> Option<PersistentLayer> {
-        match self.definition().class() {
-            BlockClass::Scene => Some(PersistentLayer::Puzzle),
-            BlockClass::System
-                if self.definition().system_role != SystemBlockRole::GeneratedMarker =>
-            {
-                Some(PersistentLayer::Puzzle)
-            }
-            BlockClass::Factory => Some(PersistentLayer::SolutionFactory),
-            BlockClass::Material | BlockClass::System => None,
-        }
+        self.definition().persistence
     }
 
     fn default_settings(&self, _pos: IVec3) -> Option<BlockSettings> {
@@ -134,6 +125,7 @@ pub struct BlockDefinition {
     slot_color: ColorSpec,
     class: BlockClass,
     system_role: SystemBlockRole,
+    persistence: Option<PersistentLayer>,
     shape: BlockShape,
     collision: bool,
     transparent: bool,
@@ -338,6 +330,7 @@ impl BlockDefinition {
             slot_color,
             BlockClass::Scene,
             SystemBlockRole::None,
+            Some(PersistentLayer::Puzzle),
         )
     }
 
@@ -356,6 +349,7 @@ impl BlockDefinition {
             slot_color,
             BlockClass::Factory,
             SystemBlockRole::None,
+            Some(PersistentLayer::SolutionFactory),
         )
     }
 
@@ -374,6 +368,7 @@ impl BlockDefinition {
             slot_color,
             BlockClass::Material,
             SystemBlockRole::None,
+            None,
         )
     }
 
@@ -392,6 +387,26 @@ impl BlockDefinition {
             slot_color,
             BlockClass::System,
             SystemBlockRole::GeneratedMarker,
+            None,
+        )
+    }
+
+    pub(crate) const fn puzzle_system(
+        kind: BlockKind,
+        name_key: &'static str,
+        short_name_key: &'static str,
+        color: ColorSpec,
+        slot_color: ColorSpec,
+    ) -> Self {
+        Self::new(
+            kind,
+            name_key,
+            short_name_key,
+            color,
+            slot_color,
+            BlockClass::System,
+            SystemBlockRole::None,
+            Some(PersistentLayer::Puzzle),
         )
     }
 
@@ -403,6 +418,7 @@ impl BlockDefinition {
         slot_color: ColorSpec,
         class: BlockClass,
         system_role: SystemBlockRole,
+        persistence: Option<PersistentLayer>,
     ) -> Self {
         Self {
             kind,
@@ -412,6 +428,7 @@ impl BlockDefinition {
             slot_color,
             class,
             system_role,
+            persistence,
             shape: BlockShape::Cube,
             collision: true,
             transparent: false,
