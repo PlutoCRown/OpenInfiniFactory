@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PistonAnimation};
+use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAnimation};
 use crate::game::world::blocks::BlockData;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks};
@@ -217,20 +217,20 @@ pub(super) fn execute_structure_moves(
     moves: Vec<StructureMove>,
     factory_structures: &mut FactoryStructureState,
 ) -> HashMap<IVec3, BlockAnimation> {
-    execute_structure_moves_with_pistons(world, moves, factory_structures).0
+    execute_structure_moves_with_pushers(world, moves, factory_structures).0
 }
 
-pub(super) fn execute_structure_moves_with_pistons(
+pub(super) fn execute_structure_moves_with_pushers(
     world: &mut WorldBlocks,
     moves: Vec<StructureMove>,
     factory_structures: &mut FactoryStructureState,
 ) -> (
     HashMap<IVec3, BlockAnimation>,
-    HashMap<IVec3, PistonAnimation>,
+    HashMap<IVec3, PusherAnimation>,
 ) {
     let mut moved = HashSet::new();
     let mut animations = HashMap::new();
-    let mut piston_animations = HashMap::new();
+    let mut pusher_animations = HashMap::new();
     for movement in moves {
         match movement {
             StructureMove::Translate {
@@ -264,9 +264,9 @@ pub(super) fn execute_structure_moves_with_pistons(
                         }
                     }
                     if let Some(actor) = actor {
-                        piston_animations.insert(
+                        pusher_animations.insert(
                             actor,
-                            PistonAnimation {
+                            PusherAnimation {
                                 direction: offset,
                                 duration: 0.0,
                             },
@@ -315,7 +315,7 @@ pub(super) fn execute_structure_moves_with_pistons(
             }
         }
     }
-    (animations, piston_animations)
+    (animations, pusher_animations)
 }
 
 pub(crate) fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
@@ -372,7 +372,7 @@ fn expanded_move_structure(
         if target.y < 0 || expanded.contains(&target) {
             continue;
         }
-        if world.can_place_solid_at(target) {
+        if world.can_place_platform_at(target) {
             continue;
         }
 
@@ -410,7 +410,7 @@ fn can_move_structure_without_push(
 ) -> bool {
     structure.iter().all(|pos| {
         let target = *pos + offset;
-        target.y >= 0 && (structure.contains(&target) || world.can_place_solid_at(target))
+        target.y >= 0 && (structure.contains(&target) || world.can_place_platform_at(target))
     })
 }
 
@@ -440,7 +440,7 @@ pub(super) fn can_rotate_structure(
 ) -> bool {
     structure.iter().all(|pos| {
         let target = rotate_pos_y(*pos, pivot, clockwise);
-        target.y >= 0 && (structure.contains(&target) || world.can_place_solid_at(target))
+        target.y >= 0 && (structure.contains(&target) || world.can_place_platform_at(target))
     })
 }
 

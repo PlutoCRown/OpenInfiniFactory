@@ -154,7 +154,8 @@ pub fn save_list_actions(
                 let name = next_world_name(&save_state.slots);
                 world.clear();
                 seed_demo_world(&mut world);
-                save_world(&world, &name, SaveKind::Puzzle);
+                *inventory = InventoryItems::for_mode(BuilderMode::Edit);
+                save_world(&world, &name, SaveKind::Puzzle, &inventory);
                 save_state.refresh();
                 open_loaded_world(
                     &name,
@@ -187,7 +188,8 @@ pub fn save_list_actions(
                 }
                 let name = next_world_name(&save_state.slots);
                 let puzzle_snapshot = world.clone();
-                save_solution_with_puzzle(&world, &name, &puzzle_snapshot);
+                *inventory = InventoryItems::for_mode(BuilderMode::Play);
+                save_solution_with_puzzle(&world, &name, &puzzle_snapshot, &inventory);
                 save_state.refresh();
                 open_loaded_world(
                     &name,
@@ -366,7 +368,7 @@ pub fn pause_menu_actions(
                 *mode = GameMode::Playing;
             }
             PauseAction::ConfirmSaveSolutionAndEdit => {
-                save_current_world(&world, &mut save_state, &mut solution_state);
+                save_current_world(&world, &inventory, &mut save_state, &mut solution_state);
                 switch_to_edit_mode(
                     &mut world,
                     &mut builder_mode,
@@ -414,10 +416,10 @@ pub fn pause_menu_actions(
                 *mode = GameMode::Paused;
             }
             PauseAction::SaveWorld => {
-                save_current_world(&world, &mut save_state, &mut solution_state);
+                save_current_world(&world, &inventory, &mut save_state, &mut solution_state);
             }
             PauseAction::SaveAndBackToMain => {
-                save_current_world(&world, &mut save_state, &mut solution_state);
+                save_current_world(&world, &inventory, &mut save_state, &mut solution_state);
                 clear_loaded_world(
                     &mut world,
                     &mut placement,
@@ -509,6 +511,7 @@ pub fn pause_menu_actions(
 
 fn save_current_world(
     world: &WorldBlocks,
+    inventory: &InventoryItems,
     save_state: &mut SaveState,
     solution_state: &mut SolutionState,
 ) {
@@ -518,12 +521,12 @@ fn save_current_world(
         .clone()
         .unwrap_or_else(|| next_world_name(&save_state.slots));
     let saved = match kind {
-        SaveKind::Puzzle => save_world(world, &name, SaveKind::Puzzle),
+        SaveKind::Puzzle => save_world(world, &name, SaveKind::Puzzle, inventory),
         SaveKind::Solution => {
             if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
-                save_solution_with_puzzle(world, &name, puzzle_snapshot)
+                save_solution_with_puzzle(world, &name, puzzle_snapshot, inventory)
             } else {
-                save_world(world, &name, SaveKind::Solution)
+                save_world(world, &name, SaveKind::Solution, inventory)
             }
         }
     };
@@ -571,6 +574,9 @@ fn open_loaded_world(
         WorldEntryMode::PlaySolution => BuilderMode::Play,
     };
     *inventory = InventoryItems::for_mode(*builder_mode);
+    if let Some(hotbar) = loaded.hotbar {
+        inventory.set_hotbar(hotbar);
+    }
     placement.selected = 0;
 
     save_state.current = Some(name.to_string());

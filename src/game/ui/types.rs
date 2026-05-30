@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
 pub use crate::game::state::UiPanelId;
@@ -9,6 +10,19 @@ use crate::shared::i18n::Language;
 
 pub const HOTBAR_SLOTS: usize = 9;
 pub(super) const BACKPACK_SLOTS: usize = 27;
+pub type HotbarItems = [Option<InventoryItem>; HOTBAR_SLOTS];
+
+const PLAY_HOTBAR_BLOCKS: [BlockKind; HOTBAR_SLOTS] = [
+    BlockKind::Platform,
+    BlockKind::Welder,
+    BlockKind::Conveyor,
+    BlockKind::Detector,
+    BlockKind::Wire,
+    BlockKind::Pusher,
+    BlockKind::Lifter,
+    BlockKind::Rotator,
+    BlockKind::Drill,
+];
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct UiRequestId(u64);
@@ -421,7 +435,7 @@ pub(crate) struct InventorySlot {
     pub index: usize,
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum AreaKind {
     Selection,
 }
@@ -434,7 +448,7 @@ impl AreaKind {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum InventoryItem {
     Block(BlockKind),
     Area(AreaKind),
@@ -482,8 +496,12 @@ impl InventoryItems {
             BuilderMode::Play => &PLAY_BLOCKS,
         };
 
+        let hotbar_blocks: &[BlockKind] = match mode {
+            BuilderMode::Edit => blocks,
+            BuilderMode::Play => &PLAY_HOTBAR_BLOCKS,
+        };
         let mut hotbar = [None; HOTBAR_SLOTS];
-        for (index, kind) in blocks.iter().take(HOTBAR_SLOTS).enumerate() {
+        for (index, kind) in hotbar_blocks.iter().take(HOTBAR_SLOTS).enumerate() {
             hotbar[index] = Some(InventoryItem::Block(*kind));
         }
 
@@ -514,6 +532,10 @@ impl InventoryItems {
         if let Some(slot) = self.hotbar.get_mut(index) {
             *slot = Some(InventoryItem::Block(kind));
         }
+    }
+
+    pub fn set_hotbar(&mut self, hotbar: HotbarItems) {
+        self.hotbar = hotbar;
     }
 }
 

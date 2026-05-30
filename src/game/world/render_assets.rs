@@ -31,8 +31,8 @@ pub struct WorldRenderAssets {
     part_rod_x: Handle<Mesh>,
     part_rod_y: Handle<Mesh>,
     part_rod_z: Handle<Mesh>,
-    part_piston_body: Handle<Mesh>,
-    part_piston_head: Handle<Mesh>,
+    part_pusher_body: Handle<Mesh>,
+    part_pusher_head: Handle<Mesh>,
     block_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     preview_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     scene_materials: HashMap<BlockKind, Handle<SceneBlockMaterial>>,
@@ -166,7 +166,7 @@ impl WorldRenderAssets {
                 ModelMaterial::Power,
                 emissive_material(1.0, 0.52, 0.20, 0.22, 0.08, 0.02),
             ),
-            (ModelMaterial::Piston, srgb_material(0.54, 0.56, 0.54)),
+            (ModelMaterial::Pusher, srgb_material(0.54, 0.56, 0.54)),
             (ModelMaterial::Wood, srgb_material(0.72, 0.46, 0.22)),
             (
                 ModelMaterial::Lift,
@@ -233,8 +233,8 @@ impl WorldRenderAssets {
             part_rod_x: meshes.add(Cuboid::new(0.72, 0.12, 0.12)),
             part_rod_y: meshes.add(Cuboid::new(0.12, 0.72, 0.12)),
             part_rod_z: meshes.add(Cuboid::new(0.12, 0.12, 0.72)),
-            part_piston_body: meshes.add(Cuboid::new(0.80, 0.80, 0.80)),
-            part_piston_head: meshes.add(Cuboid::new(0.82, 0.82, 0.20)),
+            part_pusher_body: meshes.add(Cuboid::new(0.80, 0.80, 0.80)),
+            part_pusher_head: meshes.add(Cuboid::new(0.82, 0.82, 0.20)),
             block_materials,
             preview_materials,
             scene_materials: scene_block_materials,
@@ -376,8 +376,8 @@ impl WorldRenderAssets {
             ModelMesh::RodX => self.part_rod_x.clone(),
             ModelMesh::RodY => self.part_rod_y.clone(),
             ModelMesh::RodZ => self.part_rod_z.clone(),
-            ModelMesh::PistonBody => self.part_piston_body.clone(),
-            ModelMesh::PistonHead => self.part_piston_head.clone(),
+            ModelMesh::PusherBody => self.part_pusher_body.clone(),
+            ModelMesh::PusherHead => self.part_pusher_head.clone(),
         }
     }
 

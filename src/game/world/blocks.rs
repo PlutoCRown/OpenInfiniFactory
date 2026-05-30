@@ -19,12 +19,12 @@ mod iron_material;
 mod laser;
 mod lifter;
 mod material;
-mod piston;
+mod pusher;
 mod planks;
 mod reverse_conveyor;
 mod roller;
 mod rotator;
-mod solid;
+mod platform;
 mod stamper;
 mod stone;
 mod teleport_entrance;
@@ -229,8 +229,8 @@ pub enum ModelMesh {
     RodX,
     RodY,
     RodZ,
-    PistonBody,
-    PistonHead,
+    PusherBody,
+    PusherHead,
 }
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
@@ -243,7 +243,7 @@ pub enum ModelMaterial {
     Wire,
     Signal,
     Power,
-    Piston,
+    Pusher,
     Wood,
     Lift,
     Rotation,
@@ -535,7 +535,7 @@ impl StampColor {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum BlockKind {
-    Solid,
+    Platform,
     Grass,
     Stone,
     Dirt,
@@ -548,7 +548,7 @@ pub enum BlockKind {
     Detector,
     DownDetector,
     Wire,
-    Piston,
+    Pusher,
     Lifter,
     Rotator,
     CounterRotator,

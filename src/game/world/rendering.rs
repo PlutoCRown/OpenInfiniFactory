@@ -7,8 +7,8 @@ use crate::game::simulation::factory_activity::{
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
-    AnimatedBlock, AnimatedPiston, AnimationEasing, AnimationTiming, BlockAnimation,
-    BlockAnimationKind, PistonAnimation, WeldSpark,
+    AnimatedBlock, AnimatedPusher, AnimationEasing, AnimationTiming, BlockAnimation,
+    BlockAnimationKind, PusherAnimation, WeldSpark,
 };
 use crate::game::world::blocks::{
     BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
@@ -203,21 +203,21 @@ pub fn despawn_pending_generated_previews(
 
 pub fn spawn_weld_sparks(commands: &mut Commands, assets: &WorldRenderAssets, positions: &[IVec3]) {
     let velocities = [
-        Vec3::new(0.38, 0.70, 0.10),
-        Vec3::new(-0.34, 0.62, 0.18),
-        Vec3::new(0.12, 0.74, -0.36),
-        Vec3::new(-0.16, 0.58, -0.30),
-        Vec3::new(0.28, 0.46, 0.32),
-        Vec3::new(-0.30, 0.50, -0.08),
+        Vec3::new(1.60, 2.70, 0.42),
+        Vec3::new(-1.44, 2.46, 0.76),
+        Vec3::new(0.50, 2.86, -1.50),
+        Vec3::new(-0.66, 2.28, -1.26),
+        Vec3::new(1.18, 1.92, 1.34),
+        Vec3::new(-1.26, 2.10, -0.34),
     ];
 
     for pos in positions {
         let origin = grid_to_world(*pos);
         for (index, velocity) in velocities.into_iter().enumerate() {
             let offset = Vec3::new(
-                (index as f32 * 1.37).sin() * 0.08,
-                0.02,
-                (index as f32 * 2.11).cos() * 0.08,
+                (index as f32 * 1.37).sin() * 0.20,
+                0.04,
+                (index as f32 * 2.11).cos() * 0.20,
             );
             commands.spawn((
                 Mesh3d(assets.weld_spark.clone()),
@@ -406,7 +406,7 @@ pub fn rebuild_world_with_runtime_animations(
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     animations: &HashMap<IVec3, BlockAnimation>,
-    piston_animations: &HashMap<IVec3, PistonAnimation>,
+    pusher_animations: &HashMap<IVec3, PusherAnimation>,
     timing: AnimationTiming,
     powered_wires: &HashSet<IVec3>,
 ) {
@@ -421,7 +421,7 @@ pub fn rebuild_world_with_runtime_animations(
             material,
             None,
             animations.get(pos).copied(),
-            piston_animations.get(pos).copied(),
+            pusher_animations.get(pos).copied(),
             timing,
             true,
             false,
@@ -450,7 +450,7 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     animations: &HashMap<IVec3, BlockAnimation>,
-    piston_animations: &HashMap<IVec3, PistonAnimation>,
+    pusher_animations: &HashMap<IVec3, PusherAnimation>,
     timing: AnimationTiming,
     debug: &DebugState,
     factory_structures: &FactoryStructureState,
@@ -464,7 +464,7 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
             world,
             assets,
             animations,
-            piston_animations,
+            pusher_animations,
             timing,
             powered_wires,
         );
@@ -500,7 +500,7 @@ fn spawn_block_model(
     material: Handle<StandardMaterial>,
     edit_preview: Option<EditPreview>,
     animation: Option<BlockAnimation>,
-    piston_animation: Option<PistonAnimation>,
+    pusher_animation: Option<PusherAnimation>,
     timing: AnimationTiming,
     with_block_entity: bool,
     pending_generated_preview: bool,
@@ -558,8 +558,8 @@ fn spawn_block_model(
 
     entity.with_children(|parent| {
         let mut model_root = parent.spawn((Transform::default(), Visibility::default()));
-        if let Some(piston_animation) = piston_animation {
-            model_root.insert(AnimatedPiston::new(piston_animation));
+        if let Some(pusher_animation) = pusher_animation {
+            model_root.insert(AnimatedPusher::new(pusher_animation));
         }
         model_root.with_children(|parent| {
             spawn_model_parts(parent, assets, data);

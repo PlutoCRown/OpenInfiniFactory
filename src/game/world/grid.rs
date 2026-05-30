@@ -424,7 +424,7 @@ impl WorldBlocks {
             .is_some_and(|block| block.kind.has_collision())
     }
 
-    pub fn can_place_solid_at(&self, pos: IVec3) -> bool {
+    pub fn can_place_platform_at(&self, pos: IVec3) -> bool {
         !self.is_occupied(pos)
     }
 

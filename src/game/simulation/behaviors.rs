@@ -64,7 +64,7 @@ pub(super) fn material_source_generation(
                 }
 
                 let spawn_pos = pos;
-                if world.can_place_solid_at(spawn_pos) && !blocked_generation.contains(&spawn_pos) {
+                if world.can_place_platform_at(spawn_pos) && !blocked_generation.contains(&spawn_pos) {
                     let Some(kind) = BlockKind::material_block_kind(settings.material) else {
                         continue;
                     };

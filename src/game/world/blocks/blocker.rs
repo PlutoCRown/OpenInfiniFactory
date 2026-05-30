@@ -6,12 +6,12 @@ use super::{
 
 const MODEL: &[BlockModelPart] = &[
     BlockModelPart::new(
-        ModelMesh::PistonBody,
+        ModelMesh::PusherBody,
         ModelMaterial::Frame,
         [0.0, 0.0, 0.10],
     ),
     BlockModelPart::new(
-        ModelMesh::PistonHead,
+        ModelMesh::PusherHead,
         ModelMaterial::Wood,
         [0.0, 0.0, -0.42],
     ),
@@ -65,7 +65,7 @@ impl Block for BlockerBlock {
     }
 
     fn alternate(&self) -> Option<BlockKind> {
-        Some(BlockKind::Piston)
+        Some(BlockKind::Pusher)
     }
 }
 

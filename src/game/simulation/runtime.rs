@@ -22,7 +22,7 @@ use super::gravity::mark_gravity_phase;
 use super::markers::{run_powered_marker_phase, run_static_marker_phase};
 use super::movement::mark_structure_movement_phase;
 pub use super::signals::SignalNetworkCache;
-use super::structures::{execute_structure_moves_with_pistons, merge_structure_movement_plan};
+use super::structures::{execute_structure_moves_with_pushers, merge_structure_movement_plan};
 
 #[derive(Resource, Clone)]
 pub struct SimulationStepStats {
@@ -117,10 +117,10 @@ pub fn run_turn(
     );
     sample.movement_mark_ms = mark_elapsed_ms(&mut mark);
 
-    let (mut animations, piston_animations) =
-        execute_structure_moves_with_pistons(world, movement_plan, factory_structures);
+    let (mut animations, pusher_animations) =
+        execute_structure_moves_with_pushers(world, movement_plan, factory_structures);
     merge_generated_animations(&mut animations, generated_animations);
-    let piston_animations = piston_animations
+    let pusher_animations = pusher_animations
         .into_iter()
         .map(|(pos, mut animation)| {
             animation.duration = animation_duration;
@@ -149,7 +149,7 @@ pub fn run_turn(
         world,
         render_assets,
         &animations,
-        &piston_animations,
+        &pusher_animations,
         AnimationTiming::simulation(animation_duration),
         debug,
         factory_structures,
@@ -287,7 +287,7 @@ fn place_ready_generated_materials(
         let Some(pending) = pending_generated.pending.remove(&pos) else {
             continue;
         };
-        if world.can_place_solid_at(pos) {
+        if world.can_place_platform_at(pos) {
             world.insert(pos, pending.block);
             animations.insert(
                 pos,

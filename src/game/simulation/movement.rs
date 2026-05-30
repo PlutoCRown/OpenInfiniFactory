@@ -58,7 +58,7 @@ pub(super) fn mark_structure_movement_phase(
                         offset,
                         MovementMark::Push,
                     ) {
-                        if kind == BlockKind::Piston {
+                        if kind == BlockKind::Pusher {
                             moves.push(movement.with_actor(pos, MovementMark::Push));
                         } else {
                             moves.push(movement);

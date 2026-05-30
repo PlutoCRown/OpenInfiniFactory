@@ -18,10 +18,10 @@ pub use systems::{
     update_settings_text_ui, update_status_ui, update_teleport_ui,
 };
 pub use types::{
-    ActiveSettingsSlider, AreaKind, CarriedItem, ConverterAction, GeneratorAction, InventoryItems,
-    LabelerAction, MainMenuAction, OpenSettingsDropdown, PauseAction, PendingAppExit,
-    PendingKeyBind, SaveListAction, SettingsAction, SettingsSlider, SettingsTab, TeleportAction,
-    UiPanelContext, UiPanelResult, UiRuntime, HOTBAR_SLOTS,
+    ActiveSettingsSlider, AreaKind, CarriedItem, ConverterAction, GeneratorAction, HotbarItems,
+    InventoryItems, LabelerAction, MainMenuAction, OpenSettingsDropdown, PauseAction,
+    PendingAppExit, PendingKeyBind, SaveListAction, SettingsAction, SettingsSlider, SettingsTab,
+    TeleportAction, UiPanelContext, UiPanelResult, UiRuntime, HOTBAR_SLOTS,
 };
 
 use crate::game::systems::menus::{

@@ -1,16 +1,9 @@
 use super::{
-    rgb, rgba, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial,
-    ModelMesh, RenderBehavior, SystemBlock, WeldBehavior, WeldConnectorBehavior,
+    rgb, rgba, Block, BlockDefinition, BlockKind, BlockModel, RenderBehavior, SystemBlock,
+    WeldBehavior, WeldConnectorBehavior,
 };
 
-const MODEL: &[BlockModelPart] = &[
-    BlockModelPart::new(ModelMesh::RodX, ModelMaterial::Welding, [0.0, 0.0, 0.0])
-        .scaled([0.58, 0.42, 0.42]),
-    BlockModelPart::new(ModelMesh::RodY, ModelMaterial::Welding, [0.0, 0.0, 0.0])
-        .scaled([0.42, 0.58, 0.42]),
-    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::Welding, [0.0, 0.0, 0.0])
-        .scaled([0.42, 0.42, 0.58]),
-];
+const MODEL: &[super::BlockModelPart] = &[];
 
 pub struct WeldPointBlock;
 

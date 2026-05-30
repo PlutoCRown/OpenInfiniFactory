@@ -3,9 +3,9 @@ use super::{
     copper_material::COPPER_MATERIAL, counter_rotator::COUNTER_ROTATOR, detector::DETECTOR,
     dirt::DIRT, down_detector::DOWN_DETECTOR, down_welder::DOWN_WELDER, drill::DRILL,
     drill_head::DRILL_HEAD, generator::GENERATOR, goal::GOAL, grass::GRASS,
-    iron_material::IRON_MATERIAL, laser::LASER, lifter::LIFTER, material::MATERIAL, piston::PISTON,
+    iron_material::IRON_MATERIAL, laser::LASER, lifter::LIFTER, material::MATERIAL, pusher::PUSHER,
     planks::PLANKS, reverse_conveyor::REVERSE_CONVEYOR, roller::ROLLER, rotator::ROTATOR,
-    solid::SOLID, stamper::STAMPER, stone::STONE, teleport_entrance::TELEPORT_ENTRANCE,
+    platform::PLATFORM, stamper::STAMPER, stone::STONE, teleport_entrance::TELEPORT_ENTRANCE,
     teleport_exit::TELEPORT_EXIT, weld_point::WELD_POINT, welder::WELDER, wire::WIRE, Block,
     BlockKind, EditableBlock, FactoryBlock, MaterialBlock, MaterialKind, SceneBlock, SystemBlock,
 };
@@ -27,7 +27,7 @@ pub const EDIT_BLOCKS: [BlockKind; 11] = [
 pub const EDITABLE_BLOCKS: [BlockKind; 11] = EDIT_BLOCKS;
 
 pub const PLAY_BLOCKS: [BlockKind; 15] = [
-    BlockKind::Solid,
+    BlockKind::Platform,
     BlockKind::Welder,
     BlockKind::DownWelder,
     BlockKind::Conveyor,
@@ -35,7 +35,7 @@ pub const PLAY_BLOCKS: [BlockKind; 15] = [
     BlockKind::Detector,
     BlockKind::DownDetector,
     BlockKind::Wire,
-    BlockKind::Piston,
+    BlockKind::Pusher,
     BlockKind::Lifter,
     BlockKind::Rotator,
     BlockKind::CounterRotator,
@@ -51,7 +51,7 @@ pub const ALL_BLOCKS: [BlockKind; 32] = [
     BlockKind::Planks,
     BlockKind::Generator,
     BlockKind::Goal,
-    BlockKind::Solid,
+    BlockKind::Platform,
     BlockKind::Welder,
     BlockKind::DownWelder,
     BlockKind::Conveyor,
@@ -59,7 +59,7 @@ pub const ALL_BLOCKS: [BlockKind; 32] = [
     BlockKind::Detector,
     BlockKind::DownDetector,
     BlockKind::Wire,
-    BlockKind::Piston,
+    BlockKind::Pusher,
     BlockKind::Lifter,
     BlockKind::Rotator,
     BlockKind::CounterRotator,
@@ -86,7 +86,7 @@ pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 32] = [
     &PLANKS,
     &GENERATOR,
     &GOAL,
-    &SOLID,
+    &PLATFORM,
     &WELDER,
     &DOWN_WELDER,
     &CONVEYOR,
@@ -94,7 +94,7 @@ pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 32] = [
     &DETECTOR,
     &DOWN_DETECTOR,
     &WIRE,
-    &PISTON,
+    &PUSHER,
     &LIFTER,
     &ROTATOR,
     &COUNTER_ROTATOR,
@@ -117,7 +117,7 @@ pub static BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 32] = [
 const SCENE_REGISTRY: [&'static (dyn SceneBlock + Send + Sync); 4] =
     [&GRASS, &STONE, &DIRT, &PLANKS];
 const FACTORY_REGISTRY: [&'static (dyn FactoryBlock + Send + Sync); 15] = [
-    &SOLID,
+    &PLATFORM,
     &WELDER,
     &DOWN_WELDER,
     &CONVEYOR,
@@ -125,7 +125,7 @@ const FACTORY_REGISTRY: [&'static (dyn FactoryBlock + Send + Sync); 15] = [
     &DETECTOR,
     &DOWN_DETECTOR,
     &WIRE,
-    &PISTON,
+    &PUSHER,
     &LIFTER,
     &ROTATOR,
     &COUNTER_ROTATOR,

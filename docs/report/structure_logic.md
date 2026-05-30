@@ -144,7 +144,7 @@ pub struct FactoryStructure {
 
 ## 推动规则
 
-实际移动执行在 `execute_structure_moves_with_pistons`。
+实际移动执行在 `execute_structure_moves_with_pushers`。
 
 平移移动会先调用 `expanded_move_structure`：
 

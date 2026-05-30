@@ -5,31 +5,31 @@ use super::{
 
 const MODEL: &[BlockModelPart] = &[
     BlockModelPart::new(
-        ModelMesh::PistonBody,
+        ModelMesh::PusherBody,
         ModelMaterial::Frame,
         [0.0, 0.0, 0.10],
     ),
     BlockModelPart::new(
-        ModelMesh::PistonHead,
+        ModelMesh::PusherHead,
         ModelMaterial::Wood,
         [0.0, 0.0, -0.42],
     ),
 ];
 
-pub struct PistonBlock;
+pub struct PusherBlock;
 
-pub static PISTON: PistonBlock = PistonBlock;
+pub static PUSHER: PusherBlock = PusherBlock;
 
-impl Block for PistonBlock {
+impl Block for PusherBlock {
     fn id(&self) -> BlockKind {
-        BlockKind::Piston
+        BlockKind::Pusher
     }
 
     fn definition(&self) -> BlockDefinition {
         BlockDefinition::factory(
             self.id(),
-            "block.piston",
-            "short.piston",
+            "block.pusher",
+            "short.pusher",
             rgb(0.54, 0.56, 0.54),
             rgb(0.42, 0.44, 0.42),
         )
@@ -68,4 +68,4 @@ impl Block for PistonBlock {
     }
 }
 
-impl FactoryBlock for PistonBlock {}
+impl FactoryBlock for PusherBlock {}

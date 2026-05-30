@@ -85,7 +85,7 @@
 
 ## 3. 新增一个可以造成模拟期移动的工厂方块
 
-当前例子：`Conveyor`、`ReverseConveyor`、`Lifter`、`Rotator`、`CounterRotator`、`Piston`。
+当前例子：`Conveyor`、`ReverseConveyor`、`Lifter`、`Rotator`、`CounterRotator`、`Pusher`。
 
 最少修改文件数：**4-5 个**
 

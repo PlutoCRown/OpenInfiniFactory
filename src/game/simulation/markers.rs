@@ -53,7 +53,7 @@ pub(super) fn run_powered_marker_phase(world: &mut WorldBlocks, powered_devices:
 }
 
 fn place_generated_marker(world: &mut WorldBlocks, origin: IVec3, marker: MarkerBehavior) {
-    let (offset, kind, facing, solid) = match marker {
+    let (offset, kind, facing, platform_collision) = match marker {
         MarkerBehavior::WeldPoint { offset, facing } => {
             (offset, BlockKind::WeldPoint, facing, false)
         }
@@ -66,8 +66,8 @@ fn place_generated_marker(world: &mut WorldBlocks, origin: IVec3, marker: Marker
     };
 
     let pos = origin + offset;
-    let can_place = if solid {
-        world.can_place_solid_at(pos)
+    let can_place = if platform_collision {
+        world.can_place_platform_at(pos)
     } else {
         !world.system_blocks.contains_key(&pos)
     };

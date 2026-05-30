@@ -132,7 +132,7 @@
 - 模拟回合执行完，需要用新世界状态和动画重建。
 - 切换结构调试显示。
 
-每帧真正持续运行的是 `animate_blocks`，它只更新已经带有 `AnimatedBlock` 或 `AnimatedPiston` 组件的实体插值；动画结束后会移除对应组件。
+每帧真正持续运行的是 `animate_blocks`，它只更新已经带有 `AnimatedBlock` 或 `AnimatedPusher` 组件的实体插值；动画结束后会移除对应组件。
 
 pending generator preview 是例外：`tick_simulation` 在 Play 模式下会刷新预览实体，用当前 accumulator 表示生成进度。这是为了让生成器预览动画能在模拟回合之间连续显示。
 

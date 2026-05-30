@@ -63,13 +63,13 @@ pub struct AnimatedBlock {
 }
 
 #[derive(Clone, Copy)]
-pub struct PistonAnimation {
+pub struct PusherAnimation {
     pub direction: IVec3,
     pub duration: f32,
 }
 
 #[derive(Component)]
-pub struct AnimatedPiston {
+pub struct AnimatedPusher {
     direction: Vec3,
     elapsed: f32,
     duration: f32,
@@ -82,8 +82,8 @@ pub struct WeldSpark {
     duration: f32,
 }
 
-impl AnimatedPiston {
-    pub fn new(animation: PistonAnimation) -> Self {
+impl AnimatedPusher {
+    pub fn new(animation: PusherAnimation) -> Self {
         Self {
             direction: animation.direction.as_vec3(),
             elapsed: 0.0,
@@ -128,10 +128,10 @@ pub fn animate_blocks(
     time: Res<Time>,
     mut commands: Commands,
     mut blocks: Query<(Entity, &mut Transform, &mut AnimatedBlock)>,
-    mut pistons: Query<(Entity, &mut Transform, &mut AnimatedPiston), Without<AnimatedBlock>>,
+    mut pushers: Query<(Entity, &mut Transform, &mut AnimatedPusher), Without<AnimatedBlock>>,
     mut sparks: Query<
         (Entity, &mut Transform, &mut WeldSpark),
-        (Without<AnimatedBlock>, Without<AnimatedPiston>),
+        (Without<AnimatedBlock>, Without<AnimatedPusher>),
     >,
 ) {
     for (entity, mut transform, mut animation) in &mut blocks {
@@ -155,7 +155,7 @@ pub fn animate_blocks(
         }
     }
 
-    for (entity, mut transform, mut animation) in &mut pistons {
+    for (entity, mut transform, mut animation) in &mut pushers {
         animation.elapsed += time.delta_secs();
         let t = (animation.elapsed / animation.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
         let extension = if t < 0.5 { t * 2.0 } else { (1.0 - t) * 2.0 };
@@ -163,7 +163,7 @@ pub fn animate_blocks(
 
         if t >= 1.0 {
             transform.translation = Vec3::ZERO;
-            commands.entity(entity).remove::<AnimatedPiston>();
+            commands.entity(entity).remove::<AnimatedPusher>();
         }
     }
 

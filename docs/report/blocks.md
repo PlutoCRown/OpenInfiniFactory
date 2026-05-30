@@ -69,11 +69,11 @@
 | Detector | 方块识别器 | ✅ | Down Detector | `Block`, `FactoryBlock` | `is_directional()`, `signal_behavior()`, `render_behavior()`, `alternate()` |
 | Down Detector | 向下方块识别器 | ❌ | Detector | `Block`, `FactoryBlock` | `signal_behavior()`, `render_behavior()`, `alternate()` |
 | Wire | 电线 | ❌ |  | `Block`, `FactoryBlock` | `signal_behavior()`, `render_behavior()` |
-| Piston | 活塞 | ✅ | Blocker | `Block`, `FactoryBlock` | `is_directional()`, `movement_rule()`, `signal_behavior()`, `render_behavior()`, `alternate()` |
+| Pusher | 活塞 | ✅ | Blocker | `Block`, `FactoryBlock` | `is_directional()`, `movement_rule()`, `signal_behavior()`, `render_behavior()`, `alternate()` |
 | Lifter | 抬升器 | ✅ |  | `Block`, `FactoryBlock` | `is_directional()`, `movement_rule()` |
 | Rotator | 旋转器 | ✅ | Counter Rotator | `Block`, `FactoryBlock` | `is_directional()`, `movement_rule()`, `alternate()` |
 | Counter Rotator | 逆向旋转器 | ✅ | Rotator | `Block`, `FactoryBlock` | `is_directional()`, `movement_rule()`, `alternate()` |
-| Blocker | 阻拦器 | ✅ | Piston | `Block`, `FactoryBlock` | `is_directional()`, `marker_behavior()`, `signal_behavior()`, `render_behavior()`, `alternate()` |
+| Blocker | 阻拦器 | ✅ | Pusher | `Block`, `FactoryBlock` | `is_directional()`, `marker_behavior()`, `signal_behavior()`, `render_behavior()`, `alternate()` |
 | Drill | 钻头 | ✅ | Laser | `Block`, `FactoryBlock` | `is_directional()`, `marker_behavior()`, `material_destroyer()`, `signal_behavior()`, `render_behavior()`, `alternate()` |
 | Laser | 激光 | ✅ | Drill | `Block`, `FactoryBlock` | `is_directional()`, `material_destroyer()`, `signal_behavior()`, `render_behavior()`, `alternate()` |
 

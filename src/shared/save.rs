@@ -6,6 +6,10 @@ use std::path::{Path, PathBuf};
 
 use crate::game::world::blocks::{BlockData, PersistentLayer};
 use crate::game::world::grid::{BlockSettings, WorldBlocks};
+use crate::game::{
+    state::BuilderMode,
+    ui::{HotbarItems, InventoryItems},
+};
 
 pub const SAVE_DIR: &str = "saves";
 pub const SAVE_SLOTS: usize = 8;
@@ -23,7 +27,11 @@ pub struct SaveState {
 impl SaveState {
     pub fn refresh(&mut self) {
         self.entries = list_save_entries();
-        self.slots = self.entries.iter().map(|entry| entry.name.clone()).collect();
+        self.slots = self
+            .entries
+            .iter()
+            .map(|entry| entry.name.clone())
+            .collect();
     }
 
     pub fn puzzles(&self) -> Vec<&SaveEntry> {
@@ -68,6 +76,8 @@ struct SaveFile {
     system_blocks: Vec<SavedBlock>,
     #[serde(default)]
     block_settings: Vec<SavedBlockSettings>,
+    #[serde(default)]
+    hotbar: Option<HotbarItems>,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -85,6 +95,8 @@ struct WorldLayer {
     system_blocks: Vec<SavedBlock>,
     #[serde(default)]
     block_settings: Vec<SavedBlockSettings>,
+    #[serde(default)]
+    hotbar: Option<HotbarItems>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -103,10 +115,17 @@ struct SavedBlockSettings {
     settings: BlockSettings,
 }
 
-pub fn save_world(world: &WorldBlocks, name: &str, kind: SaveKind) -> bool {
+pub fn save_world(
+    world: &WorldBlocks,
+    name: &str,
+    kind: SaveKind,
+    inventory: &InventoryItems,
+) -> bool {
     let save = match kind {
-        SaveKind::Puzzle => SaveFile::puzzle(capture_puzzle_layer(world)),
-        SaveKind::Solution => SaveFile::solution(capture_puzzle_layer(world), world),
+        SaveKind::Puzzle => SaveFile::puzzle(capture_puzzle_layer(world, inventory)),
+        SaveKind::Solution => {
+            SaveFile::solution(capture_puzzle_layer(world, inventory), world, inventory)
+        }
     };
 
     write_save(name, &save)
@@ -116,10 +135,15 @@ pub fn save_solution_with_puzzle(
     world: &WorldBlocks,
     name: &str,
     puzzle_snapshot: &WorldBlocks,
+    inventory: &InventoryItems,
 ) -> bool {
     write_save(
         name,
-        &SaveFile::solution(capture_puzzle_layer(puzzle_snapshot), world),
+        &SaveFile::solution(
+            capture_puzzle_layer(puzzle_snapshot, inventory),
+            world,
+            inventory,
+        ),
     )
 }
 
@@ -176,6 +200,7 @@ pub fn reset_solution_world(world: &mut WorldBlocks, puzzle_snapshot: &WorldBloc
 pub struct LoadedSave {
     pub world: WorldBlocks,
     pub puzzle_snapshot: Option<WorldBlocks>,
+    pub hotbar: Option<HotbarItems>,
 }
 
 impl SaveFile {
@@ -187,10 +212,11 @@ impl SaveFile {
             blocks: puzzle.blocks,
             system_blocks: puzzle.system_blocks,
             block_settings: puzzle.block_settings,
+            hotbar: puzzle.hotbar,
         }
     }
 
-    fn solution(puzzle: WorldLayer, world: &WorldBlocks) -> Self {
+    fn solution(puzzle: WorldLayer, world: &WorldBlocks, inventory: &InventoryItems) -> Self {
         Self {
             kind: SaveFileKind::Solution,
             puzzle: Some(puzzle.clone()),
@@ -198,6 +224,7 @@ impl SaveFile {
             blocks: puzzle.blocks,
             system_blocks: puzzle.system_blocks,
             block_settings: puzzle.block_settings,
+            hotbar: Some(inventory.hotbar),
         }
     }
 
@@ -208,6 +235,7 @@ impl SaveFile {
                     .puzzle
                     .clone()
                     .unwrap_or_else(|| self.legacy_puzzle_layer());
+                let hotbar = self.hotbar.or(puzzle.hotbar);
                 let mut puzzle_world = WorldBlocks::default();
                 apply_layer(&mut puzzle_world, puzzle.clone());
 
@@ -217,6 +245,8 @@ impl SaveFile {
                 LoadedSave {
                     world,
                     puzzle_snapshot: Some(puzzle_world),
+                    hotbar: hotbar
+                        .or_else(|| Some(InventoryItems::for_mode(BuilderMode::Play).hotbar)),
                 }
             }
             SaveFileKind::Puzzle | SaveFileKind::Legacy => {
@@ -224,11 +254,14 @@ impl SaveFile {
                     .puzzle
                     .clone()
                     .unwrap_or_else(|| self.legacy_puzzle_layer());
+                let hotbar = self.hotbar.or(puzzle.hotbar);
                 let mut world = WorldBlocks::default();
                 apply_layer(&mut world, puzzle);
                 LoadedSave {
                     world,
                     puzzle_snapshot: None,
+                    hotbar: hotbar
+                        .or_else(|| Some(InventoryItems::for_mode(BuilderMode::Edit).hotbar)),
                 }
             }
         }
@@ -282,12 +315,14 @@ impl SaveFile {
                 .filter(|saved| self.legacy_system_block_is_persistent(saved.pos()))
                 .cloned()
                 .collect(),
+            hotbar: self.hotbar,
         }
     }
 
     fn legacy_system_block_is_persistent(&self, pos: IVec3) -> bool {
         self.system_blocks.iter().any(|block| {
-            block.pos() == pos && block.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
+            block.pos() == pos
+                && block.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
         })
     }
 }
@@ -319,7 +354,7 @@ fn read_save(name: &str) -> Option<SaveFile> {
     ron::from_str::<SaveFile>(&contents).ok()
 }
 
-fn capture_puzzle_layer(world: &WorldBlocks) -> WorldLayer {
+fn capture_puzzle_layer(world: &WorldBlocks, inventory: &InventoryItems) -> WorldLayer {
     let blocks: Vec<SavedBlock> = world
         .blocks
         .iter()
@@ -358,6 +393,7 @@ fn capture_puzzle_layer(world: &WorldBlocks) -> WorldLayer {
                     })
             })
             .collect(),
+        hotbar: Some(inventory.hotbar),
     }
 }
 
@@ -429,12 +465,7 @@ pub fn list_saves() -> Vec<String> {
 pub fn list_save_entries() -> Vec<SaveEntry> {
     let mut entries: Vec<SaveEntry> = list_saves()
         .into_iter()
-        .filter_map(|name| {
-            save_kind(&name).map(|kind| SaveEntry {
-                name,
-                kind,
-            })
-        })
+        .filter_map(|name| save_kind(&name).map(|kind| SaveEntry { name, kind }))
         .collect();
     entries.sort_by(|a, b| a.name.cmp(&b.name));
     entries
@@ -552,7 +583,8 @@ mod tests {
             },
         );
 
-        let loaded = SaveFile::puzzle(capture_puzzle_layer(&world)).into_loaded();
+        let inventory = InventoryItems::for_mode(BuilderMode::Edit);
+        let loaded = SaveFile::puzzle(capture_puzzle_layer(&world, &inventory)).into_loaded();
         let round_trip = loaded.world;
 
         for pos in [generator, goal, stamper, roller, converter, entrance, exit] {
@@ -594,5 +626,32 @@ mod tests {
         assert_eq!(round_trip.teleport_settings(entrance).pair, Some(exit));
         assert_eq!(round_trip.teleport_settings(exit).name, "Exit");
         assert_eq!(round_trip.teleport_settings(exit).pair, Some(entrance));
+    }
+
+    #[test]
+    fn hotbar_round_trips_for_puzzle_and_solution() {
+        let mut puzzle_inventory = InventoryItems::for_mode(BuilderMode::Edit);
+        puzzle_inventory.set_hotbar_block(0, BlockKind::Stone);
+        puzzle_inventory.set_hotbar_block(1, BlockKind::TeleportEntrance);
+
+        let puzzle_loaded = SaveFile::puzzle(capture_puzzle_layer(
+            &WorldBlocks::default(),
+            &puzzle_inventory,
+        ))
+        .into_loaded();
+        assert_eq!(puzzle_loaded.hotbar, Some(puzzle_inventory.hotbar));
+
+        let mut solution_inventory = InventoryItems::for_mode(BuilderMode::Play);
+        solution_inventory.set_hotbar_block(0, BlockKind::Platform);
+        solution_inventory.set_hotbar_block(1, BlockKind::Pusher);
+        solution_inventory.hotbar[2] = None;
+
+        let solution_loaded = SaveFile::solution(
+            capture_puzzle_layer(&WorldBlocks::default(), &puzzle_inventory),
+            &WorldBlocks::default(),
+            &solution_inventory,
+        )
+        .into_loaded();
+        assert_eq!(solution_loaded.hotbar, Some(solution_inventory.hotbar));
     }
 }
