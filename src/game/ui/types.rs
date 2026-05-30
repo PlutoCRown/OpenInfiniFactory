@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
 
 pub use crate::game::state::UiPanelId;
 use crate::game::state::{BuilderMode, GameMode};
@@ -24,86 +23,39 @@ const PLAY_HOTBAR_BLOCKS: [BlockKind; HOTBAR_SLOTS] = [
     BlockKind::Drill,
 ];
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct UiRequestId(u64);
-
-impl UiRequestId {
-    pub fn raw(self) -> u64 {
-        self.0
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UiPanelContext {
-    None,
     ReturnTo(GameMode),
     Block { pos: IVec3 },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum UiPanelResult {
-    Closed,
-    SettingsClosed,
-    BlockClosed { pos: IVec3 },
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct UiPanelSession {
-    pub request_id: UiRequestId,
     pub panel: UiPanelId,
     pub context: UiPanelContext,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct UiPanelResponse {
-    pub request_id: UiRequestId,
-    pub panel: UiPanelId,
-    pub context: UiPanelContext,
-    pub result: UiPanelResult,
 }
 
 #[derive(Resource, Default)]
 pub struct UiRuntime {
     active: Option<UiPanelSession>,
-    next_request_id: u64,
-    results: VecDeque<UiPanelResponse>,
 }
 
 impl UiRuntime {
-    pub fn open(&mut self, panel: UiPanelId, context: UiPanelContext) -> UiRequestId {
-        self.close_active(UiPanelResult::Closed);
-        let request_id = UiRequestId(self.next_request_id);
-        self.next_request_id = self.next_request_id.wrapping_add(1);
-        self.active = Some(UiPanelSession {
-            request_id,
-            panel,
-            context,
-        });
-        request_id
+    pub fn open(&mut self, panel: UiPanelId, context: UiPanelContext) {
+        self.close_active();
+        self.active = Some(UiPanelSession { panel, context });
     }
 
-    pub fn open_block(&mut self, panel: UiPanelId, pos: IVec3) -> UiRequestId {
+    pub fn open_block(&mut self, panel: UiPanelId, pos: IVec3) {
         self.open(panel, UiPanelContext::Block { pos })
     }
 
-    pub fn close_active(&mut self, result: UiPanelResult) -> Option<UiPanelResponse> {
-        let session = self.active.take()?;
-        let response = UiPanelResponse {
-            request_id: session.request_id,
-            panel: session.panel,
-            context: session.context,
-            result,
-        };
-        self.results.push_back(response);
-        Some(response)
+    pub fn close_active(&mut self) {
+        self.active = None;
     }
 
-    pub fn close_current(&mut self) -> Option<UiPanelResponse> {
-        let result = self
-            .active_block_pos()
-            .map(|pos| UiPanelResult::BlockClosed { pos })
-            .unwrap_or(UiPanelResult::Closed);
-        self.close_active(result)
+    pub fn close_current(&mut self) {
+        self.close_active();
     }
 
     pub fn active(&self) -> Option<UiPanelSession> {
@@ -130,17 +82,6 @@ impl UiRuntime {
         }
     }
 
-    pub fn take_result(&mut self, request_id: UiRequestId) -> Option<UiPanelResponse> {
-        let index = self
-            .results
-            .iter()
-            .position(|response| response.request_id == request_id)?;
-        self.results.remove(index)
-    }
-
-    pub fn drain_results(&mut self) -> Vec<UiPanelResponse> {
-        self.results.drain(..).collect()
-    }
 }
 
 #[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
@@ -311,16 +252,8 @@ pub struct LocalizedText {
 pub enum PauseAction {
     Resume,
     ToggleBuilderMode,
-    ConfirmSaveSolutionAndEdit,
-    DiscardSolutionAndEdit,
-    CancelEditSwitch,
-    SaveAndBackToMain,
-    DiscardAndBackToMain,
-    CancelBackToMain,
     SaveWorld,
     ResetSolution,
-    ConfirmResetSolution,
-    CancelResetSolution,
     OpenSettings,
     BackToMainMenu,
 }
@@ -341,10 +274,43 @@ pub enum SaveListAction {
     LoadSolution(usize),
     DeletePuzzle(usize),
     DeleteSolution(usize),
-    ConfirmDelete,
-    CancelDelete,
     Back,
 }
+
+#[derive(Component, Clone, Copy)]
+pub enum ConfirmDialogAction {
+    Primary,
+    Secondary,
+    Cancel,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub enum ConfirmDialogKind {
+    DeleteSave { name: String },
+    ResetSolution,
+    ReturnToMain,
+    SaveSolutionBeforeEdit,
+}
+
+#[derive(Resource, Default)]
+pub struct ConfirmDialogState {
+    pub kind: Option<ConfirmDialogKind>,
+}
+
+#[derive(Component)]
+pub struct ConfirmDialogPanel;
+
+#[derive(Component)]
+pub struct ConfirmDialogTitle;
+
+#[derive(Component)]
+pub struct ConfirmDialogMessage;
+
+#[derive(Component)]
+pub struct ConfirmDialogPrimaryLabel;
+
+#[derive(Component)]
+pub struct ConfirmDialogSecondaryLabel;
 
 #[derive(Component, Clone, Copy)]
 pub enum SettingsAction {

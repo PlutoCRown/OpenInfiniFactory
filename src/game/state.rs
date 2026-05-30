@@ -122,9 +122,6 @@ impl SelectionAxis {
 pub enum GameMode {
     MainMenu,
     SaveListMain,
-    ConfirmBackToMain,
-    ConfirmResetSolution,
-    ConfirmSaveSolutionBeforeEdit,
     Playing,
     Inventory,
     Paused,

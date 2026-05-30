@@ -28,30 +28,12 @@ impl Facing {
         }
     }
 
-    pub fn name_key(self) -> &'static str {
-        match self {
-            Facing::North => "facing.north",
-            Facing::East => "facing.east",
-            Facing::South => "facing.south",
-            Facing::West => "facing.west",
-        }
-    }
-
     pub fn yaw(self) -> f32 {
         match self {
             Facing::North => 0.0,
             Facing::East => -std::f32::consts::FRAC_PI_2,
             Facing::South => std::f32::consts::PI,
             Facing::West => std::f32::consts::FRAC_PI_2,
-        }
-    }
-
-    pub fn forward(self) -> Vec3 {
-        match self {
-            Facing::North => Vec3::new(0.0, 0.0, -1.0),
-            Facing::East => Vec3::new(1.0, 0.0, 0.0),
-            Facing::South => Vec3::new(0.0, 0.0, 1.0),
-            Facing::West => Vec3::new(-1.0, 0.0, 0.0),
         }
     }
 

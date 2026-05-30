@@ -21,7 +21,6 @@ pub struct SaveState {
     pub slots: Vec<String>,
     pub entries: Vec<SaveEntry>,
     pub selected_puzzle: Option<String>,
-    pub pending_delete: Option<String>,
 }
 
 impl SaveState {

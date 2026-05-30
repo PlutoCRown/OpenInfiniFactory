@@ -13,8 +13,6 @@ pub struct WorldRenderAssets {
     pub(crate) block: Handle<Mesh>,
     node: Handle<Mesh>,
     wire_node: Handle<Mesh>,
-    pub(crate) arrow: Handle<Mesh>,
-    pub(crate) arrow_nose: Handle<Mesh>,
     pub(crate) goal_top: Handle<Mesh>,
     pub(crate) face_mark: Handle<Mesh>,
     pub(crate) weld_spark: Handle<Mesh>,
@@ -40,8 +38,6 @@ pub struct WorldRenderAssets {
     model_materials: HashMap<ModelMaterial, Handle<StandardMaterial>>,
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
     pub(crate) active_wire_material: Handle<StandardMaterial>,
-    pub(crate) arrow_material: Handle<StandardMaterial>,
-    pub(crate) arrow_nose_material: Handle<StandardMaterial>,
     pub(crate) goal_top_material: Handle<StandardMaterial>,
     pub(crate) weld_connector_material: Handle<StandardMaterial>,
     delete_preview_material: Handle<StandardMaterial>,
@@ -215,8 +211,6 @@ impl WorldRenderAssets {
                 BLOCK_SIZE * 0.304,
                 BLOCK_SIZE * 0.304,
             )),
-            arrow: meshes.add(Cuboid::new(0.18, 0.08, 0.72)),
-            arrow_nose: meshes.add(Cuboid::new(0.42, 0.10, 0.18)),
             goal_top: meshes.add(Cuboid::new(0.62, 0.08, 0.62)),
             face_mark: meshes.add(Cuboid::new(0.72, 0.012, 0.72)),
             weld_spark: meshes.add(Cuboid::new(0.24, 0.24, 0.24)),
@@ -248,16 +242,6 @@ impl WorldRenderAssets {
             active_wire_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.08, 0.04),
                 emissive: Color::srgb(0.34, 0.02, 0.01).into(),
-                ..default()
-            }),
-            arrow_material: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.95, 0.95, 0.38),
-                unlit: true,
-                ..default()
-            }),
-            arrow_nose_material: materials.add(StandardMaterial {
-                base_color: Color::srgb(1.0, 0.78, 0.25),
-                unlit: true,
                 ..default()
             }),
             goal_top_material: materials.add(StandardMaterial {

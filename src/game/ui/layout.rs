@@ -5,21 +5,22 @@ use crate::shared::i18n::I18n;
 use crate::shared::save::SAVE_SLOTS;
 
 use super::components::{
-    default_button_size, default_font_size, flex_row, localized_text, root_node, text,
+    default_button_size, default_font_size, flex_row, localized_text, menu_button, root_node, text,
     transparent_node,
 };
 use super::theme::{absolute_text_bundle, panel_bundle, STATUS_TEXT};
 use super::types::{
-    BackpackPanel, CarriedIcon, CarriedLabel, ConverterAction, ConverterInputRow,
-    ConverterInputText, ConverterModeText, ConverterOutputText, ConverterPanel, Crosshair,
-    CurrentSaveText, GeneratorAction, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText,
-    HotbarText, InGameHudStyle, InGameHudVisibility, InventoryTitle, LabelerAction,
-    LabelerColorText, LabelerPanel, MainMenuAction, MainMenuPanel, PauseAction, PausePanel,
-    SaveListAction, SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdown,
-    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider,
-    SettingsStatusText, SimulationStatusText, SimulationText, SlotArea, TeleportAction,
-    TeleportNameText, TeleportPairText, TeleportPanel, UiPanelBinding, UiPanelId, BACKPACK_SLOTS,
-    HOTBAR_SLOTS,
+    BackpackPanel, CarriedIcon, CarriedLabel, ConfirmDialogAction, ConfirmDialogMessage,
+    ConfirmDialogPanel, ConfirmDialogPrimaryLabel, ConfirmDialogSecondaryLabel, ConfirmDialogTitle,
+    ConverterAction, ConverterInputRow, ConverterInputText, ConverterModeText, ConverterOutputText,
+    ConverterPanel, Crosshair, CurrentSaveText, GeneratorAction, GeneratorMaterialText,
+    GeneratorPanel, GeneratorPeriodText, HotbarText, InGameHudStyle, InGameHudVisibility,
+    InventoryTitle, LabelerAction, LabelerColorText, LabelerPanel, LocalizedText, MainMenuAction,
+    MainMenuPanel, PauseAction, PausePanel, SaveListAction, SaveListPanel, SaveListTitle,
+    SettingsAction, SettingsDropdown, SettingsGameplayGroup, SettingsKeyBindingsGroup,
+    SettingsPanel, SettingsSlider, SettingsStatusText, SimulationStatusText, SimulationText,
+    SlotArea, TeleportAction, TeleportNameText, TeleportPairText, TeleportPanel, UiPanelBinding,
+    UiPanelId, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::widgets::{
     scroll_container, scroll_content, spawn_converter_button, spawn_generator_button,
@@ -40,6 +41,7 @@ pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
         spawn_teleport_panel(root, &i18n);
         spawn_pause_panel(root, &i18n);
         spawn_settings_panel(root, &i18n);
+        spawn_confirm_dialog(root, &i18n);
         spawn_main_menu(root, &i18n);
         spawn_save_list(root);
         spawn_carried_label(root);
@@ -321,31 +323,56 @@ fn spawn_pause_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
             for (key, action) in [
                 ("button.resume", PauseAction::Resume),
                 ("button.toggle_builder_mode", PauseAction::ToggleBuilderMode),
-                (
-                    "button.save_solution_and_edit",
-                    PauseAction::ConfirmSaveSolutionAndEdit,
-                ),
-                (
-                    "button.discard_solution_and_edit",
-                    PauseAction::DiscardSolutionAndEdit,
-                ),
-                ("button.cancel", PauseAction::CancelEditSwitch),
-                ("button.save_and_back", PauseAction::SaveAndBackToMain),
-                ("button.discard_and_back", PauseAction::DiscardAndBackToMain),
-                ("button.cancel", PauseAction::CancelBackToMain),
                 ("button.save_world", PauseAction::SaveWorld),
                 ("button.reset_solution", PauseAction::ResetSolution),
-                (
-                    "button.confirm_reset_solution",
-                    PauseAction::ConfirmResetSolution,
-                ),
-                ("button.cancel", PauseAction::CancelResetSolution),
                 ("button.settings", PauseAction::OpenSettings),
                 ("button.back_to_main_menu", PauseAction::BackToMainMenu),
             ] {
                 spawn_localized_pause_button(panel, i18n.text(key), key, action);
             }
         });
+}
+
+fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+    root.spawn((
+        panel_bundle(460.0, 250.0, -230.0, -125.0),
+        ConfirmDialogPanel,
+    ))
+    .with_children(|panel| {
+        panel.spawn((text("", 24.0, Color::WHITE), ConfirmDialogTitle));
+        panel.spawn((
+            text("", 15.0, STATUS_TEXT),
+            TextLayout::new_with_justify(Justify::Center),
+            Node {
+                min_height: Val::Px(54.0),
+                align_self: AlignSelf::Stretch,
+                ..default()
+            },
+            ConfirmDialogMessage,
+        ));
+        panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
+            row.spawn((menu_button(34.0), ConfirmDialogAction::Primary))
+                .with_children(|button| {
+                    button.spawn((
+                        text(i18n.text("button.confirm"), 15.0, Color::WHITE),
+                        ConfirmDialogPrimaryLabel,
+                    ));
+                });
+            row.spawn((menu_button(34.0), ConfirmDialogAction::Secondary))
+                .with_children(|button| {
+                    button.spawn((text("", 15.0, Color::WHITE), ConfirmDialogSecondaryLabel));
+                });
+            row.spawn((menu_button(34.0), ConfirmDialogAction::Cancel))
+                .with_children(|button| {
+                    button.spawn((
+                        text(i18n.text("button.cancel"), 15.0, Color::WHITE),
+                        LocalizedText {
+                            key: "button.cancel",
+                        },
+                    ));
+                });
+        });
+    });
 }
 
 fn spawn_settings_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
@@ -599,10 +626,6 @@ fn spawn_save_list(root: &mut ChildSpawnerCommands) {
                         }
                         spawn_save_slot_button(right, SaveListAction::NewSolution);
                     });
-            });
-            panel.spawn(flex_row(38.0, 8.0)).with_children(|row| {
-                spawn_save_slot_button(row, SaveListAction::ConfirmDelete);
-                spawn_save_slot_button(row, SaveListAction::CancelDelete);
             });
             spawn_save_back_button(panel);
         });

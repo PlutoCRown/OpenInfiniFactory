@@ -291,10 +291,6 @@ impl BlockModelPart {
 pub enum BlockModel {
     Default,
     Parts(&'static [BlockModelPart]),
-    Asset {
-        path: &'static str,
-        fallback: &'static [BlockModelPart],
-    },
 }
 
 #[derive(Clone, Copy)]
@@ -645,10 +641,6 @@ impl BlockKind {
                 | BlockKind::TeleportEntrance
                 | BlockKind::TeleportExit
         )
-    }
-
-    pub fn is_teleport(self) -> bool {
-        matches!(self, BlockKind::TeleportEntrance | BlockKind::TeleportExit)
     }
 
     pub fn accepts_material(self) -> bool {

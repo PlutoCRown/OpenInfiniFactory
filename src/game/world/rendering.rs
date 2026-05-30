@@ -669,7 +669,6 @@ fn spawn_model_parts(
     let parts = match data.kind.model() {
         BlockModel::Default => &[],
         BlockModel::Parts(parts) => parts,
-        BlockModel::Asset { path: _, fallback } => fallback,
     };
 
     for part in parts {

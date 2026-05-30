@@ -17,17 +17,20 @@ use super::components::{
     BUTTON_BG, BUTTON_BORDER, BUTTON_HOVER_BG, BUTTON_HOVER_BORDER, BUTTON_PRESSED_BG,
 };
 use super::types::{
-    BackpackPanel, CarriedIcon, CarriedItem, CarriedLabel, ConverterInputRow, ConverterInputText,
-    ConverterModeText, ConverterOutputText, Crosshair, CurrentSaveText, DeleteSelectionModeText,
-    FovText, GeneratorMaterialText, GeneratorPeriodText, HotbarText, InGameHudStyle,
-    InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle, KeyBindingButton,
-    KeyBindingLabel, LabelerColorText, LocalizedText, MainMenuPanel, OpenSettingsDropdown,
-    PauseAction, PausePanel, PendingKeyBind, PlaceSelectionModeText, SaveListAction, SaveListLabel,
-    SaveListPanel, SaveListTitle, ScrollContainer, ScrollContent, SettingsAction,
-    SettingsDropdownLabel, SettingsDropdownList, SettingsGameplayGroup, SettingsKeyBindingsGroup,
-    SettingsSlider, SettingsSliderFill, SettingsSliderKnob, SettingsStatusText, SettingsTab,
-    SettingsValue, SettingsValueText, SimulationStatusText, SimulationText, SlotArea, SlotLabel,
-    TeleportNameText, TeleportPairText, UiPanelBinding, UiRuntime, UiScaleText,
+    BackpackPanel, CarriedIcon, CarriedItem, CarriedLabel, ConfirmDialogAction, ConfirmDialogKind,
+    ConfirmDialogMessage, ConfirmDialogPanel, ConfirmDialogPrimaryLabel,
+    ConfirmDialogSecondaryLabel, ConfirmDialogState, ConfirmDialogTitle, ConverterInputRow,
+    ConverterInputText, ConverterModeText, ConverterOutputText, Crosshair, CurrentSaveText,
+    DeleteSelectionModeText, FovText, GeneratorMaterialText, GeneratorPeriodText, HotbarText,
+    InGameHudStyle, InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle,
+    KeyBindingButton, KeyBindingLabel, LabelerColorText, LocalizedText, MainMenuPanel,
+    OpenSettingsDropdown, PauseAction, PausePanel, PendingKeyBind, PlaceSelectionModeText,
+    SaveListAction, SaveListLabel, SaveListPanel, SaveListTitle, ScrollContainer, ScrollContent,
+    SettingsAction, SettingsDropdownLabel, SettingsDropdownList, SettingsGameplayGroup,
+    SettingsKeyBindingsGroup, SettingsSlider, SettingsSliderFill, SettingsSliderKnob,
+    SettingsStatusText, SettingsTab, SettingsValue, SettingsValueText, SimulationStatusText,
+    SimulationText, SlotArea, SlotLabel, TeleportNameText, TeleportPairText, UiPanelBinding,
+    UiRuntime, UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -178,44 +181,11 @@ pub fn update_button_hover_ui(
 }
 
 fn pause_action_visible(
-    mode: GameMode,
     save_state: &SaveState,
     solution_state: &SolutionState,
     action: PauseAction,
 ) -> bool {
-    let confirming = mode == GameMode::ConfirmSaveSolutionBeforeEdit;
-    if confirming {
-        return matches!(
-            action,
-            PauseAction::ConfirmSaveSolutionAndEdit
-                | PauseAction::DiscardSolutionAndEdit
-                | PauseAction::CancelEditSwitch
-        );
-    }
-    if mode == GameMode::ConfirmResetSolution {
-        return matches!(
-            action,
-            PauseAction::ConfirmResetSolution | PauseAction::CancelResetSolution
-        );
-    }
-    if mode == GameMode::ConfirmBackToMain {
-        return matches!(
-            action,
-            PauseAction::SaveAndBackToMain
-                | PauseAction::DiscardAndBackToMain
-                | PauseAction::CancelBackToMain
-        );
-    }
-
     match action {
-        PauseAction::ConfirmSaveSolutionAndEdit
-        | PauseAction::DiscardSolutionAndEdit
-        | PauseAction::CancelEditSwitch
-        | PauseAction::SaveAndBackToMain
-        | PauseAction::DiscardAndBackToMain
-        | PauseAction::CancelBackToMain
-        | PauseAction::ConfirmResetSolution
-        | PauseAction::CancelResetSolution => false,
         PauseAction::ToggleBuilderMode => solution_state.entry != WorldEntryMode::PlaySolution,
         PauseAction::ResetSolution => save_state.current_kind == Some(SaveKind::Solution),
         _ => true,
@@ -1043,6 +1013,7 @@ pub fn update_panel_visibility(
         >,
         Query<&mut Node, (With<BackpackPanel>, Without<PauseAction>)>,
         Query<&mut Node, (With<PausePanel>, Without<PauseAction>)>,
+        Query<&mut Node, (With<ConfirmDialogPanel>, Without<PauseAction>)>,
     )>,
     mut pause_buttons: Query<(&PauseAction, &mut Node), With<Button>>,
     mut bound_panels: Query<
@@ -1055,8 +1026,10 @@ pub fn update_panel_visibility(
             Without<SettingsKeyBindingsGroup>,
             Without<BackpackPanel>,
             Without<PausePanel>,
+            Without<ConfirmDialogPanel>,
         ),
     >,
+    confirm_dialog: Res<ConfirmDialogState>,
 ) {
     for mut style in &mut style_sets.p0() {
         style.display = if *mode == GameMode::MainMenu {
@@ -1101,13 +1074,15 @@ pub fn update_panel_visibility(
     }
 
     for mut style in &mut style_sets.p5() {
-        style.display = if matches!(
-            *mode,
-            GameMode::Paused
-                | GameMode::ConfirmSaveSolutionBeforeEdit
-                | GameMode::ConfirmBackToMain
-                | GameMode::ConfirmResetSolution
-        ) {
+        style.display = if *mode == GameMode::Paused {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    for mut style in &mut style_sets.p6() {
+        style.display = if confirm_dialog.kind.is_some() {
             Display::Flex
         } else {
             Display::None
@@ -1115,7 +1090,7 @@ pub fn update_panel_visibility(
     }
 
     for (action, mut style) in &mut pause_buttons {
-        style.display = if pause_action_visible(*mode, &save_state, &solution_state, *action) {
+        style.display = if pause_action_visible(&save_state, &solution_state, *action) {
             Display::Flex
         } else {
             Display::None
@@ -1278,12 +1253,6 @@ pub fn update_save_list_ui(
             }
             SaveListAction::NewPuzzle => i18n.text("button.new_puzzle"),
             SaveListAction::NewSolution => i18n.text("button.new_solution"),
-            SaveListAction::ConfirmDelete => save_state
-                .pending_delete
-                .as_ref()
-                .map(|name| i18n.fmt("save.confirm_delete", &[("name", name.clone())]))
-                .unwrap_or_else(|| i18n.text("button.delete")),
-            SaveListAction::CancelDelete => i18n.text("button.cancel"),
             SaveListAction::Back => i18n.text("button.back"),
         };
 
@@ -1294,9 +1263,6 @@ pub fn update_save_list_ui(
             SaveListAction::DeleteSolution(index) => play_flow && solutions.get(index).is_some(),
             SaveListAction::NewPuzzle => edit_flow,
             SaveListAction::NewSolution => play_flow && save_state.selected_puzzle.is_some(),
-            SaveListAction::ConfirmDelete | SaveListAction::CancelDelete => {
-                save_state.pending_delete.is_some()
-            }
             SaveListAction::Back => true,
         };
         let selected_puzzle_button = matches!(*action, SaveListAction::LoadPuzzle(_))
@@ -1321,6 +1287,87 @@ pub fn update_save_list_ui(
             if let Ok(mut text) = text_sets.p1().get_mut(child) {
                 text.0 = label.clone();
             }
+        }
+    }
+}
+
+pub fn update_confirm_dialog_ui(
+    dialog: Res<ConfirmDialogState>,
+    i18n: Res<I18n>,
+    mut title: Query<&mut Text, With<ConfirmDialogTitle>>,
+    mut message: Query<&mut Text, (With<ConfirmDialogMessage>, Without<ConfirmDialogTitle>)>,
+    mut primary: Query<
+        &mut Text,
+        (
+            With<ConfirmDialogPrimaryLabel>,
+            Without<ConfirmDialogTitle>,
+            Without<ConfirmDialogMessage>,
+        ),
+    >,
+    mut secondary: Query<
+        &mut Text,
+        (
+            With<ConfirmDialogSecondaryLabel>,
+            Without<ConfirmDialogTitle>,
+            Without<ConfirmDialogMessage>,
+            Without<ConfirmDialogPrimaryLabel>,
+        ),
+    >,
+    mut action_buttons: Query<(&ConfirmDialogAction, &mut Node), With<Button>>,
+) {
+    if !dialog.is_changed() && !i18n.is_changed() {
+        return;
+    }
+
+    let Some(kind) = dialog.kind.as_ref() else {
+        return;
+    };
+    if let Ok(mut text) = title.single_mut() {
+        text.0 = i18n.text("confirm.title");
+    }
+    if let Ok(mut text) = message.single_mut() {
+        text.0 = match kind {
+            ConfirmDialogKind::DeleteSave { name } => {
+                i18n.fmt("save.confirm_delete", &[("name", name.clone())])
+            }
+            ConfirmDialogKind::ResetSolution => i18n.text("confirm.reset_solution"),
+            ConfirmDialogKind::ReturnToMain => i18n.text("confirm.return_to_main"),
+            ConfirmDialogKind::SaveSolutionBeforeEdit => {
+                i18n.text("confirm.save_solution_before_edit")
+            }
+        };
+    }
+    if let Ok(mut text) = primary.single_mut() {
+        text.0 = match kind {
+            ConfirmDialogKind::DeleteSave { .. } => i18n.text("button.delete"),
+            ConfirmDialogKind::ResetSolution => i18n.text("button.confirm_reset_solution"),
+            ConfirmDialogKind::ReturnToMain => i18n.text("button.save_and_back"),
+            ConfirmDialogKind::SaveSolutionBeforeEdit => i18n.text("button.save_solution_and_edit"),
+        };
+    }
+    if let Ok(mut text) = secondary.single_mut() {
+        text.0 = match kind {
+            ConfirmDialogKind::ReturnToMain => i18n.text("button.discard_and_back"),
+            ConfirmDialogKind::SaveSolutionBeforeEdit => {
+                i18n.text("button.discard_solution_and_edit")
+            }
+            _ => String::new(),
+        };
+    }
+
+    let secondary_visible = matches!(
+        kind,
+        ConfirmDialogKind::ReturnToMain | ConfirmDialogKind::SaveSolutionBeforeEdit
+    );
+    for (action, mut node) in &mut action_buttons {
+        if matches!(*action, ConfirmDialogAction::Secondary) {
+            node.display = if secondary_visible {
+                Display::Flex
+            } else {
+                Display::None
+            };
+        } else {
+            node.display = Display::Flex;
         }
     }
 }
