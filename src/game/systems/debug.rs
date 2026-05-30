@@ -169,22 +169,17 @@ fn micros(ms: f64) -> f64 {
 
 pub fn setup_debug_ui(mut commands: Commands) {
     commands.spawn((
-        TextBundle {
-            text: Text::from_section(
-                "",
-                TextStyle {
-                    font_size: 16.0,
-                    color: Color::srgb(0.95, 1.0, 0.72),
-                    ..default()
-                },
-            ),
-            style: Style {
-                position_type: PositionType::Absolute,
-                right: Val::Px(18.0),
-                top: Val::Px(14.0),
-                display: Display::None,
-                ..default()
-            },
+        Text::new(""),
+        TextFont {
+            font_size: 16.0,
+            ..default()
+        },
+        TextColor(Color::srgb(0.95, 1.0, 0.72)),
+        Node {
+            position_type: PositionType::Absolute,
+            right: Val::Px(18.0),
+            top: Val::Px(14.0),
+            display: Display::None,
             ..default()
         },
         DebugPanel,
@@ -218,9 +213,9 @@ pub fn update_debug_ui(
     sim_stats: Res<SimulationStepStats>,
     player: Query<&Transform, With<FlyCamera>>,
     block_entities: Query<Entity, With<BlockEntity>>,
-    mut panel: Query<(&mut Text, &mut Style), With<DebugPanel>>,
+    mut panel: Query<(&mut Text, &mut Node), With<DebugPanel>>,
 ) {
-    let Ok((mut text, mut style)) = panel.get_single_mut() else {
+    let Ok((mut text, mut style)) = panel.single_mut() else {
         return;
     };
 
@@ -235,8 +230,8 @@ pub fn update_debug_ui(
     }
 
     perf.display_timer.tick(time.delta());
-    if !perf.display_timer.finished() && !perf.display_text.is_empty() {
-        text.sections[0].value.clone_from(&perf.display_text);
+    if !perf.display_timer.is_finished() && !perf.display_text.is_empty() {
+        text.0.clone_from(&perf.display_text);
         return;
     }
 
@@ -246,7 +241,7 @@ pub fn update_debug_ui(
         .unwrap_or(0.0);
 
     let player_pos = player
-        .get_single()
+        .single()
         .map(|transform| transform.translation)
         .unwrap_or(Vec3::ZERO);
 
@@ -297,7 +292,7 @@ pub fn update_debug_ui(
         player_pos.y,
         player_pos.z
     );
-    text.sections[0].value.clone_from(&perf.display_text);
+    text.0.clone_from(&perf.display_text);
 }
 
 pub fn draw_player_collider(
@@ -309,14 +304,14 @@ pub fn draw_player_collider(
         return;
     }
 
-    let Ok(transform) = player.get_single() else {
+    let Ok(transform) = player.single() else {
         return;
     };
 
     let (min, max) = player_collision_box(transform.translation);
     let center = (min + max) * 0.5;
     let size = max - min;
-    gizmos.cuboid(
+    gizmos.cube(
         Transform::from_translation(center).with_scale(size),
         Color::srgb(1.0, 0.1, 0.1),
     );

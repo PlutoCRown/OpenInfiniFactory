@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::grid_to_world;
-use crate::game::world::rendering::BlockEntity;
 
 pub const EDIT_ANIMATION_SECONDS: f32 = 0.3;
 pub const SIMULATION_TURN_SECONDS: f32 = 0.5;
@@ -115,11 +114,11 @@ impl AnimatedBlock {
 pub fn animate_blocks(
     time: Res<Time>,
     mut commands: Commands,
-    mut blocks: Query<(Entity, &mut Transform, &mut AnimatedBlock), With<BlockEntity>>,
+    mut blocks: Query<(Entity, &mut Transform, &mut AnimatedBlock)>,
     mut pistons: Query<(Entity, &mut Transform, &mut AnimatedPiston), Without<AnimatedBlock>>,
 ) {
     for (entity, mut transform, mut animation) in &mut blocks {
-        animation.elapsed += time.delta_seconds();
+        animation.elapsed += time.delta_secs();
         let t = (animation.elapsed / animation.timing.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
         let eased = match animation.timing.easing {
             AnimationEasing::Linear => t,
@@ -140,7 +139,7 @@ pub fn animate_blocks(
     }
 
     for (entity, mut transform, mut animation) in &mut pistons {
-        animation.elapsed += time.delta_seconds();
+        animation.elapsed += time.delta_secs();
         let t = (animation.elapsed / animation.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
         let extension = if t < 0.5 { t * 2.0 } else { (1.0 - t) * 2.0 };
         transform.translation = animation.direction * extension * 0.20;

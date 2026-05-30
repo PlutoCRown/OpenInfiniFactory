@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
-use bevy::render::render_resource::{AsBindGroup, ShaderRef};
+use bevy::render::render_resource::AsBindGroup;
+use bevy::shader::ShaderRef;
 
 #[derive(Asset, AsBindGroup, Clone, Debug, TypePath)]
 pub struct SceneBlockMaterial {

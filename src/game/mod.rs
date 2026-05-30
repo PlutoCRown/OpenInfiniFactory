@@ -5,9 +5,9 @@ pub mod systems;
 pub mod ui;
 pub mod world;
 
-use bevy::core_pipeline::experimental::taa::TemporalAntiAliasPlugin;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
-use bevy::pbr::{DirectionalLightShadowMap, MaterialPlugin};
+use bevy::light::{DirectionalLightShadowMap, GlobalAmbientLight};
+use bevy::pbr::MaterialPlugin;
 use bevy::prelude::*;
 
 use crate::shared::config::load_config;
@@ -59,9 +59,10 @@ impl Plugin for GamePlugin {
         };
 
         app.insert_resource(ClearColor(Color::srgb(0.58, 0.68, 0.76)))
-            .insert_resource(AmbientLight {
+            .insert_resource(GlobalAmbientLight {
                 color: Color::srgb(0.78, 0.86, 1.0),
                 brightness: 260.0,
+                affects_lightmapped_meshes: true,
             })
             .insert_resource(DirectionalLightShadowMap { size: 2048 })
             .insert_resource(WorldBlocks::default())
@@ -88,7 +89,7 @@ impl Plugin for GamePlugin {
             .insert_resource(systems::debug::DebugState::default())
             .insert_resource(systems::debug::PerfStats::default())
             .insert_resource(CarriedItem::default())
-            .add_plugins((FrameTimeDiagnosticsPlugin, TemporalAntiAliasPlugin))
+            .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(MaterialPlugin::<world::scene_material::SceneBlockMaterial>::default())
             .add_systems(
                 Startup,

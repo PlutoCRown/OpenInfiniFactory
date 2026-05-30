@@ -20,7 +20,7 @@ use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
 pub fn gameplay_input(
     keys: Res<ButtonInput<KeyCode>>,
-    mut mouse_wheel: EventReader<MouseWheel>,
+    mut mouse_wheel: MessageReader<MouseWheel>,
     config: Res<GameConfig>,
     simulation: Res<SimulationState>,
     pending_key_bind: Res<PendingKeyBind>,
@@ -573,7 +573,7 @@ fn move_selection(
             .iter()
             .find(|(_, block_entity)| block_entity.pos == *pos)
         {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 
@@ -603,7 +603,7 @@ fn move_selection(
 
 fn despawn_block_entities(commands: &mut Commands, block_entities: &Query<(Entity, &BlockEntity)>) {
     for (entity, _) in block_entities {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
@@ -760,7 +760,7 @@ fn can_place_block_at(
         return false;
     }
 
-    if let Ok(player_transform) = player.get_single() {
+    if let Ok(player_transform) = player.single() {
         if player_intersects_block(player_transform.translation, place_at) {
             return false;
         }
@@ -815,7 +815,7 @@ fn commit_edit_gesture(
                         .iter()
                         .find(|(_, block_entity)| block_entity.pos == pos)
                     {
-                        commands.entity(entity).despawn_recursive();
+                        commands.entity(entity).despawn();
                     }
                 }
             }
@@ -957,11 +957,11 @@ pub fn update_hover(
     world: Res<WorldBlocks>,
     player: Query<&Transform, With<FlyCamera>>,
     mut marker: Query<
-        (&mut Transform, &mut Visibility, &Handle<StandardMaterial>),
+        (&mut Transform, &mut Visibility, &MeshMaterial3d<StandardMaterial>),
         (With<HoverMarker>, Without<FlyCamera>),
     >,
     mut preview: Query<
-        (&mut Transform, &mut Visibility, &Handle<StandardMaterial>),
+        (&mut Transform, &mut Visibility, &MeshMaterial3d<StandardMaterial>),
         (
             With<PlacementPreview>,
             Without<HoverMarker>,
@@ -973,16 +973,16 @@ pub fn update_hover(
     if *mode != GameMode::Playing {
         placement.target = None;
         placement.edit_gesture = None;
-        if let Ok((_, mut visibility, _)) = marker.get_single_mut() {
+        if let Ok((_, mut visibility, _)) = marker.single_mut() {
             *visibility = Visibility::Hidden;
         }
-        if let Ok((_, mut visibility, _)) = preview.get_single_mut() {
+        if let Ok((_, mut visibility, _)) = preview.single_mut() {
             *visibility = Visibility::Hidden;
         }
         return;
     }
 
-    let Ok(camera_transform) = camera.get_single() else {
+    let Ok(camera_transform) = camera.single() else {
         return;
     };
 
@@ -993,7 +993,7 @@ pub fn update_hover(
     );
 
     let Ok((mut marker_transform, mut marker_visibility, marker_material)) =
-        marker.get_single_mut()
+        marker.single_mut()
     else {
         return;
     };
@@ -1003,14 +1003,14 @@ pub fn update_hover(
     } else if let Some(target) = placement.target {
         marker_transform.translation = grid_to_world(target.pos);
         *marker_visibility = Visibility::Visible;
-        if let Some(material) = materials.get_mut(marker_material) {
+        if let Some(material) = materials.get_mut(&marker_material.0) {
             material.base_color = Color::srgba(1.0, 1.0, 1.0, 0.16);
         }
     } else {
         *marker_visibility = Visibility::Hidden;
     }
 
-    let Ok((_, mut preview_visibility, _)) = preview.get_single_mut() else {
+    let Ok((_, mut preview_visibility, _)) = preview.single_mut() else {
         return;
     };
 

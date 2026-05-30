@@ -1,9 +1,10 @@
-use bevy::pbr::CascadeShadowConfigBuilder;
+use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::game::world::animation::{
-    AnimatedBlock, AnimatedPiston, AnimationTiming, BlockAnimation, PistonAnimation,
+    AnimatedBlock, AnimatedPiston, AnimationEasing, AnimationTiming, BlockAnimation,
+    BlockAnimationKind, PistonAnimation,
 };
 use crate::game::world::blocks::{
     BlockData, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
@@ -36,35 +37,33 @@ pub fn setup_scene(
     mut scene_materials: ResMut<Assets<SceneBlockMaterial>>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
+    commands.spawn((
+        PointLight {
             intensity: 1100.0,
             shadows_enabled: true,
             range: 18.0,
             radius: 3.5,
             ..default()
         },
-        transform: Transform::from_xyz(3.5, 5.5, 4.5),
-        ..default()
-    });
+        Transform::from_xyz(3.5, 5.5, 4.5),
+    ));
 
-    commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight {
+    commands.spawn((
+        DirectionalLight {
             illuminance: 9500.0,
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -1.05, -0.55, -0.28)),
-        cascade_shadow_config: CascadeShadowConfigBuilder {
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -1.05, -0.55, -0.28)),
+        CascadeShadowConfigBuilder {
             num_cascades: 3,
             minimum_distance: 0.15,
             maximum_distance: 48.0,
             first_cascade_far_bound: 8.0,
             overlap_proportion: 0.16,
         }
-        .into(),
-        ..default()
-    });
+        .build(),
+    ));
 
     let render_assets = WorldRenderAssets::new(
         &mut meshes,
@@ -83,12 +82,9 @@ pub fn setup_scene(
     });
 
     commands.spawn((
-        PbrBundle {
-            mesh: marker_mesh,
-            material: marker_material,
-            visibility: Visibility::Hidden,
-            ..default()
-        },
+        Mesh3d(marker_mesh),
+        MeshMaterial3d(marker_material),
+        Visibility::Hidden,
         HoverMarker,
     ));
 
@@ -102,12 +98,9 @@ pub fn setup_scene(
     });
 
     commands.spawn((
-        PbrBundle {
-            mesh: preview_mesh,
-            material: preview_material,
-            visibility: Visibility::Hidden,
-            ..default()
-        },
+        Mesh3d(preview_mesh),
+        MeshMaterial3d(preview_material),
+        Visibility::Hidden,
         PlacementPreview,
     ));
 }
@@ -123,13 +116,13 @@ pub fn rebuild_world(commands: &mut Commands, world: &WorldBlocks, assets: &Worl
 
 pub fn despawn_world(commands: &mut Commands, block_entities: &Query<Entity, With<BlockEntity>>) {
     for entity in block_entities {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
 pub fn despawn_edit_previews(commands: &mut Commands, previews: &Query<Entity, With<EditPreview>>) {
     for entity in previews {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
@@ -138,7 +131,7 @@ pub fn despawn_pending_generated_previews(
     previews: &Query<Entity, With<PendingGeneratedPreview>>,
 ) {
     for entity in previews {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
@@ -149,12 +142,9 @@ pub fn spawn_edit_preview(
     kind: EditPreviewKind,
 ) {
     commands.spawn((
-        PbrBundle {
-            mesh: assets.block.clone(),
-            material: assets.edit_preview_material(kind),
-            transform: Transform::from_translation(grid_to_world(pos)),
-            ..default()
-        },
+        Mesh3d(assets.block.clone()),
+        MeshMaterial3d(assets.edit_preview_material(kind)),
+        Transform::from_translation(grid_to_world(pos)),
         EditPreview,
     ));
 }
@@ -374,29 +364,38 @@ fn spawn_block_model(
     pending_generated_preview: bool,
 ) {
     let mut transform = Transform::from_translation(grid_to_world(pos));
-    if animation.is_none() {
+    if let Some(animation) = animation {
+        let progress = animation.progress.unwrap_or(0.0).clamp(0.0, 1.0);
+        let eased = match timing.easing {
+            AnimationEasing::Linear => progress,
+            AnimationEasing::SmoothStep => progress * progress * (3.0 - 2.0 * progress),
+        };
+        transform.translation =
+            grid_to_world(animation.from_pos).lerp(grid_to_world(animation.to_pos), eased);
+        transform.rotation = Quat::from_rotation_y(animation.from_facing.yaw())
+            .slerp(Quat::from_rotation_y(animation.to_facing.yaw()), eased);
+        transform.scale = match animation.kind {
+            BlockAnimationKind::Move => Vec3::ONE,
+            BlockAnimationKind::SpawnScale => Vec3::splat(eased),
+        };
+    } else {
         transform.rotation = Quat::from_rotation_y(data.facing.yaw());
     }
 
     let mut entity = if data.kind == crate::game::world::blocks::BlockKind::Wire {
-        commands.spawn(SpatialBundle {
-            transform,
-            ..default()
-        })
+        commands.spawn(transform)
     } else if let Some(scene_material) = assets.scene_material(data.kind) {
-        commands.spawn(MaterialMeshBundle::<SceneBlockMaterial> {
-            mesh: assets.block_mesh(data.kind),
-            material: scene_material,
+        commands.spawn((
+            Mesh3d(assets.block_mesh(data.kind)),
+            MeshMaterial3d::<SceneBlockMaterial>(scene_material),
             transform,
-            ..default()
-        })
+        ))
     } else {
-        commands.spawn(PbrBundle {
-            mesh: assets.block_mesh(data.kind),
-            material: material.clone(),
+        commands.spawn((
+            Mesh3d(assets.block_mesh(data.kind)),
+            MeshMaterial3d(material.clone()),
             transform,
-            ..default()
-        })
+        ))
     };
 
     if with_block_entity {
@@ -416,7 +415,7 @@ fn spawn_block_model(
     }
 
     entity.with_children(|parent| {
-        let mut model_root = parent.spawn(SpatialBundle::default());
+        let mut model_root = parent.spawn(Transform::default());
         if let Some(piston_animation) = piston_animation {
             model_root.insert(AnimatedPiston::new(piston_animation));
         }
@@ -427,12 +426,11 @@ fn spawn_block_model(
         let render_behavior = data.kind.render_behavior(data.facing);
 
         if render_behavior.goal_topper {
-            parent.spawn(PbrBundle {
-                mesh: assets.goal_top.clone(),
-                material: assets.goal_top_material.clone(),
-                transform: Transform::from_xyz(0.0, 0.55, 0.0),
-                ..default()
-            });
+            parent.spawn((
+                Mesh3d(assets.goal_top.clone()),
+                MeshMaterial3d(assets.goal_top_material.clone()),
+                Transform::from_xyz(0.0, 0.55, 0.0),
+            ));
         }
 
         if let Some(weld_connector) = render_behavior.weld_connector {
@@ -449,12 +447,11 @@ fn spawn_block_model(
                     .is_some_and(|block| weld_connects_to(block, -offset))
                 {
                     let local_offset = local_connector_offset(data, offset);
-                    parent.spawn(PbrBundle {
-                        mesh: assets.connector_mesh(local_offset),
-                        material: assets.weld_connector_material.clone(),
-                        transform: Transform::from_translation(local_offset.as_vec3() * 0.34),
-                        ..default()
-                    });
+                    parent.spawn((
+                        Mesh3d(assets.connector_mesh(local_offset)),
+                        MeshMaterial3d(assets.weld_connector_material.clone()),
+                        Transform::from_translation(local_offset.as_vec3() * 0.34),
+                    ));
                 }
             }
         }
@@ -471,23 +468,18 @@ fn spawn_block_model(
                 {
                     connected_offsets.push(offset);
                     let local_offset = local_connector_offset(data, offset);
-                    parent.spawn(PbrBundle {
-                        mesh: assets.wire_connector_mesh(local_offset),
-                        material: assets.wire_connector_material.clone(),
-                        transform: Transform::from_translation(local_offset.as_vec3() * 0.34),
-                        ..default()
-                    });
+                    parent.spawn((
+                        Mesh3d(assets.wire_connector_mesh(local_offset)),
+                        MeshMaterial3d(assets.wire_connector_material.clone()),
+                        Transform::from_translation(local_offset.as_vec3() * 0.34),
+                    ));
                 }
             }
 
             if data.kind == crate::game::world::blocks::BlockKind::Wire
                 && connected_offsets.is_empty()
             {
-                parent.spawn(PbrBundle {
-                    mesh: assets.wire_node_mesh(),
-                    material,
-                    ..default()
-                });
+                parent.spawn((Mesh3d(assets.wire_node_mesh()), MeshMaterial3d(material)));
             }
         }
 
@@ -497,12 +489,11 @@ fn spawn_block_model(
                 .iter()
                 .filter(|(face, _)| face.pos == pos)
             {
-                parent.spawn(PbrBundle {
-                    mesh: assets.face_mark.clone(),
-                    material: assets.face_mark_material(mark.color),
-                    transform: face_mark_transform(face.normal),
-                    ..default()
-                });
+                parent.spawn((
+                    Mesh3d(assets.face_mark.clone()),
+                    MeshMaterial3d(assets.face_mark_material(mark.color)),
+                    face_mark_transform(face.normal),
+                ));
             }
         }
     });
@@ -524,7 +515,11 @@ fn face_mark_transform(normal: IVec3) -> Transform {
     }
 }
 
-fn spawn_model_parts(parent: &mut ChildBuilder, assets: &WorldRenderAssets, data: BlockData) {
+fn spawn_model_parts(
+    parent: &mut ChildSpawnerCommands,
+    assets: &WorldRenderAssets,
+    data: BlockData,
+) {
     let parts = match data.kind.model() {
         BlockModel::Default => &[],
         BlockModel::Parts(parts) => parts,
@@ -532,17 +527,16 @@ fn spawn_model_parts(parent: &mut ChildBuilder, assets: &WorldRenderAssets, data
     };
 
     for part in parts {
-        parent.spawn(PbrBundle {
-            mesh: assets.model_mesh(part.mesh),
-            material: assets.model_material(part.material),
-            transform: Transform {
+        parent.spawn((
+            Mesh3d(assets.model_mesh(part.mesh)),
+            MeshMaterial3d(assets.model_material(part.material)),
+            Transform {
                 translation: model_vec3(part.translation),
                 rotation: Quat::from_rotation_y(part.yaw_radians),
                 scale: model_vec3(part.scale),
                 ..default()
             },
-            ..default()
-        });
+        ));
     }
 }
 

@@ -1,14 +1,12 @@
-use bevy::core_pipeline::experimental::taa::TemporalAntiAliasSettings;
+use bevy::anti_alias::taa::TemporalAntiAliasing;
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
 use bevy::input::mouse::MouseMotion;
-use bevy::pbr::{
-    ScreenSpaceAmbientOcclusionQualityLevel, ScreenSpaceAmbientOcclusionSettings,
-    ShadowFilteringMethod,
-};
+use bevy::light::ShadowFilteringMethod;
+use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
 use bevy::prelude::*;
 use bevy::render::camera::TemporalJitter;
-use bevy::window::{CursorGrabMode, PrimaryWindow};
+use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use crate::game::state::{GameMode, GameSettings};
 use crate::game::world::grid::WorldBlocks;
@@ -39,21 +37,17 @@ pub struct FlyCamera {
 
 pub fn spawn_player(mut commands: Commands) {
     commands.spawn((
-        Camera3dBundle {
-            camera: Camera {
-                hdr: true,
-                ..default()
-            },
-            tonemapping: Tonemapping::SomewhatBoringDisplayTransform,
-            deband_dither: DebandDither::Enabled,
-            transform: Transform::from_xyz(0.5, SPAWN_EYE_Y + 1.2, 10.5)
-                .looking_at(Vec3::new(0.5, 0.8, 0.5), Vec3::Y),
+        Camera3d::default(),
+        Camera::default(),
+        Tonemapping::SomewhatBoringDisplayTransform,
+        DebandDither::Enabled,
+        Transform::from_xyz(0.5, SPAWN_EYE_Y + 1.2, 10.5)
+            .looking_at(Vec3::new(0.5, 0.8, 0.5), Vec3::Y),
+        ScreenSpaceAmbientOcclusion {
+            quality_level: ScreenSpaceAmbientOcclusionQualityLevel::Medium,
             ..default()
         },
-        ScreenSpaceAmbientOcclusionSettings {
-            quality_level: ScreenSpaceAmbientOcclusionQualityLevel::Medium,
-        },
-        TemporalAntiAliasSettings::default(),
+        TemporalAntiAliasing::default(),
         TemporalJitter::default(),
         DepthPrepass,
         NormalPrepass,
@@ -84,11 +78,11 @@ pub fn camera_move(
         return;
     }
 
-    let Ok((mut camera, mut transform)) = query.get_single_mut() else {
+    let Ok((mut camera, mut transform)) = query.single_mut() else {
         return;
     };
 
-    let now = time.elapsed_seconds();
+    let now = time.elapsed_secs();
     let bindings = &config.key_bindings;
     let jump_key = bindings.jump_or_fly_up.key_code();
     let fly_down_key = bindings.fly_down.key_code();
@@ -130,7 +124,7 @@ pub fn camera_move(
         } else {
             PLAYER_SPEED
         };
-        let delta = horizontal * speed * time.delta_seconds();
+        let delta = horizontal * speed * time.delta_secs();
         move_with_collision(&mut transform.translation, delta, &world);
     }
 
@@ -145,13 +139,13 @@ pub fn camera_move(
         if vertical != 0.0 {
             move_with_collision(
                 &mut transform.translation,
-                Vec3::Y * vertical * FLY_SPEED * time.delta_seconds(),
+                Vec3::Y * vertical * FLY_SPEED * time.delta_secs(),
                 &world,
             );
         }
     } else {
-        camera.velocity_y -= GRAVITY * settings.gravity_scale * time.delta_seconds();
-        let vertical_delta = Vec3::Y * camera.velocity_y * time.delta_seconds();
+        camera.velocity_y -= GRAVITY * settings.gravity_scale * time.delta_secs();
+        let vertical_delta = Vec3::Y * camera.velocity_y * time.delta_secs();
         let before = transform.translation;
         move_with_collision(&mut transform.translation, vertical_delta, &world);
 
@@ -175,10 +169,10 @@ pub fn camera_move(
 pub fn camera_look(
     keys: Res<ButtonInput<KeyCode>>,
     mode: Res<GameMode>,
-    mut mouse_motion: EventReader<MouseMotion>,
+    mut mouse_motion: MessageReader<MouseMotion>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
-    let Ok((mut camera, mut transform)) = query.get_single_mut() else {
+    let Ok((mut camera, mut transform)) = query.single_mut() else {
         return;
     };
 
@@ -201,18 +195,18 @@ pub fn camera_look(
 pub fn sync_cursor_grab(
     keys: Res<ButtonInput<KeyCode>>,
     mode: Res<GameMode>,
-    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+    mut windows: Query<&mut CursorOptions, With<PrimaryWindow>>,
 ) {
-    let Ok(mut window) = windows.get_single_mut() else {
+    let Ok(mut cursor) = windows.single_mut() else {
         return;
     };
 
     if *mode == GameMode::Playing && !alt_pressed(&keys) {
-        window.cursor.grab_mode = CursorGrabMode::Locked;
-        window.cursor.visible = false;
+        cursor.grab_mode = CursorGrabMode::Locked;
+        cursor.visible = false;
     } else {
-        window.cursor.grab_mode = CursorGrabMode::None;
-        window.cursor.visible = true;
+        cursor.grab_mode = CursorGrabMode::None;
+        cursor.visible = true;
     }
 }
 

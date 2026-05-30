@@ -46,7 +46,7 @@ pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
     });
 }
 
-fn spawn_generator_panel(root: &mut ChildBuilder, i18n: &I18n) {
+fn spawn_generator_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((panel_bundle(480.0, 320.0, -240.0, -160.0), GeneratorPanel))
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "generator.title", 26.0, Color::WHITE));
@@ -83,7 +83,7 @@ fn spawn_generator_panel(root: &mut ChildBuilder, i18n: &I18n) {
         });
 }
 
-fn spawn_teleport_panel(root: &mut ChildBuilder, i18n: &I18n) {
+fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((panel_bundle(460.0, 280.0, -230.0, -140.0), TeleportPanel))
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "teleport.title", 26.0, Color::WHITE));
@@ -112,7 +112,7 @@ fn spawn_teleport_panel(root: &mut ChildBuilder, i18n: &I18n) {
         });
 }
 
-fn spawn_converter_panel(root: &mut ChildBuilder, i18n: &I18n) {
+fn spawn_converter_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((panel_bundle(460.0, 320.0, -230.0, -160.0), ConverterPanel))
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "converter.title", 26.0, Color::WHITE));
@@ -154,7 +154,7 @@ fn spawn_converter_panel(root: &mut ChildBuilder, i18n: &I18n) {
         });
 }
 
-fn spawn_labeler_panel(root: &mut ChildBuilder, i18n: &I18n) {
+fn spawn_labeler_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((panel_bundle(420.0, 240.0, -210.0, -120.0), LabelerPanel))
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "labeler.title", 26.0, Color::WHITE));
@@ -182,7 +182,7 @@ fn spawn_labeler_panel(root: &mut ChildBuilder, i18n: &I18n) {
         });
 }
 
-fn spawn_status_overlays(root: &mut ChildBuilder) {
+fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
     root.spawn((
         absolute_text_bundle(
             "+",
@@ -250,27 +250,24 @@ fn spawn_status_overlays(root: &mut ChildBuilder) {
     ));
 }
 
-fn spawn_hotbar(root: &mut ChildBuilder) {
+fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
     root.spawn((
-        NodeBundle {
-            style: Style {
-                width: Val::Px(default_button_size(540.0)),
-                height: Val::Px(default_button_size(58.0)),
-                position_type: PositionType::Absolute,
-                left: Val::Percent(50.0),
-                bottom: Val::Px(22.0),
-                margin: UiRect {
-                    left: Val::Px(-default_button_size(270.0)),
-                    ..default()
-                },
-                display: Display::Flex,
-                justify_content: JustifyContent::Center,
-                column_gap: Val::Px(4.0),
+        Node {
+            width: Val::Px(default_button_size(540.0)),
+            height: Val::Px(default_button_size(58.0)),
+            position_type: PositionType::Absolute,
+            left: Val::Percent(50.0),
+            bottom: Val::Px(22.0),
+            margin: UiRect {
+                left: Val::Px(-default_button_size(270.0)),
                 ..default()
             },
-            background_color: Color::srgba(0.04, 0.04, 0.04, 0.38).into(),
+            display: Display::Flex,
+            justify_content: JustifyContent::Center,
+            column_gap: Val::Px(4.0),
             ..default()
         },
+        BackgroundColor(Color::srgba(0.04, 0.04, 0.04, 0.38)),
         InGameHudStyle,
     ))
     .with_children(|bar| {
@@ -280,7 +277,7 @@ fn spawn_hotbar(root: &mut ChildBuilder) {
     });
 }
 
-fn spawn_inventory_panel(root: &mut ChildBuilder, i18n: &I18n) {
+fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((inventory_panel_bundle(), BackpackPanel))
         .with_children(|panel| {
             panel.spawn((
@@ -301,7 +298,7 @@ fn spawn_inventory_panel(root: &mut ChildBuilder, i18n: &I18n) {
         });
 }
 
-fn spawn_pause_panel(root: &mut ChildBuilder, i18n: &I18n) {
+fn spawn_pause_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((panel_bundle(420.0, 560.0, -210.0, -280.0), PausePanel))
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "state.paused", 30.0, Color::WHITE));
@@ -330,7 +327,7 @@ fn spawn_pause_panel(root: &mut ChildBuilder, i18n: &I18n) {
         });
 }
 
-fn spawn_settings_panel(root: &mut ChildBuilder, i18n: &I18n) {
+fn spawn_settings_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((panel_bundle(840.0, 660.0, -420.0, -330.0), SettingsPanel))
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "settings.title", 30.0, Color::WHITE));
@@ -345,9 +342,9 @@ fn spawn_settings_panel(root: &mut ChildBuilder, i18n: &I18n) {
         });
 }
 
-fn spawn_settings_tabs(panel: &mut ChildBuilder, i18n: &I18n) {
+fn spawn_settings_tabs(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
     panel
-        .spawn(transparent_node(Style {
+        .spawn(transparent_node(Node {
             width: Val::Percent(100.0),
             height: Val::Px(default_button_size(42.0)),
             display: Display::Flex,
@@ -371,14 +368,14 @@ fn spawn_settings_tabs(panel: &mut ChildBuilder, i18n: &I18n) {
 }
 
 fn spawn_settings_row(
-    panel: &mut ChildBuilder,
+    panel: &mut ChildSpawnerCommands,
     i18n: &I18n,
     label_key: &'static str,
     label_marker: impl Bundle,
-    controls: impl FnOnce(&mut ChildBuilder),
+    controls: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
     panel
-        .spawn(transparent_node(Style {
+        .spawn(transparent_node(Node {
             width: Val::Percent(100.0),
             min_height: Val::Px(default_button_size(54.0)),
             display: Display::Flex,
@@ -392,7 +389,7 @@ fn spawn_settings_row(
                 localized_text(i18n, label_key, 15.0, Color::srgb(0.82, 0.88, 0.90)),
                 label_marker,
             ));
-            row.spawn(transparent_node(Style {
+            row.spawn(transparent_node(Node {
                 width: Val::Px(430.0),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(8.0),
@@ -402,14 +399,14 @@ fn spawn_settings_row(
         });
 }
 
-fn spawn_gameplay_settings(panel: &mut ChildBuilder, i18n: &I18n) {
+fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
     panel
         .spawn(scroll_container(430.0))
         .insert(SettingsGameplayGroup)
         .with_children(|container| {
             container
                 .spawn((
-                    transparent_node(Style {
+                    transparent_node(Node {
                         width: Val::Percent(100.0),
                         flex_direction: FlexDirection::Column,
                         row_gap: Val::Px(8.0),
@@ -455,7 +452,7 @@ fn spawn_gameplay_settings(panel: &mut ChildBuilder, i18n: &I18n) {
         });
 }
 
-fn spawn_key_bindings(panel: &mut ChildBuilder, i18n: &I18n) {
+fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
     panel
         .spawn(scroll_container(360.0))
         .insert(SettingsKeyBindingsGroup)
@@ -469,7 +466,7 @@ fn spawn_key_bindings(panel: &mut ChildBuilder, i18n: &I18n) {
                         18.0,
                         Color::WHITE,
                     ));
-                    grid.spawn(transparent_node(Style::default()));
+                    grid.spawn(transparent_node(Node::default()));
                     for action in ConfigAction::GENERAL {
                         spawn_localized_settings_button(
                             grid,
@@ -484,7 +481,7 @@ fn spawn_key_bindings(panel: &mut ChildBuilder, i18n: &I18n) {
                         18.0,
                         Color::WHITE,
                     ));
-                    grid.spawn(transparent_node(Style::default()));
+                    grid.spawn(transparent_node(Node::default()));
                     for action in ConfigAction::SIMULATION {
                         spawn_localized_settings_button(
                             grid,
@@ -497,7 +494,7 @@ fn spawn_key_bindings(panel: &mut ChildBuilder, i18n: &I18n) {
         });
 }
 
-fn spawn_settings_footer(panel: &mut ChildBuilder, i18n: &I18n) {
+fn spawn_settings_footer(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
     panel.spawn(flex_row(42.0, 8.0)).with_children(|row| {
         for (key, action) in [
             ("button.reset_defaults", SettingsAction::ResetDefaults),
@@ -509,7 +506,7 @@ fn spawn_settings_footer(panel: &mut ChildBuilder, i18n: &I18n) {
     });
 }
 
-fn spawn_main_menu(root: &mut ChildBuilder, i18n: &I18n) {
+fn spawn_main_menu(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((panel_bundle(420.0, 340.0, -210.0, -170.0), MainMenuPanel))
         .with_children(|panel| {
             panel.spawn(localized_text(i18n, "main.title", 30.0, Color::WHITE));
@@ -524,7 +521,7 @@ fn spawn_main_menu(root: &mut ChildBuilder, i18n: &I18n) {
         });
 }
 
-fn spawn_save_list(root: &mut ChildBuilder) {
+fn spawn_save_list(root: &mut ChildSpawnerCommands) {
     root.spawn((panel_bundle(900.0, 620.0, -450.0, -310.0), SaveListPanel))
         .with_children(|panel| {
             panel.spawn((text("", 26.0, Color::WHITE), SaveListTitle));
@@ -532,7 +529,7 @@ fn spawn_save_list(root: &mut ChildBuilder) {
                 .spawn(flex_row(470.0, 12.0))
                 .with_children(|columns| {
                     columns
-                        .spawn(transparent_node(Style {
+                        .spawn(transparent_node(Node {
                             width: Val::Px(420.0),
                             flex_direction: FlexDirection::Column,
                             row_gap: Val::Px(6.0),
@@ -556,7 +553,7 @@ fn spawn_save_list(root: &mut ChildBuilder) {
                             spawn_save_slot_button(left, SaveListAction::NewPuzzle);
                         });
                     columns
-                        .spawn(transparent_node(Style {
+                        .spawn(transparent_node(Node {
                             width: Val::Px(420.0),
                             flex_direction: FlexDirection::Column,
                             row_gap: Val::Px(6.0),
@@ -588,44 +585,36 @@ fn spawn_save_list(root: &mut ChildBuilder) {
         });
 }
 
-fn spawn_carried_label(root: &mut ChildBuilder) {
+fn spawn_carried_label(root: &mut ChildSpawnerCommands) {
     root.spawn((
-        NodeBundle {
-            style: Style {
-                position_type: PositionType::Absolute,
-                left: Val::Px(0.0),
-                top: Val::Px(0.0),
-                width: Val::Px(default_button_size(46.0)),
-                height: Val::Px(default_button_size(46.0)),
-                display: Display::None,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                border: UiRect::all(Val::Px(2.0)),
-                ..default()
-            },
-            border_color: Color::srgb(1.0, 1.0, 1.0).into(),
-            background_color: Color::srgba(0.18, 0.18, 0.19, 0.86).into(),
-            z_index: ZIndex::Global(100),
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            top: Val::Px(0.0),
+            width: Val::Px(default_button_size(46.0)),
+            height: Val::Px(default_button_size(46.0)),
+            display: Display::None,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            border: UiRect::all(Val::Px(2.0)),
             ..default()
         },
+        BorderColor::all(Color::srgb(1.0, 1.0, 1.0)),
+        BackgroundColor(Color::srgba(0.18, 0.18, 0.19, 0.86)),
+        ZIndex(100),
         CarriedIcon,
     ))
     .with_children(|icon| {
         icon.spawn((
-            TextBundle {
-                text: Text::from_section(
-                    "",
-                    TextStyle {
-                        font_size: default_font_size(12.0),
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                )
-                .with_justify(JustifyText::Center),
-                style: Style {
-                    margin: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
+            Text::new(""),
+            TextFont {
+                font_size: default_font_size(12.0),
+                ..default()
+            },
+            TextColor(Color::WHITE),
+            TextLayout::new_with_justify(Justify::Center),
+            Node {
+                margin: UiRect::all(Val::Px(2.0)),
                 ..default()
             },
             CarriedLabel,
@@ -633,9 +622,9 @@ fn spawn_carried_label(root: &mut ChildBuilder) {
     });
 }
 
-fn inventory_panel_bundle() -> NodeBundle {
-    NodeBundle {
-        style: Style {
+fn inventory_panel_bundle() -> impl Bundle {
+    (
+        Node {
             width: Val::Px(640.0),
             height: Val::Px(430.0),
             position_type: PositionType::Absolute,
@@ -652,13 +641,12 @@ fn inventory_panel_bundle() -> NodeBundle {
             row_gap: Val::Px(12.0),
             ..default()
         },
-        background_color: Color::srgba(0.12, 0.12, 0.13, 0.94).into(),
-        ..default()
-    }
+        BackgroundColor(Color::srgba(0.12, 0.12, 0.13, 0.94)),
+    )
 }
 
-fn inventory_grid_bundle() -> NodeBundle {
-    transparent_node(Style {
+fn inventory_grid_bundle() -> impl Bundle {
+    transparent_node(Node {
         display: Display::Grid,
         grid_template_columns: RepeatedGridTrack::flex(9, 1.0),
         grid_template_rows: RepeatedGridTrack::flex(3, 1.0),
@@ -670,8 +658,8 @@ fn inventory_grid_bundle() -> NodeBundle {
     })
 }
 
-fn key_bindings_grid_bundle() -> NodeBundle {
-    transparent_node(Style {
+fn key_bindings_grid_bundle() -> impl Bundle {
+    transparent_node(Node {
         display: Display::Grid,
         grid_template_columns: RepeatedGridTrack::flex(2, 1.0),
         grid_template_rows: RepeatedGridTrack::flex(11, 1.0),

@@ -1,7 +1,7 @@
+use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
-use bevy::render::render_asset::RenderAssetUsages;
+use bevy::image::ImageSampler;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use bevy::render::texture::ImageSampler;
 
 #[derive(Clone, Copy)]
 pub enum ProceduralTexture {

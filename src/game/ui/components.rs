@@ -20,22 +20,18 @@ pub fn default_button_size(size: f32) -> f32 {
     size * DEFAULT_BUTTON_SCALE
 }
 
-pub fn transparent_node(style: Style) -> NodeBundle {
-    NodeBundle {
-        style,
-        background_color: Color::NONE.into(),
-        ..default()
-    }
+pub fn transparent_node(style: Node) -> impl Bundle {
+    (style, BackgroundColor(Color::NONE))
 }
 
-pub fn text(value: impl Into<String>, font_size: f32, color: Color) -> TextBundle {
-    TextBundle::from_section(
-        value,
-        TextStyle {
+pub fn text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(value),
+        TextFont {
             font_size: default_font_size(font_size),
-            color,
             ..default()
         },
+        TextColor(color),
     )
 }
 
@@ -44,16 +40,17 @@ pub fn localized_text(
     key: &'static str,
     font_size: f32,
     color: Color,
-) -> (TextBundle, LocalizedText) {
+) -> (impl Bundle, LocalizedText) {
     (
         text(i18n.text(key), font_size, color),
         LocalizedText { key },
     )
 }
 
-pub fn menu_button(height: f32) -> ButtonBundle {
-    ButtonBundle {
-        style: Style {
+pub fn menu_button(height: f32) -> impl Bundle {
+    (
+        Button,
+        Node {
             width: Val::Percent(100.0),
             min_width: Val::Px(default_button_size(92.0)),
             height: Val::Px(default_button_size(height)),
@@ -62,14 +59,13 @@ pub fn menu_button(height: f32) -> ButtonBundle {
             justify_content: JustifyContent::Center,
             ..default()
         },
-        border_color: BUTTON_BORDER.into(),
-        background_color: BUTTON_BG.into(),
-        ..default()
-    }
+        BorderColor::all(BUTTON_BORDER),
+        BackgroundColor(BUTTON_BG),
+    )
 }
 
-pub fn root_node() -> NodeBundle {
-    transparent_node(Style {
+pub fn root_node() -> impl Bundle {
+    transparent_node(Node {
         width: Val::Percent(100.0),
         height: Val::Percent(100.0),
         position_type: PositionType::Absolute,
@@ -77,8 +73,8 @@ pub fn root_node() -> NodeBundle {
     })
 }
 
-pub fn flex_row(height: f32, column_gap: f32) -> NodeBundle {
-    transparent_node(Style {
+pub fn flex_row(height: f32, column_gap: f32) -> impl Bundle {
+    transparent_node(Node {
         width: Val::Percent(100.0),
         height: Val::Px(default_button_size(height)),
         display: Display::Flex,

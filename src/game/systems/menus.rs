@@ -24,7 +24,7 @@ use crate::shared::save::{
 };
 
 pub fn main_menu_actions(
-    mut exit: EventWriter<AppExit>,
+    mut exit: MessageWriter<AppExit>,
     mut mode: ResMut<GameMode>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
@@ -60,7 +60,7 @@ pub fn main_menu_actions(
                 *mode = GameMode::Settings;
             }
             MainMenuAction::Quit => {
-                exit.send(AppExit::Success);
+                exit.write(AppExit::Success);
             }
         }
     }
@@ -555,7 +555,12 @@ pub fn settings_menu_actions(
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut active_slider: ResMut<ActiveSettingsSlider>,
     mut interactions: Query<
-        (Ref<Interaction>, &SettingsAction, &Node, &GlobalTransform),
+        (
+            Ref<Interaction>,
+            &SettingsAction,
+            &ComputedNode,
+            &GlobalTransform,
+        ),
         With<Button>,
     >,
 ) {
@@ -574,7 +579,7 @@ pub fn settings_menu_actions(
         }
     }
 
-    let cursor_position = windows.get_single().ok().and_then(|window| {
+    let cursor_position = windows.single().ok().and_then(|window| {
         window
             .cursor_position()
             .map(|cursor| Vec2::new(cursor.x, cursor.y))
@@ -710,7 +715,7 @@ pub fn settings_menu_actions(
 
 fn slider_percent(
     cursor_position: Option<Vec2>,
-    node: &Node,
+    node: &ComputedNode,
     transform: &GlobalTransform,
 ) -> Option<f32> {
     let cursor_position = cursor_position?;
@@ -933,7 +938,7 @@ pub fn teleport_rename_input(
     mut rename_state: ResMut<TeleportRenameState>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
-    mut keyboard_input: EventReader<KeyboardInput>,
+    mut keyboard_input: MessageReader<KeyboardInput>,
 ) {
     if *mode != GameMode::TeleportSettings || rename_state.editing.is_none() {
         keyboard_input.clear();

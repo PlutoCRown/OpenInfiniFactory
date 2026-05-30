@@ -38,15 +38,16 @@ pub fn load_ui_font(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(UiFont(asset_server.load("fonts/PingFangSC-Regular.ttf")));
 }
 
-pub fn apply_ui_font(ui_font: Option<Res<UiFont>>, mut text_query: Query<&mut Text, Added<Text>>) {
+pub fn apply_ui_font(
+    ui_font: Option<Res<UiFont>>,
+    mut text_query: Query<&mut TextFont, Added<Text>>,
+) {
     let Some(ui_font) = ui_font else {
         return;
     };
 
-    for mut text in &mut text_query {
-        for section in &mut text.sections {
-            section.style.font = ui_font.0.clone();
-        }
+    for mut font in &mut text_query {
+        font.font = ui_font.0.clone();
     }
 }
 
@@ -292,11 +293,11 @@ pub fn update_status_ui(
         ),
     >,
 ) {
-    if let Ok(mut text) = hotbar.get_single_mut() {
+    if let Ok(mut text) = hotbar.single_mut() {
         let selected = inventory.hotbar[placement.selected]
             .map(|kind| i18n.text(kind.name_key()))
             .unwrap_or_else(|| i18n.text("empty"));
-        text.sections[0].value = i18n.fmt(
+        text.0 = i18n.fmt(
             "status.hotbar",
             &[
                 ("mode", builder_mode_name(*builder_mode, &i18n)),
@@ -306,26 +307,26 @@ pub fn update_status_ui(
         );
     }
 
-    if let Ok(mut text) = inventory_title.get_single_mut() {
-        text.sections[0].value = i18n.fmt(
+    if let Ok(mut text) = inventory_title.single_mut() {
+        text.0 = i18n.fmt(
             "inventory.title",
             &[("mode", builder_mode_name(*builder_mode, &i18n))],
         );
     }
 
-    if let Ok(mut text) = fov_text.get_single_mut() {
-        text.sections[0].value = format!("FOV {:.0}", settings.fov_degrees);
+    if let Ok(mut text) = fov_text.single_mut() {
+        text.0 = format!("FOV {:.0}", settings.fov_degrees);
     }
 
-    if let Ok(mut text) = ui_scale_text.get_single_mut() {
-        text.sections[0].value = i18n.fmt(
+    if let Ok(mut text) = ui_scale_text.single_mut() {
+        text.0 = i18n.fmt(
             "settings.ui_scale",
             &[("scale", format!("{:.1}", settings.ui_scale))],
         );
     }
 
-    if let Ok(mut text) = simulation_text.get_single_mut() {
-        text.sections[0].value = i18n.fmt(
+    if let Ok(mut text) = simulation_text.single_mut() {
+        text.0 = i18n.fmt(
             "status.simulation",
             &[
                 ("mode", builder_mode_name(*builder_mode, &i18n)),
@@ -343,16 +344,16 @@ pub fn update_status_ui(
         );
     }
 
-    if let Ok(mut text) = simulation_status_text.get_single_mut() {
-        text.sections[0].value = if *builder_mode == BuilderMode::Play {
+    if let Ok(mut text) = simulation_status_text.single_mut() {
+        text.0 = if *builder_mode == BuilderMode::Play {
             simulation_status_text_value(&simulation, &config, &i18n)
         } else {
             String::new()
         };
     }
 
-    if let Ok(mut text) = current_save_text.get_single_mut() {
-        text.sections[0].value = save_state
+    if let Ok(mut text) = current_save_text.single_mut() {
+        text.0 = save_state
             .current
             .as_ref()
             .map(|name| i18n.fmt("save.world", &[("name", name.clone())]))
@@ -421,22 +422,22 @@ pub fn update_carried_item_ui(
     carried: Res<CarriedItem>,
     i18n: Res<I18n>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut icon: Query<(&mut Style, &mut BackgroundColor), With<CarriedIcon>>,
+    mut icon: Query<(&mut Node, &mut BackgroundColor), With<CarriedIcon>>,
     mut label: Query<&mut Text, With<CarriedLabel>>,
 ) {
-    let Ok((mut style, mut background)) = icon.get_single_mut() else {
+    let Ok((mut style, mut background)) = icon.single_mut() else {
         return;
     };
 
     let Some(item) = carried.item() else {
         style.display = Display::None;
-        if let Ok(mut text) = label.get_single_mut() {
-            text.sections[0].value.clear();
+        if let Ok(mut text) = label.single_mut() {
+            text.0.clear();
         }
         return;
     };
 
-    let Ok(window) = windows.get_single() else {
+    let Ok(window) = windows.single() else {
         return;
     };
 
@@ -450,17 +451,17 @@ pub fn update_carried_item_ui(
     style.top = Val::Px(cursor.y + 4.0);
     *background = slot_color(item).with_alpha(0.9).into();
 
-    if let Ok(mut text) = label.get_single_mut() {
-        text.sections[0].value = i18n.text(short_item_name(item));
+    if let Ok(mut text) = label.single_mut() {
+        text.0 = i18n.text(short_item_name(item));
     }
 }
 
 pub fn update_scroll_containers(
     mode: Res<GameMode>,
     _settings_tab: Res<SettingsTab>,
-    mut mouse_wheel: EventReader<MouseWheel>,
-    mut containers: Query<(&mut ScrollContainer, &Children, &Node)>,
-    mut contents: Query<(&mut Style, &Node), With<ScrollContent>>,
+    mut mouse_wheel: MessageReader<MouseWheel>,
+    mut containers: Query<(&mut ScrollContainer, &Children, &ComputedNode)>,
+    mut contents: Query<(&mut Node, &ComputedNode), With<ScrollContent>>,
 ) {
     if *mode != GameMode::Settings {
         return;
@@ -471,8 +472,7 @@ pub fn update_scroll_containers(
     for (mut container, children, node) in &mut containers {
         let Some(child) = children
             .iter()
-            .find(|child| contents.get(**child).is_ok())
-            .copied()
+            .find(|child| contents.get(*child).is_ok())
         else {
             continue;
         };
@@ -509,14 +509,14 @@ pub fn update_generator_ui(
     };
 
     let generator_settings = world.generator_settings(pos);
-    if let Ok(mut text) = generator_period_text.get_single_mut() {
-        text.sections[0].value = i18n.fmt(
+    if let Ok(mut text) = generator_period_text.single_mut() {
+        text.0 = i18n.fmt(
             "generator.period",
             &[("period", generator_settings.period.to_string())],
         );
     }
-    if let Ok(mut text) = generator_material_text.get_single_mut() {
-        text.sections[0].value = i18n.fmt(
+    if let Ok(mut text) = generator_material_text.single_mut() {
+        text.0 = i18n.fmt(
             "generator.material",
             &[(
                 "material",
@@ -537,8 +537,8 @@ pub fn update_labeler_ui(
     };
 
     let labeler_settings = world.labeler_settings(pos);
-    if let Ok(mut text) = labeler_color_text.get_single_mut() {
-        text.sections[0].value = i18n.fmt(
+    if let Ok(mut text) = labeler_color_text.single_mut() {
+        text.0 = i18n.fmt(
             "labeler.color",
             &[("color", i18n.text(labeler_settings.color.name_key()))],
         );
@@ -573,27 +573,27 @@ pub fn update_converter_ui(
             Without<ConverterInputText>,
         ),
     >,
-    mut converter_input_row: Query<&mut Style, With<ConverterInputRow>>,
+    mut converter_input_row: Query<&mut Node, With<ConverterInputRow>>,
 ) {
     let Some(pos) = placement.converter_panel else {
         return;
     };
 
     let settings = world.converter_settings(pos);
-    if let Ok(mut text) = converter_mode_text.get_single_mut() {
-        text.sections[0].value = i18n.fmt(
+    if let Ok(mut text) = converter_mode_text.single_mut() {
+        text.0 = i18n.fmt(
             "converter.mode",
             &[("mode", i18n.text(settings.mode.name_key()))],
         );
     }
-    if let Ok(mut text) = converter_input_text.get_single_mut() {
-        text.sections[0].value = i18n.fmt(
+    if let Ok(mut text) = converter_input_text.single_mut() {
+        text.0 = i18n.fmt(
             "converter.input",
             &[("material", i18n.text(settings.input.name_key()))],
         );
     }
-    if let Ok(mut text) = converter_output_text.get_single_mut() {
-        text.sections[0].value = i18n.fmt(
+    if let Ok(mut text) = converter_output_text.single_mut() {
+        text.0 = i18n.fmt(
             "converter.output",
             &[("material", i18n.text(settings.output.name_key()))],
         );
@@ -620,20 +620,20 @@ pub fn update_teleport_ui(
     };
 
     let settings = world.teleport_settings(pos);
-    if let Ok(mut text) = teleport_name_text.get_single_mut() {
+    if let Ok(mut text) = teleport_name_text.single_mut() {
         let name = if rename_state.editing == Some(pos) {
             i18n.fmt("teleport.editing", &[("name", rename_state.buffer.clone())])
         } else {
             i18n.fmt("teleport.name", &[("name", settings.name.clone())])
         };
-        text.sections[0].value = name;
+        text.0 = name;
     }
-    if let Ok(mut text) = teleport_pair_text.get_single_mut() {
+    if let Ok(mut text) = teleport_pair_text.single_mut() {
         let pair = settings
             .pair
             .map(|pair| world.teleport_settings(pair).name)
             .unwrap_or_else(|| i18n.text("teleport.none"));
-        text.sections[0].value = i18n.fmt("teleport.pair", &[("pair", pair)]);
+        text.0 = i18n.fmt("teleport.pair", &[("pair", pair)]);
     }
 }
 
@@ -667,7 +667,7 @@ pub fn update_settings_text_ui(
         ),
     >,
     mut key_labels: Query<
-        (&Parent, &mut Text),
+        (&ChildOf, &mut Text),
         (
             With<KeyBindingLabel>,
             Without<SettingsStatusText>,
@@ -699,7 +699,7 @@ pub fn update_settings_text_ui(
     >,
     key_buttons: Query<&KeyBindingButton>,
 ) {
-    if let Ok(mut text) = settings_status.get_single_mut() {
+    if let Ok(mut text) = settings_status.single_mut() {
         let tab_name = match *settings_tab {
             SettingsTab::Gameplay => i18n.text("tab.gameplay"),
             SettingsTab::KeyBindings => i18n.text("tab.key_bindings"),
@@ -713,7 +713,7 @@ pub fn update_settings_text_ui(
                 )
             })
             .unwrap_or_else(|| i18n.text("settings.rebind_hint"));
-        text.sections[0].value = i18n.fmt(
+        text.0 = i18n.fmt(
             "settings.status",
             &[
                 ("tab", tab_name),
@@ -746,7 +746,7 @@ pub fn update_settings_text_ui(
     }
 
     for (parent, mut text) in &mut key_labels {
-        let Ok(button) = key_buttons.get(parent.get()) else {
+        let Ok(button) = key_buttons.get(parent.parent()) else {
             continue;
         };
         let suffix = pending_key_bind
@@ -754,26 +754,26 @@ pub fn update_settings_text_ui(
             .filter(|pending| *pending == button.0)
             .map(|_| "...")
             .unwrap_or(config.input(button.0).name());
-        text.sections[0].value = format!("{}: {suffix}", i18n.text(button.0.label_key()));
+        text.0 = format!("{}: {suffix}", i18n.text(button.0.label_key()));
     }
 
-    if let Ok(mut text) = place_mode_text.get_single_mut() {
-        text.sections[0].value = i18n.text(config.place_selection_mode.label_key());
+    if let Ok(mut text) = place_mode_text.single_mut() {
+        text.0 = i18n.text(config.place_selection_mode.label_key());
     }
 
-    if let Ok(mut text) = delete_mode_text.get_single_mut() {
-        text.sections[0].value = i18n.text(config.delete_selection_mode.label_key());
+    if let Ok(mut text) = delete_mode_text.single_mut() {
+        text.0 = i18n.text(config.delete_selection_mode.label_key());
     }
 }
 
 pub fn update_settings_sliders_ui(
     settings: Res<GameSettings>,
     mut slider_fills: Query<
-        (&SettingsSliderFill, &mut Style),
+        (&SettingsSliderFill, &mut Node),
         (Without<SettingsSliderKnob>, Without<SettingsDropdownList>),
     >,
     mut slider_knobs: Query<
-        (&SettingsSliderKnob, &mut Style),
+        (&SettingsSliderKnob, &mut Node),
         (Without<SettingsSliderFill>, Without<SettingsDropdownList>),
     >,
 ) {
@@ -814,12 +814,12 @@ pub fn update_settings_dropdowns_ui(
         ),
     >,
     mut dropdown_lists: Query<
-        (&SettingsDropdownList, &mut Style),
+        (&SettingsDropdownList, &mut Node),
         (Without<SettingsSliderFill>, Without<SettingsSliderKnob>),
     >,
 ) {
     for (label, mut text) in &mut dropdown_labels {
-        text.sections[0].value = match label.0 {
+        text.0 = match label.0 {
             super::types::SettingsDropdown::Language => i18n.language().native_name().to_string(),
             super::types::SettingsDropdown::PlaceSelectionMode => {
                 i18n.text(config.place_selection_mode.label_key())
@@ -831,7 +831,7 @@ pub fn update_settings_dropdowns_ui(
     }
 
     for (value, mut text) in &mut value_texts {
-        text.sections[0].value = match value.0 {
+        text.0 = match value.0 {
             SettingsValue::Fov => format!("FOV {:.0}", settings.fov_degrees),
             SettingsValue::UiScale => i18n.fmt(
                 "settings.ui_scale",
@@ -928,7 +928,7 @@ pub fn update_localized_ui(
     }
 
     for (localized, mut text) in &mut localized_text {
-        text.sections[0].value = if localized.key == "button.save_world" {
+        text.0 = if localized.key == "button.save_world" {
             match save_state.current_kind {
                 Some(SaveKind::Solution) => i18n.text("button.save_solution"),
                 _ => i18n.text("button.save_puzzle"),
@@ -945,16 +945,16 @@ pub fn update_panel_visibility(
     solution_state: Res<SolutionState>,
     settings_tab: Res<SettingsTab>,
     mut style_sets: ParamSet<(
-        Query<&mut Style, (With<MainMenuPanel>, Without<PauseAction>)>,
-        Query<&mut Style, (With<SaveListPanel>, Without<PauseAction>)>,
-        Query<&mut Style, (With<SettingsPanel>, Without<PauseAction>)>,
-        Query<&mut Style, (With<SettingsGameplayGroup>, Without<PauseAction>)>,
-        Query<&mut Style, (With<SettingsKeyBindingsGroup>, Without<PauseAction>)>,
-        Query<&mut Style, (With<BackpackPanel>, Without<PauseAction>)>,
-        Query<&mut Style, (With<PausePanel>, Without<PauseAction>)>,
-        Query<&mut Style, (With<GeneratorPanel>, Without<PauseAction>)>,
+        Query<&mut Node, (With<MainMenuPanel>, Without<PauseAction>)>,
+        Query<&mut Node, (With<SaveListPanel>, Without<PauseAction>)>,
+        Query<&mut Node, (With<SettingsPanel>, Without<PauseAction>)>,
+        Query<&mut Node, (With<SettingsGameplayGroup>, Without<PauseAction>)>,
+        Query<&mut Node, (With<SettingsKeyBindingsGroup>, Without<PauseAction>)>,
+        Query<&mut Node, (With<BackpackPanel>, Without<PauseAction>)>,
+        Query<&mut Node, (With<PausePanel>, Without<PauseAction>)>,
+        Query<&mut Node, (With<GeneratorPanel>, Without<PauseAction>)>,
     )>,
-    mut pause_buttons: Query<(&PauseAction, &mut Style), With<Button>>,
+    mut pause_buttons: Query<(&PauseAction, &mut Node), With<Button>>,
 ) {
     for mut style in &mut style_sets.p0() {
         style.display = if *mode == GameMode::MainMenu {
@@ -1035,7 +1035,7 @@ pub fn update_panel_visibility(
 
 pub fn update_labeler_panel_visibility(
     mode: Res<GameMode>,
-    mut labeler_panel: Query<&mut Style, With<LabelerPanel>>,
+    mut labeler_panel: Query<&mut Node, With<LabelerPanel>>,
 ) {
     for mut style in &mut labeler_panel {
         style.display = if *mode == GameMode::LabelerSettings {
@@ -1048,7 +1048,7 @@ pub fn update_labeler_panel_visibility(
 
 pub fn update_converter_panel_visibility(
     mode: Res<GameMode>,
-    mut converter_panel: Query<&mut Style, With<ConverterPanel>>,
+    mut converter_panel: Query<&mut Node, With<ConverterPanel>>,
 ) {
     for mut style in &mut converter_panel {
         style.display = if *mode == GameMode::ConverterSettings {
@@ -1061,7 +1061,7 @@ pub fn update_converter_panel_visibility(
 
 pub fn update_teleport_panel_visibility(
     mode: Res<GameMode>,
-    mut teleport_panel: Query<&mut Style, With<TeleportPanel>>,
+    mut teleport_panel: Query<&mut Node, With<TeleportPanel>>,
 ) {
     for mut style in &mut teleport_panel {
         style.display = if *mode == GameMode::TeleportSettings {
@@ -1075,7 +1075,7 @@ pub fn update_teleport_panel_visibility(
 pub fn update_hud_visibility(
     mode: Res<GameMode>,
     save_state: Res<SaveState>,
-    mut hud_style: Query<&mut Style, With<InGameHudStyle>>,
+    mut hud_style: Query<&mut Node, With<InGameHudStyle>>,
     mut visibility_sets: ParamSet<(
         Query<&mut Visibility, With<Crosshair>>,
         Query<&mut Visibility, With<InGameHudVisibility>>,
@@ -1150,8 +1150,8 @@ pub fn update_inventory_slots(
         };
 
         for child in children.iter() {
-            if let Ok(mut text) = labels.get_mut(*child) {
-                text.sections[0].value = item
+            if let Ok(mut text) = labels.get_mut(child) {
+                text.0 = item
                     .map(|kind| i18n.text(short_item_name(kind)))
                     .unwrap_or_default();
             }
@@ -1178,8 +1178,8 @@ pub fn update_save_list_ui(
         With<Button>,
     >,
 ) {
-    if let Ok(mut title) = text_sets.p0().get_single_mut() {
-        title.sections[0].value = match *mode {
+    if let Ok(mut title) = text_sets.p0().single_mut() {
+        title.0 = match *mode {
             GameMode::SaveListMain => i18n.text("save.title.main"),
             _ => i18n.text("save.title.default"),
         };
@@ -1259,8 +1259,8 @@ pub fn update_save_list_ui(
         };
 
         for child in children.iter() {
-            if let Ok(mut text) = text_sets.p1().get_mut(*child) {
-                text.sections[0].value = label.clone();
+            if let Ok(mut text) = text_sets.p1().get_mut(child) {
+                text.0 = label.clone();
             }
         }
     }

@@ -121,7 +121,6 @@ pub fn run_turn(
 
     let blocked_generation: HashSet<IVec3> = pending_generated.pending.keys().copied().collect();
     let generated = run_material_behavior_phase(world, turn, &powered_devices, &blocked_generation);
-    let mut animations = animations;
     for generated in generated {
         pending_generated.pending.insert(
             generated.pos,
@@ -166,7 +165,7 @@ pub fn tick_simulation(
     render_assets: Res<WorldRenderAssets>,
 ) {
     despawn_pending_generated_previews(&mut commands, &pending_previews);
-    tick_pending_generated(time.delta_seconds(), &mut world, &mut pending_generated);
+    tick_pending_generated(time.delta_secs(), &mut world, &mut pending_generated);
     spawn_pending_generated_previews(&mut commands, &render_assets, &world, &pending_generated);
 
     if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
@@ -191,7 +190,7 @@ pub fn tick_simulation(
         return;
     }
 
-    simulation.accumulator += time.delta_seconds() * simulation.speed / SIMULATION_TURN_SECONDS;
+    simulation.accumulator += time.delta_secs() * simulation.speed / SIMULATION_TURN_SECONDS;
     while simulation.accumulator >= 1.0 {
         simulation.turn += 1;
         simulation.accumulator -= 1.0;

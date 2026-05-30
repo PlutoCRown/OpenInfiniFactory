@@ -5,9 +5,9 @@ use super::components::default_font_size;
 pub const PANEL_BG: Color = Color::srgba(0.08, 0.09, 0.10, 0.96);
 pub const STATUS_TEXT: Color = Color::srgb(0.88, 0.96, 1.0);
 
-pub fn panel_bundle(width: f32, height: f32, offset_x: f32, offset_y: f32) -> NodeBundle {
-    NodeBundle {
-        style: Style {
+pub fn panel_bundle(width: f32, height: f32, offset_x: f32, offset_y: f32) -> impl Bundle {
+    (
+        Node {
             width: Val::Px(width),
             height: Val::Px(height),
             position_type: PositionType::Absolute,
@@ -24,9 +24,8 @@ pub fn panel_bundle(width: f32, height: f32, offset_x: f32, offset_y: f32) -> No
             row_gap: Val::Px(14.0),
             ..default()
         },
-        background_color: PANEL_BG.into(),
-        ..default()
-    }
+        BackgroundColor(PANEL_BG),
+    )
 }
 
 pub fn absolute_text_bundle(
@@ -37,17 +36,15 @@ pub fn absolute_text_bundle(
     right: Option<Val>,
     top: Option<Val>,
     bottom: Option<Val>,
-) -> TextBundle {
-    TextBundle {
-        text: Text::from_section(
-            value,
-            TextStyle {
-                font_size: default_font_size(font_size),
-                color,
-                ..default()
-            },
-        ),
-        style: Style {
+) -> impl Bundle {
+    (
+        Text::new(value),
+        TextFont {
+            font_size: default_font_size(font_size),
+            ..default()
+        },
+        TextColor(color),
+        Node {
             position_type: PositionType::Absolute,
             left: left.unwrap_or(Val::Auto),
             right: right.unwrap_or(Val::Auto),
@@ -55,6 +52,5 @@ pub fn absolute_text_bundle(
             bottom: bottom.unwrap_or(Val::Auto),
             ..default()
         },
-        ..default()
-    }
+    )
 }

@@ -9,11 +9,30 @@ use super::types::{
     SettingsSliderFill, SettingsSliderKnob, SettingsValue, SettingsValueText, SlotArea, SlotLabel,
 };
 
-pub(super) fn spawn_slot(parent: &mut ChildBuilder, area: SlotArea, index: usize) {
+fn label_text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(value),
+        TextFont {
+            font_size: default_font_size(font_size),
+            ..default()
+        },
+        TextColor(color),
+    )
+}
+
+fn styled_button(style: Node, border: Color, background: Color) -> impl Bundle {
+    (Button, style, BorderColor::all(border), BackgroundColor(background))
+}
+
+fn plain_node(style: Node) -> impl Bundle {
+    (style, BackgroundColor(Color::NONE))
+}
+
+pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, index: usize) {
     parent
         .spawn((
-            ButtonBundle {
-                style: Style {
+            styled_button(
+                Node {
                     width: Val::Px(default_button_size(54.0)),
                     height: Val::Px(default_button_size(54.0)),
                     border: UiRect::all(Val::Px(2.0)),
@@ -21,28 +40,17 @@ pub(super) fn spawn_slot(parent: &mut ChildBuilder, area: SlotArea, index: usize
                     justify_content: JustifyContent::Center,
                     ..default()
                 },
-                border_color: Color::srgb(0.22, 0.22, 0.22).into(),
-                background_color: Color::srgba(0.28, 0.28, 0.30, 0.92).into(),
-                ..default()
-            },
+                Color::srgb(0.22, 0.22, 0.22),
+                Color::srgba(0.28, 0.28, 0.30, 0.92),
+            ),
             InventorySlot { area, index },
         ))
         .with_children(|slot| {
             slot.spawn((
-                TextBundle {
-                    text: Text::from_section(
-                        "",
-                        TextStyle {
-                            font_size: default_font_size(12.0),
-                            color: Color::WHITE,
-                            ..default()
-                        },
-                    )
-                    .with_justify(JustifyText::Center),
-                    style: Style {
-                        margin: UiRect::all(Val::Px(2.0)),
-                        ..default()
-                    },
+                label_text("", 12.0, Color::WHITE),
+                TextLayout::new_with_justify(Justify::Center),
+                Node {
+                    margin: UiRect::all(Val::Px(2.0)),
                     ..default()
                 },
                 SlotLabel,
@@ -51,7 +59,7 @@ pub(super) fn spawn_slot(parent: &mut ChildBuilder, area: SlotArea, index: usize
 }
 
 pub(super) fn spawn_localized_pause_button(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     label: String,
     key: &'static str,
     action: PauseAction,
@@ -60,99 +68,43 @@ pub(super) fn spawn_localized_pause_button(
 }
 
 pub(super) fn spawn_generator_button(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     label: String,
     key: &'static str,
     action: super::types::GeneratorAction,
 ) {
-    parent
-        .spawn((menu_button(36.0), action))
-        .with_children(|button| {
-            button.spawn((
-                TextBundle::from_section(
-                    label,
-                    TextStyle {
-                        font_size: default_font_size(14.0),
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
-                super::types::LocalizedText { key },
-            ));
-        });
+    spawn_localized_button(parent, 36.0, 14.0, label, key, action);
 }
 
 pub(super) fn spawn_labeler_button(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     label: String,
     key: &'static str,
     action: super::types::LabelerAction,
 ) {
-    parent
-        .spawn((menu_button(36.0), action))
-        .with_children(|button| {
-            button.spawn((
-                TextBundle::from_section(
-                    label,
-                    TextStyle {
-                        font_size: default_font_size(14.0),
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
-                super::types::LocalizedText { key },
-            ));
-        });
+    spawn_localized_button(parent, 36.0, 14.0, label, key, action);
 }
 
 pub(super) fn spawn_converter_button(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     label: String,
     key: &'static str,
     action: super::types::ConverterAction,
 ) {
-    parent
-        .spawn((menu_button(36.0), action))
-        .with_children(|button| {
-            button.spawn((
-                TextBundle::from_section(
-                    label,
-                    TextStyle {
-                        font_size: default_font_size(14.0),
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
-                super::types::LocalizedText { key },
-            ));
-        });
+    spawn_localized_button(parent, 36.0, 14.0, label, key, action);
 }
 
 pub(super) fn spawn_teleport_button(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     label: String,
     key: &'static str,
     action: super::types::TeleportAction,
 ) {
-    parent
-        .spawn((menu_button(36.0), action))
-        .with_children(|button| {
-            button.spawn((
-                TextBundle::from_section(
-                    label,
-                    TextStyle {
-                        font_size: default_font_size(14.0),
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
-                super::types::LocalizedText { key },
-            ));
-        });
+    spawn_localized_button(parent, 36.0, 14.0, label, key, action);
 }
 
 pub(super) fn spawn_localized_settings_button(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     label: String,
     key: &'static str,
     action: SettingsAction,
@@ -164,14 +116,7 @@ pub(super) fn spawn_localized_settings_button(
     }
     button.with_children(|button| {
         let mut label_entity = button.spawn((
-            TextBundle::from_section(
-                label,
-                TextStyle {
-                    font_size: default_font_size(14.0),
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
+            label_text(label, 14.0, Color::WHITE),
             super::types::LocalizedText { key },
         ));
         if is_binding {
@@ -181,15 +126,15 @@ pub(super) fn spawn_localized_settings_button(
 }
 
 pub(super) fn spawn_settings_tab(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     label: String,
     key: &'static str,
     action: SettingsAction,
 ) {
     parent
         .spawn((
-            ButtonBundle {
-                style: Style {
+            styled_button(
+                Node {
                     min_width: Val::Px(default_button_size(150.0)),
                     height: Val::Px(default_button_size(38.0)),
                     padding: UiRect::horizontal(Val::Px(18.0)),
@@ -203,37 +148,22 @@ pub(super) fn spawn_settings_tab(
                     justify_content: JustifyContent::Center,
                     ..default()
                 },
-                border_color: Color::srgb(0.38, 0.39, 0.40).into(),
-                background_color: Color::srgba(0.16, 0.17, 0.18, 0.96).into(),
-                ..default()
-            },
+                Color::srgb(0.38, 0.39, 0.40),
+                Color::srgba(0.16, 0.17, 0.18, 0.96),
+            ),
             action,
         ))
         .with_children(|tab| {
             tab.spawn((
-                TextBundle::from_section(
-                    label,
-                    TextStyle {
-                        font_size: default_font_size(15.0),
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
+                label_text(label, 15.0, Color::WHITE),
                 super::types::LocalizedText { key },
             ));
         });
 }
 
-pub(super) fn spawn_settings_slider(parent: &mut ChildBuilder, slider: SettingsSlider) {
+pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, slider: SettingsSlider) {
     parent.spawn((
-        TextBundle::from_section(
-            "",
-            TextStyle {
-                font_size: default_font_size(13.0),
-                color: Color::srgb(0.88, 0.94, 0.96),
-                ..default()
-            },
-        ),
+        label_text("", 13.0, Color::srgb(0.88, 0.94, 0.96)),
         SettingsValueText(match slider {
             SettingsSlider::Fov => SettingsValue::Fov,
             SettingsSlider::UiScale => SettingsValue::UiScale,
@@ -242,8 +172,8 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildBuilder, slider: SettingsS
     ));
     parent
         .spawn((
-            ButtonBundle {
-                style: Style {
+            styled_button(
+                Node {
                     width: Val::Px(340.0),
                     height: Val::Px(default_button_size(22.0)),
                     padding: UiRect::all(Val::Px(3.0)),
@@ -251,10 +181,9 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildBuilder, slider: SettingsS
                     align_items: AlignItems::Center,
                     ..default()
                 },
-                border_color: Color::srgb(0.42, 0.44, 0.46).into(),
-                background_color: Color::srgba(0.10, 0.11, 0.12, 0.98).into(),
-                ..default()
-            },
+                Color::srgb(0.42, 0.44, 0.46),
+                Color::srgba(0.10, 0.11, 0.12, 0.98),
+            ),
             match slider {
                 SettingsSlider::Fov => SettingsAction::FovSlider,
                 SettingsSlider::UiScale => SettingsAction::UiScaleSlider,
@@ -263,20 +192,19 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildBuilder, slider: SettingsS
         ))
         .with_children(|track| {
             track.spawn((
-                NodeBundle {
-                    style: Style {
+                (
+                    Node {
                         width: Val::Percent(50.0),
                         height: Val::Percent(100.0),
                         ..default()
                     },
-                    background_color: Color::srgb(0.32, 0.62, 0.72).into(),
-                    ..default()
-                },
+                    BackgroundColor(Color::srgb(0.32, 0.62, 0.72)),
+                ),
                 SettingsSliderFill(slider),
             ));
             track.spawn((
-                NodeBundle {
-                    style: Style {
+                (
+                    Node {
                         position_type: PositionType::Absolute,
                         left: Val::Percent(50.0),
                         top: Val::Px(3.0),
@@ -288,33 +216,30 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildBuilder, slider: SettingsS
                         },
                         ..default()
                     },
-                    background_color: Color::srgb(0.90, 0.96, 1.0).into(),
-                    ..default()
-                },
+                    BackgroundColor(Color::srgb(0.90, 0.96, 1.0)),
+                ),
                 SettingsSliderKnob(slider),
             ));
         });
 }
 
-pub(super) fn spawn_settings_dropdown(parent: &mut ChildBuilder, dropdown: SettingsDropdown) {
+pub(super) fn spawn_settings_dropdown(parent: &mut ChildSpawnerCommands, dropdown: SettingsDropdown) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            plain_node(Node {
                 width: Val::Px(260.0),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(4.0),
                 position_type: PositionType::Relative,
                 ..default()
-            },
-            background_color: Color::NONE.into(),
-            z_index: ZIndex::Global(80),
-            ..default()
-        })
+            }),
+            ZIndex(80),
+        ))
         .with_children(|container| {
             container
                 .spawn((
-                    ButtonBundle {
-                        style: Style {
+                    styled_button(
+                        Node {
                             width: Val::Percent(100.0),
                             height: Val::Px(default_button_size(36.0)),
                             padding: UiRect::horizontal(Val::Px(12.0)),
@@ -323,37 +248,19 @@ pub(super) fn spawn_settings_dropdown(parent: &mut ChildBuilder, dropdown: Setti
                             justify_content: JustifyContent::SpaceBetween,
                             ..default()
                         },
-                        border_color: Color::srgb(0.38, 0.39, 0.40).into(),
-                        background_color: Color::srgba(0.18, 0.20, 0.22, 0.96).into(),
-                        ..default()
-                    },
+                        Color::srgb(0.38, 0.39, 0.40),
+                        Color::srgba(0.18, 0.20, 0.22, 0.96),
+                    ),
                     SettingsAction::ToggleDropdown(dropdown),
                 ))
                 .with_children(|button| {
-                    button.spawn((
-                        TextBundle::from_section(
-                            "",
-                            TextStyle {
-                                font_size: default_font_size(14.0),
-                                color: Color::WHITE,
-                                ..default()
-                            },
-                        ),
-                        SettingsDropdownLabel(dropdown),
-                    ));
-                    button.spawn(TextBundle::from_section(
-                        "v",
-                        TextStyle {
-                            font_size: default_font_size(12.0),
-                            color: Color::srgb(0.72, 0.80, 0.84),
-                            ..default()
-                        },
-                    ));
+                    button.spawn((label_text("", 14.0, Color::WHITE), SettingsDropdownLabel(dropdown)));
+                    button.spawn(label_text("v", 12.0, Color::srgb(0.72, 0.80, 0.84)));
                 });
             container
                 .spawn((
-                    NodeBundle {
-                        style: Style {
+                    (
+                        Node {
                             width: Val::Percent(100.0),
                             display: Display::None,
                             position_type: PositionType::Absolute,
@@ -362,10 +269,9 @@ pub(super) fn spawn_settings_dropdown(parent: &mut ChildBuilder, dropdown: Setti
                             row_gap: Val::Px(3.0),
                             ..default()
                         },
-                        background_color: Color::srgba(0.10, 0.11, 0.12, 0.98).into(),
-                        z_index: ZIndex::Global(120),
-                        ..default()
-                    },
+                        BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
+                        ZIndex(120),
+                    ),
                     SettingsDropdownList(dropdown),
                 ))
                 .with_children(|list| match dropdown {
@@ -400,23 +306,16 @@ pub(super) fn spawn_settings_dropdown(parent: &mut ChildBuilder, dropdown: Setti
         });
 }
 
-fn spawn_dropdown_option(parent: &mut ChildBuilder, label: String, action: SettingsAction) {
+fn spawn_dropdown_option(parent: &mut ChildSpawnerCommands, label: String, action: SettingsAction) {
     parent
         .spawn((menu_button(32.0), action))
         .with_children(|button| {
-            button.spawn(TextBundle::from_section(
-                label,
-                TextStyle {
-                    font_size: default_font_size(13.0),
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ));
+            button.spawn(label_text(label, 13.0, Color::WHITE));
         });
 }
 
 fn spawn_localized_dropdown_option(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     key: &'static str,
     action: SettingsAction,
 ) {
@@ -424,21 +323,14 @@ fn spawn_localized_dropdown_option(
         .spawn((menu_button(32.0), action))
         .with_children(|button| {
             button.spawn((
-                TextBundle::from_section(
-                    key,
-                    TextStyle {
-                        font_size: default_font_size(13.0),
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
+                label_text(key, 13.0, Color::WHITE),
                 super::types::LocalizedText { key },
             ));
         });
 }
 
 pub(super) fn spawn_localized_main_button(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     label: String,
     key: &'static str,
     action: MainMenuAction,
@@ -446,19 +338,18 @@ pub(super) fn spawn_localized_main_button(
     spawn_localized_button(parent, 44.0, 17.0, label, key, action);
 }
 
-pub(super) fn scroll_container(height: f32) -> (NodeBundle, ScrollContainer) {
+pub(super) fn scroll_container(height: f32) -> (impl Bundle, ScrollContainer) {
     (
-        NodeBundle {
-            style: Style {
+        (
+            Node {
                 width: Val::Percent(100.0),
                 height: Val::Px(height),
                 position_type: PositionType::Relative,
                 overflow: Overflow::clip_y(),
                 ..default()
             },
-            background_color: Color::NONE.into(),
-            ..default()
-        },
+            BackgroundColor(Color::NONE),
+        ),
         ScrollContainer {
             offset: 0.0,
             max_offset: 0.0,
@@ -470,63 +361,51 @@ pub(super) fn scroll_content() -> ScrollContent {
     ScrollContent
 }
 
-pub(super) fn spawn_save_slot_button(parent: &mut ChildBuilder, action: SaveListAction) {
+pub(super) fn spawn_save_slot_button(parent: &mut ChildSpawnerCommands, action: SaveListAction) {
     parent
         .spawn((menu_button(34.0), action))
         .with_children(|button| {
-            button.spawn((
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font_size: default_font_size(15.0),
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
-                SaveListLabel,
-            ));
+            button.spawn((label_text("", 15.0, Color::WHITE), SaveListLabel));
         });
 }
 
-pub(super) fn spawn_save_row_button(parent: &mut ChildBuilder, action: SaveListAction, width: f32) {
-    let mut button = menu_button(30.0);
-    button.style.width = Val::Px(default_button_size(width));
-    button.style.min_width = Val::Px(default_button_size(width));
-    parent.spawn((button, action)).with_children(|button| {
-        button.spawn((
-            TextBundle::from_section(
-                "",
-                TextStyle {
-                    font_size: default_font_size(13.0),
-                    color: Color::WHITE,
+pub(super) fn spawn_save_row_button(
+    parent: &mut ChildSpawnerCommands,
+    action: SaveListAction,
+    width: f32,
+) {
+    parent
+        .spawn((
+            styled_button(
+                Node {
+                    width: Val::Px(default_button_size(width)),
+                    min_width: Val::Px(default_button_size(width)),
+                    height: Val::Px(default_button_size(30.0)),
+                    border: UiRect::all(Val::Px(1.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
                     ..default()
                 },
+                super::components::BUTTON_BORDER,
+                super::components::BUTTON_BG,
             ),
-            SaveListLabel,
-        ));
-    });
+            action,
+        ))
+        .with_children(|button| {
+            button.spawn((label_text("", 13.0, Color::WHITE), SaveListLabel));
+        });
 }
 
-pub(super) fn spawn_save_back_button(parent: &mut ChildBuilder) {
+pub(super) fn spawn_save_back_button(parent: &mut ChildSpawnerCommands) {
     parent
         .spawn((menu_button(38.0), SaveListAction::Back))
         .with_children(|button| {
-            button.spawn((
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font_size: default_font_size(16.0),
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
-                SaveListLabel,
-            ));
+            button.spawn((label_text("", 16.0, Color::WHITE), SaveListLabel));
         });
 }
 
 fn spawn_localized_button<'a, A: Bundle>(
-    parent: &'a mut ChildBuilder,
+    parent: &'a mut ChildSpawnerCommands,
     height: f32,
     font_size: f32,
     label: String,
@@ -536,14 +415,7 @@ fn spawn_localized_button<'a, A: Bundle>(
     let mut entity = parent.spawn((menu_button(height), action));
     entity.with_children(|button| {
         button.spawn((
-            TextBundle::from_section(
-                label,
-                TextStyle {
-                    font_size: default_font_size(font_size),
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
+            label_text(label, font_size, Color::WHITE),
             super::types::LocalizedText { key },
         ));
     });
