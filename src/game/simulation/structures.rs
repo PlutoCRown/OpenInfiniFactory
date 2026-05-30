@@ -29,7 +29,11 @@ pub(super) fn material_gravity_moves(
         let structure = material_structure(world, pos);
         handled.extend(structure.iter().copied());
         if can_move_structure(world, &structure, IVec3::NEG_Y, factory_structures) {
-            moves.push(StructureMove::translate(structure, IVec3::NEG_Y));
+            moves.push(StructureMove::translate_marked(
+                structure,
+                IVec3::NEG_Y,
+                MovementMark::Vertical,
+            ));
         }
     }
     moves
@@ -58,7 +62,11 @@ pub(super) fn factory_gravity_moves(
         };
         handled.extend(structure.iter().copied());
         if can_move_structure(world, &structure, IVec3::NEG_Y, factory_structures) {
-            moves.push(StructureMove::translate(structure, IVec3::NEG_Y));
+            moves.push(StructureMove::translate_marked(
+                structure,
+                IVec3::NEG_Y,
+                MovementMark::Vertical,
+            ));
         }
     }
     moves
@@ -69,6 +77,7 @@ pub(super) enum StructureMove {
         structure: HashSet<IVec3>,
         offset: IVec3,
         actor: Option<IVec3>,
+        mark: MovementMark,
     },
     Rotate {
         structure: HashSet<IVec3>,
@@ -77,12 +86,24 @@ pub(super) enum StructureMove {
     },
 }
 
+#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+pub(super) enum MovementMark {
+    Conveyor,
+    Push,
+    Vertical,
+}
+
 impl StructureMove {
-    pub(super) fn translate(structure: HashSet<IVec3>, offset: IVec3) -> Self {
+    pub(super) fn translate_marked(
+        structure: HashSet<IVec3>,
+        offset: IVec3,
+        mark: MovementMark,
+    ) -> Self {
         Self::Translate {
             structure,
             offset,
             actor: None,
+            mark,
         }
     }
 
@@ -90,11 +111,13 @@ impl StructureMove {
         structure: HashSet<IVec3>,
         offset: IVec3,
         actor: IVec3,
+        mark: MovementMark,
     ) -> Self {
         Self::Translate {
             structure,
             offset,
             actor: Some(actor),
+            mark,
         }
     }
 
@@ -105,6 +128,88 @@ impl StructureMove {
             clockwise,
         }
     }
+
+    pub(super) fn movement_mark(&self) -> MovementMark {
+        match self {
+            Self::Translate { mark, .. } => *mark,
+            Self::Rotate { .. } => MovementMark::Push,
+        }
+    }
+
+    pub(super) fn overlaps_structure(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Translate { structure: a, .. }, Self::Translate { structure: b, .. })
+            | (Self::Translate { structure: a, .. }, Self::Rotate { structure: b, .. })
+            | (Self::Rotate { structure: a, .. }, Self::Translate { structure: b, .. })
+            | (Self::Rotate { structure: a, .. }, Self::Rotate { structure: b, .. }) => {
+                a.iter().any(|pos| b.contains(pos))
+            }
+        }
+    }
+
+    fn expanded_for_plan(
+        self,
+        world: &WorldBlocks,
+        factory_structures: &FactoryStructureState,
+    ) -> Self {
+        match self {
+            Self::Translate {
+                structure,
+                offset,
+                actor,
+                mark,
+            } => {
+                let structure =
+                    expanded_move_structure(world, &structure, offset, factory_structures)
+                        .unwrap_or(structure);
+                Self::Translate {
+                    structure,
+                    offset,
+                    actor,
+                    mark,
+                }
+            }
+            movement => movement,
+        }
+    }
+}
+
+pub(super) fn merge_structure_movement_plan(
+    mut planned_moves: Vec<StructureMove>,
+    device_moves: Vec<StructureMove>,
+    world: &WorldBlocks,
+    factory_structures: &FactoryStructureState,
+) -> Vec<StructureMove> {
+    planned_moves = expand_structure_movement_plan(planned_moves, world, factory_structures);
+    let device_moves = expand_structure_movement_plan(device_moves, world, factory_structures);
+
+    for movement in device_moves {
+        let blocked_by_higher_priority = planned_moves.iter().any(|existing| {
+            existing.overlaps_structure(&movement)
+                && existing.movement_mark() > movement.movement_mark()
+        });
+        if blocked_by_higher_priority {
+            continue;
+        }
+
+        planned_moves.retain(|existing| {
+            !(existing.overlaps_structure(&movement)
+                && existing.movement_mark() <= movement.movement_mark())
+        });
+        planned_moves.push(movement);
+    }
+    planned_moves
+}
+
+fn expand_structure_movement_plan(
+    moves: Vec<StructureMove>,
+    world: &WorldBlocks,
+    factory_structures: &FactoryStructureState,
+) -> Vec<StructureMove> {
+    moves
+        .into_iter()
+        .map(|movement| movement.expanded_for_plan(world, factory_structures))
+        .collect()
 }
 
 pub(super) fn execute_structure_moves(
@@ -132,6 +237,7 @@ pub(super) fn execute_structure_moves_with_pistons(
                 structure,
                 offset,
                 actor,
+                ..
             } => {
                 if structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
@@ -270,11 +376,7 @@ fn expanded_move_structure(
             continue;
         }
 
-        let block = world.blocks.get(&target)?;
-        if !block.kind.is_factory() {
-            return None;
-        }
-        let pushed = factory_structures.active_structure_at(target, offset)?;
+        let pushed = pushable_structure_at(world, factory_structures, target, offset)?;
         for pushed_pos in pushed {
             if expanded.insert(pushed_pos) {
                 queue.push_back(pushed_pos);
@@ -283,6 +385,22 @@ fn expanded_move_structure(
     }
 
     can_move_structure_without_push(world, &expanded, offset).then_some(expanded)
+}
+
+fn pushable_structure_at(
+    world: &WorldBlocks,
+    factory_structures: &FactoryStructureState,
+    pos: IVec3,
+    offset: IVec3,
+) -> Option<HashSet<IVec3>> {
+    let block = world.blocks.get(&pos)?;
+    if block.kind.is_material() {
+        return Some(material_structure(world, pos));
+    }
+    if block.kind.is_factory() {
+        return factory_structures.active_structure_at(pos, offset);
+    }
+    None
 }
 
 fn can_move_structure_without_push(

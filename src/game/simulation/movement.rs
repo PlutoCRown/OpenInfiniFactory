@@ -5,7 +5,7 @@ use crate::game::world::blocks::{BlockKind, MovementRule};
 use crate::game::world::grid::WorldBlocks;
 
 use super::factory_activity::FactoryStructureState;
-use super::structures::{material_structure, StructureMove};
+use super::structures::{material_structure, MovementMark, StructureMove};
 
 pub(super) fn mark_structure_movement_phase(
     world: &WorldBlocks,
@@ -27,9 +27,14 @@ pub(super) fn mark_structure_movement_phase(
     for (pos, kind, mover) in movers {
         match mover {
             MovementRule::Translate { source, offset } => {
-                if let Some(movement) =
-                    mark_structure_translate(world, factory_structures, pos, pos + source, offset)
-                {
+                if let Some(movement) = mark_structure_translate(
+                    world,
+                    factory_structures,
+                    pos,
+                    pos + source,
+                    offset,
+                    MovementMark::Conveyor,
+                ) {
                     moves.push(movement);
                 }
             }
@@ -51,9 +56,10 @@ pub(super) fn mark_structure_movement_phase(
                         pos,
                         pos + source,
                         offset,
+                        MovementMark::Push,
                     ) {
                         if kind == BlockKind::Piston {
-                            moves.push(movement.with_actor(pos));
+                            moves.push(movement.with_actor(pos, MovementMark::Push));
                         } else {
                             moves.push(movement);
                         }
@@ -66,15 +72,15 @@ pub(super) fn mark_structure_movement_phase(
 }
 
 trait StructureMoveActorExt {
-    fn with_actor(self, actor: IVec3) -> StructureMove;
+    fn with_actor(self, actor: IVec3, mark: MovementMark) -> StructureMove;
 }
 
 impl StructureMoveActorExt for StructureMove {
-    fn with_actor(self, actor: IVec3) -> StructureMove {
+    fn with_actor(self, actor: IVec3, mark: MovementMark) -> StructureMove {
         match self {
             StructureMove::Translate {
                 structure, offset, ..
-            } => StructureMove::translate_by_actor(structure, offset, actor),
+            } => StructureMove::translate_by_actor(structure, offset, actor, mark),
             movement => movement,
         }
     }
@@ -86,11 +92,13 @@ fn mark_structure_translate(
     actor: IVec3,
     source: IVec3,
     offset: IVec3,
+    mark: MovementMark,
 ) -> Option<StructureMove> {
     if world.is_material_at(source) {
-        return Some(StructureMove::translate(
+        return Some(StructureMove::translate_marked(
             material_structure(world, source),
             offset,
+            mark,
         ));
     }
 
@@ -98,7 +106,7 @@ fn mark_structure_translate(
         return None;
     }
     let structure = factory_structures.active_structure_at(source, offset)?;
-    Some(StructureMove::translate(structure, offset))
+    Some(StructureMove::translate_marked(structure, offset, mark))
 }
 
 fn mark_lift_structure(
@@ -116,7 +124,14 @@ fn mark_lift_structure(
                     .is_some()
         })?;
 
-    mark_structure_translate(world, factory_structures, pos, source, IVec3::Y)
+    mark_structure_translate(
+        world,
+        factory_structures,
+        pos,
+        source,
+        IVec3::Y,
+        MovementMark::Vertical,
+    )
 }
 
 fn mark_rotate_material_structure(

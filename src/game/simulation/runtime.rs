@@ -22,7 +22,7 @@ use super::gravity::mark_gravity_phase;
 use super::markers::{run_powered_marker_phase, run_static_marker_phase};
 use super::movement::mark_structure_movement_phase;
 pub use super::signals::SignalNetworkCache;
-use super::structures::execute_structure_moves_with_pistons;
+use super::structures::{execute_structure_moves_with_pistons, merge_structure_movement_plan};
 
 #[derive(Resource, Clone)]
 pub struct SimulationStepStats {
@@ -106,11 +106,14 @@ pub fn run_turn(
     run_powered_marker_phase(world, &powered_devices);
     sample.marker_before_move_ms = mark_elapsed_ms(&mut mark);
 
-    movement_plan.extend(mark_structure_movement_phase(
+    let device_movement_plan =
+        mark_structure_movement_phase(world, &powered_devices, factory_structures);
+    movement_plan = merge_structure_movement_plan(
+        movement_plan,
+        device_movement_plan,
         world,
-        &powered_devices,
         factory_structures,
-    ));
+    );
     sample.movement_mark_ms = mark_elapsed_ms(&mut mark);
 
     let (animations, piston_animations) =

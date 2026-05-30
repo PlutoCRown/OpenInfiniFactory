@@ -11,7 +11,7 @@ use crate::game::world::grid::{
 
 use super::factory_activity::FactoryStructureState;
 use super::signal_offsets;
-use super::structures::{execute_structure_moves, material_structure, StructureMove};
+use super::structures::{execute_structure_moves, material_structure, MovementMark, StructureMove};
 
 pub(super) fn run_material_behavior_phase(
     world: &mut WorldBlocks,
@@ -233,7 +233,11 @@ fn run_material_teleport_phase(
         handled.extend(structure.iter().map(|pos| *pos + offset));
         let _ = execute_structure_moves(
             world,
-            vec![StructureMove::translate(structure, offset)],
+            vec![StructureMove::translate_marked(
+                structure,
+                offset,
+                MovementMark::Push,
+            )],
             factory_structures,
         );
     }
