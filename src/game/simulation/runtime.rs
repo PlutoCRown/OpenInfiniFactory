@@ -13,7 +13,7 @@ use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_pending_generated_previews, despawn_world,
     rebuild_world_with_runtime_animations_for_debug_state, spawn_pending_generated_block,
-    BlockEntity, PendingGeneratedPreview, WorldRenderAssets,
+    spawn_weld_sparks, BlockEntity, PendingGeneratedPreview, WorldRenderAssets,
 };
 
 use super::behaviors::{material_source_generation, run_material_behavior_phase};
@@ -133,7 +133,7 @@ pub fn run_turn(
     run_powered_marker_phase(world, &powered_devices);
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
-    run_material_behavior_phase(world, &powered_devices, factory_structures);
+    let weld_sparks = run_material_behavior_phase(world, &powered_devices, factory_structures);
 
     prepare_upcoming_generation(world, pending_generated, turn + 1);
     sample.behavior_ms = mark_elapsed_ms(&mut mark);
@@ -155,6 +155,7 @@ pub fn run_turn(
         factory_structures,
         &powered_wires,
     );
+    spawn_weld_sparks(commands, render_assets, &weld_sparks);
     sample.render_rebuild_ms = mark_elapsed_ms(&mut mark);
     sample.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
     sample.has_sample = true;

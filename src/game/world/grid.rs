@@ -453,7 +453,15 @@ impl WorldBlocks {
     }
 
     pub fn clear_generated_markers(&mut self) {
-        self.retain(|_, block| !block.kind.is_generated_marker());
+        let blocks_before = self.blocks.len();
+        self.blocks
+            .retain(|_, block| !block.kind.is_generated_marker());
+        let system_before = self.system_blocks.len();
+        self.system_blocks
+            .retain(|_, block| !block.kind.is_generated_marker());
+        if self.blocks.len() != blocks_before || self.system_blocks.len() != system_before {
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
     }
 }
 

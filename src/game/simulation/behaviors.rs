@@ -17,14 +17,15 @@ pub(super) fn run_material_behavior_phase(
     world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
     factory_structures: &mut FactoryStructureState,
-) {
+) -> Vec<IVec3> {
     run_material_acceptance_phase(world);
-    run_weld_phase(world);
+    let weld_sparks = run_weld_phase(world);
     run_material_destroy_phase(world, powered_devices);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
     run_material_teleport_phase(world, factory_structures);
     run_material_acceptance_phase(world);
+    weld_sparks
 }
 
 #[derive(Clone, Copy)]
@@ -81,48 +82,46 @@ pub(super) fn material_source_generation(
     generated
 }
 
-fn run_weld_phase(world: &mut WorldBlocks) {
+fn run_weld_phase(world: &mut WorldBlocks) -> Vec<IVec3> {
     let weld_points: Vec<IVec3> = world
-        .blocks
+        .system_blocks
         .iter()
         .filter_map(|(pos, block)| block.kind.weld_behavior().is_some().then_some(*pos))
         .collect();
+    let mut sparks = Vec::new();
 
     for weld_point in weld_points {
-        let Some(material_a) = adjacent_material(world, weld_point) else {
+        if !world.is_material_at(weld_point) {
             continue;
-        };
+        }
 
         for offset in signal_offsets() {
             let neighbor = weld_point + offset;
             if !world
-                .blocks
+                .system_blocks
                 .get(&neighbor)
                 .is_some_and(|block| block.kind.weld_behavior().is_some())
             {
                 continue;
             }
 
-            let Some(material_b) = adjacent_material_except(world, neighbor, material_a) else {
+            if !world.is_material_at(neighbor) {
                 continue;
-            };
-            world.weld_materials(material_a, material_b);
+            }
+            let was_new =
+                !world
+                    .material_welds
+                    .contains(&crate::game::world::grid::MaterialWeld::new(
+                        weld_point, neighbor,
+                    ));
+            world.weld_materials(weld_point, neighbor);
+            if was_new {
+                sparks.push(weld_point);
+                sparks.push(neighbor);
+            }
         }
     }
-}
-
-fn adjacent_material(world: &WorldBlocks, pos: IVec3) -> Option<IVec3> {
-    signal_offsets()
-        .into_iter()
-        .map(|offset| pos + offset)
-        .find(|candidate| world.is_material_at(*candidate))
-}
-
-fn adjacent_material_except(world: &WorldBlocks, pos: IVec3, except: IVec3) -> Option<IVec3> {
-    signal_offsets()
-        .into_iter()
-        .map(|offset| pos + offset)
-        .find(|candidate| *candidate != except && world.is_material_at(*candidate))
+    sparks
 }
 
 fn remove_material_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>) {

@@ -69,7 +69,7 @@ fn place_generated_marker(world: &mut WorldBlocks, origin: IVec3, marker: Marker
     let can_place = if solid {
         world.can_place_solid_at(pos)
     } else {
-        !world.is_occupied(pos)
+        !world.system_blocks.contains_key(&pos)
     };
     if can_place {
         world.insert(pos, BlockData { kind, facing });

@@ -75,6 +75,13 @@ pub struct AnimatedPiston {
     duration: f32,
 }
 
+#[derive(Component)]
+pub struct WeldSpark {
+    velocity: Vec3,
+    elapsed: f32,
+    duration: f32,
+}
+
 impl AnimatedPiston {
     pub fn new(animation: PistonAnimation) -> Self {
         Self {
@@ -107,11 +114,25 @@ impl AnimatedBlock {
     }
 }
 
+impl WeldSpark {
+    pub fn new(velocity: Vec3, duration: f32) -> Self {
+        Self {
+            velocity,
+            elapsed: 0.0,
+            duration,
+        }
+    }
+}
+
 pub fn animate_blocks(
     time: Res<Time>,
     mut commands: Commands,
     mut blocks: Query<(Entity, &mut Transform, &mut AnimatedBlock)>,
     mut pistons: Query<(Entity, &mut Transform, &mut AnimatedPiston), Without<AnimatedBlock>>,
+    mut sparks: Query<
+        (Entity, &mut Transform, &mut WeldSpark),
+        (Without<AnimatedBlock>, Without<AnimatedPiston>),
+    >,
 ) {
     for (entity, mut transform, mut animation) in &mut blocks {
         animation.elapsed += time.delta_secs();
@@ -143,6 +164,17 @@ pub fn animate_blocks(
         if t >= 1.0 {
             transform.translation = Vec3::ZERO;
             commands.entity(entity).remove::<AnimatedPiston>();
+        }
+    }
+
+    for (entity, mut transform, mut spark) in &mut sparks {
+        spark.elapsed += time.delta_secs();
+        let t = (spark.elapsed / spark.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
+        transform.translation += spark.velocity * time.delta_secs();
+        transform.scale = Vec3::splat((1.0 - t).max(0.0));
+
+        if t >= 1.0 {
+            commands.entity(entity).despawn();
         }
     }
 }

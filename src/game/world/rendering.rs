@@ -8,7 +8,7 @@ use crate::game::simulation::factory_activity::{
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     AnimatedBlock, AnimatedPiston, AnimationEasing, AnimationTiming, BlockAnimation,
-    BlockAnimationKind, PistonAnimation,
+    BlockAnimationKind, PistonAnimation, WeldSpark,
 };
 use crate::game::world::blocks::{
     BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
@@ -198,6 +198,34 @@ pub fn despawn_pending_generated_previews(
 ) {
     for entity in previews {
         commands.entity(entity).despawn();
+    }
+}
+
+pub fn spawn_weld_sparks(commands: &mut Commands, assets: &WorldRenderAssets, positions: &[IVec3]) {
+    let velocities = [
+        Vec3::new(0.38, 0.70, 0.10),
+        Vec3::new(-0.34, 0.62, 0.18),
+        Vec3::new(0.12, 0.74, -0.36),
+        Vec3::new(-0.16, 0.58, -0.30),
+        Vec3::new(0.28, 0.46, 0.32),
+        Vec3::new(-0.30, 0.50, -0.08),
+    ];
+
+    for pos in positions {
+        let origin = grid_to_world(*pos);
+        for (index, velocity) in velocities.into_iter().enumerate() {
+            let offset = Vec3::new(
+                (index as f32 * 1.37).sin() * 0.08,
+                0.02,
+                (index as f32 * 2.11).cos() * 0.08,
+            );
+            commands.spawn((
+                Mesh3d(assets.weld_spark.clone()),
+                MeshMaterial3d(assets.weld_connector_material.clone()),
+                Transform::from_translation(origin + offset),
+                WeldSpark::new(velocity, 0.28),
+            ));
+        }
     }
 }
 

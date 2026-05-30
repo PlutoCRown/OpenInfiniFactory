@@ -631,6 +631,10 @@ impl BlockKind {
     }
 
     pub fn is_system_layer(self) -> bool {
+        if self.is_generated_marker() {
+            return true;
+        }
+
         matches!(
             self,
             BlockKind::Generator
