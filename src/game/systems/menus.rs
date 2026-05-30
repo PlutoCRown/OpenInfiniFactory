@@ -2,6 +2,7 @@ use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::ButtonState;
 use bevy::prelude::*;
 use bevy::ui_widgets::SliderValue;
+use bevy::window::{PrimaryWindow, Window};
 
 use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
@@ -10,8 +11,8 @@ use crate::game::state::{
 use crate::game::ui::{
     ActiveSettingsSlider, CarriedItem, ConverterAction, GeneratorAction, InventoryItems,
     LabelerAction, MainMenuAction, OpenSettingsDropdown, PauseAction, PendingKeyBind,
-    SaveListAction, SettingsAction, SettingsSlider, SettingsTab, TeleportAction, UiPanelContext,
-    UiPanelId, UiPanelResult, UiRuntime,
+    PendingAppExit, SaveListAction, SettingsAction, SettingsSlider, SettingsTab, TeleportAction,
+    UiPanelContext, UiPanelId, UiPanelResult, UiRuntime,
 };
 use crate::game::world::blocks::{MaterialKind, StampColor};
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
@@ -25,11 +26,11 @@ use crate::shared::save::{
 };
 
 pub fn main_menu_actions(
-    mut exit: MessageWriter<AppExit>,
     mut mode: ResMut<GameMode>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
     mut ui_runtime: ResMut<UiRuntime>,
+    mut pending_exit: ResMut<PendingAppExit>,
     mut interactions: Query<(&Interaction, &MainMenuAction), (Changed<Interaction>, With<Button>)>,
 ) {
     if *mode != GameMode::MainMenu {
@@ -63,10 +64,55 @@ pub fn main_menu_actions(
                 );
             }
             MainMenuAction::Quit => {
-                exit.write(AppExit::Success);
+                request_app_exit(&mut pending_exit, AppExit::Success);
             }
         }
     }
+}
+
+pub fn app_exit_requests(
+    mut commands: Commands,
+    mut app_exit_messages: ResMut<Messages<AppExit>>,
+    mut pending_exit: ResMut<PendingAppExit>,
+    primary_windows: Query<Entity, (With<Window>, With<PrimaryWindow>)>,
+    windows: Query<Entity, With<Window>>,
+) {
+    let mut drained_exit = None;
+    for exit in app_exit_messages.drain() {
+        if exit.is_error() {
+            drained_exit = Some(exit);
+            break;
+        }
+        drained_exit.get_or_insert(exit);
+    }
+
+    if let Some(requested_exit) = drained_exit {
+        pending_exit.requested = true;
+        pending_exit.exit = Some(requested_exit);
+    }
+
+    if !pending_exit.requested {
+        return;
+    }
+
+    if windows.is_empty() {
+        app_exit_messages.write(pending_exit.exit.take().unwrap_or(AppExit::Success));
+        pending_exit.requested = false;
+        return;
+    }
+
+    if let Ok(entity) = primary_windows.single() {
+        commands.entity(entity).despawn();
+    } else {
+        for entity in &windows {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn request_app_exit(pending_exit: &mut PendingAppExit, exit: AppExit) {
+    pending_exit.requested = true;
+    pending_exit.exit = Some(exit);
 }
 
 pub fn save_list_actions(

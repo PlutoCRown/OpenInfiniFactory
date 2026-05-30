@@ -22,7 +22,7 @@ use state::{
     TeleportRenameState,
 };
 use systems::gameplay::{apply_fov, gameplay_input, placement_input, update_hover};
-use systems::menus::{main_menu_actions, pause_menu_actions, save_list_actions};
+use systems::menus::{app_exit_requests, main_menu_actions, pause_menu_actions, save_list_actions};
 use systems::simulation_controls::simulation_controls;
 use ui::{GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
@@ -76,6 +76,7 @@ impl Plugin for GamePlugin {
             .insert_resource(config)
             .insert_resource(i18n)
             .insert_resource(SaveState::default())
+            .insert_resource(ui::PendingAppExit::default())
             .insert_resource(systems::debug::DebugState::default())
             .insert_resource(systems::debug::PerfStats::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
@@ -104,6 +105,7 @@ impl Plugin for GamePlugin {
                     .before(systems::debug::mark_perf_input),
             )
             .add_systems(Update, systems::debug::mark_perf_input)
+            .add_systems(Last, app_exit_requests)
             .add_systems(
                 Update,
                 (main_menu_actions, save_list_actions, pause_menu_actions)

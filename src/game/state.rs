@@ -132,6 +132,25 @@ pub enum GameMode {
     Paused,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum UiPanelId {
+    Settings,
+    Generator,
+    Labeler,
+    Converter,
+    Teleport,
+}
+
+impl UiPanelId {
+    pub fn is_settings(self) -> bool {
+        self == Self::Settings
+    }
+
+    pub fn is_blocking_gameplay(self) -> bool {
+        true
+    }
+}
+
 #[derive(Resource, Clone, Copy, Eq, PartialEq)]
 pub enum BuilderMode {
     Edit,

@@ -2,31 +2,13 @@ use bevy::prelude::*;
 use std::collections::VecDeque;
 
 use crate::game::state::{BuilderMode, GameMode};
+pub use crate::game::state::UiPanelId;
 use crate::game::world::blocks::{BlockKind, EDIT_BLOCKS, PLAY_BLOCKS};
 use crate::shared::config::{ConfigAction, ConfigSelectionMode};
 use crate::shared::i18n::Language;
 
 pub const HOTBAR_SLOTS: usize = 9;
 pub(super) const BACKPACK_SLOTS: usize = 27;
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum UiPanelId {
-    Settings,
-    Generator,
-    Labeler,
-    Converter,
-    Teleport,
-}
-
-impl UiPanelId {
-    pub fn is_settings(self) -> bool {
-        self == Self::Settings
-    }
-
-    pub fn is_blocking_gameplay(self) -> bool {
-        true
-    }
-}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct UiRequestId(u64);
@@ -406,6 +388,12 @@ pub enum SettingsTab {
 
 #[derive(Resource, Default)]
 pub struct PendingKeyBind(pub Option<ConfigAction>);
+
+#[derive(Resource, Default)]
+pub struct PendingAppExit {
+    pub requested: bool,
+    pub exit: Option<AppExit>,
+}
 
 #[derive(Resource, Default)]
 pub struct OpenSettingsDropdown(pub Option<SettingsDropdown>);

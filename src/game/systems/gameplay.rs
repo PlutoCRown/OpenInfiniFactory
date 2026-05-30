@@ -11,7 +11,7 @@ use crate::game::ui::{
     AreaKind, CarriedItem, InventoryItems, PendingKeyBind, UiRuntime, HOTBAR_SLOTS,
 };
 use crate::game::world::animation::BlockAnimation;
-use crate::game::world::blocks::{BlockData, BlockKind, MarkerBehavior};
+use crate::game::world::blocks::{BlockData, BlockKind, Facing, MarkerBehavior};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::{
     despawn_edit_previews, rebuild_world, rebuild_world_with_animations, spawn_block_preview,
@@ -26,6 +26,7 @@ pub fn gameplay_input(
     config: Res<GameConfig>,
     simulation: Res<SimulationState>,
     pending_key_bind: Res<PendingKeyBind>,
+    inventory: Res<InventoryItems>,
     mut mode: ResMut<GameMode>,
     mut placement: ResMut<PlacementState>,
     mut teleport_rename: ResMut<TeleportRenameState>,
@@ -108,6 +109,7 @@ pub fn gameplay_input(
     if keys.just_pressed(bindings.rotate_or_rollback.key_code())
         && !simulation.is_active()
         && placement.target.is_none()
+        && selected_block_is_directional(&inventory, &placement)
     {
         placement.facing = placement.facing.rotate();
     }
@@ -230,7 +232,7 @@ pub fn placement_input(
 
     if keys.just_pressed(config.key_bindings.rotate_or_rollback.key_code()) {
         if !rotate_pending_place_preview(&mut placement) {
-            if can_preview_place {
+            if can_preview_place && selected_block_is_directional(&inventory, &placement) {
                 placement.facing = placement.facing.rotate();
             } else if let Some(pos) = current_target_pos {
                 if rotate_block_at(
@@ -341,6 +343,10 @@ fn rotate_pending_place_preview(placement: &mut PlacementState) -> bool {
         return false;
     };
 
+    if !block.kind.is_directional() {
+        return true;
+    }
+
     block.facing = block.facing.rotate();
     placement.facing = block.facing;
     true
@@ -353,10 +359,21 @@ fn selected_place_block(
 ) -> Option<BlockData> {
     let kind = inventory.hotbar[placement.selected]?;
     let kind = kind.block()?;
+    let facing = if kind.is_directional() {
+        placement.facing
+    } else {
+        Facing::North
+    };
     can_place_in_mode(kind, builder_mode).then_some(BlockData {
         kind,
-        facing: placement.facing,
+        facing,
     })
+}
+
+fn selected_block_is_directional(inventory: &InventoryItems, placement: &PlacementState) -> bool {
+    inventory.hotbar[placement.selected]
+        .and_then(|item| item.block())
+        .is_some_and(BlockKind::is_directional)
 }
 
 fn selected_area(inventory: &InventoryItems, placement: &PlacementState) -> Option<AreaKind> {
@@ -391,14 +408,14 @@ fn pick_target_block(
     placement: &mut PlacementState,
     inventory: &mut InventoryItems,
 ) {
-    let Some(kind) = world
+    let Some(block) = world
         .blocks
         .get(&pos)
         .or_else(|| world.system_blocks.get(&pos))
-        .map(|block| block.kind)
     else {
         return;
     };
+    let kind = block.kind;
     if !inventory.can_take_block(kind) {
         return;
     }
@@ -407,6 +424,9 @@ fn pick_target_block(
         placement.selected = index;
     } else {
         inventory.set_hotbar_block(placement.selected, kind);
+    }
+    if kind.is_directional() {
+        placement.facing = block.facing;
     }
     placement.selection.clear();
     placement.edit_gesture = None;

@@ -19,15 +19,16 @@ pub use systems::{
 pub use types::{
     ActiveSettingsSlider, AreaKind, CarriedItem, ConverterAction, GeneratorAction, InventoryItems,
     LabelerAction, MainMenuAction, OpenSettingsDropdown, PauseAction, PendingKeyBind,
-    SaveListAction, SettingsAction, SettingsSlider, SettingsTab, TeleportAction, UiPanelContext,
-    UiPanelId, UiPanelResponse, UiPanelResult, UiRequestId, UiRuntime, HOTBAR_SLOTS,
+    PendingAppExit, SaveListAction, SettingsAction, SettingsSlider, SettingsTab, TeleportAction,
+    UiPanelContext, UiPanelResult, UiRuntime, HOTBAR_SLOTS,
 };
+pub use crate::game::state::UiPanelId;
 
-use crate::game::{player, systems};
 use crate::game::systems::menus::{
     converter_menu_actions, generator_menu_actions, labeler_menu_actions, settings_menu_actions,
     teleport_menu_actions, teleport_rename_input,
 };
+use crate::game::{player, systems as game_systems};
 
 pub struct GameUiPlugin;
 
@@ -50,8 +51,8 @@ impl Plugin for GameUiPlugin {
                     settings_menu_actions,
                 )
                     .chain()
-                    .after(systems::debug::mark_perf_input)
-                    .before(systems::debug::mark_perf_menus),
+                    .after(game_systems::debug::mark_perf_input)
+                    .before(game_systems::debug::mark_perf_menus),
             )
             .add_systems(
                 Update,
@@ -67,8 +68,8 @@ impl Plugin for GameUiPlugin {
                     update_settings_tabs_ui,
                     update_scroll_containers,
                 )
-                    .after(systems::debug::mark_perf_animation)
-                    .before(systems::debug::mark_perf_ui),
+                    .after(game_systems::debug::mark_perf_animation)
+                    .before(game_systems::debug::mark_perf_ui),
             )
             .add_systems(
                 Update,
@@ -85,8 +86,8 @@ impl Plugin for GameUiPlugin {
                     apply_ui_font,
                     player::controller::sync_cursor_grab,
                 )
-                    .after(systems::debug::mark_perf_animation)
-                    .before(systems::debug::mark_perf_ui),
+                    .after(game_systems::debug::mark_perf_animation)
+                    .before(game_systems::debug::mark_perf_ui),
             );
     }
 }

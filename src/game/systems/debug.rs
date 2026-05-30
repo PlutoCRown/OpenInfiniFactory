@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use crate::game::player::controller::{player_collision_box, FlyCamera};
 use crate::game::simulation::runtime::SimulationStepStats;
-use crate::game::state::{BuilderMode, GameMode, SimulationState};
+use crate::game::state::{BuilderMode, SimulationState};
 use crate::game::ui::PendingKeyBind;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockEntity;

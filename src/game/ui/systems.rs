@@ -28,7 +28,7 @@ use super::types::{
     SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsSlider, SettingsSliderFill,
     SettingsSliderKnob, SettingsStatusText, SettingsTab, SettingsValue, SettingsValueText,
     SimulationStatusText, SimulationText, SlotArea, SlotLabel, TeleportNameText,
-    TeleportPairText, UiPanelBinding, UiPanelId, UiRuntime, UiScaleText,
+    TeleportPairText, UiPanelBinding, UiRuntime, UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -295,15 +295,21 @@ pub fn update_status_ui(
     >,
 ) {
     if let Ok(mut text) = hotbar.single_mut() {
-        let selected = inventory.hotbar[placement.selected]
-            .map(|kind| i18n.text(kind.name_key()))
+        let selected_item = inventory.hotbar[placement.selected];
+        let selected = selected_item
+            .map(|item| i18n.text(item.name_key()))
             .unwrap_or_else(|| i18n.text("empty"));
+        let facing = selected_item
+            .and_then(|item| item.block())
+            .filter(|kind| kind.is_directional())
+            .map(|_| i18n.fmt("status.facing", &[("facing", i18n.text(placement.facing.name_key()))]))
+            .unwrap_or_default();
         text.0 = i18n.fmt(
             "status.hotbar",
             &[
                 ("mode", builder_mode_name(*builder_mode, &i18n)),
                 ("selected", selected),
-                ("facing", i18n.text(placement.facing.name_key())),
+                ("facing", facing),
             ],
         );
     }
