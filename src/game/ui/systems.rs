@@ -18,17 +18,17 @@ use super::components::{
 };
 use super::types::{
     BackpackPanel, CarriedIcon, CarriedItem, CarriedLabel, ConverterInputRow, ConverterInputText,
-    ConverterModeText, ConverterOutputText, ConverterPanel, Crosshair, CurrentSaveText,
-    DeleteSelectionModeText, FovText, GeneratorMaterialText, GeneratorPanel, GeneratorPeriodText,
-    HotbarText, InGameHudStyle, InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle,
-    KeyBindingButton, KeyBindingLabel, LabelerColorText, LabelerPanel, LocalizedText,
-    MainMenuPanel, OpenSettingsDropdown, PauseAction, PausePanel, PendingKeyBind,
+    ConverterModeText, ConverterOutputText, Crosshair, CurrentSaveText, DeleteSelectionModeText,
+    FovText, GeneratorMaterialText, GeneratorPeriodText, HotbarText, InGameHudStyle,
+    InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle, KeyBindingButton,
+    KeyBindingLabel, LabelerColorText, LocalizedText, MainMenuPanel, OpenSettingsDropdown,
+    PauseAction, PausePanel, PendingKeyBind,
     PlaceSelectionModeText, SaveListAction, SaveListLabel, SaveListPanel, SaveListTitle,
     ScrollContainer, ScrollContent, SettingsAction, SettingsDropdownLabel, SettingsDropdownList,
-    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider,
-    SettingsSliderFill, SettingsSliderKnob, SettingsStatusText, SettingsTab, SettingsValue,
-    SettingsValueText, SimulationStatusText, SimulationText, SlotArea, SlotLabel, TeleportNameText,
-    TeleportPairText, TeleportPanel, UiScaleText,
+    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsSlider, SettingsSliderFill,
+    SettingsSliderKnob, SettingsStatusText, SettingsTab, SettingsValue, SettingsValueText,
+    SimulationStatusText, SimulationText, SlotArea, SlotLabel, TeleportNameText,
+    TeleportPairText, UiPanelBinding, UiPanelId, UiRuntime, UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -458,13 +458,13 @@ pub fn update_carried_item_ui(
 }
 
 pub fn update_scroll_containers(
-    mode: Res<GameMode>,
+    ui_runtime: Res<UiRuntime>,
     _settings_tab: Res<SettingsTab>,
     mut mouse_wheel: MessageReader<MouseWheel>,
     mut containers: Query<(&mut ScrollContainer, &Children, &ComputedNode)>,
     mut contents: Query<(&mut Node, &ComputedNode), With<ScrollContent>>,
 ) {
-    if *mode != GameMode::Settings {
+    if !ui_runtime.is_settings_open() {
         return;
     }
 
@@ -493,7 +493,7 @@ pub fn update_scroll_containers(
 }
 
 pub fn update_generator_ui(
-    placement: Res<PlacementState>,
+    ui_runtime: Res<UiRuntime>,
     world: Res<crate::game::world::grid::WorldBlocks>,
     i18n: Res<I18n>,
     mut generator_period_text: Query<
@@ -505,7 +505,7 @@ pub fn update_generator_ui(
         (With<GeneratorMaterialText>, Without<GeneratorPeriodText>),
     >,
 ) {
-    let Some(pos) = placement.generator_panel else {
+    let Some(pos) = ui_runtime.active_block_pos() else {
         return;
     };
 
@@ -528,12 +528,12 @@ pub fn update_generator_ui(
 }
 
 pub fn update_labeler_ui(
-    placement: Res<PlacementState>,
+    ui_runtime: Res<UiRuntime>,
     world: Res<crate::game::world::grid::WorldBlocks>,
     i18n: Res<I18n>,
     mut labeler_color_text: Query<&mut Text, With<LabelerColorText>>,
 ) {
-    let Some(pos) = placement.labeler_panel else {
+    let Some(pos) = ui_runtime.active_block_pos() else {
         return;
     };
 
@@ -547,7 +547,7 @@ pub fn update_labeler_ui(
 }
 
 pub fn update_converter_ui(
-    placement: Res<PlacementState>,
+    ui_runtime: Res<UiRuntime>,
     world: Res<crate::game::world::grid::WorldBlocks>,
     i18n: Res<I18n>,
     mut converter_mode_text: Query<
@@ -576,7 +576,7 @@ pub fn update_converter_ui(
     >,
     mut converter_input_row: Query<&mut Node, With<ConverterInputRow>>,
 ) {
-    let Some(pos) = placement.converter_panel else {
+    let Some(pos) = ui_runtime.active_block_pos() else {
         return;
     };
 
@@ -609,14 +609,14 @@ pub fn update_converter_ui(
 }
 
 pub fn update_teleport_ui(
-    placement: Res<PlacementState>,
+    ui_runtime: Res<UiRuntime>,
     rename_state: Res<TeleportRenameState>,
     world: Res<crate::game::world::grid::WorldBlocks>,
     i18n: Res<I18n>,
     mut teleport_name_text: Query<&mut Text, (With<TeleportNameText>, Without<TeleportPairText>)>,
     mut teleport_pair_text: Query<&mut Text, (With<TeleportPairText>, Without<TeleportNameText>)>,
 ) {
-    let Some(pos) = placement.teleport_panel else {
+    let Some(pos) = ui_runtime.active_block_pos() else {
         return;
     };
 
@@ -1004,17 +1004,42 @@ pub fn update_panel_visibility(
     save_state: Res<SaveState>,
     solution_state: Res<SolutionState>,
     settings_tab: Res<SettingsTab>,
+    ui_runtime: Res<UiRuntime>,
     mut style_sets: ParamSet<(
         Query<&mut Node, (With<MainMenuPanel>, Without<PauseAction>)>,
         Query<&mut Node, (With<SaveListPanel>, Without<PauseAction>)>,
-        Query<&mut Node, (With<SettingsPanel>, Without<PauseAction>)>,
-        Query<&mut Node, (With<SettingsGameplayGroup>, Without<PauseAction>)>,
-        Query<&mut Node, (With<SettingsKeyBindingsGroup>, Without<PauseAction>)>,
+        Query<
+            &mut Node,
+            (
+                With<SettingsGameplayGroup>,
+                Without<PauseAction>,
+                Without<UiPanelBinding>,
+            ),
+        >,
+        Query<
+            &mut Node,
+            (
+                With<SettingsKeyBindingsGroup>,
+                Without<PauseAction>,
+                Without<UiPanelBinding>,
+            ),
+        >,
         Query<&mut Node, (With<BackpackPanel>, Without<PauseAction>)>,
         Query<&mut Node, (With<PausePanel>, Without<PauseAction>)>,
-        Query<&mut Node, (With<GeneratorPanel>, Without<PauseAction>)>,
     )>,
     mut pause_buttons: Query<(&PauseAction, &mut Node), With<Button>>,
+    mut bound_panels: Query<
+        (&UiPanelBinding, &mut Node),
+        (
+            Without<PauseAction>,
+            Without<MainMenuPanel>,
+            Without<SaveListPanel>,
+            Without<SettingsGameplayGroup>,
+            Without<SettingsKeyBindingsGroup>,
+            Without<BackpackPanel>,
+            Without<PausePanel>,
+        ),
+    >,
 ) {
     for mut style in &mut style_sets.p0() {
         style.display = if *mode == GameMode::MainMenu {
@@ -1032,8 +1057,10 @@ pub fn update_panel_visibility(
         };
     }
 
+    let settings_open = ui_runtime.is_settings_open();
+
     for mut style in &mut style_sets.p2() {
-        style.display = if *mode == GameMode::Settings {
+        style.display = if settings_open && *settings_tab == SettingsTab::Gameplay {
             Display::Flex
         } else {
             Display::None
@@ -1041,7 +1068,7 @@ pub fn update_panel_visibility(
     }
 
     for mut style in &mut style_sets.p3() {
-        style.display = if *mode == GameMode::Settings && *settings_tab == SettingsTab::Gameplay {
+        style.display = if settings_open && *settings_tab == SettingsTab::KeyBindings {
             Display::Flex
         } else {
             Display::None
@@ -1049,15 +1076,6 @@ pub fn update_panel_visibility(
     }
 
     for mut style in &mut style_sets.p4() {
-        style.display = if *mode == GameMode::Settings && *settings_tab == SettingsTab::KeyBindings
-        {
-            Display::Flex
-        } else {
-            Display::None
-        };
-    }
-
-    for mut style in &mut style_sets.p5() {
         style.display = if *mode == GameMode::Inventory {
             Display::Flex
         } else {
@@ -1065,7 +1083,7 @@ pub fn update_panel_visibility(
         };
     }
 
-    for mut style in &mut style_sets.p6() {
+    for mut style in &mut style_sets.p5() {
         style.display = if matches!(
             *mode,
             GameMode::Paused | GameMode::ConfirmSaveSolutionBeforeEdit | GameMode::ConfirmBackToMain
@@ -1084,47 +1102,10 @@ pub fn update_panel_visibility(
         };
     }
 
-    for mut style in &mut style_sets.p7() {
-        style.display = if *mode == GameMode::GeneratorSettings {
-            Display::Flex
-        } else {
-            Display::None
-        };
-    }
-}
-
-pub fn update_labeler_panel_visibility(
-    mode: Res<GameMode>,
-    mut labeler_panel: Query<&mut Node, With<LabelerPanel>>,
-) {
-    for mut style in &mut labeler_panel {
-        style.display = if *mode == GameMode::LabelerSettings {
-            Display::Flex
-        } else {
-            Display::None
-        };
-    }
-}
-
-pub fn update_converter_panel_visibility(
-    mode: Res<GameMode>,
-    mut converter_panel: Query<&mut Node, With<ConverterPanel>>,
-) {
-    for mut style in &mut converter_panel {
-        style.display = if *mode == GameMode::ConverterSettings {
-            Display::Flex
-        } else {
-            Display::None
-        };
-    }
-}
-
-pub fn update_teleport_panel_visibility(
-    mode: Res<GameMode>,
-    mut teleport_panel: Query<&mut Node, With<TeleportPanel>>,
-) {
-    for mut style in &mut teleport_panel {
-        style.display = if *mode == GameMode::TeleportSettings {
+    let active_panel = ui_runtime.active_panel();
+    for (binding, mut style) in &mut bound_panels {
+        let visible = active_panel == Some(binding.0);
+        style.display = if visible {
             Display::Flex
         } else {
             Display::None

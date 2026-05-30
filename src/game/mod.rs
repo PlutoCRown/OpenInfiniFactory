@@ -16,22 +16,15 @@ use crate::shared::config::load_config;
 use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::save::SaveState;
 
-use player::controller::{camera_look, camera_move, spawn_player, sync_cursor_grab};
+use player::controller::{camera_look, camera_move, spawn_player};
 use state::{
-    BuilderMode, GameMode, GameSettings, PlacementState, SettingsReturnMode, SimulationState,
-    SolutionState, TeleportRenameState,
+    BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
+    TeleportRenameState,
 };
 use systems::gameplay::{apply_fov, gameplay_input, placement_input, update_hover};
-use systems::menus::{
-    converter_menu_actions, generator_menu_actions, labeler_menu_actions, main_menu_actions,
-    pause_menu_actions, save_list_actions, settings_menu_actions, teleport_menu_actions,
-    teleport_rename_input,
-};
+use systems::menus::{main_menu_actions, pause_menu_actions, save_list_actions};
 use systems::simulation_controls::simulation_controls;
-use ui::{
-    ActiveSettingsSlider, CarriedItem, InventoryItems, OpenSettingsDropdown, PendingKeyBind,
-    SettingsTab,
-};
+use ui::{GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
 use world::rendering::setup_scene;
@@ -83,17 +76,12 @@ impl Plugin for GamePlugin {
             .insert_resource(config)
             .insert_resource(i18n)
             .insert_resource(SaveState::default())
-            .insert_resource(SettingsTab::default())
-            .insert_resource(SettingsReturnMode::default())
-            .insert_resource(OpenSettingsDropdown::default())
-            .insert_resource(PendingKeyBind::default())
-            .insert_resource(ActiveSettingsSlider::default())
             .insert_resource(systems::debug::DebugState::default())
             .insert_resource(systems::debug::PerfStats::default())
-            .insert_resource(CarriedItem::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(InputDispatchPlugin)
             .add_plugins(UiWidgetsPlugins)
+            .add_plugins(GameUiPlugin)
             .add_observer(slider_self_update)
             .add_plugins(MaterialPlugin::<world::scene_material::SceneBlockMaterial>::default())
             .add_systems(
@@ -118,17 +106,7 @@ impl Plugin for GamePlugin {
             .add_systems(Update, systems::debug::mark_perf_input)
             .add_systems(
                 Update,
-                (
-                    main_menu_actions,
-                    save_list_actions,
-                    pause_menu_actions,
-                    generator_menu_actions,
-                    labeler_menu_actions,
-                    converter_menu_actions,
-                    teleport_menu_actions,
-                    teleport_rename_input,
-                    settings_menu_actions,
-                )
+                (main_menu_actions, save_list_actions, pause_menu_actions)
                     .chain()
                     .after(systems::debug::mark_perf_input)
                     .before(systems::debug::mark_perf_menus),
@@ -152,44 +130,6 @@ impl Plugin for GamePlugin {
             .add_systems(Update, systems::debug::mark_perf_view)
             .add_systems(Update, animate_blocks.after(systems::debug::mark_perf_view))
             .add_systems(Update, systems::debug::mark_perf_animation)
-            .add_systems(
-                Update,
-                (
-                    ui::inventory_slot_clicks,
-                    ui::update_status_ui,
-                    ui::update_localized_ui,
-                    ui::update_button_hover_ui,
-                    ui::update_settings_text_ui,
-                    ui::update_settings_sliders_ui,
-                    ui::update_settings_slider_drag_ui,
-                    ui::update_settings_dropdowns_ui,
-                    ui::update_settings_tabs_ui,
-                    ui::update_scroll_containers,
-                    ui::update_labeler_panel_visibility,
-                    ui::update_converter_panel_visibility,
-                    ui::update_teleport_panel_visibility,
-                )
-                    .after(systems::debug::mark_perf_animation)
-                    .before(systems::debug::mark_perf_ui),
-            )
-            .add_systems(
-                Update,
-                (
-                    ui::update_panel_visibility,
-                    ui::update_hud_visibility,
-                    ui::update_generator_ui,
-                    ui::update_labeler_ui,
-                    ui::update_converter_ui,
-                    ui::update_teleport_ui,
-                    ui::update_inventory_slots,
-                    ui::update_carried_item_ui,
-                    ui::update_save_list_ui,
-                    ui::apply_ui_font,
-                    sync_cursor_grab,
-                )
-                    .after(systems::debug::mark_perf_animation)
-                    .before(systems::debug::mark_perf_ui),
-            )
             .add_systems(Update, systems::debug::mark_perf_ui)
             .add_systems(
                 Update,

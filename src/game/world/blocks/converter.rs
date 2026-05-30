@@ -2,6 +2,7 @@ use super::{
     rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, EditableBlock,
     ModelMaterial, ModelMesh, SystemBlock,
 };
+use crate::game::ui::UiPanelId;
 use crate::game::world::grid::{BlockSettings, ConverterSettings};
 
 const MODEL: &[BlockModelPart] = &[
@@ -50,6 +51,10 @@ impl Block for ConverterBlock {
 
     fn model(&self) -> BlockModel {
         BlockModel::Parts(MODEL)
+    }
+
+    fn ui_panel(&self) -> Option<UiPanelId> {
+        Some(UiPanelId::Converter)
     }
 }
 

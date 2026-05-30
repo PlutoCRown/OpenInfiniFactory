@@ -7,9 +7,11 @@ use crate::game::state::{
     SelectionAxis, SelectionBounds, SelectionDrag, SimulationState, SolutionState,
     TeleportRenameState,
 };
-use crate::game::ui::{AreaKind, CarriedItem, InventoryItems, PendingKeyBind, HOTBAR_SLOTS};
+use crate::game::ui::{
+    AreaKind, CarriedItem, InventoryItems, PendingKeyBind, UiRuntime, HOTBAR_SLOTS,
+};
 use crate::game::world::animation::BlockAnimation;
-use crate::game::world::blocks::{BlockData, BlockKind, MarkerBehavior, MaterialSource};
+use crate::game::world::blocks::{BlockData, BlockKind, MarkerBehavior};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::{
     despawn_edit_previews, rebuild_world, rebuild_world_with_animations, spawn_block_preview,
@@ -28,17 +30,22 @@ pub fn gameplay_input(
     mut placement: ResMut<PlacementState>,
     mut teleport_rename: ResMut<TeleportRenameState>,
     mut carried: ResMut<CarriedItem>,
+    mut ui_runtime: ResMut<UiRuntime>,
 ) {
     let bindings = &config.key_bindings;
 
-    if *mode == GameMode::Settings && pending_key_bind.0.is_some() {
+    if pending_key_bind.0.is_some() {
         mouse_wheel.clear();
         return;
     }
 
     if keys.just_pressed(bindings.pause.key_code()) {
-        if *mode == GameMode::TeleportSettings && teleport_rename.editing.is_some() {
+        if teleport_rename.editing.is_some() {
             teleport_rename.editing = None;
+            return;
+        }
+        if ui_runtime.blocks_gameplay() {
+            ui_runtime.close_current();
             return;
         }
         *mode = match *mode {
@@ -48,30 +55,12 @@ pub fn gameplay_input(
                 GameMode::Playing
             }
             GameMode::Paused => GameMode::Playing,
-            GameMode::GeneratorSettings => {
-                placement.generator_panel = None;
-                GameMode::Playing
-            }
-            GameMode::LabelerSettings => {
-                placement.labeler_panel = None;
-                GameMode::Playing
-            }
-            GameMode::ConverterSettings => {
-                placement.converter_panel = None;
-                GameMode::Playing
-            }
-            GameMode::TeleportSettings => {
-                teleport_rename.editing = None;
-                placement.teleport_panel = None;
-                GameMode::Playing
-            }
-            GameMode::Settings => GameMode::Paused,
             GameMode::SaveListMain => GameMode::MainMenu,
             other => other,
         };
     }
 
-    if !matches!(*mode, GameMode::Playing | GameMode::Inventory) {
+    if ui_runtime.blocks_gameplay() || !matches!(*mode, GameMode::Playing | GameMode::Inventory) {
         mouse_wheel.clear();
         return;
     }
@@ -136,6 +125,7 @@ pub fn placement_input(
     mut mode: ResMut<GameMode>,
     simulation: Res<SimulationState>,
     mut placement: ResMut<PlacementState>,
+    mut ui_runtime: ResMut<UiRuntime>,
     render_assets: Res<WorldRenderAssets>,
     block_entities: Query<(Entity, &BlockEntity)>,
     edit_previews: Query<Entity, With<EditPreview>>,
@@ -160,7 +150,7 @@ pub fn placement_input(
         return;
     }
 
-    if simulation.is_active() {
+    if ui_runtime.blocks_gameplay() || simulation.is_active() {
         placement.edit_gesture = None;
         despawn_edit_previews(&mut commands, &edit_previews);
         return;
@@ -181,7 +171,7 @@ pub fn placement_input(
     let force_place = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     if mouse_buttons.just_pressed(place_button)
         && !force_place
-        && open_target_block_ui(current_target_pos, &world, &mut placement, &mut mode)
+        && open_target_block_ui(current_target_pos, &world, &mut ui_runtime, &mut mode)
     {
         placement.edit_gesture = None;
         placement.selection.clear();
@@ -376,7 +366,7 @@ fn selected_area(inventory: &InventoryItems, placement: &PlacementState) -> Opti
 fn open_target_block_ui(
     target: Option<IVec3>,
     world: &WorldBlocks,
-    placement: &mut PlacementState,
+    ui_runtime: &mut UiRuntime,
     mode: &mut GameMode,
 ) -> bool {
     let Some(pos) = target else {
@@ -386,30 +376,13 @@ fn open_target_block_ui(
         return false;
     };
 
-    if matches!(
-        block.kind.material_source(block.facing),
-        Some(MaterialSource::Generator)
-    ) {
-        placement.generator_panel = Some(pos);
-        *mode = GameMode::GeneratorSettings;
-        return true;
-    }
-    if block.kind.material_labeler(block.facing).is_some() {
-        placement.labeler_panel = Some(pos);
-        *mode = GameMode::LabelerSettings;
-        return true;
-    }
-    if block.kind == BlockKind::Converter {
-        placement.converter_panel = Some(pos);
-        *mode = GameMode::ConverterSettings;
-        return true;
-    }
-    if block.kind.is_teleport() {
-        placement.teleport_panel = Some(pos);
-        *mode = GameMode::TeleportSettings;
-        return true;
-    }
-    false
+    let Some(panel) = block.kind.ui_panel() else {
+        return false;
+    };
+
+    ui_runtime.open_block(panel, pos);
+    *mode = GameMode::Playing;
+    true
 }
 
 fn pick_target_block(
@@ -951,6 +924,7 @@ pub fn apply_fov(
 pub fn update_hover(
     mut placement: ResMut<PlacementState>,
     mode: Res<GameMode>,
+    ui_runtime: Res<UiRuntime>,
     inventory: Res<InventoryItems>,
     builder_mode: Res<BuilderMode>,
     camera: Query<&Transform, (With<FlyCamera>, Without<HoverMarker>)>,
@@ -970,7 +944,7 @@ pub fn update_hover(
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if *mode != GameMode::Playing {
+    if *mode != GameMode::Playing || ui_runtime.blocks_gameplay() {
         placement.target = None;
         placement.edit_gesture = None;
         if let Ok((_, mut visibility, _)) = marker.single_mut() {

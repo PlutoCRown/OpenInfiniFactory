@@ -189,11 +189,10 @@ pub fn setup_debug_ui(mut commands: Commands) {
 pub fn toggle_debug(
     keys: Res<ButtonInput<KeyCode>>,
     config: Res<GameConfig>,
-    mode: Res<GameMode>,
     pending_key_bind: Res<PendingKeyBind>,
     mut debug: ResMut<DebugState>,
 ) {
-    if *mode == GameMode::Settings && pending_key_bind.0.is_some() {
+    if pending_key_bind.0.is_some() {
         return;
     }
 

@@ -37,6 +37,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub use self::registry::{assert_registry_consistent, ALL_BLOCKS, EDIT_BLOCKS, PLAY_BLOCKS};
+use crate::game::ui::UiPanelId;
 pub use crate::game::world::direction::Facing;
 use crate::game::world::grid::BlockSettings;
 
@@ -100,6 +101,10 @@ pub trait Block: Send + Sync {
     }
 
     fn alternate(&self) -> Option<BlockKind> {
+        None
+    }
+
+    fn ui_panel(&self) -> Option<UiPanelId> {
         None
     }
 }
@@ -652,6 +657,10 @@ impl BlockKind {
 
     pub fn alternate(self) -> Option<Self> {
         self.block().alternate()
+    }
+
+    pub fn ui_panel(self) -> Option<UiPanelId> {
+        self.block().ui_panel()
     }
 
     pub fn marker_behavior(self, facing: Facing) -> Option<MarkerBehavior> {

@@ -1,12 +1,154 @@
 use bevy::prelude::*;
+use std::collections::VecDeque;
 
-use crate::game::state::BuilderMode;
+use crate::game::state::{BuilderMode, GameMode};
 use crate::game::world::blocks::{BlockKind, EDIT_BLOCKS, PLAY_BLOCKS};
 use crate::shared::config::{ConfigAction, ConfigSelectionMode};
 use crate::shared::i18n::Language;
 
 pub const HOTBAR_SLOTS: usize = 9;
 pub(super) const BACKPACK_SLOTS: usize = 27;
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum UiPanelId {
+    Settings,
+    Generator,
+    Labeler,
+    Converter,
+    Teleport,
+}
+
+impl UiPanelId {
+    pub fn is_settings(self) -> bool {
+        self == Self::Settings
+    }
+
+    pub fn is_blocking_gameplay(self) -> bool {
+        true
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct UiRequestId(u64);
+
+impl UiRequestId {
+    pub fn raw(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UiPanelContext {
+    None,
+    ReturnTo(GameMode),
+    Block { pos: IVec3 },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UiPanelResult {
+    Closed,
+    SettingsClosed,
+    BlockClosed { pos: IVec3 },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UiPanelSession {
+    pub request_id: UiRequestId,
+    pub panel: UiPanelId,
+    pub context: UiPanelContext,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UiPanelResponse {
+    pub request_id: UiRequestId,
+    pub panel: UiPanelId,
+    pub context: UiPanelContext,
+    pub result: UiPanelResult,
+}
+
+#[derive(Resource, Default)]
+pub struct UiRuntime {
+    active: Option<UiPanelSession>,
+    next_request_id: u64,
+    results: VecDeque<UiPanelResponse>,
+}
+
+impl UiRuntime {
+    pub fn open(&mut self, panel: UiPanelId, context: UiPanelContext) -> UiRequestId {
+        self.close_active(UiPanelResult::Closed);
+        let request_id = UiRequestId(self.next_request_id);
+        self.next_request_id = self.next_request_id.wrapping_add(1);
+        self.active = Some(UiPanelSession {
+            request_id,
+            panel,
+            context,
+        });
+        request_id
+    }
+
+    pub fn open_block(&mut self, panel: UiPanelId, pos: IVec3) -> UiRequestId {
+        self.open(panel, UiPanelContext::Block { pos })
+    }
+
+    pub fn close_active(&mut self, result: UiPanelResult) -> Option<UiPanelResponse> {
+        let session = self.active.take()?;
+        let response = UiPanelResponse {
+            request_id: session.request_id,
+            panel: session.panel,
+            context: session.context,
+            result,
+        };
+        self.results.push_back(response);
+        Some(response)
+    }
+
+    pub fn close_current(&mut self) -> Option<UiPanelResponse> {
+        let result = self
+            .active_block_pos()
+            .map(|pos| UiPanelResult::BlockClosed { pos })
+            .unwrap_or(UiPanelResult::Closed);
+        self.close_active(result)
+    }
+
+    pub fn active(&self) -> Option<UiPanelSession> {
+        self.active
+    }
+
+    pub fn active_panel(&self) -> Option<UiPanelId> {
+        self.active.map(|session| session.panel)
+    }
+
+    pub fn is_settings_open(&self) -> bool {
+        self.active_panel().is_some_and(UiPanelId::is_settings)
+    }
+
+    pub fn blocks_gameplay(&self) -> bool {
+        self.active_panel()
+            .is_some_and(UiPanelId::is_blocking_gameplay)
+    }
+
+    pub fn active_block_pos(&self) -> Option<IVec3> {
+        match self.active?.context {
+            UiPanelContext::Block { pos } => Some(pos),
+            _ => None,
+        }
+    }
+
+    pub fn take_result(&mut self, request_id: UiRequestId) -> Option<UiPanelResponse> {
+        let index = self
+            .results
+            .iter()
+            .position(|response| response.request_id == request_id)?;
+        self.results.remove(index)
+    }
+
+    pub fn drain_results(&mut self) -> Vec<UiPanelResponse> {
+        self.results.drain(..).collect()
+    }
+}
+
+#[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UiPanelBinding(pub UiPanelId);
 
 #[derive(Component)]
 pub struct HotbarText;

@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 use crate::game::state::{BuilderMode, GameMode, SimulationState};
 use crate::game::simulation::runtime::PendingGeneratedMaterials;
+use crate::game::ui::UiRuntime;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{despawn_world, rebuild_world, BlockEntity, WorldRenderAssets};
 use crate::shared::config::{ConfigAction, GameConfig};
@@ -12,13 +13,17 @@ pub fn simulation_controls(
     mut commands: Commands,
     builder_mode: Res<BuilderMode>,
     mode: Res<GameMode>,
+    ui_runtime: Res<UiRuntime>,
     mut simulation: ResMut<SimulationState>,
     mut pending_generated: ResMut<PendingGeneratedMaterials>,
     mut world: ResMut<WorldBlocks>,
     block_entities: Query<Entity, With<BlockEntity>>,
     render_assets: Res<WorldRenderAssets>,
 ) {
-    if *builder_mode != BuilderMode::Play || *mode != GameMode::Playing {
+    if *builder_mode != BuilderMode::Play
+        || *mode != GameMode::Playing
+        || ui_runtime.blocks_gameplay()
+    {
         return;
     }
 

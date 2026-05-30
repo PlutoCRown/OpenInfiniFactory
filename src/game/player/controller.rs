@@ -9,6 +9,7 @@ use bevy::render::camera::TemporalJitter;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use crate::game::state::{GameMode, GameSettings};
+use crate::game::ui::UiRuntime;
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::config::{ConfigAction, GameConfig};
 
@@ -72,10 +73,11 @@ pub fn camera_move(
     config: Res<GameConfig>,
     settings: Res<GameSettings>,
     mode: Res<GameMode>,
+    ui_runtime: Res<UiRuntime>,
     world: Res<WorldBlocks>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
-    if *mode != GameMode::Playing {
+    if *mode != GameMode::Playing || ui_runtime.blocks_gameplay() {
         return;
     }
 
@@ -170,6 +172,7 @@ pub fn camera_move(
 pub fn camera_look(
     keys: Res<ButtonInput<KeyCode>>,
     mode: Res<GameMode>,
+    ui_runtime: Res<UiRuntime>,
     mut mouse_motion: MessageReader<MouseMotion>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
@@ -177,7 +180,7 @@ pub fn camera_look(
         return;
     };
 
-    if *mode != GameMode::Playing || alt_pressed(&keys) {
+    if *mode != GameMode::Playing || ui_runtime.blocks_gameplay() || alt_pressed(&keys) {
         mouse_motion.clear();
         return;
     }
@@ -196,13 +199,14 @@ pub fn camera_look(
 pub fn sync_cursor_grab(
     keys: Res<ButtonInput<KeyCode>>,
     mode: Res<GameMode>,
+    ui_runtime: Res<UiRuntime>,
     mut windows: Query<&mut CursorOptions, With<PrimaryWindow>>,
 ) {
     let Ok(mut cursor) = windows.single_mut() else {
         return;
     };
 
-    if *mode == GameMode::Playing && !alt_pressed(&keys) {
+    if *mode == GameMode::Playing && !ui_runtime.blocks_gameplay() && !alt_pressed(&keys) {
         cursor.grab_mode = CursorGrabMode::Locked;
         cursor.visible = false;
     } else {

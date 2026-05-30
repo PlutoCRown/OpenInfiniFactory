@@ -11,10 +11,6 @@ pub struct PlacementState {
     pub target: Option<TargetHit>,
     pub edit_gesture: Option<EditGesture>,
     pub selection: SelectionState,
-    pub generator_panel: Option<IVec3>,
-    pub labeler_panel: Option<IVec3>,
-    pub converter_panel: Option<IVec3>,
-    pub teleport_panel: Option<IVec3>,
 }
 
 #[derive(Resource, Default)]
@@ -31,10 +27,6 @@ impl Default for PlacementState {
             target: None,
             edit_gesture: None,
             selection: SelectionState::default(),
-            generator_panel: None,
-            labeler_panel: None,
-            converter_panel: None,
-            teleport_panel: None,
         }
     }
 }
@@ -129,29 +121,15 @@ impl SelectionAxis {
     }
 }
 
-#[derive(Resource, Clone, Copy, Eq, PartialEq)]
+#[derive(Resource, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GameMode {
     MainMenu,
     SaveListMain,
     ConfirmBackToMain,
     ConfirmSaveSolutionBeforeEdit,
-    GeneratorSettings,
-    LabelerSettings,
-    ConverterSettings,
-    TeleportSettings,
-    Settings,
     Playing,
     Inventory,
     Paused,
-}
-
-#[derive(Resource, Clone, Copy, Eq, PartialEq)]
-pub struct SettingsReturnMode(pub GameMode);
-
-impl Default for SettingsReturnMode {
-    fn default() -> Self {
-        Self(GameMode::Paused)
-    }
 }
 
 #[derive(Resource, Clone, Copy, Eq, PartialEq)]

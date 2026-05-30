@@ -4,13 +4,14 @@ use bevy::prelude::*;
 use bevy::ui_widgets::SliderValue;
 
 use crate::game::state::{
-    BuilderMode, GameMode, GameSettings, PlacementState, SettingsReturnMode, SimulationState,
-    SolutionState, TeleportRenameState, WorldEntryMode,
+    BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
+    TeleportRenameState, WorldEntryMode,
 };
 use crate::game::ui::{
     ActiveSettingsSlider, CarriedItem, ConverterAction, GeneratorAction, InventoryItems,
     LabelerAction, MainMenuAction, OpenSettingsDropdown, PauseAction, PendingKeyBind,
-    SaveListAction, SettingsAction, SettingsSlider, SettingsTab, TeleportAction,
+    SaveListAction, SettingsAction, SettingsSlider, SettingsTab, TeleportAction, UiPanelContext,
+    UiPanelId, UiPanelResult, UiRuntime,
 };
 use crate::game::world::blocks::{MaterialKind, StampColor};
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
@@ -28,7 +29,7 @@ pub fn main_menu_actions(
     mut mode: ResMut<GameMode>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
-    mut settings_return: ResMut<SettingsReturnMode>,
+    mut ui_runtime: ResMut<UiRuntime>,
     mut interactions: Query<(&Interaction, &MainMenuAction), (Changed<Interaction>, With<Button>)>,
 ) {
     if *mode != GameMode::MainMenu {
@@ -56,8 +57,10 @@ pub fn main_menu_actions(
                 *mode = GameMode::SaveListMain;
             }
             MainMenuAction::OpenSettings => {
-                settings_return.0 = GameMode::MainMenu;
-                *mode = GameMode::Settings;
+                ui_runtime.open(
+                    UiPanelId::Settings,
+                    UiPanelContext::ReturnTo(GameMode::MainMenu),
+                );
             }
             MainMenuAction::Quit => {
                 exit.write(AppExit::Success);
@@ -249,7 +252,7 @@ pub fn pause_menu_actions(
     mut mode: ResMut<GameMode>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
-    mut settings_return: ResMut<SettingsReturnMode>,
+    mut ui_runtime: ResMut<UiRuntime>,
     mut world: ResMut<WorldBlocks>,
     mut commands: Commands,
     block_entities: Query<Entity, With<BlockEntity>>,
@@ -374,8 +377,10 @@ pub fn pause_menu_actions(
                 }
             }
             PauseAction::OpenSettings => {
-                settings_return.0 = GameMode::Paused;
-                *mode = GameMode::Settings;
+                ui_runtime.open(
+                    UiPanelId::Settings,
+                    UiPanelContext::ReturnTo(GameMode::Paused),
+                );
             }
             PauseAction::BackToMainMenu => {
                 if solution_state.dirty {
@@ -451,10 +456,6 @@ fn open_loaded_world(
     simulation.turn = 0;
     simulation.accumulator = 0.0;
     simulation.start_snapshot = None;
-    placement.generator_panel = None;
-    placement.labeler_panel = None;
-    placement.converter_panel = None;
-    placement.teleport_panel = None;
     placement.selection.clear();
     placement.edit_gesture = None;
     carried.clear();
@@ -500,10 +501,6 @@ fn clear_loaded_world(
     simulation.step_requested = false;
     simulation.accumulator = 0.0;
     simulation.start_snapshot = None;
-    placement.generator_panel = None;
-    placement.labeler_panel = None;
-    placement.converter_panel = None;
-    placement.teleport_panel = None;
     placement.selection.clear();
     placement.edit_gesture = None;
     world.clear();
@@ -544,7 +541,6 @@ pub fn settings_menu_actions(
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut mode: ResMut<GameMode>,
-    settings_return: Res<SettingsReturnMode>,
     mut settings: ResMut<GameSettings>,
     mut ui_scale: ResMut<UiScale>,
     mut config: ResMut<GameConfig>,
@@ -553,9 +549,10 @@ pub fn settings_menu_actions(
     mut open_dropdown: ResMut<OpenSettingsDropdown>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut active_slider: ResMut<ActiveSettingsSlider>,
+    mut ui_runtime: ResMut<UiRuntime>,
     mut interactions: Query<(Ref<Interaction>, &SettingsAction, Option<&SliderValue>), With<Button>>,
 ) {
-    if *mode != GameMode::Settings {
+    if !ui_runtime.is_settings_open() {
         pending_key_bind.0 = None;
         open_dropdown.0 = None;
         active_slider.0 = None;
@@ -692,10 +689,22 @@ pub fn settings_menu_actions(
                 }
                 open_dropdown.0 = None;
                 pending_key_bind.0 = None;
-                *mode = settings_return.0;
+                let return_mode = settings_return_mode(&ui_runtime, *mode);
+                ui_runtime.close_active(UiPanelResult::SettingsClosed);
+                *mode = return_mode;
             }
         }
     }
+}
+
+fn settings_return_mode(ui_runtime: &UiRuntime, fallback: GameMode) -> GameMode {
+    ui_runtime
+        .active()
+        .and_then(|session| match session.context {
+            UiPanelContext::ReturnTo(mode) => Some(mode),
+            _ => None,
+        })
+        .unwrap_or(fallback)
 }
 
 fn apply_settings_slider(
@@ -731,18 +740,17 @@ fn apply_settings_slider(
 }
 
 pub fn generator_menu_actions(
-    mut mode: ResMut<GameMode>,
-    mut placement: ResMut<PlacementState>,
+    mut ui_runtime: ResMut<UiRuntime>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
     mut interactions: Query<(&Interaction, &GeneratorAction), (Changed<Interaction>, With<Button>)>,
 ) {
-    if *mode != GameMode::GeneratorSettings {
+    if ui_runtime.active_panel() != Some(UiPanelId::Generator) {
         return;
     }
 
-    let Some(pos) = placement.generator_panel else {
-        *mode = GameMode::Playing;
+    let Some(pos) = ui_runtime.active_block_pos() else {
+        ui_runtime.close_current();
         return;
     };
 
@@ -769,26 +777,24 @@ pub fn generator_menu_actions(
                 solution_state.dirty = true;
             }
             GeneratorAction::Close => {
-                placement.generator_panel = None;
-                *mode = GameMode::Playing;
+                ui_runtime.close_active(UiPanelResult::BlockClosed { pos });
             }
         }
     }
 }
 
 pub fn labeler_menu_actions(
-    mut mode: ResMut<GameMode>,
-    mut placement: ResMut<PlacementState>,
+    mut ui_runtime: ResMut<UiRuntime>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
     mut interactions: Query<(&Interaction, &LabelerAction), (Changed<Interaction>, With<Button>)>,
 ) {
-    if *mode != GameMode::LabelerSettings {
+    if ui_runtime.active_panel() != Some(UiPanelId::Labeler) {
         return;
     }
 
-    let Some(pos) = placement.labeler_panel else {
-        *mode = GameMode::Playing;
+    let Some(pos) = ui_runtime.active_block_pos() else {
+        ui_runtime.close_current();
         return;
     };
 
@@ -810,26 +816,24 @@ pub fn labeler_menu_actions(
                 solution_state.dirty = true;
             }
             LabelerAction::Close => {
-                placement.labeler_panel = None;
-                *mode = GameMode::Playing;
+                ui_runtime.close_active(UiPanelResult::BlockClosed { pos });
             }
         }
     }
 }
 
 pub fn converter_menu_actions(
-    mut mode: ResMut<GameMode>,
-    mut placement: ResMut<PlacementState>,
+    mut ui_runtime: ResMut<UiRuntime>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
     mut interactions: Query<(&Interaction, &ConverterAction), (Changed<Interaction>, With<Button>)>,
 ) {
-    if *mode != GameMode::ConverterSettings {
+    if ui_runtime.active_panel() != Some(UiPanelId::Converter) {
         return;
     }
 
-    let Some(pos) = placement.converter_panel else {
-        *mode = GameMode::Playing;
+    let Some(pos) = ui_runtime.active_block_pos() else {
+        ui_runtime.close_current();
         return;
     };
 
@@ -856,27 +860,25 @@ pub fn converter_menu_actions(
                 solution_state.dirty = true;
             }
             ConverterAction::Close => {
-                placement.converter_panel = None;
-                *mode = GameMode::Playing;
+                ui_runtime.close_active(UiPanelResult::BlockClosed { pos });
             }
         }
     }
 }
 
 pub fn teleport_menu_actions(
-    mut mode: ResMut<GameMode>,
-    mut placement: ResMut<PlacementState>,
+    mut ui_runtime: ResMut<UiRuntime>,
     mut rename_state: ResMut<TeleportRenameState>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
     mut interactions: Query<(&Interaction, &TeleportAction), (Changed<Interaction>, With<Button>)>,
 ) {
-    if *mode != GameMode::TeleportSettings {
+    if ui_runtime.active_panel() != Some(UiPanelId::Teleport) {
         return;
     }
 
-    let Some(pos) = placement.teleport_panel else {
-        *mode = GameMode::Playing;
+    let Some(pos) = ui_runtime.active_block_pos() else {
+        ui_runtime.close_current();
         return;
     };
 
@@ -897,21 +899,20 @@ pub fn teleport_menu_actions(
             }
             TeleportAction::Close => {
                 rename_state.editing = None;
-                placement.teleport_panel = None;
-                *mode = GameMode::Playing;
+                ui_runtime.close_active(UiPanelResult::BlockClosed { pos });
             }
         }
     }
 }
 
 pub fn teleport_rename_input(
-    mode: Res<GameMode>,
+    ui_runtime: Res<UiRuntime>,
     mut rename_state: ResMut<TeleportRenameState>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
     mut keyboard_input: MessageReader<KeyboardInput>,
 ) {
-    if *mode != GameMode::TeleportSettings || rename_state.editing.is_none() {
+    if ui_runtime.active_panel() != Some(UiPanelId::Teleport) || rename_state.editing.is_none() {
         keyboard_input.clear();
         return;
     }

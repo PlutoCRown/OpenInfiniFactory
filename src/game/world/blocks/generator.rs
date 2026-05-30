@@ -1,6 +1,7 @@
 use super::{
     rgba, Block, BlockDefinition, BlockKind, EditableBlock, MaterialSource, SystemBlock,
 };
+use crate::game::ui::UiPanelId;
 use crate::game::world::grid::{BlockSettings, GeneratorSettings};
 
 pub struct GeneratorBlock;
@@ -31,6 +32,10 @@ impl Block for GeneratorBlock {
 
     fn default_settings(&self, _pos: bevy::prelude::IVec3) -> Option<BlockSettings> {
         Some(BlockSettings::Generator(GeneratorSettings::default()))
+    }
+
+    fn ui_panel(&self) -> Option<UiPanelId> {
+        Some(UiPanelId::Generator)
     }
 }
 
