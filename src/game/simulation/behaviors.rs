@@ -10,6 +10,7 @@ use crate::game::world::grid::{
 };
 
 use super::factory_activity::FactoryStructureState;
+use super::runtime::PendingGeneratedMaterials;
 use super::signal_offsets;
 use super::structures::{execute_structure_moves, material_structure, MovementMark, StructureMove};
 
@@ -17,13 +18,17 @@ pub(super) fn run_material_behavior_phase(
     world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
     factory_structures: &mut FactoryStructureState,
-) {
+    pending_destroyed: &mut PendingGeneratedMaterials,
+    ready_turn: u64,
+) -> Vec<IVec3> {
     run_material_acceptance_phase(world);
-    run_material_destroy_phase(world, powered_devices);
+    let drill_sparks =
+        run_material_destroy_phase(world, powered_devices, pending_destroyed, ready_turn);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
     run_material_teleport_phase(world, factory_structures);
     run_material_acceptance_phase(world);
+    drill_sparks
 }
 
 pub(super) fn run_weld_behavior_phase(world: &mut WorldBlocks) -> Vec<IVec3> {
@@ -247,7 +252,12 @@ fn run_material_teleport_phase(
     }
 }
 
-fn run_material_destroy_phase(world: &mut WorldBlocks, powered_devices: &HashSet<IVec3>) {
+fn run_material_destroy_phase(
+    world: &mut WorldBlocks,
+    powered_devices: &HashSet<IVec3>,
+    pending_destroyed: &mut PendingGeneratedMaterials,
+    ready_turn: u64,
+) -> Vec<IVec3> {
     let destroyers: Vec<(IVec3, MaterialDestroyer)> = world
         .blocks
         .iter()
@@ -259,12 +269,21 @@ fn run_material_destroy_phase(world: &mut WorldBlocks, powered_devices: &HashSet
         })
         .collect();
 
+    let mut sparks = Vec::new();
     for (pos, destroyer) in destroyers {
         match destroyer {
-            MaterialDestroyer::Drill { target } => remove_material_at(world, pos + target),
+            MaterialDestroyer::Drill { target } => {
+                mark_material_destroy(world, pending_destroyed, pos + target, ready_turn, &mut sparks)
+            }
             MaterialDestroyer::AdjacentDrillHead => {
                 for offset in signal_offsets() {
-                    remove_material_at(world, pos + offset);
+                    mark_material_destroy(
+                        world,
+                        pending_destroyed,
+                        pos + offset,
+                        ready_turn,
+                        &mut sparks,
+                    );
                 }
             }
             MaterialDestroyer::Laser { direction, range } => {
@@ -274,11 +293,19 @@ fn run_material_destroy_phase(world: &mut WorldBlocks, powered_devices: &HashSet
             }
         }
     }
+    sparks
 }
 
-fn remove_material_at(world: &mut WorldBlocks, pos: IVec3) {
+fn mark_material_destroy(
+    world: &WorldBlocks,
+    pending_destroyed: &mut PendingGeneratedMaterials,
+    pos: IVec3,
+    ready_turn: u64,
+    sparks: &mut Vec<IVec3>,
+) {
     if world.is_material_at(pos) {
-        world.remove(&pos);
+        pending_destroyed.mark_destroyed(pos, ready_turn);
+        sparks.push(pos);
     }
 }
 

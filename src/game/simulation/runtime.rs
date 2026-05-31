@@ -47,11 +47,17 @@ pub struct SimulationStepStats {
 #[derive(Resource, Default)]
 pub struct PendingGeneratedMaterials {
     pending: HashMap<IVec3, PendingGeneratedMaterial>,
+    pending_destroyed: HashMap<IVec3, u64>,
 }
 
 impl PendingGeneratedMaterials {
     pub fn clear(&mut self) {
         self.pending.clear();
+        self.pending_destroyed.clear();
+    }
+
+    pub(super) fn mark_destroyed(&mut self, pos: IVec3, ready_turn: u64) {
+        self.pending_destroyed.entry(pos).or_insert(ready_turn);
     }
 }
 
@@ -100,6 +106,7 @@ pub fn run_turn(
     let mut sample = SimulationStepStats::default();
 
     world.clear_generated_markers();
+    remove_ready_destroyed_materials(world, pending_generated, turn);
     let generated_animations = place_ready_generated_materials(world, pending_generated, turn);
     run_static_marker_phase(world);
     let weld_sparks = run_weld_behavior_phase(world);
@@ -154,7 +161,14 @@ pub fn run_turn(
     run_powered_marker_phase(world, &powered_devices);
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
-    run_material_behavior_phase(world, &powered_devices, factory_structures);
+    let drill_sparks =
+        run_material_behavior_phase(
+            world,
+            &powered_devices,
+            factory_structures,
+            pending_generated,
+            turn + 1,
+        );
 
     prepare_upcoming_generation(world, pending_generated, turn + 1);
     sample.behavior_ms = mark_elapsed_ms(&mut mark);
@@ -176,6 +190,7 @@ pub fn run_turn(
         &render_powered_wires,
     );
     spawn_weld_sparks(commands, render_assets, &weld_sparks);
+    spawn_weld_sparks(commands, render_assets, &drill_sparks);
     sample.render_rebuild_ms = mark_elapsed_ms(&mut mark);
     sample.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
     sample.has_sample = true;
@@ -336,6 +351,24 @@ fn place_ready_generated_materials(
         }
     }
     animations
+}
+
+fn remove_ready_destroyed_materials(
+    world: &mut WorldBlocks,
+    pending_generated: &mut PendingGeneratedMaterials,
+    turn: u64,
+) {
+    let ready: Vec<IVec3> = pending_generated
+        .pending_destroyed
+        .iter()
+        .filter_map(|(pos, ready_turn)| (*ready_turn <= turn).then_some(*pos))
+        .collect();
+    for pos in ready {
+        pending_generated.pending_destroyed.remove(&pos);
+        if world.is_material_at(pos) {
+            world.remove(&pos);
+        }
+    }
 }
 
 fn merge_generated_animations(
