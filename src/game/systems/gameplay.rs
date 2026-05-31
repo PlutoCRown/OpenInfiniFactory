@@ -44,45 +44,51 @@ pub fn gameplay_input(
     text_prompt: Res<TextPromptState>,
     mut mode: ResMut<GameMode>,
     mut placement: ResMut<PlacementState>,
-    mut teleport_rename: ResMut<TeleportRenameState>,
+    teleport_rename: Res<TeleportRenameState>,
     mut carried: ResMut<CarriedItem>,
     mut ui_runtime: ResMut<UiRuntime>,
     mut simulation: ResMut<SimulationState>,
 ) {
     let bindings = &config.key_bindings;
 
-    if pending_key_bind.0.is_some() || text_prompt.kind.is_some() {
+    let typing = pending_key_bind.0.is_some()
+        || text_prompt.kind.is_some()
+        || teleport_rename.editing.is_some();
+    if typing {
+        mouse_wheel.clear();
+        return;
+    }
+
+    if !matches!(
+        *mode,
+        GameMode::Playing | GameMode::Inventory | GameMode::Paused
+    ) {
         mouse_wheel.clear();
         return;
     }
 
     if keys.just_pressed(bindings.pause.key_code()) {
-        if teleport_rename.editing.is_some() {
-            teleport_rename.editing = None;
-            return;
-        }
         if ui_runtime.blocks_gameplay() {
             ui_runtime.close_current();
-            return;
+        } else {
+            *mode = match *mode {
+                GameMode::Playing => {
+                    simulation.running = false;
+                    simulation.step_requested = false;
+                    simulation.speed = 1.0;
+                    GameMode::Paused
+                }
+                GameMode::Inventory => {
+                    carried.clear();
+                    GameMode::Playing
+                }
+                GameMode::Paused => GameMode::Playing,
+                other => other,
+            };
         }
-        *mode = match *mode {
-            GameMode::Playing => {
-                simulation.running = false;
-                simulation.step_requested = false;
-                simulation.speed = 1.0;
-                GameMode::Paused
-            }
-            GameMode::Inventory => {
-                carried.clear();
-                GameMode::Playing
-            }
-            GameMode::Paused => GameMode::Playing,
-            GameMode::SaveListMain => GameMode::MainMenu,
-            other => other,
-        };
     }
 
-    if ui_runtime.blocks_gameplay() || !matches!(*mode, GameMode::Playing | GameMode::Inventory) {
+    if ui_runtime.blocks_gameplay() || *mode != GameMode::Playing {
         mouse_wheel.clear();
         return;
     }
