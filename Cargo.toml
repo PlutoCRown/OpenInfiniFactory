@@ -8,3 +8,15 @@ bevy = { version = "0.18.1", features = ["experimental_bevy_ui_widgets"] }
 ron = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[package.metadata.android]
+package = "dev.openinfinifactory.prototype"
+apk_name = "OpenInfiniFactory"
+assets = "assets"
+build_targets = ["aarch64-linux-android"]
+runtime_libs = "target/android-libs"
+
+[package.metadata.android.application]
+label = "OpenInfiniFactory"
+theme = "@android:style/Theme.NoTitleBar.Fullscreen"
+debuggable = false

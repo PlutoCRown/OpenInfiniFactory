@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::game::state::UiPanelId;
 use crate::game::state::{BuilderMode, GameMode};
-use crate::game::world::blocks::{BlockKind, EDIT_BLOCKS, PLAY_BLOCKS};
+use crate::game::world::blocks::{BlockKind, MaterialKind, StampColor, EDIT_BLOCKS, PLAY_BLOCKS};
 use crate::shared::config::{ConfigAction, ConfigSelectionMode};
 use crate::shared::i18n::Language;
 
@@ -114,13 +114,10 @@ pub struct GeneratorPanel;
 pub struct GeneratorPeriodText;
 
 #[derive(Component)]
-pub struct GeneratorMaterialText;
+pub struct GoalPanel;
 
 #[derive(Component)]
 pub struct LabelerPanel;
-
-#[derive(Component)]
-pub struct LabelerColorText;
 
 #[derive(Component)]
 pub struct ConverterPanel;
@@ -129,25 +126,13 @@ pub struct ConverterPanel;
 pub struct ConverterInputRow;
 
 #[derive(Component)]
-pub struct ConverterModeText;
-
-#[derive(Component)]
-pub struct ConverterInputText;
-
-#[derive(Component)]
-pub struct ConverterOutputText;
-
-#[derive(Component)]
 pub struct TeleportPanel;
 
 #[derive(Component)]
 pub struct TeleportNameText;
 
-#[derive(Component)]
-pub struct TeleportPairText;
-
-#[derive(Component)]
-pub struct SettingsStatusText;
+#[derive(Resource, Default)]
+pub struct OpenBlockPanelDropdown(pub Option<BlockPanelDropdown>);
 
 #[derive(Component)]
 pub struct SettingsGameplayGroup;
@@ -213,6 +198,12 @@ pub struct SettingsDropdownLabel(pub SettingsDropdown);
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct SettingsDropdownList(pub SettingsDropdown);
 
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsDropdownRoot(pub SettingsDropdown);
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsDropdownRow(pub SettingsDropdown);
+
 #[derive(Component)]
 pub struct ScrollContainer {
     pub offset: f32,
@@ -227,6 +218,21 @@ pub enum SettingsSlider {
     Fov,
     UiScale,
     Gravity,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum SettingsSliderUpdateMode {
+    Live,
+    Commit,
+}
+
+impl SettingsSlider {
+    pub fn update_mode(self) -> SettingsSliderUpdateMode {
+        match self {
+            Self::Fov => SettingsSliderUpdateMode::Live,
+            Self::UiScale | Self::Gravity => SettingsSliderUpdateMode::Commit,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -393,7 +399,8 @@ pub struct ActiveSettingsSlider(pub Option<SettingsSlider>);
 pub enum GeneratorAction {
     PeriodDown,
     PeriodUp,
-    MaterialNext,
+    ToggleMaterialDropdown,
+    SetMaterial(MaterialKind),
     Close,
 }
 
@@ -402,7 +409,7 @@ impl UiActionLabel for GeneratorAction {
         match self {
             Self::PeriodDown => "button.period_down",
             Self::PeriodUp => "button.period_up",
-            Self::MaterialNext => "button.material_next",
+            Self::ToggleMaterialDropdown | Self::SetMaterial(_) => "button.material_next",
             Self::Close => "button.close",
         }
     }
@@ -410,16 +417,15 @@ impl UiActionLabel for GeneratorAction {
 
 #[derive(Component, Clone, Copy)]
 pub enum LabelerAction {
-    PreviousColor,
-    NextColor,
+    ToggleColorDropdown,
+    SetColor(StampColor),
     Close,
 }
 
 impl UiActionLabel for LabelerAction {
     fn label_key(self) -> &'static str {
         match self {
-            Self::PreviousColor => "button.previous_color",
-            Self::NextColor => "button.next_color",
+            Self::ToggleColorDropdown | Self::SetColor(_) => "button.next_color",
             Self::Close => "button.close",
         }
     }
@@ -427,18 +433,18 @@ impl UiActionLabel for LabelerAction {
 
 #[derive(Component, Clone, Copy)]
 pub enum ConverterAction {
-    ToggleMode,
-    InputNext,
-    OutputNext,
+    ToggleInputDropdown,
+    ToggleOutputDropdown,
+    SetInput(MaterialKind),
+    SetOutput(MaterialKind),
     Close,
 }
 
 impl UiActionLabel for ConverterAction {
     fn label_key(self) -> &'static str {
         match self {
-            Self::ToggleMode => "button.converter_mode",
-            Self::InputNext => "button.input_material",
-            Self::OutputNext => "button.output_material",
+            Self::ToggleInputDropdown | Self::SetInput(_) => "button.input_material",
+            Self::ToggleOutputDropdown | Self::SetOutput(_) => "button.output_material",
             Self::Close => "button.close",
         }
     }
@@ -446,7 +452,8 @@ impl UiActionLabel for ConverterAction {
 
 #[derive(Component, Clone, Copy)]
 pub enum TeleportAction {
-    CyclePair,
+    TogglePairDropdown,
+    SetPair(Option<IVec3>),
     Rename,
     Close,
 }
@@ -454,12 +461,44 @@ pub enum TeleportAction {
 impl UiActionLabel for TeleportAction {
     fn label_key(self) -> &'static str {
         match self {
-            Self::CyclePair => "button.teleport_pair",
+            Self::TogglePairDropdown | Self::SetPair(_) => "button.teleport_pair",
             Self::Rename => "button.teleport_rename",
             Self::Close => "button.close",
         }
     }
 }
+
+#[derive(Component, Clone, Copy)]
+pub enum GoalAction {
+    ToggleMaterialDropdown,
+    SetMaterial(MaterialKind),
+    Close,
+}
+
+impl UiActionLabel for GoalAction {
+    fn label_key(self) -> &'static str {
+        match self {
+            Self::ToggleMaterialDropdown | Self::SetMaterial(_) => "button.material_next",
+            Self::Close => "button.close",
+        }
+    }
+}
+
+#[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BlockPanelDropdown {
+    GeneratorMaterial,
+    GoalMaterial,
+    LabelerColor,
+    ConverterInput,
+    ConverterOutput,
+    TeleportPair,
+}
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct BlockPanelDropdownLabel(pub BlockPanelDropdown);
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct BlockPanelDropdownList(pub BlockPanelDropdown);
 
 #[derive(Resource, Clone, Copy, Eq, PartialEq)]
 pub enum SettingsTab {

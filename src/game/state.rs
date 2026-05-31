@@ -1,12 +1,14 @@
 use bevy::prelude::*;
 
 use crate::game::world::blocks::BlockData;
+use crate::game::world::direction::Facing;
 use crate::game::world::grid::TargetHit;
 
 #[derive(Resource)]
 pub struct PlacementState {
     pub selected: usize,
     pub target: Option<TargetHit>,
+    pub preview_facing: Facing,
     pub edit_gesture: Option<EditGesture>,
     pub selection: SelectionState,
 }
@@ -22,6 +24,7 @@ impl Default for PlacementState {
         Self {
             selected: 0,
             target: None,
+            preview_facing: Facing::North,
             edit_gesture: None,
             selection: SelectionState::default(),
         }
@@ -131,6 +134,7 @@ pub enum GameMode {
 pub enum UiPanelId {
     Settings,
     Generator,
+    Goal,
     Labeler,
     Converter,
     Teleport,

@@ -8,6 +8,40 @@ A small Bevy prototype for a 3D block puzzle factory game.
 cargo run
 ```
 
+## Packaging
+
+macOS `.app` bundle:
+
+```bash
+scripts/package_macos_app.sh
+```
+
+Linux loose binary package:
+
+```bash
+scripts/package_linux.sh
+```
+
+Windows loose binary package:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/package_windows.ps1
+```
+
+Android APK package:
+
+```bash
+scripts/package_android.sh
+```
+
+Packaging outputs are written under `dist/`. The scripts support `CARGO`,
+`CARGO_APK`, and `TARGET` environment overrides for local toolchain adapters and
+cross-compilation. Assets are resolved through the platform adapter in
+`src/shared/platform.rs`, so development runs, loose binaries, `.app` bundles,
+and Android APK assets can use different layouts without hard-coded paths. Set
+`OPEN_INFINIFACTORY_ASSET_DIR` to override the asset directory for desktop
+builds.
+
 ## Controls
 
 - `WASD`: move camera

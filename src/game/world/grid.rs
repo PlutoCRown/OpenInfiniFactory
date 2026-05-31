@@ -23,6 +23,7 @@ pub struct WorldBlocks {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum BlockSettings {
     Generator(GeneratorSettings),
+    Goal(GoalSettings),
     Labeler(LabelerSettings),
     Converter(ConverterSettings),
     Teleport(TeleportSettings),
@@ -33,6 +34,7 @@ impl BlockSettings {
         matches!(
             (self, other),
             (Self::Generator(_), Self::Generator(_))
+                | (Self::Goal(_), Self::Goal(_))
                 | (Self::Labeler(_), Self::Labeler(_))
                 | (Self::Converter(_), Self::Converter(_))
                 | (Self::Teleport(_), Self::Teleport(_))
@@ -43,6 +45,11 @@ impl BlockSettings {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GeneratorSettings {
     pub period: u64,
+    pub material: MaterialKind,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct GoalSettings {
     pub material: MaterialKind,
 }
 
@@ -89,26 +96,18 @@ impl TeleportSettings {
     }
 }
 
-impl ConverterMode {
-    pub fn name_key(self) -> &'static str {
-        match self {
-            Self::AnyInput => "converter.mode.any",
-            Self::SpecificInput => "converter.mode.specific",
-        }
-    }
-
-    pub fn toggle(self) -> Self {
-        match self {
-            Self::AnyInput => Self::SpecificInput,
-            Self::SpecificInput => Self::AnyInput,
-        }
-    }
-}
-
 impl Default for LabelerSettings {
     fn default() -> Self {
         Self {
             color: StampColor::Red,
+        }
+    }
+}
+
+impl Default for GoalSettings {
+    fn default() -> Self {
+        Self {
+            material: MaterialKind::Basic,
         }
     }
 }
@@ -274,6 +273,17 @@ impl WorldBlocks {
         self.set_block_settings(pos, BlockSettings::Generator(settings));
     }
 
+    pub fn goal_settings(&self, pos: IVec3) -> GoalSettings {
+        match self.block_settings.get(&pos) {
+            Some(BlockSettings::Goal(settings)) => *settings,
+            _ => GoalSettings::default(),
+        }
+    }
+
+    pub fn set_goal_settings(&mut self, pos: IVec3, settings: GoalSettings) {
+        self.set_block_settings(pos, BlockSettings::Goal(settings));
+    }
+
     pub fn labeler_settings(&self, pos: IVec3) -> LabelerSettings {
         match self.block_settings.get(&pos) {
             Some(BlockSettings::Labeler(settings)) => *settings,
@@ -305,44 +315,6 @@ impl WorldBlocks {
 
     pub fn set_teleport_settings(&mut self, pos: IVec3, settings: TeleportSettings) {
         self.set_block_settings(pos, BlockSettings::Teleport(settings));
-    }
-
-    pub fn cycle_teleport_pair(&mut self, pos: IVec3) {
-        let Some(block) = self.system_blocks.get(&pos).copied() else {
-            return;
-        };
-        let target_kind = match block.kind {
-            BlockKind::TeleportEntrance => BlockKind::TeleportExit,
-            BlockKind::TeleportExit => BlockKind::TeleportEntrance,
-            _ => return,
-        };
-        let mut candidates: Vec<IVec3> = self
-            .system_blocks
-            .iter()
-            .filter_map(|(candidate_pos, candidate)| {
-                (candidate.kind == target_kind).then_some(*candidate_pos)
-            })
-            .collect();
-        candidates.sort_by_key(|candidate| self.teleport_settings(*candidate).name);
-
-        let current = self.teleport_settings(pos).pair;
-        let next = if candidates.is_empty() {
-            None
-        } else {
-            let index = current
-                .and_then(|current| {
-                    candidates
-                        .iter()
-                        .position(|candidate| *candidate == current)
-                })
-                .map(|index| (index + 1) % candidates.len())
-                .unwrap_or(0);
-            Some(candidates[index])
-        };
-
-        let mut settings = self.teleport_settings(pos);
-        settings.pair = next;
-        self.set_teleport_settings(pos, settings);
     }
 
     fn next_teleport_name(&self, kind: BlockKind) -> String {
@@ -460,10 +432,13 @@ impl WorldBlocks {
             .is_some_and(|block| block.kind.is_scene())
     }
 
-    pub fn accepts_material_at(&self, pos: IVec3) -> bool {
+    pub fn accepts_material_kind_at(&self, pos: IVec3, material: MaterialKind) -> bool {
         self.system_blocks
             .get(&pos)
-            .is_some_and(|block| block.kind.accepts_material())
+            .is_some_and(|block| match block.kind {
+                BlockKind::Goal => self.goal_settings(pos).material == material,
+                _ => block.kind.accepts_material(),
+            })
     }
 
     pub fn clear_generated_markers(&mut self) {

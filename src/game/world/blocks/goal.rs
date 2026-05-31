@@ -2,6 +2,8 @@ use super::{
     rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, EditableBlock,
     ModelMaterial, ModelMesh, RenderBehavior, SystemBlock,
 };
+use crate::game::ui::UiPanelId;
+use crate::game::world::grid::{BlockSettings, GoalSettings};
 
 const MODEL: &[BlockModelPart] = &[
     BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Goal, [0.0, 0.18, 0.0]),
@@ -39,6 +41,14 @@ impl Block for GoalBlock {
 
     fn model(&self) -> BlockModel {
         BlockModel::Parts(MODEL)
+    }
+
+    fn default_settings(&self, _pos: bevy::prelude::IVec3) -> Option<BlockSettings> {
+        Some(BlockSettings::Goal(GoalSettings::default()))
+    }
+
+    fn ui_panel(&self) -> Option<UiPanelId> {
+        Some(UiPanelId::Goal)
     }
 }
 

@@ -303,7 +303,8 @@ fn run_material_acceptance_phase(world: &mut WorldBlocks) {
         .blocks
         .iter()
         .filter_map(|(pos, block)| {
-            (block.kind.is_material() && world.accepts_material_at(*pos)).then_some(*pos)
+            let material = block.kind.material_kind()?;
+            (world.accepts_material_kind_at(*pos, material)).then_some(*pos)
         })
         .collect();
 

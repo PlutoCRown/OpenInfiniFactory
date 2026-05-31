@@ -61,8 +61,8 @@ impl Plugin for GamePlugin {
 
         app.insert_resource(ClearColor(Color::srgb(0.58, 0.68, 0.76)))
             .insert_resource(GlobalAmbientLight {
-                color: Color::srgb(0.78, 0.86, 1.0),
-                brightness: 420.0,
+                color: Color::srgb(0.90, 0.94, 1.0),
+                brightness: 680.0,
                 affects_lightmapped_meshes: true,
             })
             .insert_resource(DirectionalLightShadowMap { size: 2048 })

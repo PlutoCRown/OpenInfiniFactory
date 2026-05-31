@@ -2,8 +2,12 @@ use bevy::prelude::*;
 
 use super::components::default_font_size;
 
-pub const PANEL_BG: Color = Color::srgba(0.08, 0.09, 0.10, 0.96);
-pub const STATUS_TEXT: Color = Color::srgb(0.88, 0.96, 1.0);
+pub const PANEL_BG: Color = Color::srgb(0.192, 0.188, 0.192);
+pub const PANEL_LIGHT_EDGE: Color = Color::srgb(0.40, 0.38, 0.36);
+pub const PANEL_DARK_EDGE: Color = Color::srgb(0.08, 0.06, 0.05);
+pub const PANEL_SHADOW: Color = Color::srgba(0.125, 0.094, 0.082, 0.85);
+pub const TITLE_TEXT: Color = Color::srgb(1.0, 0.902, 0.753);
+pub const STATUS_TEXT: Color = Color::srgb(0.90, 0.84, 0.76);
 
 pub fn panel_bundle(width: f32, height: f32, offset_x: f32, offset_y: f32) -> impl Bundle {
     (
@@ -18,13 +22,28 @@ pub fn panel_bundle(width: f32, height: f32, offset_x: f32, offset_y: f32) -> im
                 top: Val::Px(offset_y),
                 ..default()
             },
-            padding: UiRect::all(Val::Px(20.0)),
+            padding: UiRect::all(Val::Px(8.0)),
+            border: UiRect::all(Val::Px(4.0)),
             display: Display::None,
             flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(14.0),
+            row_gap: Val::Px(12.0),
+            overflow: Overflow::clip(),
             ..default()
         },
         BackgroundColor(PANEL_BG),
+        BorderColor {
+            top: PANEL_LIGHT_EDGE,
+            left: PANEL_LIGHT_EDGE,
+            right: PANEL_DARK_EDGE,
+            bottom: PANEL_DARK_EDGE,
+        },
+        BoxShadow::new(
+            PANEL_SHADOW,
+            Val::Px(0.0),
+            Val::Px(0.0),
+            Val::Px(0.0),
+            Val::Px(3.0),
+        ),
     )
 }
 

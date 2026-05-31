@@ -2,8 +2,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::ButtonState;
 use bevy::prelude::*;
-use bevy::ui_widgets::SliderValue;
-use bevy::window::{PrimaryWindow, Window};
+use bevy::ui_widgets::{CoreSliderDragState, Slider, SliderRange, SliderValue};
 
 use crate::game::simulation::factory_activity::FactoryStructureState;
 use crate::game::simulation::markers::refresh_static_generated_markers;
@@ -13,14 +12,13 @@ use crate::game::state::{
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{
-    ActiveSettingsSlider, CarriedItem, ConfirmDialogAction, ConfirmDialogKind, ConfirmDialogState,
-    ConverterAction, GeneratorAction, InventoryItems, LabelerAction, MainMenuAction,
-    OpenSettingsDropdown, PauseAction, PendingAppExit, PendingKeyBind, SaveListAction,
-    SettingsAction, SettingsSlider, SettingsTab, TeleportAction, UiPanelContext, UiPanelId,
-    UiRuntime,
+    ActiveSettingsSlider, BlockPanelDropdown, CarriedItem, ConfirmDialogAction, ConfirmDialogKind,
+    ConfirmDialogState, ConverterAction, GeneratorAction, GoalAction, InventoryItems,
+    LabelerAction, MainMenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown, PauseAction,
+    PendingAppExit, PendingKeyBind, SaveListAction, SettingsAction, SettingsSlider,
+    SettingsSliderUpdateMode, SettingsTab, TeleportAction, UiPanelContext, UiPanelId, UiRuntime,
 };
-use crate::game::world::blocks::{MaterialKind, StampColor};
-use crate::game::world::grid::{seed_demo_world, WorldBlocks};
+use crate::game::world::grid::{seed_demo_world, ConverterMode, WorldBlocks};
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
 };
@@ -87,43 +85,15 @@ pub fn main_menu_actions(
 }
 
 pub fn app_exit_requests(
-    mut commands: Commands,
     mut app_exit_messages: ResMut<Messages<AppExit>>,
     mut pending_exit: ResMut<PendingAppExit>,
-    primary_windows: Query<Entity, (With<Window>, With<PrimaryWindow>)>,
-    windows: Query<Entity, With<Window>>,
 ) {
-    let mut drained_exit = None;
-    for exit in app_exit_messages.drain() {
-        if exit.is_error() {
-            drained_exit = Some(exit);
-            break;
-        }
-        drained_exit.get_or_insert(exit);
-    }
-
-    if let Some(requested_exit) = drained_exit {
-        pending_exit.requested = true;
-        pending_exit.exit = Some(requested_exit);
-    }
-
     if !pending_exit.requested {
         return;
     }
 
-    if windows.is_empty() {
-        app_exit_messages.write(pending_exit.exit.take().unwrap_or(AppExit::Success));
-        pending_exit.requested = false;
-        return;
-    }
-
-    if let Ok(entity) = primary_windows.single() {
-        commands.entity(entity).despawn();
-    } else {
-        for entity in &windows {
-            commands.entity(entity).despawn();
-        }
-    }
+    app_exit_messages.write(pending_exit.exit.take().unwrap_or(AppExit::Success));
+    pending_exit.requested = false;
 }
 
 fn request_app_exit(pending_exit: &mut PendingAppExit, exit: AppExit) {
@@ -812,9 +782,19 @@ pub fn settings_menu_actions(
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut active_slider: ResMut<ActiveSettingsSlider>,
     mut ui_runtime: ResMut<UiRuntime>,
-    mut interactions: Query<
-        (Ref<Interaction>, &SettingsAction, Option<&SliderValue>),
-        With<Button>,
+    mut interactions: Query<(Ref<Interaction>, &SettingsAction), With<Button>>,
+    slider_values: Query<(&SettingsAction, &SliderValue, &SliderRange), With<Slider>>,
+    slider_changes: Query<
+        (
+            &SettingsAction,
+            Ref<SliderValue>,
+            &SliderRange,
+            &CoreSliderDragState,
+        ),
+        (
+            With<Slider>,
+            Or<(Changed<SliderValue>, Changed<CoreSliderDragState>)>,
+        ),
     >,
 ) {
     if !ui_runtime.is_settings_open() {
@@ -832,31 +812,25 @@ pub fn settings_menu_actions(
         }
     }
 
+    update_settings_sliders_from_input(
+        &slider_changes,
+        &mut active_slider,
+        &mut settings,
+        &mut ui_scale,
+        &mut config,
+    );
+
     if mouse_buttons.just_released(MouseButton::Left) {
-        if let Some(slider) = active_slider.0.take() {
-            if let Some((_, _, value)) = interactions.iter().find(|(_, action, _)| {
-                matches!(
-                    (*action, slider),
-                    (SettingsAction::FovSlider, SettingsSlider::Fov)
-                        | (SettingsAction::UiScaleSlider, SettingsSlider::UiScale)
-                        | (SettingsAction::GravitySlider, SettingsSlider::Gravity)
-                )
-            }) {
-                if let Some(value) = value {
-                    apply_settings_slider(
-                        slider,
-                        value.0 / 100.0,
-                        &mut settings,
-                        &mut ui_scale,
-                        &mut config,
-                    );
-                    save_config(&config);
-                }
-            }
-        }
+        commit_active_settings_slider(
+            &slider_values,
+            &mut active_slider,
+            &mut settings,
+            &mut ui_scale,
+            &mut config,
+        );
     }
 
-    for (interaction, action, _) in &mut interactions {
+    for (interaction, action) in &mut interactions {
         if *interaction != Interaction::Pressed {
             continue;
         }
@@ -876,14 +850,12 @@ pub fn settings_menu_actions(
                 *settings_tab = SettingsTab::KeyBindings;
                 open_dropdown.0 = None;
             }
-            SettingsAction::FovSlider => {
-                active_slider.0 = Some(SettingsSlider::Fov);
-            }
-            SettingsAction::UiScaleSlider => {
-                active_slider.0 = Some(SettingsSlider::UiScale);
-            }
-            SettingsAction::GravitySlider => {
-                active_slider.0 = Some(SettingsSlider::Gravity);
+            SettingsAction::FovSlider
+            | SettingsAction::UiScaleSlider
+            | SettingsAction::GravitySlider => {
+                if let Some(slider) = settings_action_slider(*action) {
+                    active_slider.0 = Some(slider);
+                }
             }
             SettingsAction::SetPlaceSelectionMode(selection_mode) => {
                 if !interaction.is_changed() {
@@ -972,7 +944,100 @@ fn settings_return_mode(ui_runtime: &UiRuntime, fallback: GameMode) -> GameMode 
         .unwrap_or(fallback)
 }
 
-fn apply_settings_slider(
+fn update_settings_sliders_from_input(
+    slider_changes: &Query<
+        (
+            &SettingsAction,
+            Ref<SliderValue>,
+            &SliderRange,
+            &CoreSliderDragState,
+        ),
+        (
+            With<Slider>,
+            Or<(Changed<SliderValue>, Changed<CoreSliderDragState>)>,
+        ),
+    >,
+    active_slider: &mut ActiveSettingsSlider,
+    settings: &mut GameSettings,
+    ui_scale: &mut UiScale,
+    config: &mut GameConfig,
+) {
+    for (action, value, range, drag_state) in slider_changes {
+        let Some(slider) = settings_action_slider(*action) else {
+            continue;
+        };
+        let percent = range.thumb_position(value.0).clamp(0.0, 1.0);
+
+        if drag_state.dragging {
+            active_slider.0 = Some(slider);
+            if slider.update_mode() == SettingsSliderUpdateMode::Live {
+                apply_settings_slider_live(slider, percent, settings, ui_scale, config);
+            }
+            continue;
+        }
+
+        if active_slider.0 == Some(slider) || value.is_changed() {
+            apply_settings_slider_committed(slider, percent, settings, ui_scale, config);
+            save_config(config);
+            if active_slider.0 == Some(slider) {
+                active_slider.0 = None;
+            }
+        }
+    }
+}
+
+fn commit_active_settings_slider(
+    slider_values: &Query<(&SettingsAction, &SliderValue, &SliderRange), With<Slider>>,
+    active_slider: &mut ActiveSettingsSlider,
+    settings: &mut GameSettings,
+    ui_scale: &mut UiScale,
+    config: &mut GameConfig,
+) {
+    let Some(slider) = active_slider.0.take() else {
+        return;
+    };
+
+    for (action, value, range) in slider_values {
+        if settings_action_slider(*action) != Some(slider) {
+            continue;
+        }
+        let percent = range.thumb_position(value.0).clamp(0.0, 1.0);
+        apply_settings_slider_committed(slider, percent, settings, ui_scale, config);
+        save_config(config);
+        return;
+    }
+}
+
+fn settings_action_slider(action: SettingsAction) -> Option<SettingsSlider> {
+    match action {
+        SettingsAction::FovSlider => Some(SettingsSlider::Fov),
+        SettingsAction::UiScaleSlider => Some(SettingsSlider::UiScale),
+        SettingsAction::GravitySlider => Some(SettingsSlider::Gravity),
+        _ => None,
+    }
+}
+
+pub(crate) fn apply_settings_slider_live(
+    slider: SettingsSlider,
+    percent: f32,
+    settings: &mut GameSettings,
+    ui_scale: &mut UiScale,
+    config: &mut GameConfig,
+) {
+    apply_settings_slider_value(slider, percent, settings, ui_scale, config);
+}
+
+pub(crate) fn apply_settings_slider_committed(
+    slider: SettingsSlider,
+    percent: f32,
+    settings: &mut GameSettings,
+    ui_scale: &mut UiScale,
+    config: &mut GameConfig,
+) {
+    apply_settings_slider_value(slider, percent, settings, ui_scale, config);
+}
+
+fn apply_settings_slider_value(
     slider: SettingsSlider,
     percent: f32,
     settings: &mut GameSettings,
@@ -1006,6 +1071,7 @@ fn apply_settings_slider(
 
 pub fn generator_menu_actions(
     mut ui_runtime: ResMut<UiRuntime>,
+    mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
     mut interactions: Query<(&Interaction, &GeneratorAction), (Changed<Interaction>, With<Button>)>,
@@ -1036,12 +1102,57 @@ pub fn generator_menu_actions(
                 world.set_generator_settings(pos, settings);
                 solution_state.dirty = true;
             }
-            GeneratorAction::MaterialNext => {
-                settings.material = next_material(settings.material);
+            GeneratorAction::ToggleMaterialDropdown => {
+                toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::GeneratorMaterial);
+            }
+            GeneratorAction::SetMaterial(material) => {
+                settings.material = material;
                 world.set_generator_settings(pos, settings);
                 solution_state.dirty = true;
+                open_dropdown.0 = None;
             }
             GeneratorAction::Close => {
+                open_dropdown.0 = None;
+                ui_runtime.close_active();
+            }
+        }
+    }
+}
+
+pub fn goal_menu_actions(
+    mut ui_runtime: ResMut<UiRuntime>,
+    mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
+    mut world: ResMut<WorldBlocks>,
+    mut solution_state: ResMut<SolutionState>,
+    mut interactions: Query<(&Interaction, &GoalAction), (Changed<Interaction>, With<Button>)>,
+) {
+    if ui_runtime.active_panel() != Some(UiPanelId::Goal) {
+        return;
+    }
+
+    let Some(pos) = ui_runtime.active_block_pos() else {
+        ui_runtime.close_current();
+        return;
+    };
+
+    for (interaction, action) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        let mut settings = world.goal_settings(pos);
+        match *action {
+            GoalAction::ToggleMaterialDropdown => {
+                toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::GoalMaterial);
+            }
+            GoalAction::SetMaterial(material) => {
+                settings.material = material;
+                world.set_goal_settings(pos, settings);
+                solution_state.dirty = true;
+                open_dropdown.0 = None;
+            }
+            GoalAction::Close => {
+                open_dropdown.0 = None;
                 ui_runtime.close_active();
             }
         }
@@ -1050,6 +1161,7 @@ pub fn generator_menu_actions(
 
 pub fn labeler_menu_actions(
     mut ui_runtime: ResMut<UiRuntime>,
+    mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
     mut interactions: Query<(&Interaction, &LabelerAction), (Changed<Interaction>, With<Button>)>,
@@ -1070,17 +1182,17 @@ pub fn labeler_menu_actions(
 
         let mut settings = world.labeler_settings(pos);
         match *action {
-            LabelerAction::PreviousColor => {
-                settings.color = previous_stamp_color(settings.color);
-                world.set_labeler_settings(pos, settings);
-                solution_state.dirty = true;
+            LabelerAction::ToggleColorDropdown => {
+                toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::LabelerColor);
             }
-            LabelerAction::NextColor => {
-                settings.color = next_stamp_color(settings.color);
+            LabelerAction::SetColor(color) => {
+                settings.color = color;
                 world.set_labeler_settings(pos, settings);
                 solution_state.dirty = true;
+                open_dropdown.0 = None;
             }
             LabelerAction::Close => {
+                open_dropdown.0 = None;
                 ui_runtime.close_active();
             }
         }
@@ -1089,6 +1201,7 @@ pub fn labeler_menu_actions(
 
 pub fn converter_menu_actions(
     mut ui_runtime: ResMut<UiRuntime>,
+    mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
     mut interactions: Query<(&Interaction, &ConverterAction), (Changed<Interaction>, With<Button>)>,
@@ -1109,22 +1222,27 @@ pub fn converter_menu_actions(
 
         let mut settings = world.converter_settings(pos);
         match *action {
-            ConverterAction::ToggleMode => {
-                settings.mode = settings.mode.toggle();
-                world.set_converter_settings(pos, settings);
-                solution_state.dirty = true;
+            ConverterAction::ToggleInputDropdown => {
+                toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::ConverterInput);
             }
-            ConverterAction::InputNext => {
-                settings.input = next_material(settings.input);
-                world.set_converter_settings(pos, settings);
-                solution_state.dirty = true;
+            ConverterAction::ToggleOutputDropdown => {
+                toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::ConverterOutput);
             }
-            ConverterAction::OutputNext => {
-                settings.output = next_material(settings.output);
+            ConverterAction::SetInput(material) => {
+                settings.input = material;
+                settings.mode = ConverterMode::SpecificInput;
                 world.set_converter_settings(pos, settings);
                 solution_state.dirty = true;
+                open_dropdown.0 = None;
+            }
+            ConverterAction::SetOutput(material) => {
+                settings.output = material;
+                world.set_converter_settings(pos, settings);
+                solution_state.dirty = true;
+                open_dropdown.0 = None;
             }
             ConverterAction::Close => {
+                open_dropdown.0 = None;
                 ui_runtime.close_active();
             }
         }
@@ -1133,6 +1251,7 @@ pub fn converter_menu_actions(
 
 pub fn teleport_menu_actions(
     mut ui_runtime: ResMut<UiRuntime>,
+    mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut rename_state: ResMut<TeleportRenameState>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
@@ -1153,9 +1272,15 @@ pub fn teleport_menu_actions(
         }
 
         match *action {
-            TeleportAction::CyclePair => {
-                world.cycle_teleport_pair(pos);
+            TeleportAction::TogglePairDropdown => {
+                toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::TeleportPair);
+            }
+            TeleportAction::SetPair(pair) => {
+                let mut settings = world.teleport_settings(pos);
+                settings.pair = pair;
+                world.set_teleport_settings(pos, settings);
                 solution_state.dirty = true;
+                open_dropdown.0 = None;
             }
             TeleportAction::Rename => {
                 let settings = world.teleport_settings(pos);
@@ -1163,6 +1288,7 @@ pub fn teleport_menu_actions(
                 rename_state.buffer = settings.name;
             }
             TeleportAction::Close => {
+                open_dropdown.0 = None;
                 rename_state.editing = None;
                 ui_runtime.close_active();
             }
@@ -1227,29 +1353,10 @@ fn push_rename_char(buffer: &mut String, ch: char) {
     buffer.push(ch);
 }
 
-fn next_material(material: MaterialKind) -> MaterialKind {
-    let all = MaterialKind::ALL;
-    let index = all
-        .iter()
-        .position(|candidate| *candidate == material)
-        .unwrap_or(0);
-    all[(index + 1) % all.len()]
-}
-
-fn next_stamp_color(color: StampColor) -> StampColor {
-    let all = StampColor::ALL;
-    let index = all
-        .iter()
-        .position(|candidate| *candidate == color)
-        .unwrap_or(0);
-    all[(index + 1) % all.len()]
-}
-
-fn previous_stamp_color(color: StampColor) -> StampColor {
-    let all = StampColor::ALL;
-    let index = all
-        .iter()
-        .position(|candidate| *candidate == color)
-        .unwrap_or(0);
-    all[(index + all.len() - 1) % all.len()]
+fn toggle_block_dropdown(open_dropdown: &mut OpenBlockPanelDropdown, dropdown: BlockPanelDropdown) {
+    open_dropdown.0 = if open_dropdown.0 == Some(dropdown) {
+        None
+    } else {
+        Some(dropdown)
+    };
 }

@@ -2,13 +2,16 @@ use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
 use bevy::ui_widgets::{Slider, SliderRange, SliderThumb, SliderValue, TrackClick};
 
-use super::components::{default_button_size, default_font_size, menu_button};
+use super::components::{
+    default_button_size, default_font_size, inset_border, menu_button, raised_border,
+};
 use super::types::{
-    AreaKind, ConfirmDialogAction, InventoryItem, InventorySlot, KeyBindingButton, KeyBindingLabel,
-    MainMenuAction, PauseAction, SaveListAction, SaveListLabel, ScrollContainer, ScrollContent,
-    SettingsAction, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList, SettingsSlider,
-    SettingsSliderFill, SettingsSliderKnob, SettingsValue, SettingsValueText, SlotArea, SlotIcon,
-    SlotLabel, UiActionLabel,
+    AreaKind, BlockPanelDropdown, BlockPanelDropdownLabel, BlockPanelDropdownList,
+    ConfirmDialogAction, GeneratorAction, InventoryItem, InventorySlot, KeyBindingButton,
+    KeyBindingLabel, MainMenuAction, PauseAction, SaveListAction, SaveListLabel, ScrollContainer,
+    ScrollContent, SettingsAction, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList,
+    SettingsDropdownRoot, SettingsSlider, SettingsSliderFill, SettingsSliderKnob, SettingsValue,
+    SettingsValueText, SlotArea, SlotIcon, SlotLabel, TeleportAction, UiActionLabel,
 };
 
 fn label_text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bundle {
@@ -22,13 +25,8 @@ fn label_text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bu
     )
 }
 
-fn styled_button(style: Node, border: Color, background: Color) -> impl Bundle {
-    (
-        Button,
-        style,
-        BorderColor::all(border),
-        BackgroundColor(background),
-    )
+fn styled_button(style: Node, border: impl Into<BorderColor>, background: Color) -> impl Bundle {
+    (Button, style, border.into(), BackgroundColor(background))
 }
 
 fn plain_node(style: Node) -> impl Bundle {
@@ -42,13 +40,25 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
                 Node {
                     width: Val::Px(default_button_size(54.0)),
                     height: Val::Px(default_button_size(54.0)),
-                    border: UiRect::all(Val::Px(2.0)),
+                    border: UiRect {
+                        left: Val::Px(4.0),
+                        right: Val::Px(4.0),
+                        top: Val::Px(5.0),
+                        bottom: Val::Px(5.0),
+                    },
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
                     ..default()
                 },
-                Color::srgb(0.22, 0.22, 0.22),
-                Color::srgba(0.28, 0.28, 0.30, 0.92),
+                inset_border(),
+                Color::srgb(0.255, 0.251, 0.251),
+            ),
+            BoxShadow::new(
+                Color::srgba(0.0, 0.0, 0.0, 0.50),
+                Val::Px(0.0),
+                Val::Px(0.0),
+                Val::Px(0.0),
+                Val::Px(3.0),
             ),
             InventorySlot { area, index },
         ))
@@ -86,32 +96,110 @@ pub(super) fn spawn_localized_pause_button(parent: &mut ChildSpawnerCommands, ac
     spawn_localized_button(parent, 38.0, 16.0, action);
 }
 
-pub(super) fn spawn_generator_button(
-    parent: &mut ChildSpawnerCommands,
-    action: super::types::GeneratorAction,
-) {
+pub(super) fn spawn_generator_button(parent: &mut ChildSpawnerCommands, action: GeneratorAction) {
     spawn_localized_button(parent, 36.0, 14.0, action);
 }
 
-pub(super) fn spawn_labeler_button(
-    parent: &mut ChildSpawnerCommands,
-    action: super::types::LabelerAction,
-) {
+pub(super) fn spawn_teleport_button(parent: &mut ChildSpawnerCommands, action: TeleportAction) {
     spawn_localized_button(parent, 36.0, 14.0, action);
 }
 
-pub(super) fn spawn_converter_button(
-    parent: &mut ChildSpawnerCommands,
-    action: super::types::ConverterAction,
-) {
-    spawn_localized_button(parent, 36.0, 14.0, action);
+pub(super) fn spawn_close_button<A>(parent: &mut ChildSpawnerCommands, action: A)
+where
+    A: Component + Copy + UiActionLabel,
+{
+    let key = action.label_key();
+    parent
+        .spawn((
+            styled_button(
+                Node {
+                    position_type: PositionType::Absolute,
+                    right: Val::Px(10.0),
+                    top: Val::Px(10.0),
+                    width: Val::Px(34.0),
+                    height: Val::Px(34.0),
+                    border: UiRect::all(Val::Px(2.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                raised_border(),
+                Color::srgb(0.255, 0.251, 0.251),
+            ),
+            action,
+        ))
+        .with_children(|button| {
+            button.spawn(label_text(key, 12.0, Color::WHITE));
+        });
 }
 
-pub(super) fn spawn_teleport_button(
+pub(super) fn spawn_block_panel_dropdown<A>(
     parent: &mut ChildSpawnerCommands,
-    action: super::types::TeleportAction,
-) {
-    spawn_localized_button(parent, 36.0, 14.0, action);
+    dropdown: BlockPanelDropdown,
+    toggle_action: A,
+    options: impl IntoIterator<Item = (String, A)>,
+) where
+    A: Component + Copy,
+{
+    parent
+        .spawn((
+            plain_node(Node {
+                width: Val::Px(230.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(4.0),
+                position_type: PositionType::Relative,
+                ..default()
+            }),
+            ZIndex(300),
+        ))
+        .with_children(|container| {
+            container
+                .spawn((
+                    styled_button(
+                        Node {
+                            width: Val::Percent(100.0),
+                            height: Val::Px(default_button_size(34.0)),
+                            padding: UiRect::horizontal(Val::Px(12.0)),
+                            border: UiRect::all(Val::Px(1.0)),
+                            align_items: AlignItems::Center,
+                            justify_content: JustifyContent::SpaceBetween,
+                            ..default()
+                        },
+                        Color::srgb(0.38, 0.39, 0.40),
+                        Color::srgba(0.18, 0.20, 0.22, 0.96),
+                    ),
+                    toggle_action,
+                ))
+                .with_children(|button| {
+                    button.spawn((
+                        label_text("", 14.0, Color::WHITE),
+                        BlockPanelDropdownLabel(dropdown),
+                    ));
+                    button.spawn(label_text("v", 12.0, Color::srgb(0.72, 0.80, 0.84)));
+                });
+            container
+                .spawn((
+                    (
+                        Node {
+                            width: Val::Percent(100.0),
+                            display: Display::None,
+                            position_type: PositionType::Absolute,
+                            top: Val::Px(default_button_size(38.0)),
+                            flex_direction: FlexDirection::Column,
+                            row_gap: Val::Px(3.0),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
+                        ZIndex(500),
+                    ),
+                    BlockPanelDropdownList(dropdown),
+                ))
+                .with_children(|list| {
+                    for (label, action) in options {
+                        spawn_dropdown_option(list, label, action);
+                    }
+                });
+        });
 }
 
 pub(super) fn spawn_confirm_dialog_button(
@@ -171,8 +259,15 @@ pub(super) fn spawn_settings_tab(parent: &mut ChildSpawnerCommands, action: Sett
                     justify_content: JustifyContent::Center,
                     ..default()
                 },
-                Color::srgb(0.38, 0.39, 0.40),
-                Color::srgba(0.16, 0.17, 0.18, 0.96),
+                raised_border(),
+                Color::srgb(0.255, 0.251, 0.251),
+            ),
+            BoxShadow::new(
+                Color::srgba(0.0, 0.0, 0.0, 0.45),
+                Val::Px(0.0),
+                Val::Px(0.0),
+                Val::Px(0.0),
+                Val::Px(3.0),
             ),
             action,
         ))
@@ -185,27 +280,19 @@ pub(super) fn spawn_settings_tab(parent: &mut ChildSpawnerCommands, action: Sett
 }
 
 pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, slider: SettingsSlider) {
-    parent.spawn((
-        label_text("", 13.0, Color::srgb(0.88, 0.94, 0.96)),
-        SettingsValueText(match slider {
-            SettingsSlider::Fov => SettingsValue::Fov,
-            SettingsSlider::UiScale => SettingsValue::UiScale,
-            SettingsSlider::Gravity => SettingsValue::Gravity,
-        }),
-    ));
     parent
         .spawn((
             styled_button(
                 Node {
-                    width: Val::Px(340.0),
+                    width: Val::Px(360.0),
                     height: Val::Px(default_button_size(22.0)),
                     padding: UiRect::all(Val::Px(3.0)),
                     border: UiRect::all(Val::Px(1.0)),
                     align_items: AlignItems::Center,
                     ..default()
                 },
-                Color::srgb(0.42, 0.44, 0.46),
-                Color::srgba(0.10, 0.11, 0.12, 0.98),
+                inset_border(),
+                Color::srgb(0.255, 0.251, 0.251),
             ),
             Slider {
                 track_click: TrackClick::Snap,
@@ -229,6 +316,7 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, slider: S
                     BackgroundColor(Color::srgb(0.32, 0.62, 0.72)),
                 ),
                 SettingsSliderFill(slider),
+                Pickable::IGNORE,
             ));
             track.spawn((
                 (
@@ -248,8 +336,29 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, slider: S
                 ),
                 SettingsSliderKnob(slider),
                 SliderThumb,
+                Pickable::IGNORE,
             ));
         });
+}
+
+pub(super) fn spawn_settings_slider_value(
+    parent: &mut ChildSpawnerCommands,
+    slider: SettingsSlider,
+) {
+    parent.spawn((
+        label_text("", 13.0, Color::srgb(0.88, 0.94, 0.96)),
+        TextLayout::new_with_justify(Justify::Right),
+        Node {
+            width: Val::Px(130.0),
+            align_self: AlignSelf::Center,
+            ..default()
+        },
+        SettingsValueText(match slider {
+            SettingsSlider::Fov => SettingsValue::Fov,
+            SettingsSlider::UiScale => SettingsValue::UiScale,
+            SettingsSlider::Gravity => SettingsValue::Gravity,
+        }),
+    ));
 }
 
 fn settings_slider_initial_value(slider: SettingsSlider) -> f32 {
@@ -273,7 +382,8 @@ pub(super) fn spawn_settings_dropdown(
                 position_type: PositionType::Relative,
                 ..default()
             }),
-            ZIndex(80),
+            ZIndex(300),
+            SettingsDropdownRoot(dropdown),
         ))
         .with_children(|container| {
             container
@@ -313,7 +423,7 @@ pub(super) fn spawn_settings_dropdown(
                             ..default()
                         },
                         BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
-                        ZIndex(120),
+                        ZIndex(500),
                     ),
                     SettingsDropdownList(dropdown),
                 ))
@@ -349,7 +459,10 @@ pub(super) fn spawn_settings_dropdown(
         });
 }
 
-fn spawn_dropdown_option(parent: &mut ChildSpawnerCommands, label: String, action: SettingsAction) {
+fn spawn_dropdown_option<A>(parent: &mut ChildSpawnerCommands, label: String, action: A)
+where
+    A: Component + Copy,
+{
     parent
         .spawn((menu_button(32.0), action))
         .with_children(|button| {

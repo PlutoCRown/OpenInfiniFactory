@@ -1,7 +1,7 @@
+use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::{RenderTarget, ScalingMode};
 use bevy::light::CascadeShadowConfigBuilder;
-use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::render::render_resource::TextureFormat;
@@ -288,6 +288,7 @@ fn spawn_block_icon_model(
         AnimationTiming::edit(),
         false,
         false,
+        true,
         Some((origin - Vec3::splat(0.5), icon_layer)),
     );
 }
@@ -338,7 +339,13 @@ pub fn rebuild_world_for_debug_state(
     factory_structures: &FactoryStructureState,
 ) {
     if debug.factory_activity {
-        rebuild_world_with_factory_activity_debug(commands, meshes, world, assets, factory_structures);
+        rebuild_world_with_factory_activity_debug(
+            commands,
+            meshes,
+            world,
+            assets,
+            factory_structures,
+        );
     } else {
         rebuild_world(commands, meshes, world, assets);
     }
@@ -443,6 +450,7 @@ pub fn spawn_block_preview(
         AnimationTiming::edit(),
         false,
         false,
+        true,
         None,
     );
 }
@@ -503,6 +511,7 @@ pub fn spawn_block_with_timed_animation(
         timing,
         true,
         false,
+        true,
         None,
     );
 }
@@ -531,6 +540,7 @@ pub fn spawn_pending_generated_block(
         timing,
         false,
         true,
+        false,
         None,
     );
 }
@@ -575,6 +585,7 @@ pub fn rebuild_world_with_timed_animations(
             timing,
             true,
             false,
+            true,
             None,
         );
     }
@@ -593,6 +604,7 @@ pub fn rebuild_world_with_timed_animations(
             timing,
             true,
             false,
+            true,
             None,
         );
     }
@@ -624,6 +636,7 @@ pub fn rebuild_world_with_runtime_animations(
             timing,
             true,
             false,
+            false,
             None,
         );
     }
@@ -641,6 +654,7 @@ pub fn rebuild_world_with_runtime_animations(
             None,
             timing,
             true,
+            false,
             false,
             None,
         );
@@ -660,7 +674,13 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
     powered_wires: &HashSet<IVec3>,
 ) {
     if debug.factory_activity {
-        rebuild_world_with_factory_activity_debug(commands, meshes, world, assets, factory_structures);
+        rebuild_world_with_factory_activity_debug(
+            commands,
+            meshes,
+            world,
+            assets,
+            factory_structures,
+        );
     } else {
         rebuild_world_with_runtime_animations(
             commands,
@@ -829,6 +849,7 @@ fn spawn_block_model(
     timing: AnimationTiming,
     with_block_entity: bool,
     pending_generated_preview: bool,
+    show_generator_preview: bool,
     icon_render: Option<(Vec3, &RenderLayers)>,
 ) {
     let mut transform = Transform::from_translation(grid_to_world(pos));
@@ -860,7 +881,9 @@ fn spawn_block_model(
     } else if data.kind == BlockKind::Platform {
         commands.spawn((
             Mesh3d(assets.block_mesh(data.kind)),
-            MeshMaterial3d(assets.model_material(crate::game::world::blocks::ModelMaterial::Platform)),
+            MeshMaterial3d(
+                assets.model_material(crate::game::world::blocks::ModelMaterial::Platform),
+            ),
             transform,
         ))
     } else if let Some(scene_material) = assets.scene_material(data.kind) {
@@ -869,11 +892,7 @@ fn spawn_block_model(
         } else {
             meshes.add(scene_block_mesh(pos))
         };
-        commands.spawn((
-            Mesh3d(mesh),
-            MeshMaterial3d(scene_material),
-            transform,
-        ))
+        commands.spawn((Mesh3d(mesh), MeshMaterial3d(scene_material), transform))
     } else {
         commands.spawn((
             Mesh3d(assets.block_mesh(data.kind)),
@@ -1005,7 +1024,45 @@ fn spawn_block_model(
                 }
             }
         }
+
+        if show_generator_preview && data.kind == BlockKind::Generator {
+            spawn_generator_material_preview(
+                parent,
+                assets,
+                world.generator_settings(pos).material,
+                icon_render,
+            );
+        }
     });
+}
+
+fn spawn_generator_material_preview(
+    parent: &mut ChildSpawnerCommands,
+    assets: &WorldRenderAssets,
+    material: crate::game::world::blocks::MaterialKind,
+    icon_render: Option<(Vec3, &RenderLayers)>,
+) {
+    let Some(kind) = BlockKind::material_block_kind(material) else {
+        return;
+    };
+
+    let mut child = parent.spawn((
+        Mesh3d(assets.block_mesh(kind)),
+        MeshMaterial3d(assets.block_material(kind)),
+        Transform {
+            rotation: Quat::from_euler(
+                EulerRot::XYZ,
+                std::f32::consts::FRAC_PI_4,
+                std::f32::consts::FRAC_PI_4,
+                std::f32::consts::FRAC_PI_4,
+            ),
+            scale: Vec3::splat(0.38),
+            ..default()
+        },
+    ));
+    if let Some((_, icon_layer)) = icon_render {
+        child.insert((icon_layer.clone(), BlockIconRenderEntity));
+    }
 }
 
 fn face_mark_transform(normal: IVec3) -> Transform {

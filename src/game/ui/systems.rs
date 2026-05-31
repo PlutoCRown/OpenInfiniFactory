@@ -1,39 +1,60 @@
+use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
-use bevy::ui_widgets::{CoreSliderDragState, SliderRange, SliderValue};
+use bevy::ui_widgets::{CoreSliderDragState, Slider, SliderRange, SliderValue};
 use bevy::window::PrimaryWindow;
 
 use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
     TeleportRenameState, WorldEntryMode,
 };
-use crate::game::world::grid::ConverterMode;
+use crate::game::world::blocks::BlockKind;
+use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockIconAssets;
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ConfigAction, GameConfig};
-use crate::shared::i18n::I18n;
+use crate::shared::i18n::{I18n, Language};
 use crate::shared::save::{SaveKind, SaveState};
 
 use super::components::{
-    BUTTON_BG, BUTTON_BORDER, BUTTON_HOVER_BG, BUTTON_HOVER_BORDER, BUTTON_PRESSED_BG,
+    hover_border, inset_border, menu_button, pressed_border, raised_border, BUTTON_BG,
+    BUTTON_HOVER_BG, BUTTON_PRESSED_BG,
 };
 use super::types::{
-    BackpackPanel, CarriedIcon, CarriedItem, CarriedLabel, ConfirmDialogAction, ConfirmDialogKind,
+    ActiveSettingsSlider, BackpackPanel, BlockPanelDropdown, BlockPanelDropdownLabel,
+    BlockPanelDropdownList, CarriedIcon, CarriedItem, CarriedLabel, ConfirmDialogAction,
+    ConfirmDialogKind,
     ConfirmDialogMessage, ConfirmDialogPanel, ConfirmDialogPrimaryLabel,
     ConfirmDialogSecondaryLabel, ConfirmDialogState, ConfirmDialogTitle, ConverterInputRow,
-    ConverterInputText, ConverterModeText, ConverterOutputText, Crosshair, CurrentSaveText,
-    DeleteSelectionModeText, FovText, GeneratorMaterialText, GeneratorPeriodText, HotbarText,
+    Crosshair, CurrentSaveText, DeleteSelectionModeText, FovText, GeneratorPeriodText, HotbarText,
     InGameHudStyle, InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle,
-    InventoryTooltip, InventoryTooltipText, KeyBindingButton, KeyBindingLabel, LabelerColorText,
-    LocalizedText, MainMenuPanel, OpenSettingsDropdown, PauseAction, PausePanel, PendingKeyBind,
-    PlaceSelectionModeText, SaveListAction, SaveListLabel, SaveListPanel, SaveListTitle,
-    ScrollContainer, ScrollContent, SettingsAction, SettingsDropdownLabel, SettingsDropdownList,
-    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsSlider, SettingsSliderFill,
-    SettingsSliderKnob, SettingsStatusText, SettingsTab, SettingsValue, SettingsValueText,
-    SimulationStatusText, SimulationText, SlotArea, SlotIcon, SlotLabel, TeleportNameText,
-    TeleportPairText, UiPanelBinding, UiRuntime, UiScaleText,
+    InventoryTooltip, InventoryTooltipText, KeyBindingButton, KeyBindingLabel, LocalizedText,
+    MainMenuPanel, OpenBlockPanelDropdown, OpenSettingsDropdown, PauseAction, PausePanel,
+    PendingKeyBind, PlaceSelectionModeText, SaveListAction, SaveListLabel, SaveListPanel,
+    SaveListTitle, ScrollContainer, ScrollContent, SettingsAction, SettingsDropdownLabel,
+    SettingsDropdownList, SettingsDropdownRoot, SettingsGameplayGroup, SettingsKeyBindingsGroup,
+    SettingsDropdownRow, SettingsSlider, SettingsSliderFill, SettingsSliderKnob, SettingsTab,
+    SettingsValue, SettingsValueText, SimulationStatusText, SimulationText, SlotArea, SlotIcon,
+    SlotLabel, TeleportAction, TeleportNameText, UiPanelBinding, UiPanelId, UiRuntime,
+    UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
+
+#[derive(SystemParam)]
+pub struct BlockPanelDropdownParams<'w, 's> {
+    pub labels: Query<'w, 's, (&'static BlockPanelDropdownLabel, &'static mut Text)>,
+    pub lists: Query<'w, 's, (&'static BlockPanelDropdownList, &'static mut Node)>,
+    pub teleport_pair_list: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static BlockPanelDropdownList,
+            Option<&'static Children>,
+        ),
+    >,
+    pub teleport_pair_options: Query<'w, 's, Entity, With<TeleportAction>>,
+}
 
 #[derive(Resource, Clone)]
 pub struct UiFont(pub Handle<Font>);
@@ -167,15 +188,15 @@ pub fn update_button_hover_ui(
         match *interaction {
             Interaction::Pressed => {
                 *background = BUTTON_PRESSED_BG.into();
-                *border = BUTTON_HOVER_BORDER.into();
+                *border = pressed_border();
             }
             Interaction::Hovered => {
                 *background = BUTTON_HOVER_BG.into();
-                *border = BUTTON_HOVER_BORDER.into();
+                *border = hover_border();
             }
             Interaction::None => {
                 *background = BUTTON_BG.into();
-                *border = BUTTON_BORDER.into();
+                *border = raised_border();
             }
         }
     }
@@ -500,16 +521,8 @@ pub fn update_scroll_containers(
 
 pub fn update_generator_ui(
     ui_runtime: Res<UiRuntime>,
-    world: Res<crate::game::world::grid::WorldBlocks>,
-    i18n: Res<I18n>,
-    mut generator_period_text: Query<
-        &mut Text,
-        (With<GeneratorPeriodText>, Without<GeneratorMaterialText>),
-    >,
-    mut generator_material_text: Query<
-        &mut Text,
-        (With<GeneratorMaterialText>, Without<GeneratorPeriodText>),
-    >,
+    world: Res<WorldBlocks>,
+    mut generator_period_text: Query<&mut Text, With<GeneratorPeriodText>>,
 ) {
     let Some(pos) = ui_runtime.active_block_pos() else {
         return;
@@ -517,110 +530,49 @@ pub fn update_generator_ui(
 
     let generator_settings = world.generator_settings(pos);
     if let Ok(mut text) = generator_period_text.single_mut() {
-        text.0 = i18n.fmt(
-            "generator.period",
-            &[("period", generator_settings.period.to_string())],
-        );
-    }
-    if let Ok(mut text) = generator_material_text.single_mut() {
-        text.0 = i18n.fmt(
-            "generator.material",
-            &[(
-                "material",
-                i18n.text(generator_settings.material.name_key()),
-            )],
-        );
+        text.0 = generator_settings.period.to_string();
     }
 }
 
 pub fn update_labeler_ui(
     ui_runtime: Res<UiRuntime>,
-    world: Res<crate::game::world::grid::WorldBlocks>,
+    world: Res<WorldBlocks>,
     i18n: Res<I18n>,
-    mut labeler_color_text: Query<&mut Text, With<LabelerColorText>>,
+    mut title_text: Query<&mut Text, With<super::types::LocalizedText>>,
 ) {
     let Some(pos) = ui_runtime.active_block_pos() else {
         return;
     };
 
-    let labeler_settings = world.labeler_settings(pos);
-    if let Ok(mut text) = labeler_color_text.single_mut() {
-        text.0 = i18n.fmt(
-            "labeler.color",
-            &[("color", i18n.text(labeler_settings.color.name_key()))],
-        );
+    let Some(block) = world.system_blocks.get(&pos) else {
+        return;
+    };
+    let key = match block.kind {
+        BlockKind::Stamper => "stamper.title",
+        BlockKind::Roller => "roller.title",
+        _ => "labeler.title",
+    };
+    for mut text in &mut title_text {
+        if text.0 == i18n.text("labeler.title")
+            || text.0 == i18n.text("stamper.title")
+            || text.0 == i18n.text("roller.title")
+        {
+            text.0 = i18n.text(key);
+        }
     }
 }
 
-pub fn update_converter_ui(
-    ui_runtime: Res<UiRuntime>,
-    world: Res<crate::game::world::grid::WorldBlocks>,
-    i18n: Res<I18n>,
-    mut converter_mode_text: Query<
-        &mut Text,
-        (
-            With<ConverterModeText>,
-            Without<ConverterInputText>,
-            Without<ConverterOutputText>,
-        ),
-    >,
-    mut converter_input_text: Query<
-        &mut Text,
-        (
-            With<ConverterInputText>,
-            Without<ConverterModeText>,
-            Without<ConverterOutputText>,
-        ),
-    >,
-    mut converter_output_text: Query<
-        &mut Text,
-        (
-            With<ConverterOutputText>,
-            Without<ConverterModeText>,
-            Without<ConverterInputText>,
-        ),
-    >,
-    mut converter_input_row: Query<&mut Node, With<ConverterInputRow>>,
-) {
-    let Some(pos) = ui_runtime.active_block_pos() else {
-        return;
-    };
-
-    let settings = world.converter_settings(pos);
-    if let Ok(mut text) = converter_mode_text.single_mut() {
-        text.0 = i18n.fmt(
-            "converter.mode",
-            &[("mode", i18n.text(settings.mode.name_key()))],
-        );
-    }
-    if let Ok(mut text) = converter_input_text.single_mut() {
-        text.0 = i18n.fmt(
-            "converter.input",
-            &[("material", i18n.text(settings.input.name_key()))],
-        );
-    }
-    if let Ok(mut text) = converter_output_text.single_mut() {
-        text.0 = i18n.fmt(
-            "converter.output",
-            &[("material", i18n.text(settings.output.name_key()))],
-        );
-    }
+pub fn update_converter_ui(mut converter_input_row: Query<&mut Node, With<ConverterInputRow>>) {
     for mut style in &mut converter_input_row {
-        style.display = if settings.mode == ConverterMode::SpecificInput {
-            Display::Flex
-        } else {
-            Display::None
-        };
+        style.display = Display::Flex;
     }
 }
 
 pub fn update_teleport_ui(
     ui_runtime: Res<UiRuntime>,
     rename_state: Res<TeleportRenameState>,
-    world: Res<crate::game::world::grid::WorldBlocks>,
-    i18n: Res<I18n>,
-    mut teleport_name_text: Query<&mut Text, (With<TeleportNameText>, Without<TeleportPairText>)>,
-    mut teleport_pair_text: Query<&mut Text, (With<TeleportPairText>, Without<TeleportNameText>)>,
+    world: Res<WorldBlocks>,
+    mut teleport_name_text: Query<&mut Text, With<TeleportNameText>>,
 ) {
     let Some(pos) = ui_runtime.active_block_pos() else {
         return;
@@ -628,20 +580,143 @@ pub fn update_teleport_ui(
 
     let settings = world.teleport_settings(pos);
     if let Ok(mut text) = teleport_name_text.single_mut() {
-        let name = if rename_state.editing == Some(pos) {
-            i18n.fmt("teleport.editing", &[("name", rename_state.buffer.clone())])
+        text.0 = if rename_state.editing == Some(pos) {
+            format!("{}_", rename_state.buffer)
         } else {
-            i18n.fmt("teleport.name", &[("name", settings.name.clone())])
+            settings.name
         };
-        text.0 = name;
     }
-    if let Ok(mut text) = teleport_pair_text.single_mut() {
-        let pair = settings
-            .pair
-            .map(|pair| world.teleport_settings(pair).name)
-            .unwrap_or_else(|| i18n.text("teleport.none"));
-        text.0 = i18n.fmt("teleport.pair", &[("pair", pair)]);
+}
+
+pub fn update_block_panel_dropdowns_ui(
+    mut commands: Commands,
+    ui_runtime: Res<UiRuntime>,
+    open_dropdown: Res<OpenBlockPanelDropdown>,
+    world: Res<WorldBlocks>,
+    i18n: Res<I18n>,
+    mut teleport_pair_cache: Local<Option<(Option<IVec3>, u64, Language, bool)>>,
+    mut dropdowns: BlockPanelDropdownParams,
+) {
+    let active_pos = ui_runtime.active_block_pos();
+
+    for (label, mut text) in &mut dropdowns.labels {
+        text.0 = match label.0 {
+            BlockPanelDropdown::GeneratorMaterial => active_pos
+                .map(|pos| world.generator_settings(pos).material)
+                .map(|material| i18n.text(material.name_key()))
+                .unwrap_or_default(),
+            BlockPanelDropdown::GoalMaterial => active_pos
+                .map(|pos| world.goal_settings(pos).material)
+                .map(|material| i18n.text(material.name_key()))
+                .unwrap_or_default(),
+            BlockPanelDropdown::LabelerColor => active_pos
+                .map(|pos| world.labeler_settings(pos).color)
+                .map(|color| i18n.text(color.name_key()))
+                .unwrap_or_default(),
+            BlockPanelDropdown::ConverterInput => active_pos
+                .map(|pos| world.converter_settings(pos).input)
+                .map(|material| i18n.text(material.name_key()))
+                .unwrap_or_default(),
+            BlockPanelDropdown::ConverterOutput => active_pos
+                .map(|pos| world.converter_settings(pos).output)
+                .map(|material| i18n.text(material.name_key()))
+                .unwrap_or_default(),
+            BlockPanelDropdown::TeleportPair => active_pos
+                .and_then(|pos| world.teleport_settings(pos).pair)
+                .map(|pair| world.teleport_settings(pair).name)
+                .unwrap_or_else(|| i18n.text("teleport.none")),
+        };
     }
+
+    for (list, mut style) in &mut dropdowns.lists {
+        style.display = if open_dropdown.0 == Some(list.0) {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    let pair_dropdown_open = open_dropdown.0 == Some(BlockPanelDropdown::TeleportPair);
+    let pair_cache_key = (
+        active_pos,
+        world.topology_revision,
+        i18n.language(),
+        pair_dropdown_open,
+    );
+    let rebuild_pair_options = *teleport_pair_cache != Some(pair_cache_key);
+    if rebuild_pair_options {
+        *teleport_pair_cache = Some(pair_cache_key);
+    }
+
+    for (entity, list, children) in &mut dropdowns.teleport_pair_list {
+        if list.0 != BlockPanelDropdown::TeleportPair {
+            continue;
+        }
+        if !rebuild_pair_options {
+            continue;
+        }
+        if let Some(children) = children {
+            for child in children {
+                if dropdowns.teleport_pair_options.get(*child).is_ok() {
+                    commands.entity(*child).despawn();
+                }
+            }
+        }
+        if pair_dropdown_open {
+            let Some(pos) = active_pos else {
+                continue;
+            };
+            commands.entity(entity).with_children(|parent| {
+                spawn_teleport_pair_option(parent, i18n.text("teleport.none"), None);
+                for pair in teleport_pair_candidates(&world, pos) {
+                    spawn_teleport_pair_option(
+                        parent,
+                        world.teleport_settings(pair).name,
+                        Some(pair),
+                    );
+                }
+            });
+        }
+    }
+}
+
+fn spawn_teleport_pair_option(
+    parent: &mut ChildSpawnerCommands,
+    label: String,
+    pair: Option<IVec3>,
+) {
+    parent
+        .spawn((menu_button(32.0), TeleportAction::SetPair(pair)))
+        .with_children(|button| {
+            button.spawn((
+                Text::new(label),
+                TextFont {
+                    font_size: super::components::default_font_size(13.0),
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+            ));
+        });
+}
+
+fn teleport_pair_candidates(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
+    let Some(block) = world.system_blocks.get(&pos) else {
+        return Vec::new();
+    };
+    let target_kind = match block.kind {
+        BlockKind::TeleportEntrance => BlockKind::TeleportExit,
+        BlockKind::TeleportExit => BlockKind::TeleportEntrance,
+        _ => return Vec::new(),
+    };
+    let mut candidates: Vec<IVec3> = world
+        .system_blocks
+        .iter()
+        .filter_map(|(candidate_pos, candidate)| {
+            (candidate.kind == target_kind).then_some(*candidate_pos)
+        })
+        .collect();
+    candidates.sort_by_key(|candidate| world.teleport_settings(*candidate).name);
+    candidates
 }
 
 fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
@@ -653,31 +728,12 @@ fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
 
 pub fn update_settings_text_ui(
     config: Res<GameConfig>,
-    settings_tab: Res<SettingsTab>,
     pending_key_bind: Res<PendingKeyBind>,
     i18n: Res<I18n>,
-    mut settings_status: Query<
-        &mut Text,
-        (
-            With<SettingsStatusText>,
-            Without<SlotLabel>,
-            Without<HotbarText>,
-            Without<CarriedLabel>,
-            Without<FovText>,
-            Without<PlaceSelectionModeText>,
-            Without<DeleteSelectionModeText>,
-            Without<SimulationText>,
-            Without<CurrentSaveText>,
-            Without<KeyBindingLabel>,
-            Without<SettingsDropdownLabel>,
-            Without<SettingsValueText>,
-        ),
-    >,
     mut key_labels: Query<
         (&ChildOf, &mut Text),
         (
             With<KeyBindingLabel>,
-            Without<SettingsStatusText>,
             Without<SettingsDropdownLabel>,
             Without<SettingsValueText>,
         ),
@@ -686,7 +742,6 @@ pub fn update_settings_text_ui(
         &mut Text,
         (
             With<PlaceSelectionModeText>,
-            Without<SettingsStatusText>,
             Without<KeyBindingLabel>,
             Without<DeleteSelectionModeText>,
             Without<SettingsDropdownLabel>,
@@ -697,7 +752,6 @@ pub fn update_settings_text_ui(
         &mut Text,
         (
             With<DeleteSelectionModeText>,
-            Without<SettingsStatusText>,
             Without<KeyBindingLabel>,
             Without<PlaceSelectionModeText>,
             Without<SettingsDropdownLabel>,
@@ -706,52 +760,6 @@ pub fn update_settings_text_ui(
     >,
     key_buttons: Query<&KeyBindingButton>,
 ) {
-    if let Ok(mut text) = settings_status.single_mut() {
-        let tab_name = match *settings_tab {
-            SettingsTab::Gameplay => i18n.text("tab.gameplay"),
-            SettingsTab::KeyBindings => i18n.text("tab.key_bindings"),
-        };
-        let pending = pending_key_bind
-            .0
-            .map(|action| {
-                i18n.fmt(
-                    "settings.pending_key",
-                    &[("action", i18n.text(action.label_key()))],
-                )
-            })
-            .unwrap_or_else(|| i18n.text("settings.rebind_hint"));
-        text.0 = i18n.fmt(
-            "settings.status",
-            &[
-                ("tab", tab_name),
-                ("pending", pending),
-                (
-                    "simulate",
-                    config.input(ConfigAction::Simulate).name().to_string(),
-                ),
-                (
-                    "rollback",
-                    config
-                        .input(ConfigAction::SimulationRollback)
-                        .name()
-                        .to_string(),
-                ),
-                (
-                    "inventory",
-                    config.input(ConfigAction::Inventory).name().to_string(),
-                ),
-                (
-                    "alternate",
-                    config.input(ConfigAction::Alternate).name().to_string(),
-                ),
-                (
-                    "pause",
-                    config.input(ConfigAction::Pause).name().to_string(),
-                ),
-            ],
-        );
-    }
-
     for (parent, mut text) in &mut key_labels {
         let Ok(button) = key_buttons.get(parent.parent()) else {
             continue;
@@ -775,6 +783,7 @@ pub fn update_settings_text_ui(
 
 pub fn update_settings_sliders_ui(
     settings: Res<GameSettings>,
+    active_slider: Res<ActiveSettingsSlider>,
     mut slider_fills: Query<
         (&SettingsSliderFill, &mut Node),
         (Without<SettingsSliderKnob>, Without<SettingsDropdownList>),
@@ -783,38 +792,42 @@ pub fn update_settings_sliders_ui(
         (&SettingsSliderKnob, &mut Node),
         (Without<SettingsSliderFill>, Without<SettingsDropdownList>),
     >,
-    slider_values: Query<(Entity, &SettingsAction, &SliderValue), With<Button>>,
+    slider_values: Query<
+        (Entity, &SettingsAction, &SliderValue, &CoreSliderDragState),
+        With<Slider>,
+    >,
     mut commands: Commands,
 ) {
-    if settings.is_changed() {
-        for (entity, action, value) in &slider_values {
-            if let Some(slider) = settings_action_slider(*action) {
-                let next_value = settings_slider_percent(slider, &settings);
-                if (value.0 - next_value).abs() > f32::EPSILON {
-                    commands.entity(entity).insert(SliderValue(next_value));
-                }
+    for (entity, action, value, drag_state) in &slider_values {
+        if drag_state.dragging {
+            continue;
+        }
+        if let Some(slider) = settings_action_slider(*action) {
+            if active_slider.0 == Some(slider) {
+                continue;
+            }
+            let next_value = settings_slider_percent(slider, &settings);
+            if (value.0 - next_value).abs() > 0.01 {
+                commands.entity(entity).insert(SliderValue(next_value));
             }
         }
     }
 
     for (fill, mut style) in &mut slider_fills {
-        style.width = Val::Percent(settings_slider_percent(fill.0, &settings));
+        let percent = live_slider_percent(fill.0, &settings, &active_slider, &slider_values);
+        style.width = Val::Percent(percent);
     }
 
     for (knob, mut style) in &mut slider_knobs {
-        style.left = Val::Percent(settings_slider_percent(knob.0, &settings));
+        let percent = live_slider_percent(knob.0, &settings, &active_slider, &slider_values);
+        style.left = Val::Percent(percent);
     }
 }
 
 pub fn update_settings_slider_drag_ui(
     slider_values: Query<
-        (
-            &SettingsAction,
-            &SliderValue,
-            &SliderRange,
-            &CoreSliderDragState,
-        ),
-        (With<Button>, Changed<SliderValue>),
+        (&SettingsAction, &SliderValue, &SliderRange),
+        (With<Slider>, Changed<SliderValue>),
     >,
     mut slider_fills: Query<
         (&SettingsSliderFill, &mut Node),
@@ -825,10 +838,7 @@ pub fn update_settings_slider_drag_ui(
         (Without<SettingsSliderFill>, Without<SettingsDropdownList>),
     >,
 ) {
-    for (action, value, range, drag_state) in &slider_values {
-        if !drag_state.dragging {
-            continue;
-        }
+    for (action, value, range) in &slider_values {
         let Some(slider) = settings_action_slider(*action) else {
             continue;
         };
@@ -856,7 +866,6 @@ pub fn update_settings_dropdowns_ui(
     mut dropdown_labels: Query<
         (&SettingsDropdownLabel, &mut Text),
         (
-            Without<SettingsStatusText>,
             Without<KeyBindingLabel>,
             Without<FovText>,
             Without<PlaceSelectionModeText>,
@@ -867,7 +876,6 @@ pub fn update_settings_dropdowns_ui(
     mut value_texts: Query<
         (&SettingsValueText, &mut Text),
         (
-            Without<SettingsStatusText>,
             Without<KeyBindingLabel>,
             Without<FovText>,
             Without<PlaceSelectionModeText>,
@@ -879,6 +887,12 @@ pub fn update_settings_dropdowns_ui(
         (&SettingsDropdownList, &mut Node),
         (Without<SettingsSliderFill>, Without<SettingsSliderKnob>),
     >,
+    mut dropdown_z: Query<(
+        &mut ZIndex,
+        Option<&SettingsDropdownList>,
+        Option<&SettingsDropdownRoot>,
+        Option<&SettingsDropdownRow>,
+    )>,
 ) {
     for (label, mut text) in &mut dropdown_labels {
         text.0 = match label.0 {
@@ -907,11 +921,30 @@ pub fn update_settings_dropdowns_ui(
     }
 
     for (list, mut style) in &mut dropdown_lists {
-        style.display = if open_dropdown.0 == Some(list.0) {
-            Display::Flex
-        } else {
-            Display::None
-        };
+        let open = open_dropdown.0 == Some(list.0);
+        style.display = if open { Display::Flex } else { Display::None };
+    }
+
+    for (mut z_index, list, root, row) in &mut dropdown_z {
+        if let Some(list) = list {
+            *z_index = if open_dropdown.0 == Some(list.0) {
+                ZIndex(900)
+            } else {
+                ZIndex(500)
+            };
+        } else if let Some(root) = root {
+            *z_index = if open_dropdown.0 == Some(root.0) {
+                ZIndex(850)
+            } else {
+                ZIndex(300)
+            };
+        } else if let Some(row) = row {
+            *z_index = if open_dropdown.0 == Some(row.0) {
+                ZIndex(800)
+            } else {
+                ZIndex(300)
+            };
+        }
     }
 }
 
@@ -934,32 +967,32 @@ pub fn update_settings_tabs_ui(
                 | (SettingsAction::TabKeyBindings, SettingsTab::KeyBindings)
         );
         if selected {
-            *background = Color::srgba(0.24, 0.30, 0.34, 0.98).into();
-            *border = Color::srgb(0.42, 0.72, 0.82).into();
+            *background = Color::srgb(0.56, 0.56, 0.56).into();
+            *border = pressed_border();
         } else if matches!(
             *action,
             SettingsAction::TabGameplay | SettingsAction::TabKeyBindings
         ) {
             if *interaction == Interaction::Hovered {
                 *background = BUTTON_HOVER_BG.into();
-                *border = BUTTON_HOVER_BORDER.into();
+                *border = hover_border();
             } else {
-                *background = Color::srgba(0.16, 0.17, 0.18, 0.96).into();
-                *border = BUTTON_BORDER.into();
+                *background = BUTTON_BG.into();
+                *border = raised_border();
             }
         } else {
             match *interaction {
                 Interaction::Pressed => {
                     *background = BUTTON_PRESSED_BG.into();
-                    *border = BUTTON_HOVER_BORDER.into();
+                    *border = pressed_border();
                 }
                 Interaction::Hovered => {
                     *background = BUTTON_HOVER_BG.into();
-                    *border = BUTTON_HOVER_BORDER.into();
+                    *border = hover_border();
                 }
                 Interaction::None => {
                     *background = BUTTON_BG.into();
-                    *border = BUTTON_BORDER.into();
+                    *border = raised_border();
                 }
             }
         }
@@ -978,6 +1011,25 @@ fn settings_slider_percent(slider: SettingsSlider, settings: &GameSettings) -> f
             * 100.0)
             .clamp(0.0, 100.0),
     }
+}
+
+fn live_slider_percent(
+    slider: SettingsSlider,
+    settings: &GameSettings,
+    active_slider: &ActiveSettingsSlider,
+    slider_values: &Query<
+        (Entity, &SettingsAction, &SliderValue, &CoreSliderDragState),
+        With<Slider>,
+    >,
+) -> f32 {
+    slider_values
+        .iter()
+        .find_map(|(_, action, value, drag_state)| {
+            ((drag_state.dragging || active_slider.0 == Some(slider))
+                && settings_action_slider(*action) == Some(slider))
+                .then_some(value.0.clamp(0.0, 100.0))
+        })
+        .unwrap_or_else(|| settings_slider_percent(slider, settings))
 }
 
 fn settings_action_slider(action: SettingsAction) -> Option<SettingsSlider> {
@@ -1016,6 +1068,7 @@ pub fn update_panel_visibility(
     solution_state: Res<SolutionState>,
     settings_tab: Res<SettingsTab>,
     ui_runtime: Res<UiRuntime>,
+    mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut style_sets: ParamSet<(
         Query<&mut Node, (With<MainMenuPanel>, Without<PauseAction>)>,
         Query<&mut Node, (With<SaveListPanel>, Without<PauseAction>)>,
@@ -1122,6 +1175,9 @@ pub fn update_panel_visibility(
     }
 
     let active_panel = ui_runtime.active_panel();
+    if !block_dropdown_matches_panel(open_block_dropdown.0, active_panel) {
+        open_block_dropdown.0 = None;
+    }
     for (binding, mut style) in &mut bound_panels {
         let visible = active_panel == Some(binding.0);
         style.display = if visible {
@@ -1130,6 +1186,40 @@ pub fn update_panel_visibility(
             Display::None
         };
     }
+}
+
+fn block_dropdown_matches_panel(
+    dropdown: Option<BlockPanelDropdown>,
+    panel: Option<UiPanelId>,
+) -> bool {
+    matches!(
+        (dropdown, panel),
+        (None, _)
+            | (
+                Some(BlockPanelDropdown::GeneratorMaterial),
+                Some(UiPanelId::Generator)
+            )
+            | (
+                Some(BlockPanelDropdown::GoalMaterial),
+                Some(UiPanelId::Goal)
+            )
+            | (
+                Some(BlockPanelDropdown::LabelerColor),
+                Some(UiPanelId::Labeler)
+            )
+            | (
+                Some(BlockPanelDropdown::ConverterInput),
+                Some(UiPanelId::Converter)
+            )
+            | (
+                Some(BlockPanelDropdown::ConverterOutput),
+                Some(UiPanelId::Converter)
+            )
+            | (
+                Some(BlockPanelDropdown::TeleportPair),
+                Some(UiPanelId::Teleport)
+            )
+    )
 }
 
 pub fn update_hud_visibility(
@@ -1214,24 +1304,29 @@ pub fn update_inventory_slots(
         let selected_hotbar = slot.area == SlotArea::Hotbar && slot.index == placement.selected;
         let base_color = item
             .map(slot_color)
-            .unwrap_or(Color::srgba(0.16, 0.16, 0.17, 0.92));
+            .unwrap_or(Color::srgb(0.255, 0.251, 0.251));
         *background = if has_icon && *interaction == Interaction::Hovered {
-            Color::srgba(1.0, 1.0, 1.0, 0.06).into()
+            Color::srgb(0.32, 0.31, 0.31).into()
         } else if has_icon {
-            Color::NONE.into()
+            Color::srgb(0.255, 0.251, 0.251).into()
         } else if *interaction == Interaction::Hovered && item.is_none() {
-            Color::srgba(0.18, 0.19, 0.20, 0.70).into()
+            Color::srgb(0.32, 0.31, 0.31).into()
         } else if *interaction == Interaction::Hovered {
             base_color.with_alpha(1.0).into()
         } else {
             base_color.into()
         };
         *border = if selected_hotbar {
-            Color::srgb(1.0, 1.0, 1.0).into()
+            BorderColor {
+                top: Color::srgb(1.0, 0.94, 0.80),
+                left: Color::srgb(1.0, 0.94, 0.80),
+                right: Color::srgb(0.36, 0.25, 0.12),
+                bottom: Color::srgb(0.36, 0.25, 0.12),
+            }
         } else if *interaction == Interaction::Hovered {
-            BUTTON_HOVER_BORDER.into()
+            hover_border()
         } else {
-            Color::srgb(0.22, 0.22, 0.22).into()
+            inset_border()
         };
 
         for child in children.iter() {
