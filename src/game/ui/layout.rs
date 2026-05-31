@@ -3,9 +3,9 @@ use bevy::prelude::*;
 use crate::shared::i18n::I18n;
 
 use super::components::{
-    absolute_text_bundle, default_button_size, flex_row, localized_text, panel_bundle,
-    panel_content, panel_title_bar, panel_title_label, root_node, spawn_panel, text,
-    transparent_node, PanelOptions, STATUS_TEXT,
+    absolute_text_bundle, default_button_size, localized_text, panel_bundle, panel_content,
+    panel_title_bar, panel_title_label, root_node, spawn_panel, text, transparent_node,
+    PanelOptions, STATUS_TEXT,
 };
 use super::screens::{
     spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_inventory_tooltip,
@@ -352,13 +352,7 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
                 PanelText(PanelTextKind::ConfirmMessage),
             ));
             panel
-                .spawn((
-                    flex_row(40.0, 8.0),
-                    Node {
-                        justify_content: JustifyContent::Center,
-                        ..default()
-                    },
-                ))
+                .spawn(confirm_dialog_actions_row())
                 .with_children(|row| {
                     spawn_confirm_dialog_button(row, ConfirmDialogAction::Primary);
                     spawn_confirm_dialog_button(row, ConfirmDialogAction::Secondary);
@@ -366,4 +360,16 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
                 });
         });
     });
+}
+
+fn confirm_dialog_actions_row() -> impl Bundle {
+    transparent_node(Node {
+        width: Val::Percent(100.0),
+        height: Val::Px(default_button_size(40.0)),
+        display: Display::Flex,
+        align_items: AlignItems::Center,
+        justify_content: JustifyContent::Center,
+        column_gap: Val::Px(8.0),
+        ..default()
+    })
 }

@@ -191,7 +191,7 @@ pub fn save_solution_with_puzzle(
     world: &WorldBlocks,
     name: &str,
     puzzle_name: &str,
-    puzzle_snapshot: &WorldBlocks,
+    _puzzle_snapshot: &WorldBlocks,
     inventory: &InventoryItems,
 ) -> bool {
     write_save(
