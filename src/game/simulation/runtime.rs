@@ -22,7 +22,7 @@ use super::behaviors::{
 use super::factory_activity::FactoryStructureState;
 use super::gravity::mark_gravity_phase;
 use super::markers::{run_powered_marker_phase, run_static_marker_phase};
-use super::movement::mark_structure_movement_phase;
+use super::movement::{mark_structure_movement_phase, PusherState};
 pub use super::signals::SignalNetworkCache;
 use super::structures::{
     execute_structure_moves_with_pushers, merge_structure_movement_plan, MovementInfluenceCache,
@@ -92,6 +92,7 @@ pub fn run_turn(
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     movement_influence: &mut MovementInfluenceCache,
+    pusher_state: &mut PusherState,
     stats: &mut SimulationStepStats,
 ) {
     let total_start = Instant::now();
@@ -117,7 +118,7 @@ pub fn run_turn(
     sample.marker_before_move_ms = mark_elapsed_ms(&mut mark);
 
     let device_movement_plan =
-        mark_structure_movement_phase(world, &powered_devices, factory_structures);
+        mark_structure_movement_phase(world, &powered_devices, factory_structures, pusher_state);
     movement_plan = merge_structure_movement_plan(
         movement_plan,
         device_movement_plan,
@@ -134,13 +135,16 @@ pub fn run_turn(
         movement_influence,
     );
     merge_generated_animations(&mut animations, generated_animations);
-    let pusher_animations = pusher_animations
+    let mut pusher_animations = pusher_animations
         .into_iter()
         .map(|(pos, mut animation)| {
             animation.duration = animation_duration;
             (pos, animation)
         })
-        .collect();
+        .collect::<HashMap<_, _>>();
+    for (pos, animation) in pusher_state.sustained_animations() {
+        pusher_animations.entry(pos).or_insert(animation);
+    }
     sample.movement_execute_ms = mark_elapsed_ms(&mut mark);
 
     run_static_marker_phase(world);
@@ -191,6 +195,7 @@ pub fn tick_simulation(
     debug: Res<DebugState>,
     mut factory_structures: ResMut<FactoryStructureState>,
     mut movement_influence: ResMut<MovementInfluenceCache>,
+    mut pusher_state: ResMut<PusherState>,
 ) {
     if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
         prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
@@ -224,6 +229,7 @@ pub fn tick_simulation(
             &debug,
             &mut factory_structures,
             &mut movement_influence,
+            &mut pusher_state,
             &mut sim_stats,
         );
         prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
@@ -257,6 +263,7 @@ pub fn tick_simulation(
             &debug,
             &mut factory_structures,
             &mut movement_influence,
+            &mut pusher_state,
             &mut sim_stats,
         );
     }

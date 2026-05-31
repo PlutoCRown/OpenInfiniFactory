@@ -2,15 +2,69 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 use crate::game::world::blocks::{BlockKind, MovementRule};
+use crate::game::world::animation::PusherAnimation;
 use crate::game::world::grid::WorldBlocks;
 
 use super::factory_activity::FactoryStructureState;
-use super::structures::{material_structure, MovementMark, StructureMove};
+use super::structures::{
+    material_structure, MovementMark, PusherActor, PusherAnimationKind, StructureMove,
+};
+
+#[derive(Resource, Default)]
+pub struct PusherState {
+    entries: std::collections::HashMap<IVec3, PusherStateEntry>,
+}
+
+#[derive(Clone, Copy)]
+struct PusherStateEntry {
+    extended: bool,
+    bound_front: bool,
+}
+
+impl PusherState {
+    pub fn rebuild_from_world(world: &WorldBlocks) -> Self {
+        let entries = world
+            .blocks
+            .iter()
+            .filter_map(|(pos, block)| {
+                (block.kind == BlockKind::Pusher).then_some((
+                    *pos,
+                    PusherStateEntry {
+                        extended: false,
+                        bound_front: world.is_factory_at(*pos + block.facing.forward_ivec3()),
+                    },
+                ))
+            })
+            .collect();
+        Self { entries }
+    }
+
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    pub fn sustained_animations(&self) -> std::collections::HashMap<IVec3, PusherAnimation> {
+        self.entries
+            .iter()
+            .filter_map(|(pos, entry)| {
+                entry.extended.then_some((
+                    *pos,
+                    PusherAnimation {
+                        duration: 0.0,
+                        from_extension: 1.0,
+                        to_extension: 1.0,
+                    },
+                ))
+            })
+            .collect()
+    }
+}
 
 pub(super) fn mark_structure_movement_phase(
     world: &WorldBlocks,
     powered_devices: &HashSet<IVec3>,
     factory_structures: &FactoryStructureState,
+    pusher_state: &mut PusherState,
 ) -> Vec<StructureMove> {
     let movers: Vec<(IVec3, BlockKind, MovementRule)> = world
         .blocks
@@ -49,7 +103,19 @@ pub(super) fn mark_structure_movement_phase(
                 }
             }
             MovementRule::PoweredTranslate { source, offset } => {
-                if powered_devices.contains(&pos) {
+                if kind == BlockKind::Pusher {
+                    if let Some(movement) = mark_pusher_movement(
+                        world,
+                        factory_structures,
+                        powered_devices,
+                        pusher_state,
+                        pos,
+                        source,
+                        offset,
+                    ) {
+                        moves.push(movement);
+                    }
+                } else if powered_devices.contains(&pos) {
                     if let Some(movement) = mark_structure_translate(
                         world,
                         factory_structures,
@@ -58,15 +124,7 @@ pub(super) fn mark_structure_movement_phase(
                         offset,
                         MovementMark::Push,
                     ) {
-                        if kind == BlockKind::Pusher {
-                            moves.push(
-                                movement
-                                    .with_actor(pos, MovementMark::Push)
-                                    .with_source(pos),
-                            );
-                        } else {
-                            moves.push(movement.with_source(pos));
-                        }
+                        moves.push(movement.with_source(pos));
                     }
                 }
             }
@@ -75,20 +133,93 @@ pub(super) fn mark_structure_movement_phase(
     moves
 }
 
+fn mark_pusher_movement(
+    world: &WorldBlocks,
+    factory_structures: &FactoryStructureState,
+    powered_devices: &HashSet<IVec3>,
+    pusher_state: &mut PusherState,
+    pos: IVec3,
+    source: IVec3,
+    offset: IVec3,
+) -> Option<StructureMove> {
+    let powered = powered_devices.contains(&pos);
+    let entry = pusher_state.entries.entry(pos).or_insert_with(|| PusherStateEntry {
+        extended: false,
+        bound_front: world.is_factory_at(pos + source),
+    });
+    if powered == entry.extended {
+        return None;
+    }
+
+    let movement = if powered {
+        mark_structure_translate(
+            world,
+            factory_structures,
+            pos,
+            pos + source,
+            offset,
+            MovementMark::Push,
+        )
+    } else if entry.bound_front {
+        mark_structure_translate(
+            world,
+            factory_structures,
+            pos,
+            pos + source + offset,
+            -offset,
+            MovementMark::Push,
+        )
+    } else {
+        None
+    };
+
+    if movement.is_some() || !entry.bound_front {
+        entry.extended = powered;
+    }
+    let animation = if powered {
+        PusherAnimationKind::Extend
+    } else {
+        PusherAnimationKind::Retract
+    };
+    movement.map(|movement| {
+        movement
+            .with_pusher_actor(pos, MovementMark::Push, animation)
+            .with_source(pos)
+    })
+}
+
 trait StructureMoveActorExt {
-    fn with_actor(self, actor: IVec3, mark: MovementMark) -> StructureMove;
+    fn with_pusher_actor(
+        self,
+        actor: IVec3,
+        mark: MovementMark,
+        animation: PusherAnimationKind,
+    ) -> StructureMove;
 }
 
 impl StructureMoveActorExt for StructureMove {
-    fn with_actor(self, actor: IVec3, mark: MovementMark) -> StructureMove {
+    fn with_pusher_actor(
+        self,
+        actor: IVec3,
+        mark: MovementMark,
+        animation: PusherAnimationKind,
+    ) -> StructureMove {
         match self {
             StructureMove::Translate {
                 structure,
                 offset,
                 source,
                 ..
-            } => StructureMove::translate_by_actor(structure, offset, actor, mark)
-                .with_optional_source(source),
+            } => StructureMove::translate_by_pusher_actor(
+                structure,
+                offset,
+                PusherActor {
+                    pos: actor,
+                    animation,
+                },
+                mark,
+            )
+            .with_optional_source(source),
             movement => movement,
         }
     }

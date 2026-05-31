@@ -26,7 +26,7 @@ use state::{
 use systems::gameplay::{
     apply_fov, draw_hover_structure_bounds, gameplay_input, placement_input, update_hover,
 };
-use systems::menus::{app_exit_requests, menu_actions, save_list_actions};
+use systems::menus::{menu_actions, save_list_actions};
 use systems::simulation_controls::simulation_controls;
 use ui::{GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
@@ -79,13 +79,13 @@ impl Plugin for GamePlugin {
             .insert_resource(simulation::runtime::SimulationStepStats::default())
             .insert_resource(simulation::runtime::PendingGeneratedMaterials::default())
             .insert_resource(simulation::factory_activity::FactoryStructureState::default())
+            .insert_resource(simulation::movement::PusherState::default())
             .insert_resource(simulation::structures::MovementInfluenceCache::default())
             .insert_resource(settings)
             .insert_resource(UiScale(config.ui_scale))
             .insert_resource(config)
             .insert_resource(i18n)
             .insert_resource(SaveState::default())
-            .insert_resource(ui::PendingAppExit::default())
             .insert_resource(systems::debug::DebugState::default())
             .insert_resource(systems::debug::PerfStats::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
@@ -120,10 +120,6 @@ impl Plugin for GamePlugin {
                     .before(systems::debug::mark_perf_input),
             )
             .add_systems(Update, systems::debug::mark_perf_input)
-            .add_systems(
-                Last,
-                app_exit_requests.before(systems::debug::mark_perf_last),
-            )
             .add_systems(Update, systems::debug::mark_perf_menus)
             .add_systems(
                 Update,

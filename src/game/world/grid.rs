@@ -504,7 +504,10 @@ pub fn raycast_blocks(origin: Vec3, dir: Vec3, world: &WorldBlocks) -> Option<Ta
             }
         }
     }
-    for pos in world.system_blocks.keys() {
+    for (pos, block) in &world.system_blocks {
+        if block.kind.is_generated_marker() {
+            continue;
+        }
         let center = grid_to_world(*pos);
         let min = center - Vec3::splat(0.5);
         let max = center + Vec3::splat(0.5);

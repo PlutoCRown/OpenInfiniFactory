@@ -46,7 +46,7 @@ pub(super) fn run_powered_marker_phase(world: &mut WorldBlocks, powered_devices:
         if !matches!(marker, MarkerBehavior::BlockerHead { .. }) {
             continue;
         }
-        if powered_devices.contains(&pos) {
+        if !powered_devices.contains(&pos) {
             place_generated_marker(world, pos, marker);
         }
     }
@@ -57,9 +57,7 @@ fn place_generated_marker(world: &mut WorldBlocks, origin: IVec3, marker: Marker
         MarkerBehavior::WeldPoint { offset, facing } => {
             (offset, BlockKind::WeldPoint, facing, false)
         }
-        MarkerBehavior::BlockerHead { offset, facing } => {
-            (offset, BlockKind::BlockerHead, facing, true)
-        }
+        MarkerBehavior::BlockerHead { offset, facing } => (offset, BlockKind::BlockerHead, facing, false),
         MarkerBehavior::DrillHead { offset, facing } => {
             (offset, BlockKind::DrillHead, facing, false)
         }

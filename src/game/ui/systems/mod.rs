@@ -24,14 +24,15 @@ use super::types::{
     ActiveSettingsSlider, BlockEditAction, BlockMaterialIcon, BlockMaterialIconSlot,
     BlockPanelDropdown, BlockPanelDropdownLabel, BlockPanelDropdownList, BlockPanelText,
     BlockPanelTextKind, CarriedItem, CarriedItemPreview, ConfirmDialogAction, ConfirmDialogKind,
-    ConfirmDialogState, ConverterInputRow, Crosshair, InGameHudStyle, InGameHudVisibility,
-    InventoryItems, InventorySlot, InventoryTooltip, KeyBindingButton, LocalizedText, MenuAction,
-    OpenBlockPanelDropdown, OpenSettingsDropdown, PanelCloseButton, PanelDragState, PanelPosition,
-    PanelText, PanelTextKind, PanelTitleBar, PanelVisibility, PanelWindow, PendingKeyBind,
-    SaveListAction, SaveListCloseButton, SaveListRow, SettingsAction, SettingsDropdownLabel,
-    SettingsDropdownList, SettingsField, SettingsSliderFill, SettingsSliderKnob, SettingsTab,
-    SettingsText, SettingsTextKind, SettingsValueText, SlotArea, StatusText, StatusTextKind,
-    TeleportAction, UiHoverState, UiPanelBinding, UiPanelContext, UiPanelId, UiRuntime,
+    ConfirmDialogState, ConverterInputRow, Crosshair, GameplayHudVisibility, InGameHudStyle,
+    InGameHudVisibility, InventoryItems, InventorySlot, InventoryTooltip, KeyBindingButton,
+    LocalizedText, MenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown, PanelCloseButton,
+    PanelDragState, PanelPosition, PanelText, PanelTextKind, PanelTitleBar, PanelVisibility,
+    PanelWindow, PendingKeyBind, SaveListAction, SaveListCloseButton, SaveListRow, SettingsAction,
+    SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
+    SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind, SettingsValueText, SlotArea,
+    StatusText, StatusTextKind, TeleportAction, UiHoverState, UiPanelBinding, UiPanelContext,
+    UiPanelId, UiRuntime,
 };
 use super::widgets::{short_item_name, slot_color};
 include!("font.rs");

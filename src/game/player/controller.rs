@@ -140,11 +140,20 @@ pub fn camera_move(
             vertical -= 1.0;
         }
         if vertical != 0.0 {
+            let before_y = transform.translation.y;
             move_with_collision(
                 &mut transform.translation,
                 Vec3::Y * vertical * FLY_SPEED * time.delta_secs(),
                 &world,
             );
+            if vertical < 0.0
+                && (transform.translation.y == before_y
+                    || is_supported(transform.translation, &world))
+            {
+                camera.flying = false;
+                camera.grounded = true;
+                camera.velocity_y = 0.0;
+            }
         }
     } else {
         camera.velocity_y -= GRAVITY * settings.gravity_scale * time.delta_secs();

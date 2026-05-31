@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use crate::game::world::blocks::BlockKind;
 use crate::game::world::grid::WorldBlocks;
 
 use super::signal_offsets;
@@ -35,6 +36,7 @@ pub struct FactoryStructure {
     pub positions: HashSet<IVec3>,
     pub activity: FactoryActivity,
     pub freedom: StructureFreedom,
+    pub pushable: bool,
 }
 
 #[derive(Resource, Default, Clone)]
@@ -85,13 +87,18 @@ impl FactoryStructureState {
                 positions,
                 activity: FactoryActivity::Active,
                 freedom: StructureFreedom::All,
+                pushable: true,
             });
         }
 
-        let mut inactive = vec![false; structures.len()];
+        let scene_anchored: Vec<bool> = structures
+            .iter()
+            .map(|structure| touches_scene(world, &structure.positions))
+            .collect();
+        let mut inactive = scene_anchored.clone();
         let mut queue = VecDeque::new();
-        for (index, structure) in structures.iter().enumerate() {
-            if touches_scene(world, &structure.positions) {
+        for (index, anchored) in scene_anchored.iter().copied().enumerate() {
+            if anchored {
                 inactive[index] = true;
                 queue.push_back(index);
             }
@@ -115,7 +122,10 @@ impl FactoryStructureState {
         for (index, structure) in structures.iter_mut().enumerate() {
             if inactive[index] {
                 structure.activity = FactoryActivity::Inactive;
-                structure.freedom = StructureFreedom::None;
+                if scene_anchored[index] {
+                    structure.freedom = StructureFreedom::None;
+                    structure.pushable = false;
+                }
             }
         }
 
@@ -130,6 +140,14 @@ impl FactoryStructureState {
     }
 
     pub fn active_structure_at(&self, pos: IVec3, offset: IVec3) -> Option<HashSet<IVec3>> {
+        let structure = self.structure(pos)?;
+        if !structure.pushable || !structure.freedom.can_translate(offset) {
+            return None;
+        }
+        Some(structure.positions.clone())
+    }
+
+    pub fn falling_structure_at(&self, pos: IVec3, offset: IVec3) -> Option<HashSet<IVec3>> {
         let structure = self.structure(pos)?;
         if structure.activity != FactoryActivity::Active || !structure.freedom.can_translate(offset)
         {
@@ -200,7 +218,7 @@ impl FactoryStructureState {
     }
 }
 
-pub fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
+fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     let mut structure = HashSet::new();
     let mut queue = VecDeque::from([start]);
     structure.insert(start);
@@ -208,7 +226,11 @@ pub fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     while let Some(pos) = queue.pop_front() {
         for offset in signal_offsets() {
             let neighbor = pos + offset;
-            if structure.contains(&neighbor) || !world.is_factory_at(neighbor) {
+            if structure.contains(&neighbor)
+                || !world.is_factory_at(neighbor)
+                || is_pusher_front_connection(world, pos, neighbor)
+                || is_pusher_front_connection(world, neighbor, pos)
+            {
                 continue;
             }
             structure.insert(neighbor);
@@ -217,6 +239,12 @@ pub fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     }
 
     structure
+}
+
+fn is_pusher_front_connection(world: &WorldBlocks, from: IVec3, to: IVec3) -> bool {
+    world.blocks.get(&from).is_some_and(|block| {
+        block.kind == BlockKind::Pusher && from + block.facing.forward_ivec3() == to
+    })
 }
 
 fn touches_scene(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {

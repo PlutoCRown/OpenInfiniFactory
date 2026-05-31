@@ -2,7 +2,7 @@ mod behaviors;
 pub mod factory_activity;
 mod gravity;
 pub mod markers;
-mod movement;
+pub mod movement;
 pub mod runtime;
 mod signals;
 pub mod structures;

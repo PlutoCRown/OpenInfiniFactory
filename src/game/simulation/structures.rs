@@ -57,7 +57,7 @@ pub(super) fn factory_gravity_moves(
             continue;
         };
 
-        let Some(structure) = factory_structures.active_structure_at(pos, IVec3::NEG_Y) else {
+        let Some(structure) = factory_structures.falling_structure_at(pos, IVec3::NEG_Y) else {
             continue;
         };
         handled.extend(structure.iter().copied());
@@ -76,7 +76,7 @@ pub(super) enum StructureMove {
     Translate {
         structure: HashSet<IVec3>,
         offset: IVec3,
-        actor: Option<IVec3>,
+        actor: Option<PusherActor>,
         mark: MovementMark,
         source: Option<IVec3>,
     },
@@ -93,6 +93,18 @@ pub(super) enum MovementMark {
     Conveyor,
     Push,
     Vertical,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct PusherActor {
+    pub(super) pos: IVec3,
+    pub(super) animation: PusherAnimationKind,
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum PusherAnimationKind {
+    Extend,
+    Retract,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -176,10 +188,10 @@ impl StructureMove {
         }
     }
 
-    pub(super) fn translate_by_actor(
+    pub(super) fn translate_by_pusher_actor(
         structure: HashSet<IVec3>,
         offset: IVec3,
-        actor: IVec3,
+        actor: PusherActor,
         mark: MovementMark,
     ) -> Self {
         Self::Translate {
@@ -403,7 +415,18 @@ pub(super) fn execute_structure_moves_with_pushers(
                         }
                     }
                     if let Some(actor) = actor {
-                        pusher_animations.insert(actor, PusherAnimation { duration: 0.0 });
+                        let (from_extension, to_extension) = match actor.animation {
+                            PusherAnimationKind::Extend => (0.0, 1.0),
+                            PusherAnimationKind::Retract => (1.0, 0.0),
+                        };
+                        pusher_animations.insert(
+                            actor.pos,
+                            PusherAnimation {
+                                duration: 0.0,
+                                from_extension,
+                                to_extension,
+                            },
+                        );
                     }
                     moved.extend(structure.iter().copied());
                     move_structure(world, &structure, offset);
@@ -468,6 +491,7 @@ pub(super) fn execute_structure_moves_with_pushers(
         }
     }
     influence_cache.record_executed(executed);
+    factory_structures.rebuild_from_world(world);
     (animations, pusher_animations)
 }
 

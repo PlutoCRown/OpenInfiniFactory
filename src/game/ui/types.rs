@@ -151,6 +151,9 @@ pub struct InGameHudStyle;
 pub struct InGameHudVisibility;
 
 #[derive(Component)]
+pub struct GameplayHudVisibility;
+
+#[derive(Component)]
 pub struct ConverterInputRow;
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
@@ -598,12 +601,6 @@ pub enum SettingsTab {
 
 #[derive(Resource, Default)]
 pub struct PendingKeyBind(pub Option<ConfigAction>);
-
-#[derive(Resource, Default)]
-pub struct PendingAppExit {
-    pub requested: bool,
-    pub exit: Option<AppExit>,
-}
 
 #[derive(Resource, Default)]
 pub struct OpenSettingsDropdown(pub Option<SettingsDropdown>);

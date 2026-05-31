@@ -65,6 +65,8 @@ pub struct AnimatedBlock {
 #[derive(Clone, Copy)]
 pub struct PusherAnimation {
     pub duration: f32,
+    pub from_extension: f32,
+    pub to_extension: f32,
 }
 
 #[derive(Component)]
@@ -72,6 +74,8 @@ pub struct AnimatedPusher {
     direction: Vec3,
     elapsed: f32,
     duration: f32,
+    from_extension: f32,
+    to_extension: f32,
 }
 
 #[derive(Component)]
@@ -87,6 +91,8 @@ impl AnimatedPusher {
             direction: Vec3::NEG_Z,
             elapsed: 0.0,
             duration: animation.duration,
+            from_extension: animation.from_extension,
+            to_extension: animation.to_extension,
         }
     }
 }
@@ -157,11 +163,11 @@ pub fn animate_blocks(
     for (entity, mut transform, mut animation) in &mut pushers {
         animation.elapsed += time.delta_secs();
         let t = (animation.elapsed / animation.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
-        let extension = if t < 0.5 { t * 2.0 } else { (1.0 - t) * 2.0 };
+        let extension = animation.from_extension.lerp(animation.to_extension, t);
         transform.translation = animation.direction * extension;
 
         if t >= 1.0 {
-            transform.translation = Vec3::ZERO;
+            transform.translation = animation.direction * animation.to_extension;
             commands.entity(entity).remove::<AnimatedPusher>();
         }
     }

@@ -8,6 +8,7 @@ use bevy::ui_widgets::{CoreSliderDragState, Slider, SliderRange, SliderValue};
 
 use crate::game::simulation::factory_activity::FactoryStructureState;
 use crate::game::simulation::markers::refresh_static_generated_markers;
+use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
@@ -17,8 +18,8 @@ use crate::game::systems::debug::DebugState;
 use crate::game::ui::{
     ActiveSettingsSlider, BlockEditAction, BlockPanelDropdown, CarriedItem, ConfirmDialogAction,
     ConfirmDialogKind, ConfirmDialogState, InventoryItems, MenuAction, OpenBlockPanelDropdown,
-    OpenSettingsDropdown, PendingAppExit, PendingKeyBind, SaveListAction, SettingsAction,
-    SettingsSliderTrigger, SettingsTab, TeleportAction, UiPanelContext, UiPanelId, UiRuntime,
+    OpenSettingsDropdown, PendingKeyBind, SaveListAction, SettingsAction, SettingsSliderTrigger,
+    SettingsTab, TeleportAction, UiPanelContext, UiPanelId, UiRuntime,
 };
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
 use crate::game::world::rendering::{
@@ -41,6 +42,7 @@ pub struct WorldMenuParams<'w, 's> {
     pub debug: Res<'w, DebugState>,
     pub factory_structures: ResMut<'w, FactoryStructureState>,
     pub movement_influence: ResMut<'w, MovementInfluenceCache>,
+    pub pusher_state: ResMut<'w, PusherState>,
     pub block_entities: Query<'w, 's, Entity, With<BlockEntity>>,
 }
 
@@ -57,7 +59,7 @@ pub fn menu_actions(
     mut ui_runtime: ResMut<UiRuntime>,
     mut world_menu: WorldMenuParams,
     mut confirm_dialog: ResMut<ConfirmDialogState>,
-    mut pending_exit: ResMut<PendingAppExit>,
+    mut app_exit_messages: ResMut<Messages<AppExit>>,
     actions: Query<&MenuAction>,
 ) {
     if !primary_click(&mut click) {
@@ -88,7 +90,7 @@ pub fn menu_actions(
             );
         }
         (GameMode::MainMenu, MenuAction::Quit) => {
-            request_app_exit(&mut pending_exit, AppExit::Success);
+            app_exit_messages.write(AppExit::Success);
         }
         (GameMode::Paused, MenuAction::Resume) => *mode = GameMode::Playing,
         (GameMode::Paused, MenuAction::ToggleBuilderMode) => {
@@ -151,29 +153,13 @@ pub fn menu_actions(
                     &world_menu.debug,
                     &mut world_menu.factory_structures,
                     &mut world_menu.movement_influence,
+                    &mut world_menu.pusher_state,
                 );
                 *mode = GameMode::MainMenu;
             }
         }
         _ => {}
     }
-}
-
-pub fn app_exit_requests(
-    mut app_exit_messages: ResMut<Messages<AppExit>>,
-    mut pending_exit: ResMut<PendingAppExit>,
-) {
-    if !pending_exit.requested {
-        return;
-    }
-
-    app_exit_messages.write(pending_exit.exit.take().unwrap_or(AppExit::Success));
-    pending_exit.requested = false;
-}
-
-fn request_app_exit(pending_exit: &mut PendingAppExit, exit: AppExit) {
-    pending_exit.requested = true;
-    pending_exit.exit = Some(exit);
 }
 
 pub fn save_list_actions(
@@ -227,6 +213,7 @@ pub fn save_list_actions(
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
+                &mut world_menu.pusher_state,
                 &mut mode,
             );
         }
@@ -263,6 +250,7 @@ pub fn save_list_actions(
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
+                &mut world_menu.pusher_state,
                 &mut mode,
             );
         }
@@ -291,6 +279,7 @@ pub fn save_list_actions(
                     &world_menu.debug,
                     &mut world_menu.factory_structures,
                     &mut world_menu.movement_influence,
+                    &mut world_menu.pusher_state,
                     &mut mode,
                 );
             } else {
@@ -327,6 +316,7 @@ pub fn save_list_actions(
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
+                &mut world_menu.pusher_state,
                 &mut mode,
             );
         }
@@ -395,6 +385,7 @@ pub fn confirm_dialog_actions(
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
+                &mut world_menu.pusher_state,
                 &solution_state,
             );
             *mode = GameMode::Paused;
@@ -419,6 +410,7 @@ pub fn confirm_dialog_actions(
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
+                &mut world_menu.pusher_state,
                 &mut mode,
             );
         }
@@ -436,6 +428,7 @@ pub fn confirm_dialog_actions(
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
+                &mut world_menu.pusher_state,
                 &mut mode,
             );
         }
@@ -462,6 +455,7 @@ pub fn confirm_dialog_actions(
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
+                &mut world_menu.pusher_state,
             );
         }
         (ConfirmDialogKind::SaveSolutionBeforeEdit, ConfirmDialogAction::Secondary) => {
@@ -481,6 +475,7 @@ pub fn confirm_dialog_actions(
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
+                &mut world_menu.pusher_state,
             );
         }
         (_, ConfirmDialogAction::Secondary) => {}
@@ -534,6 +529,7 @@ fn switch_to_edit_mode_and_rebuild(
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     movement_influence: &mut MovementInfluenceCache,
+    pusher_state: &mut PusherState,
 ) {
     switch_to_edit_mode(
         world,
@@ -548,6 +544,7 @@ fn switch_to_edit_mode_and_rebuild(
     despawn_world(commands, block_entities);
     factory_structures.clear();
     movement_influence.clear();
+    pusher_state.clear();
     factory_structures.ensure_current_world(world);
     rebuild_world_for_debug_state(
         commands,
@@ -569,6 +566,7 @@ fn reset_current_solution(
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     movement_influence: &mut MovementInfluenceCache,
+    pusher_state: &mut PusherState,
     solution_state: &SolutionState,
 ) {
     if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
@@ -581,6 +579,7 @@ fn reset_current_solution(
         simulation.start_snapshot = None;
         factory_structures.clear();
         movement_influence.clear();
+        pusher_state.clear();
         factory_structures.ensure_current_world(world);
         despawn_world(commands, block_entities);
         rebuild_world_for_debug_state(
@@ -607,6 +606,7 @@ fn return_to_main_menu(
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     movement_influence: &mut MovementInfluenceCache,
+    pusher_state: &mut PusherState,
     mode: &mut GameMode,
 ) {
     clear_loaded_world(
@@ -622,6 +622,7 @@ fn return_to_main_menu(
         debug,
         factory_structures,
         movement_influence,
+        pusher_state,
     );
     *mode = GameMode::MainMenu;
 }
@@ -644,6 +645,7 @@ fn open_loaded_world(
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     movement_influence: &mut MovementInfluenceCache,
+    pusher_state: &mut PusherState,
     mode: &mut GameMode,
 ) {
     let Some(loaded) = load_world(world, name) else {
@@ -686,6 +688,7 @@ fn open_loaded_world(
     refresh_static_generated_markers(world);
     factory_structures.clear();
     movement_influence.clear();
+    pusher_state.clear();
     factory_structures.ensure_current_world(world);
     despawn_world(commands, block_entities);
     rebuild_world_for_debug_state(
@@ -712,6 +715,7 @@ fn clear_loaded_world(
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     movement_influence: &mut MovementInfluenceCache,
+    pusher_state: &mut PusherState,
 ) {
     simulation.running = false;
     simulation.step_requested = false;
@@ -728,6 +732,7 @@ fn clear_loaded_world(
     solution_state.entry = WorldEntryMode::EditPuzzle;
     factory_structures.clear();
     movement_influence.clear();
+    pusher_state.clear();
     factory_structures.ensure_current_world(world);
     despawn_world(commands, block_entities);
     rebuild_world_for_debug_state(
@@ -1023,6 +1028,7 @@ pub fn block_edit_actions(
     despawn_world(&mut world_menu.commands, &world_menu.block_entities);
     world_menu.factory_structures.clear();
     world_menu.movement_influence.clear();
+    world_menu.pusher_state.clear();
     world_menu
         .factory_structures
         .ensure_current_world(&world_menu.world);

@@ -13,8 +13,9 @@ use super::screens::{
 };
 use super::types::{
     BlockEditAction, BlockPanelDropdown, BlockPanelText, BlockPanelTextKind, ConfirmDialogAction,
-    ConverterInputRow, Crosshair, InGameHudVisibility, PanelText, PanelTextKind, PanelVisibility,
-    StatusText, StatusTextKind, TeleportAction, UiPanelBinding, UiPanelId,
+    ConverterInputRow, Crosshair, GameplayHudVisibility, InGameHudVisibility, PanelText,
+    PanelTextKind, PanelVisibility, StatusText, StatusTextKind, TeleportAction, UiPanelBinding,
+    UiPanelId,
 };
 use super::widgets::{
     spawn_block_edit_button, spawn_block_panel_dropdown, spawn_block_panel_dropdown_list,
@@ -281,6 +282,7 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
         ),
         StatusText(StatusTextKind::Hotbar),
         InGameHudVisibility,
+        GameplayHudVisibility,
     ));
     root.spawn((
         absolute_text_bundle(
@@ -294,6 +296,7 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
         ),
         StatusText(StatusTextKind::CurrentSave),
         InGameHudVisibility,
+        GameplayHudVisibility,
     ));
     root.spawn((
         absolute_text_bundle(
@@ -307,6 +310,7 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
         ),
         StatusText(StatusTextKind::Simulation),
         InGameHudVisibility,
+        GameplayHudVisibility,
     ));
     root.spawn((
         absolute_text_bundle(

@@ -257,16 +257,18 @@ pub fn placement_input(
     }
 
     if keys.just_pressed(config.key_bindings.rotate_or_rollback.key_code()) {
+        let reverse_rotation = shift_pressed(&keys);
         if let Some(gesture) = placement.edit_gesture.as_mut() {
             if let EditGestureKind::Place { block } = &mut gesture.kind {
                 if block.kind.is_directional() {
-                    block.facing = block.facing.rotate();
+                    block.facing = rotate_facing(block.facing, reverse_rotation);
                     placement.preview_facing = block.facing;
                 }
             }
         } else if let Some(pos) = current_target_pos {
             if rotate_block_at(
                 pos,
+                reverse_rotation,
                 &mut world,
                 &block_entities,
                 &mut commands,
@@ -279,12 +281,13 @@ pub fn placement_input(
             } else if selected_place_block(&inventory, *builder_mode, &placement)
                 .is_some_and(|block| block.kind.is_directional())
             {
-                placement.preview_facing = placement.preview_facing.rotate();
+                placement.preview_facing =
+                    rotate_facing(placement.preview_facing, reverse_rotation);
             }
         } else if selected_place_block(&inventory, *builder_mode, &placement)
             .is_some_and(|block| block.kind.is_directional())
         {
-            placement.preview_facing = placement.preview_facing.rotate();
+            placement.preview_facing = rotate_facing(placement.preview_facing, reverse_rotation);
         }
     }
 
@@ -676,6 +679,7 @@ fn alternate_block_at(
 
 fn rotate_block_at(
     pos: IVec3,
+    reverse: bool,
     world: &mut WorldBlocks,
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
@@ -692,7 +696,7 @@ fn rotate_block_at(
     }
 
     let from_facing = block.facing;
-    block.facing = block.facing.rotate();
+    block.facing = rotate_facing(block.facing, reverse);
     let updated = *block;
 
     refresh_edit_generated_markers(world);
@@ -725,6 +729,21 @@ fn rotate_block_at(
         rebuild_world_with_animations(commands, meshes, world, render_assets, &animations);
     }
     true
+}
+
+fn rotate_facing(
+    facing: crate::game::world::blocks::Facing,
+    reverse: bool,
+) -> crate::game::world::blocks::Facing {
+    if reverse {
+        facing.rotate_counter()
+    } else {
+        facing.rotate()
+    }
+}
+
+fn shift_pressed(keys: &ButtonInput<KeyCode>) -> bool {
+    keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight)
 }
 
 fn moved_selection_welds(
@@ -781,7 +800,11 @@ fn can_place_block_at(
     }
 
     if block.kind.is_system_layer() {
-        if world.system_blocks.contains_key(&place_at) {
+        if world
+            .system_blocks
+            .get(&place_at)
+            .is_some_and(|block| !block.kind.is_generated_marker())
+        {
             return false;
         }
     } else if !world.can_place_platform_at(place_at) {

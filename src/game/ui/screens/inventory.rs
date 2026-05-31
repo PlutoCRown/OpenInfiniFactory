@@ -8,8 +8,8 @@ use super::super::components::{
     PanelOptions,
 };
 use super::super::types::{
-    CarriedItemPreview, InGameHudStyle, InventoryTooltip, PanelText, PanelTextKind,
-    PanelVisibility, SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
+    CarriedItemPreview, GameplayHudVisibility, InGameHudStyle, InventoryTooltip, PanelText,
+    PanelTextKind, PanelVisibility, SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::super::widgets::spawn_slot;
 
@@ -32,6 +32,7 @@ pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
         },
         BackgroundColor(Color::srgba(0.04, 0.04, 0.04, 0.38)),
         InGameHudStyle,
+        GameplayHudVisibility,
     ))
     .with_children(|bar| {
         for index in 0..HOTBAR_SLOTS {

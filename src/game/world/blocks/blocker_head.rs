@@ -1,12 +1,10 @@
-use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial, ModelMesh,
-};
+use super::{rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial, ModelMesh};
 
-const MODEL: &[BlockModelPart] =
-    &[
-        BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Power, [0.0, 0.0, 0.0])
-            .scaled([0.70, 1.15, 0.70]),
-    ];
+const MODEL: &[BlockModelPart] = &[BlockModelPart::new(
+    ModelMesh::PusherHead,
+    ModelMaterial::BorderedWoodTexture,
+    [0.0, 0.0, 0.0],
+)];
 
 pub struct BlockerHeadBlock;
 
@@ -22,8 +20,8 @@ impl Block for BlockerHeadBlock {
             self.id(),
             "block.blocker_head",
             "short.blocker_head",
-            rgb(0.70, 0.48, 0.28),
-            rgb(0.58, 0.36, 0.18),
+            rgb(0.54, 0.56, 0.54),
+            rgb(0.42, 0.44, 0.42),
         )
     }
 
