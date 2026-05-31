@@ -112,14 +112,15 @@ pub fn run_turn(
     let weld_sparks = run_weld_behavior_phase(world);
     sample.prep_ms = mark_elapsed_ms(&mut mark);
 
-    let mut movement_plan = mark_gravity_phase(world, factory_structures);
-    sample.gravity_ms = mark_elapsed_ms(&mut mark);
-
     signal_cache.refresh(world);
     let powered_components = signal_cache.powered_components(world);
     let powered_devices = signal_cache.powered_devices(&powered_components);
     let render_powered_wires = signal_cache.powered_wires(&powered_components);
     sample.signal_ms = mark_elapsed_ms(&mut mark);
+
+    let actuating_devices = pusher_state.actuating_devices(world, &powered_devices);
+    let mut movement_plan = mark_gravity_phase(world, factory_structures, &actuating_devices);
+    sample.gravity_ms = mark_elapsed_ms(&mut mark);
 
     run_powered_marker_phase(world, &powered_devices);
     sample.marker_before_move_ms = mark_elapsed_ms(&mut mark);

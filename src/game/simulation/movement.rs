@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::game::world::animation::PusherAnimation;
 use crate::game::world::blocks::{BlockKind, MovementRule};
@@ -12,7 +12,7 @@ use super::structures::{
 
 #[derive(Resource, Default)]
 pub struct PusherState {
-    entries: std::collections::HashMap<IVec3, PusherStateEntry>,
+    entries: HashMap<IVec3, PusherStateEntry>,
 }
 
 #[derive(Clone, Copy)]
@@ -27,7 +27,7 @@ impl PusherState {
             .blocks
             .iter()
             .filter_map(|(pos, block)| {
-                (block.kind == BlockKind::Pusher).then_some((
+                matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker).then_some((
                     *pos,
                     PusherStateEntry {
                         extended: false,
@@ -55,6 +55,30 @@ impl PusherState {
                         to_extension: 1.0,
                     },
                 ))
+            })
+            .collect()
+    }
+
+    pub(super) fn actuating_devices(
+        &self,
+        world: &WorldBlocks,
+        powered_devices: &HashSet<IVec3>,
+    ) -> HashSet<IVec3> {
+        world
+            .blocks
+            .iter()
+            .filter_map(|(pos, block)| {
+                let desired_extended = match block.kind {
+                    BlockKind::Pusher => powered_devices.contains(pos),
+                    BlockKind::Blocker => !powered_devices.contains(pos),
+                    _ => return None,
+                };
+                let current_extended = self
+                    .entries
+                    .get(pos)
+                    .map(|entry| entry.extended)
+                    .unwrap_or(false);
+                (desired_extended != current_extended).then_some(*pos)
             })
             .collect()
     }
@@ -131,15 +155,20 @@ pub(super) fn mark_structure_movement_phase(
                 }
             }
             MovementRule::PoweredTranslate { source, offset } => {
-                if kind == BlockKind::Pusher {
+                if matches!(kind, BlockKind::Pusher | BlockKind::Blocker) {
+                    let desired_extended = if kind == BlockKind::Pusher {
+                        powered_devices.contains(&pos)
+                    } else {
+                        !powered_devices.contains(&pos)
+                    };
                     if let Some(movement) = mark_pusher_movement(
                         world,
                         factory_structures,
-                        powered_devices,
                         pusher_state,
                         pos,
                         source,
                         offset,
+                        desired_extended,
                     ) {
                         moves.push(movement);
                     }
@@ -164,13 +193,12 @@ pub(super) fn mark_structure_movement_phase(
 fn mark_pusher_movement(
     world: &WorldBlocks,
     factory_structures: &FactoryStructureState,
-    powered_devices: &HashSet<IVec3>,
     pusher_state: &mut PusherState,
     pos: IVec3,
     source: IVec3,
     offset: IVec3,
+    desired_extended: bool,
 ) -> Option<StructureMove> {
-    let powered = powered_devices.contains(&pos);
     let entry = pusher_state
         .entries
         .entry(pos)
@@ -178,11 +206,11 @@ fn mark_pusher_movement(
             extended: false,
             bound_front: world.is_factory_at(pos + source),
         });
-    if powered == entry.extended {
+    if desired_extended == entry.extended {
         return None;
     }
 
-    let movement = if powered {
+    let movement = if desired_extended {
         mark_structure_translate(
             world,
             factory_structures,
@@ -205,9 +233,9 @@ fn mark_pusher_movement(
     };
 
     if movement.is_some() || !entry.bound_front {
-        entry.extended = powered;
+        entry.extended = desired_extended;
     }
-    let animation = if powered {
+    let animation = if desired_extended {
         PusherAnimationKind::Extend
     } else {
         PusherAnimationKind::Retract

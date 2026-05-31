@@ -46,6 +46,7 @@ pub(super) fn material_gravity_moves(
 pub(super) fn factory_gravity_moves(
     world: &WorldBlocks,
     factory_structures: &FactoryStructureState,
+    skip_positions: &HashSet<IVec3>,
 ) -> Vec<StructureMove> {
     let mut factory_blocks: Vec<IVec3> = world
         .blocks
@@ -65,6 +66,9 @@ pub(super) fn factory_gravity_moves(
             continue;
         };
         handled.extend(structure.iter().copied());
+        if structure.iter().any(|pos| skip_positions.contains(pos)) {
+            continue;
+        }
         if structure_supported_by_lifter(world, &structure) {
             continue;
         }

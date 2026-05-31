@@ -1,6 +1,6 @@
 use super::{
     rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, Facing, MarkerBehavior,
-    ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior, WireConnectorBehavior,
+    ModelMaterial, ModelMesh, MovementRule, RenderBehavior, SignalBehavior, WireConnectorBehavior,
 };
 
 const MODEL: &[BlockModelPart] = &[
@@ -49,6 +49,13 @@ impl Block for BlockerBlock {
         Some(MarkerBehavior::BlockerHead {
             offset: facing.forward_ivec3(),
             facing,
+        })
+    }
+
+    fn movement_rule(&self, facing: Facing) -> Option<MovementRule> {
+        Some(MovementRule::PoweredTranslate {
+            source: facing.forward_ivec3(),
+            offset: facing.forward_ivec3(),
         })
     }
 

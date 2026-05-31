@@ -140,23 +140,20 @@ fn spawn_text_prompt(root: &mut ChildSpawnerCommands) {
             });
             panel.spawn(panel_content()).with_children(|content| {
                 content
-                    .spawn((
-                        styled_button(
-                            Node {
-                                width: Val::Percent(100.0),
-                                min_height: Val::Px(default_button_size(38.0)),
-                                padding: UiRect::horizontal(Val::Px(12.0)),
-                                border: UiRect::all(Val::Px(1.0)),
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            raised_border(),
-                            BUTTON_BG,
-                        ),
-                        TextPromptText::Value,
+                    .spawn(styled_button(
+                        Node {
+                            width: Val::Percent(100.0),
+                            min_height: Val::Px(default_button_size(38.0)),
+                            padding: UiRect::horizontal(Val::Px(12.0)),
+                            border: UiRect::all(Val::Px(1.0)),
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                        raised_border(),
+                        BUTTON_BG,
                     ))
                     .with_children(|input| {
-                        input.spawn(text("", 16.0, Color::WHITE));
+                        input.spawn((text("", 16.0, Color::WHITE), TextPromptText::Value));
                     });
                 content.spawn(flex_row(36.0, 8.0)).with_children(|row| {
                     spawn_prompt_button(row, TextPromptAction::Confirm);

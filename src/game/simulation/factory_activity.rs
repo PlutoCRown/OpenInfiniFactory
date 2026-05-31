@@ -243,7 +243,8 @@ fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
 
 fn is_pusher_front_connection(world: &WorldBlocks, from: IVec3, to: IVec3) -> bool {
     world.blocks.get(&from).is_some_and(|block| {
-        block.kind == BlockKind::Pusher && from + block.facing.forward_ivec3() == to
+        matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker)
+            && from + block.facing.forward_ivec3() == to
     })
 }
 

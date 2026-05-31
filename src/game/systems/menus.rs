@@ -554,13 +554,7 @@ pub fn text_prompt_input(
             Key::Backspace => {
                 prompt.value.pop();
             }
-            Key::Space => push_rename_char(&mut prompt.value, ' '),
-            Key::Character(text) => {
-                for ch in text.chars() {
-                    push_rename_char(&mut prompt.value, ch);
-                }
-            }
-            _ => {}
+            _ => push_text_input(&mut prompt.value, event),
         }
     }
     if confirm {
@@ -1354,7 +1348,6 @@ pub fn teleport_rename_input(
     mut keyboard_input: MessageReader<KeyboardInput>,
 ) {
     if ui_runtime.active_panel() != Some(UiPanelId::Teleport) || rename_state.editing.is_none() {
-        keyboard_input.clear();
         return;
     }
 
@@ -1372,13 +1365,7 @@ pub fn teleport_rename_input(
             Key::Backspace => {
                 rename_state.buffer.pop();
             }
-            Key::Space => push_rename_char(&mut rename_state.buffer, ' '),
-            Key::Character(text) => {
-                for ch in text.chars() {
-                    push_rename_char(&mut rename_state.buffer, ch);
-                }
-            }
-            _ => {}
+            _ => push_text_input(&mut rename_state.buffer, event),
         }
     }
 
@@ -1401,6 +1388,15 @@ fn push_rename_char(buffer: &mut String, ch: char) {
         return;
     }
     buffer.push(ch);
+}
+
+fn push_text_input(buffer: &mut String, event: &KeyboardInput) {
+    let Some(text) = event.text.as_deref() else {
+        return;
+    };
+    for ch in text.chars() {
+        push_rename_char(buffer, ch);
+    }
 }
 
 fn toggle_block_dropdown(open_dropdown: &mut OpenBlockPanelDropdown, dropdown: BlockPanelDropdown) {
