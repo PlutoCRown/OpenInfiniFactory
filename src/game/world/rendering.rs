@@ -927,6 +927,7 @@ fn spawn_block_model(
         entity.insert(PendingGeneratedPreview);
     }
 
+    let is_edit_preview = edit_preview.is_some();
     if let Some(edit_preview) = edit_preview {
         entity.insert(edit_preview);
     }
@@ -945,6 +946,9 @@ fn spawn_block_model(
                 parent,
                 assets,
                 data,
+                is_edit_preview
+                    .then(|| material.clone())
+                    .filter(|_| icon_render.is_none()),
                 pusher_animation,
                 icon_render.map(|(_, layer)| layer),
             );
@@ -1099,6 +1103,7 @@ fn spawn_model_parts(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
     data: BlockData,
+    override_material: Option<Handle<StandardMaterial>>,
     pusher_animation: Option<PusherAnimation>,
     icon_layer: Option<&RenderLayers>,
 ) {
@@ -1111,7 +1116,11 @@ fn spawn_model_parts(
     for part in parts {
         let mut child = parent.spawn((
             Mesh3d(assets.model_mesh(part.mesh)),
-            MeshMaterial3d(assets.model_material(part.material)),
+            MeshMaterial3d(
+                override_material
+                    .clone()
+                    .unwrap_or_else(|| assets.model_material(part.material)),
+            ),
             Transform {
                 translation: model_vec3(part.translation),
                 rotation: Quat::from_rotation_y(part.yaw_radians),
