@@ -44,6 +44,10 @@ pub fn panel_bundle(width: f32, height: f32, offset_x: f32, offset_y: f32) -> im
             Val::Px(0.0),
             Val::Px(3.0),
         ),
+        Pickable {
+            should_block_lower: true,
+            is_hoverable: false,
+        },
     )
 }
 

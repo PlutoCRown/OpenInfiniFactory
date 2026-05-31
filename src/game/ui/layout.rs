@@ -16,9 +16,9 @@ use super::types::{
     ConverterPanel, Crosshair, CurrentSaveText, GeneratorAction, GeneratorPanel,
     GeneratorPeriodText, GoalAction, GoalPanel, HotbarText, InGameHudStyle, InGameHudVisibility,
     InventoryTitle, InventoryTooltip, InventoryTooltipText, LabelerAction, LabelerPanel,
-    MainMenuAction, MainMenuPanel, PauseAction, PausePanel, SaveListAction, SaveListPanel,
-    SaveListTitle, SettingsAction, SettingsDropdown, SettingsGameplayGroup,
-    SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider, SettingsDropdownRow,
+    MainMenuAction, MainMenuPanel, ModalScrim, PauseAction, PausePanel, SaveListAction,
+    SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdown, SettingsDropdownRow,
+    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider,
     SimulationStatusText, SimulationText, SlotArea, TeleportAction, TeleportNameText,
     TeleportPanel, UiPanelBinding, UiPanelId, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
@@ -44,6 +44,7 @@ pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
         spawn_pause_panel(root, &i18n);
         spawn_settings_panel(root, &i18n);
         spawn_confirm_dialog(root);
+        spawn_modal_scrim(root);
         spawn_main_menu(root, &i18n);
         spawn_save_list(root);
         spawn_carried_label(root);
@@ -51,9 +52,29 @@ pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
     });
 }
 
+fn spawn_modal_scrim(root: &mut ChildSpawnerCommands) {
+    root.spawn((
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            position_type: PositionType::Absolute,
+            display: Display::None,
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.16)),
+        Pickable {
+            should_block_lower: true,
+            is_hoverable: false,
+        },
+        GlobalZIndex(0),
+        ModalScrim,
+    ));
+}
+
 fn spawn_generator_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(430.0, 230.0, -215.0, -115.0),
+        GlobalZIndex(0),
         GeneratorPanel,
         UiPanelBinding(UiPanelId::Generator),
     ))
@@ -80,6 +101,7 @@ fn spawn_generator_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
 fn spawn_goal_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(430.0, 190.0, -215.0, -95.0),
+        GlobalZIndex(0),
         GoalPanel,
         UiPanelBinding(UiPanelId::Goal),
     ))
@@ -101,6 +123,7 @@ fn spawn_goal_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
 fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(460.0, 230.0, -230.0, -115.0),
+        GlobalZIndex(0),
         TeleportPanel,
         UiPanelBinding(UiPanelId::Teleport),
     ))
@@ -125,6 +148,7 @@ fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
 fn spawn_converter_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(460.0, 260.0, -230.0, -130.0),
+        GlobalZIndex(0),
         ConverterPanel,
         UiPanelBinding(UiPanelId::Converter),
     ))
@@ -158,6 +182,7 @@ fn spawn_converter_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
 fn spawn_labeler_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(420.0, 190.0, -210.0, -95.0),
+        GlobalZIndex(0),
         LabelerPanel,
         UiPanelBinding(UiPanelId::Labeler),
     ))
@@ -338,25 +363,30 @@ fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
 }
 
 fn spawn_pause_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
-    root.spawn((panel_bundle(420.0, 560.0, -210.0, -280.0), PausePanel))
-        .with_children(|panel| {
-            panel.spawn(localized_text(i18n, "state.paused", 30.0, TITLE_TEXT));
-            for action in [
-                PauseAction::Resume,
-                PauseAction::ToggleBuilderMode,
-                PauseAction::SaveWorld,
-                PauseAction::ResetSolution,
-                PauseAction::OpenSettings,
-                PauseAction::BackToMainMenu,
-            ] {
-                spawn_localized_pause_button(panel, action);
-            }
-        });
+    root.spawn((
+        panel_bundle(420.0, 560.0, -210.0, -280.0),
+        GlobalZIndex(0),
+        PausePanel,
+    ))
+    .with_children(|panel| {
+        panel.spawn(localized_text(i18n, "state.paused", 30.0, TITLE_TEXT));
+        for action in [
+            PauseAction::Resume,
+            PauseAction::ToggleBuilderMode,
+            PauseAction::SaveWorld,
+            PauseAction::ResetSolution,
+            PauseAction::OpenSettings,
+            PauseAction::BackToMainMenu,
+        ] {
+            spawn_localized_pause_button(panel, action);
+        }
+    });
 }
 
 fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
     root.spawn((
         panel_bundle(460.0, 250.0, -230.0, -125.0),
+        GlobalZIndex(0),
         ConfirmDialogPanel,
     ))
     .with_children(|panel| {
@@ -390,6 +420,7 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
 fn spawn_settings_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(840.0, 660.0, -420.0, -330.0),
+        GlobalZIndex(0),
         SettingsPanel,
         UiPanelBinding(UiPanelId::Settings),
     ))
@@ -597,76 +628,68 @@ fn spawn_settings_footer(panel: &mut ChildSpawnerCommands) {
 }
 
 fn spawn_main_menu(root: &mut ChildSpawnerCommands, i18n: &I18n) {
-    root.spawn((panel_bundle(420.0, 340.0, -210.0, -170.0), MainMenuPanel))
-        .with_children(|panel| {
-            panel.spawn(localized_text(i18n, "main.title", 30.0, Color::WHITE));
-            for action in [
-                MainMenuAction::EditPuzzle,
-                MainMenuAction::Play,
-                MainMenuAction::OpenSettings,
-                MainMenuAction::Quit,
-            ] {
-                spawn_localized_main_button(panel, action);
-            }
-        });
+    root.spawn((
+        panel_bundle(420.0, 340.0, -210.0, -170.0),
+        GlobalZIndex(0),
+        MainMenuPanel,
+    ))
+    .with_children(|panel| {
+        panel.spawn(localized_text(i18n, "main.title", 30.0, Color::WHITE));
+        for action in [
+            MainMenuAction::EditPuzzle,
+            MainMenuAction::Play,
+            MainMenuAction::OpenSettings,
+            MainMenuAction::Quit,
+        ] {
+            spawn_localized_main_button(panel, action);
+        }
+    });
 }
 
 fn spawn_save_list(root: &mut ChildSpawnerCommands) {
-    root.spawn((panel_bundle(900.0, 620.0, -450.0, -310.0), SaveListPanel))
-        .with_children(|panel| {
-            panel.spawn((text("", 26.0, Color::WHITE), SaveListTitle));
-            panel.spawn(flex_row(470.0, 12.0)).with_children(|columns| {
-                columns
-                    .spawn(transparent_node(Node {
-                        width: Val::Px(420.0),
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(6.0),
-                        ..default()
-                    }))
-                    .with_children(|left| {
-                        for index in 0..SAVE_SLOTS {
-                            left.spawn(flex_row(32.0, 6.0)).with_children(|row| {
-                                spawn_save_row_button(
-                                    row,
-                                    SaveListAction::LoadPuzzle(index),
-                                    260.0,
-                                );
-                                spawn_save_row_button(
-                                    row,
-                                    SaveListAction::DeletePuzzle(index),
-                                    80.0,
-                                );
-                            });
-                        }
-                        spawn_save_slot_button(left, SaveListAction::NewPuzzle);
-                    });
-                columns
-                    .spawn(transparent_node(Node {
-                        width: Val::Px(420.0),
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(6.0),
-                        ..default()
-                    }))
-                    .with_children(|right| {
-                        for index in 0..SAVE_SLOTS {
-                            right.spawn(flex_row(32.0, 6.0)).with_children(|row| {
-                                spawn_save_row_button(
-                                    row,
-                                    SaveListAction::LoadSolution(index),
-                                    260.0,
-                                );
-                                spawn_save_row_button(
-                                    row,
-                                    SaveListAction::DeleteSolution(index),
-                                    80.0,
-                                );
-                            });
-                        }
-                        spawn_save_slot_button(right, SaveListAction::NewSolution);
-                    });
-            });
-            spawn_save_back_button(panel);
+    root.spawn((
+        panel_bundle(900.0, 620.0, -450.0, -310.0),
+        GlobalZIndex(0),
+        SaveListPanel,
+    ))
+    .with_children(|panel| {
+        panel.spawn((text("", 26.0, Color::WHITE), SaveListTitle));
+        panel.spawn(flex_row(470.0, 12.0)).with_children(|columns| {
+            columns
+                .spawn(transparent_node(Node {
+                    width: Val::Px(420.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(6.0),
+                    ..default()
+                }))
+                .with_children(|left| {
+                    for index in 0..SAVE_SLOTS {
+                        left.spawn(flex_row(32.0, 6.0)).with_children(|row| {
+                            spawn_save_row_button(row, SaveListAction::LoadPuzzle(index), 260.0);
+                            spawn_save_row_button(row, SaveListAction::DeletePuzzle(index), 80.0);
+                        });
+                    }
+                    spawn_save_slot_button(left, SaveListAction::NewPuzzle);
+                });
+            columns
+                .spawn(transparent_node(Node {
+                    width: Val::Px(420.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(6.0),
+                    ..default()
+                }))
+                .with_children(|right| {
+                    for index in 0..SAVE_SLOTS {
+                        right.spawn(flex_row(32.0, 6.0)).with_children(|row| {
+                            spawn_save_row_button(row, SaveListAction::LoadSolution(index), 260.0);
+                            spawn_save_row_button(row, SaveListAction::DeleteSolution(index), 80.0);
+                        });
+                    }
+                    spawn_save_slot_button(right, SaveListAction::NewSolution);
+                });
         });
+        spawn_save_back_button(panel);
+    });
 }
 
 fn spawn_carried_label(root: &mut ChildSpawnerCommands) {

@@ -16,6 +16,7 @@ pub use systems::{
     update_localized_ui, update_panel_visibility, update_save_list_ui, update_scroll_containers,
     update_settings_dropdowns_ui, update_settings_slider_drag_ui, update_settings_sliders_ui,
     update_settings_tabs_ui, update_settings_text_ui, update_status_ui, update_teleport_ui,
+    update_ui_layers,
 };
 pub use types::{
     ActiveSettingsSlider, AreaKind, BlockPanelDropdown, CarriedItem, ConfirmDialogAction,
@@ -81,6 +82,7 @@ impl Plugin for GameUiPlugin {
                 Update,
                 (
                     update_panel_visibility,
+                    update_ui_layers,
                     update_hud_visibility,
                     update_generator_ui,
                     update_labeler_ui,

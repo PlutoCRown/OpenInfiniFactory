@@ -37,13 +37,13 @@ pub struct UiPanelSession {
 
 #[derive(Resource, Default)]
 pub struct UiRuntime {
-    active: Option<UiPanelSession>,
+    stack: Vec<UiPanelSession>,
 }
 
 impl UiRuntime {
     pub fn open(&mut self, panel: UiPanelId, context: UiPanelContext) {
-        self.close_active();
-        self.active = Some(UiPanelSession { panel, context });
+        self.stack.retain(|session| session.panel != panel);
+        self.stack.push(UiPanelSession { panel, context });
     }
 
     pub fn open_block(&mut self, panel: UiPanelId, pos: IVec3) {
@@ -51,7 +51,7 @@ impl UiRuntime {
     }
 
     pub fn close_active(&mut self) {
-        self.active = None;
+        self.stack.pop();
     }
 
     pub fn close_current(&mut self) {
@@ -59,11 +59,11 @@ impl UiRuntime {
     }
 
     pub fn active(&self) -> Option<UiPanelSession> {
-        self.active
+        self.stack.last().copied()
     }
 
     pub fn active_panel(&self) -> Option<UiPanelId> {
-        self.active.map(|session| session.panel)
+        self.active().map(|session| session.panel)
     }
 
     pub fn is_settings_open(&self) -> bool {
@@ -76,15 +76,32 @@ impl UiRuntime {
     }
 
     pub fn active_block_pos(&self) -> Option<IVec3> {
-        match self.active?.context {
+        match self.active()?.context {
             UiPanelContext::Block { pos } => Some(pos),
             _ => None,
         }
+    }
+
+    pub fn panel_layer(&self, panel: UiPanelId) -> Option<usize> {
+        self.stack.iter().position(|session| session.panel == panel)
+    }
+
+    pub fn top_modal_layer(&self) -> Option<usize> {
+        self.stack
+            .iter()
+            .rposition(|session| session.panel.is_blocking_gameplay())
+    }
+
+    pub fn has_modal_panel(&self) -> bool {
+        self.top_modal_layer().is_some()
     }
 }
 
 #[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
 pub struct UiPanelBinding(pub UiPanelId);
+
+#[derive(Component)]
+pub struct ModalScrim;
 
 #[derive(Component)]
 pub struct HotbarText;

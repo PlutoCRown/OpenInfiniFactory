@@ -23,20 +23,19 @@ use super::components::{
 use super::types::{
     ActiveSettingsSlider, BackpackPanel, BlockPanelDropdown, BlockPanelDropdownLabel,
     BlockPanelDropdownList, CarriedIcon, CarriedItem, CarriedLabel, ConfirmDialogAction,
-    ConfirmDialogKind,
-    ConfirmDialogMessage, ConfirmDialogPanel, ConfirmDialogPrimaryLabel,
+    ConfirmDialogKind, ConfirmDialogMessage, ConfirmDialogPanel, ConfirmDialogPrimaryLabel,
     ConfirmDialogSecondaryLabel, ConfirmDialogState, ConfirmDialogTitle, ConverterInputRow,
     Crosshair, CurrentSaveText, DeleteSelectionModeText, FovText, GeneratorPeriodText, HotbarText,
     InGameHudStyle, InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle,
     InventoryTooltip, InventoryTooltipText, KeyBindingButton, KeyBindingLabel, LocalizedText,
-    MainMenuPanel, OpenBlockPanelDropdown, OpenSettingsDropdown, PauseAction, PausePanel,
-    PendingKeyBind, PlaceSelectionModeText, SaveListAction, SaveListLabel, SaveListPanel,
-    SaveListTitle, ScrollContainer, ScrollContent, SettingsAction, SettingsDropdownLabel,
-    SettingsDropdownList, SettingsDropdownRoot, SettingsGameplayGroup, SettingsKeyBindingsGroup,
-    SettingsDropdownRow, SettingsSlider, SettingsSliderFill, SettingsSliderKnob, SettingsTab,
-    SettingsValue, SettingsValueText, SimulationStatusText, SimulationText, SlotArea, SlotIcon,
-    SlotLabel, TeleportAction, TeleportNameText, UiPanelBinding, UiPanelId, UiRuntime,
-    UiScaleText,
+    MainMenuPanel, ModalScrim, OpenBlockPanelDropdown, OpenSettingsDropdown, PauseAction,
+    PausePanel, PendingKeyBind, PlaceSelectionModeText, SaveListAction, SaveListLabel,
+    SaveListPanel, SaveListTitle, ScrollContainer, ScrollContent, SettingsAction,
+    SettingsDropdownLabel, SettingsDropdownList, SettingsDropdownRoot, SettingsDropdownRow,
+    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsSlider, SettingsSliderFill,
+    SettingsSliderKnob, SettingsTab, SettingsValue, SettingsValueText, SimulationStatusText,
+    SimulationText, SlotArea, SlotIcon, SlotLabel, TeleportAction, TeleportNameText,
+    UiPanelBinding, UiPanelId, UiRuntime, UiScaleText,
 };
 use super::widgets::{short_item_name, slot_color};
 
@@ -1027,7 +1026,7 @@ fn live_slider_percent(
         .find_map(|(_, action, value, drag_state)| {
             ((drag_state.dragging || active_slider.0 == Some(slider))
                 && settings_action_slider(*action) == Some(slider))
-                .then_some(value.0.clamp(0.0, 100.0))
+            .then_some(value.0.clamp(0.0, 100.0))
         })
         .unwrap_or_else(|| settings_slider_percent(slider, settings))
 }
@@ -1091,6 +1090,7 @@ pub fn update_panel_visibility(
         Query<&mut Node, (With<BackpackPanel>, Without<PauseAction>)>,
         Query<&mut Node, (With<PausePanel>, Without<PauseAction>)>,
         Query<&mut Node, (With<ConfirmDialogPanel>, Without<PauseAction>)>,
+        Query<&mut Node, (With<ModalScrim>, Without<PauseAction>)>,
     )>,
     mut pause_buttons: Query<(&PauseAction, &mut Node), With<Button>>,
     mut bound_panels: Query<
@@ -1104,6 +1104,7 @@ pub fn update_panel_visibility(
             Without<BackpackPanel>,
             Without<PausePanel>,
             Without<ConfirmDialogPanel>,
+            Without<ModalScrim>,
         ),
     >,
     confirm_dialog: Res<ConfirmDialogState>,
@@ -1166,6 +1167,15 @@ pub fn update_panel_visibility(
         };
     }
 
+    let active_panel = ui_runtime.active_panel();
+    for mut style in &mut style_sets.p7() {
+        style.display = if ui_runtime.has_modal_panel() || confirm_dialog.kind.is_some() {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
     for (action, mut style) in &mut pause_buttons {
         style.display = if pause_action_visible(&save_state, &solution_state, *action) {
             Display::Flex
@@ -1174,7 +1184,6 @@ pub fn update_panel_visibility(
         };
     }
 
-    let active_panel = ui_runtime.active_panel();
     if !block_dropdown_matches_panel(open_block_dropdown.0, active_panel) {
         open_block_dropdown.0 = None;
     }
@@ -1186,6 +1195,77 @@ pub fn update_panel_visibility(
             Display::None
         };
     }
+}
+
+pub fn update_ui_layers(
+    ui_runtime: Res<UiRuntime>,
+    confirm_dialog: Res<ConfirmDialogState>,
+    mut layered_nodes: Query<(
+        &mut GlobalZIndex,
+        Option<&UiPanelBinding>,
+        Has<MainMenuPanel>,
+        Has<SaveListPanel>,
+        Has<PausePanel>,
+        Has<BackpackPanel>,
+        Has<ConfirmDialogPanel>,
+        Has<ModalScrim>,
+    )>,
+) {
+    const BASE_LAYER: i32 = 100;
+
+    let top_panel_z = ui_runtime
+        .top_modal_layer()
+        .map(panel_layer_z)
+        .unwrap_or(PANEL_LAYER_BASE);
+    let confirm_z = if confirm_dialog.kind.is_some() {
+        top_panel_z + CONFIRM_LAYER_STEP
+    } else {
+        PANEL_LAYER_BASE
+    };
+    let scrim_z = if confirm_dialog.kind.is_some() {
+        confirm_z + SCRIM_OFFSET
+    } else {
+        ui_runtime
+            .top_modal_layer()
+            .map(|layer| panel_layer_z(layer) + SCRIM_OFFSET)
+            .unwrap_or(PANEL_LAYER_BASE + SCRIM_OFFSET)
+    };
+
+    for (
+        mut z,
+        binding,
+        main_menu,
+        save_list,
+        pause_panel,
+        backpack_panel,
+        confirm_panel,
+        modal_scrim,
+    ) in &mut layered_nodes
+    {
+        z.0 = if modal_scrim {
+            scrim_z
+        } else if confirm_panel {
+            confirm_z
+        } else if let Some(binding) = binding {
+            ui_runtime
+                .panel_layer(binding.0)
+                .map(panel_layer_z)
+                .unwrap_or(PANEL_LAYER_BASE)
+        } else if main_menu || save_list || pause_panel || backpack_panel {
+            BASE_LAYER
+        } else {
+            z.0
+        };
+    }
+}
+
+const PANEL_LAYER_BASE: i32 = 1_000;
+const PANEL_LAYER_STEP: i32 = 20;
+const SCRIM_OFFSET: i32 = -1;
+const CONFIRM_LAYER_STEP: i32 = 20;
+
+fn panel_layer_z(layer: usize) -> i32 {
+    PANEL_LAYER_BASE + layer as i32 * PANEL_LAYER_STEP
 }
 
 fn block_dropdown_matches_panel(
