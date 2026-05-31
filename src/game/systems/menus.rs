@@ -106,6 +106,7 @@ pub fn menu_actions(
                     simulation.start_snapshot = None;
                     simulation.start_factory_structures = None;
                     solution_state.puzzle_snapshot = Some(world_menu.world.clone());
+                    solution_state.puzzle_name = save_state.current.clone();
                     save_state.current = Some(next_named_save(
                         &save_state
                             .entries
@@ -703,7 +704,7 @@ fn confirm_text_prompt(
                 .unwrap_or_else(|| world_menu.world.clone());
             *world_menu.world = puzzle_snapshot.clone();
             *inventory = InventoryItems::for_mode(BuilderMode::Play);
-            if save_solution_with_puzzle(&world_menu.world, &name, &puzzle_snapshot, inventory) {
+            if save_solution_with_puzzle(&world_menu.world, &name, &puzzle, &puzzle_snapshot, inventory) {
                 save_state.refresh();
                 open_loaded_world_from_menu(
                     &name,
@@ -804,8 +805,10 @@ fn save_current_world(
     let saved = match kind {
         SaveKind::Puzzle => save_world(world, &name, SaveKind::Puzzle, inventory),
         SaveKind::Solution => {
-            if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
-                save_solution_with_puzzle(world, &name, puzzle_snapshot, inventory)
+            if let (Some(puzzle_name), Some(puzzle_snapshot)) =
+                (&solution_state.puzzle_name, &solution_state.puzzle_snapshot)
+            {
+                save_solution_with_puzzle(world, &name, puzzle_name, puzzle_snapshot, inventory)
             } else {
                 save_world(world, &name, SaveKind::Solution, inventory)
             }
@@ -988,6 +991,10 @@ fn open_loaded_world(
 
     solution_state.entry = entry;
     solution_state.dirty = false;
+    solution_state.puzzle_name = match entry {
+        WorldEntryMode::EditPuzzle => None,
+        WorldEntryMode::PlaySolution => loaded.puzzle_name.or_else(|| save_state.selected_puzzle.clone()),
+    };
     solution_state.puzzle_snapshot = match entry {
         WorldEntryMode::EditPuzzle => None,
         WorldEntryMode::PlaySolution => loaded.puzzle_snapshot.or_else(|| Some(loaded.world)),
@@ -1037,6 +1044,7 @@ fn clear_loaded_world(
     save_state.current_kind = None;
     save_state.select_puzzle(None, None);
     solution_state.puzzle_snapshot = None;
+    solution_state.puzzle_name = None;
     solution_state.dirty = false;
     solution_state.entry = WorldEntryMode::EditPuzzle;
     factory_structures.clear();
@@ -1074,6 +1082,7 @@ fn switch_to_edit_mode(
     placement.selected = 0;
     save_state.current_kind = Some(SaveKind::Puzzle);
     solution_state.puzzle_snapshot = None;
+    solution_state.puzzle_name = None;
     *mode = GameMode::Paused;
 }
 

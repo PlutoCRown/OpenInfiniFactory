@@ -122,6 +122,8 @@ struct SaveFile {
     #[serde(default)]
     puzzle: Option<WorldLayer>,
     #[serde(default)]
+    puzzle_ref: Option<String>,
+    #[serde(default)]
     factory_blocks: Vec<SavedBlock>,
     blocks: Vec<SavedBlock>,
     #[serde(default)]
@@ -175,9 +177,11 @@ pub fn save_world(
 ) -> bool {
     let save = match kind {
         SaveKind::Puzzle => SaveFile::puzzle(capture_puzzle_layer(world, inventory)),
-        SaveKind::Solution => {
-            SaveFile::solution(capture_puzzle_layer(world, inventory), world, inventory)
-        }
+        SaveKind::Solution => SaveFile::legacy_solution(
+            capture_puzzle_layer(world, inventory),
+            world,
+            inventory,
+        ),
     };
 
     write_save(name, &save)
@@ -186,13 +190,14 @@ pub fn save_world(
 pub fn save_solution_with_puzzle(
     world: &WorldBlocks,
     name: &str,
+    puzzle_name: &str,
     puzzle_snapshot: &WorldBlocks,
     inventory: &InventoryItems,
 ) -> bool {
     write_save(
         name,
         &SaveFile::solution(
-            capture_puzzle_layer(puzzle_snapshot, inventory),
+            puzzle_name,
             world,
             inventory,
         ),
@@ -258,6 +263,9 @@ fn solution_matches_puzzle(solution: &str, puzzle: &str) -> bool {
     if !matches!(solution.kind, SaveFileKind::Solution) {
         return false;
     }
+    if solution.puzzle_ref.as_deref() == Some(puzzle) {
+        return true;
+    }
     let Some(puzzle_save) = read_save(puzzle) else {
         return false;
     };
@@ -272,6 +280,7 @@ pub fn reset_solution_world(world: &mut WorldBlocks, puzzle_snapshot: &WorldBloc
 pub struct LoadedSave {
     pub world: WorldBlocks,
     pub puzzle_snapshot: Option<WorldBlocks>,
+    pub puzzle_name: Option<String>,
     pub hotbar: Option<HotbarItems>,
 }
 
@@ -280,6 +289,7 @@ impl SaveFile {
         Self {
             kind: SaveFileKind::Puzzle,
             puzzle: Some(puzzle.clone()),
+            puzzle_ref: None,
             factory_blocks: Vec::new(),
             blocks: puzzle.blocks,
             system_blocks: puzzle.system_blocks,
@@ -288,10 +298,24 @@ impl SaveFile {
         }
     }
 
-    fn solution(puzzle: WorldLayer, world: &WorldBlocks, inventory: &InventoryItems) -> Self {
+    fn solution(puzzle_name: &str, world: &WorldBlocks, inventory: &InventoryItems) -> Self {
+        Self {
+            kind: SaveFileKind::Solution,
+            puzzle: None,
+            puzzle_ref: Some(normalized_save_name(puzzle_name)),
+            factory_blocks: capture_factory_blocks(world),
+            blocks: Vec::new(),
+            system_blocks: Vec::new(),
+            block_settings: Vec::new(),
+            hotbar: Some(inventory.hotbar),
+        }
+    }
+
+    fn legacy_solution(puzzle: WorldLayer, world: &WorldBlocks, inventory: &InventoryItems) -> Self {
         Self {
             kind: SaveFileKind::Solution,
             puzzle: Some(puzzle.clone()),
+            puzzle_ref: None,
             factory_blocks: capture_factory_blocks(world),
             blocks: puzzle.blocks,
             system_blocks: puzzle.system_blocks,
@@ -303,10 +327,11 @@ impl SaveFile {
     fn into_loaded(self) -> LoadedSave {
         match self.kind {
             SaveFileKind::Solution => {
-                let puzzle = self
-                    .puzzle
-                    .clone()
-                    .unwrap_or_else(|| self.legacy_puzzle_layer());
+                let puzzle = self.referenced_puzzle_layer().unwrap_or_else(|| {
+                    self.puzzle
+                        .clone()
+                        .unwrap_or_else(|| self.legacy_puzzle_layer())
+                });
                 let hotbar = self.hotbar.or(puzzle.hotbar);
                 let mut puzzle_world = WorldBlocks::default();
                 apply_layer(&mut puzzle_world, puzzle.clone());
@@ -317,6 +342,7 @@ impl SaveFile {
                 LoadedSave {
                     world,
                     puzzle_snapshot: Some(puzzle_world),
+                    puzzle_name: self.puzzle_ref,
                     hotbar: hotbar
                         .or_else(|| Some(InventoryItems::for_mode(BuilderMode::Play).hotbar)),
                 }
@@ -332,6 +358,7 @@ impl SaveFile {
                 LoadedSave {
                     world,
                     puzzle_snapshot: None,
+                    puzzle_name: None,
                     hotbar: hotbar
                         .or_else(|| Some(InventoryItems::for_mode(BuilderMode::Edit).hotbar)),
                 }
@@ -341,8 +368,8 @@ impl SaveFile {
 
     fn puzzle_signature(&self) -> Vec<String> {
         let puzzle = self
-            .puzzle
-            .clone()
+            .referenced_puzzle_layer()
+            .or_else(|| self.puzzle.clone())
             .unwrap_or_else(|| self.legacy_puzzle_layer());
         let mut parts: Vec<String> = Vec::new();
         for saved in puzzle.blocks {
@@ -389,6 +416,15 @@ impl SaveFile {
                 .collect(),
             hotbar: self.hotbar,
         }
+    }
+
+    fn referenced_puzzle_layer(&self) -> Option<WorldLayer> {
+        let puzzle_name = self.puzzle_ref.as_deref()?;
+        read_save(puzzle_name).map(|save| {
+            save.puzzle
+                .clone()
+                .unwrap_or_else(|| save.legacy_puzzle_layer())
+        })
     }
 
     fn legacy_system_block_is_persistent(&self, pos: IVec3) -> bool {
@@ -741,7 +777,7 @@ mod tests {
         solution_inventory.set_hotbar_block(1, BlockKind::Switch);
         solution_inventory.hotbar[2] = None;
 
-        let solution_loaded = SaveFile::solution(
+        let solution_loaded = SaveFile::legacy_solution(
             capture_puzzle_layer(&WorldBlocks::default(), &puzzle_inventory),
             &WorldBlocks::default(),
             &solution_inventory,

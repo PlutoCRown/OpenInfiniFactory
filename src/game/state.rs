@@ -204,6 +204,7 @@ impl SimulationState {
 #[derive(Resource, Default)]
 pub struct SolutionState {
     pub puzzle_snapshot: Option<crate::game::world::grid::WorldBlocks>,
+    pub puzzle_name: Option<String>,
     pub entry: WorldEntryMode,
     pub dirty: bool,
     pub save_list_entry: WorldEntryMode,
