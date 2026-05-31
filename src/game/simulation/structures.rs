@@ -366,11 +366,11 @@ fn compare_movement_priority(
 fn movement_priority_key(
     movement: &StructureMove,
     influence_cache: &MovementInfluenceCache,
-) -> (u32, u8, ConveyorSourcePriority) {
+) -> (u32, u8, ConveyorPriority) {
     (
         movement.source().map_or(u32::MAX, |_| influence_cache.count(movement)),
         movement_kind_priority(movement),
-        conveyor_source_priority(movement),
+        conveyor_priority(movement),
     )
 }
 
@@ -393,47 +393,65 @@ fn movement_kind_priority(movement: &StructureMove) -> u8 {
 }
 
 #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
-struct ConveyorSourcePriority {
-    positive_x: i32,
-    negative_x: i32,
-    positive_y: i32,
-    negative_y: i32,
-    positive_z: i32,
-    negative_z: i32,
+struct ConveyorPriority {
+    target_x: i32,
+    target_y: i32,
+    target_z: i32,
+    offset_x: i32,
+    offset_y: i32,
+    offset_z: i32,
+    source_x: i32,
+    source_y: i32,
+    source_z: i32,
 }
 
-fn conveyor_source_priority(movement: &StructureMove) -> ConveyorSourcePriority {
+fn conveyor_priority(movement: &StructureMove) -> ConveyorPriority {
     let Some(source) = movement.source() else {
-        return ConveyorSourcePriority::neutral();
+        return ConveyorPriority::neutral();
     };
-    if !matches!(
-        movement,
-        StructureMove::Translate {
-            mark: MovementMark::Conveyor,
-            ..
-        }
-    ) {
-        return ConveyorSourcePriority::neutral();
-    }
-    ConveyorSourcePriority {
-        positive_x: -source.x,
-        negative_x: source.x,
-        positive_y: -source.y,
-        negative_y: source.y,
-        positive_z: -source.z,
-        negative_z: source.z,
+    let StructureMove::Translate {
+        structure,
+        offset,
+        mark: MovementMark::Conveyor,
+        ..
+    } = movement
+    else {
+        return ConveyorPriority::neutral();
+    };
+    let target = conveyor_primary_target(structure, *offset);
+    ConveyorPriority {
+        target_x: target.x,
+        target_y: target.y,
+        target_z: target.z,
+        offset_x: -offset.x,
+        offset_y: -offset.y,
+        offset_z: -offset.z,
+        source_x: source.x,
+        source_y: source.y,
+        source_z: source.z,
     }
 }
 
-impl ConveyorSourcePriority {
+fn conveyor_primary_target(structure: &HashSet<IVec3>, offset: IVec3) -> IVec3 {
+    structure
+        .iter()
+        .map(|pos| *pos + offset)
+        .min_by_key(|pos| (pos.x, pos.y, pos.z))
+        .unwrap_or(IVec3::ZERO)
+}
+
+impl ConveyorPriority {
     fn neutral() -> Self {
         Self {
-            positive_x: 0,
-            negative_x: 0,
-            positive_y: 0,
-            negative_y: 0,
-            positive_z: 0,
-            negative_z: 0,
+            target_x: 0,
+            target_y: 0,
+            target_z: 0,
+            offset_x: 0,
+            offset_y: 0,
+            offset_z: 0,
+            source_x: 0,
+            source_y: 0,
+            source_z: 0,
         }
     }
 }
