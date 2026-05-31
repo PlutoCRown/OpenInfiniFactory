@@ -99,8 +99,6 @@
   "button.teleport_pair": "配对",
   "button.teleport_rename": "重命名",
   "button.toggle_builder_mode": "切换编辑/游玩模式",
-  "button.ui_scale_down": "界面缩放 -",
-  "button.ui_scale_up": "界面缩放 +",
   "converter.input": "输入：{material}",
   "converter.mode": "模式：{mode}",
   "converter.mode.any": "任意输入",

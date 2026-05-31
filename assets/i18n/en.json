@@ -99,8 +99,6 @@
   "button.teleport_pair": "Pair",
   "button.teleport_rename": "Rename",
   "button.toggle_builder_mode": "Toggle Edit/Play Mode",
-  "button.ui_scale_down": "UI Scale -",
-  "button.ui_scale_up": "UI Scale +",
   "empty": "Empty",
   "converter.input": "Input: {material}",
   "converter.mode": "Mode: {mode}",

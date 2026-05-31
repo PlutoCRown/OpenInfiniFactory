@@ -1,6 +1,8 @@
 use bevy::ecs::system::SystemParam;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::ButtonState;
+use bevy::picking::pointer::PointerButton;
+use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 use bevy::ui_widgets::{CoreSliderDragState, Slider, SliderRange, SliderValue};
 
@@ -13,9 +15,9 @@ use crate::game::state::{
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{
     ActiveSettingsSlider, BlockEditAction, BlockPanelDropdown, CarriedItem, ConfirmDialogAction,
-    ConfirmDialogKind, ConfirmDialogState, InventoryItems, MenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown,
-    PendingAppExit, PendingKeyBind, SaveListAction, SettingsAction, SettingsSliderTrigger,
-    SettingsTab, TeleportAction, UiPanelContext, UiPanelId, UiRuntime,
+    ConfirmDialogKind, ConfirmDialogState, InventoryItems, MenuAction, OpenBlockPanelDropdown,
+    OpenSettingsDropdown, PendingAppExit, PendingKeyBind, SaveListAction, SettingsAction,
+    SettingsSliderTrigger, SettingsTab, TeleportAction, UiPanelContext, UiPanelId, UiRuntime,
 };
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
 use crate::game::world::rendering::{
@@ -41,6 +43,7 @@ pub struct WorldMenuParams<'w, 's> {
 }
 
 pub fn menu_actions(
+    mut click: On<Pointer<Click>>,
     mut builder_mode: ResMut<BuilderMode>,
     mut simulation: ResMut<SimulationState>,
     mut inventory: ResMut<InventoryItems>,
@@ -53,23 +56,26 @@ pub fn menu_actions(
     mut world_menu: WorldMenuParams,
     mut confirm_dialog: ResMut<ConfirmDialogState>,
     mut pending_exit: ResMut<PendingAppExit>,
-    mut interactions: Query<(&Interaction, &MenuAction), (Changed<Interaction>, With<Button>)>,
+    actions: Query<&MenuAction>,
 ) {
-    for (interaction, action) in &mut interactions {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
+    if !primary_click(&mut click) {
+        return;
+    }
+    let Ok(action) = actions.get(click.entity).copied() else {
+        return;
+    };
+    click.propagate(false);
 
-        match (*mode, *action) {
+    match (*mode, action) {
             (GameMode::MainMenu, MenuAction::EditPuzzle) => {
                 save_state.refresh();
-                save_state.selected_puzzle = None;
+                save_state.select_puzzle(None);
                 solution_state.save_list_entry = WorldEntryMode::EditPuzzle;
                 *mode = GameMode::SaveListMain;
             }
             (GameMode::MainMenu, MenuAction::Play) => {
                 save_state.refresh();
-                save_state.selected_puzzle = None;
+                save_state.select_puzzle(None);
                 solution_state.save_list_entry = WorldEntryMode::PlaySolution;
                 *mode = GameMode::SaveListMain;
             }
@@ -85,7 +91,7 @@ pub fn menu_actions(
             (GameMode::Paused, MenuAction::Resume) => *mode = GameMode::Playing,
             (GameMode::Paused, MenuAction::ToggleBuilderMode) => {
                 if solution_state.entry == WorldEntryMode::PlaySolution {
-                    continue;
+                    return;
                 }
                 *builder_mode = match *builder_mode {
                     BuilderMode::Edit => {
@@ -101,7 +107,7 @@ pub fn menu_actions(
                     }
                     BuilderMode::Play => {
                         confirm_dialog.kind = Some(ConfirmDialogKind::SaveSolutionBeforeEdit);
-                        continue;
+                        return;
                     }
                 };
                 *inventory = InventoryItems::for_mode(*builder_mode);
@@ -148,7 +154,6 @@ pub fn menu_actions(
             }
             _ => {}
         }
-    }
 }
 
 pub fn app_exit_requests(
@@ -169,6 +174,7 @@ fn request_app_exit(pending_exit: &mut PendingAppExit, exit: AppExit) {
 }
 
 pub fn save_list_actions(
+    mut click: On<Pointer<Click>>,
     mut mode: ResMut<GameMode>,
     mut builder_mode: ResMut<BuilderMode>,
     mut inventory: ResMut<InventoryItems>,
@@ -179,21 +185,20 @@ pub fn save_list_actions(
     mut simulation: ResMut<SimulationState>,
     mut world_menu: WorldMenuParams,
     mut confirm_dialog: ResMut<ConfirmDialogState>,
-    mut interactions: Query<(&Interaction, &SaveListAction), (Changed<Interaction>, With<Button>)>,
+    actions: Query<&SaveListAction>,
 ) {
-    if *mode != GameMode::SaveListMain {
+    if !primary_click(&mut click) || *mode != GameMode::SaveListMain {
         return;
     }
+    let Ok(action) = actions.get(click.entity).copied() else {
+        return;
+    };
+    click.propagate(false);
 
-    for (interaction, action) in &mut interactions {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
-
-        match *action {
+    match action {
             SaveListAction::NewPuzzle => {
                 if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
-                    continue;
+                    return;
                 }
                 let name = next_world_name(&save_state.slots);
                 world_menu.world.clear();
@@ -223,13 +228,13 @@ pub fn save_list_actions(
             }
             SaveListAction::NewSolution => {
                 if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
-                    continue;
+                    return;
                 }
                 let Some(puzzle_name) = save_state.selected_puzzle.clone() else {
-                    continue;
+                    return;
                 };
                 if load_world(&mut world_menu.world, &puzzle_name).is_none() {
-                    continue;
+                    return;
                 }
                 let name = next_world_name(&save_state.slots);
                 let puzzle_snapshot = world_menu.world.clone();
@@ -259,10 +264,10 @@ pub fn save_list_actions(
             SaveListAction::LoadPuzzle(index) => {
                 let puzzles = save_state.puzzles();
                 let Some(entry) = puzzles.get(index) else {
-                    continue;
+                    return;
                 };
+                let name = entry.name.clone();
                 if solution_state.save_list_entry == WorldEntryMode::EditPuzzle {
-                    let name = entry.name.clone();
                     open_loaded_world(
                         &name,
                         WorldEntryMode::EditPuzzle,
@@ -283,22 +288,19 @@ pub fn save_list_actions(
                         &mut mode,
                     );
                 } else {
-                    save_state.selected_puzzle = Some(entry.name.clone());
+                    save_state.select_puzzle(Some(name));
                 }
             }
             SaveListAction::LoadSolution(index) => {
                 if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
-                    continue;
+                    return;
                 }
                 if save_state.selected_puzzle.is_none() {
-                    continue;
+                    return;
                 }
-                let Some(puzzle_name) = save_state.selected_puzzle.as_deref() else {
-                    continue;
-                };
-                let solutions = save_state.solutions_for_puzzle(puzzle_name);
+                let solutions = save_state.selected_puzzle_solutions();
                 let Some(entry) = solutions.get(index) else {
-                    continue;
+                    return;
                 };
                 let name = entry.name.clone();
                 open_loaded_world(
@@ -329,10 +331,7 @@ pub fn save_list_actions(
                 }
             }
             SaveListAction::DeleteSolution(index) => {
-                let Some(puzzle_name) = save_state.selected_puzzle.as_deref() else {
-                    continue;
-                };
-                if let Some(entry) = save_state.solutions_for_puzzle(puzzle_name).get(index) {
+                if let Some(entry) = save_state.selected_puzzle_solutions().get(index) {
                     confirm_dialog.kind = Some(ConfirmDialogKind::DeleteSave {
                         name: entry.name.clone(),
                     });
@@ -342,10 +341,10 @@ pub fn save_list_actions(
                 *mode = GameMode::MainMenu;
             }
         }
-    }
 }
 
 pub fn confirm_dialog_actions(
+    mut click: On<Pointer<Click>>,
     mut builder_mode: ResMut<BuilderMode>,
     mut simulation: ResMut<SimulationState>,
     mut inventory: ResMut<InventoryItems>,
@@ -356,27 +355,26 @@ pub fn confirm_dialog_actions(
     mut solution_state: ResMut<SolutionState>,
     mut world_menu: WorldMenuParams,
     mut confirm_dialog: ResMut<ConfirmDialogState>,
-    mut interactions: Query<
-        (&Interaction, &ConfirmDialogAction),
-        (Changed<Interaction>, With<Button>),
-    >,
+    actions: Query<&ConfirmDialogAction>,
 ) {
+    if !primary_click(&mut click) {
+        return;
+    }
     let Some(kind) = confirm_dialog.kind.clone() else {
         return;
     };
+    let Ok(action) = actions.get(click.entity).copied() else {
+        return;
+    };
+    click.propagate(false);
 
-    for (interaction, action) in &mut interactions {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
-
-        match (kind.clone(), *action) {
+    match (kind, action) {
             (_, ConfirmDialogAction::Cancel) => {}
             (ConfirmDialogKind::DeleteSave { name }, ConfirmDialogAction::Primary) => {
                 delete_save(&name);
                 save_state.refresh();
                 if save_state.selected_puzzle.as_deref() == Some(name.as_str()) {
-                    save_state.selected_puzzle = None;
+                    save_state.select_puzzle(None);
                 }
             }
             (ConfirmDialogKind::ResetSolution, ConfirmDialogAction::Primary) => {
@@ -477,7 +475,6 @@ pub fn confirm_dialog_actions(
         }
 
         confirm_dialog.kind = None;
-    }
 }
 
 fn save_current_world(
@@ -658,7 +655,7 @@ fn open_loaded_world(
         WorldEntryMode::EditPuzzle => SaveKind::Puzzle,
         WorldEntryMode::PlaySolution => SaveKind::Solution,
     });
-    save_state.selected_puzzle = None;
+    save_state.select_puzzle(None);
 
     solution_state.entry = entry;
     solution_state.dirty = false;
@@ -704,7 +701,7 @@ fn clear_loaded_world(
     world.clear();
     save_state.current = None;
     save_state.current_kind = None;
-    save_state.selected_puzzle = None;
+    save_state.select_puzzle(None);
     solution_state.puzzle_snapshot = None;
     solution_state.dirty = false;
     solution_state.entry = WorldEntryMode::EditPuzzle;
@@ -747,17 +744,13 @@ fn switch_to_edit_mode(
 pub fn settings_menu_actions(
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    mut mode: ResMut<GameMode>,
     mut settings: ResMut<GameSettings>,
     mut ui_scale: ResMut<UiScale>,
     mut config: ResMut<GameConfig>,
-    mut i18n: ResMut<I18n>,
-    mut settings_tab: ResMut<SettingsTab>,
     mut open_dropdown: ResMut<OpenSettingsDropdown>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut active_slider: ResMut<ActiveSettingsSlider>,
-    mut ui_runtime: ResMut<UiRuntime>,
-    mut interactions: Query<(Ref<Interaction>, &SettingsAction), With<Button>>,
+    ui_runtime: Res<UiRuntime>,
     slider_values: Query<(&SettingsAction, &SliderValue, &SliderRange), With<Slider>>,
     slider_changes: Query<
         (
@@ -804,24 +797,36 @@ pub fn settings_menu_actions(
             &mut config,
         );
     }
+}
 
-    for (interaction, action) in &mut interactions {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
+pub fn settings_action_clicked(
+    mut click: On<Pointer<Click>>,
+    mut mode: ResMut<GameMode>,
+    mut settings: ResMut<GameSettings>,
+    mut ui_scale: ResMut<UiScale>,
+    mut config: ResMut<GameConfig>,
+    mut i18n: ResMut<I18n>,
+    mut settings_tab: ResMut<SettingsTab>,
+    mut open_dropdown: ResMut<OpenSettingsDropdown>,
+    mut pending_key_bind: ResMut<PendingKeyBind>,
+    mut active_slider: ResMut<ActiveSettingsSlider>,
+    mut ui_runtime: ResMut<UiRuntime>,
+    actions: Query<&SettingsAction>,
+) {
+    if !primary_click(&mut click) || !ui_runtime.is_settings_open() {
+        return;
+    }
+    let Ok(action) = actions.get(click.entity).copied() else {
+        return;
+    };
+    click.propagate(false);
 
-        match *action {
+    match action {
             SettingsAction::TabGameplay => {
-                if !interaction.is_changed() {
-                    continue;
-                }
                 *settings_tab = SettingsTab::Gameplay;
                 open_dropdown.0 = None;
             }
             SettingsAction::TabKeyBindings => {
-                if !interaction.is_changed() {
-                    continue;
-                }
                 *settings_tab = SettingsTab::KeyBindings;
                 open_dropdown.0 = None;
             }
@@ -829,34 +834,22 @@ pub fn settings_menu_actions(
                 active_slider.0 = Some(field);
             }
             SettingsAction::SetPlaceSelectionMode(selection_mode) => {
-                if !interaction.is_changed() {
-                    continue;
-                }
                 config.place_selection_mode = selection_mode;
                 open_dropdown.0 = None;
                 save_config(&config);
             }
             SettingsAction::SetDeleteSelectionMode(selection_mode) => {
-                if !interaction.is_changed() {
-                    continue;
-                }
                 config.delete_selection_mode = selection_mode;
                 open_dropdown.0 = None;
                 save_config(&config);
             }
             SettingsAction::SetLanguage(language) => {
-                if !interaction.is_changed() {
-                    continue;
-                }
                 i18n.set_language(language);
                 config.language = Some(language);
                 open_dropdown.0 = None;
                 save_config(&config);
             }
             SettingsAction::ToggleDropdown(dropdown) => {
-                if !interaction.is_changed() {
-                    continue;
-                }
                 open_dropdown.0 = if open_dropdown.0 == Some(dropdown) {
                     None
                 } else {
@@ -864,15 +857,9 @@ pub fn settings_menu_actions(
                 };
             }
             SettingsAction::Bind(action) => {
-                if !interaction.is_changed() {
-                    continue;
-                }
                 pending_key_bind.0 = Some(action);
             }
             SettingsAction::ResetDefaults => {
-                if !interaction.is_changed() {
-                    continue;
-                }
                 *config = GameConfig::default();
                 settings.fov_degrees = config.fov_degrees;
                 settings.ui_scale = config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
@@ -886,15 +873,9 @@ pub fn settings_menu_actions(
                 save_config(&config);
             }
             SettingsAction::OpenFolder => {
-                if !interaction.is_changed() {
-                    continue;
-                }
                 open_config_folder();
             }
             SettingsAction::Back => {
-                if !interaction.is_changed() {
-                    continue;
-                }
                 open_dropdown.0 = None;
                 pending_key_bind.0 = None;
                 let return_mode = settings_return_mode(&ui_runtime, *mode);
@@ -902,7 +883,6 @@ pub fn settings_menu_actions(
                 *mode = return_mode;
             }
         }
-    }
 }
 
 fn settings_return_mode(ui_runtime: &UiRuntime, fallback: GameMode) -> GameMode {
@@ -982,50 +962,47 @@ fn commit_active_settings_slider(
     }
 }
 
+fn primary_click(click: &mut On<Pointer<Click>>) -> bool {
+    click.event.button == PointerButton::Primary
+}
+
 pub fn block_edit_actions(
+    mut click: On<Pointer<Click>>,
     mut ui_runtime: ResMut<UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
-    mut interactions: Query<(&Interaction, &BlockEditAction), (Changed<Interaction>, With<Button>)>,
+    actions: Query<&BlockEditAction>,
 ) {
+    if !primary_click(&mut click) {
+        return;
+    }
     let Some(pos) = ui_runtime.active_block_pos() else {
-        ui_runtime.close_current();
         return;
     };
     let Some(block) = world.system_blocks.get(&pos).copied() else {
         ui_runtime.close_current();
         return;
     };
-    for (interaction, action) in &mut interactions {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
-        match *action {
-            BlockEditAction::Close => {
-                open_dropdown.0 = None;
-                ui_runtime.close_active();
-            }
-            action => block.kind.handle_edit_action(
-                pos,
-                action,
-                &mut world,
-                &mut solution_state,
-                &mut open_dropdown,
-            ),
-        }
-    }
+    let Ok(action) = actions.get(click.entity).copied() else {
+        return;
+    };
+    click.propagate(false);
+    block
+        .kind
+        .handle_edit_action(pos, action, &mut world, &mut solution_state, &mut open_dropdown);
 }
 
 pub fn teleport_menu_actions(
+    mut click: On<Pointer<Click>>,
     mut ui_runtime: ResMut<UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut rename_state: ResMut<TeleportRenameState>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
-    mut interactions: Query<(&Interaction, &TeleportAction), (Changed<Interaction>, With<Button>)>,
+    actions: Query<&TeleportAction>,
 ) {
-    if ui_runtime.active_panel() != Some(UiPanelId::Teleport) {
+    if !primary_click(&mut click) || ui_runtime.active_panel() != Some(UiPanelId::Teleport) {
         return;
     }
 
@@ -1034,12 +1011,12 @@ pub fn teleport_menu_actions(
         return;
     };
 
-    for (interaction, action) in &mut interactions {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
+    let Ok(action) = actions.get(click.entity).copied() else {
+        return;
+    };
+    click.propagate(false);
 
-        match *action {
+    match action {
             TeleportAction::TogglePairDropdown => {
                 toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::TeleportPair);
             }
@@ -1055,13 +1032,7 @@ pub fn teleport_menu_actions(
                 rename_state.editing = Some(pos);
                 rename_state.buffer = settings.name;
             }
-            TeleportAction::Close => {
-                open_dropdown.0 = None;
-                rename_state.editing = None;
-                ui_runtime.close_active();
-            }
         }
-    }
 }
 
 pub fn teleport_rename_input(

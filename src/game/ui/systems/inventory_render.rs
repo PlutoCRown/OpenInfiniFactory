@@ -2,11 +2,12 @@ pub fn update_inventory_slots(
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
     i18n: Res<I18n>,
+    hover: Res<UiHoverState>,
     block_icons: Option<Res<BlockIconAssets>>,
     mut slot_query: Query<
         (
+            Entity,
             &InventorySlot,
-            &Interaction,
             &Children,
             &mut BackgroundColor,
             &mut BorderColor,
@@ -22,7 +23,7 @@ pub fn update_inventory_slots(
     mut tooltip: Query<(&mut Node, &Children), With<InventoryTooltip>>,
 ) {
     let mut hovered_item = None;
-    for (slot, interaction, children, mut background, mut border) in &mut slot_query {
+    for (entity, slot, children, mut background, mut border) in &mut slot_query {
         let item = match slot.area {
             SlotArea::Hotbar => inventory.hotbar[slot.index],
             SlotArea::Backpack => inventory.backpack[slot.index],
@@ -31,7 +32,8 @@ pub fn update_inventory_slots(
             .and_then(|item| item.block())
             .and_then(|kind| block_icons.as_deref().and_then(|icons| icons.get(kind)));
         let has_icon = icon_handle.is_some();
-        if *interaction == Interaction::Hovered {
+        let hovered = hover.entity == Some(entity);
+        if hovered {
             hovered_item = item;
         }
 
@@ -39,13 +41,13 @@ pub fn update_inventory_slots(
         let base_color = item
             .map(slot_color)
             .unwrap_or(Color::srgb(0.255, 0.251, 0.251));
-        *background = if has_icon && *interaction == Interaction::Hovered {
+        *background = if has_icon && hovered {
             Color::srgb(0.32, 0.31, 0.31).into()
         } else if has_icon {
             Color::srgb(0.255, 0.251, 0.251).into()
-        } else if *interaction == Interaction::Hovered && item.is_none() {
+        } else if hovered && item.is_none() {
             Color::srgb(0.32, 0.31, 0.31).into()
-        } else if *interaction == Interaction::Hovered {
+        } else if hovered {
             base_color.with_alpha(1.0).into()
         } else {
             base_color.into()
@@ -57,7 +59,7 @@ pub fn update_inventory_slots(
                 right: Color::srgb(0.36, 0.25, 0.12),
                 bottom: Color::srgb(0.36, 0.25, 0.12),
             }
-        } else if *interaction == Interaction::Hovered {
+        } else if hovered {
             hover_border()
         } else {
             inset_border()

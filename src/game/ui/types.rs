@@ -101,6 +101,41 @@ impl UiRuntime {
 #[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
 pub struct UiPanelBinding(pub UiPanelId);
 
+#[derive(Component)]
+pub struct PanelWindow;
+
+#[derive(Component, Default)]
+pub struct PanelPosition {
+    pub dragged: bool,
+    pub centered: bool,
+}
+
+#[derive(Component)]
+pub struct PanelTitleBar;
+
+#[derive(Component)]
+pub struct PanelCloseButton;
+
+#[derive(Resource, Default)]
+pub struct PanelDragState {
+    pub panel: Option<Entity>,
+    pub cursor: Vec2,
+    pub panel_pos: Vec2,
+}
+
+impl PanelDragState {
+    pub fn clear(&mut self) {
+        self.panel = None;
+        self.cursor = Vec2::ZERO;
+        self.panel_pos = Vec2::ZERO;
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct UiHoverState {
+    pub entity: Option<Entity>,
+}
+
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub enum PanelVisibility {
     GameMode(GameMode),
@@ -175,15 +210,6 @@ pub struct SettingsDropdownRoot(pub SettingsDropdown);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct SettingsDropdownRow(pub SettingsDropdown);
-
-#[derive(Component)]
-pub struct ScrollContainer {
-    pub offset: f32,
-    pub max_offset: f32,
-}
-
-#[derive(Component)]
-pub struct ScrollContent;
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum SettingsField {
@@ -428,6 +454,12 @@ pub enum SaveListAction {
 }
 
 #[derive(Component, Clone, Copy)]
+pub enum SaveListRow {
+    Puzzle(usize),
+    Solution(usize),
+}
+
+#[derive(Component, Clone, Copy)]
 pub enum ConfirmDialogAction {
     Primary,
     Secondary,
@@ -505,7 +537,6 @@ pub enum BlockEditAction {
     ToggleOutputDropdown,
     SetInput(MaterialKind),
     SetOutput(MaterialKind),
-    Close,
 }
 
 impl UiActionLabel for BlockEditAction {
@@ -517,7 +548,6 @@ impl UiActionLabel for BlockEditAction {
             Self::ToggleColorDropdown | Self::SetColor(_) => "button.next_color",
             Self::ToggleInputDropdown | Self::SetInput(_) => "button.input_material",
             Self::ToggleOutputDropdown | Self::SetOutput(_) => "button.output_material",
-            Self::Close => "button.close",
         }
     }
 }
@@ -527,7 +557,6 @@ pub enum TeleportAction {
     TogglePairDropdown,
     SetPair(Option<IVec3>),
     Rename,
-    Close,
 }
 
 impl UiActionLabel for TeleportAction {
@@ -535,7 +564,6 @@ impl UiActionLabel for TeleportAction {
         match self {
             Self::TogglePairDropdown | Self::SetPair(_) => "button.teleport_pair",
             Self::Rename => "button.teleport_rename",
-            Self::Close => "button.close",
         }
     }
 }

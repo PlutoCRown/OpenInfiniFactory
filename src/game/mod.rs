@@ -92,6 +92,8 @@ impl Plugin for GamePlugin {
             .add_plugins(UiWidgetsPlugins)
             .add_plugins(GameUiPlugin)
             .add_observer(slider_self_update)
+            .add_observer(menu_actions)
+            .add_observer(save_list_actions)
             .add_systems(
                 Startup,
                 (
@@ -118,13 +120,6 @@ impl Plugin for GamePlugin {
             )
             .add_systems(Update, systems::debug::mark_perf_input)
             .add_systems(Last, app_exit_requests.before(systems::debug::mark_perf_last))
-            .add_systems(
-                Update,
-                (menu_actions, save_list_actions)
-                    .chain()
-                    .after(systems::debug::mark_perf_input)
-                    .before(systems::debug::mark_perf_menus),
-            )
             .add_systems(Update, systems::debug::mark_perf_menus)
             .add_systems(
                 Update,

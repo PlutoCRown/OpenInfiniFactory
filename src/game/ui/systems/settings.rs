@@ -180,22 +180,24 @@ pub fn update_settings_dropdowns_ui(
 
 pub fn update_settings_tabs_ui(
     settings_tab: Res<SettingsTab>,
+    hover: Res<UiHoverState>,
     mut tab_buttons: Query<
         (
+            Entity,
             &SettingsAction,
-            &Interaction,
             &mut BackgroundColor,
             &mut BorderColor,
         ),
         With<Button>,
     >,
 ) {
-    for (action, interaction, mut background, mut border) in &mut tab_buttons {
+    for (entity, action, mut background, mut border) in &mut tab_buttons {
         let selected = matches!(
             (*action, *settings_tab),
             (SettingsAction::TabGameplay, SettingsTab::Gameplay)
                 | (SettingsAction::TabKeyBindings, SettingsTab::KeyBindings)
         );
+        let hovered = hover.entity == Some(entity);
         if selected {
             *background = Color::srgb(0.56, 0.56, 0.56).into();
             *border = pressed_border();
@@ -203,7 +205,7 @@ pub fn update_settings_tabs_ui(
             *action,
             SettingsAction::TabGameplay | SettingsAction::TabKeyBindings
         ) {
-            if *interaction == Interaction::Hovered {
+            if hovered {
                 *background = BUTTON_HOVER_BG.into();
                 *border = hover_border();
             } else {
@@ -211,19 +213,12 @@ pub fn update_settings_tabs_ui(
                 *border = raised_border();
             }
         } else {
-            match *interaction {
-                Interaction::Pressed => {
-                    *background = BUTTON_PRESSED_BG.into();
-                    *border = pressed_border();
-                }
-                Interaction::Hovered => {
-                    *background = BUTTON_HOVER_BG.into();
-                    *border = hover_border();
-                }
-                Interaction::None => {
-                    *background = BUTTON_BG.into();
-                    *border = raised_border();
-                }
+            if hovered {
+                *background = BUTTON_HOVER_BG.into();
+                *border = hover_border();
+            } else {
+                *background = BUTTON_BG.into();
+                *border = raised_border();
             }
         }
     }

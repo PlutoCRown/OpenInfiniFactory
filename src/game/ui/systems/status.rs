@@ -1,33 +1,3 @@
-pub fn update_button_hover_ui(
-    mut buttons: Query<
-        (&Interaction, &mut BackgroundColor, &mut BorderColor),
-        (
-            Changed<Interaction>,
-            With<Button>,
-            Without<InventorySlot>,
-            Without<SettingsAction>,
-            Without<SaveListAction>,
-        ),
-    >,
-) {
-    for (interaction, mut background, mut border) in &mut buttons {
-        match *interaction {
-            Interaction::Pressed => {
-                *background = BUTTON_PRESSED_BG.into();
-                *border = pressed_border();
-            }
-            Interaction::Hovered => {
-                *background = BUTTON_HOVER_BG.into();
-                *border = hover_border();
-            }
-            Interaction::None => {
-                *background = BUTTON_BG.into();
-                *border = raised_border();
-            }
-        }
-    }
-}
-
 fn pause_action_visible(
     save_state: &SaveState,
     solution_state: &SolutionState,

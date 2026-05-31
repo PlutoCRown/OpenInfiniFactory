@@ -3,16 +3,19 @@ pub fn update_save_list_ui(
     save_state: Res<SaveState>,
     solution_state: Res<SolutionState>,
     i18n: Res<I18n>,
+    hover: Res<UiHoverState>,
     mut texts: ParamSet<(
         Query<(&PanelText, &mut Text)>,
         Query<&mut Text, Without<PanelText>>,
     )>,
+    mut rows: Query<(&SaveListRow, &mut Node)>,
     mut slots: Query<
         (
+            Entity,
             &SaveListAction,
-            &Interaction,
             &Children,
             &mut BackgroundColor,
+            &mut BorderColor,
         ),
         With<Button>,
     >,
@@ -27,15 +30,23 @@ pub fn update_save_list_ui(
     }
 
     let puzzles = save_state.puzzles();
-    let solutions = save_state
-        .selected_puzzle
-        .as_deref()
-        .map(|puzzle| save_state.solutions_for_puzzle(puzzle))
-        .unwrap_or_default();
+    let solutions = save_state.selected_puzzle_solutions();
     let play_flow = solution_state.save_list_entry == WorldEntryMode::PlaySolution;
     let edit_flow = solution_state.save_list_entry == WorldEntryMode::EditPuzzle;
 
-    for (action, interaction, children, mut background) in &mut slots {
+    for (row, mut node) in &mut rows {
+        let visible = match *row {
+            SaveListRow::Puzzle(index) => puzzles.get(index).is_some(),
+            SaveListRow::Solution(index) => play_flow && solutions.get(index).is_some(),
+        };
+        node.display = if visible {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    for (entity, action, children, mut background, mut border) in &mut slots {
         let label = match *action {
             SaveListAction::LoadPuzzle(index) => puzzles
                 .get(index)
@@ -48,11 +59,11 @@ pub fn update_save_list_ui(
                         i18n.fmt("save.load_puzzle", &[("name", entry.name.clone())])
                     }
                 })
-                .unwrap_or_else(|| i18n.text("empty_slot")),
+                .unwrap_or_default(),
             SaveListAction::LoadSolution(index) => solutions
                 .get(index)
                 .map(|entry| i18n.fmt("save.load_solution", &[("name", entry.name.clone())]))
-                .unwrap_or_else(|| i18n.text("empty_slot")),
+                .unwrap_or_default(),
             SaveListAction::DeletePuzzle(_) | SaveListAction::DeleteSolution(_) => {
                 i18n.text("button.delete")
             }
@@ -78,7 +89,8 @@ pub fn update_save_list_ui(
                 _ => false,
             };
 
-        *background = if enabled_load && *interaction == Interaction::Hovered {
+        let hovered = enabled_load && hover.entity == Some(entity);
+        *background = if hovered {
             BUTTON_HOVER_BG.into()
         } else if enabled_load && selected_puzzle_button {
             Color::srgba(0.22, 0.35, 0.32, 0.96).into()
@@ -86,6 +98,15 @@ pub fn update_save_list_ui(
             BUTTON_BG.into()
         } else {
             Color::srgba(0.12, 0.12, 0.13, 0.82).into()
+        };
+        *border = if hovered {
+            hover_border()
+        } else if selected_puzzle_button {
+            pressed_border()
+        } else if enabled_load {
+            raised_border()
+        } else {
+            inset_border()
         };
 
         for child in children.iter() {

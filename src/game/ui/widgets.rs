@@ -1,15 +1,14 @@
 use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
-use bevy::ui_widgets::{Slider, SliderRange, SliderThumb, SliderValue, TrackClick};
 
 use super::components::{
-    default_button_size, default_font_size, inset_border, menu_button, raised_border,
+    default_button_size, default_font_size, full_width_button, inset_border, menu_button,
+    raised_border, slider_bundle, slider_fill, slider_knob, styled_button,
 };
 use super::types::{
     AreaKind, BlockEditAction, BlockPanelDropdown, BlockPanelDropdownLabel, BlockPanelDropdownList,
     ConfirmDialogAction, InventoryItem, InventorySlot, KeyBindingButton,
-    MenuAction, SaveListAction, ScrollContainer,
-    ScrollContent, SettingsAction, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList,
+    MenuAction, SettingsAction, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList,
     SettingsDropdownRoot, SettingsField, SettingsSliderFill, SettingsSliderKnob, SettingsText,
     SettingsTextKind, SettingsValueText, SlotArea, TeleportAction, UiActionLabel,
 };
@@ -23,10 +22,6 @@ fn label_text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bu
         },
         TextColor(color),
     )
-}
-
-fn styled_button(style: Node, border: impl Into<BorderColor>, background: Color) -> impl Bundle {
-    (Button, style, border.into(), BackgroundColor(background))
 }
 
 fn plain_node(style: Node) -> impl Bundle {
@@ -96,7 +91,7 @@ pub(super) fn spawn_menu_button(
     font_size: f32,
     action: MenuAction,
 ) {
-    spawn_localized_button(parent, height, font_size, action);
+    spawn_full_width_localized_button(parent, height, font_size, action);
 }
 
 pub(super) fn spawn_block_edit_button(parent: &mut ChildSpawnerCommands, action: BlockEditAction) {
@@ -105,35 +100,6 @@ pub(super) fn spawn_block_edit_button(parent: &mut ChildSpawnerCommands, action:
 
 pub(super) fn spawn_teleport_button(parent: &mut ChildSpawnerCommands, action: TeleportAction) {
     spawn_localized_button(parent, 36.0, 14.0, action);
-}
-
-pub(super) fn spawn_close_button<A>(parent: &mut ChildSpawnerCommands, action: A)
-where
-    A: Component + Copy + UiActionLabel,
-{
-    let key = action.label_key();
-    parent
-        .spawn((
-            styled_button(
-                Node {
-                    position_type: PositionType::Absolute,
-                    right: Val::Px(10.0),
-                    top: Val::Px(10.0),
-                    width: Val::Px(34.0),
-                    height: Val::Px(34.0),
-                    border: UiRect::all(Val::Px(2.0)),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },
-                raised_border(),
-                Color::srgb(0.255, 0.251, 0.251),
-            ),
-            action,
-        ))
-        .with_children(|button| {
-            button.spawn(label_text(key, 12.0, Color::WHITE));
-        });
 }
 
 pub(super) fn spawn_block_panel_dropdown<A>(
@@ -211,7 +177,7 @@ pub(super) fn spawn_confirm_dialog_button(
 ) {
     let key = action.label_key();
     parent
-        .spawn((menu_button(34.0), action))
+        .spawn((full_width_button(34.0), action))
         .with_children(|button| {
             button.spawn((
                 label_text(key, 15.0, Color::WHITE),
@@ -226,7 +192,7 @@ pub(super) fn spawn_localized_settings_button(
 ) {
     let is_binding = matches!(action, SettingsAction::Bind(_));
     let key = action.label_key();
-    let mut button = parent.spawn((menu_button(36.0), action));
+    let mut button = parent.spawn((full_width_button(36.0), action));
     if let SettingsAction::Bind(action) = action {
         button.insert(KeyBindingButton(action));
     }
@@ -282,59 +248,10 @@ pub(super) fn spawn_settings_tab(parent: &mut ChildSpawnerCommands, action: Sett
 
 pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, field: SettingsField) {
     parent
-        .spawn((
-            styled_button(
-                Node {
-                    width: Val::Px(360.0),
-                    height: Val::Px(default_button_size(22.0)),
-                    padding: UiRect::all(Val::Px(3.0)),
-                    border: UiRect::all(Val::Px(1.0)),
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                inset_border(),
-                Color::srgb(0.255, 0.251, 0.251),
-            ),
-            Slider {
-                track_click: TrackClick::Snap,
-            },
-            SliderValue(0.0),
-            SliderRange::new(0.0, 100.0),
-            SettingsAction::Field(field),
-        ))
+        .spawn(slider_bundle(SettingsAction::Field(field)))
         .with_children(|track| {
-            track.spawn((
-                (
-                    Node {
-                        width: Val::Percent(50.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.32, 0.62, 0.72)),
-                ),
-                SettingsSliderFill(field),
-                Pickable::IGNORE,
-            ));
-            track.spawn((
-                (
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Percent(50.0),
-                        top: Val::Px(3.0),
-                        bottom: Val::Px(3.0),
-                        width: Val::Px(6.0),
-                        margin: UiRect {
-                            left: Val::Px(-3.0),
-                            ..default()
-                        },
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.90, 0.96, 1.0)),
-                ),
-                SettingsSliderKnob(field),
-                SliderThumb,
-                Pickable::IGNORE,
-            ));
+            track.spawn((slider_fill(), SettingsSliderFill(field)));
+            track.spawn((slider_knob(), SettingsSliderKnob(field)));
         });
 }
 
@@ -357,6 +274,7 @@ pub(super) fn spawn_settings_slider_value(
 pub(super) fn spawn_settings_dropdown(
     parent: &mut ChildSpawnerCommands,
     dropdown: SettingsDropdown,
+    options: impl IntoIterator<Item = (String, SettingsAction)>,
 ) {
     parent
         .spawn((
@@ -412,33 +330,9 @@ pub(super) fn spawn_settings_dropdown(
                     ),
                     SettingsDropdownList(dropdown),
                 ))
-                .with_children(|list| match dropdown {
-                    SettingsDropdown::Language => {
-                        for language in crate::shared::i18n::Language::ALL {
-                            spawn_dropdown_option(
-                                list,
-                                language.native_name().to_string(),
-                                SettingsAction::SetLanguage(language),
-                            );
-                        }
-                    }
-                    SettingsDropdown::PlaceSelectionMode => {
-                        for mode in crate::shared::config::ConfigSelectionMode::ALL {
-                            spawn_localized_dropdown_option(
-                                list,
-                                mode.label_key(),
-                                SettingsAction::SetPlaceSelectionMode(mode),
-                            );
-                        }
-                    }
-                    SettingsDropdown::DeleteSelectionMode => {
-                        for mode in crate::shared::config::ConfigSelectionMode::ALL {
-                            spawn_localized_dropdown_option(
-                                list,
-                                mode.label_key(),
-                                SettingsAction::SetDeleteSelectionMode(mode),
-                            );
-                        }
+                .with_children(|list| {
+                    for (label, action) in options {
+                        spawn_dropdown_option(list, label, action);
                     }
                 });
         });
@@ -455,87 +349,6 @@ where
         });
 }
 
-fn spawn_localized_dropdown_option(
-    parent: &mut ChildSpawnerCommands,
-    key: &'static str,
-    action: SettingsAction,
-) {
-    parent
-        .spawn((menu_button(32.0), action))
-        .with_children(|button| {
-            button.spawn((
-                label_text(key, 13.0, Color::WHITE),
-                super::types::LocalizedText { key },
-            ));
-        });
-}
-
-pub(super) fn scroll_container(height: f32) -> (impl Bundle, ScrollContainer) {
-    (
-        (
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Px(height),
-                position_type: PositionType::Relative,
-                overflow: Overflow::clip_y(),
-                ..default()
-            },
-            BackgroundColor(Color::NONE),
-        ),
-        ScrollContainer {
-            offset: 0.0,
-            max_offset: 0.0,
-        },
-    )
-}
-
-pub(super) fn scroll_content() -> ScrollContent {
-    ScrollContent
-}
-
-pub(super) fn spawn_save_slot_button(parent: &mut ChildSpawnerCommands, action: SaveListAction) {
-    parent
-        .spawn((menu_button(34.0), action))
-        .with_children(|button| {
-            button.spawn(label_text("", 15.0, Color::WHITE));
-        });
-}
-
-pub(super) fn spawn_save_row_button(
-    parent: &mut ChildSpawnerCommands,
-    action: SaveListAction,
-    width: f32,
-) {
-    parent
-        .spawn((
-            styled_button(
-                Node {
-                    width: Val::Px(default_button_size(width)),
-                    min_width: Val::Px(default_button_size(width)),
-                    height: Val::Px(default_button_size(30.0)),
-                    border: UiRect::all(Val::Px(1.0)),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },
-                super::components::BUTTON_BORDER,
-                super::components::BUTTON_BG,
-            ),
-            action,
-        ))
-        .with_children(|button| {
-            button.spawn(label_text("", 13.0, Color::WHITE));
-        });
-}
-
-pub(super) fn spawn_save_back_button(parent: &mut ChildSpawnerCommands) {
-    parent
-        .spawn((menu_button(38.0), SaveListAction::Back))
-        .with_children(|button| {
-            button.spawn(label_text("", 16.0, Color::WHITE));
-        });
-}
-
 fn spawn_localized_button<'a, A>(
     parent: &'a mut ChildSpawnerCommands,
     height: f32,
@@ -547,6 +360,26 @@ where
 {
     let key = action.label_key();
     let mut entity = parent.spawn((menu_button(height), action));
+    entity.with_children(|button| {
+        button.spawn((
+            label_text(key, font_size, Color::WHITE),
+            super::types::LocalizedText { key },
+        ));
+    });
+    entity
+}
+
+fn spawn_full_width_localized_button<'a, A>(
+    parent: &'a mut ChildSpawnerCommands,
+    height: f32,
+    font_size: f32,
+    action: A,
+) -> EntityCommands<'a>
+where
+    A: Bundle + Copy + UiActionLabel,
+{
+    let key = action.label_key();
+    let mut entity = parent.spawn((full_width_button(height), action));
     entity.with_children(|button| {
         button.spawn((
             label_text(key, font_size, Color::WHITE),

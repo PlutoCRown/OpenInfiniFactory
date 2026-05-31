@@ -10,6 +10,7 @@ pub fn update_panel_visibility(
         Query<(&PanelVisibility, &mut Node)>,
         Query<(&MenuAction, &mut Node), With<Button>>,
         Query<(&UiPanelBinding, &mut Node)>,
+        Query<(&Node, &mut Visibility, &mut PanelPosition), With<PanelWindow>>,
     )>,
     confirm_dialog: Res<ConfirmDialogState>,
 ) {
@@ -39,6 +40,115 @@ pub fn update_panel_visibility(
     for (binding, mut style) in &mut nodes.p2() {
         style.display = display_for(active_panel == Some(binding.0));
     }
+
+    for (style, mut visibility, mut position) in &mut nodes.p3() {
+        if style.display == Display::None {
+            position.centered = false;
+            *visibility = Visibility::Hidden;
+        } else {
+            *visibility = Visibility::Visible;
+        }
+    }
+}
+
+pub fn panel_close_clicked(
+    mut click: On<Pointer<Click>>,
+    mut mode: ResMut<GameMode>,
+    mut ui_runtime: ResMut<UiRuntime>,
+    mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
+    mut open_settings_dropdown: ResMut<OpenSettingsDropdown>,
+    mut pending_key_bind: ResMut<PendingKeyBind>,
+    mut teleport_rename: ResMut<TeleportRenameState>,
+    mut drag: ResMut<PanelDragState>,
+    close_buttons: Query<(), With<PanelCloseButton>>,
+) {
+    if click.event.button != PointerButton::Primary || close_buttons.get(click.entity).is_err() {
+        return;
+    }
+    click.propagate(false);
+
+    if ui_runtime.is_settings_open() {
+        open_settings_dropdown.0 = None;
+        pending_key_bind.0 = None;
+    }
+    open_block_dropdown.0 = None;
+    teleport_rename.editing = None;
+    let return_mode = panel_close_return_mode(&ui_runtime);
+    ui_runtime.close_active();
+    if let Some(return_mode) = return_mode {
+        *mode = return_mode;
+    }
+    drag.clear();
+}
+
+pub fn panel_drag_started(
+    mut drag_start: On<Pointer<DragStart>>,
+    title_bars: Query<&ChildOf, With<PanelTitleBar>>,
+    panels: Query<&Node, With<PanelWindow>>,
+    mut drag: ResMut<PanelDragState>,
+) {
+    if drag_start.event.button != PointerButton::Primary {
+        return;
+    }
+    let Ok(panel) = title_bars.get(drag_start.entity) else {
+        return;
+    };
+    let panel_entity = panel.parent();
+    let Ok(style) = panels.get(panel_entity) else {
+        return;
+    };
+    drag_start.propagate(false);
+    drag.panel = Some(panel_entity);
+    drag.cursor = drag_start.pointer_location.position;
+    drag.panel_pos = panel_position(style);
+}
+
+pub fn panel_dragged(
+    mut drag_event: On<Pointer<Drag>>,
+    title_bars: Query<(), With<PanelTitleBar>>,
+    mut drag: ResMut<PanelDragState>,
+    mut panels: Query<(&mut Node, &mut PanelPosition), With<PanelWindow>>,
+) {
+    if drag_event.event.button != PointerButton::Primary
+        || title_bars.get(drag_event.entity).is_err()
+    {
+        return;
+    }
+    let Some(panel) = drag.panel else {
+        return;
+    };
+    let Ok((mut style, mut position)) = panels.get_mut(panel) else {
+        drag.clear();
+        return;
+    };
+    drag_event.propagate(false);
+    let next = drag.panel_pos + drag_event.event.distance;
+    style.left = Val::Px(next.x.max(10.0));
+    style.top = Val::Px(next.y.max(10.0));
+    style.right = Val::Auto;
+    style.bottom = Val::Auto;
+    style.margin = UiRect::ZERO;
+    position.dragged = true;
+}
+
+pub fn panel_drag_ended(
+    mut drag_end: On<Pointer<DragEnd>>,
+    title_bars: Query<(), With<PanelTitleBar>>,
+    mut drag: ResMut<PanelDragState>,
+) {
+    if drag_end.event.button != PointerButton::Primary || title_bars.get(drag_end.entity).is_err()
+    {
+        return;
+    }
+    drag_end.propagate(false);
+    drag.clear();
+}
+
+fn panel_close_return_mode(ui_runtime: &UiRuntime) -> Option<GameMode> {
+    ui_runtime.active().and_then(|session| match session.context {
+        UiPanelContext::ReturnTo(mode) => Some(mode),
+        _ => None,
+    })
 }
 
 fn active_block_has_panel(
@@ -78,6 +188,46 @@ fn display_for(visible: bool) -> Display {
         Display::Flex
     } else {
         Display::None
+    }
+}
+
+fn panel_position(style: &Node) -> Vec2 {
+    Vec2::new(px_or(style.left, 10.0), px_or(style.top, 10.0))
+}
+
+fn px_or(value: Val, fallback: f32) -> f32 {
+    match value {
+        Val::Px(value) => value,
+        _ => fallback,
+    }
+}
+
+pub fn center_new_panels(
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut panels: Query<(&mut Node, &ComputedNode, &mut PanelPosition, &mut Visibility), With<PanelWindow>>,
+) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let viewport = Vec2::new(window.width(), window.height());
+
+    for (mut style, node, mut position, mut visibility) in &mut panels {
+        if style.display == Display::None || position.dragged {
+            continue;
+        }
+        let size = node.size();
+        if size.x <= 0.0 || size.y <= 0.0 {
+            continue;
+        }
+        let left = ((viewport.x - size.x) * 0.5).max(10.0);
+        let top = ((viewport.y - size.y) * 0.5).max(10.0);
+        style.left = Val::Px(left);
+        style.top = Val::Px(top);
+        style.right = Val::Auto;
+        style.bottom = Val::Auto;
+        style.margin = UiRect::ZERO;
+        position.centered = true;
+        *visibility = Visibility::Visible;
     }
 }
 

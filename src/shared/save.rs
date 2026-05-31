@@ -21,6 +21,7 @@ pub struct SaveState {
     pub slots: Vec<String>,
     pub entries: Vec<SaveEntry>,
     pub selected_puzzle: Option<String>,
+    selected_puzzle_solutions: Vec<SaveEntry>,
 }
 
 impl SaveState {
@@ -31,6 +32,7 @@ impl SaveState {
             .iter()
             .map(|entry| entry.name.clone())
             .collect();
+        self.refresh_selected_puzzle_solutions();
     }
 
     pub fn puzzles(&self) -> Vec<&SaveEntry> {
@@ -40,13 +42,33 @@ impl SaveState {
             .collect()
     }
 
-    pub fn solutions_for_puzzle(&self, puzzle: &str) -> Vec<&SaveEntry> {
-        self.entries
-            .iter()
-            .filter(|entry| {
-                entry.kind == SaveKind::Solution && solution_matches_puzzle(&entry.name, puzzle)
+    pub fn select_puzzle(&mut self, puzzle: Option<String>) {
+        if self.selected_puzzle == puzzle {
+            return;
+        }
+        self.selected_puzzle = puzzle;
+        self.refresh_selected_puzzle_solutions();
+    }
+
+    pub fn selected_puzzle_solutions(&self) -> &[SaveEntry] {
+        &self.selected_puzzle_solutions
+    }
+
+    fn refresh_selected_puzzle_solutions(&mut self) {
+        self.selected_puzzle_solutions = self
+            .selected_puzzle
+            .as_deref()
+            .map(|puzzle| {
+                self.entries
+                    .iter()
+                    .filter(|entry| {
+                        entry.kind == SaveKind::Solution
+                            && solution_matches_puzzle(&entry.name, puzzle)
+                    })
+                    .cloned()
+                    .collect()
             })
-            .collect()
+            .unwrap_or_default();
     }
 }
 
