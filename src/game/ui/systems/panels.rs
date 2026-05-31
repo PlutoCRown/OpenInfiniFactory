@@ -112,7 +112,6 @@ pub fn panel_drag_started(
 pub fn panel_dragged(
     mut drag_event: On<Pointer<Drag>>,
     title_bars: Query<(), With<PanelTitleBar>>,
-    windows: Query<&Window, With<PrimaryWindow>>,
     ui_scale: Res<UiScale>,
     mut drag: ResMut<PanelDragState>,
     mut panels: Query<(&mut Node, &mut PanelPosition), With<PanelWindow>>,
@@ -131,7 +130,7 @@ pub fn panel_dragged(
     };
     drag_event.propagate(false);
     let next = drag.panel_pos
-        + screen_to_ui_delta(drag_event.event.distance, windows.single().ok(), ui_scale.0);
+        + screen_to_ui_delta(drag_event.pointer_location.position - drag.cursor, ui_scale.0);
     style.left = Val::Px(next.x.max(10.0));
     style.top = Val::Px(next.y.max(10.0));
     style.right = Val::Auto;
@@ -212,9 +211,8 @@ fn px_or(value: Val, fallback: f32) -> f32 {
     }
 }
 
-fn screen_to_ui_delta(delta: Vec2, window: Option<&Window>, ui_scale: f32) -> Vec2 {
-    let scale = window.map(Window::scale_factor).unwrap_or(1.0) / ui_scale.max(0.01);
-    delta * scale
+fn screen_to_ui_delta(delta: Vec2, ui_scale: f32) -> Vec2 {
+    delta / ui_scale.max(0.01)
 }
 
 pub fn center_new_panels(
