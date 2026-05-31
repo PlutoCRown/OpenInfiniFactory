@@ -15,7 +15,7 @@
 | S02 | 按方块维度整理行为文档 | D2 | R1 | main | docs | done |
 | S03 | 修复确认返回主菜单弹窗宽度 | D1 | R1 | main | ui-a | done |
 | S04 | 修复菜单标题拖动比例问题 | D2 | R2 | main | ui-a | done |
-| S05 | 方块放置目标面高亮 | D2 | R2 | main | render-a | todo |
+| S05 | 方块放置目标面高亮 | D2 | R2 | main | render-a | done |
 | S06 | 修复定制模型方块半透明预览 | D2 | R2 | main | render-a | todo |
 | S07 | 优化 Puzzle / Solution 选择界面样式 | D3 | R2 | branch: `ui/save-list-responsive` | ui-b | todo |
 | S08 | 扩展 P 模式结构渲染 | D3 | R3 | branch: `debug/structure-rendering` | debug-a | todo |

@@ -118,9 +118,10 @@ pub fn setup_scene(
     let render_assets = WorldRenderAssets::new(&mut meshes, &mut materials, &mut images);
     commands.insert_resource(render_assets);
 
-    let marker_mesh = meshes.add(Cuboid::new(1.04, 1.04, 1.04));
+    let marker_mesh = meshes.add(Cuboid::new(0.92, 0.018, 0.92));
     let marker_material = materials.add(StandardMaterial {
-        base_color: Color::srgba(1.0, 1.0, 1.0, 0.16),
+        base_color: Color::srgba(0.78, 0.96, 1.0, 0.46),
+        emissive: Color::srgb(0.04, 0.22, 0.26).into(),
         alpha_mode: AlphaMode::Blend,
         unlit: true,
         ..default()

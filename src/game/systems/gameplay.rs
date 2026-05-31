@@ -1095,7 +1095,7 @@ pub fn update_hover(
         &world,
     );
 
-    let Ok((_, mut marker_visibility, _)) = marker.single_mut() else {
+    let Ok((mut marker_transform, mut marker_visibility, _)) = marker.single_mut() else {
         return;
     };
     *marker_visibility = Visibility::Hidden;
@@ -1113,6 +1113,11 @@ pub fn update_hover(
         hover_bounds.bounds = None;
     }
 
+    if let Some(target) = placement.target {
+        *marker_transform = hover_face_transform(target.pos, target.normal);
+        *marker_visibility = Visibility::Visible;
+    }
+
     let Ok((_, mut preview_visibility, _)) = preview.single_mut() else {
         return;
     };
@@ -1120,6 +1125,22 @@ pub fn update_hover(
     let _ = (inventory, builder_mode, player);
     let _ = &mut materials;
     *preview_visibility = Visibility::Hidden;
+}
+
+fn hover_face_transform(pos: IVec3, normal: IVec3) -> Transform {
+    let normal_vec = normal.as_vec3();
+    let rotation = if normal.x != 0 {
+        Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)
+    } else if normal.z != 0 {
+        Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)
+    } else {
+        Quat::IDENTITY
+    };
+    Transform {
+        translation: grid_to_world(pos) + normal_vec * 0.514,
+        rotation,
+        ..default()
+    }
 }
 
 fn hover_structure_bounds(
