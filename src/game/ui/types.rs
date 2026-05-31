@@ -104,9 +104,6 @@ pub struct UiPanelBinding(pub UiPanelId);
 pub struct ModalScrim;
 
 #[derive(Component)]
-pub struct HotbarText;
-
-#[derive(Component)]
 pub struct InGameHudStyle;
 
 #[derive(Component)]
@@ -128,9 +125,6 @@ pub struct SettingsPanel;
 pub struct GeneratorPanel;
 
 #[derive(Component)]
-pub struct GeneratorPeriodText;
-
-#[derive(Component)]
 pub struct GoalPanel;
 
 #[derive(Component)]
@@ -145,8 +139,14 @@ pub struct ConverterInputRow;
 #[derive(Component)]
 pub struct TeleportPanel;
 
-#[derive(Component)]
-pub struct TeleportNameText;
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct BlockPanelText(pub BlockPanelTextKind);
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum BlockPanelTextKind {
+    GeneratorPeriod,
+    TeleportName,
+}
 
 #[derive(Resource, Default)]
 pub struct OpenBlockPanelDropdown(pub Option<BlockPanelDropdown>);
@@ -156,9 +156,6 @@ pub struct SettingsGameplayGroup;
 
 #[derive(Component)]
 pub struct SettingsKeyBindingsGroup;
-
-#[derive(Component)]
-pub struct KeyBindingLabel;
 
 #[derive(Component, Clone, Copy)]
 pub struct KeyBindingButton(pub ConfigAction);
@@ -173,25 +170,15 @@ pub struct SaveListPanel;
 pub struct SaveListTitle;
 
 #[derive(Component)]
-pub struct SaveListLabel;
-
-#[derive(Component)]
-pub struct CurrentSaveText;
-
-#[derive(Component)]
 pub struct Crosshair;
 
-#[derive(Component)]
-pub struct FovText;
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsText(pub SettingsTextKind);
 
-#[derive(Component)]
-pub struct UiScaleText;
-
-#[derive(Component)]
-pub struct PlaceSelectionModeText;
-
-#[derive(Component)]
-pub struct DeleteSelectionModeText;
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum SettingsTextKind {
+    KeyBinding,
+}
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct SettingsValueText(pub SettingsValue);
@@ -259,11 +246,16 @@ pub enum SettingsDropdown {
     DeleteSelectionMode,
 }
 
-#[derive(Component)]
-pub struct SimulationText;
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct StatusText(pub StatusTextKind);
 
-#[derive(Component)]
-pub struct SimulationStatusText;
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum StatusTextKind {
+    Hotbar,
+    CurrentSave,
+    Simulation,
+    SimulationOverlay,
+}
 
 #[derive(Component)]
 pub struct LocalizedText {
@@ -365,12 +357,6 @@ pub struct ConfirmDialogTitle;
 
 #[derive(Component)]
 pub struct ConfirmDialogMessage;
-
-#[derive(Component)]
-pub struct ConfirmDialogPrimaryLabel;
-
-#[derive(Component)]
-pub struct ConfirmDialogSecondaryLabel;
 
 #[derive(Component, Clone, Copy)]
 pub enum SettingsAction {
@@ -542,16 +528,7 @@ impl Default for SettingsTab {
 }
 
 #[derive(Component)]
-pub(crate) struct SlotLabel;
-
-#[derive(Component)]
-pub(crate) struct SlotIcon;
-
-#[derive(Component)]
 pub(crate) struct InventoryTooltip;
-
-#[derive(Component)]
-pub(crate) struct InventoryTooltipText;
 
 #[derive(Component)]
 pub(crate) struct CarriedLabel;

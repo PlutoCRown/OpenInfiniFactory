@@ -10,16 +10,15 @@ use super::components::{
 };
 use super::theme::{absolute_text_bundle, panel_bundle, STATUS_TEXT, TITLE_TEXT};
 use super::types::{
-    BackpackPanel, BlockPanelDropdown, CarriedIcon, CarriedLabel, ConfirmDialogAction,
-    ConfirmDialogMessage, ConfirmDialogPanel, ConfirmDialogPrimaryLabel,
-    ConfirmDialogSecondaryLabel, ConfirmDialogTitle, ConverterAction, ConverterInputRow,
-    ConverterPanel, Crosshair, CurrentSaveText, GeneratorAction, GeneratorPanel,
-    GeneratorPeriodText, GoalAction, GoalPanel, HotbarText, InGameHudStyle, InGameHudVisibility,
-    InventoryTitle, InventoryTooltip, InventoryTooltipText, LabelerAction, LabelerPanel,
+    BackpackPanel, BlockPanelDropdown, BlockPanelText, BlockPanelTextKind, CarriedIcon, CarriedLabel, ConfirmDialogAction,
+    ConfirmDialogMessage, ConfirmDialogPanel, ConfirmDialogTitle, ConverterAction, ConverterInputRow,
+    ConverterPanel, Crosshair, GeneratorAction, GeneratorPanel,
+    GoalAction, GoalPanel, InGameHudStyle, InGameHudVisibility,
+    InventoryTitle, InventoryTooltip, LabelerAction, LabelerPanel,
     MainMenuAction, MainMenuPanel, ModalScrim, PauseAction, PausePanel, SaveListAction,
     SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdown, SettingsDropdownRow,
     SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider,
-    SimulationStatusText, SimulationText, SlotArea, TeleportAction, TeleportNameText,
+    SlotArea, StatusText, StatusTextKind, TeleportAction,
     TeleportPanel, UiPanelBinding, UiPanelId, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::widgets::{
@@ -83,7 +82,10 @@ fn spawn_generator_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         spawn_close_button(panel, GeneratorAction::Close);
         spawn_panel_row(panel, i18n, "panel.period", |row| {
             spawn_generator_button(row, GeneratorAction::PeriodDown);
-            row.spawn((text("", 18.0, Color::WHITE), GeneratorPeriodText));
+            row.spawn((
+                text("", 18.0, Color::WHITE),
+                BlockPanelText(BlockPanelTextKind::GeneratorPeriod),
+            ));
             spawn_generator_button(row, GeneratorAction::PeriodUp);
         });
         spawn_panel_row(panel, i18n, "panel.material", |row| {
@@ -132,7 +134,10 @@ fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         spawn_close_button(panel, TeleportAction::Close);
         spawn_panel_row(panel, i18n, "panel.name", |row| {
             spawn_teleport_button(row, TeleportAction::Rename);
-            row.spawn((text("", 18.0, Color::WHITE), TeleportNameText));
+            row.spawn((
+                text("", 18.0, Color::WHITE),
+                BlockPanelText(BlockPanelTextKind::TeleportName),
+            ));
         });
         spawn_panel_row(panel, i18n, "panel.pair", |row| {
             spawn_block_panel_dropdown(
@@ -270,7 +275,7 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
             Some(Val::Px(62.0)),
             None,
         ),
-        HotbarText,
+        StatusText(StatusTextKind::Hotbar),
         InGameHudVisibility,
     ));
     root.spawn((
@@ -283,7 +288,7 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
             Some(Val::Px(18.0)),
             None,
         ),
-        CurrentSaveText,
+        StatusText(StatusTextKind::CurrentSave),
         InGameHudVisibility,
     ));
     root.spawn((
@@ -296,7 +301,7 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
             Some(Val::Px(112.0)),
             None,
         ),
-        SimulationText,
+        StatusText(StatusTextKind::Simulation),
         InGameHudVisibility,
     ));
     root.spawn((
@@ -309,7 +314,7 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
             None,
             Some(Val::Px(18.0)),
         ),
-        SimulationStatusText,
+        StatusText(StatusTextKind::SimulationOverlay),
         InGameHudVisibility,
     ));
 }
@@ -402,17 +407,9 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
             ConfirmDialogMessage,
         ));
         panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-            spawn_confirm_dialog_button(
-                row,
-                ConfirmDialogAction::Primary,
-                ConfirmDialogPrimaryLabel,
-            );
-            spawn_confirm_dialog_button(
-                row,
-                ConfirmDialogAction::Secondary,
-                ConfirmDialogSecondaryLabel,
-            );
-            spawn_confirm_dialog_button(row, ConfirmDialogAction::Cancel, ());
+            spawn_confirm_dialog_button(row, ConfirmDialogAction::Primary);
+            spawn_confirm_dialog_button(row, ConfirmDialogAction::Secondary);
+            spawn_confirm_dialog_button(row, ConfirmDialogAction::Cancel);
         });
     });
 }
@@ -765,7 +762,6 @@ fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
         tooltip.spawn((
             text("", 14.0, Color::WHITE),
             TextLayout::new_with_justify(Justify::Center),
-            InventoryTooltipText,
         ));
     });
 }

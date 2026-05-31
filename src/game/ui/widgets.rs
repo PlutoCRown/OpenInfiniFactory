@@ -8,10 +8,10 @@ use super::components::{
 use super::types::{
     AreaKind, BlockPanelDropdown, BlockPanelDropdownLabel, BlockPanelDropdownList,
     ConfirmDialogAction, GeneratorAction, InventoryItem, InventorySlot, KeyBindingButton,
-    KeyBindingLabel, MainMenuAction, PauseAction, SaveListAction, SaveListLabel, ScrollContainer,
+    MainMenuAction, PauseAction, SaveListAction, ScrollContainer,
     ScrollContent, SettingsAction, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList,
     SettingsDropdownRoot, SettingsSlider, SettingsSliderFill, SettingsSliderKnob, SettingsValue,
-    SettingsValueText, SlotArea, SlotIcon, SlotLabel, TeleportAction, UiActionLabel,
+    SettingsText, SettingsTextKind, SettingsValueText, SlotArea, TeleportAction, UiActionLabel,
 };
 
 fn label_text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bundle {
@@ -78,7 +78,6 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
                     },
                     ..default()
                 },
-                SlotIcon,
             ));
             slot.spawn((
                 label_text("", 12.0, Color::WHITE),
@@ -87,7 +86,6 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
                     margin: UiRect::all(Val::Px(2.0)),
                     ..default()
                 },
-                SlotLabel,
             ));
         });
 }
@@ -205,7 +203,6 @@ pub(super) fn spawn_block_panel_dropdown<A>(
 pub(super) fn spawn_confirm_dialog_button(
     parent: &mut ChildSpawnerCommands,
     action: ConfirmDialogAction,
-    label_marker: impl Bundle,
 ) {
     let key = action.label_key();
     parent
@@ -214,7 +211,6 @@ pub(super) fn spawn_confirm_dialog_button(
             button.spawn((
                 label_text(key, 15.0, Color::WHITE),
                 super::types::LocalizedText { key },
-                label_marker,
             ));
         });
 }
@@ -235,7 +231,7 @@ pub(super) fn spawn_localized_settings_button(
             super::types::LocalizedText { key },
         ));
         if is_binding {
-            label_entity.insert(KeyBindingLabel);
+            label_entity.insert(SettingsText(SettingsTextKind::KeyBinding));
         }
     });
 }
@@ -519,7 +515,7 @@ pub(super) fn spawn_save_slot_button(parent: &mut ChildSpawnerCommands, action: 
     parent
         .spawn((menu_button(34.0), action))
         .with_children(|button| {
-            button.spawn((label_text("", 15.0, Color::WHITE), SaveListLabel));
+            button.spawn(label_text("", 15.0, Color::WHITE));
         });
 }
 
@@ -546,7 +542,7 @@ pub(super) fn spawn_save_row_button(
             action,
         ))
         .with_children(|button| {
-            button.spawn((label_text("", 13.0, Color::WHITE), SaveListLabel));
+            button.spawn(label_text("", 13.0, Color::WHITE));
         });
 }
 
@@ -554,7 +550,7 @@ pub(super) fn spawn_save_back_button(parent: &mut ChildSpawnerCommands) {
     parent
         .spawn((menu_button(38.0), SaveListAction::Back))
         .with_children(|button| {
-            button.spawn((label_text("", 16.0, Color::WHITE), SaveListLabel));
+            button.spawn(label_text("", 16.0, Color::WHITE));
         });
 }
 
