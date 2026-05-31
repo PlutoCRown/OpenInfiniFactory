@@ -1,6 +1,6 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, Facing, FactoryBlock,
-    MarkerBehavior, MaterialDestroyer, ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, Facing, MarkerBehavior,
+    MaterialDestroyer, ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior,
     WireConnectorBehavior,
 };
 
@@ -74,5 +74,3 @@ impl Block for DrillBlock {
         Some(BlockKind::Laser)
     }
 }
-
-impl FactoryBlock for DrillBlock {}

@@ -5,9 +5,10 @@ use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
 use crate::game::world::blocks::{
-    BlockKind, BlockShape, ModelMaterial, ModelMesh, StampColor, ALL_BLOCKS, BLOCK_SIZE,
+    all_blocks, BlockKind, BlockShape, BlockTexture, ModelMaterial, ModelMesh, StampColor,
+    BLOCK_SIZE,
 };
-use crate::game::world::procedural_textures::{block_texture, ProceduralTexture};
+use crate::game::world::procedural_textures::block_texture;
 
 #[derive(Resource, Clone)]
 pub struct WorldRenderAssets {
@@ -65,73 +66,56 @@ impl WorldRenderAssets {
         materials: &mut Assets<StandardMaterial>,
         images: &mut Assets<Image>,
     ) -> Self {
-        let material_texture = images.add(block_texture(ProceduralTexture::Material));
-        let iron_texture = images.add(block_texture(ProceduralTexture::IronMaterial));
-        let copper_texture = images.add(block_texture(ProceduralTexture::CopperMaterial));
-        let platform_texture = images.add(block_texture(ProceduralTexture::Platform));
-        let stone_texture = images.add(block_texture(ProceduralTexture::Stone));
-        let wood_texture = images.add(block_texture(ProceduralTexture::Wood));
-        let bordered_wood_texture = images.add(block_texture(ProceduralTexture::BorderedWood));
-        let textures = [
-            (BlockKind::Platform, platform_texture.clone()),
-            (BlockKind::Material, material_texture.clone()),
-            (BlockKind::IronMaterial, iron_texture.clone()),
-            (BlockKind::CopperMaterial, copper_texture.clone()),
-        ];
-        let block_materials = ALL_BLOCKS
+        let block_textures: HashMap<_, _> = all_blocks()
+            .into_iter()
+            .filter_map(|kind| {
+                kind.definition()
+                    .texture()
+                    .map(|texture| (kind, images.add(block_texture(texture))))
+            })
+            .collect();
+        let platform_texture = block_textures
+            .get(&BlockKind::Platform)
+            .expect("platform defines a texture")
+            .clone();
+        let stone_texture = block_textures
+            .get(&BlockKind::Stone)
+            .expect("stone defines a texture")
+            .clone();
+        let wood_texture = block_textures
+            .get(&BlockKind::Planks)
+            .expect("planks define a texture")
+            .clone();
+        let bordered_wood_texture = images.add(block_texture(BlockTexture::BorderedWood));
+        let block_materials = all_blocks()
             .into_iter()
             .map(|kind| {
-                let texture = textures.iter().find_map(|(texture_kind, texture)| {
-                    (*texture_kind == kind).then_some(texture.clone())
-                });
+                let texture = block_textures.get(&kind).cloned();
                 let material = texture
                     .map(|texture| textured_block_material(kind, texture))
                     .unwrap_or_else(|| block_material(kind));
                 (kind, materials.add(material))
             })
             .collect();
-        let preview_materials = ALL_BLOCKS
+        let preview_materials = all_blocks()
             .into_iter()
             .map(|kind| {
-                let texture = textures.iter().find_map(|(texture_kind, texture)| {
-                    (*texture_kind == kind).then_some(texture.clone())
-                });
+                let texture = block_textures.get(&kind).cloned();
                 (kind, materials.add(preview_block_material(kind, texture)))
             })
             .collect();
-        let scene_textures = [
-            (
-                BlockKind::Grass,
-                images.add(block_texture(ProceduralTexture::Grass)),
-            ),
-            (BlockKind::Stone, stone_texture.clone()),
-            (
-                BlockKind::Dirt,
-                images.add(block_texture(ProceduralTexture::Dirt)),
-            ),
-            (BlockKind::Planks, wood_texture.clone()),
-        ];
-        let scene_block_materials = [
-            (
-                BlockKind::Grass,
-                textured_scene_material(Color::srgb(0.28, 0.55, 0.20), scene_textures[0].1.clone()),
-            ),
-            (
-                BlockKind::Stone,
-                textured_scene_material(Color::srgb(0.42, 0.43, 0.42), scene_textures[1].1.clone()),
-            ),
-            (
-                BlockKind::Dirt,
-                textured_scene_material(Color::srgb(0.34, 0.22, 0.13), scene_textures[2].1.clone()),
-            ),
-            (
-                BlockKind::Planks,
-                textured_scene_material(Color::srgb(0.54, 0.32, 0.13), scene_textures[3].1.clone()),
-            ),
-        ]
-        .into_iter()
-        .map(|(kind, material)| (kind, materials.add(material)))
-        .collect();
+        let scene_block_materials = all_blocks()
+            .into_iter()
+            .filter(|kind| kind.is_scene())
+            .filter_map(|kind| {
+                block_textures.get(&kind).map(|texture| {
+                    (
+                        kind,
+                        materials.add(textured_scene_material(kind.material(), texture.clone())),
+                    )
+                })
+            })
+            .collect();
         let face_mark_materials = StampColor::ALL
             .into_iter()
             .map(|color| {

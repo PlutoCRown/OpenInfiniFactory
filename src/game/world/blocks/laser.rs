@@ -1,7 +1,6 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, FactoryBlock,
-    MaterialDestroyer, ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior,
-    WireConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, MaterialDestroyer,
+    ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior, WireConnectorBehavior,
 };
 
 const MODEL: &[BlockModelPart] = &[
@@ -68,5 +67,3 @@ impl Block for LaserBlock {
         Some(BlockKind::Drill)
     }
 }
-
-impl FactoryBlock for LaserBlock {}

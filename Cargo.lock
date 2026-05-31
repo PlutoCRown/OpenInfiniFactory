@@ -3754,6 +3754,7 @@ name = "open_infinifactory"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "inventory",
  "ron 0.8.1",
  "serde",
  "serde_json",

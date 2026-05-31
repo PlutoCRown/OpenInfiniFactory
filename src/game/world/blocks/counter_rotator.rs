@@ -1,6 +1,6 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, FactoryBlock,
-    ModelMaterial, ModelMesh, MovementRule,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial, ModelMesh,
+    MovementRule,
 };
 
 const MODEL: &[BlockModelPart] = &[
@@ -56,5 +56,3 @@ impl Block for CounterRotatorBlock {
         Some(BlockKind::Rotator)
     }
 }
-
-impl FactoryBlock for CounterRotatorBlock {}

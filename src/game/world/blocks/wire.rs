@@ -1,6 +1,5 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, FactoryBlock, RenderBehavior, SignalBehavior,
-    WireConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, RenderBehavior, SignalBehavior, WireConnectorBehavior,
 };
 
 pub struct WireBlock;
@@ -34,5 +33,3 @@ impl Block for WireBlock {
         }
     }
 }
-
-impl FactoryBlock for WireBlock {}

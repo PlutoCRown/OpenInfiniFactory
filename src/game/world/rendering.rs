@@ -16,7 +16,7 @@ use crate::game::world::animation::{
     BlockAnimationKind, PusherAnimation, WeldSpark,
 };
 use crate::game::world::blocks::{
-    BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior, EDIT_BLOCKS,
+    edit_blocks, BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
     PLAY_BLOCKS,
 };
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
@@ -226,7 +226,7 @@ pub fn setup_block_icons(
 
 fn block_icon_kinds() -> Vec<BlockKind> {
     let mut kinds = Vec::new();
-    for kind in EDIT_BLOCKS.into_iter().chain(PLAY_BLOCKS).chain([
+    for kind in edit_blocks().into_iter().chain(PLAY_BLOCKS).chain([
         BlockKind::Material,
         BlockKind::IronMaterial,
         BlockKind::CopperMaterial,

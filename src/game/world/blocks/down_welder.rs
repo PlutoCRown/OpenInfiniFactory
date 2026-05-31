@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, Facing, FactoryBlock, MarkerBehavior,
-    RenderBehavior, WeldConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, Facing, MarkerBehavior, RenderBehavior,
+    WeldConnectorBehavior,
 };
 
 const MODEL: &[super::BlockModelPart] = &[];
@@ -48,5 +48,3 @@ impl Block for DownWelderBlock {
         Some(BlockKind::Welder)
     }
 }
-
-impl FactoryBlock for DownWelderBlock {}

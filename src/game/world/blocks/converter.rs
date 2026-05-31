@@ -1,6 +1,6 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockEditContext, BlockKind, BlockModel, BlockModelPart, EditableBlock,
-    ModelMaterial, ModelMesh, SystemBlock,
+    rgb, Block, BlockDefinition, BlockEditContext, BlockKind, BlockModel, BlockModelPart,
+    EditableBlock, ModelMaterial, ModelMesh,
 };
 use crate::game::ui::{BlockEditAction, BlockPanelDropdown, UiPanelId};
 use crate::game::world::grid::{BlockSettings, ConverterMode, ConverterSettings};
@@ -53,8 +53,6 @@ impl Block for ConverterBlock {
         BlockModel::Parts(MODEL)
     }
 }
-
-impl SystemBlock for ConverterBlock {}
 impl EditableBlock for ConverterBlock {
     fn ui_panel(&self) -> Option<UiPanelId> {
         Some(UiPanelId::Converter)

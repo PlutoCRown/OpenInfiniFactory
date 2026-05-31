@@ -1,6 +1,6 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, FactoryBlock,
-    ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior, WireConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial, ModelMesh,
+    RenderBehavior, SignalBehavior, WireConnectorBehavior,
 };
 
 const MODEL: &[BlockModelPart] = &[
@@ -56,5 +56,3 @@ impl Block for DetectorBlock {
         Some(BlockKind::DownDetector)
     }
 }
-
-impl FactoryBlock for DetectorBlock {}

@@ -48,10 +48,12 @@ pub fn update_status_ui(
     save_state: Res<SaveState>,
     config: Res<GameConfig>,
     i18n: Res<I18n>,
-    mut status_texts: Query<(&StatusText, &mut Text)>,
-    mut panel_texts: Query<(&PanelText, &mut Text)>,
+    mut texts: ParamSet<(
+        Query<(&StatusText, &mut Text)>,
+        Query<(&PanelText, &mut Text)>,
+    )>,
 ) {
-    for (status, mut text) in &mut status_texts {
+    for (status, mut text) in &mut texts.p0() {
         text.0 = status_text_value(
             status.0,
             &placement,
@@ -64,7 +66,7 @@ pub fn update_status_ui(
         );
     }
 
-    for (panel_text, mut text) in &mut panel_texts {
+    for (panel_text, mut text) in &mut texts.p1() {
         if panel_text.0 == PanelTextKind::InventoryTitle {
             text.0 = i18n.fmt(
                 "inventory.title",

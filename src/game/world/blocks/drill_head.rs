@@ -1,4 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, BlockModel, MaterialDestroyer, SystemBlock};
+use super::{rgb, Block, BlockDefinition, BlockKind, BlockModel, MaterialDestroyer};
 
 pub struct DrillHeadBlock;
 
@@ -30,5 +30,3 @@ impl Block for DrillHeadBlock {
         BlockModel::PartsOnly(&[])
     }
 }
-
-impl SystemBlock for DrillHeadBlock {}

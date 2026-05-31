@@ -13,11 +13,13 @@ pub fn update_inventory_slots(
         ),
         With<Button>,
     >,
-    mut labels: Query<&mut Text, Without<CarriedItemPreview>>,
+    mut texts: ParamSet<(
+        Query<&mut Text, Without<CarriedItemPreview>>,
+        Query<&mut Text, Without<CarriedItemPreview>>,
+    )>,
     mut icons: Query<&mut ImageNode>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut tooltip: Query<(&mut Node, &Children), With<InventoryTooltip>>,
-    mut tooltip_text: Query<&mut Text, Without<CarriedItemPreview>>,
 ) {
     let mut hovered_item = None;
     for (slot, interaction, children, mut background, mut border) in &mut slot_query {
@@ -62,7 +64,7 @@ pub fn update_inventory_slots(
         };
 
         for child in children.iter() {
-            if let Ok(mut text) = labels.get_mut(child) {
+            if let Ok(mut text) = texts.p0().get_mut(child) {
                 text.0 = if has_icon {
                     String::new()
                 } else {
@@ -96,7 +98,7 @@ pub fn update_inventory_slots(
     tooltip_node.left = Val::Px(cursor.x + 16.0);
     tooltip_node.top = Val::Px(cursor.y + 16.0);
     for child in tooltip_children.iter() {
-        if let Ok(mut text) = tooltip_text.get_mut(child) {
+        if let Ok(mut text) = texts.p1().get_mut(child) {
             text.0 = i18n.text(item.name_key());
         }
     }

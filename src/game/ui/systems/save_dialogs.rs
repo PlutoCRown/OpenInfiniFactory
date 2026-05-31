@@ -3,8 +3,10 @@ pub fn update_save_list_ui(
     save_state: Res<SaveState>,
     solution_state: Res<SolutionState>,
     i18n: Res<I18n>,
-    mut panel_texts: Query<(&PanelText, &mut Text)>,
-    mut labels: Query<&mut Text, Without<PanelText>>,
+    mut texts: ParamSet<(
+        Query<(&PanelText, &mut Text)>,
+        Query<&mut Text, Without<PanelText>>,
+    )>,
     mut slots: Query<
         (
             &SaveListAction,
@@ -15,7 +17,7 @@ pub fn update_save_list_ui(
         With<Button>,
     >,
 ) {
-    for (panel_text, mut text) in &mut panel_texts {
+    for (panel_text, mut text) in &mut texts.p0() {
         if panel_text.0 == PanelTextKind::SaveListTitle {
             text.0 = match *mode {
                 GameMode::SaveListMain => i18n.text("save.title.main"),
@@ -87,7 +89,7 @@ pub fn update_save_list_ui(
         };
 
         for child in children.iter() {
-            if let Ok(mut text) = labels.get_mut(child) {
+            if let Ok(mut text) = texts.p1().get_mut(child) {
                 text.0 = label.clone();
             }
         }
@@ -97,9 +99,11 @@ pub fn update_save_list_ui(
 pub fn update_confirm_dialog_ui(
     dialog: Res<ConfirmDialogState>,
     i18n: Res<I18n>,
-    mut panel_texts: Query<(&PanelText, &mut Text)>,
+    mut texts: ParamSet<(
+        Query<(&PanelText, &mut Text)>,
+        Query<&mut Text, Without<PanelText>>,
+    )>,
     mut action_buttons: Query<(&ConfirmDialogAction, &mut Node, &Children), With<Button>>,
-    mut button_labels: Query<&mut Text, Without<PanelText>>,
 ) {
     if !dialog.is_changed() && !i18n.is_changed() {
         return;
@@ -108,7 +112,7 @@ pub fn update_confirm_dialog_ui(
     let Some(kind) = dialog.kind.as_ref() else {
         return;
     };
-    for (panel_text, mut text) in &mut panel_texts {
+    for (panel_text, mut text) in &mut texts.p0() {
         text.0 = match panel_text.0 {
             PanelTextKind::ConfirmTitle => i18n.text("confirm.title"),
             PanelTextKind::ConfirmMessage => match kind {
@@ -140,7 +144,7 @@ pub fn update_confirm_dialog_ui(
         }
         let label = confirm_dialog_button_label(kind, *action, &i18n);
         for child in children.iter() {
-            if let Ok(mut text) = button_labels.get_mut(child) {
+            if let Ok(mut text) = texts.p1().get_mut(child) {
                 text.0 = label.clone();
             }
         }

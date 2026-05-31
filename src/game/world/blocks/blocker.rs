@@ -1,7 +1,6 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, Facing, FactoryBlock,
-    MarkerBehavior, ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior,
-    WireConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, Facing, MarkerBehavior,
+    ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior, WireConnectorBehavior,
 };
 
 const MODEL: &[BlockModelPart] = &[
@@ -68,5 +67,3 @@ impl Block for BlockerBlock {
         Some(BlockKind::Pusher)
     }
 }
-
-impl FactoryBlock for BlockerBlock {}

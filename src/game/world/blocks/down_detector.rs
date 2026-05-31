@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, FactoryBlock,
-    ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior, WireConnectorBehavior,
+    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial, ModelMesh,
+    RenderBehavior, SignalBehavior, WireConnectorBehavior,
 };
 
 const MODEL: &[BlockModelPart] = &[
@@ -54,5 +54,3 @@ impl Block for DownDetectorBlock {
         Some(BlockKind::Detector)
     }
 }
-
-impl FactoryBlock for DownDetectorBlock {}

@@ -1,6 +1,6 @@
 use super::{
     rgb, rgba, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial,
-    ModelMesh, RenderBehavior, SystemBlock, WeldBehavior, WeldConnectorBehavior,
+    ModelMesh, RenderBehavior, WeldBehavior, WeldConnectorBehavior,
 };
 
 const MODEL: &[BlockModelPart] = &[BlockModelPart::new(
@@ -46,5 +46,3 @@ impl Block for WeldPointBlock {
         BlockModel::PartsOnly(MODEL)
     }
 }
-
-impl SystemBlock for WeldPointBlock {}

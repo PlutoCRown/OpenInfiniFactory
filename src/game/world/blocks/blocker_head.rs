@@ -1,6 +1,5 @@
 use super::{
     rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial, ModelMesh,
-    SystemBlock,
 };
 
 const MODEL: &[BlockModelPart] =
@@ -32,5 +31,3 @@ impl Block for BlockerHeadBlock {
         BlockModel::Parts(MODEL)
     }
 }
-
-impl SystemBlock for BlockerHeadBlock {}

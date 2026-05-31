@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::game::state::UiPanelId;
 use crate::game::state::{BuilderMode, GameMode};
-use crate::game::world::blocks::{BlockKind, MaterialKind, StampColor, EDIT_BLOCKS, PLAY_BLOCKS};
+use crate::game::world::blocks::{edit_blocks, BlockKind, MaterialKind, StampColor, PLAY_BLOCKS};
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ConfigAction, ConfigSelectionMode};
 use crate::shared::i18n::Language;
@@ -274,10 +274,12 @@ pub const GAMEPLAY_SETTINGS: &[SettingsItem] = &[
 
 impl SettingsField {
     pub fn slider(self) -> Option<SettingsSliderConfig> {
-        GAMEPLAY_SETTINGS.iter().find_map(|item| match item.control {
-            SettingsControl::Slider { field, config } if field == self => Some(config),
-            _ => None,
-        })
+        GAMEPLAY_SETTINGS
+            .iter()
+            .find_map(|item| match item.control {
+                SettingsControl::Slider { field, config } if field == self => Some(config),
+                _ => None,
+            })
     }
 
     pub fn percent(self, settings: &crate::game::state::GameSettings) -> f32 {
@@ -317,7 +319,12 @@ impl SettingsField {
         };
         let raw = slider.min + percent.clamp(0.0, 1.0) * (slider.max - slider.min);
         let value = (raw / slider.step).round() * slider.step;
-        self.apply_value(value.clamp(slider.min, slider.max), settings, ui_scale, config);
+        self.apply_value(
+            value.clamp(slider.min, slider.max),
+            settings,
+            ui_scale,
+            config,
+        );
     }
 
     fn value(self, settings: &crate::game::state::GameSettings) -> f32 {
@@ -641,8 +648,9 @@ impl Default for InventoryItems {
 
 impl InventoryItems {
     pub fn for_mode(mode: BuilderMode) -> Self {
+        let edit_blocks = edit_blocks();
         let blocks: &[BlockKind] = match mode {
-            BuilderMode::Edit => &EDIT_BLOCKS,
+            BuilderMode::Edit => &edit_blocks,
             BuilderMode::Play => &PLAY_BLOCKS,
         };
 

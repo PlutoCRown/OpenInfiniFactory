@@ -2,31 +2,25 @@ mod registry;
 
 mod blocker;
 mod blocker_head;
+mod catalog;
 mod converter;
 mod conveyor;
-mod copper_material;
 mod counter_rotator;
 mod detector;
-mod dirt;
 mod down_detector;
 mod down_welder;
 mod drill;
 mod drill_head;
 mod generator;
 mod goal;
-mod grass;
-mod iron_material;
 mod laser;
 mod lifter;
-mod material;
-mod planks;
 mod platform;
 mod pusher;
 mod reverse_conveyor;
 mod roller;
 mod rotator;
 mod stamper;
-mod stone;
 mod teleport_entrance;
 mod teleport_exit;
 mod weld_point;
@@ -36,10 +30,10 @@ mod wire;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-pub use self::registry::{assert_registry_consistent, ALL_BLOCKS, EDIT_BLOCKS, PLAY_BLOCKS};
+pub use self::registry::{all_blocks, assert_registry_consistent, edit_blocks, PLAY_BLOCKS};
+use crate::game::state::SolutionState;
 use crate::game::ui::{BlockEditAction, BlockPanelDropdown, OpenBlockPanelDropdown, UiPanelId};
 pub use crate::game::world::direction::Facing;
-use crate::game::state::SolutionState;
 use crate::game::world::grid::{BlockSettings, WorldBlocks};
 
 pub const BLOCK_SIZE: f32 = 1.0;
@@ -106,17 +100,12 @@ pub trait Block: Send + Sync {
     }
 }
 
-pub trait SceneBlock: Block {}
-pub trait FactoryBlock: Block {}
-pub trait MaterialBlock: Block {}
-pub trait SystemBlock: Block {}
 pub trait EditableBlock: Block {
     fn ui_panel(&self) -> Option<UiPanelId> {
         None
     }
 
-    fn handle_edit_action(&self, _ctx: &mut BlockEditContext, _action: BlockEditAction) {
-    }
+    fn handle_edit_action(&self, _ctx: &mut BlockEditContext, _action: BlockEditAction) {}
 }
 
 pub struct BlockEditContext<'a> {
@@ -185,14 +174,14 @@ pub struct BlockDefinition {
     color: ColorSpec,
     slot_color: ColorSpec,
     class: BlockClass,
-    system_role: SystemBlockRole,
     persistence: Option<PersistentLayer>,
     shape: BlockShape,
     collision: bool,
     transparent: bool,
+    texture: Option<BlockTexture>,
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BlockClass {
     Scene,
     Factory,
@@ -201,15 +190,83 @@ pub enum BlockClass {
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-enum SystemBlockRole {
-    None,
-    GeneratedMarker,
+pub enum BlockLayer {
+    Scene(SceneBlock),
+    Material(MaterialBlock),
+    Factory(FactoryBlock),
+    System(SystemBlock),
+    Virtual(VirtualBlock),
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum SceneBlock {
+    Grass,
+    Stone,
+    Dirt,
+    Planks,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum MaterialBlock {
+    Material,
+    IronMaterial,
+    CopperMaterial,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum FactoryBlock {
+    Platform,
+    Welder,
+    DownWelder,
+    Conveyor,
+    ReverseConveyor,
+    Detector,
+    DownDetector,
+    Wire,
+    Pusher,
+    Lifter,
+    Rotator,
+    CounterRotator,
+    Blocker,
+    Drill,
+    Laser,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum SystemBlock {
+    Generator,
+    Goal,
+    Stamper,
+    Roller,
+    Converter,
+    TeleportEntrance,
+    TeleportExit,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum VirtualBlock {
+    WeldPoint,
+    BlockerHead,
+    DrillHead,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum BlockShape {
     Cube,
     Node,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum BlockTexture {
+    Material,
+    IronMaterial,
+    CopperMaterial,
+    Platform,
+    Grass,
+    Stone,
+    Dirt,
+    Wood,
+    BorderedWood,
 }
 
 #[derive(Clone, Copy)]
@@ -403,7 +460,6 @@ impl BlockDefinition {
             color,
             slot_color,
             BlockClass::Scene,
-            SystemBlockRole::None,
             Some(PersistentLayer::Puzzle),
         )
     }
@@ -422,7 +478,6 @@ impl BlockDefinition {
             color,
             slot_color,
             BlockClass::Factory,
-            SystemBlockRole::None,
             Some(PersistentLayer::SolutionFactory),
         )
     }
@@ -441,7 +496,6 @@ impl BlockDefinition {
             color,
             slot_color,
             BlockClass::Material,
-            SystemBlockRole::None,
             None,
         )
     }
@@ -460,7 +514,6 @@ impl BlockDefinition {
             color,
             slot_color,
             BlockClass::System,
-            SystemBlockRole::GeneratedMarker,
             None,
         )
     }
@@ -479,7 +532,6 @@ impl BlockDefinition {
             color,
             slot_color,
             BlockClass::System,
-            SystemBlockRole::None,
             Some(PersistentLayer::Puzzle),
         )
     }
@@ -491,7 +543,6 @@ impl BlockDefinition {
         color: ColorSpec,
         slot_color: ColorSpec,
         class: BlockClass,
-        system_role: SystemBlockRole,
         persistence: Option<PersistentLayer>,
     ) -> Self {
         Self {
@@ -501,11 +552,11 @@ impl BlockDefinition {
             color,
             slot_color,
             class,
-            system_role,
             persistence,
             shape: BlockShape::Cube,
             collision: true,
             transparent: false,
+            texture: None,
         }
     }
 
@@ -521,6 +572,11 @@ impl BlockDefinition {
 
     pub(crate) const fn transparent(mut self) -> Self {
         self.transparent = true;
+        self
+    }
+
+    pub(crate) const fn textured(mut self, texture: BlockTexture) -> Self {
+        self.texture = Some(texture);
         self
     }
 
@@ -542,6 +598,21 @@ impl BlockDefinition {
 
     pub fn is_transparent(self) -> bool {
         self.transparent
+    }
+
+    pub fn texture(self) -> Option<BlockTexture> {
+        self.texture
+    }
+}
+
+impl BlockLayer {
+    pub fn class(self) -> BlockClass {
+        match self {
+            Self::Scene(_) => BlockClass::Scene,
+            Self::Material(_) => BlockClass::Material,
+            Self::Factory(_) => BlockClass::Factory,
+            Self::System(_) | Self::Virtual(_) => BlockClass::System,
+        }
     }
 }
 
@@ -643,6 +714,43 @@ impl BlockKind {
         registry::get(self)
     }
 
+    pub fn layer(self) -> BlockLayer {
+        match self {
+            BlockKind::Grass => BlockLayer::Scene(SceneBlock::Grass),
+            BlockKind::Stone => BlockLayer::Scene(SceneBlock::Stone),
+            BlockKind::Dirt => BlockLayer::Scene(SceneBlock::Dirt),
+            BlockKind::Planks => BlockLayer::Scene(SceneBlock::Planks),
+            BlockKind::Material => BlockLayer::Material(MaterialBlock::Material),
+            BlockKind::IronMaterial => BlockLayer::Material(MaterialBlock::IronMaterial),
+            BlockKind::CopperMaterial => BlockLayer::Material(MaterialBlock::CopperMaterial),
+            BlockKind::Platform => BlockLayer::Factory(FactoryBlock::Platform),
+            BlockKind::Welder => BlockLayer::Factory(FactoryBlock::Welder),
+            BlockKind::DownWelder => BlockLayer::Factory(FactoryBlock::DownWelder),
+            BlockKind::Conveyor => BlockLayer::Factory(FactoryBlock::Conveyor),
+            BlockKind::ReverseConveyor => BlockLayer::Factory(FactoryBlock::ReverseConveyor),
+            BlockKind::Detector => BlockLayer::Factory(FactoryBlock::Detector),
+            BlockKind::DownDetector => BlockLayer::Factory(FactoryBlock::DownDetector),
+            BlockKind::Wire => BlockLayer::Factory(FactoryBlock::Wire),
+            BlockKind::Pusher => BlockLayer::Factory(FactoryBlock::Pusher),
+            BlockKind::Lifter => BlockLayer::Factory(FactoryBlock::Lifter),
+            BlockKind::Rotator => BlockLayer::Factory(FactoryBlock::Rotator),
+            BlockKind::CounterRotator => BlockLayer::Factory(FactoryBlock::CounterRotator),
+            BlockKind::Blocker => BlockLayer::Factory(FactoryBlock::Blocker),
+            BlockKind::Drill => BlockLayer::Factory(FactoryBlock::Drill),
+            BlockKind::Laser => BlockLayer::Factory(FactoryBlock::Laser),
+            BlockKind::Generator => BlockLayer::System(SystemBlock::Generator),
+            BlockKind::Goal => BlockLayer::System(SystemBlock::Goal),
+            BlockKind::Stamper => BlockLayer::System(SystemBlock::Stamper),
+            BlockKind::Roller => BlockLayer::System(SystemBlock::Roller),
+            BlockKind::Converter => BlockLayer::System(SystemBlock::Converter),
+            BlockKind::TeleportEntrance => BlockLayer::System(SystemBlock::TeleportEntrance),
+            BlockKind::TeleportExit => BlockLayer::System(SystemBlock::TeleportExit),
+            BlockKind::WeldPoint => BlockLayer::Virtual(VirtualBlock::WeldPoint),
+            BlockKind::BlockerHead => BlockLayer::Virtual(VirtualBlock::BlockerHead),
+            BlockKind::DrillHead => BlockLayer::Virtual(VirtualBlock::DrillHead),
+        }
+    }
+
     pub fn definition(self) -> BlockDefinition {
         self.block().definition()
     }
@@ -684,36 +792,23 @@ impl BlockKind {
     }
 
     pub fn is_factory(self) -> bool {
-        self.definition().class() == BlockClass::Factory
+        matches!(self.layer(), BlockLayer::Factory(_))
     }
 
     pub fn is_scene(self) -> bool {
-        self.definition().class() == BlockClass::Scene
+        matches!(self.layer(), BlockLayer::Scene(_))
     }
 
     pub fn is_material(self) -> bool {
-        self.definition().class() == BlockClass::Material
+        matches!(self.layer(), BlockLayer::Material(_))
     }
 
     pub fn is_generated_marker(self) -> bool {
-        self.definition().system_role == SystemBlockRole::GeneratedMarker
+        matches!(self.layer(), BlockLayer::Virtual(_))
     }
 
     pub fn is_system_layer(self) -> bool {
-        if self.is_generated_marker() {
-            return true;
-        }
-
-        matches!(
-            self,
-            BlockKind::Generator
-                | BlockKind::Goal
-                | BlockKind::Stamper
-                | BlockKind::Roller
-                | BlockKind::Converter
-                | BlockKind::TeleportEntrance
-                | BlockKind::TeleportExit
-        )
+        matches!(self.layer(), BlockLayer::System(_) | BlockLayer::Virtual(_))
     }
 
     pub fn accepts_material(self) -> bool {

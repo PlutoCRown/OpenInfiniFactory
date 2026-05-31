@@ -1,4 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, FactoryBlock};
+use super::{rgb, Block, BlockDefinition, BlockKind, BlockTexture};
 
 pub struct PlatformBlock;
 
@@ -17,7 +17,6 @@ impl Block for PlatformBlock {
             rgb(0.36, 0.47, 0.58),
             rgb(0.28, 0.38, 0.48),
         )
+        .textured(BlockTexture::Platform)
     }
 }
-
-impl FactoryBlock for PlatformBlock {}

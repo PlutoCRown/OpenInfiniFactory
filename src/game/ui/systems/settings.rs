@@ -107,20 +107,22 @@ pub fn update_settings_dropdowns_ui(
     settings: Res<GameSettings>,
     open_dropdown: Res<OpenSettingsDropdown>,
     i18n: Res<I18n>,
-    mut dropdown_labels: Query<
-        (&SettingsDropdownLabel, &mut Text),
-        (
-            Without<SettingsText>,
-            Without<SettingsValueText>,
-        ),
-    >,
-    mut value_texts: Query<
-        (&SettingsValueText, &mut Text),
-        (
-            Without<SettingsText>,
-            Without<SettingsDropdownLabel>,
-        ),
-    >,
+    mut texts: ParamSet<(
+        Query<
+            (&SettingsDropdownLabel, &mut Text),
+            (
+                Without<SettingsText>,
+                Without<SettingsValueText>,
+            ),
+        >,
+        Query<
+            (&SettingsValueText, &mut Text),
+            (
+                Without<SettingsText>,
+                Without<SettingsDropdownLabel>,
+            ),
+        >,
+    )>,
     mut dropdown_lists: Query<
         (&SettingsDropdownList, &mut Node),
         (Without<SettingsSliderFill>, Without<SettingsSliderKnob>),
@@ -132,7 +134,7 @@ pub fn update_settings_dropdowns_ui(
         Option<&SettingsDropdownRow>,
     )>,
 ) {
-    for (label, mut text) in &mut dropdown_labels {
+    for (label, mut text) in &mut texts.p0() {
         text.0 = match label.0 {
             super::types::SettingsDropdown::Language => i18n.language().native_name().to_string(),
             super::types::SettingsDropdown::PlaceSelectionMode => {
@@ -144,7 +146,7 @@ pub fn update_settings_dropdowns_ui(
         };
     }
 
-    for (value, mut text) in &mut value_texts {
+    for (value, mut text) in &mut texts.p1() {
         text.0 = value.0.display(&settings, &i18n);
     }
 

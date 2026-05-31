@@ -6,13 +6,15 @@ pub fn update_panel_visibility(
     ui_runtime: Res<UiRuntime>,
     world: Res<WorldBlocks>,
     mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
-    mut controlled_panels: Query<(&PanelVisibility, &mut Node)>,
-    mut pause_buttons: Query<(&MenuAction, &mut Node), With<Button>>,
-    mut bound_panels: Query<(&UiPanelBinding, &mut Node)>,
+    mut nodes: ParamSet<(
+        Query<(&PanelVisibility, &mut Node)>,
+        Query<(&MenuAction, &mut Node), With<Button>>,
+        Query<(&UiPanelBinding, &mut Node)>,
+    )>,
     confirm_dialog: Res<ConfirmDialogState>,
 ) {
     let active_panel = ui_runtime.active_panel();
-    for (visibility, mut style) in &mut controlled_panels {
+    for (visibility, mut style) in &mut nodes.p0() {
         style.display = display_for(panel_visible(
             *visibility,
             *mode,
@@ -22,7 +24,7 @@ pub fn update_panel_visibility(
         ));
     }
 
-    for (action, mut style) in &mut pause_buttons {
+    for (action, mut style) in &mut nodes.p1() {
         style.display = if pause_action_visible(&save_state, &solution_state, *action) {
             Display::Flex
         } else {
@@ -34,7 +36,7 @@ pub fn update_panel_visibility(
     {
         open_block_dropdown.0 = None;
     }
-    for (binding, mut style) in &mut bound_panels {
+    for (binding, mut style) in &mut nodes.p2() {
         style.display = display_for(active_panel == Some(binding.0));
     }
 }

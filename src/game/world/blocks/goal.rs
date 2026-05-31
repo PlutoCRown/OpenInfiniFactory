@@ -1,6 +1,6 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockEditContext, BlockKind, BlockModel, BlockModelPart, EditableBlock,
-    ModelMaterial, ModelMesh, RenderBehavior, SystemBlock,
+    rgb, Block, BlockDefinition, BlockEditContext, BlockKind, BlockModel, BlockModelPart,
+    EditableBlock, ModelMaterial, ModelMesh, RenderBehavior,
 };
 use crate::game::ui::{BlockEditAction, BlockPanelDropdown, UiPanelId};
 use crate::game::world::grid::{BlockSettings, GoalSettings};
@@ -47,8 +47,6 @@ impl Block for GoalBlock {
         Some(BlockSettings::Goal(GoalSettings::default()))
     }
 }
-
-impl SystemBlock for GoalBlock {}
 impl EditableBlock for GoalBlock {
     fn ui_panel(&self) -> Option<UiPanelId> {
         Some(UiPanelId::Goal)

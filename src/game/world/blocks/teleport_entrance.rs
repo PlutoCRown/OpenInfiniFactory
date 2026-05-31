@@ -1,6 +1,6 @@
 use super::{
     rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, EditableBlock,
-    ModelMaterial, ModelMesh, SystemBlock,
+    ModelMaterial, ModelMesh,
 };
 use crate::game::ui::UiPanelId;
 use crate::game::world::grid::{BlockSettings, TeleportSettings};
@@ -66,8 +66,6 @@ impl Block for TeleportEntranceBlock {
         BlockModel::Parts(MODEL)
     }
 }
-
-impl SystemBlock for TeleportEntranceBlock {}
 impl EditableBlock for TeleportEntranceBlock {
     fn ui_panel(&self) -> Option<UiPanelId> {
         Some(UiPanelId::Teleport)

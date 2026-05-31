@@ -1,7 +1,6 @@
 use super::{
-    edit_labeler, rgb, Block, BlockDefinition, BlockEditContext, BlockKind, BlockModel, BlockModelPart,
-    EditableBlock,
-    MaterialLabeler, ModelMaterial, ModelMesh, SystemBlock,
+    edit_labeler, rgb, Block, BlockDefinition, BlockEditContext, BlockKind, BlockModel,
+    BlockModelPart, EditableBlock, MaterialLabeler, ModelMaterial, ModelMesh,
 };
 use crate::game::ui::{BlockEditAction, UiPanelId};
 use crate::game::world::grid::{BlockSettings, LabelerSettings};
@@ -56,8 +55,6 @@ impl Block for RollerBlock {
         BlockModel::Parts(MODEL)
     }
 }
-
-impl SystemBlock for RollerBlock {}
 impl EditableBlock for RollerBlock {
     fn ui_panel(&self) -> Option<UiPanelId> {
         Some(UiPanelId::Labeler)
