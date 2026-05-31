@@ -77,6 +77,7 @@ impl Plugin for GamePlugin {
             .insert_resource(SolutionState::default())
             .insert_resource(simulation::runtime::SignalNetworkCache::default())
             .insert_resource(simulation::runtime::SimulationStepStats::default())
+            .insert_resource(simulation::runtime::MovementPreview::default())
             .insert_resource(simulation::runtime::PendingGeneratedMaterials::default())
             .insert_resource(simulation::factory_activity::FactoryStructureState::default())
             .insert_resource(simulation::movement::PusherState::default())
@@ -134,6 +135,12 @@ impl Plugin for GamePlugin {
                 (apply_fov, update_hover, draw_hover_structure_bounds)
                     .chain()
                     .after(systems::debug::mark_perf_simulation)
+                    .before(systems::debug::mark_perf_view),
+            )
+            .add_systems(
+                Update,
+                simulation::runtime::update_movement_preview
+                    .after(update_hover)
                     .before(systems::debug::mark_perf_view),
             )
             .add_systems(Update, systems::debug::mark_perf_view)

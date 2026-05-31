@@ -23,6 +23,12 @@ struct PusherStateEntry {
 }
 
 impl PusherState {
+    pub fn cloned_for_preview(&self) -> Self {
+        Self {
+            entries: self.entries.clone(),
+        }
+    }
+
     pub fn rebuild_from_world(world: &WorldBlocks) -> Self {
         let entries = world
             .blocks
@@ -97,7 +103,6 @@ impl PusherState {
             })
             .collect()
     }
-
 }
 
 pub fn blocker_animations(
@@ -152,13 +157,9 @@ pub(super) fn mark_structure_movement_phase(
     for (pos, kind, mover) in movers {
         match mover {
             MovementRule::Translate { source, offset } => {
-                if let Some(movement) = mark_conveyor_movement(
-                    world,
-                    factory_structures,
-                    pos,
-                    source,
-                    offset,
-                ) {
+                if let Some(movement) =
+                    mark_conveyor_movement(world, factory_structures, pos, source, offset)
+                {
                     moves.push(movement.with_source(pos));
                 }
             }

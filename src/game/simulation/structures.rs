@@ -139,6 +139,12 @@ pub struct MovementInfluenceCache {
 }
 
 impl MovementInfluenceCache {
+    pub fn cloned_for_preview(&self) -> Self {
+        Self {
+            counts: self.counts.clone(),
+        }
+    }
+
     pub fn clear(&mut self) {
         self.counts.clear();
     }
@@ -244,9 +250,24 @@ impl StructureMove {
         self
     }
 
-    fn source(&self) -> Option<IVec3> {
+    pub(super) fn source(&self) -> Option<IVec3> {
         match self {
             Self::Translate { source, .. } | Self::Rotate { source, .. } => *source,
+        }
+    }
+
+    pub(super) fn motion_description(&self) -> String {
+        match self {
+            Self::Translate { offset, mark, .. } => {
+                format!("{} {}", mark.label(), direction_label(*offset))
+            }
+            Self::Rotate { clockwise, .. } => {
+                if *clockwise {
+                    "Rotate CW".to_string()
+                } else {
+                    "Rotate CCW".to_string()
+                }
+            }
         }
     }
 
@@ -281,14 +302,9 @@ impl StructureMove {
                 source,
             } => {
                 let mode = movement_expansion_mode(mark, source);
-                let structure = expanded_move_structure(
-                    world,
-                    &structure,
-                    offset,
-                    factory_structures,
-                    mode,
-                )
-                .unwrap_or(structure);
+                let structure =
+                    expanded_move_structure(world, &structure, offset, factory_structures, mode)
+                        .unwrap_or(structure);
                 Self::Translate {
                     structure,
                     offset,
@@ -299,6 +315,28 @@ impl StructureMove {
             }
             movement => movement,
         }
+    }
+}
+
+impl MovementMark {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Conveyor => "Conveyor",
+            Self::Push => "Push",
+            Self::Vertical => "Vertical",
+        }
+    }
+}
+
+fn direction_label(offset: IVec3) -> &'static str {
+    match (offset.x, offset.y, offset.z) {
+        (1, 0, 0) => "+X",
+        (-1, 0, 0) => "-X",
+        (0, 1, 0) => "+Y",
+        (0, -1, 0) => "-Y",
+        (0, 0, 1) => "+Z",
+        (0, 0, -1) => "-Z",
+        _ => "custom",
     }
 }
 
@@ -368,7 +406,9 @@ fn movement_priority_key(
     influence_cache: &MovementInfluenceCache,
 ) -> (u32, u8, ConveyorPriority) {
     (
-        movement.source().map_or(u32::MAX, |_| influence_cache.count(movement)),
+        movement
+            .source()
+            .map_or(u32::MAX, |_| influence_cache.count(movement)),
         movement_kind_priority(movement),
         conveyor_priority(movement),
     )
@@ -715,8 +755,7 @@ fn expanded_move_structure(
         }
 
         let pushed = pushable_structure_at(world, factory_structures, target, offset)?;
-        if mode == MovementExpansionMode::Gravity && structure_supported_by_lifter(world, &pushed)
-        {
+        if mode == MovementExpansionMode::Gravity && structure_supported_by_lifter(world, &pushed) {
             return None;
         }
         for pushed_pos in pushed {

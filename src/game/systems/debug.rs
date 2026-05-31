@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use crate::game::player::controller::{player_collision_box, FlyCamera};
 use crate::game::simulation::factory_activity::FactoryStructureState;
-use crate::game::simulation::runtime::SimulationStepStats;
+use crate::game::simulation::runtime::{MovementPreview, SimulationStepStats};
 use crate::game::state::{BuilderMode, GameMode, SimulationState};
 use crate::game::ui::{PendingKeyBind, TextPromptState};
 use crate::game::world::grid::WorldBlocks;
@@ -303,6 +303,7 @@ pub fn update_debug_ui(
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
     sim_stats: Res<SimulationStepStats>,
+    movement_preview: Res<MovementPreview>,
     player: Query<&Transform, With<FlyCamera>>,
     block_entities: Query<Entity, With<BlockEntity>>,
     mut panel: Query<(&mut Text, &mut Node), With<DebugPanel>>,
@@ -315,6 +316,16 @@ pub fn update_debug_ui(
         Display::Flex
     } else {
         Display::None
+    };
+    style.top = if debug.factory_activity {
+        Val::Auto
+    } else {
+        Val::Px(14.0)
+    };
+    style.bottom = if debug.factory_activity {
+        Val::Px(18.0)
+    } else {
+        Val::Auto
     };
 
     if !debug.enabled {
@@ -360,9 +371,26 @@ pub fn update_debug_ui(
     };
 
     let render_remainder_ms = (perf.render_other_ms.value - perf.render_gap_ms.value).max(0.0);
+    let moments_text = if debug.factory_activity && !movement_preview.moments.is_empty() {
+        let rows = movement_preview
+            .moments
+            .iter()
+            .map(|moment| {
+                let source = moment
+                    .source
+                    .map(|pos| format!(" @ {},{},{}", pos.x, pos.y, pos.z))
+                    .unwrap_or_default();
+                format!("  {}{}", moment.label, source)
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("\n\nMoments\n{rows}")
+    } else {
+        String::new()
+    };
 
     perf.display_text = format!(
-        "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n  PreUpdate/Input Plumbing: {:>8.2} us\n  Input: {:>8.2} us\n  Menus: {:>8.2} us\n  Sim Systems: {:>8.2} us\n  View: {:>8.2} us\n  Anim: {:>8.2} us\n  UI: {:>8.2} us\n  Debug UI: {:>8.2} us\n  Update Tail: {:>8.2} us\n  PostUpdate/UI Layout: {:>8.2} us\n  PostUpdate/Transform: {:>8.2} us\n  PostUpdate/Visibility: {:>8.2} us\n  Last: {:>8.2} us\n  Schedule/Untracked: {:>8.2} us\nRender/Engine: {:>5.2} ms\n  Frame Gap: {:>5.2} ms\n  Timing Remainder: {:>5.2} ms{}\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
+        "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n  PreUpdate/Input Plumbing: {:>8.2} us\n  Input: {:>8.2} us\n  Menus: {:>8.2} us\n  Sim Systems: {:>8.2} us\n  View: {:>8.2} us\n  Anim: {:>8.2} us\n  UI: {:>8.2} us\n  Debug UI: {:>8.2} us\n  Update Tail: {:>8.2} us\n  PostUpdate/UI Layout: {:>8.2} us\n  PostUpdate/Transform: {:>8.2} us\n  PostUpdate/Visibility: {:>8.2} us\n  Last: {:>8.2} us\n  Schedule/Untracked: {:>8.2} us\nRender/Engine: {:>5.2} ms\n  Frame Gap: {:>5.2} ms\n  Timing Remainder: {:>5.2} ms{}\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}{}\n/: toggle",
         fps,
         perf.frame_ms.value,
         perf.main_ms.value,
@@ -388,7 +416,8 @@ pub fn update_debug_ui(
         block_entities.iter().count(),
         player_pos.x,
         player_pos.y,
-        player_pos.z
+        player_pos.z,
+        moments_text
     );
     text.0.clone_from(&perf.display_text);
 }

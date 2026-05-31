@@ -26,6 +26,7 @@ use super::movement::{blocker_animations, mark_structure_movement_phase, PusherS
 pub use super::signals::SignalNetworkCache;
 use super::structures::{
     execute_structure_moves_with_pushers, merge_structure_movement_plan, MovementInfluenceCache,
+    StructureMove,
 };
 
 #[derive(Resource, Clone)]
@@ -42,6 +43,108 @@ pub struct SimulationStepStats {
     pub behavior_ms: f64,
     pub signal_refresh_ms: f64,
     pub render_rebuild_ms: f64,
+}
+
+#[derive(Resource, Default)]
+pub struct MovementPreview {
+    pub moments: Vec<PreviewMoment>,
+}
+
+pub struct PreviewMoment {
+    pub label: String,
+    pub source: Option<IVec3>,
+}
+
+pub fn update_movement_preview(
+    world: Res<WorldBlocks>,
+    simulation: Res<SimulationState>,
+    factory_structures: Res<FactoryStructureState>,
+    movement_influence: Res<MovementInfluenceCache>,
+    pusher_state: Res<PusherState>,
+    hover_bounds: Res<crate::game::world::rendering::HoverStructureBounds>,
+    mut preview: ResMut<MovementPreview>,
+) {
+    preview.moments.clear();
+    let Some(bounds) = hover_bounds.bounds else {
+        return;
+    };
+    if !simulation.is_active() {
+        return;
+    }
+
+    let Some(structure) = preview_structure_positions(&world, &factory_structures, bounds) else {
+        return;
+    };
+    let mut preview_world = world.clone();
+    run_static_marker_phase(&mut preview_world);
+    let mut preview_signal_cache = SignalNetworkCache::default();
+    preview_signal_cache.refresh(&preview_world);
+    let powered_components = preview_signal_cache.powered_components(&preview_world);
+    let powered_devices = preview_signal_cache.powered_devices(&powered_components);
+    let mut preview_factory_structures = factory_structures.clone();
+    preview_factory_structures.ensure_current_world(&preview_world);
+    let mut preview_pusher_state = pusher_state.cloned_for_preview();
+    let actuating_devices =
+        preview_pusher_state.actuating_devices(&preview_world, &powered_devices);
+    let hard_pusher_head_occupancy = preview_pusher_state.hard_head_occupancy(&preview_world);
+    let mut movement_plan = mark_gravity_phase(
+        &preview_world,
+        &preview_factory_structures,
+        &actuating_devices,
+        &hard_pusher_head_occupancy,
+    );
+    run_powered_marker_phase(&mut preview_world, &powered_devices);
+    let device_movement_plan = mark_structure_movement_phase(
+        &preview_world,
+        &powered_devices,
+        &preview_factory_structures,
+        &mut preview_pusher_state,
+    );
+    let mut preview_influence = movement_influence.cloned_for_preview();
+    movement_plan = merge_structure_movement_plan(
+        movement_plan,
+        device_movement_plan,
+        &preview_world,
+        &preview_factory_structures,
+        &mut preview_influence,
+    );
+
+    preview.moments = preview_moments_for_structure(movement_plan, &structure);
+}
+
+fn preview_structure_positions(
+    world: &WorldBlocks,
+    factory_structures: &FactoryStructureState,
+    bounds: crate::game::world::rendering::StructureBounds,
+) -> Option<HashSet<IVec3>> {
+    let pos = bounds.min;
+    match bounds.kind {
+        super::factory_activity::StructureKind::Material => {
+            Some(super::structures::material_structure(world, pos))
+        }
+        super::factory_activity::StructureKind::Factory => {
+            factory_structures.movable_structure_at(pos)
+        }
+    }
+}
+
+fn preview_moments_for_structure(
+    moves: Vec<StructureMove>,
+    structure: &HashSet<IVec3>,
+) -> Vec<PreviewMoment> {
+    moves
+        .into_iter()
+        .filter(|movement| {
+            movement
+                .structure()
+                .iter()
+                .any(|pos| structure.contains(pos))
+        })
+        .map(|movement| PreviewMoment {
+            label: movement.motion_description(),
+            source: movement.source(),
+        })
+        .collect()
 }
 
 #[derive(Resource, Default)]
