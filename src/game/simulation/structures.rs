@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAnimation};
-use crate::game::world::blocks::BlockData;
+use crate::game::world::blocks::{BlockData, MovementRule};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks};
 
@@ -29,6 +29,9 @@ pub(super) fn material_gravity_moves(
 
         let structure = material_structure(world, pos);
         handled.extend(structure.iter().copied());
+        if structure_supported_by_lifter(world, &structure) {
+            continue;
+        }
         if can_move_structure(world, &structure, IVec3::NEG_Y, factory_structures) {
             moves.push(StructureMove::translate_marked(
                 structure,
@@ -62,6 +65,9 @@ pub(super) fn factory_gravity_moves(
             continue;
         };
         handled.extend(structure.iter().copied());
+        if structure_supported_by_lifter(world, &structure) {
+            continue;
+        }
         if can_move_structure(world, &structure, IVec3::NEG_Y, factory_structures) {
             moves.push(StructureMove::translate_marked(
                 structure,
@@ -340,7 +346,7 @@ fn movement_priority_key(
     influence_cache: &MovementInfluenceCache,
 ) -> (u32, u8, ConveyorSourcePriority) {
     (
-        influence_cache.count(movement),
+        movement.source().map_or(u32::MAX, |_| influence_cache.count(movement)),
         movement_kind_priority(movement),
         conveyor_source_priority(movement),
     )
@@ -419,6 +425,15 @@ fn expand_structure_movement_plan(
         .into_iter()
         .map(|movement| movement.expanded_for_plan(world, factory_structures))
         .collect()
+}
+
+fn structure_supported_by_lifter(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
+    world.blocks.iter().any(|(pos, block)| {
+        matches!(
+            block.kind.movement_rule(block.facing),
+            Some(MovementRule::Lift { range }) if structure.contains(&(*pos + IVec3::Y * (range + 1)))
+        )
+    })
 }
 
 pub(super) fn execute_structure_moves(

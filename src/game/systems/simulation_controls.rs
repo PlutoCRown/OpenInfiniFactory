@@ -58,14 +58,9 @@ pub fn simulation_controls(
 
     if keys.just_pressed(step_key) {
         if !simulation.is_active() {
-            start_simulation_state(
-                &mut simulation,
-                &world,
-                &mut factory_structures,
-                &mut pusher_state,
-            );
-            simulation.step_requested = true;
-        } else if simulation.running {
+            return;
+        }
+        if simulation.running {
             simulation.running = false;
             simulation.speed = 1.0;
         } else {
