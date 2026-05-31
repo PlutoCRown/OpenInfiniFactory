@@ -163,7 +163,8 @@ impl FactoryStructureState {
         if !target.pushable || !target.freedom.can_translate(offset) {
             return None;
         }
-        let structure = factory_structure_with_blocked_edge(world, target_pos, Some(pusher_pos));
+        let structure =
+            connected_subset_with_blocked_edge(world, target, target_pos, Some(pusher_pos));
         (!structure.contains(&pusher_pos)).then_some(structure)
     }
 
@@ -256,6 +257,29 @@ fn factory_structure_with_blocked_edge(
     start: IVec3,
     blocked_pusher_pos: Option<IVec3>,
 ) -> HashSet<IVec3> {
+    let allowed: HashSet<IVec3> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| block.kind.is_factory().then_some(*pos))
+        .collect();
+    connected_factory_subset(world, &allowed, start, blocked_pusher_pos)
+}
+
+fn connected_subset_with_blocked_edge(
+    world: &WorldBlocks,
+    structure: &FactoryStructure,
+    start: IVec3,
+    blocked_pusher_pos: Option<IVec3>,
+) -> HashSet<IVec3> {
+    connected_factory_subset(world, &structure.positions, start, blocked_pusher_pos)
+}
+
+fn connected_factory_subset(
+    world: &WorldBlocks,
+    allowed: &HashSet<IVec3>,
+    start: IVec3,
+    blocked_pusher_pos: Option<IVec3>,
+) -> HashSet<IVec3> {
     let mut structure = HashSet::new();
     let mut queue = VecDeque::from([start]);
     structure.insert(start);
@@ -264,7 +288,7 @@ fn factory_structure_with_blocked_edge(
         for offset in signal_offsets() {
             let neighbor = pos + offset;
             if structure.contains(&neighbor)
-                || !world.is_factory_at(neighbor)
+                || !allowed.contains(&neighbor)
                 || is_blocked_pusher_edge(world, blocked_pusher_pos, pos, neighbor)
                 || is_blocked_factory_connection(world, pos, neighbor)
                 || is_blocked_factory_connection(world, neighbor, pos)
