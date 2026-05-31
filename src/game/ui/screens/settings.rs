@@ -20,7 +20,9 @@ pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     spawn_panel(
         root,
         i18n,
-        PanelOptions::new(840.0, "settings.title").closable().title_size(30.0),
+        PanelOptions::new(840.0, "settings.title")
+            .closable()
+            .title_size(30.0),
         UiPanelBinding(UiPanelId::Settings),
         |panel| {
             spawn_settings_tabs(panel);
@@ -122,11 +124,7 @@ fn settings_row_node() -> impl Bundle {
     })
 }
 
-fn spawn_settings_label(
-    row: &mut ChildSpawnerCommands,
-    i18n: &I18n,
-    label_key: &'static str,
-) {
+fn spawn_settings_label(row: &mut ChildSpawnerCommands, i18n: &I18n, label_key: &'static str) {
     row.spawn((
         localized_text(i18n, label_key, 15.0, Color::srgb(0.82, 0.88, 0.90)),
         Node {
@@ -185,7 +183,12 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
             container
                 .spawn((key_bindings_columns_bundle(), scroll_content()))
                 .with_children(|columns| {
-                    spawn_key_group(columns, i18n, "settings.group.general", &ConfigAction::GENERAL);
+                    spawn_key_group(
+                        columns,
+                        i18n,
+                        "settings.group.general",
+                        &ConfigAction::GENERAL,
+                    );
                     spawn_key_group(
                         columns,
                         i18n,

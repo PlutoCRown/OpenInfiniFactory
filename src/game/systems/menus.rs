@@ -8,6 +8,7 @@ use bevy::ui_widgets::{CoreSliderDragState, Slider, SliderRange, SliderValue};
 
 use crate::game::simulation::factory_activity::FactoryStructureState;
 use crate::game::simulation::markers::refresh_static_generated_markers;
+use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
     TeleportRenameState, WorldEntryMode,
@@ -39,6 +40,7 @@ pub struct WorldMenuParams<'w, 's> {
     pub render_assets: Res<'w, WorldRenderAssets>,
     pub debug: Res<'w, DebugState>,
     pub factory_structures: ResMut<'w, FactoryStructureState>,
+    pub movement_influence: ResMut<'w, MovementInfluenceCache>,
     pub block_entities: Query<'w, 's, Entity, With<BlockEntity>>,
 }
 
@@ -148,6 +150,7 @@ pub fn menu_actions(
                     &world_menu.render_assets,
                     &world_menu.debug,
                     &mut world_menu.factory_structures,
+                    &mut world_menu.movement_influence,
                 );
                 *mode = GameMode::MainMenu;
             }
@@ -223,6 +226,7 @@ pub fn save_list_actions(
                 &world_menu.render_assets,
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
+                &mut world_menu.movement_influence,
                 &mut mode,
             );
         }
@@ -258,6 +262,7 @@ pub fn save_list_actions(
                 &world_menu.render_assets,
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
+                &mut world_menu.movement_influence,
                 &mut mode,
             );
         }
@@ -285,6 +290,7 @@ pub fn save_list_actions(
                     &world_menu.render_assets,
                     &world_menu.debug,
                     &mut world_menu.factory_structures,
+                    &mut world_menu.movement_influence,
                     &mut mode,
                 );
             } else {
@@ -320,6 +326,7 @@ pub fn save_list_actions(
                 &world_menu.render_assets,
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
+                &mut world_menu.movement_influence,
                 &mut mode,
             );
         }
@@ -387,6 +394,7 @@ pub fn confirm_dialog_actions(
                 &world_menu.render_assets,
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
+                &mut world_menu.movement_influence,
                 &solution_state,
             );
             *mode = GameMode::Paused;
@@ -410,6 +418,7 @@ pub fn confirm_dialog_actions(
                 &world_menu.render_assets,
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
+                &mut world_menu.movement_influence,
                 &mut mode,
             );
         }
@@ -426,6 +435,7 @@ pub fn confirm_dialog_actions(
                 &world_menu.render_assets,
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
+                &mut world_menu.movement_influence,
                 &mut mode,
             );
         }
@@ -451,6 +461,7 @@ pub fn confirm_dialog_actions(
                 &world_menu.render_assets,
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
+                &mut world_menu.movement_influence,
             );
         }
         (ConfirmDialogKind::SaveSolutionBeforeEdit, ConfirmDialogAction::Secondary) => {
@@ -469,6 +480,7 @@ pub fn confirm_dialog_actions(
                 &world_menu.render_assets,
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
+                &mut world_menu.movement_influence,
             );
         }
         (_, ConfirmDialogAction::Secondary) => {}
@@ -521,6 +533,7 @@ fn switch_to_edit_mode_and_rebuild(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
+    movement_influence: &mut MovementInfluenceCache,
 ) {
     switch_to_edit_mode(
         world,
@@ -534,6 +547,7 @@ fn switch_to_edit_mode_and_rebuild(
     );
     despawn_world(commands, block_entities);
     factory_structures.clear();
+    movement_influence.clear();
     factory_structures.ensure_current_world(world);
     rebuild_world_for_debug_state(
         commands,
@@ -554,6 +568,7 @@ fn reset_current_solution(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
+    movement_influence: &mut MovementInfluenceCache,
     solution_state: &SolutionState,
 ) {
     if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
@@ -565,6 +580,7 @@ fn reset_current_solution(
         simulation.accumulator = 0.0;
         simulation.start_snapshot = None;
         factory_structures.clear();
+        movement_influence.clear();
         factory_structures.ensure_current_world(world);
         despawn_world(commands, block_entities);
         rebuild_world_for_debug_state(
@@ -590,6 +606,7 @@ fn return_to_main_menu(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
+    movement_influence: &mut MovementInfluenceCache,
     mode: &mut GameMode,
 ) {
     clear_loaded_world(
@@ -604,6 +621,7 @@ fn return_to_main_menu(
         render_assets,
         debug,
         factory_structures,
+        movement_influence,
     );
     *mode = GameMode::MainMenu;
 }
@@ -625,6 +643,7 @@ fn open_loaded_world(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
+    movement_influence: &mut MovementInfluenceCache,
     mode: &mut GameMode,
 ) {
     let Some(loaded) = load_world(world, name) else {
@@ -666,6 +685,7 @@ fn open_loaded_world(
 
     refresh_static_generated_markers(world);
     factory_structures.clear();
+    movement_influence.clear();
     factory_structures.ensure_current_world(world);
     despawn_world(commands, block_entities);
     rebuild_world_for_debug_state(
@@ -691,6 +711,7 @@ fn clear_loaded_world(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
+    movement_influence: &mut MovementInfluenceCache,
 ) {
     simulation.running = false;
     simulation.step_requested = false;
@@ -706,6 +727,7 @@ fn clear_loaded_world(
     solution_state.dirty = false;
     solution_state.entry = WorldEntryMode::EditPuzzle;
     factory_structures.clear();
+    movement_influence.clear();
     factory_structures.ensure_current_world(world);
     despawn_world(commands, block_entities);
     rebuild_world_for_debug_state(
@@ -1000,6 +1022,7 @@ pub fn block_edit_actions(
     }
     despawn_world(&mut world_menu.commands, &world_menu.block_entities);
     world_menu.factory_structures.clear();
+    world_menu.movement_influence.clear();
     world_menu
         .factory_structures
         .ensure_current_world(&world_menu.world);

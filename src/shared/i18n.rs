@@ -26,7 +26,6 @@ impl Language {
             Language::ChineseSimplified => "简体中文",
         }
     }
-
 }
 
 #[derive(Resource)]

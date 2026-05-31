@@ -6,8 +6,8 @@ use crate::shared::save::SAVE_SLOTS;
 
 use super::super::components::{
     default_button_size, flex_row, full_width_button, panel_bundle, panel_content, panel_title_bar,
-    panel_title_button, panel_title_label, raised_border, styled_button, text,
-    transparent_node, BUTTON_BG,
+    panel_title_button, panel_title_label, raised_border, styled_button, text, transparent_node,
+    BUTTON_BG,
 };
 use super::super::types::{
     PanelText, PanelTextKind, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListRow,
@@ -26,7 +26,11 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                 PanelText(PanelTextKind::SaveListTitle),
             ));
             title
-                .spawn((panel_title_button(), SaveListAction::Back, SaveListCloseButton))
+                .spawn((
+                    panel_title_button(),
+                    SaveListAction::Back,
+                    SaveListCloseButton,
+                ))
                 .with_children(|button| {
                     button.spawn(text("x", 12.0, Color::WHITE));
                 });
@@ -97,11 +101,7 @@ fn spawn_save_slot_button(parent: &mut ChildSpawnerCommands, action: SaveListAct
         });
 }
 
-fn spawn_save_row_button(
-    parent: &mut ChildSpawnerCommands,
-    action: SaveListAction,
-    width: f32,
-) {
+fn spawn_save_row_button(parent: &mut ChildSpawnerCommands, action: SaveListAction, width: f32) {
     parent
         .spawn((
             styled_button(

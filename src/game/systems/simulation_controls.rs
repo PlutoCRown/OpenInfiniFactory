@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::game::simulation::factory_activity::FactoryStructureState;
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::runtime::PendingGeneratedMaterials;
+use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::state::{BuilderMode, GameMode, SimulationState};
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::UiRuntime;
@@ -22,6 +23,7 @@ pub fn simulation_controls(
     mut simulation: ResMut<SimulationState>,
     mut pending_generated: ResMut<PendingGeneratedMaterials>,
     mut factory_structures: ResMut<FactoryStructureState>,
+    mut movement_influence: ResMut<MovementInfluenceCache>,
     mut world: ResMut<WorldBlocks>,
     block_entities: Query<Entity, With<BlockEntity>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -68,6 +70,7 @@ pub fn simulation_controls(
         refresh_static_generated_markers(&mut world);
         pending_generated.clear();
         factory_structures.clear();
+        movement_influence.clear();
         despawn_world(&mut commands, &block_entities);
         rebuild_world_for_debug_state(
             &mut commands,

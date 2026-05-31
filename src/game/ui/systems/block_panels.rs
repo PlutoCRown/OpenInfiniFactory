@@ -125,6 +125,7 @@ pub fn update_block_panel_dropdowns_ui(
     world: Res<WorldBlocks>,
     i18n: Res<I18n>,
     block_icons: Option<Res<BlockIconAssets>>,
+    ui_scale: Res<UiScale>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut teleport_pair_cache: Local<Option<(Option<IVec3>, u64, Language, bool)>>,
     mut dropdowns: BlockPanelDropdownParams,
@@ -180,11 +181,11 @@ pub fn update_block_panel_dropdowns_ui(
         }
     }
 
-    let viewport = windows
-        .single()
-        .ok()
+    let window = windows.single().ok();
+    let viewport = window
         .map(|window| Vec2::new(window.width(), window.height()))
         .unwrap_or(Vec2::ZERO);
+    let scale = ui_transform_scale(window, ui_scale.0);
     for (list, mut style, list_node) in &mut dropdowns.lists {
         let open = open_dropdown.0 == Some(list.0);
         style.display = if open { Display::Flex } else { Display::None };
@@ -197,6 +198,7 @@ pub fn update_block_panel_dropdowns_ui(
             &dropdowns.teleport_triggers,
             list_node.size(),
             viewport,
+            scale,
         ) {
             style.left = Val::Px(left);
             style.top = Val::Px(top);
@@ -284,6 +286,7 @@ fn block_dropdown_position(
     teleport_triggers: &Query<(&TeleportAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
     list_size: Vec2,
     viewport: Vec2,
+    scale: f32,
 ) -> Option<(f32, f32)> {
     let target = block_dropdown_toggle_action(dropdown);
     let trigger = target
@@ -303,7 +306,7 @@ fn block_dropdown_position(
                     .map(|(_, node, transform)| (node, transform))
             })?
         })?;
-    dropdown_position_from_trigger(trigger.0, trigger.1, list_size, viewport)
+    dropdown_position_from_trigger(trigger.0, trigger.1, list_size, viewport, scale)
 }
 
 fn block_dropdown_toggle_action(dropdown: BlockPanelDropdown) -> Option<BlockEditAction> {
@@ -323,9 +326,10 @@ fn dropdown_position_from_trigger(
     transform: &UiGlobalTransform,
     list_size: Vec2,
     viewport: Vec2,
+    scale: f32,
 ) -> Option<(f32, f32)> {
     let trigger_size = trigger_node.size();
-    let center = *transform * Vec2::ZERO;
+    let center = (*transform * Vec2::ZERO) * scale;
     let trigger_left = center.x - trigger_size.x * 0.5;
     let trigger_top = center.y - trigger_size.y * 0.5;
     let below = trigger_top + trigger_size.y + 4.0;
@@ -337,6 +341,10 @@ fn dropdown_position_from_trigger(
     };
     let left = trigger_left.clamp(10.0, (viewport.x - list_size.x - 10.0).max(10.0));
     Some((left, top))
+}
+
+fn ui_transform_scale(window: Option<&Window>, ui_scale: f32) -> f32 {
+    window.map(Window::scale_factor).unwrap_or(1.0) / ui_scale.max(0.01)
 }
 
 fn spawn_teleport_pair_option(

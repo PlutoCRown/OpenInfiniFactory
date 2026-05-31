@@ -4,9 +4,7 @@ const ASSET_DIR_NAME: &str = "assets";
 const ASSET_DIR_ENV: &str = "OPEN_INFINIFACTORY_ASSET_DIR";
 
 pub fn asset_path() -> String {
-    resolve_asset_path()
-        .to_string_lossy()
-        .into_owned()
+    resolve_asset_path().to_string_lossy().into_owned()
 }
 
 fn resolve_asset_path() -> PathBuf {

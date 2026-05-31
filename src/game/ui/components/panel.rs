@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 
-use super::button::{raised_border, HoverButton};
-use super::text::{default_font_size, text};
 use super::super::types::{
     LocalizedText, PanelCloseButton, PanelPosition, PanelText, PanelTitleBar, PanelWindow,
 };
+use super::button::{raised_border, HoverButton};
+use super::text::{default_font_size, text};
 use crate::shared::i18n::I18n;
 
 pub const PANEL_BG: Color = Color::srgb(0.192, 0.188, 0.192);
@@ -60,26 +60,24 @@ pub fn spawn_panel(
 ) {
     root.spawn((panel_bundle(options.width), GlobalZIndex(0), markers))
         .with_children(|panel| {
-            panel
-                .spawn(panel_title_bar())
-                .with_children(|title| {
-                    let mut title_text = title.spawn(panel_title_label(
-                        i18n.text(options.title_key),
-                        options.title_size,
-                    ));
-                    if let Some(marker) = options.title_marker {
-                        title_text.insert(marker);
-                    } else {
-                        title_text.insert(LocalizedText {
-                            key: options.title_key,
-                        });
-                    }
-                    if options.show_close {
-                        title.spawn(panel_close_button()).with_children(|button| {
-                            button.spawn(text("x", 12.0, Color::WHITE));
-                        });
-                    }
-                });
+            panel.spawn(panel_title_bar()).with_children(|title| {
+                let mut title_text = title.spawn(panel_title_label(
+                    i18n.text(options.title_key),
+                    options.title_size,
+                ));
+                if let Some(marker) = options.title_marker {
+                    title_text.insert(marker);
+                } else {
+                    title_text.insert(LocalizedText {
+                        key: options.title_key,
+                    });
+                }
+                if options.show_close {
+                    title.spawn(panel_close_button()).with_children(|button| {
+                        button.spawn(text("x", 12.0, Color::WHITE));
+                    });
+                }
+            });
             panel.spawn(panel_content()).with_children(content);
         });
 }
@@ -176,10 +174,7 @@ pub fn panel_title_label(value: impl Into<String>, font_size: f32) -> impl Bundl
 }
 
 pub fn panel_close_button() -> impl Bundle {
-    (
-        panel_title_button(),
-        PanelCloseButton,
-    )
+    (panel_title_button(), PanelCloseButton)
 }
 
 pub fn panel_title_button() -> impl Bundle {

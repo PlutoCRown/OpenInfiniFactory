@@ -10,23 +10,21 @@ use bevy::prelude::*;
 pub use crate::game::state::UiPanelId;
 pub use layout::setup_ui;
 pub use systems::{
-    apply_ui_font, center_new_panels, inventory_slot_clicks, load_ui_font,
-    panel_close_clicked, panel_drag_ended, panel_drag_started, panel_dragged,
-    ui_hovered, ui_unhovered,
-    update_block_panel_dropdowns_ui, update_carried_item_ui, update_confirm_dialog_ui, update_converter_ui,
-    update_generator_ui, update_hud_visibility, update_inventory_slots, update_labeler_ui,
-    update_localized_ui, update_panel_visibility, update_save_list_ui,
+    apply_ui_font, center_new_panels, inventory_slot_clicks, load_ui_font, panel_close_clicked,
+    panel_drag_ended, panel_drag_started, panel_dragged, ui_hovered, ui_unhovered,
+    update_block_panel_dropdowns_ui, update_carried_item_ui, update_confirm_dialog_ui,
+    update_converter_ui, update_generator_ui, update_hud_visibility, update_inventory_slots,
+    update_labeler_ui, update_localized_ui, update_panel_visibility, update_save_list_ui,
     update_settings_dropdowns_ui, update_settings_slider_drag_ui, update_settings_sliders_ui,
     update_settings_tabs_ui, update_settings_text_ui, update_status_ui, update_teleport_ui,
     update_ui_layers,
 };
 pub use types::{
     ActiveSettingsSlider, AreaKind, BlockEditAction, BlockPanelDropdown, CarriedItem,
-    ConfirmDialogAction, ConfirmDialogKind, ConfirmDialogState,
-    HotbarItems, InventoryItems, MenuAction, OpenBlockPanelDropdown,
-    OpenSettingsDropdown, PanelDragState, PendingAppExit, PendingKeyBind, SaveListAction,
-    SettingsAction, SettingsSliderTrigger, SettingsTab, TeleportAction,
-    UiHoverState, UiPanelContext, UiRuntime, HOTBAR_SLOTS,
+    ConfirmDialogAction, ConfirmDialogKind, ConfirmDialogState, HotbarItems, InventoryItems,
+    MenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown, PanelDragState, PendingAppExit,
+    PendingKeyBind, SaveListAction, SettingsAction, SettingsSliderTrigger, SettingsTab,
+    TeleportAction, UiHoverState, UiPanelContext, UiRuntime, HOTBAR_SLOTS,
 };
 
 use crate::game::systems::menus::{
@@ -92,12 +90,7 @@ impl Plugin for GameUiPlugin {
             .add_systems(
                 Update,
                 (
-                    (
-                        update_panel_visibility,
-                        center_new_panels,
-                        update_ui_layers,
-                    )
-                        .chain(),
+                    (update_panel_visibility, center_new_panels, update_ui_layers).chain(),
                     update_hud_visibility,
                     update_generator_ui,
                     update_labeler_ui,

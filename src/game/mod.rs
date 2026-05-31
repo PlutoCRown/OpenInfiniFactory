@@ -5,8 +5,8 @@ pub mod systems;
 pub mod ui;
 pub mod world;
 
-use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::camera::visibility::VisibilitySystems;
+use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::input_focus::InputDispatchPlugin;
 use bevy::light::{DirectionalLightShadowMap, GlobalAmbientLight};
 use bevy::prelude::*;
@@ -79,6 +79,7 @@ impl Plugin for GamePlugin {
             .insert_resource(simulation::runtime::SimulationStepStats::default())
             .insert_resource(simulation::runtime::PendingGeneratedMaterials::default())
             .insert_resource(simulation::factory_activity::FactoryStructureState::default())
+            .insert_resource(simulation::structures::MovementInfluenceCache::default())
             .insert_resource(settings)
             .insert_resource(UiScale(config.ui_scale))
             .insert_resource(config)
@@ -119,7 +120,10 @@ impl Plugin for GamePlugin {
                     .before(systems::debug::mark_perf_input),
             )
             .add_systems(Update, systems::debug::mark_perf_input)
-            .add_systems(Last, app_exit_requests.before(systems::debug::mark_perf_last))
+            .add_systems(
+                Last,
+                app_exit_requests.before(systems::debug::mark_perf_last),
+            )
             .add_systems(Update, systems::debug::mark_perf_menus)
             .add_systems(
                 Update,

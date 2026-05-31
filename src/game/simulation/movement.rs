@@ -35,17 +35,17 @@ pub(super) fn mark_structure_movement_phase(
                     offset,
                     MovementMark::Conveyor,
                 ) {
-                    moves.push(movement);
+                    moves.push(movement.with_source(pos));
                 }
             }
             MovementRule::Lift { range } => {
                 if let Some(movement) = mark_lift_structure(world, factory_structures, pos, range) {
-                    moves.push(movement);
+                    moves.push(movement.with_source(pos));
                 }
             }
             MovementRule::Rotate { clockwise } => {
                 if let Some(movement) = mark_rotate_material_structure(world, pos, clockwise) {
-                    moves.push(movement);
+                    moves.push(movement.with_source(pos));
                 }
             }
             MovementRule::PoweredTranslate { source, offset } => {
@@ -59,9 +59,13 @@ pub(super) fn mark_structure_movement_phase(
                         MovementMark::Push,
                     ) {
                         if kind == BlockKind::Pusher {
-                            moves.push(movement.with_actor(pos, MovementMark::Push));
+                            moves.push(
+                                movement
+                                    .with_actor(pos, MovementMark::Push)
+                                    .with_source(pos),
+                            );
                         } else {
-                            moves.push(movement);
+                            moves.push(movement.with_source(pos));
                         }
                     }
                 }
@@ -79,9 +83,27 @@ impl StructureMoveActorExt for StructureMove {
     fn with_actor(self, actor: IVec3, mark: MovementMark) -> StructureMove {
         match self {
             StructureMove::Translate {
-                structure, offset, ..
-            } => StructureMove::translate_by_actor(structure, offset, actor, mark),
+                structure,
+                offset,
+                source,
+                ..
+            } => StructureMove::translate_by_actor(structure, offset, actor, mark)
+                .with_optional_source(source),
             movement => movement,
+        }
+    }
+}
+
+trait StructureMoveSourceExt {
+    fn with_optional_source(self, source: Option<IVec3>) -> StructureMove;
+}
+
+impl StructureMoveSourceExt for StructureMove {
+    fn with_optional_source(self, source: Option<IVec3>) -> StructureMove {
+        if let Some(source) = source {
+            self.with_source(source)
+        } else {
+            self
         }
     }
 }

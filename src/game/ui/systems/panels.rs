@@ -109,6 +109,8 @@ pub fn panel_drag_started(
 pub fn panel_dragged(
     mut drag_event: On<Pointer<Drag>>,
     title_bars: Query<(), With<PanelTitleBar>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    ui_scale: Res<UiScale>,
     mut drag: ResMut<PanelDragState>,
     mut panels: Query<(&mut Node, &mut PanelPosition), With<PanelWindow>>,
 ) {
@@ -125,7 +127,8 @@ pub fn panel_dragged(
         return;
     };
     drag_event.propagate(false);
-    let next = drag.panel_pos + drag_event.event.distance;
+    let next = drag.panel_pos
+        + screen_to_ui_delta(drag_event.event.distance, windows.single().ok(), ui_scale.0);
     style.left = Val::Px(next.x.max(10.0));
     style.top = Val::Px(next.y.max(10.0));
     style.right = Val::Auto;
@@ -139,8 +142,7 @@ pub fn panel_drag_ended(
     title_bars: Query<(), With<PanelTitleBar>>,
     mut drag: ResMut<PanelDragState>,
 ) {
-    if drag_end.event.button != PointerButton::Primary || title_bars.get(drag_end.entity).is_err()
-    {
+    if drag_end.event.button != PointerButton::Primary || title_bars.get(drag_end.entity).is_err() {
         return;
     }
     drag_end.propagate(false);
@@ -148,10 +150,12 @@ pub fn panel_drag_ended(
 }
 
 fn panel_close_return_mode(ui_runtime: &UiRuntime) -> Option<GameMode> {
-    ui_runtime.active().and_then(|session| match session.context {
-        UiPanelContext::ReturnTo(mode) => Some(mode),
-        _ => None,
-    })
+    ui_runtime
+        .active()
+        .and_then(|session| match session.context {
+            UiPanelContext::ReturnTo(mode) => Some(mode),
+            _ => None,
+        })
 }
 
 fn active_block_has_panel(
@@ -205,9 +209,22 @@ fn px_or(value: Val, fallback: f32) -> f32 {
     }
 }
 
+fn screen_to_ui_delta(delta: Vec2, window: Option<&Window>, ui_scale: f32) -> Vec2 {
+    let scale = window.map(Window::scale_factor).unwrap_or(1.0) / ui_scale.max(0.01);
+    delta * scale
+}
+
 pub fn center_new_panels(
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut panels: Query<(&mut Node, &ComputedNode, &mut PanelPosition, &mut Visibility), With<PanelWindow>>,
+    mut panels: Query<
+        (
+            &mut Node,
+            &ComputedNode,
+            &mut PanelPosition,
+            &mut Visibility,
+        ),
+        With<PanelWindow>,
+    >,
 ) {
     let Ok(window) = windows.single() else {
         return;

@@ -24,7 +24,9 @@ use super::gravity::mark_gravity_phase;
 use super::markers::{run_powered_marker_phase, run_static_marker_phase};
 use super::movement::mark_structure_movement_phase;
 pub use super::signals::SignalNetworkCache;
-use super::structures::{execute_structure_moves_with_pushers, merge_structure_movement_plan};
+use super::structures::{
+    execute_structure_moves_with_pushers, merge_structure_movement_plan, MovementInfluenceCache,
+};
 
 #[derive(Resource, Clone)]
 pub struct SimulationStepStats {
@@ -89,6 +91,7 @@ pub fn run_turn(
     animation_duration: f32,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
+    movement_influence: &mut MovementInfluenceCache,
     stats: &mut SimulationStepStats,
 ) {
     let total_start = Instant::now();
@@ -120,11 +123,16 @@ pub fn run_turn(
         device_movement_plan,
         world,
         factory_structures,
+        movement_influence,
     );
     sample.movement_mark_ms = mark_elapsed_ms(&mut mark);
 
-    let (mut animations, pusher_animations) =
-        execute_structure_moves_with_pushers(world, movement_plan, factory_structures);
+    let (mut animations, pusher_animations) = execute_structure_moves_with_pushers(
+        world,
+        movement_plan,
+        factory_structures,
+        movement_influence,
+    );
     merge_generated_animations(&mut animations, generated_animations);
     let pusher_animations = pusher_animations
         .into_iter()
@@ -182,6 +190,7 @@ pub fn tick_simulation(
     render_assets: Res<WorldRenderAssets>,
     debug: Res<DebugState>,
     mut factory_structures: ResMut<FactoryStructureState>,
+    mut movement_influence: ResMut<MovementInfluenceCache>,
 ) {
     if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
         prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
@@ -214,6 +223,7 @@ pub fn tick_simulation(
             SIMULATION_TURN_SECONDS,
             &debug,
             &mut factory_structures,
+            &mut movement_influence,
             &mut sim_stats,
         );
         prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
@@ -246,6 +256,7 @@ pub fn tick_simulation(
             SIMULATION_TURN_SECONDS / simulation.speed.max(0.001),
             &debug,
             &mut factory_structures,
+            &mut movement_influence,
             &mut sim_stats,
         );
     }

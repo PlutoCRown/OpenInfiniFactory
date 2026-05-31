@@ -107,21 +107,16 @@ pub fn update_settings_dropdowns_ui(
     settings: Res<GameSettings>,
     open_dropdown: Res<OpenSettingsDropdown>,
     i18n: Res<I18n>,
+    ui_scale: Res<UiScale>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut texts: ParamSet<(
         Query<
             (&SettingsDropdownLabel, &mut Text),
-            (
-                Without<SettingsText>,
-                Without<SettingsValueText>,
-            ),
+            (Without<SettingsText>, Without<SettingsValueText>),
         >,
         Query<
             (&SettingsValueText, &mut Text),
-            (
-                Without<SettingsText>,
-                Without<SettingsDropdownLabel>,
-            ),
+            (Without<SettingsText>, Without<SettingsDropdownLabel>),
         >,
     )>,
     mut dropdown_lists: Query<
@@ -146,11 +141,11 @@ pub fn update_settings_dropdowns_ui(
         text.0 = value.0.display(&settings, &i18n);
     }
 
-    let viewport = windows
-        .single()
-        .ok()
+    let window = windows.single().ok();
+    let viewport = window
         .map(|window| Vec2::new(window.width(), window.height()))
         .unwrap_or(Vec2::ZERO);
+    let scale = settings_ui_transform_scale(window, ui_scale.0);
     for (list, mut style, list_node) in &mut dropdown_lists {
         let open = open_dropdown.0 == Some(list.0);
         style.display = if open { Display::Flex } else { Display::None };
@@ -162,6 +157,7 @@ pub fn update_settings_dropdowns_ui(
             &triggers,
             list_node.size(),
             viewport,
+            scale,
         ) {
             style.left = Val::Px(left);
             style.top = Val::Px(top);
@@ -174,12 +170,13 @@ fn dropdown_position(
     triggers: &Query<(&SettingsAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
     list_size: Vec2,
     viewport: Vec2,
+    scale: f32,
 ) -> Option<(f32, f32)> {
     let (_, trigger_node, transform) = triggers
         .iter()
         .find(|(action, node, _)| **action == target && !node.is_empty())?;
     let trigger_size = trigger_node.size();
-    let center = *transform * Vec2::ZERO;
+    let center = (*transform * Vec2::ZERO) * scale;
     let trigger_left = center.x - trigger_size.x * 0.5;
     let trigger_top = center.y - trigger_size.y * 0.5;
     let below = trigger_top + trigger_size.y + 4.0;
@@ -191,6 +188,10 @@ fn dropdown_position(
     };
     let left = trigger_left.clamp(10.0, (viewport.x - list_size.x - 10.0).max(10.0));
     Some((left, top))
+}
+
+fn settings_ui_transform_scale(window: Option<&Window>, ui_scale: f32) -> f32 {
+    window.map(Window::scale_factor).unwrap_or(1.0) / ui_scale.max(0.01)
 }
 
 pub fn update_settings_tabs_ui(

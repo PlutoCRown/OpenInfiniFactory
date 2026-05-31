@@ -13,7 +13,11 @@ pub const BUTTON_DARK_EDGE: Color = Color::srgb(0.02, 0.02, 0.02);
 #[derive(Component)]
 pub struct HoverButton;
 
-pub fn styled_button(style: Node, border: impl Into<BorderColor>, background: Color) -> impl Bundle {
+pub fn styled_button(
+    style: Node,
+    border: impl Into<BorderColor>,
+    background: Color,
+) -> impl Bundle {
     (
         Button,
         HoverButton,
