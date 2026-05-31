@@ -738,7 +738,7 @@ mod tests {
 
         let mut solution_inventory = InventoryItems::for_mode(BuilderMode::Play);
         solution_inventory.set_hotbar_block(0, BlockKind::Platform);
-        solution_inventory.set_hotbar_block(1, BlockKind::Pusher);
+        solution_inventory.set_hotbar_block(1, BlockKind::Switch);
         solution_inventory.hotbar[2] = None;
 
         let solution_loaded = SaveFile::solution(

@@ -18,10 +18,10 @@ const PLAY_HOTBAR_BLOCKS: [BlockKind; HOTBAR_SLOTS] = [
     BlockKind::Conveyor,
     BlockKind::Detector,
     BlockKind::Wire,
+    BlockKind::Switch,
     BlockKind::Pusher,
     BlockKind::Lifter,
     BlockKind::Rotator,
-    BlockKind::Drill,
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

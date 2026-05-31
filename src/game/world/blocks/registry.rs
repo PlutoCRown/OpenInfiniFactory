@@ -4,9 +4,9 @@ use super::{
     down_detector::DOWN_DETECTOR, down_welder::DOWN_WELDER, drill::DRILL, drill_head::DRILL_HEAD,
     generator::GENERATOR, goal::GOAL, laser::LASER, lifter::LIFTER, platform::PLATFORM,
     pusher::PUSHER, reverse_conveyor::REVERSE_CONVEYOR, roller::ROLLER, rotator::ROTATOR,
-    stamper::STAMPER, teleport_entrance::TELEPORT_ENTRANCE, teleport_exit::TELEPORT_EXIT,
-    weld_point::WELD_POINT, welder::WELDER, wire::WIRE, Block, BlockKind, EditableBlock,
-    MaterialKind,
+    stamper::STAMPER, switch::SWITCH, teleport_entrance::TELEPORT_ENTRANCE,
+    teleport_exit::TELEPORT_EXIT, weld_point::WELD_POINT, welder::WELDER, wire::WIRE, Block,
+    BlockKind, EditableBlock, MaterialKind,
 };
 
 pub const BUILTIN_EDIT_BLOCKS: [BlockKind; 7] = [
@@ -19,7 +19,7 @@ pub const BUILTIN_EDIT_BLOCKS: [BlockKind; 7] = [
     BlockKind::TeleportExit,
 ];
 
-pub const PLAY_BLOCKS: [BlockKind; 15] = [
+pub const PLAY_BLOCKS: [BlockKind; 16] = [
     BlockKind::Platform,
     BlockKind::Welder,
     BlockKind::DownWelder,
@@ -28,6 +28,7 @@ pub const PLAY_BLOCKS: [BlockKind; 15] = [
     BlockKind::Detector,
     BlockKind::DownDetector,
     BlockKind::Wire,
+    BlockKind::Switch,
     BlockKind::Pusher,
     BlockKind::Lifter,
     BlockKind::Rotator,
@@ -37,7 +38,7 @@ pub const PLAY_BLOCKS: [BlockKind; 15] = [
     BlockKind::Laser,
 ];
 
-pub const BUILTIN_BLOCKS: [BlockKind; 25] = [
+pub const BUILTIN_BLOCKS: [BlockKind; 26] = [
     BlockKind::Generator,
     BlockKind::Goal,
     BlockKind::Platform,
@@ -48,6 +49,7 @@ pub const BUILTIN_BLOCKS: [BlockKind; 25] = [
     BlockKind::Detector,
     BlockKind::DownDetector,
     BlockKind::Wire,
+    BlockKind::Switch,
     BlockKind::Pusher,
     BlockKind::Lifter,
     BlockKind::Rotator,
@@ -65,7 +67,7 @@ pub const BUILTIN_BLOCKS: [BlockKind; 25] = [
     BlockKind::DrillHead,
 ];
 
-pub static BUILTIN_BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 25] = [
+pub static BUILTIN_BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 26] = [
     &GENERATOR,
     &GOAL,
     &PLATFORM,
@@ -76,6 +78,7 @@ pub static BUILTIN_BLOCK_REGISTRY: [&'static (dyn Block + Send + Sync); 25] = [
     &DETECTOR,
     &DOWN_DETECTOR,
     &WIRE,
+    &SWITCH,
     &PUSHER,
     &LIFTER,
     &ROTATOR,
@@ -213,23 +216,24 @@ fn block_order(kind: BlockKind) -> usize {
         BlockKind::Detector => 11,
         BlockKind::DownDetector => 12,
         BlockKind::Wire => 13,
-        BlockKind::Pusher => 14,
-        BlockKind::Lifter => 15,
-        BlockKind::Rotator => 16,
-        BlockKind::CounterRotator => 17,
-        BlockKind::Blocker => 18,
-        BlockKind::Drill => 19,
-        BlockKind::Laser => 20,
-        BlockKind::Stamper => 21,
-        BlockKind::Roller => 22,
-        BlockKind::Converter => 23,
-        BlockKind::TeleportEntrance => 24,
-        BlockKind::TeleportExit => 25,
-        BlockKind::Material => 26,
-        BlockKind::IronMaterial => 27,
-        BlockKind::CopperMaterial => 28,
-        BlockKind::WeldPoint => 29,
-        BlockKind::BlockerHead => 30,
-        BlockKind::DrillHead => 31,
+        BlockKind::Switch => 14,
+        BlockKind::Pusher => 15,
+        BlockKind::Lifter => 16,
+        BlockKind::Rotator => 17,
+        BlockKind::CounterRotator => 18,
+        BlockKind::Blocker => 19,
+        BlockKind::Drill => 20,
+        BlockKind::Laser => 21,
+        BlockKind::Stamper => 22,
+        BlockKind::Roller => 23,
+        BlockKind::Converter => 24,
+        BlockKind::TeleportEntrance => 25,
+        BlockKind::TeleportExit => 26,
+        BlockKind::Material => 27,
+        BlockKind::IronMaterial => 28,
+        BlockKind::CopperMaterial => 29,
+        BlockKind::WeldPoint => 30,
+        BlockKind::BlockerHead => 31,
+        BlockKind::DrillHead => 32,
     }
 }

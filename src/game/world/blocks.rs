@@ -21,6 +21,7 @@ mod reverse_conveyor;
 mod roller;
 mod rotator;
 mod stamper;
+mod switch;
 mod teleport_entrance;
 mod teleport_exit;
 mod weld_point;
@@ -223,6 +224,7 @@ pub enum FactoryBlock {
     Detector,
     DownDetector,
     Wire,
+    Switch,
     Pusher,
     Lifter,
     Rotator,
@@ -688,6 +690,7 @@ pub enum BlockKind {
     Detector,
     DownDetector,
     Wire,
+    Switch,
     Pusher,
     Lifter,
     Rotator,
@@ -731,6 +734,7 @@ impl BlockKind {
             BlockKind::Detector => BlockLayer::Factory(FactoryBlock::Detector),
             BlockKind::DownDetector => BlockLayer::Factory(FactoryBlock::DownDetector),
             BlockKind::Wire => BlockLayer::Factory(FactoryBlock::Wire),
+            BlockKind::Switch => BlockLayer::Factory(FactoryBlock::Switch),
             BlockKind::Pusher => BlockLayer::Factory(FactoryBlock::Pusher),
             BlockKind::Lifter => BlockLayer::Factory(FactoryBlock::Lifter),
             BlockKind::Rotator => BlockLayer::Factory(FactoryBlock::Rotator),
