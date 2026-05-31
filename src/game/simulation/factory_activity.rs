@@ -111,6 +111,11 @@ impl FactoryStructureState {
                     let Some(neighbor_index) = structure_by_pos.get(&neighbor).copied() else {
                         continue;
                     };
+                    if is_blocked_factory_connection(world, *pos, neighbor)
+                        || is_blocked_factory_connection(world, neighbor, *pos)
+                    {
+                        continue;
+                    }
                     if !inactive[neighbor_index] {
                         inactive[neighbor_index] = true;
                         queue.push_back(neighbor_index);
@@ -233,8 +238,8 @@ fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
             let neighbor = pos + offset;
             if structure.contains(&neighbor)
                 || !world.is_factory_at(neighbor)
-                || is_pusher_front_connection(world, pos, neighbor)
-                || is_pusher_front_connection(world, neighbor, pos)
+                || is_blocked_factory_connection(world, pos, neighbor)
+                || is_blocked_factory_connection(world, neighbor, pos)
             {
                 continue;
             }
@@ -246,10 +251,19 @@ fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     structure
 }
 
-fn is_pusher_front_connection(world: &WorldBlocks, from: IVec3, to: IVec3) -> bool {
+fn is_blocked_factory_connection(world: &WorldBlocks, from: IVec3, to: IVec3) -> bool {
     world.blocks.get(&from).is_some_and(|block| {
-        matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker)
-            && from + block.facing.forward_ivec3() == to
+        let offset = to - from;
+        match block.kind {
+            BlockKind::Pusher
+            | BlockKind::Blocker
+            | BlockKind::Detector
+            | BlockKind::Drill
+            | BlockKind::Welder => offset == block.facing.forward_ivec3(),
+            BlockKind::Lifter | BlockKind::Conveyor => offset == IVec3::Y,
+            BlockKind::ReverseConveyor => offset == IVec3::NEG_Y,
+            _ => false,
+        }
     })
 }
 
