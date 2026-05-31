@@ -2,7 +2,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
-use crate::game::player::controller::{player_intersects_block, FlyCamera};
+use crate::game::player::controller::{player_can_occupy, player_intersects_block, FlyCamera};
 use crate::game::simulation::factory_activity::{
     FactoryStructureState, StructureFreedom, StructureKind,
 };
@@ -33,7 +33,7 @@ pub struct PlacementQueries<'w, 's> {
     meshes: ResMut<'w, Assets<Mesh>>,
     block_entities: Query<'w, 's, (Entity, &'static BlockEntity)>,
     edit_previews: Query<'w, 's, Entity, With<EditPreview>>,
-    player: Query<'w, 's, &'static Transform, With<FlyCamera>>,
+    player: Query<'w, 's, &'static mut Transform, With<FlyCamera>>,
 }
 
 pub fn gameplay_input(
@@ -157,7 +157,7 @@ pub fn placement_input(
         mut meshes,
         block_entities,
         edit_previews,
-        player,
+        mut player,
     } = queries;
     let place_button = config
         .input(crate::shared::config::ConfigAction::Place)
@@ -178,7 +178,7 @@ pub fn placement_input(
         return;
     }
 
-    if ui_runtime.blocks_gameplay() || simulation.is_active() {
+    if ui_runtime.blocks_gameplay() {
         placement.edit_gesture = None;
         despawn_edit_previews(&mut commands, &edit_previews);
         return;
@@ -191,6 +191,22 @@ pub fn placement_input(
     let current_place_at = placement.target.map(|target| target.pos + target.normal);
     let current_delete_at = placement.target.map(|target| target.pos);
     let current_target_pos = placement.target.map(|target| target.pos);
+    if *builder_mode == BuilderMode::Play
+        && mouse_buttons.just_pressed(place_button)
+        && try_teleport_player(current_target_pos, &world, &mut player)
+    {
+        placement.edit_gesture = None;
+        placement.selection.clear();
+        despawn_edit_previews(&mut commands, &edit_previews);
+        return;
+    }
+
+    if simulation.is_active() {
+        placement.edit_gesture = None;
+        despawn_edit_previews(&mut commands, &edit_previews);
+        return;
+    }
+
     let force_place = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     if mouse_buttons.just_pressed(place_button)
         && !force_place
@@ -456,6 +472,44 @@ fn pick_target_block(
     }
     placement.selection.clear();
     placement.edit_gesture = None;
+}
+
+fn try_teleport_player(
+    target: Option<IVec3>,
+    world: &WorldBlocks,
+    player: &mut Query<&mut Transform, With<FlyCamera>>,
+) -> bool {
+    let Some(entrance) = target else {
+        return false;
+    };
+    if !world
+        .system_blocks
+        .get(&entrance)
+        .is_some_and(|block| block.kind == BlockKind::TeleportEntrance)
+    {
+        return false;
+    }
+    let Some(exit) = world.teleport_settings(entrance).pair else {
+        return false;
+    };
+    if !world
+        .system_blocks
+        .get(&exit)
+        .is_some_and(|block| block.kind == BlockKind::TeleportExit)
+    {
+        return false;
+    }
+    let Ok(mut player_transform) = player.single_mut() else {
+        return false;
+    };
+    let entrance_center = grid_to_world(entrance);
+    let exit_center = grid_to_world(exit);
+    let next_pos = exit_center + (player_transform.translation - entrance_center);
+    if !player_can_occupy(next_pos, world) {
+        return false;
+    }
+    player_transform.translation = next_pos;
+    true
 }
 
 fn handle_selection_area_input(
@@ -807,7 +861,7 @@ fn can_place_block_at(
     block: BlockData,
     builder_mode: BuilderMode,
     world: &WorldBlocks,
-    player: &Query<&Transform, With<FlyCamera>>,
+    player: &Query<&mut Transform, With<FlyCamera>>,
 ) -> bool {
     if place_at.y < 0 {
         return false;
@@ -845,7 +899,7 @@ fn commit_edit_gesture(
     config: &GameConfig,
     world: &mut WorldBlocks,
     builder_mode: BuilderMode,
-    player: &Query<&Transform, With<FlyCamera>>,
+    player: &Query<&mut Transform, With<FlyCamera>>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
@@ -924,7 +978,7 @@ fn spawn_gesture_previews(
     config: &GameConfig,
     world: &WorldBlocks,
     builder_mode: BuilderMode,
-    player: &Query<&Transform, With<FlyCamera>>,
+    player: &Query<&mut Transform, With<FlyCamera>>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,

@@ -235,6 +235,10 @@ pub fn player_intersects_block(position: Vec3, block: IVec3) -> bool {
     aabb_intersects(player_min, player_max, block_min, block_max)
 }
 
+pub fn player_can_occupy(position: Vec3, world: &WorldBlocks) -> bool {
+    !collides(position, world)
+}
+
 pub fn player_collision_box(position: Vec3) -> (Vec3, Vec3) {
     player_aabb(position)
 }
