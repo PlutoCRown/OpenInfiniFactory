@@ -59,7 +59,6 @@ pub fn menu_actions(
     mut ui_runtime: ResMut<UiRuntime>,
     mut world_menu: WorldMenuParams,
     mut confirm_dialog: ResMut<ConfirmDialogState>,
-    mut app_exit_messages: ResMut<Messages<AppExit>>,
     actions: Query<&MenuAction>,
 ) {
     if !primary_click(&mut click) {
@@ -90,7 +89,7 @@ pub fn menu_actions(
             );
         }
         (GameMode::MainMenu, MenuAction::Quit) => {
-            app_exit_messages.write(AppExit::Success);
+            std::process::exit(0);
         }
         (GameMode::Paused, MenuAction::Resume) => *mode = GameMode::Playing,
         (GameMode::Paused, MenuAction::ToggleBuilderMode) => {

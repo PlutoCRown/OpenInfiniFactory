@@ -47,6 +47,7 @@ pub struct BlockAnimation {
 #[derive(Clone, Copy)]
 pub enum BlockAnimationKind {
     Move,
+    Rotate { pivot: IVec3, clockwise: bool },
     SpawnScale,
 }
 
@@ -58,6 +59,7 @@ pub struct AnimatedBlock {
     to_rotation: Quat,
     from_scale: Vec3,
     to_scale: Vec3,
+    kind: BlockAnimationKind,
     elapsed: f32,
     timing: AnimationTiming,
 }
@@ -111,10 +113,11 @@ impl AnimatedBlock {
             from_rotation: Quat::from_rotation_y(animation.from_facing.yaw()),
             to_rotation: Quat::from_rotation_y(animation.to_facing.yaw()),
             from_scale: match animation.kind {
-                BlockAnimationKind::Move => Vec3::ONE,
+                BlockAnimationKind::Move | BlockAnimationKind::Rotate { .. } => Vec3::ONE,
                 BlockAnimationKind::SpawnScale => Vec3::ZERO,
             },
             to_scale: Vec3::ONE,
+            kind: animation.kind,
             elapsed: animation.progress.unwrap_or(0.0).clamp(0.0, 1.0) * timing.duration,
             timing,
         }
@@ -148,9 +151,12 @@ pub fn animate_blocks(
             AnimationEasing::Linear => t,
             AnimationEasing::SmoothStep => t * t * (3.0 - 2.0 * t),
         };
-        transform.translation = animation
-            .from_translation
-            .lerp(animation.to_translation, eased);
+        transform.translation = match animation.kind {
+            BlockAnimationKind::Rotate { pivot, clockwise } => {
+                rotate_world_pos_y(animation.from_translation, pivot, clockwise, eased)
+            }
+            _ => animation.from_translation.lerp(animation.to_translation, eased),
+        };
         transform.rotation = animation.from_rotation.slerp(animation.to_rotation, eased);
         transform.scale = animation.from_scale.lerp(animation.to_scale, eased);
 
@@ -185,4 +191,16 @@ pub fn animate_blocks(
             commands.entity(entity).despawn();
         }
     }
+}
+
+pub fn rotate_world_pos_y(from: Vec3, pivot: IVec3, clockwise: bool, t: f32) -> Vec3 {
+    let pivot = grid_to_world(pivot);
+    let rel = from - pivot;
+    let angle = if clockwise {
+        -std::f32::consts::FRAC_PI_2
+    } else {
+        std::f32::consts::FRAC_PI_2
+    } * t;
+    let rotation = Quat::from_rotation_y(angle);
+    pivot + rotation.mul_vec3(rel)
 }

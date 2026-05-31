@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAnimation};
@@ -221,13 +222,6 @@ impl StructureMove {
         self
     }
 
-    pub(super) fn movement_mark(&self) -> MovementMark {
-        match self {
-            Self::Translate { mark, .. } => *mark,
-            Self::Rotate { .. } => MovementMark::Push,
-        }
-    }
-
     fn source(&self) -> Option<IVec3> {
         match self {
             Self::Translate { source, .. } | Self::Rotate { source, .. } => *source,
@@ -291,12 +285,7 @@ pub(super) fn merge_structure_movement_plan(
     let mut device_moves = expand_structure_movement_plan(device_moves, world, factory_structures);
     let active_sources = active_device_sources(&device_moves);
     influence_cache.retain_active_sources(&active_sources);
-    device_moves.sort_by_key(|movement| {
-        (
-            influence_cache.count(movement),
-            std::cmp::Reverse(movement.movement_mark()),
-        )
-    });
+    device_moves.sort_by(|a, b| compare_movement_priority(a, b, influence_cache));
 
     for movement in device_moves {
         let blocked_by_higher_priority = planned_moves.iter().any(|existing| {
@@ -335,15 +324,89 @@ fn movement_beats(
     existing: &StructureMove,
     influence_cache: &MovementInfluenceCache,
 ) -> bool {
-    match (challenger.source(), existing.source()) {
-        (Some(_), Some(_)) => {
-            let challenger_count = influence_cache.count(challenger);
-            let existing_count = influence_cache.count(existing);
-            challenger_count < existing_count
-                || (challenger_count == existing_count
-                    && challenger.movement_mark() >= existing.movement_mark())
+    compare_movement_priority(challenger, existing, influence_cache) != Ordering::Greater
+}
+
+fn compare_movement_priority(
+    a: &StructureMove,
+    b: &StructureMove,
+    influence_cache: &MovementInfluenceCache,
+) -> Ordering {
+    movement_priority_key(a, influence_cache).cmp(&movement_priority_key(b, influence_cache))
+}
+
+fn movement_priority_key(
+    movement: &StructureMove,
+    influence_cache: &MovementInfluenceCache,
+) -> (u32, u8, ConveyorSourcePriority) {
+    (
+        influence_cache.count(movement),
+        movement_kind_priority(movement),
+        conveyor_source_priority(movement),
+    )
+}
+
+fn movement_kind_priority(movement: &StructureMove) -> u8 {
+    match movement {
+        StructureMove::Translate {
+            mark: MovementMark::Vertical,
+            ..
+        } => 0,
+        StructureMove::Rotate { .. } => 1,
+        StructureMove::Translate {
+            mark: MovementMark::Push,
+            ..
+        } => 2,
+        StructureMove::Translate {
+            mark: MovementMark::Conveyor,
+            ..
+        } => 3,
+    }
+}
+
+#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+struct ConveyorSourcePriority {
+    positive_x: i32,
+    negative_x: i32,
+    positive_y: i32,
+    negative_y: i32,
+    positive_z: i32,
+    negative_z: i32,
+}
+
+fn conveyor_source_priority(movement: &StructureMove) -> ConveyorSourcePriority {
+    let Some(source) = movement.source() else {
+        return ConveyorSourcePriority::neutral();
+    };
+    if !matches!(
+        movement,
+        StructureMove::Translate {
+            mark: MovementMark::Conveyor,
+            ..
         }
-        _ => challenger.movement_mark() >= existing.movement_mark(),
+    ) {
+        return ConveyorSourcePriority::neutral();
+    }
+    ConveyorSourcePriority {
+        positive_x: -source.x,
+        negative_x: source.x,
+        positive_y: -source.y,
+        negative_y: source.y,
+        positive_z: -source.z,
+        negative_z: source.z,
+    }
+}
+
+impl ConveyorSourcePriority {
+    fn neutral() -> Self {
+        Self {
+            positive_x: 0,
+            negative_x: 0,
+            positive_y: 0,
+            negative_y: 0,
+            positive_z: 0,
+            negative_z: 0,
+        }
     }
 }
 
@@ -468,7 +531,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                                     to_pos: target,
                                     from_facing: block.facing,
                                     to_facing: rotate_facing(block.facing, clockwise),
-                                    kind: BlockAnimationKind::Move,
+                                    kind: BlockAnimationKind::Rotate { pivot, clockwise },
                                     duration: None,
                                     progress: None,
                                 },

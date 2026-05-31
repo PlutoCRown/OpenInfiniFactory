@@ -12,8 +12,8 @@ use crate::game::simulation::factory_activity::{
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
-    AnimatedBlock, AnimatedPusher, AnimationEasing, AnimationTiming, BlockAnimation,
-    BlockAnimationKind, PusherAnimation, WeldSpark,
+    rotate_world_pos_y, AnimatedBlock, AnimatedPusher, AnimationEasing, AnimationTiming,
+    BlockAnimation, BlockAnimationKind, PusherAnimation, WeldSpark,
 };
 use crate::game::world::blocks::{
     edit_blocks, BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
@@ -859,12 +859,19 @@ fn spawn_block_model(
             AnimationEasing::Linear => progress,
             AnimationEasing::SmoothStep => progress * progress * (3.0 - 2.0 * progress),
         };
-        transform.translation =
-            grid_to_world(animation.from_pos).lerp(grid_to_world(animation.to_pos), eased);
+        transform.translation = match animation.kind {
+            BlockAnimationKind::Rotate { pivot, clockwise } => rotate_world_pos_y(
+                grid_to_world(animation.from_pos),
+                pivot,
+                clockwise,
+                eased,
+            ),
+            _ => grid_to_world(animation.from_pos).lerp(grid_to_world(animation.to_pos), eased),
+        };
         transform.rotation = render_rotation(data, animation.from_facing)
             .slerp(render_rotation(data, animation.to_facing), eased);
         transform.scale = match animation.kind {
-            BlockAnimationKind::Move => Vec3::ONE,
+            BlockAnimationKind::Move | BlockAnimationKind::Rotate { .. } => Vec3::ONE,
             BlockAnimationKind::SpawnScale => Vec3::splat(eased),
         };
     } else {
