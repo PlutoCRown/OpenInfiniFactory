@@ -224,6 +224,11 @@ pub fn save_list_actions(
                 if !save_state.puzzles().iter().any(|entry| entry.name == *name) {
                     return;
                 }
+                if puzzle_has_solutions(&mut save_state, &name) {
+                    confirm_dialog.kind =
+                        Some(ConfirmDialogKind::EditPuzzleWithSolutions { name: name.clone() });
+                    return;
+                }
                 open_loaded_world(
                     &name,
                     WorldEntryMode::EditPuzzle,
@@ -483,10 +488,37 @@ pub fn confirm_dialog_actions(
                 &mut world_menu.pusher_state,
             );
         }
+        (ConfirmDialogKind::EditPuzzleWithSolutions { name }, ConfirmDialogAction::Primary) => {
+            open_loaded_world_from_menu(
+                &name,
+                WorldEntryMode::EditPuzzle,
+                &mut mode,
+                &mut builder_mode,
+                &mut inventory,
+                &mut carried,
+                &mut placement,
+                &mut save_state,
+                &mut solution_state,
+                &mut simulation,
+                &mut world_menu,
+            );
+        }
         (_, ConfirmDialogAction::Secondary) => {}
     }
 
     confirm_dialog.kind = None;
+}
+
+fn puzzle_has_solutions(save_state: &mut SaveState, puzzle: &str) -> bool {
+    let previous_puzzle = save_state.selected_puzzle.clone();
+    let previous_source = save_state.selected_puzzle_kind;
+    save_state.select_puzzle(
+        Some(puzzle.to_string()),
+        Some(crate::shared::save::SavePuzzleSource::PuzzleFile),
+    );
+    let has_solutions = !save_state.selected_puzzle_solutions().is_empty();
+    save_state.select_puzzle(previous_puzzle, previous_source);
+    has_solutions
 }
 
 pub fn text_prompt_actions(

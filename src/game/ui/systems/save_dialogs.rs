@@ -480,13 +480,17 @@ pub fn update_confirm_dialog_ui(
                 ConfirmDialogKind::SaveSolutionBeforeEdit => {
                     i18n.text("confirm.save_solution_before_edit")
                 }
+                ConfirmDialogKind::EditPuzzleWithSolutions { name } => {
+                    i18n.fmt("confirm.edit_puzzle_with_solutions", &[("name", name.clone())])
+                }
             },
             _ => continue,
         };
     }
     let secondary_visible = matches!(
         kind,
-        ConfirmDialogKind::ReturnToMain | ConfirmDialogKind::SaveSolutionBeforeEdit
+            ConfirmDialogKind::ReturnToMain
+            | ConfirmDialogKind::SaveSolutionBeforeEdit
     );
     for (action, mut node, children) in &mut action_buttons {
         if matches!(*action, ConfirmDialogAction::Secondary) {
@@ -583,6 +587,7 @@ fn confirm_dialog_button_label(
             ConfirmDialogKind::ResetSolution => i18n.text("button.confirm_reset_solution"),
             ConfirmDialogKind::ReturnToMain => i18n.text("button.save_and_back"),
             ConfirmDialogKind::SaveSolutionBeforeEdit => i18n.text("button.save_solution_and_edit"),
+            ConfirmDialogKind::EditPuzzleWithSolutions { .. } => i18n.text("button.edit_puzzle"),
         },
         ConfirmDialogAction::Secondary => match kind {
             ConfirmDialogKind::ReturnToMain => i18n.text("button.discard_and_back"),
