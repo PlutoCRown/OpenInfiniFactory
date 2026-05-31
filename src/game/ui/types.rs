@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub use crate::game::state::UiPanelId;
-use crate::game::state::{BuilderMode, GameMode};
+use crate::game::state::{BuilderMode, GameMode, WorldEntryMode};
 use crate::game::world::blocks::{edit_blocks, BlockKind, MaterialKind, StampColor, PLAY_BLOCKS};
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ConfigAction, ConfigSelectionMode};
@@ -421,6 +421,7 @@ pub enum MenuAction {
     Resume,
     ToggleBuilderMode,
     SaveWorld,
+    SaveAsNewPuzzle,
     ResetSolution,
     OpenSettings,
     BackToMainMenu,
@@ -435,6 +436,7 @@ impl UiActionLabel for MenuAction {
             Self::Resume => "button.resume",
             Self::ToggleBuilderMode => "button.toggle_builder_mode",
             Self::SaveWorld => "button.save_world",
+            Self::SaveAsNewPuzzle => "button.save_as_new_puzzle",
             Self::ResetSolution => "button.reset_solution",
             Self::OpenSettings => "button.settings",
             Self::BackToMainMenu => "button.back_to_main_menu",
@@ -442,25 +444,67 @@ impl UiActionLabel for MenuAction {
     }
 }
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone)]
 pub enum SaveListAction {
     NewPuzzle,
     NewSolution,
-    LoadPuzzle(usize),
-    LoadSolution(usize),
-    DeletePuzzle(usize),
-    DeleteSolution(usize),
+    LoadPuzzle(String),
+    LoadSolution(String),
+    RenamePuzzle(String),
+    RenameSolution(String),
+    DeletePuzzle(String),
+    DeleteSolution(String),
     Back,
-}
-
-#[derive(Component, Clone, Copy)]
-pub enum SaveListRow {
-    Puzzle(usize),
-    Solution(usize),
 }
 
 #[derive(Component)]
 pub struct SaveListCloseButton;
+
+#[derive(Component, Clone, Copy)]
+pub struct SaveListPuzzleColumn;
+
+#[derive(Component, Clone, Copy)]
+pub struct SaveListSolutionColumn;
+
+#[derive(Component)]
+pub struct SaveListPrompt;
+
+#[derive(Resource, Default)]
+pub struct SaveListRenderState {
+    pub entry: Option<WorldEntryMode>,
+    pub puzzle_keys: Vec<String>,
+    pub solution_keys: Vec<String>,
+}
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub enum TextPromptAction {
+    Confirm,
+    Cancel,
+}
+
+#[derive(Component)]
+pub struct TextPromptRoot;
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub enum TextPromptText {
+    Title,
+    Value,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub enum TextPromptKind {
+    NewPuzzle,
+    NewSolution { puzzle: String },
+    RenamePuzzle { name: String },
+    RenameSolution { name: String },
+    SaveAsNewPuzzle,
+}
+
+#[derive(Resource, Default)]
+pub struct TextPromptState {
+    pub kind: Option<TextPromptKind>,
+    pub value: String,
+}
 
 #[derive(Component, Clone, Copy)]
 pub enum ConfirmDialogAction {

@@ -1,15 +1,27 @@
+use crate::game::ui::screens::{spawn_save_management_row, spawn_save_select_row};
+
 pub fn update_save_list_ui(
     mode: Res<GameMode>,
     save_state: Res<SaveState>,
     solution_state: Res<SolutionState>,
     i18n: Res<I18n>,
     hover: Res<UiHoverState>,
+    mut render_state: ResMut<SaveListRenderState>,
+    mut commands: Commands,
     mut texts: ParamSet<(
         Query<(&PanelText, &mut Text)>,
-        Query<&mut Text, Without<PanelText>>,
+        Query<&mut Text, (Without<PanelText>, Without<SaveListPrompt>)>,
+        Query<&mut Text, With<SaveListPrompt>>,
     )>,
-    mut rows: Query<(&SaveListRow, &mut Node)>,
-    mut slots: Query<
+    mut puzzle_columns: Query<
+        (Entity, &mut Node, &Children),
+        (With<SaveListPuzzleColumn>, Without<SaveListSolutionColumn>),
+    >,
+    mut solution_columns: Query<
+        (Entity, &mut Node, &Children),
+        (With<SaveListSolutionColumn>, Without<SaveListPuzzleColumn>),
+    >,
+    mut buttons: Query<
         (
             Entity,
             &SaveListAction,
@@ -20,90 +32,261 @@ pub fn update_save_list_ui(
         (With<Button>, Without<SaveListCloseButton>),
     >,
 ) {
+    let play_flow = solution_state.save_list_entry == WorldEntryMode::PlaySolution;
+    let edit_flow = solution_state.save_list_entry == WorldEntryMode::EditPuzzle;
+    let puzzle_rows = save_list_puzzle_rows(&save_state, edit_flow);
+    let solution_rows = save_state
+        .selected_puzzle_solutions()
+        .iter()
+        .map(|entry| entry.name.clone())
+        .collect::<Vec<_>>();
+    let show_solutions = play_flow && save_state.selected_puzzle.is_some();
+
+    update_save_list_title(&mode, &solution_state, &i18n, &mut texts);
+    update_save_list_columns(
+        &mut commands,
+        &mut render_state,
+        &mut puzzle_columns,
+        &mut solution_columns,
+        &puzzle_rows,
+        &solution_rows,
+        solution_state.save_list_entry,
+        edit_flow,
+        show_solutions,
+    );
+    update_save_list_prompt(play_flow, &save_state, &i18n, &mut texts);
+    update_save_list_buttons(
+        &save_state,
+        &solution_state,
+        &i18n,
+        &hover,
+        &mut texts,
+        &mut buttons,
+    );
+}
+
+fn save_list_puzzle_rows(save_state: &SaveState, edit_flow: bool) -> Vec<String> {
+    if edit_flow {
+        save_state
+            .puzzles()
+            .into_iter()
+            .map(|entry| entry.name.clone())
+            .collect()
+    } else {
+        save_state
+            .puzzle_choices()
+            .into_iter()
+            .map(|choice| choice.name)
+            .collect()
+    }
+}
+
+fn update_save_list_title(
+    mode: &GameMode,
+    solution_state: &SolutionState,
+    i18n: &I18n,
+    texts: &mut ParamSet<(
+        Query<(&PanelText, &mut Text)>,
+        Query<&mut Text, (Without<PanelText>, Without<SaveListPrompt>)>,
+        Query<&mut Text, With<SaveListPrompt>>,
+    )>,
+) {
     for (panel_text, mut text) in &mut texts.p0() {
         if panel_text.0 == PanelTextKind::SaveListTitle {
             text.0 = match *mode {
-                GameMode::SaveListMain => i18n.text("save.title.main"),
+                GameMode::SaveListMain => match solution_state.save_list_entry {
+                    WorldEntryMode::EditPuzzle => i18n.text("save.title.edit_puzzle"),
+                    WorldEntryMode::PlaySolution => i18n.text("save.title.play_solution"),
+                },
                 _ => i18n.text("save.title.default"),
             };
         }
     }
+}
 
-    let puzzles = save_state.puzzles();
-    let solutions = save_state.selected_puzzle_solutions();
-    let play_flow = solution_state.save_list_entry == WorldEntryMode::PlaySolution;
-    let edit_flow = solution_state.save_list_entry == WorldEntryMode::EditPuzzle;
+fn update_save_list_columns(
+    commands: &mut Commands,
+    render_state: &mut SaveListRenderState,
+    puzzle_columns: &mut Query<
+        (Entity, &mut Node, &Children),
+        (With<SaveListPuzzleColumn>, Without<SaveListSolutionColumn>),
+    >,
+    solution_columns: &mut Query<
+        (Entity, &mut Node, &Children),
+        (With<SaveListSolutionColumn>, Without<SaveListPuzzleColumn>),
+    >,
+    puzzle_rows: &[String],
+    solution_rows: &[String],
+    entry: WorldEntryMode,
+    edit_flow: bool,
+    show_solutions: bool,
+) {
+    for (entity, mut node, children) in puzzle_columns {
+        node.display = Display::Flex;
+        if render_state.entry != Some(entry) || render_state.puzzle_keys != puzzle_rows {
+            if edit_flow {
+                rebuild_management_column(
+                    commands,
+                    entity,
+                    children,
+                    Some(SaveListAction::NewPuzzle),
+                    puzzle_rows,
+                    SaveListAction::LoadPuzzle,
+                    SaveListAction::RenamePuzzle,
+                    SaveListAction::DeletePuzzle,
+                );
+            } else {
+                rebuild_selection_column(
+                    commands,
+                    entity,
+                    children,
+                    puzzle_rows,
+                    SaveListAction::LoadPuzzle,
+                );
+            }
+        }
+    }
+    if render_state.entry != Some(entry) || render_state.puzzle_keys != puzzle_rows {
+        render_state.puzzle_keys = puzzle_rows.to_vec();
+    }
 
-    for (row, mut node) in &mut rows {
-        let visible = match *row {
-            SaveListRow::Puzzle(index) => puzzles.get(index).is_some(),
-            SaveListRow::Solution(index) => play_flow && solutions.get(index).is_some(),
-        };
-        node.display = if visible {
+    for (entity, mut node, children) in solution_columns {
+        node.display = if show_solutions {
             Display::Flex
         } else {
             Display::None
         };
+        if render_state.entry != Some(entry) || render_state.solution_keys != solution_rows {
+            rebuild_management_column(
+                commands,
+                entity,
+                children,
+                Some(SaveListAction::NewSolution),
+                solution_rows,
+                SaveListAction::LoadSolution,
+                SaveListAction::RenameSolution,
+                SaveListAction::DeleteSolution,
+            );
+        }
     }
+    if render_state.entry != Some(entry) || render_state.solution_keys != solution_rows {
+        render_state.solution_keys = solution_rows.to_vec();
+    }
+    render_state.entry = Some(entry);
+}
 
-    for (entity, action, children, mut background, mut border) in &mut slots {
-        let label = match *action {
-            SaveListAction::LoadPuzzle(index) => puzzles
-                .get(index)
-                .map(|entry| {
-                    if save_state.selected_puzzle.as_deref() == Some(entry.name.as_str()) {
-                        i18n.fmt("save.selected_puzzle", &[("name", entry.name.clone())])
-                    } else if play_flow {
-                        i18n.fmt("save.select_puzzle", &[("name", entry.name.clone())])
-                    } else {
-                        i18n.fmt("save.load_puzzle", &[("name", entry.name.clone())])
-                    }
-                })
-                .unwrap_or_default(),
-            SaveListAction::LoadSolution(index) => solutions
-                .get(index)
-                .map(|entry| i18n.fmt("save.load_solution", &[("name", entry.name.clone())]))
-                .unwrap_or_default(),
-            SaveListAction::DeletePuzzle(_) | SaveListAction::DeleteSolution(_) => {
-                i18n.text("button.delete")
-            }
-            SaveListAction::NewPuzzle => i18n.text("button.new_puzzle"),
-            SaveListAction::NewSolution => i18n.text("button.new_solution"),
-            SaveListAction::Back => i18n.text("button.back"),
+fn rebuild_management_column(
+    commands: &mut Commands,
+    column_entity: Entity,
+    children: &Children,
+    create_action: Option<SaveListAction>,
+    names: &[String],
+    load: fn(String) -> SaveListAction,
+    rename: fn(String) -> SaveListAction,
+    delete: fn(String) -> SaveListAction,
+) {
+    for child in children.iter() {
+        commands.entity(child).despawn();
+    }
+    commands.entity(column_entity).with_children(|column| {
+        for name in names {
+            spawn_save_management_row(
+                column,
+                load(name.clone()),
+                rename(name.clone()),
+                delete(name.clone()),
+            );
+        }
+        if let Some(create_action) = create_action {
+            column
+                .spawn((full_width_button(34.0), create_action))
+                .with_children(|button| {
+                    button.spawn(text("", 15.0, Color::WHITE));
+                });
+        }
+    });
+}
+
+fn rebuild_selection_column(
+    commands: &mut Commands,
+    column_entity: Entity,
+    children: &Children,
+    names: &[String],
+    load: fn(String) -> SaveListAction,
+) {
+    for child in children.iter() {
+        commands.entity(child).despawn();
+    }
+    commands.entity(column_entity).with_children(|column| {
+        for name in names {
+            spawn_save_select_row(column, load(name.clone()));
+        }
+    });
+}
+
+fn update_save_list_prompt(
+    play_flow: bool,
+    save_state: &SaveState,
+    i18n: &I18n,
+    texts: &mut ParamSet<(
+        Query<(&PanelText, &mut Text)>,
+        Query<&mut Text, (Without<PanelText>, Without<SaveListPrompt>)>,
+        Query<&mut Text, With<SaveListPrompt>>,
+    )>,
+) {
+    for mut text in &mut texts.p2() {
+        text.0 = if play_flow && save_state.selected_puzzle.is_none() {
+            i18n.text("save.choose_puzzle_prompt")
+        } else {
+            String::new()
         };
+    }
+}
 
-        let enabled_load = match *action {
-            SaveListAction::LoadPuzzle(index) => puzzles.get(index).is_some(),
-            SaveListAction::LoadSolution(index) => play_flow && solutions.get(index).is_some(),
-            SaveListAction::DeletePuzzle(index) => puzzles.get(index).is_some(),
-            SaveListAction::DeleteSolution(index) => play_flow && solutions.get(index).is_some(),
-            SaveListAction::NewPuzzle => edit_flow,
-            SaveListAction::NewSolution => play_flow && save_state.selected_puzzle.is_some(),
-            SaveListAction::Back => true,
-        };
-        let selected_puzzle_button = matches!(*action, SaveListAction::LoadPuzzle(_))
-            && match *action {
-                SaveListAction::LoadPuzzle(index) => puzzles.get(index).is_some_and(|entry| {
-                    save_state.selected_puzzle.as_deref() == Some(entry.name.as_str())
-                }),
-                _ => false,
-            };
+fn update_save_list_buttons(
+    save_state: &SaveState,
+    solution_state: &SolutionState,
+    i18n: &I18n,
+    hover: &UiHoverState,
+    texts: &mut ParamSet<(
+        Query<(&PanelText, &mut Text)>,
+        Query<&mut Text, (Without<PanelText>, Without<SaveListPrompt>)>,
+        Query<&mut Text, With<SaveListPrompt>>,
+    )>,
+    buttons: &mut Query<
+        (
+            Entity,
+            &SaveListAction,
+            &Children,
+            &mut BackgroundColor,
+            &mut BorderColor,
+        ),
+        (With<Button>, Without<SaveListCloseButton>),
+    >,
+) {
+    let play_flow = solution_state.save_list_entry == WorldEntryMode::PlaySolution;
+    let edit_flow = solution_state.save_list_entry == WorldEntryMode::EditPuzzle;
 
-        let hovered = enabled_load && hover.entity == Some(entity);
+    for (entity, action, children, mut background, mut border) in buttons {
+        let label = save_list_button_label(action, save_state, play_flow, i18n);
+        let enabled = save_list_button_enabled(action, save_state, edit_flow, play_flow);
+        let selected = save_list_button_selected(action, save_state, play_flow);
+        let hovered = enabled && hover.entity == Some(entity);
+
         *background = if hovered {
             BUTTON_HOVER_BG.into()
-        } else if enabled_load && selected_puzzle_button {
+        } else if enabled && selected {
             Color::srgba(0.22, 0.35, 0.32, 0.96).into()
-        } else if enabled_load {
+        } else if enabled {
             BUTTON_BG.into()
         } else {
             Color::srgba(0.12, 0.12, 0.13, 0.82).into()
         };
         *border = if hovered {
             hover_border()
-        } else if selected_puzzle_button {
+        } else if selected {
             pressed_border()
-        } else if enabled_load {
+        } else if enabled {
             raised_border()
         } else {
             inset_border()
@@ -115,6 +298,80 @@ pub fn update_save_list_ui(
             }
         }
     }
+}
+
+fn save_list_button_label(
+    action: &SaveListAction,
+    save_state: &SaveState,
+    play_flow: bool,
+    i18n: &I18n,
+) -> String {
+    match action {
+        SaveListAction::LoadPuzzle(name) => {
+            if play_flow {
+                if save_state.selected_puzzle.as_deref() == Some(name.as_str()) {
+                    i18n.fmt("save.selected_puzzle", &[("name", name.clone())])
+                } else {
+                    i18n.fmt("save.select_puzzle", &[("name", name.clone())])
+                }
+            } else {
+                i18n.fmt("save.load_puzzle", &[("name", name.clone())])
+            }
+        }
+        SaveListAction::LoadSolution(name) => {
+            i18n.fmt("save.load_solution", &[("name", name.clone())])
+        }
+        SaveListAction::RenamePuzzle(_) | SaveListAction::RenameSolution(_) => {
+            i18n.text("button.rename")
+        }
+        SaveListAction::DeletePuzzle(_) | SaveListAction::DeleteSolution(_) => {
+            i18n.text("button.delete")
+        }
+        SaveListAction::NewPuzzle => i18n.text("button.new_puzzle"),
+        SaveListAction::NewSolution => i18n.text("button.new_solution"),
+        SaveListAction::Back => i18n.text("button.back"),
+    }
+}
+
+fn save_list_button_enabled(
+    action: &SaveListAction,
+    save_state: &SaveState,
+    edit_flow: bool,
+    play_flow: bool,
+) -> bool {
+    match action {
+        SaveListAction::LoadPuzzle(name) => {
+            save_state
+                .puzzle_choices()
+                .iter()
+                .any(|choice| &choice.name == name)
+                || save_state.puzzles().iter().any(|entry| &entry.name == name)
+        }
+        SaveListAction::LoadSolution(name)
+        | SaveListAction::RenameSolution(name)
+        | SaveListAction::DeleteSolution(name) => {
+            play_flow
+                && save_state
+                    .selected_puzzle_solutions()
+                    .iter()
+                    .any(|entry| &entry.name == name)
+        }
+        SaveListAction::RenamePuzzle(name) | SaveListAction::DeletePuzzle(name) => {
+            edit_flow && save_state.puzzles().iter().any(|entry| &entry.name == name)
+        }
+        SaveListAction::NewPuzzle => edit_flow,
+        SaveListAction::NewSolution => play_flow && save_state.selected_puzzle.is_some(),
+        SaveListAction::Back => true,
+    }
+}
+
+fn save_list_button_selected(
+    action: &SaveListAction,
+    save_state: &SaveState,
+    play_flow: bool,
+) -> bool {
+    matches!(action, SaveListAction::LoadPuzzle(name) if play_flow
+        && save_state.selected_puzzle.as_deref() == Some(name.as_str()))
 }
 
 pub fn update_confirm_dialog_ui(
@@ -169,6 +426,67 @@ pub fn update_confirm_dialog_ui(
                 text.0 = label.clone();
             }
         }
+    }
+}
+
+pub fn update_text_prompt_ui(
+    prompt: Res<TextPromptState>,
+    i18n: Res<I18n>,
+    mut roots: Query<(&mut Node, &mut Visibility), With<TextPromptRoot>>,
+    mut texts: ParamSet<(
+        Query<(&TextPromptText, &mut Text)>,
+        Query<(&TextPromptAction, &Children)>,
+        Query<&mut Text, Without<TextPromptText>>,
+    )>,
+) {
+    let visible = prompt.kind.is_some();
+    for (mut node, mut visibility) in &mut roots {
+        node.display = if visible {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        *visibility = if visible {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+    let Some(kind) = prompt.kind.as_ref() else {
+        return;
+    };
+
+    for (kind_marker, mut text) in &mut texts.p0() {
+        text.0 = match kind_marker {
+            TextPromptText::Title => text_prompt_title(kind, &i18n),
+            TextPromptText::Value => format!("{}_", prompt.as_ref().value),
+        };
+    }
+
+    let mut button_labels = Vec::new();
+    for (action, children) in &mut texts.p1() {
+        button_labels.push((*action, children.iter().collect::<Vec<_>>()));
+    }
+    for (action, children) in button_labels {
+        let label = match action {
+            TextPromptAction::Confirm => i18n.text("button.confirm"),
+            TextPromptAction::Cancel => i18n.text("button.cancel"),
+        };
+        for child in children {
+            if let Ok(mut text) = texts.p2().get_mut(child) {
+                text.0 = label.clone();
+            }
+        }
+    }
+}
+
+fn text_prompt_title(kind: &TextPromptKind, i18n: &I18n) -> String {
+    match kind {
+        TextPromptKind::NewPuzzle => i18n.text("save.prompt.new_puzzle"),
+        TextPromptKind::NewSolution { .. } => i18n.text("save.prompt.new_solution"),
+        TextPromptKind::RenamePuzzle { .. } => i18n.text("save.prompt.rename_puzzle"),
+        TextPromptKind::RenameSolution { .. } => i18n.text("save.prompt.rename_solution"),
+        TextPromptKind::SaveAsNewPuzzle => i18n.text("save.prompt.save_as_new_puzzle"),
     }
 }
 

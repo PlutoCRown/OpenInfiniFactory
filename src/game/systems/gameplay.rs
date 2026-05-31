@@ -15,7 +15,7 @@ use crate::game::state::{
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{
-    AreaKind, CarriedItem, InventoryItems, PendingKeyBind, UiRuntime, HOTBAR_SLOTS,
+    AreaKind, CarriedItem, InventoryItems, PendingKeyBind, TextPromptState, UiRuntime, HOTBAR_SLOTS,
 };
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::blocks::{BlockData, BlockKind};
@@ -41,6 +41,7 @@ pub fn gameplay_input(
     mut mouse_wheel: MessageReader<MouseWheel>,
     config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
+    text_prompt: Res<TextPromptState>,
     mut mode: ResMut<GameMode>,
     mut placement: ResMut<PlacementState>,
     mut teleport_rename: ResMut<TeleportRenameState>,
@@ -50,7 +51,7 @@ pub fn gameplay_input(
 ) {
     let bindings = &config.key_bindings;
 
-    if pending_key_bind.0.is_some() {
+    if pending_key_bind.0.is_some() || text_prompt.kind.is_some() {
         mouse_wheel.clear();
         return;
     }

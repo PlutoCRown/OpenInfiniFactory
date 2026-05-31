@@ -272,9 +272,13 @@ fn run_material_destroy_phase(
     let mut sparks = Vec::new();
     for (pos, destroyer) in destroyers {
         match destroyer {
-            MaterialDestroyer::Drill { target } => {
-                mark_material_destroy(world, pending_destroyed, pos + target, ready_turn, &mut sparks)
-            }
+            MaterialDestroyer::Drill { target } => mark_material_destroy(
+                world,
+                pending_destroyed,
+                pos + target,
+                ready_turn,
+                &mut sparks,
+            ),
             MaterialDestroyer::AdjacentDrillHead => {
                 for offset in signal_offsets() {
                     mark_material_destroy(

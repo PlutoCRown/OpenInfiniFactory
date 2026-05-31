@@ -19,7 +19,8 @@ use crate::game::ui::{
     ActiveSettingsSlider, BlockEditAction, BlockPanelDropdown, CarriedItem, ConfirmDialogAction,
     ConfirmDialogKind, ConfirmDialogState, InventoryItems, MenuAction, OpenBlockPanelDropdown,
     OpenSettingsDropdown, PendingKeyBind, SaveListAction, SettingsAction, SettingsSliderTrigger,
-    SettingsTab, TeleportAction, UiPanelContext, UiPanelId, UiRuntime,
+    SettingsTab, TeleportAction, TextPromptAction, TextPromptKind, TextPromptState, UiPanelContext,
+    UiPanelId, UiRuntime,
 };
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
 use crate::game::world::rendering::{
@@ -29,8 +30,8 @@ use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_M
 use crate::shared::config::{input_from_buttons, open_config_folder, save_config, GameConfig};
 use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::save::{
-    delete_save, load_world, next_world_name, reset_solution_world, save_solution_with_puzzle,
-    save_world, SaveKind, SaveState,
+    delete_save, load_world, next_named_save, rename_save, reset_solution_world,
+    save_solution_with_puzzle, save_world, SaveKind, SaveState,
 };
 
 #[derive(SystemParam)]
@@ -59,12 +60,13 @@ pub fn menu_actions(
     mut ui_runtime: ResMut<UiRuntime>,
     mut world_menu: WorldMenuParams,
     mut confirm_dialog: ResMut<ConfirmDialogState>,
+    mut text_prompt: ResMut<TextPromptState>,
     actions: Query<&MenuAction>,
 ) {
     if !primary_click(&mut click) {
         return;
     }
-    let Ok(action) = actions.get(click.entity).copied() else {
+    let Ok(action) = actions.get(click.entity).cloned() else {
         return;
     };
     click.propagate(false);
@@ -72,13 +74,13 @@ pub fn menu_actions(
     match (*mode, action) {
         (GameMode::MainMenu, MenuAction::EditPuzzle) => {
             save_state.refresh();
-            save_state.select_puzzle(None);
+            save_state.select_puzzle(None, None);
             solution_state.save_list_entry = WorldEntryMode::EditPuzzle;
             *mode = GameMode::SaveListMain;
         }
         (GameMode::MainMenu, MenuAction::Play) => {
             save_state.refresh();
-            save_state.select_puzzle(None);
+            save_state.select_puzzle(None, None);
             solution_state.save_list_entry = WorldEntryMode::PlaySolution;
             *mode = GameMode::SaveListMain;
         }
@@ -102,9 +104,15 @@ pub fn menu_actions(
                     simulation.step_requested = false;
                     simulation.accumulator = 0.0;
                     simulation.start_snapshot = None;
-                    if save_state.current_kind == Some(SaveKind::Puzzle) {
-                        solution_state.puzzle_snapshot = Some(world_menu.world.clone());
-                    }
+                    solution_state.puzzle_snapshot = Some(world_menu.world.clone());
+                    save_state.current = Some(next_named_save(
+                        &save_state
+                            .entries
+                            .iter()
+                            .map(|entry| entry.name.clone())
+                            .collect::<Vec<_>>(),
+                        save_state.current.as_deref().unwrap_or("solution"),
+                    ));
                     save_state.current_kind = Some(SaveKind::Solution);
                     BuilderMode::Play
                 }
@@ -125,6 +133,9 @@ pub fn menu_actions(
                 &mut save_state,
                 &mut solution_state,
             );
+        }
+        (GameMode::Paused, MenuAction::SaveAsNewPuzzle) => {
+            open_text_prompt(&mut text_prompt, TextPromptKind::SaveAsNewPuzzle, "puzzle");
         }
         (GameMode::Paused, MenuAction::ResetSolution) => {
             confirm_dialog.kind = Some(ConfirmDialogKind::ResetSolution);
@@ -173,12 +184,13 @@ pub fn save_list_actions(
     mut simulation: ResMut<SimulationState>,
     mut world_menu: WorldMenuParams,
     mut confirm_dialog: ResMut<ConfirmDialogState>,
+    mut text_prompt: ResMut<TextPromptState>,
     actions: Query<&SaveListAction>,
 ) {
     if !primary_click(&mut click) || *mode != GameMode::SaveListMain {
         return;
     }
-    let Ok(action) = actions.get(click.entity).copied() else {
+    let Ok(action) = actions.get(click.entity).cloned() else {
         return;
     };
     click.propagate(false);
@@ -188,33 +200,7 @@ pub fn save_list_actions(
             if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
                 return;
             }
-            let name = next_world_name(&save_state.slots);
-            world_menu.world.clear();
-            seed_demo_world(&mut world_menu.world);
-            *inventory = InventoryItems::for_mode(BuilderMode::Edit);
-            save_world(&world_menu.world, &name, SaveKind::Puzzle, &inventory);
-            save_state.refresh();
-            open_loaded_world(
-                &name,
-                WorldEntryMode::EditPuzzle,
-                &mut world_menu.world,
-                &mut builder_mode,
-                &mut inventory,
-                &mut carried,
-                &mut placement,
-                &mut save_state,
-                &mut solution_state,
-                &mut simulation,
-                &mut world_menu.commands,
-                &mut world_menu.meshes,
-                &world_menu.block_entities,
-                &world_menu.render_assets,
-                &world_menu.debug,
-                &mut world_menu.factory_structures,
-                &mut world_menu.movement_influence,
-                &mut world_menu.pusher_state,
-                &mut mode,
-            );
+            open_text_prompt(&mut text_prompt, TextPromptKind::NewPuzzle, "puzzle");
         }
         SaveListAction::NewSolution => {
             if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
@@ -223,43 +209,19 @@ pub fn save_list_actions(
             let Some(puzzle_name) = save_state.selected_puzzle.clone() else {
                 return;
             };
-            if load_world(&mut world_menu.world, &puzzle_name).is_none() {
-                return;
-            }
-            let name = next_world_name(&save_state.slots);
-            let puzzle_snapshot = world_menu.world.clone();
-            *inventory = InventoryItems::for_mode(BuilderMode::Play);
-            save_solution_with_puzzle(&world_menu.world, &name, &puzzle_snapshot, &inventory);
-            save_state.refresh();
-            open_loaded_world(
-                &name,
-                WorldEntryMode::PlaySolution,
-                &mut world_menu.world,
-                &mut builder_mode,
-                &mut inventory,
-                &mut carried,
-                &mut placement,
-                &mut save_state,
-                &mut solution_state,
-                &mut simulation,
-                &mut world_menu.commands,
-                &mut world_menu.meshes,
-                &world_menu.block_entities,
-                &world_menu.render_assets,
-                &world_menu.debug,
-                &mut world_menu.factory_structures,
-                &mut world_menu.movement_influence,
-                &mut world_menu.pusher_state,
-                &mut mode,
+            open_text_prompt(
+                &mut text_prompt,
+                TextPromptKind::NewSolution {
+                    puzzle: puzzle_name,
+                },
+                "solution",
             );
         }
-        SaveListAction::LoadPuzzle(index) => {
-            let puzzles = save_state.puzzles();
-            let Some(entry) = puzzles.get(index) else {
-                return;
-            };
-            let name = entry.name.clone();
+        SaveListAction::LoadPuzzle(name) => {
             if solution_state.save_list_entry == WorldEntryMode::EditPuzzle {
+                if !save_state.puzzles().iter().any(|entry| entry.name == *name) {
+                    return;
+                }
                 open_loaded_world(
                     &name,
                     WorldEntryMode::EditPuzzle,
@@ -282,21 +244,30 @@ pub fn save_list_actions(
                     &mut mode,
                 );
             } else {
-                save_state.select_puzzle(Some(name));
+                let Some(choice) = save_state
+                    .puzzle_choices()
+                    .into_iter()
+                    .find(|choice| choice.name == *name)
+                else {
+                    return;
+                };
+                save_state.select_puzzle(Some(choice.name), Some(choice.source));
             }
         }
-        SaveListAction::LoadSolution(index) => {
+        SaveListAction::LoadSolution(name) => {
             if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
                 return;
             }
             if save_state.selected_puzzle.is_none() {
                 return;
             }
-            let solutions = save_state.selected_puzzle_solutions();
-            let Some(entry) = solutions.get(index) else {
+            if !save_state
+                .selected_puzzle_solutions()
+                .iter()
+                .any(|entry| entry.name == *name)
+            {
                 return;
-            };
-            let name = entry.name.clone();
+            }
             open_loaded_world(
                 &name,
                 WorldEntryMode::PlaySolution,
@@ -319,18 +290,49 @@ pub fn save_list_actions(
                 &mut mode,
             );
         }
-        SaveListAction::DeletePuzzle(index) => {
-            if let Some(entry) = save_state.puzzles().get(index) {
-                confirm_dialog.kind = Some(ConfirmDialogKind::DeleteSave {
-                    name: entry.name.clone(),
-                });
+        SaveListAction::RenamePuzzle(name) => {
+            if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
+                return;
+            }
+            if save_state.puzzles().iter().any(|entry| entry.name == *name) {
+                open_text_prompt(
+                    &mut text_prompt,
+                    TextPromptKind::RenamePuzzle { name: name.clone() },
+                    &name,
+                );
             }
         }
-        SaveListAction::DeleteSolution(index) => {
-            if let Some(entry) = save_state.selected_puzzle_solutions().get(index) {
-                confirm_dialog.kind = Some(ConfirmDialogKind::DeleteSave {
-                    name: entry.name.clone(),
-                });
+        SaveListAction::RenameSolution(name) => {
+            if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
+                return;
+            }
+            if save_state
+                .selected_puzzle_solutions()
+                .iter()
+                .any(|entry| entry.name == *name)
+            {
+                open_text_prompt(
+                    &mut text_prompt,
+                    TextPromptKind::RenameSolution { name: name.clone() },
+                    &name,
+                );
+            }
+        }
+        SaveListAction::DeletePuzzle(name) => {
+            if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
+                return;
+            }
+            if save_state.puzzles().iter().any(|entry| entry.name == *name) {
+                confirm_dialog.kind = Some(ConfirmDialogKind::DeleteSave { name: name.clone() });
+            }
+        }
+        SaveListAction::DeleteSolution(name) => {
+            if save_state
+                .selected_puzzle_solutions()
+                .iter()
+                .any(|entry| entry.name == *name)
+            {
+                confirm_dialog.kind = Some(ConfirmDialogKind::DeleteSave { name: name.clone() });
             }
         }
         SaveListAction::Back => {
@@ -370,7 +372,7 @@ pub fn confirm_dialog_actions(
             delete_save(&name);
             save_state.refresh();
             if save_state.selected_puzzle.as_deref() == Some(name.as_str()) {
-                save_state.select_puzzle(None);
+                save_state.select_puzzle(None, None);
             }
         }
         (ConfirmDialogKind::ResetSolution, ConfirmDialogAction::Primary) => {
@@ -483,6 +485,251 @@ pub fn confirm_dialog_actions(
     confirm_dialog.kind = None;
 }
 
+pub fn text_prompt_actions(
+    mut click: On<Pointer<Click>>,
+    mut prompt: ResMut<TextPromptState>,
+    mut mode: ResMut<GameMode>,
+    mut builder_mode: ResMut<BuilderMode>,
+    mut inventory: ResMut<InventoryItems>,
+    mut carried: ResMut<CarriedItem>,
+    mut placement: ResMut<PlacementState>,
+    mut save_state: ResMut<SaveState>,
+    mut solution_state: ResMut<SolutionState>,
+    mut simulation: ResMut<SimulationState>,
+    mut world_menu: WorldMenuParams,
+    actions: Query<&TextPromptAction>,
+) {
+    if !primary_click(&mut click) {
+        return;
+    }
+    let Ok(action) = actions.get(click.entity).copied() else {
+        return;
+    };
+    click.propagate(false);
+    match action {
+        TextPromptAction::Confirm => confirm_text_prompt(
+            &mut prompt,
+            &mut mode,
+            &mut builder_mode,
+            &mut inventory,
+            &mut carried,
+            &mut placement,
+            &mut save_state,
+            &mut solution_state,
+            &mut simulation,
+            &mut world_menu,
+        ),
+        TextPromptAction::Cancel => {
+            prompt.kind = None;
+            prompt.value.clear();
+        }
+    }
+}
+
+pub fn text_prompt_input(
+    mut prompt: ResMut<TextPromptState>,
+    mut mode: ResMut<GameMode>,
+    mut builder_mode: ResMut<BuilderMode>,
+    mut inventory: ResMut<InventoryItems>,
+    mut carried: ResMut<CarriedItem>,
+    mut placement: ResMut<PlacementState>,
+    mut save_state: ResMut<SaveState>,
+    mut solution_state: ResMut<SolutionState>,
+    mut simulation: ResMut<SimulationState>,
+    mut world_menu: WorldMenuParams,
+    mut keyboard_input: MessageReader<KeyboardInput>,
+) {
+    if prompt.kind.is_none() {
+        return;
+    }
+    let mut confirm = false;
+    let mut cancel = false;
+    for event in keyboard_input.read() {
+        if event.state != ButtonState::Pressed {
+            continue;
+        }
+        match &event.logical_key {
+            Key::Enter => confirm = true,
+            Key::Escape => cancel = true,
+            Key::Backspace => {
+                prompt.value.pop();
+            }
+            Key::Space => push_rename_char(&mut prompt.value, ' '),
+            Key::Character(text) => {
+                for ch in text.chars() {
+                    push_rename_char(&mut prompt.value, ch);
+                }
+            }
+            _ => {}
+        }
+    }
+    if confirm {
+        confirm_text_prompt(
+            &mut prompt,
+            &mut mode,
+            &mut builder_mode,
+            &mut inventory,
+            &mut carried,
+            &mut placement,
+            &mut save_state,
+            &mut solution_state,
+            &mut simulation,
+            &mut world_menu,
+        );
+    } else if cancel {
+        prompt.kind = None;
+        prompt.value.clear();
+    }
+}
+
+fn open_text_prompt(prompt: &mut TextPromptState, kind: TextPromptKind, value: &str) {
+    prompt.kind = Some(kind);
+    prompt.value = value.chars().take(24).collect();
+}
+
+fn confirm_text_prompt(
+    prompt: &mut TextPromptState,
+    mode: &mut GameMode,
+    builder_mode: &mut BuilderMode,
+    inventory: &mut InventoryItems,
+    carried: &mut CarriedItem,
+    placement: &mut PlacementState,
+    save_state: &mut SaveState,
+    solution_state: &mut SolutionState,
+    simulation: &mut SimulationState,
+    world_menu: &mut WorldMenuParams,
+) {
+    let Some(kind) = prompt.kind.clone() else {
+        return;
+    };
+    let requested = prompt.value.clone();
+    let existing = save_state
+        .entries
+        .iter()
+        .map(|entry| entry.name.clone())
+        .collect::<Vec<_>>();
+    let name = match &kind {
+        TextPromptKind::RenamePuzzle { name: old }
+        | TextPromptKind::RenameSolution { name: old }
+            if requested.trim() == old =>
+        {
+            old.clone()
+        }
+        _ => next_named_save(&existing, &requested),
+    };
+    if name.is_empty() {
+        return;
+    }
+
+    match kind {
+        TextPromptKind::NewPuzzle => {
+            world_menu.world.clear();
+            seed_demo_world(&mut world_menu.world);
+            *inventory = InventoryItems::for_mode(BuilderMode::Edit);
+            if save_world(&world_menu.world, &name, SaveKind::Puzzle, inventory) {
+                save_state.refresh();
+                open_loaded_world_from_menu(
+                    &name,
+                    WorldEntryMode::EditPuzzle,
+                    mode,
+                    builder_mode,
+                    inventory,
+                    carried,
+                    placement,
+                    save_state,
+                    solution_state,
+                    simulation,
+                    world_menu,
+                );
+            }
+        }
+        TextPromptKind::NewSolution { puzzle } => {
+            let Some(loaded) = load_world(&mut world_menu.world, &puzzle) else {
+                return;
+            };
+            let puzzle_snapshot = loaded
+                .puzzle_snapshot
+                .unwrap_or_else(|| world_menu.world.clone());
+            *world_menu.world = puzzle_snapshot.clone();
+            *inventory = InventoryItems::for_mode(BuilderMode::Play);
+            if save_solution_with_puzzle(&world_menu.world, &name, &puzzle_snapshot, inventory) {
+                save_state.refresh();
+                open_loaded_world_from_menu(
+                    &name,
+                    WorldEntryMode::PlaySolution,
+                    mode,
+                    builder_mode,
+                    inventory,
+                    carried,
+                    placement,
+                    save_state,
+                    solution_state,
+                    simulation,
+                    world_menu,
+                );
+            }
+        }
+        TextPromptKind::RenamePuzzle { name: old }
+        | TextPromptKind::RenameSolution { name: old } => {
+            if old == name || rename_save(&old, &name) {
+                if save_state.current.as_deref() == Some(old.as_str()) {
+                    save_state.current = Some(name.clone());
+                }
+                if save_state.selected_puzzle.as_deref() == Some(old.as_str()) {
+                    save_state.select_puzzle(Some(name.clone()), save_state.selected_puzzle_kind);
+                }
+                save_state.refresh();
+            }
+        }
+        TextPromptKind::SaveAsNewPuzzle => {
+            if save_world(&world_menu.world, &name, SaveKind::Puzzle, inventory) {
+                save_state.current = Some(name);
+                save_state.current_kind = Some(SaveKind::Puzzle);
+                solution_state.dirty = false;
+                save_state.refresh();
+            }
+        }
+    }
+    prompt.kind = None;
+    prompt.value.clear();
+}
+
+fn open_loaded_world_from_menu(
+    name: &str,
+    entry: WorldEntryMode,
+    mode: &mut GameMode,
+    builder_mode: &mut BuilderMode,
+    inventory: &mut InventoryItems,
+    carried: &mut CarriedItem,
+    placement: &mut PlacementState,
+    save_state: &mut SaveState,
+    solution_state: &mut SolutionState,
+    simulation: &mut SimulationState,
+    world_menu: &mut WorldMenuParams,
+) {
+    open_loaded_world(
+        name,
+        entry,
+        &mut world_menu.world,
+        builder_mode,
+        inventory,
+        carried,
+        placement,
+        save_state,
+        solution_state,
+        simulation,
+        &mut world_menu.commands,
+        &mut world_menu.meshes,
+        &world_menu.block_entities,
+        &world_menu.render_assets,
+        &world_menu.debug,
+        &mut world_menu.factory_structures,
+        &mut world_menu.movement_influence,
+        &mut world_menu.pusher_state,
+        mode,
+    );
+}
+
 fn save_current_world(
     world: &WorldBlocks,
     inventory: &InventoryItems,
@@ -490,10 +737,16 @@ fn save_current_world(
     solution_state: &mut SolutionState,
 ) {
     let kind = save_state.current_kind.unwrap_or(SaveKind::Puzzle);
-    let name = save_state
-        .current
-        .clone()
-        .unwrap_or_else(|| next_world_name(&save_state.slots));
+    let name = save_state.current.clone().unwrap_or_else(|| {
+        next_named_save(
+            &save_state
+                .entries
+                .iter()
+                .map(|entry| entry.name.clone())
+                .collect::<Vec<_>>(),
+            "world",
+        )
+    });
     let saved = match kind {
         SaveKind::Puzzle => save_world(world, &name, SaveKind::Puzzle, inventory),
         SaveKind::Solution => {
@@ -675,7 +928,7 @@ fn open_loaded_world(
         WorldEntryMode::EditPuzzle => SaveKind::Puzzle,
         WorldEntryMode::PlaySolution => SaveKind::Solution,
     });
-    save_state.select_puzzle(None);
+    save_state.select_puzzle(None, None);
 
     solution_state.entry = entry;
     solution_state.dirty = false;
@@ -725,7 +978,7 @@ fn clear_loaded_world(
     world.clear();
     save_state.current = None;
     save_state.current_kind = None;
-    save_state.select_puzzle(None);
+    save_state.select_puzzle(None, None);
     solution_state.puzzle_snapshot = None;
     solution_state.dirty = false;
     solution_state.entry = WorldEntryMode::EditPuzzle;

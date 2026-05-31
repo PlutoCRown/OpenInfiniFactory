@@ -10,7 +10,10 @@ pub fn update_panel_visibility(
         Query<(&PanelVisibility, &mut Node)>,
         Query<(&MenuAction, &mut Node), With<Button>>,
         Query<(&UiPanelBinding, &mut Node)>,
-        Query<(&Node, &mut Visibility, &mut PanelPosition), With<PanelWindow>>,
+        Query<
+            (&Node, &mut Visibility, &mut PanelPosition),
+            (With<PanelWindow>, Without<TextPromptRoot>),
+        >,
     )>,
     confirm_dialog: Res<ConfirmDialogState>,
 ) {

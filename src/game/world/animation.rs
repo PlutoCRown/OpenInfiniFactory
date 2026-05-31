@@ -155,7 +155,9 @@ pub fn animate_blocks(
             BlockAnimationKind::Rotate { pivot, clockwise } => {
                 rotate_world_pos_y(animation.from_translation, pivot, clockwise, eased)
             }
-            _ => animation.from_translation.lerp(animation.to_translation, eased),
+            _ => animation
+                .from_translation
+                .lerp(animation.to_translation, eased),
         };
         transform.rotation = animation.from_rotation.slerp(animation.to_rotation, eased);
         transform.scale = animation.from_scale.lerp(animation.to_scale, eased);

@@ -17,8 +17,8 @@ use crate::shared::i18n::{I18n, Language};
 use crate::shared::save::{SaveKind, SaveState};
 
 use super::components::{
-    hover_border, inset_border, menu_button, pressed_border, raised_border, BUTTON_BG,
-    BUTTON_HOVER_BG,
+    full_width_button, hover_border, inset_border, menu_button, pressed_border, raised_border,
+    text, BUTTON_BG, BUTTON_HOVER_BG,
 };
 use super::types::{
     ActiveSettingsSlider, BlockEditAction, BlockMaterialIcon, BlockMaterialIconSlot,
@@ -28,11 +28,13 @@ use super::types::{
     InGameHudVisibility, InventoryItems, InventorySlot, InventoryTooltip, KeyBindingButton,
     LocalizedText, MenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown, PanelCloseButton,
     PanelDragState, PanelPosition, PanelText, PanelTextKind, PanelTitleBar, PanelVisibility,
-    PanelWindow, PendingKeyBind, SaveListAction, SaveListCloseButton, SaveListRow, SettingsAction,
+    PanelWindow, PendingKeyBind, SaveListAction, SaveListCloseButton, SaveListPrompt,
+    SaveListPuzzleColumn, SaveListRenderState, SaveListSolutionColumn, SettingsAction,
     SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
     SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind, SettingsValueText, SlotArea,
-    StatusText, StatusTextKind, TeleportAction, UiHoverState, UiPanelBinding, UiPanelContext,
-    UiPanelId, UiRuntime,
+    StatusText, StatusTextKind, TeleportAction, TextPromptAction, TextPromptKind, TextPromptRoot,
+    TextPromptState, TextPromptText, UiHoverState, UiPanelBinding, UiPanelContext, UiPanelId,
+    UiRuntime,
 };
 use super::widgets::{short_item_name, slot_color};
 include!("font.rs");

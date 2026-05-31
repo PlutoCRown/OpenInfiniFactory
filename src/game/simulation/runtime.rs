@@ -161,14 +161,13 @@ pub fn run_turn(
     run_powered_marker_phase(world, &powered_devices);
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
-    let drill_sparks =
-        run_material_behavior_phase(
-            world,
-            &powered_devices,
-            factory_structures,
-            pending_generated,
-            turn + 1,
-        );
+    let drill_sparks = run_material_behavior_phase(
+        world,
+        &powered_devices,
+        factory_structures,
+        pending_generated,
+        turn + 1,
+    );
 
     prepare_upcoming_generation(world, pending_generated, turn + 1);
     sample.behavior_ms = mark_elapsed_ms(&mut mark);

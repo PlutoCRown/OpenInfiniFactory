@@ -222,5 +222,15 @@
   "teleport.pair": "Pair: {pair}",
   "teleport.title": "Teleport",
   "tab.gameplay": "Gameplay",
-  "tab.key_bindings": "Key Bindings"
+  "tab.key_bindings": "Key Bindings",
+  "button.rename": "Rename",
+  "button.save_as_new_puzzle": "Save As New Puzzle",
+  "save.choose_puzzle_prompt": "Select a puzzle first.",
+  "save.prompt.new_puzzle": "New puzzle name",
+  "save.prompt.new_solution": "New solution name",
+  "save.prompt.rename_puzzle": "Rename puzzle",
+  "save.prompt.rename_solution": "Rename solution",
+  "save.prompt.save_as_new_puzzle": "Save as new puzzle",
+  "save.title.edit_puzzle": "Edit Puzzle",
+  "save.title.play_solution": "Start Playing"
 }

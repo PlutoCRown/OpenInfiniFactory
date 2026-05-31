@@ -47,6 +47,9 @@ impl BlockIconAssets {
 pub(crate) struct BlockIconRenderEntity;
 
 #[derive(Component)]
+pub(crate) struct BlockIconRenderRoot;
+
+#[derive(Component)]
 pub(crate) struct BlockIconRenderCamera;
 
 #[derive(Resource)]
@@ -167,6 +170,7 @@ pub fn setup_block_icons(
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.85, -0.55, -0.25)),
         icon_layer.clone(),
         BlockIconRenderEntity,
+        BlockIconRenderRoot,
     ));
 
     for (index, kind) in icon_kinds.into_iter().enumerate() {
@@ -214,6 +218,7 @@ pub fn setup_block_icons(
             },
             icon_layer.clone(),
             BlockIconRenderEntity,
+            BlockIconRenderRoot,
             BlockIconRenderCamera,
         ));
     }
@@ -241,7 +246,7 @@ fn block_icon_kinds() -> Vec<BlockKind> {
 pub fn retire_block_icon_renderers(
     mut commands: Commands,
     state: Option<ResMut<BlockIconRenderState>>,
-    render_entities: Query<Entity, With<BlockIconRenderEntity>>,
+    render_entities: Query<Entity, With<BlockIconRenderRoot>>,
     mut cameras: Query<&mut Camera, With<BlockIconRenderCamera>>,
 ) {
     let Some(mut state) = state else {
@@ -860,12 +865,9 @@ fn spawn_block_model(
             AnimationEasing::SmoothStep => progress * progress * (3.0 - 2.0 * progress),
         };
         transform.translation = match animation.kind {
-            BlockAnimationKind::Rotate { pivot, clockwise } => rotate_world_pos_y(
-                grid_to_world(animation.from_pos),
-                pivot,
-                clockwise,
-                eased,
-            ),
+            BlockAnimationKind::Rotate { pivot, clockwise } => {
+                rotate_world_pos_y(grid_to_world(animation.from_pos), pivot, clockwise, eased)
+            }
             _ => grid_to_world(animation.from_pos).lerp(grid_to_world(animation.to_pos), eased),
         };
         transform.rotation = render_rotation(data, animation.from_facing)
@@ -909,7 +911,11 @@ fn spawn_block_model(
     };
 
     if let Some((_, icon_layer)) = icon_render {
-        entity.insert((icon_layer.clone(), BlockIconRenderEntity));
+        entity.insert((
+            icon_layer.clone(),
+            BlockIconRenderEntity,
+            BlockIconRenderRoot,
+        ));
     }
 
     if with_block_entity {

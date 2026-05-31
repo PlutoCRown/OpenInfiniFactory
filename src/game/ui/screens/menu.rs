@@ -54,6 +54,11 @@ const PAUSE_MENU_ITEMS: &[MenuItem] = &[
         font_size: 16.0,
     },
     MenuItem {
+        action: MenuAction::SaveAsNewPuzzle,
+        height: 38.0,
+        font_size: 16.0,
+    },
+    MenuItem {
         action: MenuAction::ResetSolution,
         height: 38.0,
         font_size: 16.0,

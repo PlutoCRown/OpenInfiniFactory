@@ -17,19 +17,20 @@ pub use systems::{
     update_labeler_ui, update_localized_ui, update_panel_visibility, update_save_list_ui,
     update_settings_dropdowns_ui, update_settings_slider_drag_ui, update_settings_sliders_ui,
     update_settings_tabs_ui, update_settings_text_ui, update_status_ui, update_teleport_ui,
-    update_ui_layers,
+    update_text_prompt_ui, update_ui_layers,
 };
 pub use types::{
     ActiveSettingsSlider, AreaKind, BlockEditAction, BlockPanelDropdown, CarriedItem,
     ConfirmDialogAction, ConfirmDialogKind, ConfirmDialogState, HotbarItems, InventoryItems,
     MenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown, PanelDragState, PendingKeyBind,
-    SaveListAction, SettingsAction, SettingsSliderTrigger, SettingsTab, TeleportAction,
-    UiHoverState, UiPanelContext, UiRuntime, HOTBAR_SLOTS,
+    SaveListAction, SaveListRenderState, SettingsAction, SettingsSliderTrigger, SettingsTab,
+    TeleportAction, TextPromptAction, TextPromptKind, TextPromptState, UiHoverState,
+    UiPanelContext, UiRuntime, HOTBAR_SLOTS,
 };
 
 use crate::game::systems::menus::{
     block_edit_actions, confirm_dialog_actions, settings_action_clicked, settings_menu_actions,
-    teleport_menu_actions, teleport_rename_input,
+    teleport_menu_actions, teleport_rename_input, text_prompt_actions, text_prompt_input,
 };
 use crate::game::{player, systems as game_systems};
 use components::{
@@ -47,6 +48,8 @@ impl Plugin for GameUiPlugin {
             .insert_resource(ActiveSettingsSlider::default())
             .insert_resource(UiRuntime::default())
             .insert_resource(ConfirmDialogState::default())
+            .insert_resource(TextPromptState::default())
+            .insert_resource(SaveListRenderState::default())
             .insert_resource(CarriedItem::default())
             .insert_resource(PanelDragState::default())
             .insert_resource(UiHoverState::default())
@@ -54,6 +57,7 @@ impl Plugin for GameUiPlugin {
             .add_observer(teleport_menu_actions)
             .add_observer(confirm_dialog_actions)
             .add_observer(settings_action_clicked)
+            .add_observer(text_prompt_actions)
             .add_observer(inventory_slot_clicks)
             .add_observer(panel_close_clicked)
             .add_observer(panel_drag_started)
@@ -67,7 +71,11 @@ impl Plugin for GameUiPlugin {
             .add_observer(ui_unhovered)
             .add_systems(
                 Update,
-                (teleport_rename_input, settings_menu_actions)
+                (
+                    teleport_rename_input,
+                    text_prompt_input,
+                    settings_menu_actions,
+                )
                     .chain()
                     .after(game_systems::debug::mark_perf_input)
                     .before(game_systems::debug::mark_perf_menus),
@@ -100,6 +108,7 @@ impl Plugin for GameUiPlugin {
                     update_carried_item_ui,
                     update_save_list_ui,
                     update_confirm_dialog_ui,
+                    update_text_prompt_ui,
                     apply_ui_font,
                     player::controller::sync_cursor_grab,
                 )

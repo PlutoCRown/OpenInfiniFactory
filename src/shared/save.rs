@@ -12,26 +12,19 @@ use crate::game::{
 };
 
 pub const SAVE_DIR: &str = "saves";
-pub const SAVE_SLOTS: usize = 8;
-
 #[derive(Resource, Default)]
 pub struct SaveState {
     pub current: Option<String>,
     pub current_kind: Option<SaveKind>,
-    pub slots: Vec<String>,
     pub entries: Vec<SaveEntry>,
     pub selected_puzzle: Option<String>,
+    pub selected_puzzle_kind: Option<SavePuzzleSource>,
     selected_puzzle_solutions: Vec<SaveEntry>,
 }
 
 impl SaveState {
     pub fn refresh(&mut self) {
         self.entries = list_save_entries();
-        self.slots = self
-            .entries
-            .iter()
-            .map(|entry| entry.name.clone())
-            .collect();
         self.refresh_selected_puzzle_solutions();
     }
 
@@ -42,11 +35,31 @@ impl SaveState {
             .collect()
     }
 
-    pub fn select_puzzle(&mut self, puzzle: Option<String>) {
-        if self.selected_puzzle == puzzle {
+    pub fn puzzle_choices(&self) -> Vec<SavePuzzleChoice> {
+        let mut choices: Vec<SavePuzzleChoice> = self
+            .entries
+            .iter()
+            .filter_map(|entry| match entry.kind {
+                SaveKind::Puzzle => Some(SavePuzzleChoice {
+                    name: entry.name.clone(),
+                    source: SavePuzzleSource::PuzzleFile,
+                }),
+                SaveKind::Solution => Some(SavePuzzleChoice {
+                    name: entry.name.clone(),
+                    source: SavePuzzleSource::SolutionSnapshot,
+                }),
+            })
+            .collect();
+        choices.sort_by(|a, b| a.name.cmp(&b.name).then(a.source.cmp(&b.source)));
+        choices
+    }
+
+    pub fn select_puzzle(&mut self, puzzle: Option<String>, source: Option<SavePuzzleSource>) {
+        if self.selected_puzzle == puzzle && self.selected_puzzle_kind == source {
             return;
         }
         self.selected_puzzle = puzzle;
+        self.selected_puzzle_kind = source;
         self.refresh_selected_puzzle_solutions();
     }
 
@@ -55,20 +68,26 @@ impl SaveState {
     }
 
     fn refresh_selected_puzzle_solutions(&mut self) {
-        self.selected_puzzle_solutions = self
-            .selected_puzzle
-            .as_deref()
-            .map(|puzzle| {
-                self.entries
+        self.selected_puzzle_solutions =
+            match (self.selected_puzzle.as_deref(), self.selected_puzzle_kind) {
+                (Some(puzzle), Some(SavePuzzleSource::PuzzleFile)) => self
+                    .entries
                     .iter()
                     .filter(|entry| {
                         entry.kind == SaveKind::Solution
                             && solution_matches_puzzle(&entry.name, puzzle)
                     })
                     .cloned()
-                    .collect()
-            })
-            .unwrap_or_default();
+                    .collect(),
+                (Some(solution), Some(SavePuzzleSource::SolutionSnapshot)) => self
+                    .entries
+                    .iter()
+                    .find(|entry| entry.kind == SaveKind::Solution && entry.name == solution)
+                    .cloned()
+                    .into_iter()
+                    .collect(),
+                _ => Vec::new(),
+            };
     }
 }
 
@@ -76,6 +95,18 @@ impl SaveState {
 pub struct SaveEntry {
     pub name: String,
     pub kind: SaveKind,
+}
+
+#[derive(Clone)]
+pub struct SavePuzzleChoice {
+    pub name: String,
+    pub source: SavePuzzleSource,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum SavePuzzleSource {
+    PuzzleFile,
+    SolutionSnapshot,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -195,6 +226,26 @@ pub fn delete_save(name: &str) -> bool {
         Ok(()) => true,
         Err(error) => {
             warn!("Failed to delete save {name}: {error}");
+            false
+        }
+    }
+}
+
+pub fn rename_save(old_name: &str, new_name: &str) -> bool {
+    let new_name = normalized_save_name(new_name);
+    if new_name.is_empty() || old_name == new_name {
+        return false;
+    }
+    let old_path = save_path(old_name);
+    let new_path = save_path(&new_name);
+    if new_path.exists() {
+        warn!("Cannot rename save {old_name} to {new_name}: target already exists");
+        return false;
+    }
+    match fs::rename(old_path, new_path) {
+        Ok(()) => true,
+        Err(error) => {
+            warn!("Failed to rename save {old_name} to {new_name}: {error}");
             false
         }
     }
@@ -502,6 +553,23 @@ pub fn next_world_name(existing: &[String]) -> String {
     unreachable!()
 }
 
+pub fn next_named_save(existing: &[String], base: &str) -> String {
+    let base = normalized_save_name(base);
+    if base.is_empty() {
+        return next_world_name(existing);
+    }
+    if !existing.iter().any(|name| name == &base) {
+        return base;
+    }
+    for index in 2.. {
+        let candidate = format!("{base}_{index}");
+        if !existing.iter().any(|name| name == &candidate) {
+            return candidate;
+        }
+    }
+    unreachable!()
+}
+
 fn save_path(name: &str) -> PathBuf {
     Path::new(SAVE_DIR).join(format!("{}.ron", sanitize_save_name(name)))
 }
@@ -521,6 +589,12 @@ fn sanitize_save_name(name: &str) -> String {
             }
         })
         .collect()
+}
+
+pub fn normalized_save_name(name: &str) -> String {
+    sanitize_save_name(name.trim())
+        .trim_matches('_')
+        .to_string()
 }
 
 #[cfg(test)]

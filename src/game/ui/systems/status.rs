@@ -5,6 +5,7 @@ fn pause_action_visible(
 ) -> bool {
     match action {
         MenuAction::ToggleBuilderMode => solution_state.entry != WorldEntryMode::PlaySolution,
+        MenuAction::SaveAsNewPuzzle => save_state.current_kind == Some(SaveKind::Puzzle),
         MenuAction::ResetSolution => save_state.current_kind == Some(SaveKind::Solution),
         _ => true,
     }

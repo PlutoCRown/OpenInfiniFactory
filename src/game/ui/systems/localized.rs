@@ -13,6 +13,8 @@ pub fn update_localized_ui(
                 Some(SaveKind::Solution) => i18n.text("button.save_solution"),
                 _ => i18n.text("button.save_puzzle"),
             }
+        } else if localized.key == "button.save_as_new_puzzle" {
+            i18n.text("button.save_as_new_puzzle")
         } else {
             i18n.text(localized.key)
         };

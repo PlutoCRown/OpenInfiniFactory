@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 use std::collections::HashSet;
 
-use crate::game::world::blocks::{BlockKind, MovementRule};
 use crate::game::world::animation::PusherAnimation;
+use crate::game::world::blocks::{BlockKind, MovementRule};
 use crate::game::world::grid::WorldBlocks;
 
 use super::factory_activity::FactoryStructureState;
@@ -72,8 +72,16 @@ pub fn blocker_animations(
                 *pos,
                 PusherAnimation {
                     duration: 0.0,
-                    from_extension: if powered_devices.contains(pos) { 1.0 } else { 0.0 },
-                    to_extension: if powered_devices.contains(pos) { 0.0 } else { 1.0 },
+                    from_extension: if powered_devices.contains(pos) {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                    to_extension: if powered_devices.contains(pos) {
+                        0.0
+                    } else {
+                        1.0
+                    },
                 },
             ))
         })
@@ -163,10 +171,13 @@ fn mark_pusher_movement(
     offset: IVec3,
 ) -> Option<StructureMove> {
     let powered = powered_devices.contains(&pos);
-    let entry = pusher_state.entries.entry(pos).or_insert_with(|| PusherStateEntry {
-        extended: false,
-        bound_front: world.is_factory_at(pos + source),
-    });
+    let entry = pusher_state
+        .entries
+        .entry(pos)
+        .or_insert_with(|| PusherStateEntry {
+            extended: false,
+            bound_front: world.is_factory_at(pos + source),
+        });
     if powered == entry.extended {
         return None;
     }

@@ -222,5 +222,15 @@
   "teleport.pair": "配对：{pair}",
   "teleport.title": "传送口",
   "tab.gameplay": "游戏",
-  "tab.key_bindings": "按键绑定"
+  "tab.key_bindings": "按键绑定",
+  "button.rename": "改名",
+  "button.save_as_new_puzzle": "另存为新谜题",
+  "save.choose_puzzle_prompt": "请先选择一个谜题。",
+  "save.prompt.new_puzzle": "新谜题名称",
+  "save.prompt.new_solution": "新方案名称",
+  "save.prompt.rename_puzzle": "重命名谜题",
+  "save.prompt.rename_solution": "重命名方案",
+  "save.prompt.save_as_new_puzzle": "另存为新谜题",
+  "save.title.edit_puzzle": "编辑谜题",
+  "save.title.play_solution": "开始游玩"
 }

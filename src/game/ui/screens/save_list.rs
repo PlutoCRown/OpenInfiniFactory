@@ -2,7 +2,6 @@ use bevy::prelude::*;
 
 use crate::game::state::GameMode;
 use crate::shared::i18n::I18n;
-use crate::shared::save::SAVE_SLOTS;
 
 use super::super::components::{
     default_button_size, flex_row, full_width_button, panel_bundle, panel_content, panel_title_bar,
@@ -10,7 +9,8 @@ use super::super::components::{
     BUTTON_BG,
 };
 use super::super::types::{
-    PanelText, PanelTextKind, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListRow,
+    PanelText, PanelTextKind, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListPrompt,
+    SaveListPuzzleColumn, SaveListSolutionColumn, TextPromptAction, TextPromptRoot, TextPromptText,
 };
 
 pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
@@ -37,23 +37,16 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         });
         panel.spawn(panel_content()).with_children(|panel| {
             panel.spawn(save_columns_row()).with_children(|columns| {
-                spawn_save_column(
-                    columns,
-                    SaveListRow::Puzzle,
-                    SaveListAction::LoadPuzzle,
-                    SaveListAction::DeletePuzzle,
-                    SaveListAction::NewPuzzle,
-                );
-                spawn_save_column(
-                    columns,
-                    SaveListRow::Solution,
-                    SaveListAction::LoadSolution,
-                    SaveListAction::DeleteSolution,
-                    SaveListAction::NewSolution,
-                );
+                spawn_save_column(columns, SaveListAction::NewPuzzle, SaveListPuzzleColumn);
+                spawn_save_column(columns, SaveListAction::NewSolution, SaveListSolutionColumn);
             });
+            panel.spawn((
+                text("", 16.0, Color::srgb(0.82, 0.86, 0.88)),
+                SaveListPrompt,
+            ));
         });
     });
+    spawn_text_prompt(root);
 }
 
 fn save_columns_row() -> impl Bundle {
@@ -68,27 +61,20 @@ fn save_columns_row() -> impl Bundle {
 
 fn spawn_save_column(
     columns: &mut ChildSpawnerCommands,
-    row: fn(usize) -> SaveListRow,
-    load: fn(usize) -> SaveListAction,
-    delete: fn(usize) -> SaveListAction,
     create: SaveListAction,
+    marker: impl Component + Copy,
 ) {
     columns
-        .spawn(transparent_node(Node {
-            width: Val::Px(420.0),
-            flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(6.0),
-            ..default()
-        }))
+        .spawn((
+            transparent_node(Node {
+                width: Val::Px(420.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(6.0),
+                ..default()
+            }),
+            marker,
+        ))
         .with_children(|column| {
-            for index in 0..SAVE_SLOTS {
-                column
-                    .spawn((flex_row(32.0, 6.0), row(index)))
-                    .with_children(|row| {
-                        spawn_save_row_button(row, load(index), 260.0);
-                        spawn_save_row_button(row, delete(index), 80.0);
-                    });
-            }
             spawn_save_slot_button(column, create);
         });
 }
@@ -98,6 +84,28 @@ fn spawn_save_slot_button(parent: &mut ChildSpawnerCommands, action: SaveListAct
         .spawn((full_width_button(34.0), action))
         .with_children(|button| {
             button.spawn(text("", 15.0, Color::WHITE));
+        });
+}
+
+pub fn spawn_save_management_row(
+    parent: &mut ChildSpawnerCommands,
+    load: SaveListAction,
+    rename: SaveListAction,
+    delete: SaveListAction,
+) {
+    parent.spawn(flex_row(32.0, 6.0)).with_children(|row| {
+        spawn_save_row_button(row, load, 220.0);
+        spawn_save_row_button(row, rename, 82.0);
+        spawn_save_row_button(row, delete, 82.0);
+    });
+}
+
+pub fn spawn_save_select_row(parent: &mut ChildSpawnerCommands, load: SaveListAction) {
+    parent
+        .spawn(full_width_button(32.0))
+        .insert(load)
+        .with_children(|button| {
+            button.spawn(text("", 13.0, Color::WHITE));
         });
 }
 
@@ -121,5 +129,47 @@ fn spawn_save_row_button(parent: &mut ChildSpawnerCommands, action: SaveListActi
         ))
         .with_children(|button| {
             button.spawn(text("", 13.0, Color::WHITE));
+        });
+}
+
+fn spawn_text_prompt(root: &mut ChildSpawnerCommands) {
+    root.spawn((panel_bundle(420.0), GlobalZIndex(30_000), TextPromptRoot))
+        .with_children(|panel| {
+            panel.spawn(panel_title_bar()).with_children(|title| {
+                title.spawn((panel_title_label("", 20.0), TextPromptText::Title));
+            });
+            panel.spawn(panel_content()).with_children(|content| {
+                content
+                    .spawn((
+                        styled_button(
+                            Node {
+                                width: Val::Percent(100.0),
+                                min_height: Val::Px(default_button_size(38.0)),
+                                padding: UiRect::horizontal(Val::Px(12.0)),
+                                border: UiRect::all(Val::Px(1.0)),
+                                align_items: AlignItems::Center,
+                                ..default()
+                            },
+                            raised_border(),
+                            BUTTON_BG,
+                        ),
+                        TextPromptText::Value,
+                    ))
+                    .with_children(|input| {
+                        input.spawn(text("", 16.0, Color::WHITE));
+                    });
+                content.spawn(flex_row(36.0, 8.0)).with_children(|row| {
+                    spawn_prompt_button(row, TextPromptAction::Confirm);
+                    spawn_prompt_button(row, TextPromptAction::Cancel);
+                });
+            });
+        });
+}
+
+fn spawn_prompt_button(parent: &mut ChildSpawnerCommands, action: TextPromptAction) {
+    parent
+        .spawn((full_width_button(34.0), action))
+        .with_children(|button| {
+            button.spawn(text("", 15.0, Color::WHITE));
         });
 }
