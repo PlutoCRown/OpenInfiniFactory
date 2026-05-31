@@ -140,6 +140,7 @@
   "confirm.return_to_main": "返回主菜单？",
   "confirm.reset_solution": "重置当前解法？",
   "confirm.edit_puzzle_with_solutions": "{name} 已有关联解法。继续编辑该谜题可能导致这些解法消失或失效。",
+  "confirm.save_puzzle_with_solutions": "保存 {name} 会导致所有关联解法消失。要覆盖保存，还是另存为新谜题？",
   "confirm.save_solution_before_edit": "返回编辑模式前保存解法？",
   "confirm.title": "确认",
   "save.load_puzzle": "谜题：{name}",

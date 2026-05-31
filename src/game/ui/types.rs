@@ -533,6 +533,7 @@ pub enum ConfirmDialogKind {
     ReturnToMain,
     SaveSolutionBeforeEdit,
     EditPuzzleWithSolutions { name: String },
+    SavePuzzleWithSolutions { name: String },
 }
 
 #[derive(Resource, Default)]

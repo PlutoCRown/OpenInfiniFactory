@@ -128,6 +128,14 @@ pub fn menu_actions(
             *mode = GameMode::Playing;
         }
         (GameMode::Paused, MenuAction::SaveWorld) => {
+            if let (Some(SaveKind::Puzzle), Some(name)) =
+                (save_state.current_kind, save_state.current.clone())
+            {
+                if puzzle_has_solutions(&mut save_state, &name) {
+                    confirm_dialog.kind = Some(ConfirmDialogKind::SavePuzzleWithSolutions { name });
+                    return;
+                }
+            }
             save_current_world(
                 &world_menu.world,
                 &inventory,
@@ -360,6 +368,7 @@ pub fn confirm_dialog_actions(
     mut solution_state: ResMut<SolutionState>,
     mut world_menu: WorldMenuParams,
     mut confirm_dialog: ResMut<ConfirmDialogState>,
+    mut text_prompt: ResMut<TextPromptState>,
     actions: Query<&ConfirmDialogAction>,
 ) {
     if !primary_click(&mut click) {
@@ -502,6 +511,18 @@ pub fn confirm_dialog_actions(
                 &mut simulation,
                 &mut world_menu,
             );
+        }
+        (ConfirmDialogKind::SavePuzzleWithSolutions { .. }, ConfirmDialogAction::Primary) => {
+            save_current_world(
+                &world_menu.world,
+                &inventory,
+                &mut save_state,
+                &mut solution_state,
+                &simulation,
+            );
+        }
+        (ConfirmDialogKind::SavePuzzleWithSolutions { name }, ConfirmDialogAction::Secondary) => {
+            open_text_prompt(&mut text_prompt, TextPromptKind::SaveAsNewPuzzle, &name);
         }
         (_, ConfirmDialogAction::Secondary) => {}
     }

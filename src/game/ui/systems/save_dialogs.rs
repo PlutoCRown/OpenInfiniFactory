@@ -483,6 +483,9 @@ pub fn update_confirm_dialog_ui(
                 ConfirmDialogKind::EditPuzzleWithSolutions { name } => {
                     i18n.fmt("confirm.edit_puzzle_with_solutions", &[("name", name.clone())])
                 }
+                ConfirmDialogKind::SavePuzzleWithSolutions { name } => {
+                    i18n.fmt("confirm.save_puzzle_with_solutions", &[("name", name.clone())])
+                }
             },
             _ => continue,
         };
@@ -491,6 +494,7 @@ pub fn update_confirm_dialog_ui(
         kind,
             ConfirmDialogKind::ReturnToMain
             | ConfirmDialogKind::SaveSolutionBeforeEdit
+            | ConfirmDialogKind::SavePuzzleWithSolutions { .. }
     );
     for (action, mut node, children) in &mut action_buttons {
         if matches!(*action, ConfirmDialogAction::Secondary) {
@@ -588,12 +592,14 @@ fn confirm_dialog_button_label(
             ConfirmDialogKind::ReturnToMain => i18n.text("button.save_and_back"),
             ConfirmDialogKind::SaveSolutionBeforeEdit => i18n.text("button.save_solution_and_edit"),
             ConfirmDialogKind::EditPuzzleWithSolutions { .. } => i18n.text("button.edit_puzzle"),
+            ConfirmDialogKind::SavePuzzleWithSolutions { .. } => i18n.text("button.save_puzzle"),
         },
         ConfirmDialogAction::Secondary => match kind {
             ConfirmDialogKind::ReturnToMain => i18n.text("button.discard_and_back"),
             ConfirmDialogKind::SaveSolutionBeforeEdit => {
                 i18n.text("button.discard_solution_and_edit")
             }
+            ConfirmDialogKind::SavePuzzleWithSolutions { .. } => i18n.text("button.save_as_new_puzzle"),
             _ => String::new(),
         },
         ConfirmDialogAction::Cancel => i18n.text("button.cancel"),

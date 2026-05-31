@@ -140,6 +140,7 @@
   "confirm.return_to_main": "Return to main menu?",
   "confirm.reset_solution": "Reset the current solution?",
   "confirm.edit_puzzle_with_solutions": "{name} already has linked solutions. Editing this puzzle may remove or invalidate those solutions.",
+  "confirm.save_puzzle_with_solutions": "Saving {name} may remove all linked solutions. Overwrite it, or save as a new puzzle?",
   "confirm.save_solution_before_edit": "Save solution before returning to edit mode?",
   "confirm.title": "Confirm",
   "save.load_puzzle": "Puzzle: {name}",
