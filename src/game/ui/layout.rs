@@ -329,7 +329,7 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
 
 fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
     root.spawn((
-        panel_bundle(460.0),
+        panel_bundle(620.0),
         GlobalZIndex(0),
         PanelVisibility::ConfirmDialog,
     ))
@@ -351,11 +351,19 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
                 },
                 PanelText(PanelTextKind::ConfirmMessage),
             ));
-            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-                spawn_confirm_dialog_button(row, ConfirmDialogAction::Primary);
-                spawn_confirm_dialog_button(row, ConfirmDialogAction::Secondary);
-                spawn_confirm_dialog_button(row, ConfirmDialogAction::Cancel);
-            });
+            panel
+                .spawn((
+                    flex_row(40.0, 8.0),
+                    Node {
+                        justify_content: JustifyContent::Center,
+                        ..default()
+                    },
+                ))
+                .with_children(|row| {
+                    spawn_confirm_dialog_button(row, ConfirmDialogAction::Primary);
+                    spawn_confirm_dialog_button(row, ConfirmDialogAction::Secondary);
+                    spawn_confirm_dialog_button(row, ConfirmDialogAction::Cancel);
+                });
         });
     });
 }

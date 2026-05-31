@@ -458,6 +458,10 @@ pub fn update_confirm_dialog_ui(
             node.display = Display::Flex;
         }
         let label = confirm_dialog_button_label(kind, *action, &i18n);
+        let width = confirm_dialog_button_width(&label);
+        node.width = Val::Px(width);
+        node.min_width = Val::Px(width);
+        node.flex_grow = 0.0;
         for child in children.iter() {
             if let Ok(mut text) = texts.p1().get_mut(child) {
                 text.0 = label.clone();
@@ -548,4 +552,11 @@ fn confirm_dialog_button_label(
         },
         ConfirmDialogAction::Cancel => i18n.text("button.cancel"),
     }
+}
+
+fn confirm_dialog_button_width(label: &str) -> f32 {
+    let char_count = label.chars().count() as f32;
+    let wide_count = label.chars().filter(|ch| !ch.is_ascii()).count() as f32;
+    let estimated_text_width = char_count * 10.0 + wide_count * 8.0;
+    estimated_text_width.clamp(118.0, 230.0)
 }
