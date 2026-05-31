@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::game::world::blocks::{
     BlockData, BlockKind, MaterialDestroyer, MaterialLabeler, MaterialSource,
@@ -12,7 +12,7 @@ use crate::game::world::grid::{
 use super::factory_activity::FactoryStructureState;
 use super::runtime::PendingGeneratedMaterials;
 use super::signal_offsets;
-use super::structures::{execute_structure_moves, material_structure, MovementMark, StructureMove};
+use super::structures::material_structure;
 
 pub(super) fn run_material_behavior_phase(
     world: &mut WorldBlocks,
@@ -212,7 +212,7 @@ fn run_material_conversion_phase(world: &mut WorldBlocks) {
 
 fn run_material_teleport_phase(
     world: &mut WorldBlocks,
-    factory_structures: &mut FactoryStructureState,
+    _factory_structures: &mut FactoryStructureState,
 ) {
     let entrances: Vec<IVec3> = world
         .system_blocks
@@ -236,20 +236,44 @@ fn run_material_teleport_phase(
             continue;
         }
 
-        let structure = material_structure(world, entrance);
-        let offset = exit - entrance;
-        handled.extend(structure.iter().copied());
-        handled.extend(structure.iter().map(|pos| *pos + offset));
-        let _ = execute_structure_moves(
-            world,
-            vec![StructureMove::translate_marked(
-                structure,
-                offset,
-                MovementMark::Push,
-            )],
-            factory_structures,
-        );
+        if !world.can_place_platform_at(exit) {
+            continue;
+        }
+        teleport_single_material(world, entrance, exit);
+        handled.insert(entrance);
+        handled.insert(exit);
     }
+}
+
+fn teleport_single_material(world: &mut WorldBlocks, entrance: IVec3, exit: IVec3) {
+    let moved_marks = moved_single_material_face_marks(world, entrance, exit);
+    let Some(block) = world.remove(&entrance) else {
+        return;
+    };
+    world.replace_material_face_marks(moved_marks);
+    world.insert(exit, block);
+}
+
+fn moved_single_material_face_marks(
+    world: &WorldBlocks,
+    entrance: IVec3,
+    exit: IVec3,
+) -> HashMap<MaterialFace, MaterialFaceMark> {
+    world
+        .material_face_marks
+        .iter()
+        .map(|(face, mark)| {
+            let face = if face.pos == entrance {
+                MaterialFace {
+                    pos: exit,
+                    normal: face.normal,
+                }
+            } else {
+                *face
+            };
+            (face, *mark)
+        })
+        .collect()
 }
 
 fn run_material_destroy_phase(

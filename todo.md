@@ -21,7 +21,7 @@
 | S08 | 扩展 P 模式结构渲染 | D3 | R3 | branch: `debug/structure-rendering` | debug-a | done |
 | S09 | 传送带同目标推送优先级统一 | D3 | R3 | branch: `sim/conveyor-priority` | sim-a | done |
 | S10 | 活塞头伸入同一方块的冲突统一 | D3 | R3 | branch: `sim/pusher-head-conflicts` | sim-b | done |
-| S11 | 实现传送器功能 | D3 | R3 | branch: `feature/teleporter-material` | sim-c | todo |
+| S11 | 实现传送器功能 | D3 | R3 | branch: `feature/teleporter-material` | sim-c | done |
 | S12 | 点击传送器传送玩家视角 | D3 | R3 | branch: `feature/teleporter-player-view` | player-a | todo |
 | S13 | 编辑 Puzzle 前的 Solution 风险提醒 | D2 | R2 | branch: `save/puzzle-solution-warnings` | save-a | todo |
 | S14 | 保存 Puzzle 时的 Solution 清除提醒 | D2 | R2 | branch: `save/puzzle-solution-warnings` | save-a | todo |
