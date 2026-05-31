@@ -327,6 +327,8 @@ pub fn rebuild_world_with_factory_activity_debug(
                 _ => assets.active_factory_debug_material(),
             };
             spawn_debug_factory_block(commands, assets, *pos, material);
+        } else if data.kind.is_material() {
+            spawn_debug_factory_block(commands, assets, *pos, assets.material_debug_material());
         } else {
             spawn_block(commands, meshes, assets, world, *pos, *data);
         }

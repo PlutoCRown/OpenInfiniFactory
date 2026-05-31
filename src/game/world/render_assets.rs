@@ -53,6 +53,7 @@ pub struct WorldRenderAssets {
     selection_preview_material: Handle<StandardMaterial>,
     active_factory_debug_material: Handle<StandardMaterial>,
     inactive_factory_debug_material: Handle<StandardMaterial>,
+    material_debug_material: Handle<StandardMaterial>,
 }
 
 pub enum EditPreviewKind {
@@ -303,6 +304,11 @@ impl WorldRenderAssets {
                 unlit: true,
                 ..default()
             }),
+            material_debug_material: materials.add(StandardMaterial {
+                base_color: Color::srgb(0.12, 0.50, 1.0),
+                unlit: true,
+                ..default()
+            }),
         }
     }
 
@@ -330,6 +336,10 @@ impl WorldRenderAssets {
 
     pub(crate) fn inactive_factory_debug_material(&self) -> Handle<StandardMaterial> {
         self.inactive_factory_debug_material.clone()
+    }
+
+    pub(crate) fn material_debug_material(&self) -> Handle<StandardMaterial> {
+        self.material_debug_material.clone()
     }
 
     pub(crate) fn edit_preview_material(&self, kind: EditPreviewKind) -> Handle<StandardMaterial> {

@@ -18,7 +18,7 @@
 | S05 | 方块放置目标面高亮 | D2 | R2 | main | render-a | done |
 | S06 | 修复定制模型方块半透明预览 | D2 | R2 | main | render-a | done |
 | S07 | 优化 Puzzle / Solution 选择界面样式 | D3 | R2 | branch: `ui/save-list-responsive` | ui-b | done |
-| S08 | 扩展 P 模式结构渲染 | D3 | R3 | branch: `debug/structure-rendering` | debug-a | todo |
+| S08 | 扩展 P 模式结构渲染 | D3 | R3 | branch: `debug/structure-rendering` | debug-a | done |
 | S09 | 传送带同目标推送优先级统一 | D3 | R3 | branch: `sim/conveyor-priority` | sim-a | todo |
 | S10 | 活塞头伸入同一方块的冲突统一 | D3 | R3 | branch: `sim/pusher-head-conflicts` | sim-b | todo |
 | S11 | 实现传送器功能 | D3 | R3 | branch: `feature/teleporter-material` | sim-c | todo |
