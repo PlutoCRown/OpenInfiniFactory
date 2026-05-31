@@ -1,6 +1,5 @@
 use crate::game::ui::screens::{
-    spawn_save_management_row, spawn_save_select_row, SAVE_LIST_EDIT_COLUMN_WIDTH,
-    SAVE_LIST_PLAY_COLUMN_WIDTH,
+    spawn_save_management_row, spawn_save_select_row,
 };
 
 pub fn update_save_list_ui(
@@ -62,6 +61,7 @@ pub fn update_save_list_ui(
         &mut solution_columns,
         &puzzle_rows,
         &solution_rows,
+        &i18n,
         solution_state.save_list_entry,
         edit_flow,
         show_solutions,
@@ -137,16 +137,22 @@ fn update_save_list_columns(
     >,
     puzzle_rows: &[String],
     solution_rows: &[String],
+    i18n: &I18n,
     entry: WorldEntryMode,
     edit_flow: bool,
     show_solutions: bool,
 ) {
-    let puzzle_width = if edit_flow {
-        SAVE_LIST_EDIT_COLUMN_WIDTH
-    } else {
-        SAVE_LIST_PLAY_COLUMN_WIDTH
-    };
-    let solution_width = SAVE_LIST_EDIT_COLUMN_WIDTH;
+    let puzzle_width = save_list_column_width(
+        puzzle_rows,
+        if edit_flow {
+            SaveListColumnKind::ManagementPuzzle
+        } else {
+            SaveListColumnKind::PuzzleSelect
+        },
+        i18n,
+    );
+    let solution_width =
+        save_list_column_width(solution_rows, SaveListColumnKind::ManagementSolution, i18n);
     let panel_width = if show_solutions {
         puzzle_width + solution_width + 44.0
     } else {
@@ -170,6 +176,7 @@ fn update_save_list_columns(
                     SaveListAction::LoadPuzzle,
                     SaveListAction::RenamePuzzle,
                     SaveListAction::DeletePuzzle,
+                    puzzle_width,
                 );
             } else {
                 rebuild_selection_column(
@@ -203,6 +210,7 @@ fn update_save_list_columns(
                 SaveListAction::LoadSolution,
                 SaveListAction::RenameSolution,
                 SaveListAction::DeleteSolution,
+                solution_width,
             );
         }
     }
@@ -221,6 +229,7 @@ fn rebuild_management_column(
     load: fn(String) -> SaveListAction,
     rename: fn(String) -> SaveListAction,
     delete: fn(String) -> SaveListAction,
+    width: f32,
 ) {
     for child in children.iter() {
         commands.entity(child).despawn();
@@ -232,6 +241,7 @@ fn rebuild_management_column(
                 load(name.clone()),
                 rename(name.clone()),
                 delete(name.clone()),
+                width,
             );
         }
         if let Some(create_action) = create_action {
@@ -242,6 +252,37 @@ fn rebuild_management_column(
                 });
         }
     });
+}
+
+#[derive(Clone, Copy)]
+enum SaveListColumnKind {
+    PuzzleSelect,
+    ManagementPuzzle,
+    ManagementSolution,
+}
+
+fn save_list_column_width(names: &[String], kind: SaveListColumnKind, i18n: &I18n) -> f32 {
+    let longest_name = names.iter().map(|name| name.chars().count()).max().unwrap_or(0) as f32;
+    let action_chars = match kind {
+        SaveListColumnKind::PuzzleSelect => [
+            i18n.text("save.select_puzzle").chars().count(),
+            i18n.text("save.selected_puzzle").chars().count(),
+        ]
+        .into_iter()
+        .max()
+        .unwrap_or(0) as f32,
+        SaveListColumnKind::ManagementPuzzle => i18n.text("save.load_puzzle").chars().count() as f32,
+        SaveListColumnKind::ManagementSolution => {
+            i18n.text("save.load_solution").chars().count() as f32
+        }
+    };
+    let estimated = (longest_name + action_chars) * 9.5 + 56.0;
+    match kind {
+        SaveListColumnKind::PuzzleSelect => estimated.clamp(320.0, 520.0),
+        SaveListColumnKind::ManagementPuzzle | SaveListColumnKind::ManagementSolution => {
+            estimated.clamp(390.0, 560.0)
+        }
+    }
 }
 
 fn rebuild_selection_column(

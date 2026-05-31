@@ -94,11 +94,14 @@ pub fn spawn_save_management_row(
     load: SaveListAction,
     rename: SaveListAction,
     delete: SaveListAction,
+    width: f32,
 ) {
+    let side_width = 82.0;
+    let load_width = (width - side_width * 2.0 - 12.0).max(180.0);
     parent.spawn(flex_row(32.0, 6.0)).with_children(|row| {
-        spawn_save_row_button(row, load, 260.0);
-        spawn_save_row_button(row, rename, 82.0);
-        spawn_save_row_button(row, delete, 82.0);
+        spawn_save_row_button(row, load, load_width);
+        spawn_save_row_button(row, rename, side_width);
+        spawn_save_row_button(row, delete, side_width);
     });
 }
 
@@ -173,5 +176,4 @@ fn spawn_prompt_button(parent: &mut ChildSpawnerCommands, action: TextPromptActi
         });
 }
 
-pub const SAVE_LIST_EDIT_COLUMN_WIDTH: f32 = 466.0;
-pub const SAVE_LIST_PLAY_COLUMN_WIDTH: f32 = 340.0;
+const SAVE_LIST_EDIT_COLUMN_WIDTH: f32 = 466.0;
