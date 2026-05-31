@@ -9,12 +9,14 @@ pub(super) fn mark_gravity_phase(
     world: &WorldBlocks,
     factory_structures: &FactoryStructureState,
     skip_factory_positions: &HashSet<IVec3>,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> Vec<StructureMove> {
-    let mut moves = material_gravity_moves(world, factory_structures);
+    let mut moves = material_gravity_moves(world, factory_structures, hard_pusher_head_occupancy);
     moves.extend(factory_gravity_moves(
         world,
         factory_structures,
         skip_factory_positions,
+        hard_pusher_head_occupancy,
     ));
     moves
 }

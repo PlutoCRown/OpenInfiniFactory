@@ -12,6 +12,7 @@ use super::factory_activity::FactoryStructureState;
 pub(super) fn material_gravity_moves(
     world: &WorldBlocks,
     factory_structures: &FactoryStructureState,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> Vec<StructureMove> {
     let mut materials: Vec<IVec3> = world
         .blocks
@@ -32,7 +33,12 @@ pub(super) fn material_gravity_moves(
         if structure_supported_by_lifter(world, &structure) {
             continue;
         }
-        if can_move_gravity_structure(world, &structure, factory_structures) {
+        if can_move_gravity_structure(
+            world,
+            &structure,
+            factory_structures,
+            hard_pusher_head_occupancy,
+        ) {
             moves.push(StructureMove::translate_marked(
                 structure,
                 IVec3::NEG_Y,
@@ -47,6 +53,7 @@ pub(super) fn factory_gravity_moves(
     world: &WorldBlocks,
     factory_structures: &FactoryStructureState,
     skip_positions: &HashSet<IVec3>,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> Vec<StructureMove> {
     let mut factory_blocks: Vec<IVec3> = world
         .blocks
@@ -72,7 +79,12 @@ pub(super) fn factory_gravity_moves(
         if structure_supported_by_lifter(world, &structure) {
             continue;
         }
-        if can_move_gravity_structure(world, &structure, factory_structures) {
+        if can_move_gravity_structure(
+            world,
+            &structure,
+            factory_structures,
+            hard_pusher_head_occupancy,
+        ) {
             moves.push(StructureMove::translate_marked(
                 structure,
                 IVec3::NEG_Y,
@@ -617,15 +629,57 @@ fn can_move_gravity_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     factory_structures: &FactoryStructureState,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> bool {
-    expanded_move_structure(
+    if hard_pusher_head_blocked_below(world, structure, hard_pusher_head_occupancy) {
+        return false;
+    }
+    let Some(expanded) = expanded_move_structure(
         world,
         structure,
         IVec3::NEG_Y,
         factory_structures,
         MovementExpansionMode::Gravity,
-    )
-    .is_some()
+    ) else {
+        return false;
+    };
+    !hard_pusher_head_blocks_move(&expanded, IVec3::NEG_Y, hard_pusher_head_occupancy)
+}
+
+fn hard_pusher_head_blocked_below(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
+) -> bool {
+    structure.iter().any(|pos| {
+        let Some(block) = world.blocks.get(pos) else {
+            return false;
+        };
+        if !matches!(
+            block.kind,
+            crate::game::world::blocks::BlockKind::Pusher
+                | crate::game::world::blocks::BlockKind::Blocker
+        ) {
+            return false;
+        }
+        let head = *pos + block.facing.forward_ivec3();
+        if !hard_pusher_head_occupancy.contains(&head) {
+            return false;
+        }
+        let target = head + IVec3::NEG_Y;
+        target.y < 0 || (!structure.contains(&target) && !world.can_move_into(target))
+    })
+}
+
+fn hard_pusher_head_blocks_move(
+    structure: &HashSet<IVec3>,
+    offset: IVec3,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
+) -> bool {
+    structure.iter().any(|pos| {
+        let target = *pos + offset;
+        !structure.contains(&target) && hard_pusher_head_occupancy.contains(&target)
+    })
 }
 
 fn expanded_move_structure(

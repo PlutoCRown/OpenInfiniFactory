@@ -152,7 +152,26 @@ impl FactoryStructureState {
         Some(structure.positions.clone())
     }
 
-    pub fn falling_structure_at(&self, pos: IVec3, offset: IVec3) -> Option<HashSet<IVec3>> {
+    pub fn pusher_target_structure(
+        &self,
+        world: &WorldBlocks,
+        pusher_pos: IVec3,
+        target_pos: IVec3,
+        offset: IVec3,
+    ) -> Option<HashSet<IVec3>> {
+        let target = self.structure(target_pos)?;
+        if !target.pushable || !target.freedom.can_translate(offset) {
+            return None;
+        }
+        let structure = factory_structure_with_blocked_edge(world, target_pos, Some(pusher_pos));
+        (!structure.contains(&pusher_pos)).then_some(structure)
+    }
+
+    pub fn falling_structure_at(
+        &self,
+        pos: IVec3,
+        offset: IVec3,
+    ) -> Option<HashSet<IVec3>> {
         let structure = self.structure(pos)?;
         if structure.activity != FactoryActivity::Active || !structure.freedom.can_translate(offset)
         {
@@ -180,17 +199,16 @@ impl FactoryStructureState {
             let Some(structure) = self.structures.get_mut(index) else {
                 continue;
             };
-            let should_move = structure
-                .positions
-                .iter()
-                .any(|pos| positions.contains(pos));
-            if !should_move {
-                continue;
-            }
             structure.positions = structure
                 .positions
                 .iter()
-                .map(|pos| *pos + offset)
+                .map(|pos| {
+                    if positions.contains(pos) {
+                        *pos + offset
+                    } else {
+                        *pos
+                    }
+                })
                 .collect();
             for pos in &structure.positions {
                 self.structure_by_pos.insert(*pos, index);
@@ -226,9 +244,18 @@ impl FactoryStructureState {
             .get(&pos)
             .and_then(|index| self.structures.get(*index))
     }
+
 }
 
 fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
+    factory_structure_with_blocked_edge(world, start, None)
+}
+
+fn factory_structure_with_blocked_edge(
+    world: &WorldBlocks,
+    start: IVec3,
+    blocked_pusher_pos: Option<IVec3>,
+) -> HashSet<IVec3> {
     let mut structure = HashSet::new();
     let mut queue = VecDeque::from([start]);
     structure.insert(start);
@@ -238,6 +265,7 @@ fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
             let neighbor = pos + offset;
             if structure.contains(&neighbor)
                 || !world.is_factory_at(neighbor)
+                || is_blocked_pusher_edge(world, blocked_pusher_pos, pos, neighbor)
                 || is_blocked_factory_connection(world, pos, neighbor)
                 || is_blocked_factory_connection(world, neighbor, pos)
             {
@@ -251,19 +279,37 @@ fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     structure
 }
 
+fn is_blocked_pusher_edge(
+    world: &WorldBlocks,
+    pusher_pos: Option<IVec3>,
+    from: IVec3,
+    to: IVec3,
+) -> bool {
+    let Some(pusher_pos) = pusher_pos else {
+        return false;
+    };
+    pusher_front_neighbor(world, pusher_pos)
+        .is_some_and(|front| (from == pusher_pos && to == front) || (from == front && to == pusher_pos))
+}
+
 fn is_blocked_factory_connection(world: &WorldBlocks, from: IVec3, to: IVec3) -> bool {
     world.blocks.get(&from).is_some_and(|block| {
         let offset = to - from;
         match block.kind {
-            BlockKind::Pusher
-            | BlockKind::Blocker
-            | BlockKind::Detector
-            | BlockKind::Drill
-            | BlockKind::Welder => offset == block.facing.forward_ivec3(),
+            BlockKind::Detector | BlockKind::Drill | BlockKind::Welder => {
+                offset == block.facing.forward_ivec3()
+            }
             BlockKind::Lifter | BlockKind::Conveyor => offset == IVec3::Y,
             BlockKind::ReverseConveyor => offset == IVec3::NEG_Y,
             _ => false,
         }
+    })
+}
+
+fn pusher_front_neighbor(world: &WorldBlocks, pos: IVec3) -> Option<IVec3> {
+    world.blocks.get(&pos).and_then(|block| {
+        matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker)
+            .then_some(pos + block.facing.forward_ivec3())
     })
 }
 

@@ -119,7 +119,13 @@ pub fn run_turn(
     sample.signal_ms = mark_elapsed_ms(&mut mark);
 
     let actuating_devices = pusher_state.actuating_devices(world, &powered_devices);
-    let mut movement_plan = mark_gravity_phase(world, factory_structures, &actuating_devices);
+    let hard_pusher_head_occupancy = pusher_state.hard_head_occupancy(world);
+    let mut movement_plan = mark_gravity_phase(
+        world,
+        factory_structures,
+        &actuating_devices,
+        &hard_pusher_head_occupancy,
+    );
     sample.gravity_ms = mark_elapsed_ms(&mut mark);
 
     run_powered_marker_phase(world, &powered_devices);

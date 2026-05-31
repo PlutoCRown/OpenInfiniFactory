@@ -82,6 +82,21 @@ impl PusherState {
             })
             .collect()
     }
+
+    pub(super) fn hard_head_occupancy(&self, world: &WorldBlocks) -> HashSet<IVec3> {
+        self.entries
+            .iter()
+            .filter_map(|(pos, entry)| {
+                if !entry.extended {
+                    return None;
+                }
+                let block = world.blocks.get(pos)?;
+                matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker)
+                    .then_some(*pos + block.facing.forward_ivec3())
+            })
+            .collect()
+    }
+
 }
 
 pub fn blocker_animations(
@@ -232,7 +247,7 @@ fn mark_pusher_movement(
         None
     };
 
-    if movement.is_some() || !entry.bound_front {
+    if movement.is_some() || desired_extended || !entry.bound_front {
         entry.extended = desired_extended;
     }
     let animation = if desired_extended {
@@ -314,10 +329,19 @@ fn mark_structure_translate(
         ));
     }
 
-    if factory_structures.structure_contains(source, actor) {
-        return None;
-    }
-    let structure = factory_structures.active_structure_at(source, offset)?;
+    let structure = if matches!(mark, MovementMark::Push)
+        && world
+            .blocks
+            .get(&actor)
+            .is_some_and(|block| matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker))
+    {
+        factory_structures.pusher_target_structure(world, actor, source, offset)?
+    } else {
+        if factory_structures.structure_contains(source, actor) {
+            return None;
+        }
+        factory_structures.active_structure_at(source, offset)?
+    };
     Some(StructureMove::translate_marked(structure, offset, mark))
 }
 
