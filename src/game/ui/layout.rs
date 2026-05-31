@@ -10,25 +10,86 @@ use super::components::{
 };
 use super::theme::{absolute_text_bundle, panel_bundle, STATUS_TEXT, TITLE_TEXT};
 use super::types::{
-    BackpackPanel, BlockPanelDropdown, BlockPanelText, BlockPanelTextKind, CarriedIcon, CarriedLabel, ConfirmDialogAction,
-    ConfirmDialogMessage, ConfirmDialogPanel, ConfirmDialogTitle, ConverterAction, ConverterInputRow,
-    ConverterPanel, Crosshair, GeneratorAction, GeneratorPanel,
-    GoalAction, GoalPanel, InGameHudStyle, InGameHudVisibility,
-    InventoryTitle, InventoryTooltip, LabelerAction, LabelerPanel,
-    MainMenuAction, MainMenuPanel, ModalScrim, PauseAction, PausePanel, SaveListAction,
-    SaveListPanel, SaveListTitle, SettingsAction, SettingsDropdown, SettingsDropdownRow,
-    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsPanel, SettingsSlider,
-    SlotArea, StatusText, StatusTextKind, TeleportAction,
-    TeleportPanel, UiPanelBinding, UiPanelId, BACKPACK_SLOTS, HOTBAR_SLOTS,
+    BlockPanelDropdown, BlockPanelText, BlockPanelTextKind, CarriedItemPreview,
+    BlockEditAction, ConfirmDialogAction, ConverterInputRow, Crosshair,
+    InGameHudStyle, InGameHudVisibility, InventoryTooltip,
+    MenuAction, PanelText, PanelTextKind, PanelVisibility, SaveListAction,
+    SettingsAction, SettingsControl, SettingsDropdown, SettingsDropdownRow, SettingsItem,
+    SettingsTab, SlotArea, StatusText, StatusTextKind, TeleportAction, UiPanelBinding, UiPanelId,
+    GAMEPLAY_SETTINGS, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 use super::widgets::{
     scroll_container, scroll_content, spawn_block_panel_dropdown, spawn_close_button,
-    spawn_confirm_dialog_button, spawn_generator_button, spawn_localized_main_button,
-    spawn_localized_pause_button, spawn_localized_settings_button, spawn_save_back_button,
+    spawn_block_edit_button, spawn_confirm_dialog_button, spawn_menu_button,
+    spawn_localized_settings_button, spawn_save_back_button,
     spawn_save_row_button, spawn_save_slot_button, spawn_settings_dropdown, spawn_settings_slider,
     spawn_settings_slider_value, spawn_settings_tab, spawn_slot, spawn_teleport_button,
 };
+use crate::game::state::GameMode;
 use crate::game::world::blocks::{MaterialKind, StampColor};
+
+#[derive(Clone, Copy)]
+struct MenuItem {
+    action: MenuAction,
+    height: f32,
+    font_size: f32,
+}
+
+const MAIN_MENU_ITEMS: &[MenuItem] = &[
+    MenuItem {
+        action: MenuAction::EditPuzzle,
+        height: 44.0,
+        font_size: 17.0,
+    },
+    MenuItem {
+        action: MenuAction::Play,
+        height: 44.0,
+        font_size: 17.0,
+    },
+    MenuItem {
+        action: MenuAction::OpenSettings,
+        height: 44.0,
+        font_size: 17.0,
+    },
+    MenuItem {
+        action: MenuAction::Quit,
+        height: 44.0,
+        font_size: 17.0,
+    },
+];
+
+const PAUSE_MENU_ITEMS: &[MenuItem] = &[
+    MenuItem {
+        action: MenuAction::Resume,
+        height: 38.0,
+        font_size: 16.0,
+    },
+    MenuItem {
+        action: MenuAction::ToggleBuilderMode,
+        height: 38.0,
+        font_size: 16.0,
+    },
+    MenuItem {
+        action: MenuAction::SaveWorld,
+        height: 38.0,
+        font_size: 16.0,
+    },
+    MenuItem {
+        action: MenuAction::ResetSolution,
+        height: 38.0,
+        font_size: 16.0,
+    },
+    MenuItem {
+        action: MenuAction::OpenSettings,
+        height: 38.0,
+        font_size: 16.0,
+    },
+    MenuItem {
+        action: MenuAction::BackToMainMenu,
+        height: 38.0,
+        font_size: 16.0,
+    },
+];
 
 pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
     commands.spawn(root_node()).with_children(|root| {
@@ -66,7 +127,7 @@ fn spawn_modal_scrim(root: &mut ChildSpawnerCommands) {
             is_hoverable: false,
         },
         GlobalZIndex(0),
-        ModalScrim,
+        PanelVisibility::ModalScrim,
     ));
 }
 
@@ -74,27 +135,26 @@ fn spawn_generator_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(430.0, 230.0, -215.0, -115.0),
         GlobalZIndex(0),
-        GeneratorPanel,
         UiPanelBinding(UiPanelId::Generator),
     ))
     .with_children(|panel| {
         panel.spawn(localized_text(i18n, "generator.title", 26.0, TITLE_TEXT));
-        spawn_close_button(panel, GeneratorAction::Close);
+        spawn_close_button(panel, BlockEditAction::Close);
         spawn_panel_row(panel, i18n, "panel.period", |row| {
-            spawn_generator_button(row, GeneratorAction::PeriodDown);
+            spawn_block_edit_button(row, BlockEditAction::PeriodDown);
             row.spawn((
                 text("", 18.0, Color::WHITE),
                 BlockPanelText(BlockPanelTextKind::GeneratorPeriod),
             ));
-            spawn_generator_button(row, GeneratorAction::PeriodUp);
+            spawn_block_edit_button(row, BlockEditAction::PeriodUp);
         });
         spawn_panel_row(panel, i18n, "panel.material", |row| {
             spawn_block_panel_dropdown(
                 row,
                 BlockPanelDropdown::GeneratorMaterial,
-                GeneratorAction::ToggleMaterialDropdown,
+                BlockEditAction::ToggleMaterialDropdown,
                 material_options(i18n)
-                    .map(|(label, material)| (label, GeneratorAction::SetMaterial(material))),
+                    .map(|(label, material)| (label, BlockEditAction::SetMaterial(material))),
             );
         });
     });
@@ -104,19 +164,18 @@ fn spawn_goal_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(430.0, 190.0, -215.0, -95.0),
         GlobalZIndex(0),
-        GoalPanel,
         UiPanelBinding(UiPanelId::Goal),
     ))
     .with_children(|panel| {
         panel.spawn(localized_text(i18n, "goal.title", 26.0, TITLE_TEXT));
-        spawn_close_button(panel, GoalAction::Close);
+        spawn_close_button(panel, BlockEditAction::Close);
         spawn_panel_row(panel, i18n, "panel.material", |row| {
             spawn_block_panel_dropdown(
                 row,
                 BlockPanelDropdown::GoalMaterial,
-                GoalAction::ToggleMaterialDropdown,
+                BlockEditAction::ToggleMaterialDropdown,
                 material_options(i18n)
-                    .map(|(label, material)| (label, GoalAction::SetMaterial(material))),
+                    .map(|(label, material)| (label, BlockEditAction::SetMaterial(material))),
             );
         });
     });
@@ -126,7 +185,6 @@ fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(460.0, 230.0, -230.0, -115.0),
         GlobalZIndex(0),
-        TeleportPanel,
         UiPanelBinding(UiPanelId::Teleport),
     ))
     .with_children(|panel| {
@@ -154,12 +212,11 @@ fn spawn_converter_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(460.0, 260.0, -230.0, -130.0),
         GlobalZIndex(0),
-        ConverterPanel,
         UiPanelBinding(UiPanelId::Converter),
     ))
     .with_children(|panel| {
         panel.spawn(localized_text(i18n, "converter.title", 26.0, TITLE_TEXT));
-        spawn_close_button(panel, ConverterAction::Close);
+        spawn_close_button(panel, BlockEditAction::Close);
         panel
             .spawn((panel_row_node(), ConverterInputRow))
             .with_children(|row| {
@@ -167,18 +224,18 @@ fn spawn_converter_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                 spawn_block_panel_dropdown(
                     row,
                     BlockPanelDropdown::ConverterInput,
-                    ConverterAction::ToggleInputDropdown,
+                    BlockEditAction::ToggleInputDropdown,
                     material_options(i18n)
-                        .map(|(label, material)| (label, ConverterAction::SetInput(material))),
+                        .map(|(label, material)| (label, BlockEditAction::SetInput(material))),
                 );
             });
         spawn_panel_row(panel, i18n, "panel.output", |row| {
             spawn_block_panel_dropdown(
                 row,
                 BlockPanelDropdown::ConverterOutput,
-                ConverterAction::ToggleOutputDropdown,
+                BlockEditAction::ToggleOutputDropdown,
                 material_options(i18n)
-                    .map(|(label, material)| (label, ConverterAction::SetOutput(material))),
+                    .map(|(label, material)| (label, BlockEditAction::SetOutput(material))),
             );
         });
     });
@@ -188,19 +245,18 @@ fn spawn_labeler_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(420.0, 190.0, -210.0, -95.0),
         GlobalZIndex(0),
-        LabelerPanel,
         UiPanelBinding(UiPanelId::Labeler),
     ))
     .with_children(|panel| {
         panel.spawn(localized_text(i18n, "labeler.title", 26.0, TITLE_TEXT));
-        spawn_close_button(panel, LabelerAction::Close);
+        spawn_close_button(panel, BlockEditAction::Close);
         spawn_panel_row(panel, i18n, "panel.color", |row| {
             spawn_block_panel_dropdown(
                 row,
                 BlockPanelDropdown::LabelerColor,
-                LabelerAction::ToggleColorDropdown,
+                BlockEditAction::ToggleColorDropdown,
                 stamp_color_options(i18n)
-                    .map(|(label, color)| (label, LabelerAction::SetColor(color))),
+                    .map(|(label, color)| (label, BlockEditAction::SetColor(color))),
             );
         });
     });
@@ -347,43 +403,39 @@ fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
 }
 
 fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
-    root.spawn((inventory_panel_bundle(), BackpackPanel))
-        .with_children(|panel| {
-            panel.spawn((
-                text("", 24.0, Color::srgb(0.94, 0.94, 0.92)),
-                InventoryTitle,
-            ));
-            panel.spawn(inventory_grid_bundle()).with_children(|grid| {
-                for index in 0..BACKPACK_SLOTS {
-                    spawn_slot(grid, SlotArea::Backpack, index);
-                }
-            });
-            panel.spawn(localized_text(
-                i18n,
-                "inventory.help",
-                15.0,
-                Color::srgb(0.78, 0.78, 0.76),
-            ));
+    root.spawn((
+        inventory_panel_bundle(),
+        PanelVisibility::GameMode(GameMode::Inventory),
+    ))
+    .with_children(|panel| {
+        panel.spawn((
+            text("", 24.0, Color::srgb(0.94, 0.94, 0.92)),
+            PanelText(PanelTextKind::InventoryTitle),
+        ));
+        panel.spawn(inventory_grid_bundle()).with_children(|grid| {
+            for index in 0..BACKPACK_SLOTS {
+                spawn_slot(grid, SlotArea::Backpack, index);
+            }
         });
+        panel.spawn(localized_text(
+            i18n,
+            "inventory.help",
+            15.0,
+            Color::srgb(0.78, 0.78, 0.76),
+        ));
+    });
 }
 
 fn spawn_pause_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(420.0, 560.0, -210.0, -280.0),
         GlobalZIndex(0),
-        PausePanel,
+        PanelVisibility::GameMode(GameMode::Paused),
     ))
     .with_children(|panel| {
         panel.spawn(localized_text(i18n, "state.paused", 30.0, TITLE_TEXT));
-        for action in [
-            PauseAction::Resume,
-            PauseAction::ToggleBuilderMode,
-            PauseAction::SaveWorld,
-            PauseAction::ResetSolution,
-            PauseAction::OpenSettings,
-            PauseAction::BackToMainMenu,
-        ] {
-            spawn_localized_pause_button(panel, action);
+        for item in PAUSE_MENU_ITEMS {
+            spawn_menu_button(panel, item.height, item.font_size, item.action);
         }
     });
 }
@@ -392,10 +444,13 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
     root.spawn((
         panel_bundle(460.0, 250.0, -230.0, -125.0),
         GlobalZIndex(0),
-        ConfirmDialogPanel,
+        PanelVisibility::ConfirmDialog,
     ))
     .with_children(|panel| {
-        panel.spawn((text("", 24.0, TITLE_TEXT), ConfirmDialogTitle));
+        panel.spawn((
+            text("", 24.0, TITLE_TEXT),
+            PanelText(PanelTextKind::ConfirmTitle),
+        ));
         panel.spawn((
             text("", 15.0, STATUS_TEXT),
             TextLayout::new_with_justify(Justify::Center),
@@ -404,7 +459,7 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
                 align_self: AlignSelf::Stretch,
                 ..default()
             },
-            ConfirmDialogMessage,
+            PanelText(PanelTextKind::ConfirmMessage),
         ));
         panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
             spawn_confirm_dialog_button(row, ConfirmDialogAction::Primary);
@@ -418,7 +473,6 @@ fn spawn_settings_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(840.0, 660.0, -420.0, -330.0),
         GlobalZIndex(0),
-        SettingsPanel,
         UiPanelBinding(UiPanelId::Settings),
     ))
     .with_children(|panel| {
@@ -460,7 +514,7 @@ fn spawn_settings_dropdown_row(
                 column_gap: Val::Px(18.0),
                 ..default()
             }),
-            SettingsGameplayGroup,
+            PanelVisibility::SettingsTab(SettingsTab::Gameplay),
             SettingsDropdownRow(dropdown),
             ZIndex(300),
         ))
@@ -490,7 +544,7 @@ fn spawn_settings_slider_row(
     panel: &mut ChildSpawnerCommands,
     i18n: &I18n,
     label_key: &'static str,
-    slider: SettingsSlider,
+    item: SettingsItem,
 ) {
     panel
         .spawn(transparent_node(Node {
@@ -501,7 +555,7 @@ fn spawn_settings_slider_row(
             column_gap: Val::Px(18.0),
             ..default()
         }))
-        .insert(SettingsGameplayGroup)
+        .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
         .with_children(|row| {
             row.spawn((
                 localized_text(i18n, label_key, 15.0, Color::srgb(0.82, 0.88, 0.90)),
@@ -517,16 +571,31 @@ fn spawn_settings_slider_row(
                 ..default()
             }))
             .with_children(|controls| {
-                spawn_settings_slider(controls, slider);
+                if let SettingsControl::Slider { field, .. } = item.control {
+                    spawn_settings_slider(controls, field);
+                }
             });
-            spawn_settings_slider_value(row, slider);
+            if let SettingsControl::Slider { field, .. } = item.control {
+                spawn_settings_slider_value(row, field);
+            }
         });
+}
+
+fn spawn_settings_item(panel: &mut ChildSpawnerCommands, i18n: &I18n, item: SettingsItem) {
+    match item.control {
+        SettingsControl::Slider { .. } => {
+            spawn_settings_slider_row(panel, i18n, item.label_key, item)
+        }
+        SettingsControl::Dropdown(dropdown) => {
+            spawn_settings_dropdown_row(panel, i18n, item.label_key, dropdown)
+        }
+    }
 }
 
 fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
     panel
         .spawn(scroll_container(500.0))
-        .insert(SettingsGameplayGroup)
+        .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
         .with_children(|container| {
             container
                 .spawn((
@@ -539,37 +608,9 @@ fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
                     scroll_content(),
                 ))
                 .with_children(|content| {
-                    spawn_settings_slider_row(content, i18n, "settings.fov", SettingsSlider::Fov);
-                    spawn_settings_slider_row(
-                        content,
-                        i18n,
-                        "settings.ui_scale_label",
-                        SettingsSlider::UiScale,
-                    );
-                    spawn_settings_slider_row(
-                        content,
-                        i18n,
-                        "settings.gravity",
-                        SettingsSlider::Gravity,
-                    );
-                    spawn_settings_dropdown_row(
-                        content,
-                        i18n,
-                        "settings.language",
-                        SettingsDropdown::Language,
-                    );
-                    spawn_settings_dropdown_row(
-                        content,
-                        i18n,
-                        "settings.place_selection_mode",
-                        SettingsDropdown::PlaceSelectionMode,
-                    );
-                    spawn_settings_dropdown_row(
-                        content,
-                        i18n,
-                        "settings.delete_selection_mode",
-                        SettingsDropdown::DeleteSelectionMode,
-                    );
+                    for item in GAMEPLAY_SETTINGS {
+                        spawn_settings_item(content, i18n, *item);
+                    }
                     content.spawn(transparent_node(Node {
                         width: Val::Percent(100.0),
                         height: Val::Px(120.0),
@@ -583,7 +624,7 @@ fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
 fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
     panel
         .spawn(scroll_container(360.0))
-        .insert(SettingsKeyBindingsGroup)
+        .insert(PanelVisibility::SettingsTab(SettingsTab::KeyBindings))
         .with_children(|container| {
             container
                 .spawn((key_bindings_grid_bundle(), scroll_content()))
@@ -628,17 +669,12 @@ fn spawn_main_menu(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(420.0, 340.0, -210.0, -170.0),
         GlobalZIndex(0),
-        MainMenuPanel,
+        PanelVisibility::GameMode(GameMode::MainMenu),
     ))
     .with_children(|panel| {
         panel.spawn(localized_text(i18n, "main.title", 30.0, Color::WHITE));
-        for action in [
-            MainMenuAction::EditPuzzle,
-            MainMenuAction::Play,
-            MainMenuAction::OpenSettings,
-            MainMenuAction::Quit,
-        ] {
-            spawn_localized_main_button(panel, action);
+        for item in MAIN_MENU_ITEMS {
+            spawn_menu_button(panel, item.height, item.font_size, item.action);
         }
     });
 }
@@ -647,10 +683,13 @@ fn spawn_save_list(root: &mut ChildSpawnerCommands) {
     root.spawn((
         panel_bundle(900.0, 620.0, -450.0, -310.0),
         GlobalZIndex(0),
-        SaveListPanel,
+        PanelVisibility::GameMode(GameMode::SaveListMain),
     ))
     .with_children(|panel| {
-        panel.spawn((text("", 26.0, Color::WHITE), SaveListTitle));
+        panel.spawn((
+            text("", 26.0, Color::WHITE),
+            PanelText(PanelTextKind::SaveListTitle),
+        ));
         panel.spawn(flex_row(470.0, 12.0)).with_children(|columns| {
             columns
                 .spawn(transparent_node(Node {
@@ -706,7 +745,7 @@ fn spawn_carried_label(root: &mut ChildSpawnerCommands) {
         BorderColor::all(Color::srgb(1.0, 1.0, 1.0)),
         BackgroundColor(Color::srgba(0.18, 0.18, 0.19, 0.86)),
         ZIndex(100),
-        CarriedIcon,
+        CarriedItemPreview,
     ))
     .with_children(|icon| {
         icon.spawn((
@@ -737,7 +776,6 @@ fn spawn_carried_label(root: &mut ChildSpawnerCommands) {
                 margin: UiRect::all(Val::Px(2.0)),
                 ..default()
             },
-            CarriedLabel,
         ));
     });
 }

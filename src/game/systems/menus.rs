@@ -12,13 +12,12 @@ use crate::game::state::{
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{
-    ActiveSettingsSlider, BlockPanelDropdown, CarriedItem, ConfirmDialogAction, ConfirmDialogKind,
-    ConfirmDialogState, ConverterAction, GeneratorAction, GoalAction, InventoryItems,
-    LabelerAction, MainMenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown, PauseAction,
-    PendingAppExit, PendingKeyBind, SaveListAction, SettingsAction, SettingsSlider,
-    SettingsSliderUpdateMode, SettingsTab, TeleportAction, UiPanelContext, UiPanelId, UiRuntime,
+    ActiveSettingsSlider, BlockEditAction, BlockPanelDropdown, CarriedItem, ConfirmDialogAction,
+    ConfirmDialogKind, ConfirmDialogState, InventoryItems, MenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown,
+    PendingAppExit, PendingKeyBind, SaveListAction, SettingsAction, SettingsSliderTrigger,
+    SettingsTab, TeleportAction, UiPanelContext, UiPanelId, UiRuntime,
 };
-use crate::game::world::grid::{seed_demo_world, ConverterMode, WorldBlocks};
+use crate::game::world::grid::{seed_demo_world, WorldBlocks};
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
 };
@@ -41,45 +40,113 @@ pub struct WorldMenuParams<'w, 's> {
     pub block_entities: Query<'w, 's, Entity, With<BlockEntity>>,
 }
 
-pub fn main_menu_actions(
+pub fn menu_actions(
+    mut builder_mode: ResMut<BuilderMode>,
+    mut simulation: ResMut<SimulationState>,
+    mut inventory: ResMut<InventoryItems>,
+    mut carried: ResMut<CarriedItem>,
+    mut placement: ResMut<PlacementState>,
     mut mode: ResMut<GameMode>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
     mut ui_runtime: ResMut<UiRuntime>,
+    mut world_menu: WorldMenuParams,
+    mut confirm_dialog: ResMut<ConfirmDialogState>,
     mut pending_exit: ResMut<PendingAppExit>,
-    mut interactions: Query<(&Interaction, &MainMenuAction), (Changed<Interaction>, With<Button>)>,
+    mut interactions: Query<(&Interaction, &MenuAction), (Changed<Interaction>, With<Button>)>,
 ) {
-    if *mode != GameMode::MainMenu {
-        return;
-    }
-
     for (interaction, action) in &mut interactions {
         if *interaction != Interaction::Pressed {
             continue;
         }
 
-        match action {
-            MainMenuAction::EditPuzzle => {
+        match (*mode, *action) {
+            (GameMode::MainMenu, MenuAction::EditPuzzle) => {
                 save_state.refresh();
                 save_state.selected_puzzle = None;
                 solution_state.save_list_entry = WorldEntryMode::EditPuzzle;
                 *mode = GameMode::SaveListMain;
             }
-            MainMenuAction::Play => {
+            (GameMode::MainMenu, MenuAction::Play) => {
                 save_state.refresh();
                 save_state.selected_puzzle = None;
                 solution_state.save_list_entry = WorldEntryMode::PlaySolution;
                 *mode = GameMode::SaveListMain;
             }
-            MainMenuAction::OpenSettings => {
+            (GameMode::MainMenu, MenuAction::OpenSettings) => {
                 ui_runtime.open(
                     UiPanelId::Settings,
                     UiPanelContext::ReturnTo(GameMode::MainMenu),
                 );
             }
-            MainMenuAction::Quit => {
+            (GameMode::MainMenu, MenuAction::Quit) => {
                 request_app_exit(&mut pending_exit, AppExit::Success);
             }
+            (GameMode::Paused, MenuAction::Resume) => *mode = GameMode::Playing,
+            (GameMode::Paused, MenuAction::ToggleBuilderMode) => {
+                if solution_state.entry == WorldEntryMode::PlaySolution {
+                    continue;
+                }
+                *builder_mode = match *builder_mode {
+                    BuilderMode::Edit => {
+                        simulation.running = false;
+                        simulation.step_requested = false;
+                        simulation.accumulator = 0.0;
+                        simulation.start_snapshot = None;
+                        if save_state.current_kind == Some(SaveKind::Puzzle) {
+                            solution_state.puzzle_snapshot = Some(world_menu.world.clone());
+                        }
+                        save_state.current_kind = Some(SaveKind::Solution);
+                        BuilderMode::Play
+                    }
+                    BuilderMode::Play => {
+                        confirm_dialog.kind = Some(ConfirmDialogKind::SaveSolutionBeforeEdit);
+                        continue;
+                    }
+                };
+                *inventory = InventoryItems::for_mode(*builder_mode);
+                carried.clear();
+                placement.selected = 0;
+                *mode = GameMode::Playing;
+            }
+            (GameMode::Paused, MenuAction::SaveWorld) => {
+                save_current_world(
+                    &world_menu.world,
+                    &inventory,
+                    &mut save_state,
+                    &mut solution_state,
+                );
+            }
+            (GameMode::Paused, MenuAction::ResetSolution) => {
+                confirm_dialog.kind = Some(ConfirmDialogKind::ResetSolution);
+            }
+            (GameMode::Paused, MenuAction::OpenSettings) => {
+                ui_runtime.open(
+                    UiPanelId::Settings,
+                    UiPanelContext::ReturnTo(GameMode::Paused),
+                );
+            }
+            (GameMode::Paused, MenuAction::BackToMainMenu) => {
+                if solution_state.dirty {
+                    confirm_dialog.kind = Some(ConfirmDialogKind::ReturnToMain);
+                } else {
+                    clear_loaded_world(
+                        &mut world_menu.world,
+                        &mut placement,
+                        &mut save_state,
+                        &mut solution_state,
+                        &mut simulation,
+                        &mut world_menu.commands,
+                        &mut world_menu.meshes,
+                        &world_menu.block_entities,
+                        &world_menu.render_assets,
+                        &world_menu.debug,
+                        &mut world_menu.factory_structures,
+                    );
+                    *mode = GameMode::MainMenu;
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -273,98 +340,6 @@ pub fn save_list_actions(
             }
             SaveListAction::Back => {
                 *mode = GameMode::MainMenu;
-            }
-        }
-    }
-}
-
-pub fn pause_menu_actions(
-    mut builder_mode: ResMut<BuilderMode>,
-    mut simulation: ResMut<SimulationState>,
-    mut inventory: ResMut<InventoryItems>,
-    mut carried: ResMut<CarriedItem>,
-    mut placement: ResMut<PlacementState>,
-    mut mode: ResMut<GameMode>,
-    mut save_state: ResMut<SaveState>,
-    mut solution_state: ResMut<SolutionState>,
-    mut ui_runtime: ResMut<UiRuntime>,
-    mut world_menu: WorldMenuParams,
-    mut confirm_dialog: ResMut<ConfirmDialogState>,
-    mut interactions: Query<(&Interaction, &PauseAction), (Changed<Interaction>, With<Button>)>,
-) {
-    if *mode != GameMode::Paused {
-        return;
-    }
-
-    for (interaction, action) in &mut interactions {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
-
-        match action {
-            PauseAction::Resume => *mode = GameMode::Playing,
-            PauseAction::ToggleBuilderMode => {
-                if solution_state.entry == WorldEntryMode::PlaySolution {
-                    continue;
-                }
-                *builder_mode = match *builder_mode {
-                    BuilderMode::Edit => {
-                        simulation.running = false;
-                        simulation.step_requested = false;
-                        simulation.accumulator = 0.0;
-                        simulation.start_snapshot = None;
-                        if save_state.current_kind == Some(SaveKind::Puzzle) {
-                            solution_state.puzzle_snapshot = Some(world_menu.world.clone());
-                        }
-                        save_state.current_kind = Some(SaveKind::Solution);
-                        BuilderMode::Play
-                    }
-                    BuilderMode::Play => {
-                        confirm_dialog.kind = Some(ConfirmDialogKind::SaveSolutionBeforeEdit);
-                        continue;
-                    }
-                };
-                *inventory = InventoryItems::for_mode(*builder_mode);
-                carried.clear();
-                placement.selected = 0;
-                *mode = GameMode::Playing;
-            }
-            PauseAction::SaveWorld => {
-                save_current_world(
-                    &world_menu.world,
-                    &inventory,
-                    &mut save_state,
-                    &mut solution_state,
-                );
-            }
-            PauseAction::ResetSolution => {
-                confirm_dialog.kind = Some(ConfirmDialogKind::ResetSolution);
-            }
-            PauseAction::OpenSettings => {
-                ui_runtime.open(
-                    UiPanelId::Settings,
-                    UiPanelContext::ReturnTo(GameMode::Paused),
-                );
-            }
-            PauseAction::BackToMainMenu => {
-                if solution_state.dirty {
-                    confirm_dialog.kind = Some(ConfirmDialogKind::ReturnToMain);
-                } else {
-                    clear_loaded_world(
-                        &mut world_menu.world,
-                        &mut placement,
-                        &mut save_state,
-                        &mut solution_state,
-                        &mut simulation,
-                        &mut world_menu.commands,
-                        &mut world_menu.meshes,
-                        &world_menu.block_entities,
-                        &world_menu.render_assets,
-                        &world_menu.debug,
-                        &mut world_menu.factory_structures,
-                    );
-                    *mode = GameMode::MainMenu;
-                }
             }
         }
     }
@@ -850,12 +825,8 @@ pub fn settings_menu_actions(
                 *settings_tab = SettingsTab::KeyBindings;
                 open_dropdown.0 = None;
             }
-            SettingsAction::FovSlider
-            | SettingsAction::UiScaleSlider
-            | SettingsAction::GravitySlider => {
-                if let Some(slider) = settings_action_slider(*action) {
-                    active_slider.0 = Some(slider);
-                }
+            SettingsAction::Field(field) => {
+                active_slider.0 = Some(field);
             }
             SettingsAction::SetPlaceSelectionMode(selection_mode) => {
                 if !interaction.is_changed() {
@@ -963,23 +934,26 @@ fn update_settings_sliders_from_input(
     config: &mut GameConfig,
 ) {
     for (action, value, range, drag_state) in slider_changes {
-        let Some(slider) = settings_action_slider(*action) else {
+        let SettingsAction::Field(field) = *action else {
             continue;
         };
         let percent = range.thumb_position(value.0).clamp(0.0, 1.0);
 
         if drag_state.dragging {
-            active_slider.0 = Some(slider);
-            if slider.update_mode() == SettingsSliderUpdateMode::Live {
-                apply_settings_slider_live(slider, percent, settings, ui_scale, config);
+            active_slider.0 = Some(field);
+            if field
+                .slider()
+                .is_some_and(|slider| slider.trigger == SettingsSliderTrigger::Live)
+            {
+                field.apply_percent(percent, settings, ui_scale, config);
             }
             continue;
         }
 
-        if active_slider.0 == Some(slider) || value.is_changed() {
-            apply_settings_slider_committed(slider, percent, settings, ui_scale, config);
+        if active_slider.0 == Some(field) || value.is_changed() {
+            field.apply_percent(percent, settings, ui_scale, config);
             save_config(config);
-            if active_slider.0 == Some(slider) {
+            if active_slider.0 == Some(field) {
                 active_slider.0 = None;
             }
         }
@@ -993,258 +967,52 @@ fn commit_active_settings_slider(
     ui_scale: &mut UiScale,
     config: &mut GameConfig,
 ) {
-    let Some(slider) = active_slider.0.take() else {
+    let Some(field) = active_slider.0.take() else {
         return;
     };
 
     for (action, value, range) in slider_values {
-        if settings_action_slider(*action) != Some(slider) {
+        if *action != SettingsAction::Field(field) {
             continue;
         }
         let percent = range.thumb_position(value.0).clamp(0.0, 1.0);
-        apply_settings_slider_committed(slider, percent, settings, ui_scale, config);
+        field.apply_percent(percent, settings, ui_scale, config);
         save_config(config);
         return;
     }
 }
 
-fn settings_action_slider(action: SettingsAction) -> Option<SettingsSlider> {
-    match action {
-        SettingsAction::FovSlider => Some(SettingsSlider::Fov),
-        SettingsAction::UiScaleSlider => Some(SettingsSlider::UiScale),
-        SettingsAction::GravitySlider => Some(SettingsSlider::Gravity),
-        _ => None,
-    }
-}
-
-pub(crate) fn apply_settings_slider_live(
-    slider: SettingsSlider,
-    percent: f32,
-    settings: &mut GameSettings,
-    ui_scale: &mut UiScale,
-    config: &mut GameConfig,
-) {
-    apply_settings_slider_value(slider, percent, settings, ui_scale, config);
-}
-
-pub(crate) fn apply_settings_slider_committed(
-    slider: SettingsSlider,
-    percent: f32,
-    settings: &mut GameSettings,
-    ui_scale: &mut UiScale,
-    config: &mut GameConfig,
-) {
-    apply_settings_slider_value(slider, percent, settings, ui_scale, config);
-}
-
-fn apply_settings_slider_value(
-    slider: SettingsSlider,
-    percent: f32,
-    settings: &mut GameSettings,
-    ui_scale: &mut UiScale,
-    config: &mut GameConfig,
-) {
-    match slider {
-        SettingsSlider::Fov => {
-            settings.fov_degrees = (50.0 + percent * 60.0).round().clamp(50.0, 110.0);
-            config.fov_degrees = settings.fov_degrees;
-        }
-        SettingsSlider::UiScale => {
-            settings.ui_scale =
-                ((UI_SCALE_MIN + percent * (UI_SCALE_MAX - UI_SCALE_MIN)) * 10.0).round() / 10.0;
-            settings.ui_scale = settings.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
-            ui_scale.0 = settings.ui_scale;
-            config.ui_scale = settings.ui_scale;
-        }
-        SettingsSlider::Gravity => {
-            settings.gravity_scale =
-                ((GRAVITY_SCALE_MIN + percent * (GRAVITY_SCALE_MAX - GRAVITY_SCALE_MIN)) * 10.0)
-                    .round()
-                    / 10.0;
-            settings.gravity_scale = settings
-                .gravity_scale
-                .clamp(GRAVITY_SCALE_MIN, GRAVITY_SCALE_MAX);
-            config.gravity_scale = settings.gravity_scale;
-        }
-    }
-}
-
-pub fn generator_menu_actions(
+pub fn block_edit_actions(
     mut ui_runtime: ResMut<UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
-    mut interactions: Query<(&Interaction, &GeneratorAction), (Changed<Interaction>, With<Button>)>,
+    mut interactions: Query<(&Interaction, &BlockEditAction), (Changed<Interaction>, With<Button>)>,
 ) {
-    if ui_runtime.active_panel() != Some(UiPanelId::Generator) {
-        return;
-    }
-
     let Some(pos) = ui_runtime.active_block_pos() else {
         ui_runtime.close_current();
         return;
     };
-
-    for (interaction, action) in &mut interactions {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
-
-        let mut settings = world.generator_settings(pos);
-        match *action {
-            GeneratorAction::PeriodDown => {
-                settings.period = settings.period.saturating_sub(1).max(1);
-                world.set_generator_settings(pos, settings);
-                solution_state.dirty = true;
-            }
-            GeneratorAction::PeriodUp => {
-                settings.period = (settings.period + 1).min(120);
-                world.set_generator_settings(pos, settings);
-                solution_state.dirty = true;
-            }
-            GeneratorAction::ToggleMaterialDropdown => {
-                toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::GeneratorMaterial);
-            }
-            GeneratorAction::SetMaterial(material) => {
-                settings.material = material;
-                world.set_generator_settings(pos, settings);
-                solution_state.dirty = true;
-                open_dropdown.0 = None;
-            }
-            GeneratorAction::Close => {
-                open_dropdown.0 = None;
-                ui_runtime.close_active();
-            }
-        }
-    }
-}
-
-pub fn goal_menu_actions(
-    mut ui_runtime: ResMut<UiRuntime>,
-    mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
-    mut world: ResMut<WorldBlocks>,
-    mut solution_state: ResMut<SolutionState>,
-    mut interactions: Query<(&Interaction, &GoalAction), (Changed<Interaction>, With<Button>)>,
-) {
-    if ui_runtime.active_panel() != Some(UiPanelId::Goal) {
-        return;
-    }
-
-    let Some(pos) = ui_runtime.active_block_pos() else {
+    let Some(block) = world.system_blocks.get(&pos).copied() else {
         ui_runtime.close_current();
         return;
     };
-
     for (interaction, action) in &mut interactions {
         if *interaction != Interaction::Pressed {
             continue;
         }
-
-        let mut settings = world.goal_settings(pos);
         match *action {
-            GoalAction::ToggleMaterialDropdown => {
-                toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::GoalMaterial);
-            }
-            GoalAction::SetMaterial(material) => {
-                settings.material = material;
-                world.set_goal_settings(pos, settings);
-                solution_state.dirty = true;
-                open_dropdown.0 = None;
-            }
-            GoalAction::Close => {
+            BlockEditAction::Close => {
                 open_dropdown.0 = None;
                 ui_runtime.close_active();
             }
-        }
-    }
-}
-
-pub fn labeler_menu_actions(
-    mut ui_runtime: ResMut<UiRuntime>,
-    mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
-    mut world: ResMut<WorldBlocks>,
-    mut solution_state: ResMut<SolutionState>,
-    mut interactions: Query<(&Interaction, &LabelerAction), (Changed<Interaction>, With<Button>)>,
-) {
-    if ui_runtime.active_panel() != Some(UiPanelId::Labeler) {
-        return;
-    }
-
-    let Some(pos) = ui_runtime.active_block_pos() else {
-        ui_runtime.close_current();
-        return;
-    };
-
-    for (interaction, action) in &mut interactions {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
-
-        let mut settings = world.labeler_settings(pos);
-        match *action {
-            LabelerAction::ToggleColorDropdown => {
-                toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::LabelerColor);
-            }
-            LabelerAction::SetColor(color) => {
-                settings.color = color;
-                world.set_labeler_settings(pos, settings);
-                solution_state.dirty = true;
-                open_dropdown.0 = None;
-            }
-            LabelerAction::Close => {
-                open_dropdown.0 = None;
-                ui_runtime.close_active();
-            }
-        }
-    }
-}
-
-pub fn converter_menu_actions(
-    mut ui_runtime: ResMut<UiRuntime>,
-    mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
-    mut world: ResMut<WorldBlocks>,
-    mut solution_state: ResMut<SolutionState>,
-    mut interactions: Query<(&Interaction, &ConverterAction), (Changed<Interaction>, With<Button>)>,
-) {
-    if ui_runtime.active_panel() != Some(UiPanelId::Converter) {
-        return;
-    }
-
-    let Some(pos) = ui_runtime.active_block_pos() else {
-        ui_runtime.close_current();
-        return;
-    };
-
-    for (interaction, action) in &mut interactions {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
-
-        let mut settings = world.converter_settings(pos);
-        match *action {
-            ConverterAction::ToggleInputDropdown => {
-                toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::ConverterInput);
-            }
-            ConverterAction::ToggleOutputDropdown => {
-                toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::ConverterOutput);
-            }
-            ConverterAction::SetInput(material) => {
-                settings.input = material;
-                settings.mode = ConverterMode::SpecificInput;
-                world.set_converter_settings(pos, settings);
-                solution_state.dirty = true;
-                open_dropdown.0 = None;
-            }
-            ConverterAction::SetOutput(material) => {
-                settings.output = material;
-                world.set_converter_settings(pos, settings);
-                solution_state.dirty = true;
-                open_dropdown.0 = None;
-            }
-            ConverterAction::Close => {
-                open_dropdown.0 = None;
-                ui_runtime.close_active();
-            }
+            action => block.kind.handle_edit_action(
+                pos,
+                action,
+                &mut world,
+                &mut solution_state,
+                &mut open_dropdown,
+            ),
         }
     }
 }

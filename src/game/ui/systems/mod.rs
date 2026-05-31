@@ -11,7 +11,6 @@ use crate::game::state::{
 use crate::game::world::blocks::BlockKind;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockIconAssets;
-use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ConfigAction, GameConfig};
 use crate::shared::i18n::{I18n, Language};
 use crate::shared::save::{SaveKind, SaveState};
@@ -21,22 +20,16 @@ use super::components::{
     BUTTON_HOVER_BG, BUTTON_PRESSED_BG,
 };
 use super::types::{
-    ActiveSettingsSlider, BackpackPanel, BlockPanelDropdown, BlockPanelDropdownLabel,
-    BlockPanelDropdownList, CarriedIcon, CarriedItem, CarriedLabel, ConfirmDialogAction,
-    ConfirmDialogKind, ConfirmDialogMessage, ConfirmDialogPanel,
-    ConfirmDialogState, ConfirmDialogTitle, ConverterInputRow,
-    Crosshair,
-    InGameHudStyle, InGameHudVisibility, InventoryItems, InventorySlot, InventoryTitle,
-    InventoryTooltip, KeyBindingButton, LocalizedText,
-    MainMenuPanel, ModalScrim, OpenBlockPanelDropdown, OpenSettingsDropdown, PauseAction,
-    PausePanel, PendingKeyBind, SaveListAction,
-    SaveListPanel, SaveListTitle, ScrollContainer, ScrollContent, SettingsAction,
-    SettingsDropdownLabel, SettingsDropdownList, SettingsDropdownRoot, SettingsDropdownRow,
-    SettingsGameplayGroup, SettingsKeyBindingsGroup, SettingsSlider, SettingsSliderFill,
-    SettingsSliderKnob, SettingsTab, SettingsValue, SettingsValueText, StatusText,
-    StatusTextKind, SlotArea, TeleportAction, BlockPanelText, BlockPanelTextKind,
-    SettingsText, SettingsTextKind,
-    UiPanelBinding, UiPanelId, UiRuntime,
+    ActiveSettingsSlider, BlockPanelDropdown, BlockPanelDropdownLabel, BlockPanelDropdownList,
+    BlockPanelText, BlockPanelTextKind, CarriedItem, CarriedItemPreview, ConfirmDialogAction,
+    ConfirmDialogKind, ConfirmDialogState, ConverterInputRow, Crosshair, InGameHudStyle,
+    InGameHudVisibility, InventoryItems, InventorySlot, InventoryTooltip, KeyBindingButton,
+    LocalizedText, OpenBlockPanelDropdown, OpenSettingsDropdown, PanelText, PanelTextKind,
+    MenuAction, PanelVisibility, PendingKeyBind, SaveListAction, ScrollContainer, ScrollContent,
+    SettingsAction, SettingsDropdownLabel, SettingsDropdownList, SettingsDropdownRoot,
+    SettingsDropdownRow, SettingsField, SettingsSliderFill, SettingsSliderKnob, SettingsTab,
+    SettingsText, SettingsTextKind, SettingsValueText, SlotArea, StatusText, StatusTextKind,
+    TeleportAction, UiPanelBinding, UiPanelId, UiRuntime,
 };
 use super::widgets::{short_item_name, slot_color};
 include!("font.rs");

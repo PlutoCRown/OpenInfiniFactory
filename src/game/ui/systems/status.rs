@@ -31,11 +31,11 @@ pub fn update_button_hover_ui(
 fn pause_action_visible(
     save_state: &SaveState,
     solution_state: &SolutionState,
-    action: PauseAction,
+    action: MenuAction,
 ) -> bool {
     match action {
-        PauseAction::ToggleBuilderMode => solution_state.entry != WorldEntryMode::PlaySolution,
-        PauseAction::ResetSolution => save_state.current_kind == Some(SaveKind::Solution),
+        MenuAction::ToggleBuilderMode => solution_state.entry != WorldEntryMode::PlaySolution,
+        MenuAction::ResetSolution => save_state.current_kind == Some(SaveKind::Solution),
         _ => true,
     }
 }
@@ -49,13 +49,7 @@ pub fn update_status_ui(
     config: Res<GameConfig>,
     i18n: Res<I18n>,
     mut status_texts: Query<(&StatusText, &mut Text)>,
-    mut inventory_title: Query<
-        &mut Text,
-        (
-            With<InventoryTitle>,
-            Without<CarriedLabel>,
-        ),
-    >,
+    mut panel_texts: Query<(&PanelText, &mut Text)>,
 ) {
     for (status, mut text) in &mut status_texts {
         text.0 = status_text_value(
@@ -70,11 +64,13 @@ pub fn update_status_ui(
         );
     }
 
-    if let Ok(mut text) = inventory_title.single_mut() {
-        text.0 = i18n.fmt(
-            "inventory.title",
-            &[("mode", builder_mode_name(*builder_mode, &i18n))],
-        );
+    for (panel_text, mut text) in &mut panel_texts {
+        if panel_text.0 == PanelTextKind::InventoryTitle {
+            text.0 = i18n.fmt(
+                "inventory.title",
+                &[("mode", builder_mode_name(*builder_mode, &i18n))],
+            );
+        }
     }
 }
 

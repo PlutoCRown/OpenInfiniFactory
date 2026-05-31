@@ -13,11 +13,11 @@ pub fn update_inventory_slots(
         ),
         With<Button>,
     >,
-    mut labels: Query<&mut Text, Without<CarriedLabel>>,
+    mut labels: Query<&mut Text, Without<CarriedItemPreview>>,
     mut icons: Query<&mut ImageNode>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut tooltip: Query<(&mut Node, &Children), With<InventoryTooltip>>,
-    mut tooltip_text: Query<&mut Text, Without<CarriedLabel>>,
+    mut tooltip_text: Query<&mut Text, Without<CarriedItemPreview>>,
 ) {
     let mut hovered_item = None;
     for (slot, interaction, children, mut background, mut border) in &mut slot_query {

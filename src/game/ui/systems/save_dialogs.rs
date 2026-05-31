@@ -3,8 +3,8 @@ pub fn update_save_list_ui(
     save_state: Res<SaveState>,
     solution_state: Res<SolutionState>,
     i18n: Res<I18n>,
-    mut title: Query<&mut Text, With<SaveListTitle>>,
-    mut labels: Query<&mut Text, Without<SaveListTitle>>,
+    mut panel_texts: Query<(&PanelText, &mut Text)>,
+    mut labels: Query<&mut Text, Without<PanelText>>,
     mut slots: Query<
         (
             &SaveListAction,
@@ -15,11 +15,13 @@ pub fn update_save_list_ui(
         With<Button>,
     >,
 ) {
-    if let Ok(mut title) = title.single_mut() {
-        title.0 = match *mode {
-            GameMode::SaveListMain => i18n.text("save.title.main"),
-            _ => i18n.text("save.title.default"),
-        };
+    for (panel_text, mut text) in &mut panel_texts {
+        if panel_text.0 == PanelTextKind::SaveListTitle {
+            text.0 = match *mode {
+                GameMode::SaveListMain => i18n.text("save.title.main"),
+                _ => i18n.text("save.title.default"),
+            };
+        }
     }
 
     let puzzles = save_state.puzzles();
@@ -95,10 +97,9 @@ pub fn update_save_list_ui(
 pub fn update_confirm_dialog_ui(
     dialog: Res<ConfirmDialogState>,
     i18n: Res<I18n>,
-    mut title: Query<&mut Text, With<ConfirmDialogTitle>>,
-    mut message: Query<&mut Text, (With<ConfirmDialogMessage>, Without<ConfirmDialogTitle>)>,
+    mut panel_texts: Query<(&PanelText, &mut Text)>,
     mut action_buttons: Query<(&ConfirmDialogAction, &mut Node, &Children), With<Button>>,
-    mut button_labels: Query<&mut Text, (Without<ConfirmDialogTitle>, Without<ConfirmDialogMessage>)>,
+    mut button_labels: Query<&mut Text, Without<PanelText>>,
 ) {
     if !dialog.is_changed() && !i18n.is_changed() {
         return;
@@ -107,19 +108,20 @@ pub fn update_confirm_dialog_ui(
     let Some(kind) = dialog.kind.as_ref() else {
         return;
     };
-    if let Ok(mut text) = title.single_mut() {
-        text.0 = i18n.text("confirm.title");
-    }
-    if let Ok(mut text) = message.single_mut() {
-        text.0 = match kind {
-            ConfirmDialogKind::DeleteSave { name } => {
-                i18n.fmt("save.confirm_delete", &[("name", name.clone())])
-            }
-            ConfirmDialogKind::ResetSolution => i18n.text("confirm.reset_solution"),
-            ConfirmDialogKind::ReturnToMain => i18n.text("confirm.return_to_main"),
-            ConfirmDialogKind::SaveSolutionBeforeEdit => {
-                i18n.text("confirm.save_solution_before_edit")
-            }
+    for (panel_text, mut text) in &mut panel_texts {
+        text.0 = match panel_text.0 {
+            PanelTextKind::ConfirmTitle => i18n.text("confirm.title"),
+            PanelTextKind::ConfirmMessage => match kind {
+                ConfirmDialogKind::DeleteSave { name } => {
+                    i18n.fmt("save.confirm_delete", &[("name", name.clone())])
+                }
+                ConfirmDialogKind::ResetSolution => i18n.text("confirm.reset_solution"),
+                ConfirmDialogKind::ReturnToMain => i18n.text("confirm.return_to_main"),
+                ConfirmDialogKind::SaveSolutionBeforeEdit => {
+                    i18n.text("confirm.save_solution_before_edit")
+                }
+            },
+            _ => continue,
         };
     }
     let secondary_visible = matches!(

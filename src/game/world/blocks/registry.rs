@@ -173,6 +173,13 @@ pub fn is_editable(kind: BlockKind) -> bool {
     EDITABLE_REGISTRY.iter().any(|block| block.id() == kind)
 }
 
+pub fn editable(kind: BlockKind) -> Option<&'static (dyn EditableBlock + Send + Sync)> {
+    EDITABLE_REGISTRY
+        .iter()
+        .copied()
+        .find(|block| block.id() == kind)
+}
+
 pub fn material_block_kind(material: MaterialKind) -> Option<BlockKind> {
     MATERIAL_REGISTRY
         .iter()

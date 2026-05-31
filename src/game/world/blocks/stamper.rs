@@ -1,8 +1,9 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, EditableBlock,
+    edit_labeler, rgb, Block, BlockDefinition, BlockEditContext, BlockKind, BlockModel, BlockModelPart,
+    EditableBlock,
     MaterialLabeler, ModelMaterial, ModelMesh, SystemBlock,
 };
-use crate::game::ui::UiPanelId;
+use crate::game::ui::{BlockEditAction, UiPanelId};
 use crate::game::world::grid::{BlockSettings, LabelerSettings};
 
 const MODEL: &[BlockModelPart] = &[
@@ -54,11 +55,15 @@ impl Block for StamperBlock {
     fn model(&self) -> BlockModel {
         BlockModel::Parts(MODEL)
     }
-
-    fn ui_panel(&self) -> Option<UiPanelId> {
-        Some(UiPanelId::Labeler)
-    }
 }
 
 impl SystemBlock for StamperBlock {}
-impl EditableBlock for StamperBlock {}
+impl EditableBlock for StamperBlock {
+    fn ui_panel(&self) -> Option<UiPanelId> {
+        Some(UiPanelId::Labeler)
+    }
+
+    fn handle_edit_action(&self, ctx: &mut BlockEditContext, action: BlockEditAction) {
+        edit_labeler(ctx, action);
+    }
+}

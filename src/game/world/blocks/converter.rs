@@ -1,9 +1,9 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, EditableBlock,
+    rgb, Block, BlockDefinition, BlockEditContext, BlockKind, BlockModel, BlockModelPart, EditableBlock,
     ModelMaterial, ModelMesh, SystemBlock,
 };
-use crate::game::ui::UiPanelId;
-use crate::game::world::grid::{BlockSettings, ConverterSettings};
+use crate::game::ui::{BlockEditAction, BlockPanelDropdown, UiPanelId};
+use crate::game::world::grid::{BlockSettings, ConverterMode, ConverterSettings};
 
 const MODEL: &[BlockModelPart] = &[
     BlockModelPart::new(ModelMesh::Medium, ModelMaterial::System, [0.0, 0.38, 0.0]),
@@ -52,11 +52,37 @@ impl Block for ConverterBlock {
     fn model(&self) -> BlockModel {
         BlockModel::Parts(MODEL)
     }
-
-    fn ui_panel(&self) -> Option<UiPanelId> {
-        Some(UiPanelId::Converter)
-    }
 }
 
 impl SystemBlock for ConverterBlock {}
-impl EditableBlock for ConverterBlock {}
+impl EditableBlock for ConverterBlock {
+    fn ui_panel(&self) -> Option<UiPanelId> {
+        Some(UiPanelId::Converter)
+    }
+
+    fn handle_edit_action(&self, ctx: &mut BlockEditContext, action: BlockEditAction) {
+        let mut settings = ctx.world.converter_settings(ctx.pos);
+        match action {
+            BlockEditAction::ToggleInputDropdown => {
+                ctx.toggle_dropdown(BlockPanelDropdown::ConverterInput);
+                return;
+            }
+            BlockEditAction::ToggleOutputDropdown => {
+                ctx.toggle_dropdown(BlockPanelDropdown::ConverterOutput);
+                return;
+            }
+            BlockEditAction::SetInput(material) => {
+                settings.input = material;
+                settings.mode = ConverterMode::SpecificInput;
+                ctx.close_dropdown();
+            }
+            BlockEditAction::SetOutput(material) => {
+                settings.output = material;
+                ctx.close_dropdown();
+            }
+            _ => return,
+        }
+        ctx.world.set_converter_settings(ctx.pos, settings);
+        ctx.mark_dirty();
+    }
+}

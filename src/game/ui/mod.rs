@@ -19,17 +19,17 @@ pub use systems::{
     update_ui_layers,
 };
 pub use types::{
-    ActiveSettingsSlider, AreaKind, BlockPanelDropdown, CarriedItem, ConfirmDialogAction,
-    ConfirmDialogKind, ConfirmDialogState, ConverterAction, GeneratorAction, GoalAction,
-    HotbarItems, InventoryItems, LabelerAction, MainMenuAction, OpenBlockPanelDropdown,
-    OpenSettingsDropdown, PauseAction, PendingAppExit, PendingKeyBind, SaveListAction,
-    SettingsAction, SettingsSlider, SettingsSliderUpdateMode, SettingsTab, TeleportAction,
-    UiPanelContext, UiRuntime, HOTBAR_SLOTS,
+    ActiveSettingsSlider, AreaKind, BlockEditAction, BlockPanelDropdown, CarriedItem,
+    ConfirmDialogAction, ConfirmDialogKind, ConfirmDialogState,
+    HotbarItems, InventoryItems, MenuAction, OpenBlockPanelDropdown,
+    OpenSettingsDropdown, PendingAppExit, PendingKeyBind, SaveListAction,
+    SettingsAction, SettingsSliderTrigger, SettingsTab, TeleportAction, UiPanelContext, UiRuntime,
+    HOTBAR_SLOTS,
 };
 
 use crate::game::systems::menus::{
-    confirm_dialog_actions, converter_menu_actions, generator_menu_actions, goal_menu_actions,
-    labeler_menu_actions, settings_menu_actions, teleport_menu_actions, teleport_rename_input,
+    block_edit_actions, confirm_dialog_actions, settings_menu_actions, teleport_menu_actions,
+    teleport_rename_input,
 };
 use crate::game::{player, systems as game_systems};
 
@@ -48,10 +48,7 @@ impl Plugin for GameUiPlugin {
             .add_systems(
                 Update,
                 (
-                    generator_menu_actions,
-                    goal_menu_actions,
-                    labeler_menu_actions,
-                    converter_menu_actions,
+                    block_edit_actions,
                     teleport_menu_actions,
                     teleport_rename_input,
                     confirm_dialog_actions,

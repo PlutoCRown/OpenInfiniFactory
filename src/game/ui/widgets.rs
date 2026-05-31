@@ -6,12 +6,12 @@ use super::components::{
     default_button_size, default_font_size, inset_border, menu_button, raised_border,
 };
 use super::types::{
-    AreaKind, BlockPanelDropdown, BlockPanelDropdownLabel, BlockPanelDropdownList,
-    ConfirmDialogAction, GeneratorAction, InventoryItem, InventorySlot, KeyBindingButton,
-    MainMenuAction, PauseAction, SaveListAction, ScrollContainer,
+    AreaKind, BlockEditAction, BlockPanelDropdown, BlockPanelDropdownLabel, BlockPanelDropdownList,
+    ConfirmDialogAction, InventoryItem, InventorySlot, KeyBindingButton,
+    MenuAction, SaveListAction, ScrollContainer,
     ScrollContent, SettingsAction, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList,
-    SettingsDropdownRoot, SettingsSlider, SettingsSliderFill, SettingsSliderKnob, SettingsValue,
-    SettingsText, SettingsTextKind, SettingsValueText, SlotArea, TeleportAction, UiActionLabel,
+    SettingsDropdownRoot, SettingsField, SettingsSliderFill, SettingsSliderKnob, SettingsText,
+    SettingsTextKind, SettingsValueText, SlotArea, TeleportAction, UiActionLabel,
 };
 
 fn label_text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bundle {
@@ -90,11 +90,16 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
         });
 }
 
-pub(super) fn spawn_localized_pause_button(parent: &mut ChildSpawnerCommands, action: PauseAction) {
-    spawn_localized_button(parent, 38.0, 16.0, action);
+pub(super) fn spawn_menu_button(
+    parent: &mut ChildSpawnerCommands,
+    height: f32,
+    font_size: f32,
+    action: MenuAction,
+) {
+    spawn_localized_button(parent, height, font_size, action);
 }
 
-pub(super) fn spawn_generator_button(parent: &mut ChildSpawnerCommands, action: GeneratorAction) {
+pub(super) fn spawn_block_edit_button(parent: &mut ChildSpawnerCommands, action: BlockEditAction) {
     spawn_localized_button(parent, 36.0, 14.0, action);
 }
 
@@ -275,7 +280,7 @@ pub(super) fn spawn_settings_tab(parent: &mut ChildSpawnerCommands, action: Sett
         });
 }
 
-pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, slider: SettingsSlider) {
+pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, field: SettingsField) {
     parent
         .spawn((
             styled_button(
@@ -293,13 +298,9 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, slider: S
             Slider {
                 track_click: TrackClick::Snap,
             },
-            SliderValue(settings_slider_initial_value(slider)),
+            SliderValue(0.0),
             SliderRange::new(0.0, 100.0),
-            match slider {
-                SettingsSlider::Fov => SettingsAction::FovSlider,
-                SettingsSlider::UiScale => SettingsAction::UiScaleSlider,
-                SettingsSlider::Gravity => SettingsAction::GravitySlider,
-            },
+            SettingsAction::Field(field),
         ))
         .with_children(|track| {
             track.spawn((
@@ -311,7 +312,7 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, slider: S
                     },
                     BackgroundColor(Color::srgb(0.32, 0.62, 0.72)),
                 ),
-                SettingsSliderFill(slider),
+                SettingsSliderFill(field),
                 Pickable::IGNORE,
             ));
             track.spawn((
@@ -330,7 +331,7 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, slider: S
                     },
                     BackgroundColor(Color::srgb(0.90, 0.96, 1.0)),
                 ),
-                SettingsSliderKnob(slider),
+                SettingsSliderKnob(field),
                 SliderThumb,
                 Pickable::IGNORE,
             ));
@@ -339,7 +340,7 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, slider: S
 
 pub(super) fn spawn_settings_slider_value(
     parent: &mut ChildSpawnerCommands,
-    slider: SettingsSlider,
+    field: SettingsField,
 ) {
     parent.spawn((
         label_text("", 13.0, Color::srgb(0.88, 0.94, 0.96)),
@@ -349,20 +350,8 @@ pub(super) fn spawn_settings_slider_value(
             align_self: AlignSelf::Center,
             ..default()
         },
-        SettingsValueText(match slider {
-            SettingsSlider::Fov => SettingsValue::Fov,
-            SettingsSlider::UiScale => SettingsValue::UiScale,
-            SettingsSlider::Gravity => SettingsValue::Gravity,
-        }),
+        SettingsValueText(field),
     ));
-}
-
-fn settings_slider_initial_value(slider: SettingsSlider) -> f32 {
-    match slider {
-        SettingsSlider::Fov => 50.0,
-        SettingsSlider::UiScale => 0.0,
-        SettingsSlider::Gravity => 20.0,
-    }
 }
 
 pub(super) fn spawn_settings_dropdown(
@@ -479,13 +468,6 @@ fn spawn_localized_dropdown_option(
                 super::types::LocalizedText { key },
             ));
         });
-}
-
-pub(super) fn spawn_localized_main_button(
-    parent: &mut ChildSpawnerCommands,
-    action: MainMenuAction,
-) {
-    spawn_localized_button(parent, 44.0, 17.0, action);
 }
 
 pub(super) fn scroll_container(height: f32) -> (impl Bundle, ScrollContainer) {

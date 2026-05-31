@@ -3,22 +3,22 @@ pub fn update_carried_item_ui(
     i18n: Res<I18n>,
     block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut icon: Query<(&mut Node, &mut BackgroundColor, &Children), With<CarriedIcon>>,
-    mut icon_images: Query<&mut ImageNode, Without<CarriedIcon>>,
-    mut label: Query<&mut Text, With<CarriedLabel>>,
+    mut preview: Query<(&mut Node, &mut BackgroundColor, &Children), With<CarriedItemPreview>>,
+    mut preview_images: Query<&mut ImageNode>,
+    mut preview_text: Query<&mut Text>,
 ) {
-    let Ok((mut style, mut background, children)) = icon.single_mut() else {
+    let Ok((mut style, mut background, children)) = preview.single_mut() else {
         return;
     };
 
     let Some(item) = carried.item() else {
         style.display = Display::None;
-        if let Ok(mut text) = label.single_mut() {
-            text.0.clear();
-        }
         for child in children.iter() {
-            if let Ok(mut image) = icon_images.get_mut(child) {
+            if let Ok(mut image) = preview_images.get_mut(child) {
                 *image = ImageNode::default();
+            }
+            if let Ok(mut text) = preview_text.get_mut(child) {
+                text.0.clear();
             }
         }
         return;
@@ -42,20 +42,19 @@ pub fn update_carried_item_ui(
         .block()
         .and_then(|kind| block_icons.as_deref().and_then(|icons| icons.get(kind)));
     for child in children.iter() {
-        if let Ok(mut image) = icon_images.get_mut(child) {
+        if let Ok(mut image) = preview_images.get_mut(child) {
             *image = icon_handle
                 .as_ref()
                 .map(|handle| ImageNode::new(handle.clone()))
                 .unwrap_or_default();
         }
-    }
-
-    if let Ok(mut text) = label.single_mut() {
-        text.0 = if icon_handle.is_some() {
-            String::new()
-        } else {
-            i18n.text(short_item_name(item))
-        };
+        if let Ok(mut text) = preview_text.get_mut(child) {
+            text.0 = if icon_handle.is_some() {
+                String::new()
+            } else {
+                i18n.text(short_item_name(item))
+            };
+        }
     }
 }
 

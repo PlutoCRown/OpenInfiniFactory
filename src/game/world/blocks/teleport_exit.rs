@@ -65,11 +65,11 @@ impl Block for TeleportExitBlock {
     fn model(&self) -> BlockModel {
         BlockModel::Parts(MODEL)
     }
+}
 
+impl SystemBlock for TeleportExitBlock {}
+impl EditableBlock for TeleportExitBlock {
     fn ui_panel(&self) -> Option<UiPanelId> {
         Some(UiPanelId::Teleport)
     }
 }
-
-impl SystemBlock for TeleportExitBlock {}
-impl EditableBlock for TeleportExitBlock {}

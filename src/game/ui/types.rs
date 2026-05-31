@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub use crate::game::state::UiPanelId;
 use crate::game::state::{BuilderMode, GameMode};
 use crate::game::world::blocks::{BlockKind, MaterialKind, StampColor, EDIT_BLOCKS, PLAY_BLOCKS};
+use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ConfigAction, ConfigSelectionMode};
 use crate::shared::i18n::Language;
 
@@ -100,8 +101,13 @@ impl UiRuntime {
 #[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
 pub struct UiPanelBinding(pub UiPanelId);
 
-#[derive(Component)]
-pub struct ModalScrim;
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub enum PanelVisibility {
+    GameMode(GameMode),
+    SettingsTab(SettingsTab),
+    ConfirmDialog,
+    ModalScrim,
+}
 
 #[derive(Component)]
 pub struct InGameHudStyle;
@@ -110,34 +116,7 @@ pub struct InGameHudStyle;
 pub struct InGameHudVisibility;
 
 #[derive(Component)]
-pub struct BackpackPanel;
-
-#[derive(Component)]
-pub struct InventoryTitle;
-
-#[derive(Component)]
-pub struct PausePanel;
-
-#[derive(Component)]
-pub struct SettingsPanel;
-
-#[derive(Component)]
-pub struct GeneratorPanel;
-
-#[derive(Component)]
-pub struct GoalPanel;
-
-#[derive(Component)]
-pub struct LabelerPanel;
-
-#[derive(Component)]
-pub struct ConverterPanel;
-
-#[derive(Component)]
 pub struct ConverterInputRow;
-
-#[derive(Component)]
-pub struct TeleportPanel;
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct BlockPanelText(pub BlockPanelTextKind);
@@ -151,23 +130,19 @@ pub enum BlockPanelTextKind {
 #[derive(Resource, Default)]
 pub struct OpenBlockPanelDropdown(pub Option<BlockPanelDropdown>);
 
-#[derive(Component)]
-pub struct SettingsGameplayGroup;
-
-#[derive(Component)]
-pub struct SettingsKeyBindingsGroup;
-
 #[derive(Component, Clone, Copy)]
 pub struct KeyBindingButton(pub ConfigAction);
 
-#[derive(Component)]
-pub struct MainMenuPanel;
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct PanelText(pub PanelTextKind);
 
-#[derive(Component)]
-pub struct SaveListPanel;
-
-#[derive(Component)]
-pub struct SaveListTitle;
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum PanelTextKind {
+    InventoryTitle,
+    SaveListTitle,
+    ConfirmTitle,
+    ConfirmMessage,
+}
 
 #[derive(Component)]
 pub struct Crosshair;
@@ -181,20 +156,13 @@ pub enum SettingsTextKind {
 }
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub struct SettingsValueText(pub SettingsValue);
-
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub enum SettingsValue {
-    Fov,
-    UiScale,
-    Gravity,
-}
+pub struct SettingsValueText(pub SettingsField);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub struct SettingsSliderFill(pub SettingsSlider);
+pub struct SettingsSliderFill(pub SettingsField);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub struct SettingsSliderKnob(pub SettingsSlider);
+pub struct SettingsSliderKnob(pub SettingsField);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct SettingsDropdownLabel(pub SettingsDropdown);
@@ -218,23 +186,169 @@ pub struct ScrollContainer {
 pub struct ScrollContent;
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-pub enum SettingsSlider {
+pub enum SettingsField {
     Fov,
     UiScale,
     Gravity,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-pub enum SettingsSliderUpdateMode {
+pub enum SettingsSliderTrigger {
     Live,
     Commit,
 }
 
-impl SettingsSlider {
-    pub fn update_mode(self) -> SettingsSliderUpdateMode {
+#[derive(Clone, Copy)]
+pub struct SettingsSliderConfig {
+    pub min: f32,
+    pub max: f32,
+    pub step: f32,
+    pub trigger: SettingsSliderTrigger,
+}
+
+#[derive(Clone, Copy)]
+pub enum SettingsControl {
+    Slider {
+        field: SettingsField,
+        config: SettingsSliderConfig,
+    },
+    Dropdown(SettingsDropdown),
+}
+
+#[derive(Clone, Copy)]
+pub struct SettingsItem {
+    pub label_key: &'static str,
+    pub control: SettingsControl,
+}
+
+pub const GAMEPLAY_SETTINGS: &[SettingsItem] = &[
+    SettingsItem {
+        label_key: "settings.fov",
+        control: SettingsControl::Slider {
+            field: SettingsField::Fov,
+            config: SettingsSliderConfig {
+                min: 50.0,
+                max: 110.0,
+                step: 1.0,
+                trigger: SettingsSliderTrigger::Live,
+            },
+        },
+    },
+    SettingsItem {
+        label_key: "settings.ui_scale_label",
+        control: SettingsControl::Slider {
+            field: SettingsField::UiScale,
+            config: SettingsSliderConfig {
+                min: UI_SCALE_MIN,
+                max: UI_SCALE_MAX,
+                step: 0.1,
+                trigger: SettingsSliderTrigger::Commit,
+            },
+        },
+    },
+    SettingsItem {
+        label_key: "settings.gravity",
+        control: SettingsControl::Slider {
+            field: SettingsField::Gravity,
+            config: SettingsSliderConfig {
+                min: GRAVITY_SCALE_MIN,
+                max: GRAVITY_SCALE_MAX,
+                step: 0.1,
+                trigger: SettingsSliderTrigger::Commit,
+            },
+        },
+    },
+    SettingsItem {
+        label_key: "settings.language",
+        control: SettingsControl::Dropdown(SettingsDropdown::Language),
+    },
+    SettingsItem {
+        label_key: "settings.place_selection_mode",
+        control: SettingsControl::Dropdown(SettingsDropdown::PlaceSelectionMode),
+    },
+    SettingsItem {
+        label_key: "settings.delete_selection_mode",
+        control: SettingsControl::Dropdown(SettingsDropdown::DeleteSelectionMode),
+    },
+];
+
+impl SettingsField {
+    pub fn slider(self) -> Option<SettingsSliderConfig> {
+        GAMEPLAY_SETTINGS.iter().find_map(|item| match item.control {
+            SettingsControl::Slider { field, config } if field == self => Some(config),
+            _ => None,
+        })
+    }
+
+    pub fn percent(self, settings: &crate::game::state::GameSettings) -> f32 {
+        let Some(slider) = self.slider() else {
+            return 0.0;
+        };
+        ((self.value(settings) - slider.min) / (slider.max - slider.min) * 100.0).clamp(0.0, 100.0)
+    }
+
+    pub fn display(
+        self,
+        settings: &crate::game::state::GameSettings,
+        i18n: &crate::shared::i18n::I18n,
+    ) -> String {
         match self {
-            Self::Fov => SettingsSliderUpdateMode::Live,
-            Self::UiScale | Self::Gravity => SettingsSliderUpdateMode::Commit,
+            Self::Fov => format!("FOV {:.0}", settings.fov_degrees),
+            Self::UiScale => i18n.fmt(
+                "settings.ui_scale",
+                &[("scale", format!("{:.1}", settings.ui_scale))],
+            ),
+            Self::Gravity => i18n.fmt(
+                "settings.gravity_value",
+                &[("scale", format!("{:.1}", settings.gravity_scale))],
+            ),
+        }
+    }
+
+    pub fn apply_percent(
+        self,
+        percent: f32,
+        settings: &mut crate::game::state::GameSettings,
+        ui_scale: &mut UiScale,
+        config: &mut crate::shared::config::GameConfig,
+    ) {
+        let Some(slider) = self.slider() else {
+            return;
+        };
+        let raw = slider.min + percent.clamp(0.0, 1.0) * (slider.max - slider.min);
+        let value = (raw / slider.step).round() * slider.step;
+        self.apply_value(value.clamp(slider.min, slider.max), settings, ui_scale, config);
+    }
+
+    fn value(self, settings: &crate::game::state::GameSettings) -> f32 {
+        match self {
+            Self::Fov => settings.fov_degrees,
+            Self::UiScale => settings.ui_scale,
+            Self::Gravity => settings.gravity_scale,
+        }
+    }
+
+    fn apply_value(
+        self,
+        value: f32,
+        settings: &mut crate::game::state::GameSettings,
+        ui_scale: &mut UiScale,
+        config: &mut crate::shared::config::GameConfig,
+    ) {
+        match self {
+            Self::Fov => {
+                settings.fov_degrees = value;
+                config.fov_degrees = value;
+            }
+            Self::UiScale => {
+                settings.ui_scale = value;
+                ui_scale.0 = value;
+                config.ui_scale = value;
+            }
+            Self::Gravity => {
+                settings.gravity_scale = value;
+                config.gravity_scale = value;
+            }
         }
     }
 }
@@ -266,8 +380,11 @@ pub trait UiActionLabel {
     fn label_key(self) -> &'static str;
 }
 
-#[derive(Component, Clone, Copy)]
-pub enum PauseAction {
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub enum MenuAction {
+    EditPuzzle,
+    Play,
+    Quit,
     Resume,
     ToggleBuilderMode,
     SaveWorld,
@@ -276,34 +393,18 @@ pub enum PauseAction {
     BackToMainMenu,
 }
 
-impl UiActionLabel for PauseAction {
+impl UiActionLabel for MenuAction {
     fn label_key(self) -> &'static str {
         match self {
+            Self::EditPuzzle => "button.edit_puzzle",
+            Self::Play => "button.start_playing",
+            Self::Quit => "button.quit_game",
             Self::Resume => "button.resume",
             Self::ToggleBuilderMode => "button.toggle_builder_mode",
             Self::SaveWorld => "button.save_world",
             Self::ResetSolution => "button.reset_solution",
             Self::OpenSettings => "button.settings",
             Self::BackToMainMenu => "button.back_to_main_menu",
-        }
-    }
-}
-
-#[derive(Component, Clone, Copy)]
-pub enum MainMenuAction {
-    EditPuzzle,
-    Play,
-    OpenSettings,
-    Quit,
-}
-
-impl UiActionLabel for MainMenuAction {
-    fn label_key(self) -> &'static str {
-        match self {
-            Self::EditPuzzle => "button.edit_puzzle",
-            Self::Play => "button.start_playing",
-            Self::OpenSettings => "button.settings",
-            Self::Quit => "button.quit_game",
         }
     }
 }
@@ -349,22 +450,11 @@ pub struct ConfirmDialogState {
     pub kind: Option<ConfirmDialogKind>,
 }
 
-#[derive(Component)]
-pub struct ConfirmDialogPanel;
-
-#[derive(Component)]
-pub struct ConfirmDialogTitle;
-
-#[derive(Component)]
-pub struct ConfirmDialogMessage;
-
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub enum SettingsAction {
     TabGameplay,
     TabKeyBindings,
-    FovSlider,
-    UiScaleSlider,
-    GravitySlider,
+    Field(SettingsField),
     SetPlaceSelectionMode(ConfigSelectionMode),
     SetDeleteSelectionMode(ConfigSelectionMode),
     SetLanguage(Language),
@@ -384,9 +474,7 @@ impl UiActionLabel for SettingsAction {
             Self::ResetDefaults => "button.reset_defaults",
             Self::OpenFolder => "button.open_config_folder",
             Self::Back => "button.back",
-            Self::FovSlider
-            | Self::UiScaleSlider
-            | Self::GravitySlider
+            Self::Field(_)
             | Self::SetPlaceSelectionMode(_)
             | Self::SetDeleteSelectionMode(_)
             | Self::SetLanguage(_)
@@ -396,46 +484,16 @@ impl UiActionLabel for SettingsAction {
 }
 
 #[derive(Resource, Default)]
-pub struct ActiveSettingsSlider(pub Option<SettingsSlider>);
+pub struct ActiveSettingsSlider(pub Option<SettingsField>);
 
 #[derive(Component, Clone, Copy)]
-pub enum GeneratorAction {
+pub enum BlockEditAction {
     PeriodDown,
     PeriodUp,
     ToggleMaterialDropdown,
     SetMaterial(MaterialKind),
-    Close,
-}
-
-impl UiActionLabel for GeneratorAction {
-    fn label_key(self) -> &'static str {
-        match self {
-            Self::PeriodDown => "button.period_down",
-            Self::PeriodUp => "button.period_up",
-            Self::ToggleMaterialDropdown | Self::SetMaterial(_) => "button.material_next",
-            Self::Close => "button.close",
-        }
-    }
-}
-
-#[derive(Component, Clone, Copy)]
-pub enum LabelerAction {
     ToggleColorDropdown,
     SetColor(StampColor),
-    Close,
-}
-
-impl UiActionLabel for LabelerAction {
-    fn label_key(self) -> &'static str {
-        match self {
-            Self::ToggleColorDropdown | Self::SetColor(_) => "button.next_color",
-            Self::Close => "button.close",
-        }
-    }
-}
-
-#[derive(Component, Clone, Copy)]
-pub enum ConverterAction {
     ToggleInputDropdown,
     ToggleOutputDropdown,
     SetInput(MaterialKind),
@@ -443,9 +501,13 @@ pub enum ConverterAction {
     Close,
 }
 
-impl UiActionLabel for ConverterAction {
+impl UiActionLabel for BlockEditAction {
     fn label_key(self) -> &'static str {
         match self {
+            Self::PeriodDown => "button.period_down",
+            Self::PeriodUp => "button.period_up",
+            Self::ToggleMaterialDropdown | Self::SetMaterial(_) => "button.material_next",
+            Self::ToggleColorDropdown | Self::SetColor(_) => "button.next_color",
             Self::ToggleInputDropdown | Self::SetInput(_) => "button.input_material",
             Self::ToggleOutputDropdown | Self::SetOutput(_) => "button.output_material",
             Self::Close => "button.close",
@@ -466,22 +528,6 @@ impl UiActionLabel for TeleportAction {
         match self {
             Self::TogglePairDropdown | Self::SetPair(_) => "button.teleport_pair",
             Self::Rename => "button.teleport_rename",
-            Self::Close => "button.close",
-        }
-    }
-}
-
-#[derive(Component, Clone, Copy)]
-pub enum GoalAction {
-    ToggleMaterialDropdown,
-    SetMaterial(MaterialKind),
-    Close,
-}
-
-impl UiActionLabel for GoalAction {
-    fn label_key(self) -> &'static str {
-        match self {
-            Self::ToggleMaterialDropdown | Self::SetMaterial(_) => "button.material_next",
             Self::Close => "button.close",
         }
     }
@@ -531,10 +577,7 @@ impl Default for SettingsTab {
 pub(crate) struct InventoryTooltip;
 
 #[derive(Component)]
-pub(crate) struct CarriedLabel;
-
-#[derive(Component)]
-pub(crate) struct CarriedIcon;
+pub(crate) struct CarriedItemPreview;
 
 #[derive(Component, Clone, Copy)]
 pub(crate) struct InventorySlot {

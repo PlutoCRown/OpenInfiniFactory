@@ -46,11 +46,11 @@ pub fn update_settings_sliders_ui(
         if drag_state.dragging {
             continue;
         }
-        if let Some(slider) = settings_action_slider(*action) {
-            if active_slider.0 == Some(slider) {
+        if let SettingsAction::Field(field) = *action {
+            if active_slider.0 == Some(field) {
                 continue;
             }
-            let next_value = settings_slider_percent(slider, &settings);
+            let next_value = field.percent(&settings);
             if (value.0 - next_value).abs() > 0.01 {
                 commands.entity(entity).insert(SliderValue(next_value));
             }
@@ -83,19 +83,19 @@ pub fn update_settings_slider_drag_ui(
     >,
 ) {
     for (action, value, range) in &slider_values {
-        let Some(slider) = settings_action_slider(*action) else {
+        let SettingsAction::Field(field) = *action else {
             continue;
         };
         let percent = (range.thumb_position(value.0) * 100.0).clamp(0.0, 100.0);
 
         for (fill, mut style) in &mut slider_fills {
-            if fill.0 == slider {
+            if fill.0 == field {
                 style.width = Val::Percent(percent);
             }
         }
 
         for (knob, mut style) in &mut slider_knobs {
-            if knob.0 == slider {
+            if knob.0 == field {
                 style.left = Val::Percent(percent);
             }
         }
@@ -145,17 +145,7 @@ pub fn update_settings_dropdowns_ui(
     }
 
     for (value, mut text) in &mut value_texts {
-        text.0 = match value.0 {
-            SettingsValue::Fov => format!("FOV {:.0}", settings.fov_degrees),
-            SettingsValue::UiScale => i18n.fmt(
-                "settings.ui_scale",
-                &[("scale", format!("{:.1}", settings.ui_scale))],
-            ),
-            SettingsValue::Gravity => i18n.fmt(
-                "settings.gravity_value",
-                &[("scale", format!("{:.1}", settings.gravity_scale))],
-            ),
-        };
+        text.0 = value.0.display(&settings, &i18n);
     }
 
     for (list, mut style) in &mut dropdown_lists {
@@ -237,22 +227,8 @@ pub fn update_settings_tabs_ui(
     }
 }
 
-fn settings_slider_percent(slider: SettingsSlider, settings: &GameSettings) -> f32 {
-    match slider {
-        SettingsSlider::Fov => ((settings.fov_degrees - 50.0) / 60.0 * 100.0).clamp(0.0, 100.0),
-        SettingsSlider::UiScale => {
-            ((settings.ui_scale - UI_SCALE_MIN) / (UI_SCALE_MAX - UI_SCALE_MIN) * 100.0)
-                .clamp(0.0, 100.0)
-        }
-        SettingsSlider::Gravity => ((settings.gravity_scale - GRAVITY_SCALE_MIN)
-            / (GRAVITY_SCALE_MAX - GRAVITY_SCALE_MIN)
-            * 100.0)
-            .clamp(0.0, 100.0),
-    }
-}
-
 fn live_slider_percent(
-    slider: SettingsSlider,
+    field: SettingsField,
     settings: &GameSettings,
     active_slider: &ActiveSettingsSlider,
     slider_values: &Query<
@@ -263,18 +239,9 @@ fn live_slider_percent(
     slider_values
         .iter()
         .find_map(|(_, action, value, drag_state)| {
-            ((drag_state.dragging || active_slider.0 == Some(slider))
-                && settings_action_slider(*action) == Some(slider))
+            ((drag_state.dragging || active_slider.0 == Some(field))
+                && *action == SettingsAction::Field(field))
             .then_some(value.0.clamp(0.0, 100.0))
         })
-        .unwrap_or_else(|| settings_slider_percent(slider, settings))
-}
-
-fn settings_action_slider(action: SettingsAction) -> Option<SettingsSlider> {
-    match action {
-        SettingsAction::FovSlider => Some(SettingsSlider::Fov),
-        SettingsAction::UiScaleSlider => Some(SettingsSlider::UiScale),
-        SettingsAction::GravitySlider => Some(SettingsSlider::Gravity),
-        _ => None,
-    }
+        .unwrap_or_else(|| field.percent(settings))
 }

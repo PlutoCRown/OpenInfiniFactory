@@ -37,9 +37,10 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub use self::registry::{assert_registry_consistent, ALL_BLOCKS, EDIT_BLOCKS, PLAY_BLOCKS};
-use crate::game::ui::UiPanelId;
+use crate::game::ui::{BlockEditAction, BlockPanelDropdown, OpenBlockPanelDropdown, UiPanelId};
 pub use crate::game::world::direction::Facing;
-use crate::game::world::grid::BlockSettings;
+use crate::game::state::SolutionState;
+use crate::game::world::grid::{BlockSettings, WorldBlocks};
 
 pub const BLOCK_SIZE: f32 = 1.0;
 pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
@@ -103,17 +104,72 @@ pub trait Block: Send + Sync {
     fn alternate(&self) -> Option<BlockKind> {
         None
     }
-
-    fn ui_panel(&self) -> Option<UiPanelId> {
-        None
-    }
 }
 
 pub trait SceneBlock: Block {}
 pub trait FactoryBlock: Block {}
 pub trait MaterialBlock: Block {}
 pub trait SystemBlock: Block {}
-pub trait EditableBlock: Block {}
+pub trait EditableBlock: Block {
+    fn ui_panel(&self) -> Option<UiPanelId> {
+        None
+    }
+
+    fn handle_edit_action(&self, _ctx: &mut BlockEditContext, _action: BlockEditAction) {
+    }
+}
+
+pub struct BlockEditContext<'a> {
+    pub pos: IVec3,
+    pub world: &'a mut WorldBlocks,
+    solution_state: &'a mut SolutionState,
+    open_dropdown: &'a mut OpenBlockPanelDropdown,
+}
+
+impl<'a> BlockEditContext<'a> {
+    pub fn new(
+        pos: IVec3,
+        world: &'a mut WorldBlocks,
+        solution_state: &'a mut SolutionState,
+        open_dropdown: &'a mut OpenBlockPanelDropdown,
+    ) -> Self {
+        Self {
+            pos,
+            world,
+            solution_state,
+            open_dropdown,
+        }
+    }
+
+    pub fn toggle_dropdown(&mut self, dropdown: BlockPanelDropdown) {
+        self.open_dropdown.0 = (self.open_dropdown.0 != Some(dropdown)).then_some(dropdown);
+    }
+
+    pub fn close_dropdown(&mut self) {
+        self.open_dropdown.0 = None;
+    }
+
+    pub fn mark_dirty(&mut self) {
+        self.solution_state.dirty = true;
+    }
+}
+
+pub(super) fn edit_labeler(ctx: &mut BlockEditContext, action: BlockEditAction) {
+    let mut settings = ctx.world.labeler_settings(ctx.pos);
+    match action {
+        BlockEditAction::ToggleColorDropdown => {
+            ctx.toggle_dropdown(BlockPanelDropdown::LabelerColor);
+            return;
+        }
+        BlockEditAction::SetColor(color) => {
+            settings.color = color;
+            ctx.close_dropdown();
+        }
+        _ => return,
+    }
+    ctx.world.set_labeler_settings(ctx.pos, settings);
+    ctx.mark_dirty();
+}
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum PersistentLayer {
@@ -673,7 +729,21 @@ impl BlockKind {
     }
 
     pub fn ui_panel(self) -> Option<UiPanelId> {
-        self.block().ui_panel()
+        registry::editable(self).and_then(EditableBlock::ui_panel)
+    }
+
+    pub fn handle_edit_action(
+        self,
+        pos: IVec3,
+        action: BlockEditAction,
+        world: &mut WorldBlocks,
+        solution_state: &mut SolutionState,
+        open_dropdown: &mut OpenBlockPanelDropdown,
+    ) {
+        if let Some(block) = registry::editable(self) {
+            let mut ctx = BlockEditContext::new(pos, world, solution_state, open_dropdown);
+            block.handle_edit_action(&mut ctx, action);
+        }
     }
 
     pub fn marker_behavior(self, facing: Facing) -> Option<MarkerBehavior> {

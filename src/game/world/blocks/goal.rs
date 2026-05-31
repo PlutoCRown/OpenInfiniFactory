@@ -1,8 +1,8 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, EditableBlock,
+    rgb, Block, BlockDefinition, BlockEditContext, BlockKind, BlockModel, BlockModelPart, EditableBlock,
     ModelMaterial, ModelMesh, RenderBehavior, SystemBlock,
 };
-use crate::game::ui::UiPanelId;
+use crate::game::ui::{BlockEditAction, BlockPanelDropdown, UiPanelId};
 use crate::game::world::grid::{BlockSettings, GoalSettings};
 
 const MODEL: &[BlockModelPart] = &[
@@ -46,11 +46,28 @@ impl Block for GoalBlock {
     fn default_settings(&self, _pos: bevy::prelude::IVec3) -> Option<BlockSettings> {
         Some(BlockSettings::Goal(GoalSettings::default()))
     }
-
-    fn ui_panel(&self) -> Option<UiPanelId> {
-        Some(UiPanelId::Goal)
-    }
 }
 
 impl SystemBlock for GoalBlock {}
-impl EditableBlock for GoalBlock {}
+impl EditableBlock for GoalBlock {
+    fn ui_panel(&self) -> Option<UiPanelId> {
+        Some(UiPanelId::Goal)
+    }
+
+    fn handle_edit_action(&self, ctx: &mut BlockEditContext, action: BlockEditAction) {
+        let mut settings = ctx.world.goal_settings(ctx.pos);
+        match action {
+            BlockEditAction::ToggleMaterialDropdown => {
+                ctx.toggle_dropdown(BlockPanelDropdown::GoalMaterial);
+                return;
+            }
+            BlockEditAction::SetMaterial(material) => {
+                settings.material = material;
+                ctx.close_dropdown();
+            }
+            _ => return,
+        }
+        ctx.world.set_goal_settings(ctx.pos, settings);
+        ctx.mark_dirty();
+    }
+}

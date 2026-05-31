@@ -26,7 +26,7 @@ use state::{
 use systems::gameplay::{
     apply_fov, draw_hover_structure_bounds, gameplay_input, placement_input, update_hover,
 };
-use systems::menus::{app_exit_requests, main_menu_actions, pause_menu_actions, save_list_actions};
+use systems::menus::{app_exit_requests, menu_actions, save_list_actions};
 use systems::simulation_controls::simulation_controls;
 use ui::{GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
@@ -120,7 +120,7 @@ impl Plugin for GamePlugin {
             .add_systems(Last, app_exit_requests.before(systems::debug::mark_perf_last))
             .add_systems(
                 Update,
-                (main_menu_actions, save_list_actions, pause_menu_actions)
+                (menu_actions, save_list_actions)
                     .chain()
                     .after(systems::debug::mark_perf_input)
                     .before(systems::debug::mark_perf_menus),
