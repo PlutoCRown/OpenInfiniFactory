@@ -322,8 +322,8 @@ pub fn rebuild_world_with_factory_activity_debug(
     for (pos, data) in &world.blocks {
         if data.kind.is_factory() {
             let material = match factory_structures.activity_at(*pos) {
-                Some(FactoryActivity::Active) => assets.active_factory_debug_material(),
-                _ => assets.inactive_factory_debug_material(),
+                Some(FactoryActivity::Inactive) => assets.inactive_factory_debug_material(),
+                _ => assets.active_factory_debug_material(),
             };
             spawn_debug_factory_block(commands, assets, *pos, material);
         } else {

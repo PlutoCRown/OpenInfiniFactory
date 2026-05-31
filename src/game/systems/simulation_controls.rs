@@ -75,12 +75,17 @@ pub fn simulation_controls(
     };
 
     if keys.just_pressed(rollback_key) && simulation.is_active() {
-        rollback_simulation(&mut simulation, &mut world);
+        let factory_snapshot = rollback_simulation(&mut simulation, &mut world);
         refresh_static_generated_markers(&mut world);
         pending_generated.clear();
         factory_structures.clear();
         movement_influence.clear();
         pusher_state.clear();
+        if let Some(snapshot) = factory_snapshot {
+            *factory_structures = snapshot;
+        } else {
+            factory_structures.rebuild_from_world(&world);
+        }
         despawn_world(&mut commands, &block_entities);
         rebuild_world_for_debug_state(
             &mut commands,
@@ -102,16 +107,22 @@ fn start_simulation_state(
     simulation.start_snapshot = Some(world.clone());
     *pusher_state = PusherState::rebuild_from_world(world);
     factory_structures.rebuild_from_world(world);
+    simulation.start_factory_structures = Some(factory_structures.clone());
 }
-fn rollback_simulation(simulation: &mut SimulationState, world: &mut WorldBlocks) {
+fn rollback_simulation(
+    simulation: &mut SimulationState,
+    world: &mut WorldBlocks,
+) -> Option<FactoryStructureState> {
     simulation.running = false;
     simulation.step_requested = false;
     simulation.turn = 0;
     simulation.accumulator = 0.0;
+    let factory_snapshot = simulation.start_factory_structures.take();
     if let Some(snapshot) = simulation.start_snapshot.take() {
         *world = snapshot;
     } else {
         world.retain(|_, block| !block.kind.is_material());
         world.clear_generated_markers();
     }
+    factory_snapshot
 }

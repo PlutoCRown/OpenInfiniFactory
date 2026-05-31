@@ -460,6 +460,9 @@ pub enum SaveListAction {
 #[derive(Component)]
 pub struct SaveListCloseButton;
 
+#[derive(Component)]
+pub struct SaveListPanel;
+
 #[derive(Component, Clone, Copy)]
 pub struct SaveListPuzzleColumn;
 

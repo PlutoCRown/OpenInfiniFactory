@@ -32,7 +32,7 @@ pub(super) fn material_gravity_moves(
         if structure_supported_by_lifter(world, &structure) {
             continue;
         }
-        if can_move_structure(world, &structure, IVec3::NEG_Y, factory_structures) {
+        if can_move_gravity_structure(world, &structure, factory_structures) {
             moves.push(StructureMove::translate_marked(
                 structure,
                 IVec3::NEG_Y,
@@ -72,7 +72,7 @@ pub(super) fn factory_gravity_moves(
         if structure_supported_by_lifter(world, &structure) {
             continue;
         }
-        if can_move_structure(world, &structure, IVec3::NEG_Y, factory_structures) {
+        if can_move_gravity_structure(world, &structure, factory_structures) {
             moves.push(StructureMove::translate_marked(
                 structure,
                 IVec3::NEG_Y,
@@ -268,9 +268,15 @@ impl StructureMove {
                 mark,
                 source,
             } => {
-                let structure =
-                    expanded_move_structure(world, &structure, offset, factory_structures)
-                        .unwrap_or(structure);
+                let mode = movement_expansion_mode(mark, source);
+                let structure = expanded_move_structure(
+                    world,
+                    &structure,
+                    offset,
+                    factory_structures,
+                    mode,
+                )
+                .unwrap_or(structure);
                 Self::Translate {
                     structure,
                     offset,
@@ -468,15 +474,19 @@ pub(super) fn execute_structure_moves_with_pushers(
                 structure,
                 offset,
                 actor,
+                mark,
                 source,
-                ..
             } => {
                 if structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
                 }
-                if let Some(structure) =
-                    expanded_move_structure(world, &structure, offset, factory_structures)
-                {
+                if let Some(structure) = expanded_move_structure(
+                    world,
+                    &structure,
+                    offset,
+                    factory_structures,
+                    movement_expansion_mode(mark, source),
+                ) {
                     let before_key = StructureKey::from_structure(&structure);
                     if offset.abs().element_sum() == 1 {
                         for pos in &structure {
@@ -603,13 +613,19 @@ fn welded_neighbors(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
         .collect()
 }
 
-pub(super) fn can_move_structure(
+fn can_move_gravity_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
-    offset: IVec3,
     factory_structures: &FactoryStructureState,
 ) -> bool {
-    expanded_move_structure(world, structure, offset, factory_structures).is_some()
+    expanded_move_structure(
+        world,
+        structure,
+        IVec3::NEG_Y,
+        factory_structures,
+        MovementExpansionMode::Gravity,
+    )
+    .is_some()
 }
 
 fn expanded_move_structure(
@@ -617,6 +633,7 @@ fn expanded_move_structure(
     structure: &HashSet<IVec3>,
     offset: IVec3,
     factory_structures: &FactoryStructureState,
+    mode: MovementExpansionMode,
 ) -> Option<HashSet<IVec3>> {
     if offset.abs().element_sum() != 1 {
         return can_move_structure_without_push(world, structure, offset)
@@ -635,6 +652,10 @@ fn expanded_move_structure(
         }
 
         let pushed = pushable_structure_at(world, factory_structures, target, offset)?;
+        if mode == MovementExpansionMode::Gravity && structure_supported_by_lifter(world, &pushed)
+        {
+            return None;
+        }
         for pushed_pos in pushed {
             if expanded.insert(pushed_pos) {
                 queue.push_back(pushed_pos);
@@ -643,6 +664,20 @@ fn expanded_move_structure(
     }
 
     can_move_structure_without_push(world, &expanded, offset).then_some(expanded)
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum MovementExpansionMode {
+    Normal,
+    Gravity,
+}
+
+fn movement_expansion_mode(mark: MovementMark, source: Option<IVec3>) -> MovementExpansionMode {
+    if mark == MovementMark::Vertical && source.is_none() {
+        MovementExpansionMode::Gravity
+    } else {
+        MovementExpansionMode::Normal
+    }
 }
 
 fn pushable_structure_at(

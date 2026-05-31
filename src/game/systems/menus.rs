@@ -104,6 +104,7 @@ pub fn menu_actions(
                     simulation.step_requested = false;
                     simulation.accumulator = 0.0;
                     simulation.start_snapshot = None;
+                    simulation.start_factory_structures = None;
                     solution_state.puzzle_snapshot = Some(world_menu.world.clone());
                     save_state.current = Some(next_named_save(
                         &save_state
@@ -132,6 +133,7 @@ pub fn menu_actions(
                 &inventory,
                 &mut save_state,
                 &mut solution_state,
+                &simulation,
             );
         }
         (GameMode::Paused, MenuAction::SaveAsNewPuzzle) => {
@@ -397,6 +399,7 @@ pub fn confirm_dialog_actions(
                 &inventory,
                 &mut save_state,
                 &mut solution_state,
+                &simulation,
             );
             return_to_main_menu(
                 &mut world_menu.world,
@@ -439,6 +442,7 @@ pub fn confirm_dialog_actions(
                 &inventory,
                 &mut save_state,
                 &mut solution_state,
+                &simulation,
             );
             switch_to_edit_mode_and_rebuild(
                 &mut world_menu.world,
@@ -676,7 +680,8 @@ fn confirm_text_prompt(
             }
         }
         TextPromptKind::SaveAsNewPuzzle => {
-            if save_world(&world_menu.world, &name, SaveKind::Puzzle, inventory) {
+            let world = simulation.authoring_world(&world_menu.world);
+            if save_world(world, &name, SaveKind::Puzzle, inventory) {
                 save_state.current = Some(name);
                 save_state.current_kind = Some(SaveKind::Puzzle);
                 solution_state.dirty = false;
@@ -729,7 +734,9 @@ fn save_current_world(
     inventory: &InventoryItems,
     save_state: &mut SaveState,
     solution_state: &mut SolutionState,
+    simulation: &SimulationState,
 ) {
+    let world = simulation.authoring_world(world);
     let kind = save_state.current_kind.unwrap_or(SaveKind::Puzzle);
     let name = save_state.current.clone().unwrap_or_else(|| {
         next_named_save(
@@ -823,6 +830,7 @@ fn reset_current_solution(
         simulation.turn = 0;
         simulation.accumulator = 0.0;
         simulation.start_snapshot = None;
+        simulation.start_factory_structures = None;
         factory_structures.clear();
         movement_influence.clear();
         pusher_state.clear();
@@ -903,6 +911,7 @@ fn open_loaded_world(
     simulation.turn = 0;
     simulation.accumulator = 0.0;
     simulation.start_snapshot = None;
+    simulation.start_factory_structures = None;
     placement.selection.clear();
     placement.edit_gesture = None;
     carried.clear();
@@ -967,6 +976,7 @@ fn clear_loaded_world(
     simulation.step_requested = false;
     simulation.accumulator = 0.0;
     simulation.start_snapshot = None;
+    simulation.start_factory_structures = None;
     placement.selection.clear();
     placement.edit_gesture = None;
     world.clear();

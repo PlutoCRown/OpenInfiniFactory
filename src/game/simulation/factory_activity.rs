@@ -163,6 +163,14 @@ impl FactoryStructureState {
                 changed_indices.insert(index);
             }
         }
+        for index in &changed_indices {
+            let Some(structure) = self.structures.get(*index) else {
+                continue;
+            };
+            for pos in &structure.positions {
+                self.structure_by_pos.remove(pos);
+            }
+        }
         for index in changed_indices {
             let Some(structure) = self.structures.get_mut(index) else {
                 continue;
@@ -173,9 +181,6 @@ impl FactoryStructureState {
                 .any(|pos| positions.contains(pos));
             if !should_move {
                 continue;
-            }
-            for pos in &structure.positions {
-                self.structure_by_pos.remove(pos);
             }
             structure.positions = structure
                 .positions

@@ -9,8 +9,9 @@ use super::super::components::{
     BUTTON_BG,
 };
 use super::super::types::{
-    PanelText, PanelTextKind, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListPrompt,
-    SaveListPuzzleColumn, SaveListSolutionColumn, TextPromptAction, TextPromptRoot, TextPromptText,
+    PanelText, PanelTextKind, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListPanel,
+    SaveListPrompt, SaveListPuzzleColumn, SaveListSolutionColumn, TextPromptAction, TextPromptRoot,
+    TextPromptText,
 };
 
 pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
@@ -18,6 +19,7 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         panel_bundle(900.0),
         GlobalZIndex(0),
         PanelVisibility::GameMode(GameMode::SaveListMain),
+        SaveListPanel,
     ))
     .with_children(|panel| {
         panel.spawn(panel_title_bar()).with_children(|title| {
@@ -51,7 +53,7 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
 
 fn save_columns_row() -> impl Bundle {
     transparent_node(Node {
-        width: Val::Percent(100.0),
+        width: Val::Auto,
         display: Display::Flex,
         align_items: AlignItems::FlexStart,
         column_gap: Val::Px(12.0),
@@ -67,7 +69,7 @@ fn spawn_save_column(
     columns
         .spawn((
             transparent_node(Node {
-                width: Val::Px(420.0),
+                width: Val::Px(SAVE_LIST_EDIT_COLUMN_WIDTH),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(6.0),
                 ..default()
@@ -94,7 +96,7 @@ pub fn spawn_save_management_row(
     delete: SaveListAction,
 ) {
     parent.spawn(flex_row(32.0, 6.0)).with_children(|row| {
-        spawn_save_row_button(row, load, 220.0);
+        spawn_save_row_button(row, load, 260.0);
         spawn_save_row_button(row, rename, 82.0);
         spawn_save_row_button(row, delete, 82.0);
     });
@@ -170,3 +172,6 @@ fn spawn_prompt_button(parent: &mut ChildSpawnerCommands, action: TextPromptActi
             button.spawn(text("", 15.0, Color::WHITE));
         });
 }
+
+pub const SAVE_LIST_EDIT_COLUMN_WIDTH: f32 = 466.0;
+pub const SAVE_LIST_PLAY_COLUMN_WIDTH: f32 = 340.0;
