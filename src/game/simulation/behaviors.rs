@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::game::world::blocks::{
     BlockData, BlockKind, MaterialDestroyer, MaterialLabeler, MaterialSource,
@@ -354,19 +354,74 @@ fn fire_laser(world: &mut WorldBlocks, pos: IVec3, direction: IVec3, range: i32)
 }
 
 fn run_material_acceptance_phase(world: &mut WorldBlocks) {
-    let accepted: Vec<IVec3> = world
-        .blocks
-        .iter()
-        .filter_map(|(pos, block)| {
-            let material = block.kind.material_kind()?;
-            (world.accepts_material_kind_at(*pos, material)).then_some(*pos)
-        })
-        .collect();
+    let accepted = accepted_goal_structures(world);
+    for structure in accepted {
+        remove_material_structure(world, &structure);
+    }
+}
 
-    for pos in accepted {
-        if world.is_material_at(pos) {
-            let structure = material_structure(world, pos);
-            remove_material_structure(world, &structure);
+fn accepted_goal_structures(world: &WorldBlocks) -> Vec<HashSet<IVec3>> {
+    let mut goals: Vec<IVec3> = world
+        .system_blocks
+        .iter()
+        .filter_map(|(pos, block)| (block.kind == BlockKind::Goal).then_some(*pos))
+        .collect();
+    goals.sort_by_key(|pos| (pos.x, pos.y, pos.z));
+
+    let mut handled = HashSet::new();
+    let mut accepted = Vec::new();
+    for goal in goals {
+        if handled.contains(&goal) {
+            continue;
+        }
+        let group = connected_goal_group(world, goal);
+        handled.extend(group.iter().copied());
+        if let Some(structure) = accepted_structure_for_goal_group(world, &group) {
+            accepted.push(structure);
         }
     }
+    accepted
+}
+
+fn connected_goal_group(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
+    let mut group = HashSet::new();
+    let mut queue = VecDeque::from([start]);
+    group.insert(start);
+
+    while let Some(pos) = queue.pop_front() {
+        for offset in signal_offsets() {
+            let neighbor = pos + offset;
+            if group.contains(&neighbor) {
+                continue;
+            }
+            if world
+                .system_blocks
+                .get(&neighbor)
+                .is_some_and(|block| block.kind == BlockKind::Goal)
+            {
+                group.insert(neighbor);
+                queue.push_back(neighbor);
+            }
+        }
+    }
+    group
+}
+
+fn accepted_structure_for_goal_group(
+    world: &WorldBlocks,
+    group: &HashSet<IVec3>,
+) -> Option<HashSet<IVec3>> {
+    let start = *group.iter().next()?;
+    for goal in group {
+        let material = world.blocks.get(goal)?.kind.material_kind()?;
+        if world.goal_settings(*goal).material != material {
+            return None;
+        }
+    }
+
+    let structure = material_structure(world, start);
+    if structure.len() != group.len() || !structure.iter().all(|pos| group.contains(pos)) {
+        return None;
+    }
+    Some(structure)
 }

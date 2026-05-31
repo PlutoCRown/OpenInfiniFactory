@@ -811,10 +811,6 @@ impl BlockKind {
         matches!(self.layer(), BlockLayer::System(_) | BlockLayer::Virtual(_))
     }
 
-    pub fn accepts_material(self) -> bool {
-        matches!(self, BlockKind::Goal)
-    }
-
     pub fn is_editable(self) -> bool {
         registry::is_editable(self)
     }

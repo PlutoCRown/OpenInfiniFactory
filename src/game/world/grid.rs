@@ -432,15 +432,6 @@ impl WorldBlocks {
             .is_some_and(|block| block.kind.is_scene())
     }
 
-    pub fn accepts_material_kind_at(&self, pos: IVec3, material: MaterialKind) -> bool {
-        self.system_blocks
-            .get(&pos)
-            .is_some_and(|block| match block.kind {
-                BlockKind::Goal => self.goal_settings(pos).material == material,
-                _ => block.kind.accepts_material(),
-            })
-    }
-
     pub fn clear_generated_markers(&mut self) {
         let blocks_before = self.blocks.len();
         self.blocks
