@@ -30,7 +30,7 @@
 | S17 | 新增开关方块 | D4 | R4 | branch: `feature/switch-block` | dynamic-a | done |
 | S18 | 方块行为抽象 | D4 | R4 | branch: `refactor/block-behaviors` | refactor-a | done |
 | S19 | 优化 Puzzle / Solution 存档关系 | D5 | R5 | branch: `save/puzzle-solution-split` | save-b | done |
-| S20 | 新增动态模式 | D5 | R5 | branch: `feature/dynamic-mode` | dynamic-b | todo |
+| S20 | 新增动态模式 | D5 | R5 | branch: `feature/dynamic-mode` | dynamic-b | skipped |
 
 ## 并行建议
 
