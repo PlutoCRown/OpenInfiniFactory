@@ -206,9 +206,6 @@ pub struct SettingsDropdownLabel(pub SettingsDropdown);
 pub struct SettingsDropdownList(pub SettingsDropdown);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub struct SettingsDropdownRoot(pub SettingsDropdown);
-
-#[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct SettingsDropdownRow(pub SettingsDropdown);
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -459,6 +456,9 @@ pub enum SaveListRow {
     Solution(usize),
 }
 
+#[derive(Component)]
+pub struct SaveListCloseButton;
+
 #[derive(Component, Clone, Copy)]
 pub enum ConfirmDialogAction {
     Primary,
@@ -525,7 +525,7 @@ impl UiActionLabel for SettingsAction {
 #[derive(Resource, Default)]
 pub struct ActiveSettingsSlider(pub Option<SettingsField>);
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub enum BlockEditAction {
     PeriodDown,
     PeriodUp,
@@ -552,7 +552,7 @@ impl UiActionLabel for BlockEditAction {
     }
 }
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub enum TeleportAction {
     TogglePairDropdown,
     SetPair(Option<IVec3>),
@@ -583,6 +583,12 @@ pub struct BlockPanelDropdownLabel(pub BlockPanelDropdown);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct BlockPanelDropdownList(pub BlockPanelDropdown);
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct BlockMaterialIconSlot(pub BlockPanelDropdown);
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct BlockMaterialIcon(pub MaterialKind);
 
 #[derive(Resource, Clone, Copy, Eq, PartialEq)]
 pub enum SettingsTab {

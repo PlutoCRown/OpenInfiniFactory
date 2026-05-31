@@ -1,7 +1,38 @@
 #[derive(SystemParam)]
 pub struct BlockPanelDropdownParams<'w, 's> {
     pub labels: Query<'w, 's, (&'static BlockPanelDropdownLabel, &'static mut Text)>,
-    pub lists: Query<'w, 's, (&'static BlockPanelDropdownList, &'static mut Node)>,
+    pub material_slots: Query<'w, 's, (&'static BlockMaterialIconSlot, &'static Children)>,
+    pub material_options: Query<'w, 's, (&'static BlockMaterialIcon, &'static Children)>,
+    pub material_icons: Query<'w, 's, &'static mut ImageNode>,
+    pub lists: Query<
+        'w,
+        's,
+        (
+            &'static BlockPanelDropdownList,
+            &'static mut Node,
+            &'static ComputedNode,
+        ),
+    >,
+    pub triggers: Query<
+        'w,
+        's,
+        (
+            &'static BlockEditAction,
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+        ),
+        With<Button>,
+    >,
+    pub teleport_triggers: Query<
+        'w,
+        's,
+        (
+            &'static TeleportAction,
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+        ),
+        With<Button>,
+    >,
     pub teleport_pair_list: Query<
         'w,
         's,
@@ -93,6 +124,8 @@ pub fn update_block_panel_dropdowns_ui(
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
     i18n: Res<I18n>,
+    block_icons: Option<Res<BlockIconAssets>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
     mut teleport_pair_cache: Local<Option<(Option<IVec3>, u64, Language, bool)>>,
     mut dropdowns: BlockPanelDropdownParams,
 ) {
@@ -127,12 +160,47 @@ pub fn update_block_panel_dropdowns_ui(
         };
     }
 
-    for (list, mut style) in &mut dropdowns.lists {
-        style.display = if open_dropdown.0 == Some(list.0) {
-            Display::Flex
-        } else {
-            Display::None
-        };
+    if let Some(block_icons) = block_icons.as_deref() {
+        for (slot, children) in &dropdowns.material_slots {
+            let material = selected_material(slot.0, active_pos, &world);
+            update_material_children(
+                children,
+                material,
+                block_icons,
+                &mut dropdowns.material_icons,
+            );
+        }
+        for (option, children) in &dropdowns.material_options {
+            update_material_children(
+                children,
+                Some(option.0),
+                block_icons,
+                &mut dropdowns.material_icons,
+            );
+        }
+    }
+
+    let viewport = windows
+        .single()
+        .ok()
+        .map(|window| Vec2::new(window.width(), window.height()))
+        .unwrap_or(Vec2::ZERO);
+    for (list, mut style, list_node) in &mut dropdowns.lists {
+        let open = open_dropdown.0 == Some(list.0);
+        style.display = if open { Display::Flex } else { Display::None };
+        if !open {
+            continue;
+        }
+        if let Some((left, top)) = block_dropdown_position(
+            list.0,
+            &dropdowns.triggers,
+            &dropdowns.teleport_triggers,
+            list_node.size(),
+            viewport,
+        ) {
+            style.left = Val::Px(left);
+            style.top = Val::Px(top);
+        }
     }
 
     let pair_dropdown_open = open_dropdown.0 == Some(BlockPanelDropdown::TeleportPair);
@@ -177,6 +245,98 @@ pub fn update_block_panel_dropdowns_ui(
             });
         }
     }
+}
+
+fn selected_material(
+    dropdown: BlockPanelDropdown,
+    active_pos: Option<IVec3>,
+    world: &WorldBlocks,
+) -> Option<MaterialKind> {
+    let pos = active_pos?;
+    match dropdown {
+        BlockPanelDropdown::GeneratorMaterial => Some(world.generator_settings(pos).material),
+        BlockPanelDropdown::GoalMaterial => Some(world.goal_settings(pos).material),
+        BlockPanelDropdown::ConverterInput => Some(world.converter_settings(pos).input),
+        BlockPanelDropdown::ConverterOutput => Some(world.converter_settings(pos).output),
+        BlockPanelDropdown::LabelerColor | BlockPanelDropdown::TeleportPair => None,
+    }
+}
+
+fn update_material_children(
+    children: &Children,
+    material: Option<MaterialKind>,
+    block_icons: &BlockIconAssets,
+    icon_query: &mut Query<&mut ImageNode>,
+) {
+    let icon = material
+        .and_then(BlockKind::material_block_kind)
+        .and_then(|kind| block_icons.get(kind));
+    for child in children.iter() {
+        if let Ok(mut image) = icon_query.get_mut(child) {
+            *image = icon.clone().map(ImageNode::new).unwrap_or_default();
+        }
+    }
+}
+
+fn block_dropdown_position(
+    dropdown: BlockPanelDropdown,
+    triggers: &Query<(&BlockEditAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
+    teleport_triggers: &Query<(&TeleportAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
+    list_size: Vec2,
+    viewport: Vec2,
+) -> Option<(f32, f32)> {
+    let target = block_dropdown_toggle_action(dropdown);
+    let trigger = target
+        .and_then(|target| {
+            triggers
+                .iter()
+                .find(|(action, node, _)| **action == target && !node.is_empty())
+                .map(|(_, node, transform)| (node, transform))
+        })
+        .or_else(|| {
+            (dropdown == BlockPanelDropdown::TeleportPair).then(|| {
+                teleport_triggers
+                    .iter()
+                    .find(|(action, node, _)| {
+                        **action == TeleportAction::TogglePairDropdown && !node.is_empty()
+                    })
+                    .map(|(_, node, transform)| (node, transform))
+            })?
+        })?;
+    dropdown_position_from_trigger(trigger.0, trigger.1, list_size, viewport)
+}
+
+fn block_dropdown_toggle_action(dropdown: BlockPanelDropdown) -> Option<BlockEditAction> {
+    match dropdown {
+        BlockPanelDropdown::GeneratorMaterial | BlockPanelDropdown::GoalMaterial => {
+            Some(BlockEditAction::ToggleMaterialDropdown)
+        }
+        BlockPanelDropdown::LabelerColor => Some(BlockEditAction::ToggleColorDropdown),
+        BlockPanelDropdown::ConverterInput => Some(BlockEditAction::ToggleInputDropdown),
+        BlockPanelDropdown::ConverterOutput => Some(BlockEditAction::ToggleOutputDropdown),
+        BlockPanelDropdown::TeleportPair => None,
+    }
+}
+
+fn dropdown_position_from_trigger(
+    trigger_node: &ComputedNode,
+    transform: &UiGlobalTransform,
+    list_size: Vec2,
+    viewport: Vec2,
+) -> Option<(f32, f32)> {
+    let trigger_size = trigger_node.size();
+    let center = *transform * Vec2::ZERO;
+    let trigger_left = center.x - trigger_size.x * 0.5;
+    let trigger_top = center.y - trigger_size.y * 0.5;
+    let below = trigger_top + trigger_size.y + 4.0;
+    let above = trigger_top - list_size.y - 4.0;
+    let top = if below + list_size.y <= viewport.y - 10.0 || above < 10.0 {
+        below
+    } else {
+        above.max(10.0)
+    };
+    let left = trigger_left.clamp(10.0, (viewport.x - list_size.x - 10.0).max(10.0));
+    Some((left, top))
 }
 
 fn spawn_teleport_pair_option(

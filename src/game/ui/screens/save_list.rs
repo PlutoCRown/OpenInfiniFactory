@@ -9,7 +9,9 @@ use super::super::components::{
     panel_title_button, panel_title_label, raised_border, styled_button, text,
     transparent_node, BUTTON_BG,
 };
-use super::super::types::{PanelText, PanelTextKind, PanelVisibility, SaveListAction, SaveListRow};
+use super::super::types::{
+    PanelText, PanelTextKind, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListRow,
+};
 
 pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
@@ -24,13 +26,13 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                 PanelText(PanelTextKind::SaveListTitle),
             ));
             title
-                .spawn((panel_title_button(), SaveListAction::Back))
+                .spawn((panel_title_button(), SaveListAction::Back, SaveListCloseButton))
                 .with_children(|button| {
                     button.spawn(text("x", 12.0, Color::WHITE));
                 });
         });
         panel.spawn(panel_content()).with_children(|panel| {
-            panel.spawn(flex_row(470.0, 12.0)).with_children(|columns| {
+            panel.spawn(save_columns_row()).with_children(|columns| {
                 spawn_save_column(
                     columns,
                     SaveListRow::Puzzle,
@@ -48,6 +50,16 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
             });
         });
     });
+}
+
+fn save_columns_row() -> impl Bundle {
+    transparent_node(Node {
+        width: Val::Percent(100.0),
+        display: Display::Flex,
+        align_items: AlignItems::FlexStart,
+        column_gap: Val::Px(12.0),
+        ..default()
+    })
 }
 
 fn spawn_save_column(

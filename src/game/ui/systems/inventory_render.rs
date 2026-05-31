@@ -9,10 +9,11 @@ pub fn update_inventory_slots(
             Entity,
             &InventorySlot,
             &Children,
+            &mut Node,
             &mut BackgroundColor,
             &mut BorderColor,
         ),
-        With<Button>,
+        (With<Button>, Without<InventoryTooltip>),
     >,
     mut texts: ParamSet<(
         Query<&mut Text, Without<CarriedItemPreview>>,
@@ -20,13 +21,18 @@ pub fn update_inventory_slots(
     )>,
     mut icons: Query<&mut ImageNode>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut tooltip: Query<(&mut Node, &Children), With<InventoryTooltip>>,
+    mut tooltip: Query<(&mut Node, &Children), (With<InventoryTooltip>, Without<Button>)>,
 ) {
     let mut hovered_item = None;
-    for (entity, slot, children, mut background, mut border) in &mut slot_query {
+    for (entity, slot, children, mut node, mut background, mut border) in &mut slot_query {
         let item = match slot.area {
             SlotArea::Hotbar => inventory.hotbar[slot.index],
             SlotArea::Backpack => inventory.backpack[slot.index],
+        };
+        node.display = if slot.area == SlotArea::Backpack && item.is_none() {
+            Display::None
+        } else {
+            Display::Flex
         };
         let icon_handle = item
             .and_then(|item| item.block())

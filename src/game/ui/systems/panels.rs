@@ -44,9 +44,12 @@ pub fn update_panel_visibility(
     for (style, mut visibility, mut position) in &mut nodes.p3() {
         if style.display == Display::None {
             position.centered = false;
+            position.dragged = false;
             *visibility = Visibility::Hidden;
-        } else {
+        } else if position.centered || position.dragged {
             *visibility = Visibility::Visible;
+        } else {
+            *visibility = Visibility::Hidden;
         }
     }
 }

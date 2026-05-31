@@ -3,8 +3,8 @@ use bevy::prelude::*;
 use crate::shared::i18n::I18n;
 
 use super::components::{
-    absolute_text_bundle, panel_bundle, panel_content, panel_title_bar, panel_title_label,
-    default_button_size, flex_row, localized_text, root_node, spawn_panel, text,
+    absolute_text_bundle, default_button_size, flex_row, localized_text, panel_bundle,
+    panel_content, panel_title_bar, panel_title_label, root_node, spawn_panel, text,
     transparent_node, PanelOptions, STATUS_TEXT,
 };
 use super::screens::{
@@ -12,12 +12,13 @@ use super::screens::{
     spawn_main_menu, spawn_pause_panel, spawn_save_list, spawn_settings_panel,
 };
 use super::types::{
-    BlockPanelDropdown, BlockPanelText, BlockPanelTextKind, BlockEditAction, ConfirmDialogAction,
-    ConverterInputRow, Crosshair, InGameHudVisibility, PanelText, PanelTextKind,
-    PanelVisibility, StatusText, StatusTextKind, TeleportAction, UiPanelBinding, UiPanelId,
+    BlockEditAction, BlockPanelDropdown, BlockPanelText, BlockPanelTextKind, ConfirmDialogAction,
+    ConverterInputRow, Crosshair, InGameHudVisibility, PanelText, PanelTextKind, PanelVisibility,
+    StatusText, StatusTextKind, TeleportAction, UiPanelBinding, UiPanelId,
 };
 use super::widgets::{
-    spawn_block_panel_dropdown, spawn_block_edit_button, spawn_confirm_dialog_button,
+    spawn_block_edit_button, spawn_block_panel_dropdown, spawn_block_panel_dropdown_list,
+    spawn_confirm_dialog_button, spawn_material_icon_dropdown_list, spawn_material_icon_slot,
     spawn_teleport_button,
 };
 use crate::game::world::blocks::{MaterialKind, StampColor};
@@ -40,6 +41,7 @@ pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
         spawn_save_list(root, &i18n);
         spawn_carried_label(root);
         spawn_inventory_tooltip(root);
+        spawn_block_dropdown_layers(root, &i18n);
     });
 }
 
@@ -78,12 +80,10 @@ fn spawn_generator_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                 spawn_block_edit_button(row, BlockEditAction::PeriodUp);
             });
             spawn_panel_row(panel, i18n, "panel.material", |row| {
-                spawn_block_panel_dropdown(
+                spawn_material_icon_slot(
                     row,
                     BlockPanelDropdown::GeneratorMaterial,
                     BlockEditAction::ToggleMaterialDropdown,
-                    material_options(i18n)
-                        .map(|(label, material)| (label, BlockEditAction::SetMaterial(material))),
                 );
             });
         },
@@ -98,12 +98,10 @@ fn spawn_goal_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         UiPanelBinding(UiPanelId::Goal),
         |panel| {
             spawn_panel_row(panel, i18n, "panel.material", |row| {
-                spawn_block_panel_dropdown(
+                spawn_material_icon_slot(
                     row,
                     BlockPanelDropdown::GoalMaterial,
                     BlockEditAction::ToggleMaterialDropdown,
-                    material_options(i18n)
-                        .map(|(label, material)| (label, BlockEditAction::SetMaterial(material))),
                 );
             });
         },
@@ -129,7 +127,6 @@ fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                     row,
                     BlockPanelDropdown::TeleportPair,
                     TeleportAction::TogglePairDropdown,
-                    std::iter::empty::<(String, TeleportAction)>(),
                 );
             });
         },
@@ -147,21 +144,17 @@ fn spawn_converter_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                 .spawn((panel_row_node(), ConverterInputRow))
                 .with_children(|row| {
                     spawn_panel_label(row, i18n, "panel.input");
-                    spawn_block_panel_dropdown(
+                    spawn_material_icon_slot(
                         row,
                         BlockPanelDropdown::ConverterInput,
                         BlockEditAction::ToggleInputDropdown,
-                        material_options(i18n)
-                            .map(|(label, material)| (label, BlockEditAction::SetInput(material))),
                     );
                 });
             spawn_panel_row(panel, i18n, "panel.output", |row| {
-                spawn_block_panel_dropdown(
+                spawn_material_icon_slot(
                     row,
                     BlockPanelDropdown::ConverterOutput,
                     BlockEditAction::ToggleOutputDropdown,
-                    material_options(i18n)
-                        .map(|(label, material)| (label, BlockEditAction::SetOutput(material))),
                 );
             });
         },
@@ -180,11 +173,42 @@ fn spawn_labeler_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                     row,
                     BlockPanelDropdown::LabelerColor,
                     BlockEditAction::ToggleColorDropdown,
-                    stamp_color_options(i18n)
-                        .map(|(label, color)| (label, BlockEditAction::SetColor(color))),
                 );
             });
         },
+    );
+}
+
+fn spawn_block_dropdown_layers(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+    spawn_material_icon_dropdown_list(
+        root,
+        BlockPanelDropdown::GeneratorMaterial,
+        material_options().map(|material| (material, BlockEditAction::SetMaterial(material))),
+    );
+    spawn_material_icon_dropdown_list(
+        root,
+        BlockPanelDropdown::GoalMaterial,
+        material_options().map(|material| (material, BlockEditAction::SetMaterial(material))),
+    );
+    spawn_material_icon_dropdown_list(
+        root,
+        BlockPanelDropdown::ConverterInput,
+        material_options().map(|material| (material, BlockEditAction::SetInput(material))),
+    );
+    spawn_material_icon_dropdown_list(
+        root,
+        BlockPanelDropdown::ConverterOutput,
+        material_options().map(|material| (material, BlockEditAction::SetOutput(material))),
+    );
+    spawn_block_panel_dropdown_list(
+        root,
+        BlockPanelDropdown::LabelerColor,
+        stamp_color_options(i18n).map(|(label, color)| (label, BlockEditAction::SetColor(color))),
+    );
+    spawn_block_panel_dropdown_list(
+        root,
+        BlockPanelDropdown::TeleportPair,
+        std::iter::empty::<(String, TeleportAction)>(),
     );
 }
 
@@ -221,10 +245,8 @@ fn spawn_panel_label(row: &mut ChildSpawnerCommands, i18n: &I18n, label_key: &'s
     ));
 }
 
-fn material_options(i18n: &I18n) -> impl Iterator<Item = (String, MaterialKind)> + '_ {
-    MaterialKind::ALL
-        .into_iter()
-        .map(|material| (i18n.text(material.name_key()), material))
+fn material_options() -> impl Iterator<Item = MaterialKind> {
+    MaterialKind::ALL.into_iter()
 }
 
 fn stamp_color_options(i18n: &I18n) -> impl Iterator<Item = (String, StampColor)> + '_ {
@@ -302,32 +324,34 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
 }
 
 fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
-    root.spawn((panel_bundle(460.0), GlobalZIndex(0), PanelVisibility::ConfirmDialog))
-        .with_children(|panel| {
-            panel
-                .spawn(panel_title_bar())
-                .with_children(|title| {
-                    title.spawn((
-                        panel_title_label("", 24.0),
-                        PanelText(PanelTextKind::ConfirmTitle),
-                    ));
-                });
-            panel.spawn(panel_content()).with_children(|panel| {
-                panel.spawn((
-                    text("", 15.0, STATUS_TEXT),
-                    TextLayout::new_with_justify(Justify::Center),
-                    Node {
-                        min_height: Val::Px(54.0),
-                        align_self: AlignSelf::Stretch,
-                        ..default()
-                    },
-                    PanelText(PanelTextKind::ConfirmMessage),
-                ));
-                panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-                    spawn_confirm_dialog_button(row, ConfirmDialogAction::Primary);
-                    spawn_confirm_dialog_button(row, ConfirmDialogAction::Secondary);
-                    spawn_confirm_dialog_button(row, ConfirmDialogAction::Cancel);
-                });
+    root.spawn((
+        panel_bundle(460.0),
+        GlobalZIndex(0),
+        PanelVisibility::ConfirmDialog,
+    ))
+    .with_children(|panel| {
+        panel.spawn(panel_title_bar()).with_children(|title| {
+            title.spawn((
+                panel_title_label("", 24.0),
+                PanelText(PanelTextKind::ConfirmTitle),
+            ));
+        });
+        panel.spawn(panel_content()).with_children(|panel| {
+            panel.spawn((
+                text("", 15.0, STATUS_TEXT),
+                TextLayout::new_with_justify(Justify::Center),
+                Node {
+                    min_height: Val::Px(54.0),
+                    align_self: AlignSelf::Stretch,
+                    ..default()
+                },
+                PanelText(PanelTextKind::ConfirmMessage),
+            ));
+            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
+                spawn_confirm_dialog_button(row, ConfirmDialogAction::Primary);
+                spawn_confirm_dialog_button(row, ConfirmDialogAction::Secondary);
+                spawn_confirm_dialog_button(row, ConfirmDialogAction::Cancel);
             });
         });
+    });
 }

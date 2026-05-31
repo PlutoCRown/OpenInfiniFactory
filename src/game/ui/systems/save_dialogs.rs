@@ -17,7 +17,7 @@ pub fn update_save_list_ui(
             &mut BackgroundColor,
             &mut BorderColor,
         ),
-        With<Button>,
+        (With<Button>, Without<SaveListCloseButton>),
     >,
 ) {
     for (panel_text, mut text) in &mut texts.p0() {

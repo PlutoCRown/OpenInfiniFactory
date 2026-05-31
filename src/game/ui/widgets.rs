@@ -6,12 +6,14 @@ use super::components::{
     raised_border, slider_bundle, slider_fill, slider_knob, styled_button,
 };
 use super::types::{
-    AreaKind, BlockEditAction, BlockPanelDropdown, BlockPanelDropdownLabel, BlockPanelDropdownList,
-    ConfirmDialogAction, InventoryItem, InventorySlot, KeyBindingButton,
-    MenuAction, SettingsAction, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList,
-    SettingsDropdownRoot, SettingsField, SettingsSliderFill, SettingsSliderKnob, SettingsText,
-    SettingsTextKind, SettingsValueText, SlotArea, TeleportAction, UiActionLabel,
+    AreaKind, BlockEditAction, BlockMaterialIcon, BlockMaterialIconSlot, BlockPanelDropdown,
+    BlockPanelDropdownLabel, BlockPanelDropdownList, ConfirmDialogAction, InventoryItem,
+    InventorySlot, KeyBindingButton, MenuAction, SettingsAction, SettingsDropdown,
+    SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
+    SettingsSliderKnob, SettingsText, SettingsTextKind, SettingsValueText, SlotArea,
+    TeleportAction, UiActionLabel,
 };
+use crate::game::world::blocks::MaterialKind;
 
 fn label_text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bundle {
     (
@@ -106,7 +108,6 @@ pub(super) fn spawn_block_panel_dropdown<A>(
     parent: &mut ChildSpawnerCommands,
     dropdown: BlockPanelDropdown,
     toggle_action: A,
-    options: impl IntoIterator<Item = (String, A)>,
 ) where
     A: Component + Copy,
 {
@@ -146,28 +147,133 @@ pub(super) fn spawn_block_panel_dropdown<A>(
                     ));
                     button.spawn(label_text("v", 12.0, Color::srgb(0.72, 0.80, 0.84)));
                 });
-            container
-                .spawn((
-                    (
+        });
+}
+
+pub(super) fn spawn_block_panel_dropdown_list<A>(
+    parent: &mut ChildSpawnerCommands,
+    dropdown: BlockPanelDropdown,
+    options: impl IntoIterator<Item = (String, A)>,
+) where
+    A: Component + Copy,
+{
+    parent
+        .spawn((
+            dropdown_list_node(230.0),
+            GlobalZIndex(20_000),
+            BlockPanelDropdownList(dropdown),
+        ))
+        .with_children(|list| {
+            for (label, action) in options {
+                spawn_dropdown_option(list, label, action);
+            }
+        });
+}
+
+pub(super) fn spawn_material_icon_slot<A>(
+    parent: &mut ChildSpawnerCommands,
+    dropdown: BlockPanelDropdown,
+    toggle_action: A,
+) where
+    A: Component + Copy,
+{
+    parent
+        .spawn((
+            styled_button(
+                Node {
+                    width: Val::Px(default_button_size(54.0)),
+                    height: Val::Px(default_button_size(54.0)),
+                    border: UiRect {
+                        left: Val::Px(4.0),
+                        right: Val::Px(4.0),
+                        top: Val::Px(5.0),
+                        bottom: Val::Px(5.0),
+                    },
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                inset_border(),
+                Color::srgb(0.255, 0.251, 0.251),
+            ),
+            BlockMaterialIconSlot(dropdown),
+            toggle_action,
+        ))
+        .with_children(|slot| {
+            slot.spawn((
+                ImageNode::default(),
+                Node {
+                    width: Val::Px(default_button_size(64.0)),
+                    height: Val::Px(default_button_size(64.0)),
+                    position_type: PositionType::Absolute,
+                    left: Val::Percent(50.0),
+                    top: Val::Percent(50.0),
+                    margin: UiRect {
+                        left: Val::Px(-default_button_size(32.0)),
+                        top: Val::Px(-default_button_size(32.0)),
+                        ..default()
+                    },
+                    ..default()
+                },
+            ));
+        });
+}
+
+pub(super) fn spawn_material_icon_dropdown_list<A>(
+    parent: &mut ChildSpawnerCommands,
+    dropdown: BlockPanelDropdown,
+    options: impl IntoIterator<Item = (MaterialKind, A)>,
+) where
+    A: Component + Copy,
+{
+    parent
+        .spawn((
+            icon_dropdown_list_node(),
+            GlobalZIndex(20_000),
+            BlockPanelDropdownList(dropdown),
+        ))
+        .with_children(|list| {
+            for (material, action) in options {
+                list.spawn((
+                    styled_button(
                         Node {
-                            width: Val::Percent(100.0),
-                            display: Display::None,
-                            position_type: PositionType::Absolute,
-                            top: Val::Px(default_button_size(38.0)),
-                            flex_direction: FlexDirection::Column,
-                            row_gap: Val::Px(3.0),
+                            width: Val::Px(default_button_size(54.0)),
+                            height: Val::Px(default_button_size(54.0)),
+                            border: UiRect {
+                                left: Val::Px(4.0),
+                                right: Val::Px(4.0),
+                                top: Val::Px(5.0),
+                                bottom: Val::Px(5.0),
+                            },
+                            align_items: AlignItems::Center,
+                            justify_content: JustifyContent::Center,
                             ..default()
                         },
-                        BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
-                        ZIndex(500),
+                        inset_border(),
+                        Color::srgb(0.255, 0.251, 0.251),
                     ),
-                    BlockPanelDropdownList(dropdown),
+                    BlockMaterialIcon(material),
+                    action,
                 ))
-                .with_children(|list| {
-                    for (label, action) in options {
-                        spawn_dropdown_option(list, label, action);
-                    }
+                .with_children(|slot| {
+                    slot.spawn((
+                        ImageNode::default(),
+                        Node {
+                            width: Val::Px(default_button_size(64.0)),
+                            height: Val::Px(default_button_size(64.0)),
+                            position_type: PositionType::Absolute,
+                            left: Val::Percent(50.0),
+                            top: Val::Percent(50.0),
+                            margin: UiRect {
+                                left: Val::Px(-default_button_size(32.0)),
+                                top: Val::Px(-default_button_size(32.0)),
+                                ..default()
+                            },
+                            ..default()
+                        },
+                    ));
                 });
+            }
         });
 }
 
@@ -255,10 +361,7 @@ pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, field: Se
         });
 }
 
-pub(super) fn spawn_settings_slider_value(
-    parent: &mut ChildSpawnerCommands,
-    field: SettingsField,
-) {
+pub(super) fn spawn_settings_slider_value(parent: &mut ChildSpawnerCommands, field: SettingsField) {
     parent.spawn((
         label_text("", 13.0, Color::srgb(0.88, 0.94, 0.96)),
         TextLayout::new_with_justify(Justify::Right),
@@ -274,19 +377,15 @@ pub(super) fn spawn_settings_slider_value(
 pub(super) fn spawn_settings_dropdown(
     parent: &mut ChildSpawnerCommands,
     dropdown: SettingsDropdown,
-    options: impl IntoIterator<Item = (String, SettingsAction)>,
 ) {
     parent
         .spawn((
             plain_node(Node {
                 width: Val::Px(260.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(4.0),
                 position_type: PositionType::Relative,
                 ..default()
             }),
             ZIndex(300),
-            SettingsDropdownRoot(dropdown),
         ))
         .with_children(|container| {
             container
@@ -313,29 +412,61 @@ pub(super) fn spawn_settings_dropdown(
                     ));
                     button.spawn(label_text("v", 12.0, Color::srgb(0.72, 0.80, 0.84)));
                 });
-            container
-                .spawn((
-                    (
-                        Node {
-                            width: Val::Percent(100.0),
-                            display: Display::None,
-                            position_type: PositionType::Absolute,
-                            top: Val::Px(default_button_size(40.0)),
-                            flex_direction: FlexDirection::Column,
-                            row_gap: Val::Px(3.0),
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
-                        ZIndex(500),
-                    ),
-                    SettingsDropdownList(dropdown),
-                ))
-                .with_children(|list| {
-                    for (label, action) in options {
-                        spawn_dropdown_option(list, label, action);
-                    }
-                });
         });
+}
+
+pub(super) fn spawn_settings_dropdown_list(
+    parent: &mut ChildSpawnerCommands,
+    dropdown: SettingsDropdown,
+    options: impl IntoIterator<Item = (String, SettingsAction)>,
+) {
+    parent
+        .spawn((
+            dropdown_list_node(260.0),
+            GlobalZIndex(20_000),
+            SettingsDropdownList(dropdown),
+        ))
+        .with_children(|list| {
+            for (label, action) in options {
+                spawn_dropdown_option(list, label, action);
+            }
+        });
+}
+
+fn dropdown_list_node(width: f32) -> impl Bundle {
+    (
+        Node {
+            width: Val::Px(width),
+            display: Display::None,
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            top: Val::Px(0.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(3.0),
+            padding: UiRect::all(Val::Px(4.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
+    )
+}
+
+fn icon_dropdown_list_node() -> impl Bundle {
+    (
+        Node {
+            width: Val::Px(192.0),
+            display: Display::None,
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            top: Val::Px(0.0),
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::Wrap,
+            row_gap: Val::Px(4.0),
+            column_gap: Val::Px(4.0),
+            padding: UiRect::all(Val::Px(4.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
+    )
 }
 
 fn spawn_dropdown_option<A>(parent: &mut ChildSpawnerCommands, label: String, action: A)

@@ -67,93 +67,93 @@ pub fn menu_actions(
     click.propagate(false);
 
     match (*mode, action) {
-            (GameMode::MainMenu, MenuAction::EditPuzzle) => {
-                save_state.refresh();
-                save_state.select_puzzle(None);
-                solution_state.save_list_entry = WorldEntryMode::EditPuzzle;
-                *mode = GameMode::SaveListMain;
+        (GameMode::MainMenu, MenuAction::EditPuzzle) => {
+            save_state.refresh();
+            save_state.select_puzzle(None);
+            solution_state.save_list_entry = WorldEntryMode::EditPuzzle;
+            *mode = GameMode::SaveListMain;
+        }
+        (GameMode::MainMenu, MenuAction::Play) => {
+            save_state.refresh();
+            save_state.select_puzzle(None);
+            solution_state.save_list_entry = WorldEntryMode::PlaySolution;
+            *mode = GameMode::SaveListMain;
+        }
+        (GameMode::MainMenu, MenuAction::OpenSettings) => {
+            ui_runtime.open(
+                UiPanelId::Settings,
+                UiPanelContext::ReturnTo(GameMode::MainMenu),
+            );
+        }
+        (GameMode::MainMenu, MenuAction::Quit) => {
+            request_app_exit(&mut pending_exit, AppExit::Success);
+        }
+        (GameMode::Paused, MenuAction::Resume) => *mode = GameMode::Playing,
+        (GameMode::Paused, MenuAction::ToggleBuilderMode) => {
+            if solution_state.entry == WorldEntryMode::PlaySolution {
+                return;
             }
-            (GameMode::MainMenu, MenuAction::Play) => {
-                save_state.refresh();
-                save_state.select_puzzle(None);
-                solution_state.save_list_entry = WorldEntryMode::PlaySolution;
-                *mode = GameMode::SaveListMain;
-            }
-            (GameMode::MainMenu, MenuAction::OpenSettings) => {
-                ui_runtime.open(
-                    UiPanelId::Settings,
-                    UiPanelContext::ReturnTo(GameMode::MainMenu),
-                );
-            }
-            (GameMode::MainMenu, MenuAction::Quit) => {
-                request_app_exit(&mut pending_exit, AppExit::Success);
-            }
-            (GameMode::Paused, MenuAction::Resume) => *mode = GameMode::Playing,
-            (GameMode::Paused, MenuAction::ToggleBuilderMode) => {
-                if solution_state.entry == WorldEntryMode::PlaySolution {
+            *builder_mode = match *builder_mode {
+                BuilderMode::Edit => {
+                    simulation.running = false;
+                    simulation.step_requested = false;
+                    simulation.accumulator = 0.0;
+                    simulation.start_snapshot = None;
+                    if save_state.current_kind == Some(SaveKind::Puzzle) {
+                        solution_state.puzzle_snapshot = Some(world_menu.world.clone());
+                    }
+                    save_state.current_kind = Some(SaveKind::Solution);
+                    BuilderMode::Play
+                }
+                BuilderMode::Play => {
+                    confirm_dialog.kind = Some(ConfirmDialogKind::SaveSolutionBeforeEdit);
                     return;
                 }
-                *builder_mode = match *builder_mode {
-                    BuilderMode::Edit => {
-                        simulation.running = false;
-                        simulation.step_requested = false;
-                        simulation.accumulator = 0.0;
-                        simulation.start_snapshot = None;
-                        if save_state.current_kind == Some(SaveKind::Puzzle) {
-                            solution_state.puzzle_snapshot = Some(world_menu.world.clone());
-                        }
-                        save_state.current_kind = Some(SaveKind::Solution);
-                        BuilderMode::Play
-                    }
-                    BuilderMode::Play => {
-                        confirm_dialog.kind = Some(ConfirmDialogKind::SaveSolutionBeforeEdit);
-                        return;
-                    }
-                };
-                *inventory = InventoryItems::for_mode(*builder_mode);
-                carried.clear();
-                placement.selected = 0;
-                *mode = GameMode::Playing;
-            }
-            (GameMode::Paused, MenuAction::SaveWorld) => {
-                save_current_world(
-                    &world_menu.world,
-                    &inventory,
+            };
+            *inventory = InventoryItems::for_mode(*builder_mode);
+            carried.clear();
+            placement.selected = 0;
+            *mode = GameMode::Playing;
+        }
+        (GameMode::Paused, MenuAction::SaveWorld) => {
+            save_current_world(
+                &world_menu.world,
+                &inventory,
+                &mut save_state,
+                &mut solution_state,
+            );
+        }
+        (GameMode::Paused, MenuAction::ResetSolution) => {
+            confirm_dialog.kind = Some(ConfirmDialogKind::ResetSolution);
+        }
+        (GameMode::Paused, MenuAction::OpenSettings) => {
+            ui_runtime.open(
+                UiPanelId::Settings,
+                UiPanelContext::ReturnTo(GameMode::Paused),
+            );
+        }
+        (GameMode::Paused, MenuAction::BackToMainMenu) => {
+            if solution_state.dirty {
+                confirm_dialog.kind = Some(ConfirmDialogKind::ReturnToMain);
+            } else {
+                clear_loaded_world(
+                    &mut world_menu.world,
+                    &mut placement,
                     &mut save_state,
                     &mut solution_state,
+                    &mut simulation,
+                    &mut world_menu.commands,
+                    &mut world_menu.meshes,
+                    &world_menu.block_entities,
+                    &world_menu.render_assets,
+                    &world_menu.debug,
+                    &mut world_menu.factory_structures,
                 );
+                *mode = GameMode::MainMenu;
             }
-            (GameMode::Paused, MenuAction::ResetSolution) => {
-                confirm_dialog.kind = Some(ConfirmDialogKind::ResetSolution);
-            }
-            (GameMode::Paused, MenuAction::OpenSettings) => {
-                ui_runtime.open(
-                    UiPanelId::Settings,
-                    UiPanelContext::ReturnTo(GameMode::Paused),
-                );
-            }
-            (GameMode::Paused, MenuAction::BackToMainMenu) => {
-                if solution_state.dirty {
-                    confirm_dialog.kind = Some(ConfirmDialogKind::ReturnToMain);
-                } else {
-                    clear_loaded_world(
-                        &mut world_menu.world,
-                        &mut placement,
-                        &mut save_state,
-                        &mut solution_state,
-                        &mut simulation,
-                        &mut world_menu.commands,
-                        &mut world_menu.meshes,
-                        &world_menu.block_entities,
-                        &world_menu.render_assets,
-                        &world_menu.debug,
-                        &mut world_menu.factory_structures,
-                    );
-                    *mode = GameMode::MainMenu;
-                }
-            }
-            _ => {}
         }
+        _ => {}
+    }
 }
 
 pub fn app_exit_requests(
@@ -196,16 +196,78 @@ pub fn save_list_actions(
     click.propagate(false);
 
     match action {
-            SaveListAction::NewPuzzle => {
-                if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
-                    return;
-                }
-                let name = next_world_name(&save_state.slots);
-                world_menu.world.clear();
-                seed_demo_world(&mut world_menu.world);
-                *inventory = InventoryItems::for_mode(BuilderMode::Edit);
-                save_world(&world_menu.world, &name, SaveKind::Puzzle, &inventory);
-                save_state.refresh();
+        SaveListAction::NewPuzzle => {
+            if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
+                return;
+            }
+            let name = next_world_name(&save_state.slots);
+            world_menu.world.clear();
+            seed_demo_world(&mut world_menu.world);
+            *inventory = InventoryItems::for_mode(BuilderMode::Edit);
+            save_world(&world_menu.world, &name, SaveKind::Puzzle, &inventory);
+            save_state.refresh();
+            open_loaded_world(
+                &name,
+                WorldEntryMode::EditPuzzle,
+                &mut world_menu.world,
+                &mut builder_mode,
+                &mut inventory,
+                &mut carried,
+                &mut placement,
+                &mut save_state,
+                &mut solution_state,
+                &mut simulation,
+                &mut world_menu.commands,
+                &mut world_menu.meshes,
+                &world_menu.block_entities,
+                &world_menu.render_assets,
+                &world_menu.debug,
+                &mut world_menu.factory_structures,
+                &mut mode,
+            );
+        }
+        SaveListAction::NewSolution => {
+            if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
+                return;
+            }
+            let Some(puzzle_name) = save_state.selected_puzzle.clone() else {
+                return;
+            };
+            if load_world(&mut world_menu.world, &puzzle_name).is_none() {
+                return;
+            }
+            let name = next_world_name(&save_state.slots);
+            let puzzle_snapshot = world_menu.world.clone();
+            *inventory = InventoryItems::for_mode(BuilderMode::Play);
+            save_solution_with_puzzle(&world_menu.world, &name, &puzzle_snapshot, &inventory);
+            save_state.refresh();
+            open_loaded_world(
+                &name,
+                WorldEntryMode::PlaySolution,
+                &mut world_menu.world,
+                &mut builder_mode,
+                &mut inventory,
+                &mut carried,
+                &mut placement,
+                &mut save_state,
+                &mut solution_state,
+                &mut simulation,
+                &mut world_menu.commands,
+                &mut world_menu.meshes,
+                &world_menu.block_entities,
+                &world_menu.render_assets,
+                &world_menu.debug,
+                &mut world_menu.factory_structures,
+                &mut mode,
+            );
+        }
+        SaveListAction::LoadPuzzle(index) => {
+            let puzzles = save_state.puzzles();
+            let Some(entry) = puzzles.get(index) else {
+                return;
+            };
+            let name = entry.name.clone();
+            if solution_state.save_list_entry == WorldEntryMode::EditPuzzle {
                 open_loaded_world(
                     &name,
                     WorldEntryMode::EditPuzzle,
@@ -225,122 +287,60 @@ pub fn save_list_actions(
                     &mut world_menu.factory_structures,
                     &mut mode,
                 );
-            }
-            SaveListAction::NewSolution => {
-                if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
-                    return;
-                }
-                let Some(puzzle_name) = save_state.selected_puzzle.clone() else {
-                    return;
-                };
-                if load_world(&mut world_menu.world, &puzzle_name).is_none() {
-                    return;
-                }
-                let name = next_world_name(&save_state.slots);
-                let puzzle_snapshot = world_menu.world.clone();
-                *inventory = InventoryItems::for_mode(BuilderMode::Play);
-                save_solution_with_puzzle(&world_menu.world, &name, &puzzle_snapshot, &inventory);
-                save_state.refresh();
-                open_loaded_world(
-                    &name,
-                    WorldEntryMode::PlaySolution,
-                    &mut world_menu.world,
-                    &mut builder_mode,
-                    &mut inventory,
-                    &mut carried,
-                    &mut placement,
-                    &mut save_state,
-                    &mut solution_state,
-                    &mut simulation,
-                    &mut world_menu.commands,
-                    &mut world_menu.meshes,
-                    &world_menu.block_entities,
-                    &world_menu.render_assets,
-                    &world_menu.debug,
-                    &mut world_menu.factory_structures,
-                    &mut mode,
-                );
-            }
-            SaveListAction::LoadPuzzle(index) => {
-                let puzzles = save_state.puzzles();
-                let Some(entry) = puzzles.get(index) else {
-                    return;
-                };
-                let name = entry.name.clone();
-                if solution_state.save_list_entry == WorldEntryMode::EditPuzzle {
-                    open_loaded_world(
-                        &name,
-                        WorldEntryMode::EditPuzzle,
-                        &mut world_menu.world,
-                        &mut builder_mode,
-                        &mut inventory,
-                        &mut carried,
-                        &mut placement,
-                        &mut save_state,
-                        &mut solution_state,
-                        &mut simulation,
-                        &mut world_menu.commands,
-                        &mut world_menu.meshes,
-                        &world_menu.block_entities,
-                        &world_menu.render_assets,
-                        &world_menu.debug,
-                        &mut world_menu.factory_structures,
-                        &mut mode,
-                    );
-                } else {
-                    save_state.select_puzzle(Some(name));
-                }
-            }
-            SaveListAction::LoadSolution(index) => {
-                if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
-                    return;
-                }
-                if save_state.selected_puzzle.is_none() {
-                    return;
-                }
-                let solutions = save_state.selected_puzzle_solutions();
-                let Some(entry) = solutions.get(index) else {
-                    return;
-                };
-                let name = entry.name.clone();
-                open_loaded_world(
-                    &name,
-                    WorldEntryMode::PlaySolution,
-                    &mut world_menu.world,
-                    &mut builder_mode,
-                    &mut inventory,
-                    &mut carried,
-                    &mut placement,
-                    &mut save_state,
-                    &mut solution_state,
-                    &mut simulation,
-                    &mut world_menu.commands,
-                    &mut world_menu.meshes,
-                    &world_menu.block_entities,
-                    &world_menu.render_assets,
-                    &world_menu.debug,
-                    &mut world_menu.factory_structures,
-                    &mut mode,
-                );
-            }
-            SaveListAction::DeletePuzzle(index) => {
-                if let Some(entry) = save_state.puzzles().get(index) {
-                    confirm_dialog.kind = Some(ConfirmDialogKind::DeleteSave {
-                        name: entry.name.clone(),
-                    });
-                }
-            }
-            SaveListAction::DeleteSolution(index) => {
-                if let Some(entry) = save_state.selected_puzzle_solutions().get(index) {
-                    confirm_dialog.kind = Some(ConfirmDialogKind::DeleteSave {
-                        name: entry.name.clone(),
-                    });
-                }
-            }
-            SaveListAction::Back => {
-                *mode = GameMode::MainMenu;
+            } else {
+                save_state.select_puzzle(Some(name));
             }
         }
+        SaveListAction::LoadSolution(index) => {
+            if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
+                return;
+            }
+            if save_state.selected_puzzle.is_none() {
+                return;
+            }
+            let solutions = save_state.selected_puzzle_solutions();
+            let Some(entry) = solutions.get(index) else {
+                return;
+            };
+            let name = entry.name.clone();
+            open_loaded_world(
+                &name,
+                WorldEntryMode::PlaySolution,
+                &mut world_menu.world,
+                &mut builder_mode,
+                &mut inventory,
+                &mut carried,
+                &mut placement,
+                &mut save_state,
+                &mut solution_state,
+                &mut simulation,
+                &mut world_menu.commands,
+                &mut world_menu.meshes,
+                &world_menu.block_entities,
+                &world_menu.render_assets,
+                &world_menu.debug,
+                &mut world_menu.factory_structures,
+                &mut mode,
+            );
+        }
+        SaveListAction::DeletePuzzle(index) => {
+            if let Some(entry) = save_state.puzzles().get(index) {
+                confirm_dialog.kind = Some(ConfirmDialogKind::DeleteSave {
+                    name: entry.name.clone(),
+                });
+            }
+        }
+        SaveListAction::DeleteSolution(index) => {
+            if let Some(entry) = save_state.selected_puzzle_solutions().get(index) {
+                confirm_dialog.kind = Some(ConfirmDialogKind::DeleteSave {
+                    name: entry.name.clone(),
+                });
+            }
+        }
+        SaveListAction::Back => {
+            *mode = GameMode::MainMenu;
+        }
+    }
 }
 
 pub fn confirm_dialog_actions(
@@ -369,112 +369,112 @@ pub fn confirm_dialog_actions(
     click.propagate(false);
 
     match (kind, action) {
-            (_, ConfirmDialogAction::Cancel) => {}
-            (ConfirmDialogKind::DeleteSave { name }, ConfirmDialogAction::Primary) => {
-                delete_save(&name);
-                save_state.refresh();
-                if save_state.selected_puzzle.as_deref() == Some(name.as_str()) {
-                    save_state.select_puzzle(None);
-                }
+        (_, ConfirmDialogAction::Cancel) => {}
+        (ConfirmDialogKind::DeleteSave { name }, ConfirmDialogAction::Primary) => {
+            delete_save(&name);
+            save_state.refresh();
+            if save_state.selected_puzzle.as_deref() == Some(name.as_str()) {
+                save_state.select_puzzle(None);
             }
-            (ConfirmDialogKind::ResetSolution, ConfirmDialogAction::Primary) => {
-                reset_current_solution(
-                    &mut world_menu.world,
-                    &mut simulation,
-                    &mut world_menu.commands,
-                    &mut world_menu.meshes,
-                    &world_menu.block_entities,
-                    &world_menu.render_assets,
-                    &world_menu.debug,
-                    &mut world_menu.factory_structures,
-                    &solution_state,
-                );
-                *mode = GameMode::Paused;
-            }
-            (ConfirmDialogKind::ReturnToMain, ConfirmDialogAction::Primary) => {
-                save_current_world(
-                    &world_menu.world,
-                    &inventory,
-                    &mut save_state,
-                    &mut solution_state,
-                );
-                return_to_main_menu(
-                    &mut world_menu.world,
-                    &mut placement,
-                    &mut save_state,
-                    &mut solution_state,
-                    &mut simulation,
-                    &mut world_menu.commands,
-                    &mut world_menu.meshes,
-                    &world_menu.block_entities,
-                    &world_menu.render_assets,
-                    &world_menu.debug,
-                    &mut world_menu.factory_structures,
-                    &mut mode,
-                );
-            }
-            (ConfirmDialogKind::ReturnToMain, ConfirmDialogAction::Secondary) => {
-                return_to_main_menu(
-                    &mut world_menu.world,
-                    &mut placement,
-                    &mut save_state,
-                    &mut solution_state,
-                    &mut simulation,
-                    &mut world_menu.commands,
-                    &mut world_menu.meshes,
-                    &world_menu.block_entities,
-                    &world_menu.render_assets,
-                    &world_menu.debug,
-                    &mut world_menu.factory_structures,
-                    &mut mode,
-                );
-            }
-            (ConfirmDialogKind::SaveSolutionBeforeEdit, ConfirmDialogAction::Primary) => {
-                save_current_world(
-                    &world_menu.world,
-                    &inventory,
-                    &mut save_state,
-                    &mut solution_state,
-                );
-                switch_to_edit_mode_and_rebuild(
-                    &mut world_menu.world,
-                    &mut builder_mode,
-                    &mut inventory,
-                    &mut carried,
-                    &mut placement,
-                    &mut mode,
-                    &mut save_state,
-                    &mut solution_state,
-                    &mut world_menu.commands,
-                    &mut world_menu.meshes,
-                    &world_menu.block_entities,
-                    &world_menu.render_assets,
-                    &world_menu.debug,
-                    &mut world_menu.factory_structures,
-                );
-            }
-            (ConfirmDialogKind::SaveSolutionBeforeEdit, ConfirmDialogAction::Secondary) => {
-                switch_to_edit_mode_and_rebuild(
-                    &mut world_menu.world,
-                    &mut builder_mode,
-                    &mut inventory,
-                    &mut carried,
-                    &mut placement,
-                    &mut mode,
-                    &mut save_state,
-                    &mut solution_state,
-                    &mut world_menu.commands,
-                    &mut world_menu.meshes,
-                    &world_menu.block_entities,
-                    &world_menu.render_assets,
-                    &world_menu.debug,
-                    &mut world_menu.factory_structures,
-                );
-            }
-            (_, ConfirmDialogAction::Secondary) => {}
         }
+        (ConfirmDialogKind::ResetSolution, ConfirmDialogAction::Primary) => {
+            reset_current_solution(
+                &mut world_menu.world,
+                &mut simulation,
+                &mut world_menu.commands,
+                &mut world_menu.meshes,
+                &world_menu.block_entities,
+                &world_menu.render_assets,
+                &world_menu.debug,
+                &mut world_menu.factory_structures,
+                &solution_state,
+            );
+            *mode = GameMode::Paused;
+        }
+        (ConfirmDialogKind::ReturnToMain, ConfirmDialogAction::Primary) => {
+            save_current_world(
+                &world_menu.world,
+                &inventory,
+                &mut save_state,
+                &mut solution_state,
+            );
+            return_to_main_menu(
+                &mut world_menu.world,
+                &mut placement,
+                &mut save_state,
+                &mut solution_state,
+                &mut simulation,
+                &mut world_menu.commands,
+                &mut world_menu.meshes,
+                &world_menu.block_entities,
+                &world_menu.render_assets,
+                &world_menu.debug,
+                &mut world_menu.factory_structures,
+                &mut mode,
+            );
+        }
+        (ConfirmDialogKind::ReturnToMain, ConfirmDialogAction::Secondary) => {
+            return_to_main_menu(
+                &mut world_menu.world,
+                &mut placement,
+                &mut save_state,
+                &mut solution_state,
+                &mut simulation,
+                &mut world_menu.commands,
+                &mut world_menu.meshes,
+                &world_menu.block_entities,
+                &world_menu.render_assets,
+                &world_menu.debug,
+                &mut world_menu.factory_structures,
+                &mut mode,
+            );
+        }
+        (ConfirmDialogKind::SaveSolutionBeforeEdit, ConfirmDialogAction::Primary) => {
+            save_current_world(
+                &world_menu.world,
+                &inventory,
+                &mut save_state,
+                &mut solution_state,
+            );
+            switch_to_edit_mode_and_rebuild(
+                &mut world_menu.world,
+                &mut builder_mode,
+                &mut inventory,
+                &mut carried,
+                &mut placement,
+                &mut mode,
+                &mut save_state,
+                &mut solution_state,
+                &mut world_menu.commands,
+                &mut world_menu.meshes,
+                &world_menu.block_entities,
+                &world_menu.render_assets,
+                &world_menu.debug,
+                &mut world_menu.factory_structures,
+            );
+        }
+        (ConfirmDialogKind::SaveSolutionBeforeEdit, ConfirmDialogAction::Secondary) => {
+            switch_to_edit_mode_and_rebuild(
+                &mut world_menu.world,
+                &mut builder_mode,
+                &mut inventory,
+                &mut carried,
+                &mut placement,
+                &mut mode,
+                &mut save_state,
+                &mut solution_state,
+                &mut world_menu.commands,
+                &mut world_menu.meshes,
+                &world_menu.block_entities,
+                &world_menu.render_assets,
+                &world_menu.debug,
+                &mut world_menu.factory_structures,
+            );
+        }
+        (_, ConfirmDialogAction::Secondary) => {}
+    }
 
-        confirm_dialog.kind = None;
+    confirm_dialog.kind = None;
 }
 
 fn save_current_world(
@@ -822,67 +822,67 @@ pub fn settings_action_clicked(
     click.propagate(false);
 
     match action {
-            SettingsAction::TabGameplay => {
-                *settings_tab = SettingsTab::Gameplay;
-                open_dropdown.0 = None;
-            }
-            SettingsAction::TabKeyBindings => {
-                *settings_tab = SettingsTab::KeyBindings;
-                open_dropdown.0 = None;
-            }
-            SettingsAction::Field(field) => {
-                active_slider.0 = Some(field);
-            }
-            SettingsAction::SetPlaceSelectionMode(selection_mode) => {
-                config.place_selection_mode = selection_mode;
-                open_dropdown.0 = None;
-                save_config(&config);
-            }
-            SettingsAction::SetDeleteSelectionMode(selection_mode) => {
-                config.delete_selection_mode = selection_mode;
-                open_dropdown.0 = None;
-                save_config(&config);
-            }
-            SettingsAction::SetLanguage(language) => {
-                i18n.set_language(language);
-                config.language = Some(language);
-                open_dropdown.0 = None;
-                save_config(&config);
-            }
-            SettingsAction::ToggleDropdown(dropdown) => {
-                open_dropdown.0 = if open_dropdown.0 == Some(dropdown) {
-                    None
-                } else {
-                    Some(dropdown)
-                };
-            }
-            SettingsAction::Bind(action) => {
-                pending_key_bind.0 = Some(action);
-            }
-            SettingsAction::ResetDefaults => {
-                *config = GameConfig::default();
-                settings.fov_degrees = config.fov_degrees;
-                settings.ui_scale = config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
-                settings.gravity_scale = config
-                    .gravity_scale
-                    .clamp(GRAVITY_SCALE_MIN, GRAVITY_SCALE_MAX);
-                ui_scale.0 = settings.ui_scale;
-                i18n.set_language(resolve_language(config.language));
-                open_dropdown.0 = None;
-                pending_key_bind.0 = None;
-                save_config(&config);
-            }
-            SettingsAction::OpenFolder => {
-                open_config_folder();
-            }
-            SettingsAction::Back => {
-                open_dropdown.0 = None;
-                pending_key_bind.0 = None;
-                let return_mode = settings_return_mode(&ui_runtime, *mode);
-                ui_runtime.close_active();
-                *mode = return_mode;
-            }
+        SettingsAction::TabGameplay => {
+            *settings_tab = SettingsTab::Gameplay;
+            open_dropdown.0 = None;
         }
+        SettingsAction::TabKeyBindings => {
+            *settings_tab = SettingsTab::KeyBindings;
+            open_dropdown.0 = None;
+        }
+        SettingsAction::Field(field) => {
+            active_slider.0 = Some(field);
+        }
+        SettingsAction::SetPlaceSelectionMode(selection_mode) => {
+            config.place_selection_mode = selection_mode;
+            open_dropdown.0 = None;
+            save_config(&config);
+        }
+        SettingsAction::SetDeleteSelectionMode(selection_mode) => {
+            config.delete_selection_mode = selection_mode;
+            open_dropdown.0 = None;
+            save_config(&config);
+        }
+        SettingsAction::SetLanguage(language) => {
+            i18n.set_language(language);
+            config.language = Some(language);
+            open_dropdown.0 = None;
+            save_config(&config);
+        }
+        SettingsAction::ToggleDropdown(dropdown) => {
+            open_dropdown.0 = if open_dropdown.0 == Some(dropdown) {
+                None
+            } else {
+                Some(dropdown)
+            };
+        }
+        SettingsAction::Bind(action) => {
+            pending_key_bind.0 = Some(action);
+        }
+        SettingsAction::ResetDefaults => {
+            *config = GameConfig::default();
+            settings.fov_degrees = config.fov_degrees;
+            settings.ui_scale = config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
+            settings.gravity_scale = config
+                .gravity_scale
+                .clamp(GRAVITY_SCALE_MIN, GRAVITY_SCALE_MAX);
+            ui_scale.0 = settings.ui_scale;
+            i18n.set_language(resolve_language(config.language));
+            open_dropdown.0 = None;
+            pending_key_bind.0 = None;
+            save_config(&config);
+        }
+        SettingsAction::OpenFolder => {
+            open_config_folder();
+        }
+        SettingsAction::Back => {
+            open_dropdown.0 = None;
+            pending_key_bind.0 = None;
+            let return_mode = settings_return_mode(&ui_runtime, *mode);
+            ui_runtime.close_active();
+            *mode = return_mode;
+        }
+    }
 }
 
 fn settings_return_mode(ui_runtime: &UiRuntime, fallback: GameMode) -> GameMode {
@@ -970,8 +970,8 @@ pub fn block_edit_actions(
     mut click: On<Pointer<Click>>,
     mut ui_runtime: ResMut<UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
-    mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
+    mut world_menu: WorldMenuParams,
     actions: Query<&BlockEditAction>,
 ) {
     if !primary_click(&mut click) {
@@ -980,7 +980,7 @@ pub fn block_edit_actions(
     let Some(pos) = ui_runtime.active_block_pos() else {
         return;
     };
-    let Some(block) = world.system_blocks.get(&pos).copied() else {
+    let Some(block) = world_menu.world.system_blocks.get(&pos).copied() else {
         ui_runtime.close_current();
         return;
     };
@@ -988,9 +988,39 @@ pub fn block_edit_actions(
         return;
     };
     click.propagate(false);
-    block
-        .kind
-        .handle_edit_action(pos, action, &mut world, &mut solution_state, &mut open_dropdown);
+    block.kind.handle_edit_action(
+        pos,
+        action,
+        &mut world_menu.world,
+        &mut solution_state,
+        &mut open_dropdown,
+    );
+    if !block_edit_action_mutates_world(action) {
+        return;
+    }
+    despawn_world(&mut world_menu.commands, &world_menu.block_entities);
+    world_menu.factory_structures.clear();
+    world_menu
+        .factory_structures
+        .ensure_current_world(&world_menu.world);
+    rebuild_world_for_debug_state(
+        &mut world_menu.commands,
+        &mut world_menu.meshes,
+        &world_menu.world,
+        &world_menu.render_assets,
+        &world_menu.debug,
+        &mut world_menu.factory_structures,
+    );
+}
+
+fn block_edit_action_mutates_world(action: BlockEditAction) -> bool {
+    !matches!(
+        action,
+        BlockEditAction::ToggleMaterialDropdown
+            | BlockEditAction::ToggleColorDropdown
+            | BlockEditAction::ToggleInputDropdown
+            | BlockEditAction::ToggleOutputDropdown
+    )
 }
 
 pub fn teleport_menu_actions(
@@ -1017,22 +1047,22 @@ pub fn teleport_menu_actions(
     click.propagate(false);
 
     match action {
-            TeleportAction::TogglePairDropdown => {
-                toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::TeleportPair);
-            }
-            TeleportAction::SetPair(pair) => {
-                let mut settings = world.teleport_settings(pos);
-                settings.pair = pair;
-                world.set_teleport_settings(pos, settings);
-                solution_state.dirty = true;
-                open_dropdown.0 = None;
-            }
-            TeleportAction::Rename => {
-                let settings = world.teleport_settings(pos);
-                rename_state.editing = Some(pos);
-                rename_state.buffer = settings.name;
-            }
+        TeleportAction::TogglePairDropdown => {
+            toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::TeleportPair);
         }
+        TeleportAction::SetPair(pair) => {
+            let mut settings = world.teleport_settings(pos);
+            settings.pair = pair;
+            world.set_teleport_settings(pos, settings);
+            solution_state.dirty = true;
+            open_dropdown.0 = None;
+        }
+        TeleportAction::Rename => {
+            let settings = world.teleport_settings(pos);
+            rename_state.editing = Some(pos);
+            rename_state.buffer = settings.name;
+        }
+    }
 }
 
 pub fn teleport_rename_input(

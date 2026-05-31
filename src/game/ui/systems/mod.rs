@@ -9,7 +9,7 @@ use crate::game::state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
     TeleportRenameState, WorldEntryMode,
 };
-use crate::game::world::blocks::BlockKind;
+use crate::game::world::blocks::{BlockKind, MaterialKind};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockIconAssets;
 use crate::shared::config::{ConfigAction, GameConfig};
@@ -17,19 +17,19 @@ use crate::shared::i18n::{I18n, Language};
 use crate::shared::save::{SaveKind, SaveState};
 
 use super::components::{
-    hover_border, inset_border, menu_button, pressed_border, raised_border,
-    BUTTON_BG, BUTTON_HOVER_BG,
+    hover_border, inset_border, menu_button, pressed_border, raised_border, BUTTON_BG,
+    BUTTON_HOVER_BG,
 };
 use super::types::{
-    ActiveSettingsSlider, BlockPanelDropdown, BlockPanelDropdownLabel, BlockPanelDropdownList,
-    BlockPanelText, BlockPanelTextKind, CarriedItem, CarriedItemPreview, ConfirmDialogAction,
-    ConfirmDialogKind, ConfirmDialogState, ConverterInputRow, Crosshair, InGameHudStyle,
-    InGameHudVisibility, InventoryItems, InventorySlot, InventoryTooltip, KeyBindingButton,
-    LocalizedText, OpenBlockPanelDropdown, OpenSettingsDropdown, PanelCloseButton,
-    PanelDragState, PanelPosition, PanelText, PanelTextKind, PanelTitleBar, PanelWindow,
-    MenuAction, PanelVisibility, PendingKeyBind, SaveListAction, SaveListRow,
-    SettingsAction, SettingsDropdownLabel, SettingsDropdownList, SettingsDropdownRoot,
-    SettingsDropdownRow, SettingsField, SettingsSliderFill, SettingsSliderKnob, SettingsTab,
+    ActiveSettingsSlider, BlockEditAction, BlockMaterialIcon, BlockMaterialIconSlot,
+    BlockPanelDropdown, BlockPanelDropdownLabel, BlockPanelDropdownList, BlockPanelText,
+    BlockPanelTextKind, CarriedItem, CarriedItemPreview, ConfirmDialogAction, ConfirmDialogKind,
+    ConfirmDialogState, ConverterInputRow, Crosshair, InGameHudStyle, InGameHudVisibility,
+    InventoryItems, InventorySlot, InventoryTooltip, KeyBindingButton, LocalizedText, MenuAction,
+    OpenBlockPanelDropdown, OpenSettingsDropdown, PanelCloseButton, PanelDragState, PanelPosition,
+    PanelText, PanelTextKind, PanelTitleBar, PanelVisibility, PanelWindow, PendingKeyBind,
+    SaveListAction, SaveListCloseButton, SaveListRow, SettingsAction, SettingsDropdownLabel,
+    SettingsDropdownList, SettingsField, SettingsSliderFill, SettingsSliderKnob, SettingsTab,
     SettingsText, SettingsTextKind, SettingsValueText, SlotArea, StatusText, StatusTextKind,
     TeleportAction, UiHoverState, UiPanelBinding, UiPanelContext, UiPanelId, UiRuntime,
 };

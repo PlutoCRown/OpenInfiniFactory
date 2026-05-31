@@ -12,8 +12,8 @@ use super::super::types::{
     SettingsItem, SettingsTab, UiPanelBinding, UiPanelId, GAMEPLAY_SETTINGS,
 };
 use super::super::widgets::{
-    spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_slider,
-    spawn_settings_slider_value, spawn_settings_tab,
+    spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_dropdown_list,
+    spawn_settings_slider, spawn_settings_slider_value, spawn_settings_tab,
 };
 
 pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
@@ -28,6 +28,7 @@ pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
             spawn_key_bindings(panel, i18n);
         },
     );
+    spawn_settings_dropdown_layers(root, i18n);
 }
 
 fn spawn_settings_tabs(panel: &mut ChildSpawnerCommands) {
@@ -68,9 +69,19 @@ fn spawn_settings_dropdown_row(
                 ..default()
             }))
             .with_children(|controls| {
-                spawn_settings_dropdown(controls, dropdown, settings_dropdown_options(i18n, dropdown));
+                spawn_settings_dropdown(controls, dropdown);
             });
         });
+}
+
+fn spawn_settings_dropdown_layers(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+    for dropdown in [
+        SettingsDropdown::Language,
+        SettingsDropdown::PlaceSelectionMode,
+        SettingsDropdown::DeleteSelectionMode,
+    ] {
+        spawn_settings_dropdown_list(root, dropdown, settings_dropdown_options(i18n, dropdown));
+    }
 }
 
 fn spawn_settings_slider_row(
@@ -172,11 +183,11 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
         .insert(PanelVisibility::SettingsTab(SettingsTab::KeyBindings))
         .with_children(|container| {
             container
-                .spawn((key_bindings_grid_bundle(), scroll_content()))
-                .with_children(|grid| {
-                    spawn_key_group(grid, i18n, "settings.group.general", &ConfigAction::GENERAL);
+                .spawn((key_bindings_columns_bundle(), scroll_content()))
+                .with_children(|columns| {
+                    spawn_key_group(columns, i18n, "settings.group.general", &ConfigAction::GENERAL);
                     spawn_key_group(
-                        grid,
+                        columns,
                         i18n,
                         "settings.group.simulation",
                         &ConfigAction::SIMULATION,
@@ -186,16 +197,25 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
 }
 
 fn spawn_key_group(
-    grid: &mut ChildSpawnerCommands,
+    columns: &mut ChildSpawnerCommands,
     i18n: &I18n,
     label_key: &'static str,
     actions: &[ConfigAction],
 ) {
-    grid.spawn(localized_text(i18n, label_key, 18.0, Color::WHITE));
-    grid.spawn(transparent_node(Node::default()));
-    for action in actions {
-        spawn_localized_settings_button(grid, SettingsAction::Bind(*action));
-    }
+    columns
+        .spawn(transparent_node(Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(12.0),
+            flex_grow: 1.0,
+            flex_basis: Val::Px(0.0),
+            ..default()
+        }))
+        .with_children(|group| {
+            group.spawn(localized_text(i18n, label_key, 18.0, Color::WHITE));
+            for action in actions {
+                spawn_localized_settings_button(group, SettingsAction::Bind(*action));
+            }
+        });
 }
 
 fn spawn_settings_footer(panel: &mut ChildSpawnerCommands) {
@@ -210,16 +230,13 @@ fn spawn_settings_footer(panel: &mut ChildSpawnerCommands) {
     });
 }
 
-fn key_bindings_grid_bundle() -> impl Bundle {
+fn key_bindings_columns_bundle() -> impl Bundle {
     transparent_node(Node {
-        display: Display::Grid,
-        grid_template_columns: RepeatedGridTrack::flex(2, 1.0),
-        grid_template_rows: RepeatedGridTrack::flex(11, 1.0),
         position_type: PositionType::Absolute,
         width: Val::Percent(100.0),
-        height: Val::Px(462.0),
-        row_gap: Val::Px(6.0),
-        column_gap: Val::Px(8.0),
+        flex_direction: FlexDirection::Row,
+        align_items: AlignItems::FlexStart,
+        column_gap: Val::Px(14.0),
         ..default()
     })
 }

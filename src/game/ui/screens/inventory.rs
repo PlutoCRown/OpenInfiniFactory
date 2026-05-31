@@ -148,13 +148,13 @@ pub fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
 
 fn inventory_grid_bundle() -> impl Bundle {
     transparent_node(Node {
-        display: Display::Grid,
-        grid_template_columns: RepeatedGridTrack::flex(9, 1.0),
-        grid_template_rows: RepeatedGridTrack::flex(3, 1.0),
+        display: Display::Flex,
+        flex_direction: FlexDirection::Row,
+        flex_wrap: FlexWrap::Wrap,
         row_gap: Val::Px(4.0),
         column_gap: Val::Px(4.0),
-        width: Val::Px(605.0),
-        height: Val::Px(197.0),
+        width: Val::Percent(100.0),
+        min_height: Val::Px(default_button_size(58.0)),
         ..default()
     })
 }

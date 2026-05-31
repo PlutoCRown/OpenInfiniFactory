@@ -107,6 +107,7 @@ pub fn update_settings_dropdowns_ui(
     settings: Res<GameSettings>,
     open_dropdown: Res<OpenSettingsDropdown>,
     i18n: Res<I18n>,
+    windows: Query<&Window, With<PrimaryWindow>>,
     mut texts: ParamSet<(
         Query<
             (&SettingsDropdownLabel, &mut Text),
@@ -124,15 +125,10 @@ pub fn update_settings_dropdowns_ui(
         >,
     )>,
     mut dropdown_lists: Query<
-        (&SettingsDropdownList, &mut Node),
+        (&SettingsDropdownList, &mut Node, &ComputedNode),
         (Without<SettingsSliderFill>, Without<SettingsSliderKnob>),
     >,
-    mut dropdown_z: Query<(
-        &mut ZIndex,
-        Option<&SettingsDropdownList>,
-        Option<&SettingsDropdownRoot>,
-        Option<&SettingsDropdownRow>,
-    )>,
+    triggers: Query<(&SettingsAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     for (label, mut text) in &mut texts.p0() {
         text.0 = match label.0 {
@@ -150,32 +146,51 @@ pub fn update_settings_dropdowns_ui(
         text.0 = value.0.display(&settings, &i18n);
     }
 
-    for (list, mut style) in &mut dropdown_lists {
+    let viewport = windows
+        .single()
+        .ok()
+        .map(|window| Vec2::new(window.width(), window.height()))
+        .unwrap_or(Vec2::ZERO);
+    for (list, mut style, list_node) in &mut dropdown_lists {
         let open = open_dropdown.0 == Some(list.0);
         style.display = if open { Display::Flex } else { Display::None };
-    }
-
-    for (mut z_index, list, root, row) in &mut dropdown_z {
-        if let Some(list) = list {
-            *z_index = if open_dropdown.0 == Some(list.0) {
-                ZIndex(900)
-            } else {
-                ZIndex(500)
-            };
-        } else if let Some(root) = root {
-            *z_index = if open_dropdown.0 == Some(root.0) {
-                ZIndex(850)
-            } else {
-                ZIndex(300)
-            };
-        } else if let Some(row) = row {
-            *z_index = if open_dropdown.0 == Some(row.0) {
-                ZIndex(800)
-            } else {
-                ZIndex(300)
-            };
+        if !open {
+            continue;
+        }
+        if let Some((left, top)) = dropdown_position(
+            SettingsAction::ToggleDropdown(list.0),
+            &triggers,
+            list_node.size(),
+            viewport,
+        ) {
+            style.left = Val::Px(left);
+            style.top = Val::Px(top);
         }
     }
+}
+
+fn dropdown_position(
+    target: SettingsAction,
+    triggers: &Query<(&SettingsAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
+    list_size: Vec2,
+    viewport: Vec2,
+) -> Option<(f32, f32)> {
+    let (_, trigger_node, transform) = triggers
+        .iter()
+        .find(|(action, node, _)| **action == target && !node.is_empty())?;
+    let trigger_size = trigger_node.size();
+    let center = *transform * Vec2::ZERO;
+    let trigger_left = center.x - trigger_size.x * 0.5;
+    let trigger_top = center.y - trigger_size.y * 0.5;
+    let below = trigger_top + trigger_size.y + 4.0;
+    let above = trigger_top - list_size.y - 4.0;
+    let top = if below + list_size.y <= viewport.y - 10.0 || above < 10.0 {
+        below
+    } else {
+        above.max(10.0)
+    };
+    let left = trigger_left.clamp(10.0, (viewport.x - list_size.x - 10.0).max(10.0));
+    Some((left, top))
 }
 
 pub fn update_settings_tabs_ui(
