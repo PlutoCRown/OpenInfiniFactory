@@ -323,6 +323,7 @@ fn is_blocked_factory_connection(world: &WorldBlocks, from: IVec3, to: IVec3) ->
             BlockKind::Detector | BlockKind::Drill | BlockKind::Welder => {
                 offset == block.facing.forward_ivec3()
             }
+            BlockKind::DownDetector | BlockKind::DownWelder => offset == IVec3::NEG_Y,
             BlockKind::Lifter | BlockKind::Conveyor => offset == IVec3::Y,
             BlockKind::ReverseConveyor => offset == IVec3::NEG_Y,
             _ => false,
@@ -341,6 +342,9 @@ fn touches_scene(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
     structure.iter().any(|pos| {
         signal_offsets()
             .into_iter()
-            .any(|offset| world.is_scene_at(*pos + offset))
+            .any(|offset| {
+                let neighbor = *pos + offset;
+                world.is_scene_at(neighbor) && !is_blocked_factory_connection(world, *pos, neighbor)
+            })
     })
 }

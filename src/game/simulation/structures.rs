@@ -250,7 +250,7 @@ impl StructureMove {
         }
     }
 
-    fn structure(&self) -> &HashSet<IVec3> {
+    pub(super) fn structure(&self) -> &HashSet<IVec3> {
         match self {
             Self::Translate { structure, .. } | Self::Rotate { structure, .. } => structure,
         }
@@ -718,6 +718,22 @@ fn expanded_move_structure(
     }
 
     can_move_structure_without_push(world, &expanded, offset).then_some(expanded)
+}
+
+pub(super) fn can_translate_structure(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+    offset: IVec3,
+    factory_structures: &FactoryStructureState,
+) -> bool {
+    expanded_move_structure(
+        world,
+        structure,
+        offset,
+        factory_structures,
+        MovementExpansionMode::Normal,
+    )
+    .is_some()
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]

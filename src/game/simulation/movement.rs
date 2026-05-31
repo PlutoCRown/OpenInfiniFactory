@@ -7,7 +7,8 @@ use crate::game::world::grid::WorldBlocks;
 
 use super::factory_activity::FactoryStructureState;
 use super::structures::{
-    material_structure, MovementMark, PusherActor, PusherAnimationKind, StructureMove,
+    can_translate_structure, material_structure, MovementMark, PusherActor, PusherAnimationKind,
+    StructureMove,
 };
 
 #[derive(Resource, Default)]
@@ -148,13 +149,12 @@ pub(super) fn mark_structure_movement_phase(
     for (pos, kind, mover) in movers {
         match mover {
             MovementRule::Translate { source, offset } => {
-                if let Some(movement) = mark_structure_translate(
+                if let Some(movement) = mark_conveyor_movement(
                     world,
                     factory_structures,
                     pos,
-                    pos + source,
+                    source,
                     offset,
-                    MovementMark::Conveyor,
                 ) {
                     moves.push(movement.with_source(pos));
                 }
@@ -203,6 +203,40 @@ pub(super) fn mark_structure_movement_phase(
         }
     }
     moves
+}
+
+fn mark_conveyor_movement(
+    world: &WorldBlocks,
+    factory_structures: &FactoryStructureState,
+    pos: IVec3,
+    source: IVec3,
+    offset: IVec3,
+) -> Option<StructureMove> {
+    let target = pos + source;
+    if let Some(movement) = mark_structure_translate(
+        world,
+        factory_structures,
+        pos,
+        target,
+        offset,
+        MovementMark::Conveyor,
+    ) {
+        if can_translate_structure(world, movement.structure(), offset, factory_structures) {
+            return Some(movement);
+        }
+    } else if !world.is_occupied(target) {
+        return None;
+    }
+
+    let structure = factory_structures.active_structure_at(pos, -offset)?;
+    if !can_translate_structure(world, &structure, -offset, factory_structures) {
+        return None;
+    }
+    Some(StructureMove::translate_marked(
+        structure,
+        -offset,
+        MovementMark::Conveyor,
+    ))
 }
 
 fn mark_pusher_movement(
