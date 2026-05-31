@@ -62,6 +62,10 @@ impl Block for ReverseConveyorBlock {
         })
     }
 
+    fn factory_connection_blocker(&self, _facing: super::Facing) -> Option<IVec3> {
+        Some(IVec3::NEG_Y)
+    }
+
     fn model(&self) -> BlockModel {
         BlockModel::PartsOnly(MODEL)
     }

@@ -33,6 +33,10 @@ impl Block for DownWelderBlock {
         })
     }
 
+    fn factory_connection_blocker(&self, _facing: Facing) -> Option<IVec3> {
+        Some(IVec3::NEG_Y)
+    }
+
     fn render_behavior(&self, _facing: Facing) -> RenderBehavior {
         RenderBehavior {
             weld_connector: Some(WeldConnectorBehavior::Offset(IVec3::NEG_Y)),

@@ -1,3 +1,5 @@
+use bevy::prelude::IVec3;
+
 use super::{
     rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial, ModelMesh,
     MovementRule,
@@ -36,6 +38,10 @@ impl Block for LifterBlock {
 
     fn movement_rule(&self, _facing: super::Facing) -> Option<MovementRule> {
         Some(MovementRule::Lift { range: 5 })
+    }
+
+    fn factory_connection_blocker(&self, _facing: super::Facing) -> Option<IVec3> {
+        Some(IVec3::Y)
     }
 
     fn model(&self) -> BlockModel {

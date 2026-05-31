@@ -37,6 +37,10 @@ impl Block for DownDetectorBlock {
         })
     }
 
+    fn factory_connection_blocker(&self, _facing: super::Facing) -> Option<IVec3> {
+        Some(IVec3::NEG_Y)
+    }
+
     fn render_behavior(&self, _facing: super::Facing) -> RenderBehavior {
         RenderBehavior {
             wire_connector: Some(WireConnectorBehavior::Device {

@@ -1,3 +1,5 @@
+use bevy::prelude::IVec3;
+
 use super::{
     rgb, Block, BlockDefinition, BlockKind, BlockModel, Facing, MarkerBehavior, RenderBehavior,
     WeldConnectorBehavior,
@@ -33,6 +35,10 @@ impl Block for WelderBlock {
             offset: facing.forward_ivec3(),
             facing,
         })
+    }
+
+    fn factory_connection_blocker(&self, facing: Facing) -> Option<IVec3> {
+        Some(facing.forward_ivec3())
     }
 
     fn render_behavior(&self, facing: Facing) -> RenderBehavior {

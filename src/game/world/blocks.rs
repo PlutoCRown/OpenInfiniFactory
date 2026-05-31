@@ -72,6 +72,10 @@ pub trait Block: Send + Sync {
         None
     }
 
+    fn factory_connection_blocker(&self, _facing: Facing) -> Option<IVec3> {
+        None
+    }
+
     fn material_destroyer(&self, _facing: Facing) -> Option<MaterialDestroyer> {
         None
     }
@@ -867,6 +871,10 @@ impl BlockKind {
 
     pub fn movement_rule(self, facing: Facing) -> Option<MovementRule> {
         self.block().movement_rule(facing)
+    }
+
+    pub fn factory_connection_blocker(self, facing: Facing) -> Option<IVec3> {
+        self.block().factory_connection_blocker(facing)
     }
 
     pub fn material_destroyer(self, facing: Facing) -> Option<MaterialDestroyer> {

@@ -1,3 +1,5 @@
+use bevy::prelude::IVec3;
+
 use super::{
     rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, Facing, MarkerBehavior,
     MaterialDestroyer, ModelMaterial, ModelMesh, RenderBehavior, SignalBehavior,
@@ -51,6 +53,10 @@ impl Block for DrillBlock {
         Some(MaterialDestroyer::Drill {
             target: facing.forward_ivec3(),
         })
+    }
+
+    fn factory_connection_blocker(&self, facing: Facing) -> Option<IVec3> {
+        Some(facing.forward_ivec3())
     }
 
     fn signal_behavior(&self, _facing: Facing) -> Option<SignalBehavior> {

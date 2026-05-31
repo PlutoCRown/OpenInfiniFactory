@@ -13,6 +13,7 @@
 | `material_kind` | `src/game/world/blocks/registry.rs`、`src/game/simulation/behaviors.rs` | 识别材料类型和转换输出。 |
 | `default_settings` | `src/game/world/grid.rs`、各编辑 UI | 初始化 Generator、Goal、Labeler、Converter、Teleport 设置。 |
 | `movement_rule` | `src/game/simulation/movement.rs`、`src/game/simulation/structures.rs` | 传送带、抬升器、旋转器、活塞类运动。 |
+| `factory_connection_blocker` | `src/game/simulation/factory_activity.rs` | 声明工厂结构连接中需要阻断的一面。 |
 | `material_destroyer` | `src/game/simulation/behaviors.rs` | Drill、DrillHead、Laser 删除材料。 |
 | `material_labeler` | `src/game/simulation/behaviors.rs` | Stamper、Roller 标记材料面。 |
 | `weld_behavior` | `src/game/simulation/behaviors.rs` | WeldPoint 执行焊接。 |
@@ -73,16 +74,16 @@
 
 这让新增方块时需要同时理解声明枚举和多个运行期阶段。
 
-### 2. 工厂结构连接规则单独维护
+### 2. 工厂结构连接规则已回收到方块声明
 
-`factory_activity.rs` 中有硬编码的连接阻断规则：
+连接阻断规则现在由方块模块通过 `factory_connection_blocker(facing)` 声明，`factory_activity.rs` 只消费这个声明：
 
 - Detector / Drill / Welder 的朝向面阻断连接。
 - DownDetector / DownWelder 的下方面阻断连接。
 - Lifter / Conveyor 的上方面阻断连接。
 - ReverseConveyor 的下方面阻断连接。
 
-这些规则和方块模块里的 `marker_behavior`、`movement_rule` 语义相关，但目前没有由方块自身声明。
+这让新增同类工厂方块时，不需要再修改结构分析模块里的 kind match。
 
 ### 3. 编辑 UI 与方块设置绑定较紧
 
@@ -108,9 +109,7 @@ Generator、Goal、Stamper、Roller、Converter、TeleportEntrance、TeleportExi
 
 ## 后续抽象建议
 
-1. 先把结构连接阻断能力纳入方块声明，例如 `factory_connection_blockers(facing)`。
-2. 把移动、信号、marker、行为执行继续保留分阶段，但使用统一的方块能力描述生成阶段输入。
-3. 对设置类方块建立 `BlockSettingsDescriptor`，减少 UI、默认设置、存档之间的重复映射。
-4. 对 Virtual marker 明确生命周期和来源，避免运行期 marker 行为散落在源方块和 marker 方块两处。
-5. 把 alternate 关系集中成可验证表，启动时检查互反关系。
-
+1. 把移动、信号、marker、行为执行继续保留分阶段，但使用统一的方块能力描述生成阶段输入。
+2. 对设置类方块建立 `BlockSettingsDescriptor`，减少 UI、默认设置、存档之间的重复映射。
+3. 对 Virtual marker 明确生命周期和来源，避免运行期 marker 行为散落在源方块和 marker 方块两处。
+4. 把 alternate 关系集中成可验证表，启动时检查互反关系。

@@ -62,6 +62,10 @@ impl Block for ConveyorBlock {
         })
     }
 
+    fn factory_connection_blocker(&self, _facing: super::Facing) -> Option<IVec3> {
+        Some(IVec3::Y)
+    }
+
     fn model(&self) -> BlockModel {
         BlockModel::PartsOnly(MODEL)
     }

@@ -1,3 +1,5 @@
+use bevy::prelude::IVec3;
+
 use super::{
     rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial, ModelMesh,
     RenderBehavior, SignalBehavior, WireConnectorBehavior,
@@ -37,6 +39,10 @@ impl Block for DetectorBlock {
         Some(SignalBehavior::Detector {
             detection_pos: facing.forward_ivec3(),
         })
+    }
+
+    fn factory_connection_blocker(&self, facing: super::Facing) -> Option<IVec3> {
+        Some(facing.forward_ivec3())
     }
 
     fn render_behavior(&self, facing: super::Facing) -> RenderBehavior {
