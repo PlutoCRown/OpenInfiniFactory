@@ -134,7 +134,7 @@ pub(super) fn mark_structure_movement_phase(
     factory_structures: &FactoryStructureState,
     pusher_state: &mut PusherState,
 ) -> Vec<StructureMove> {
-    let movers: Vec<(IVec3, BlockKind, MovementRule)> = world
+    let mut movers: Vec<(IVec3, BlockKind, MovementRule)> = world
         .blocks
         .iter()
         .filter_map(|(pos, block)| {
@@ -144,7 +144,10 @@ pub(super) fn mark_structure_movement_phase(
                 .map(|mover| (*pos, block.kind, mover))
         })
         .collect();
+    movers.sort_by_key(|(pos, _, _)| (pos.x, pos.y, pos.z));
     let mut moves = Vec::new();
+    let hard_head_occupancy = pusher_state.hard_head_occupancy(world);
+    let mut claimed_head_targets = HashSet::new();
 
     for (pos, kind, mover) in movers {
         match mover {
@@ -176,6 +179,16 @@ pub(super) fn mark_structure_movement_phase(
                     } else {
                         !powered_devices.contains(&pos)
                     };
+                    if desired_extended
+                        && pusher_head_target_blocked(
+                            pos,
+                            offset,
+                            &hard_head_occupancy,
+                            &mut claimed_head_targets,
+                        )
+                    {
+                        continue;
+                    }
                     if let Some(movement) = mark_pusher_movement(
                         world,
                         factory_structures,
@@ -203,6 +216,16 @@ pub(super) fn mark_structure_movement_phase(
         }
     }
     moves
+}
+
+fn pusher_head_target_blocked(
+    pos: IVec3,
+    offset: IVec3,
+    hard_head_occupancy: &HashSet<IVec3>,
+    claimed_head_targets: &mut HashSet<IVec3>,
+) -> bool {
+    let target = pos + offset;
+    hard_head_occupancy.contains(&target) || !claimed_head_targets.insert(target)
 }
 
 fn mark_conveyor_movement(
