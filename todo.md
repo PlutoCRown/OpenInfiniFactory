@@ -9,28 +9,28 @@
 
 ## 建议执行顺序
 
-| 顺序 | 任务 | 难度 | 范围 | 分支建议 | 并行组 |
-| --- | --- | --- | --- | --- | --- |
-| S01 | 调研 Barrier 的 Reactive / Continue 模拟模式 | D1 | R1 | main | docs |
-| S02 | 按方块维度整理行为文档 | D2 | R1 | main | docs |
-| S03 | 修复确认返回主菜单弹窗宽度 | D1 | R1 | main | ui-a |
-| S04 | 修复菜单标题拖动比例问题 | D2 | R2 | main | ui-a |
-| S05 | 方块放置目标面高亮 | D2 | R2 | main | render-a |
-| S06 | 修复定制模型方块半透明预览 | D2 | R2 | main | render-a |
-| S07 | 优化 Puzzle / Solution 选择界面样式 | D3 | R2 | branch: `ui/save-list-responsive` | ui-b |
-| S08 | 扩展 P 模式结构渲染 | D3 | R3 | branch: `debug/structure-rendering` | debug-a |
-| S09 | 传送带同目标推送优先级统一 | D3 | R3 | branch: `sim/conveyor-priority` | sim-a |
-| S10 | 活塞头伸入同一方块的冲突统一 | D3 | R3 | branch: `sim/pusher-head-conflicts` | sim-b |
-| S11 | 实现传送器功能 | D3 | R3 | branch: `feature/teleporter-material` | sim-c |
-| S12 | 点击传送器传送玩家视角 | D3 | R3 | branch: `feature/teleporter-player-view` | player-a |
-| S13 | 编辑 Puzzle 前的 Solution 风险提醒 | D2 | R2 | branch: `save/puzzle-solution-warnings` | save-a |
-| S14 | 保存 Puzzle 时的 Solution 清除提醒 | D2 | R2 | branch: `save/puzzle-solution-warnings` | save-a |
-| S15 | 显示结构下一回合 Moment 列表 | D4 | R4 | branch: `debug/moment-preview` | debug-b |
-| S16 | 实现验收器功能 | D4 | R4 | branch: `feature/acceptor` | sim-d |
-| S17 | 新增开关方块 | D4 | R4 | branch: `feature/switch-block` | dynamic-a |
-| S18 | 方块行为抽象 | D4 | R4 | branch: `refactor/block-behaviors` | refactor-a |
-| S19 | 优化 Puzzle / Solution 存档关系 | D5 | R5 | branch: `save/puzzle-solution-split` | save-b |
-| S20 | 新增动态模式 | D5 | R5 | branch: `feature/dynamic-mode` | dynamic-b |
+| 顺序 | 任务 | 难度 | 范围 | 分支建议 | 并行组 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| S01 | 调研 Barrier 的 Reactive / Continue 模拟模式 | D1 | R1 | main | docs | done |
+| S02 | 按方块维度整理行为文档 | D2 | R1 | main | docs | todo |
+| S03 | 修复确认返回主菜单弹窗宽度 | D1 | R1 | main | ui-a | todo |
+| S04 | 修复菜单标题拖动比例问题 | D2 | R2 | main | ui-a | todo |
+| S05 | 方块放置目标面高亮 | D2 | R2 | main | render-a | todo |
+| S06 | 修复定制模型方块半透明预览 | D2 | R2 | main | render-a | todo |
+| S07 | 优化 Puzzle / Solution 选择界面样式 | D3 | R2 | branch: `ui/save-list-responsive` | ui-b | todo |
+| S08 | 扩展 P 模式结构渲染 | D3 | R3 | branch: `debug/structure-rendering` | debug-a | todo |
+| S09 | 传送带同目标推送优先级统一 | D3 | R3 | branch: `sim/conveyor-priority` | sim-a | todo |
+| S10 | 活塞头伸入同一方块的冲突统一 | D3 | R3 | branch: `sim/pusher-head-conflicts` | sim-b | todo |
+| S11 | 实现传送器功能 | D3 | R3 | branch: `feature/teleporter-material` | sim-c | todo |
+| S12 | 点击传送器传送玩家视角 | D3 | R3 | branch: `feature/teleporter-player-view` | player-a | todo |
+| S13 | 编辑 Puzzle 前的 Solution 风险提醒 | D2 | R2 | branch: `save/puzzle-solution-warnings` | save-a | todo |
+| S14 | 保存 Puzzle 时的 Solution 清除提醒 | D2 | R2 | branch: `save/puzzle-solution-warnings` | save-a | todo |
+| S15 | 显示结构下一回合 Moment 列表 | D4 | R4 | branch: `debug/moment-preview` | debug-b | todo |
+| S16 | 实现验收器功能 | D4 | R4 | branch: `feature/acceptor` | sim-d | todo |
+| S17 | 新增开关方块 | D4 | R4 | branch: `feature/switch-block` | dynamic-a | todo |
+| S18 | 方块行为抽象 | D4 | R4 | branch: `refactor/block-behaviors` | refactor-a | todo |
+| S19 | 优化 Puzzle / Solution 存档关系 | D5 | R5 | branch: `save/puzzle-solution-split` | save-b | todo |
+| S20 | 新增动态模式 | D5 | R5 | branch: `feature/dynamic-mode` | dynamic-b | todo |
 
 ## 并行建议
 
