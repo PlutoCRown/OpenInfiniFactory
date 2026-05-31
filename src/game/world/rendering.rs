@@ -1108,9 +1108,16 @@ fn spawn_model_parts(
         if let Some(icon_layer) = icon_layer {
             child.insert((icon_layer.clone(), BlockIconRenderEntity));
         }
-        if part.mesh == crate::game::world::blocks::ModelMesh::PusherHead {
+        if matches!(
+            part.mesh,
+            crate::game::world::blocks::ModelMesh::PusherHead
+                | crate::game::world::blocks::ModelMesh::RodZ
+        ) {
             if let Some(pusher_animation) = pusher_animation {
-                child.insert(AnimatedPusher::new(pusher_animation));
+                child.insert(AnimatedPusher::new(
+                    pusher_animation,
+                    model_vec3(part.translation),
+                ));
             }
         }
     }

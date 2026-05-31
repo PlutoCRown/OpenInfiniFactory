@@ -22,7 +22,7 @@ use super::behaviors::{
 use super::factory_activity::FactoryStructureState;
 use super::gravity::mark_gravity_phase;
 use super::markers::{run_powered_marker_phase, run_static_marker_phase};
-use super::movement::{mark_structure_movement_phase, PusherState};
+use super::movement::{blocker_animations, mark_structure_movement_phase, PusherState};
 pub use super::signals::SignalNetworkCache;
 use super::structures::{
     execute_structure_moves_with_pushers, merge_structure_movement_plan, MovementInfluenceCache,
@@ -143,6 +143,9 @@ pub fn run_turn(
         })
         .collect::<HashMap<_, _>>();
     for (pos, animation) in pusher_state.sustained_animations() {
+        pusher_animations.entry(pos).or_insert(animation);
+    }
+    for (pos, animation) in blocker_animations(world, &powered_devices) {
         pusher_animations.entry(pos).or_insert(animation);
     }
     sample.movement_execute_ms = mark_elapsed_ms(&mut mark);

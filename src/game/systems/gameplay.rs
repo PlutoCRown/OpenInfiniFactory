@@ -662,6 +662,13 @@ fn alternate_block_at(
         return false;
     };
 
+    if matches!(
+        (block.kind, kind),
+        (BlockKind::Conveyor, BlockKind::ReverseConveyor)
+            | (BlockKind::ReverseConveyor, BlockKind::Conveyor)
+    ) {
+        block.facing = block.facing.rotate().rotate();
+    }
     block.kind = kind;
     refresh_edit_generated_markers(world);
     factory_structures.rebuild_from_world(world);

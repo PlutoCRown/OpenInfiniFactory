@@ -58,7 +58,7 @@ impl Block for ReverseConveyorBlock {
     fn movement_rule(&self, facing: super::Facing) -> Option<MovementRule> {
         Some(MovementRule::Translate {
             source: IVec3::NEG_Y,
-            offset: facing.forward_ivec3(),
+            offset: -facing.forward_ivec3(),
         })
     }
 

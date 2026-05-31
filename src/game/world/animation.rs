@@ -71,6 +71,7 @@ pub struct PusherAnimation {
 
 #[derive(Component)]
 pub struct AnimatedPusher {
+    base_translation: Vec3,
     direction: Vec3,
     elapsed: f32,
     duration: f32,
@@ -86,8 +87,9 @@ pub struct WeldSpark {
 }
 
 impl AnimatedPusher {
-    pub fn new(animation: PusherAnimation) -> Self {
+    pub fn new(animation: PusherAnimation, base_translation: Vec3) -> Self {
         Self {
+            base_translation,
             direction: Vec3::NEG_Z,
             elapsed: 0.0,
             duration: animation.duration,
@@ -164,10 +166,11 @@ pub fn animate_blocks(
         animation.elapsed += time.delta_secs();
         let t = (animation.elapsed / animation.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
         let extension = animation.from_extension.lerp(animation.to_extension, t);
-        transform.translation = animation.direction * extension;
+        transform.translation = animation.base_translation + animation.direction * extension;
 
         if t >= 1.0 {
-            transform.translation = animation.direction * animation.to_extension;
+            transform.translation =
+                animation.base_translation + animation.direction * animation.to_extension;
             commands.entity(entity).remove::<AnimatedPusher>();
         }
     }

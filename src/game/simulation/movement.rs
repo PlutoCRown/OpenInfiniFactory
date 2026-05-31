@@ -60,6 +60,26 @@ impl PusherState {
     }
 }
 
+pub fn blocker_animations(
+    world: &WorldBlocks,
+    powered_devices: &HashSet<IVec3>,
+) -> std::collections::HashMap<IVec3, PusherAnimation> {
+    world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| {
+            (block.kind == BlockKind::Blocker).then_some((
+                *pos,
+                PusherAnimation {
+                    duration: 0.0,
+                    from_extension: if powered_devices.contains(pos) { 1.0 } else { 0.0 },
+                    to_extension: if powered_devices.contains(pos) { 0.0 } else { 1.0 },
+                },
+            ))
+        })
+        .collect()
+}
+
 pub(super) fn mark_structure_movement_phase(
     world: &WorldBlocks,
     powered_devices: &HashSet<IVec3>,

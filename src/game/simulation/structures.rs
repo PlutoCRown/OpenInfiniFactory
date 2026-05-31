@@ -491,7 +491,6 @@ pub(super) fn execute_structure_moves_with_pushers(
         }
     }
     influence_cache.record_executed(executed);
-    factory_structures.rebuild_from_world(world);
     (animations, pusher_animations)
 }
 

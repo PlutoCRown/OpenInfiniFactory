@@ -14,6 +14,8 @@ const MODEL: &[BlockModelPart] = &[
         ModelMaterial::BorderedWoodTexture,
         [0.0, 0.0, -0.40],
     ),
+    BlockModelPart::new(ModelMesh::RodZ, ModelMaterial::StoneTexture, [0.0, 0.0, -0.18])
+        .scaled([1.35, 1.35, 0.70]),
 ];
 
 pub struct PusherBlock;

@@ -1,10 +1,4 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, ModelMaterial, ModelMesh};
-
-const MODEL: &[BlockModelPart] = &[BlockModelPart::new(
-    ModelMesh::PusherHead,
-    ModelMaterial::BorderedWoodTexture,
-    [0.0, 0.0, 0.0],
-)];
+use super::{rgb, Block, BlockDefinition, BlockKind, BlockModel};
 
 pub struct BlockerHeadBlock;
 
@@ -26,6 +20,6 @@ impl Block for BlockerHeadBlock {
     }
 
     fn model(&self) -> BlockModel {
-        BlockModel::Parts(MODEL)
+        BlockModel::PartsOnly(&[])
     }
 }
