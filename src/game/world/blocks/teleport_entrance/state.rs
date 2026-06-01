@@ -52,13 +52,23 @@ pub(crate) fn normalize_state(
     SerializedBlockState::from_state(&state.decode::<TeleportSettings>()?)
 }
 
+pub(crate) fn settings(world: &WorldBlocks, pos: IVec3) -> TeleportSettings {
+    world
+        .block_state(pos)
+        .unwrap_or_else(|| TeleportSettings::unnamed(pos))
+}
+
+pub(crate) fn set_settings(world: &mut WorldBlocks, pos: IVec3, settings: TeleportSettings) {
+    world.set_block_state(pos, settings);
+}
+
 pub(crate) fn clear_pair_references(pos: IVec3, world: &mut WorldBlocks) {
     let positions: Vec<IVec3> = world.system_blocks.keys().copied().collect();
     for other in positions {
-        let mut settings = world.teleport_settings(other);
+        let mut settings = settings(world, other);
         if settings.pair == Some(pos) {
             settings.pair = None;
-            world.set_teleport_settings(other, settings);
+            set_settings(world, other, settings);
         }
     }
 }
@@ -72,7 +82,7 @@ fn next_teleport_name(kind: BlockKind, world: &WorldBlocks) -> String {
     let used: HashSet<String> = world
         .system_blocks
         .iter()
-        .filter_map(|(pos, block)| (block.kind == kind).then(|| world.teleport_settings(*pos).name))
+        .filter_map(|(pos, block)| (block.kind == kind).then(|| settings(world, *pos).name))
         .collect();
 
     for name in base_names {

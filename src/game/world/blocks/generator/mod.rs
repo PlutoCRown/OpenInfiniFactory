@@ -10,7 +10,9 @@ mod simulation;
 mod state;
 pub(crate) mod ui;
 
-pub use state::GeneratorSettings;
+pub(crate) use state::{
+    set_settings as set_generator_settings, settings as generator_settings, GeneratorSettings,
+};
 
 pub struct GeneratorBlock;
 

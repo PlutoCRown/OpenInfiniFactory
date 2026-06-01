@@ -35,3 +35,11 @@ pub(super) fn normalize_state(
 ) -> Option<SerializedBlockState> {
     SerializedBlockState::from_state(&state.decode::<GeneratorSettings>()?)
 }
+
+pub(crate) fn settings(world: &WorldBlocks, pos: IVec3) -> GeneratorSettings {
+    world.block_state(pos).unwrap_or_default()
+}
+
+pub(crate) fn set_settings(world: &mut WorldBlocks, pos: IVec3, settings: GeneratorSettings) {
+    world.set_block_state(pos, settings);
+}

@@ -16,8 +16,9 @@ use crate::game::world::animation::{
     BlockAnimation, BlockAnimationKind, PusherAnimation, WeldSpark,
 };
 use crate::game::world::blocks::{
-    edit_blocks, local_connection_offset, six_way_offsets, wire_connector_render_plan, BlockData,
-    BlockKind, BlockModel, BlockRenderSpec, WeldConnectorBehavior, PLAY_BLOCKS,
+    edit_blocks, generator_settings, local_connection_offset, six_way_offsets,
+    wire_connector_render_plan, BlockData, BlockKind, BlockModel, BlockRenderSpec,
+    WeldConnectorBehavior, PLAY_BLOCKS,
 };
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_manager::WorldRenderManager;
@@ -1049,7 +1050,7 @@ fn spawn_block_model(
             spawn_generator_material_preview(
                 parent,
                 assets,
-                world.generator_settings(pos).material,
+                generator_settings(&world, pos).material,
                 icon_render,
             );
         }

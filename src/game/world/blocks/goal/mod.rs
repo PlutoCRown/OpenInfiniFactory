@@ -11,7 +11,9 @@ mod render;
 mod state;
 pub(crate) mod ui;
 
-pub use state::GoalSettings;
+pub(crate) use state::{
+    set_settings as set_goal_settings, settings as goal_settings, GoalSettings,
+};
 
 pub struct GoalBlock;
 

@@ -12,7 +12,9 @@ mod simulation;
 mod state;
 pub(crate) mod ui;
 
-pub use state::RollerSettings;
+pub(crate) use state::{
+    set_settings as set_roller_settings, settings as roller_settings, RollerSettings,
+};
 
 pub struct RollerBlock;
 

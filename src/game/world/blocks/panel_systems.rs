@@ -9,7 +9,10 @@ use crate::game::ui::types::{
     BlockPanelDropdownLabel, BlockPanelDropdownList, BlockPanelText, BlockPanelTextKind,
     ConverterInputRow, LocalizedText, OpenBlockPanelDropdown, TeleportAction, UiRuntime,
 };
-use crate::game::world::blocks::{BlockKind, MaterialKind};
+use crate::game::world::blocks::{
+    converter_settings, generator_settings, goal_settings, labeler_color, teleport_settings,
+    BlockKind, MaterialKind,
+};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockIconAssets;
 use crate::shared::i18n::{I18n, Language};
@@ -70,7 +73,7 @@ pub fn update_generator_ui(
         return;
     };
 
-    let generator_settings = world.generator_settings(pos);
+    let generator_settings = generator_settings(&world, pos);
     for (panel_text, mut text) in &mut panel_texts {
         if panel_text.0 == BlockPanelTextKind::GeneratorPeriod {
             text.0 = generator_settings.period.to_string();
@@ -122,7 +125,7 @@ pub fn update_teleport_ui(
         return;
     };
 
-    let settings = world.teleport_settings(pos);
+    let settings = teleport_settings(&world, pos);
     for (panel_text, mut text) in &mut panel_texts {
         if panel_text.0 == BlockPanelTextKind::TeleportName {
             text.0 = if rename_state.editing == Some(pos) {
@@ -151,28 +154,28 @@ pub fn update_block_panel_dropdowns_ui(
     for (label, mut text) in &mut dropdowns.labels {
         text.0 = match label.0 {
             BlockPanelDropdown::GeneratorMaterial => active_pos
-                .map(|pos| world.generator_settings(pos).material)
+                .map(|pos| generator_settings(&world, pos).material)
                 .map(|material| i18n.text(material.name_key()))
                 .unwrap_or_default(),
             BlockPanelDropdown::GoalMaterial => active_pos
-                .map(|pos| world.goal_settings(pos).material)
+                .map(|pos| goal_settings(&world, pos).material)
                 .map(|material| i18n.text(material.name_key()))
                 .unwrap_or_default(),
             BlockPanelDropdown::LabelerColor => active_pos
-                .map(|pos| world.labeler_color(pos))
+                .map(|pos| labeler_color(&world, pos))
                 .map(|color| i18n.text(color.name_key()))
                 .unwrap_or_default(),
             BlockPanelDropdown::ConverterInput => active_pos
-                .map(|pos| world.converter_settings(pos).input)
+                .map(|pos| converter_settings(&world, pos).input)
                 .map(|material| i18n.text(material.name_key()))
                 .unwrap_or_default(),
             BlockPanelDropdown::ConverterOutput => active_pos
-                .map(|pos| world.converter_settings(pos).output)
+                .map(|pos| converter_settings(&world, pos).output)
                 .map(|material| i18n.text(material.name_key()))
                 .unwrap_or_default(),
             BlockPanelDropdown::TeleportPair => active_pos
-                .and_then(|pos| world.teleport_settings(pos).pair)
-                .map(|pair| world.teleport_settings(pair).name)
+                .and_then(|pos| teleport_settings(&world, pos).pair)
+                .map(|pair| teleport_settings(&world, pair).name)
                 .unwrap_or_else(|| i18n.text("teleport.none")),
         };
     }
@@ -256,7 +259,7 @@ pub fn update_block_panel_dropdowns_ui(
                 for pair in teleport_pair_candidates(&world, pos) {
                     spawn_teleport_pair_option(
                         parent,
-                        world.teleport_settings(pair).name,
+                        teleport_settings(&world, pair).name,
                         Some(pair),
                     );
                 }
@@ -272,10 +275,10 @@ fn selected_material(
 ) -> Option<MaterialKind> {
     let pos = active_pos?;
     match dropdown {
-        BlockPanelDropdown::GeneratorMaterial => Some(world.generator_settings(pos).material),
-        BlockPanelDropdown::GoalMaterial => Some(world.goal_settings(pos).material),
-        BlockPanelDropdown::ConverterInput => Some(world.converter_settings(pos).input),
-        BlockPanelDropdown::ConverterOutput => Some(world.converter_settings(pos).output),
+        BlockPanelDropdown::GeneratorMaterial => Some(generator_settings(&world, pos).material),
+        BlockPanelDropdown::GoalMaterial => Some(goal_settings(&world, pos).material),
+        BlockPanelDropdown::ConverterInput => Some(converter_settings(&world, pos).input),
+        BlockPanelDropdown::ConverterOutput => Some(converter_settings(&world, pos).output),
         BlockPanelDropdown::LabelerColor | BlockPanelDropdown::TeleportPair => None,
     }
 }
@@ -398,6 +401,6 @@ fn teleport_pair_candidates(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
             (candidate.kind == target_kind).then_some(*candidate_pos)
         })
         .collect();
-    candidates.sort_by_key(|candidate| world.teleport_settings(*candidate).name);
+    candidates.sort_by_key(|candidate| teleport_settings(&world, *candidate).name);
     candidates
 }

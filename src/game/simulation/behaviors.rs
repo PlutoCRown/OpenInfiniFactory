@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::game::world::blocks::{
+    converter_settings, generator_settings, goal_settings, labeler_color, teleport_settings,
     BlockData, BlockKind, ConverterMode, MaterialDestroyer, MaterialLabeler, MaterialSource,
 };
 use crate::game::world::direction::Facing;
@@ -66,7 +67,7 @@ pub(super) fn material_source_generation(
     for (pos, source) in sources {
         match source {
             MaterialSource::Generator => {
-                let settings = world.generator_settings(pos);
+                let settings = generator_settings(&world, pos);
                 if turn % settings.period.max(1) != 0 {
                     continue;
                 }
@@ -174,7 +175,7 @@ fn run_material_label_phase(world: &mut WorldBlocks) {
         world.set_material_face_mark(
             face,
             MaterialFaceMark {
-                color: world.labeler_color(pos),
+                color: labeler_color(&world, pos),
                 source,
             },
         );
@@ -196,7 +197,7 @@ fn run_material_conversion_phase(world: &mut WorldBlocks) {
             continue;
         };
 
-        let settings = world.converter_settings(pos);
+        let settings = converter_settings(&world, pos);
         if settings.mode == ConverterMode::SpecificInput && input_material != settings.input {
             continue;
         }
@@ -224,7 +225,7 @@ fn run_material_teleport_phase(
         if handled.contains(&entrance) || !world.is_material_at(entrance) {
             continue;
         }
-        let Some(exit) = world.teleport_settings(entrance).pair else {
+        let Some(exit) = teleport_settings(&world, entrance).pair else {
             continue;
         };
         if !world
@@ -413,7 +414,7 @@ fn accepted_structure_for_goal_group(
     let start = *group.iter().next()?;
     for goal in group {
         let material = world.blocks.get(goal)?.kind.material_kind()?;
-        if world.goal_settings(*goal).material != material {
+        if goal_settings(&world, *goal).material != material {
             return None;
         }
     }

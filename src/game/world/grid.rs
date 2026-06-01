@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 use crate::game::world::blocks::{
-    BlockData, BlockKind, ConverterSettings, GeneratorSettings, GoalSettings, RollerSettings,
-    SerializableBlockState, SerializedBlockState, StampColor, StamperSettings, TeleportSettings,
+    BlockData, BlockKind, SerializableBlockState, SerializedBlockState, StampColor,
 };
 use crate::game::world::direction::Facing;
 
@@ -137,10 +136,6 @@ impl WorldBlocks {
         }
     }
 
-    pub fn generator_settings(&self, pos: IVec3) -> GeneratorSettings {
-        self.block_state(pos).unwrap_or_default()
-    }
-
     pub fn block_state<T: SerializableBlockState>(&self, pos: IVec3) -> Option<T> {
         let block = self
             .system_blocks
@@ -194,75 +189,6 @@ impl WorldBlocks {
             self.block_states.insert(pos, state);
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
-    }
-
-    pub fn set_generator_settings(&mut self, pos: IVec3, settings: GeneratorSettings) {
-        self.set_block_state(pos, settings);
-    }
-
-    pub fn goal_settings(&self, pos: IVec3) -> GoalSettings {
-        self.block_state(pos).unwrap_or_default()
-    }
-
-    pub fn set_goal_settings(&mut self, pos: IVec3, settings: GoalSettings) {
-        self.set_block_state(pos, settings);
-    }
-
-    pub fn stamper_settings(&self, pos: IVec3) -> StamperSettings {
-        self.block_state(pos).unwrap_or_default()
-    }
-
-    pub fn set_stamper_settings(&mut self, pos: IVec3, settings: StamperSettings) {
-        self.set_block_state(pos, settings);
-    }
-
-    pub fn roller_settings(&self, pos: IVec3) -> RollerSettings {
-        self.block_state(pos).unwrap_or_default()
-    }
-
-    pub fn set_roller_settings(&mut self, pos: IVec3, settings: RollerSettings) {
-        self.set_block_state(pos, settings);
-    }
-
-    pub fn labeler_color(&self, pos: IVec3) -> crate::game::world::blocks::StampColor {
-        if self
-            .system_blocks
-            .get(&pos)
-            .is_some_and(|block| block.kind == BlockKind::Roller)
-        {
-            self.roller_settings(pos).color
-        } else {
-            self.stamper_settings(pos).color
-        }
-    }
-
-    pub fn set_labeler_color(&mut self, pos: IVec3, color: crate::game::world::blocks::StampColor) {
-        if self
-            .system_blocks
-            .get(&pos)
-            .is_some_and(|block| block.kind == BlockKind::Roller)
-        {
-            self.set_roller_settings(pos, RollerSettings { color });
-        } else {
-            self.set_stamper_settings(pos, StamperSettings { color });
-        }
-    }
-
-    pub fn converter_settings(&self, pos: IVec3) -> ConverterSettings {
-        self.block_state(pos).unwrap_or_default()
-    }
-
-    pub fn set_converter_settings(&mut self, pos: IVec3, settings: ConverterSettings) {
-        self.set_block_state(pos, settings);
-    }
-
-    pub fn teleport_settings(&self, pos: IVec3) -> TeleportSettings {
-        self.block_state(pos)
-            .unwrap_or_else(|| TeleportSettings::unnamed(pos))
-    }
-
-    pub fn set_teleport_settings(&mut self, pos: IVec3, settings: TeleportSettings) {
-        self.set_block_state(pos, settings);
     }
 
     pub fn set_material_face_mark(&mut self, face: MaterialFace, mark: MaterialFaceMark) {

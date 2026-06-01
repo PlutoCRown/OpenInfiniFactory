@@ -12,7 +12,9 @@ mod simulation;
 mod state;
 pub(crate) mod ui;
 
-pub use state::StamperSettings;
+pub(crate) use state::{
+    set_settings as set_stamper_settings, settings as stamper_settings, StamperSettings,
+};
 
 pub struct StamperBlock;
 

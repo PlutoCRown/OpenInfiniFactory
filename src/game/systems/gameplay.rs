@@ -19,7 +19,7 @@ use crate::game::ui::{
     AreaKind, CarriedItem, InventoryItems, PendingKeyBind, UiRuntime, HOTBAR_SLOTS,
 };
 use crate::game::world::animation::BlockAnimation;
-use crate::game::world::blocks::{BlockData, BlockKind};
+use crate::game::world::blocks::{teleport_settings, BlockData, BlockKind};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
@@ -519,7 +519,7 @@ fn try_teleport_player(
     {
         return false;
     }
-    let Some(exit) = world.teleport_settings(entrance).pair else {
+    let Some(exit) = teleport_settings(&world, entrance).pair else {
         return false;
     };
     if !world

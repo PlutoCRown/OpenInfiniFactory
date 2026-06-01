@@ -6,7 +6,7 @@ use crate::game::world::blocks::panel_layout::{
 use crate::game::world::blocks::ui_components::{
     spawn_material_icon_dropdown_list, spawn_material_icon_slot,
 };
-use crate::game::world::blocks::MaterialKind;
+use crate::game::world::blocks::{converter_settings, set_converter_settings, MaterialKind};
 use crate::shared::i18n::I18n;
 use bevy::prelude::*;
 
@@ -65,7 +65,7 @@ pub(super) fn handle_edit_action(
     ctx: &mut BlockEditContext,
     action: BlockEditAction,
 ) {
-    let mut settings = ctx.world.converter_settings(ctx.pos);
+    let mut settings = converter_settings(ctx.world, ctx.pos);
     match action {
         BlockEditAction::ToggleInputDropdown => {
             ctx.toggle_dropdown(BlockPanelDropdown::ConverterInput);
@@ -86,6 +86,6 @@ pub(super) fn handle_edit_action(
         }
         _ => return,
     }
-    ctx.world.set_converter_settings(ctx.pos, settings);
+    set_converter_settings(ctx.world, ctx.pos, settings);
     ctx.mark_dirty();
 }

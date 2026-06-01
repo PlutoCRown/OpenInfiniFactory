@@ -22,6 +22,7 @@ use crate::game::ui::{
     PendingKeyBind, SaveListAction, SettingsAction, SettingsSliderTrigger, SettingsTab,
     TeleportAction, TextPromptAction, TextPromptKind, UiPanelContext, UiPanelId, UiRuntime,
 };
+use crate::game::world::blocks::{set_teleport_settings, teleport_settings};
 use crate::game::world::grid::{seed_demo_world, WorldBlocks};
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderManager,
@@ -1425,14 +1426,14 @@ pub fn teleport_menu_actions(
             toggle_block_dropdown(&mut open_dropdown, BlockPanelDropdown::TeleportPair);
         }
         TeleportAction::SetPair(pair) => {
-            let mut settings = world.teleport_settings(pos);
+            let mut settings = teleport_settings(&world, pos);
             settings.pair = pair;
-            world.set_teleport_settings(pos, settings);
+            set_teleport_settings(&mut world, pos, settings);
             solution_state.dirty = true;
             open_dropdown.0 = None;
         }
         TeleportAction::Rename => {
-            let settings = world.teleport_settings(pos);
+            let settings = teleport_settings(&world, pos);
             rename_state.editing = Some(pos);
             rename_state.buffer = settings.name;
         }
@@ -1469,11 +1470,11 @@ pub fn teleport_rename_input(
     }
 
     if confirm {
-        let mut settings = world.teleport_settings(pos);
+        let mut settings = teleport_settings(&world, pos);
         let trimmed = rename_state.buffer.trim();
         if !trimmed.is_empty() {
             settings.name = trimmed.chars().take(24).collect();
-            world.set_teleport_settings(pos, settings);
+            set_teleport_settings(&mut world, pos, settings);
             solution_state.dirty = true;
         }
         rename_state.editing = None;

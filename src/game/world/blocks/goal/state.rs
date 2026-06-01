@@ -33,3 +33,11 @@ pub(super) fn normalize_state(
 ) -> Option<SerializedBlockState> {
     SerializedBlockState::from_state(&state.decode::<GoalSettings>()?)
 }
+
+pub(crate) fn settings(world: &WorldBlocks, pos: IVec3) -> GoalSettings {
+    world.block_state(pos).unwrap_or_default()
+}
+
+pub(crate) fn set_settings(world: &mut WorldBlocks, pos: IVec3, settings: GoalSettings) {
+    world.set_block_state(pos, settings);
+}

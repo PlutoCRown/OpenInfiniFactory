@@ -11,7 +11,10 @@ mod render;
 mod state;
 pub(crate) mod ui;
 
-pub use state::{ConverterMode, ConverterSettings};
+pub(crate) use state::{
+    set_settings as set_converter_settings, settings as converter_settings, ConverterMode,
+    ConverterSettings,
+};
 
 pub struct ConverterBlock;
 

@@ -8,7 +8,9 @@ mod render;
 pub mod state;
 pub(crate) mod ui;
 
-pub use state::TeleportSettings;
+pub(crate) use state::{
+    set_settings as set_teleport_settings, settings as teleport_settings, TeleportSettings,
+};
 
 pub struct TeleportEntranceBlock;
 

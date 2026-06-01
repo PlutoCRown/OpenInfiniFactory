@@ -4,7 +4,7 @@ use crate::game::world::blocks::panel_layout::{panel_text, spawn_block_panel, sp
 use crate::game::world::blocks::ui_components::{
     spawn_block_edit_button, spawn_material_icon_dropdown_list, spawn_material_icon_slot,
 };
-use crate::game::world::blocks::MaterialKind;
+use crate::game::world::blocks::{generator_settings, set_generator_settings, MaterialKind};
 use crate::shared::i18n::I18n;
 use bevy::prelude::*;
 
@@ -54,7 +54,7 @@ pub(super) fn handle_edit_action(
     ctx: &mut BlockEditContext,
     action: BlockEditAction,
 ) {
-    let mut settings = ctx.world.generator_settings(ctx.pos);
+    let mut settings = generator_settings(ctx.world, ctx.pos);
     match action {
         BlockEditAction::PeriodDown => settings.period = settings.period.saturating_sub(1).max(1),
         BlockEditAction::PeriodUp => settings.period = (settings.period + 1).min(120),
@@ -68,6 +68,6 @@ pub(super) fn handle_edit_action(
         }
         _ => return,
     }
-    ctx.world.set_generator_settings(ctx.pos, settings);
+    set_generator_settings(ctx.world, ctx.pos, settings);
     ctx.mark_dirty();
 }

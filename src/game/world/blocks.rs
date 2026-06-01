@@ -45,13 +45,18 @@ use crate::game::ui::{BlockEditAction, BlockPanelDropdown, OpenBlockPanelDropdow
 pub use crate::game::world::direction::Facing;
 use crate::game::world::grid::WorldBlocks;
 
-pub use self::converter::{ConverterMode, ConverterSettings};
-pub use self::generator::GeneratorSettings;
-pub use self::goal::GoalSettings;
-pub use self::roller::RollerSettings;
+pub(crate) use self::converter::{
+    converter_settings, set_converter_settings, ConverterMode, ConverterSettings,
+};
+pub(crate) use self::generator::{generator_settings, set_generator_settings, GeneratorSettings};
+pub(crate) use self::goal::{goal_settings, set_goal_settings, GoalSettings};
+pub(crate) use self::labeler::{color as labeler_color, set_color as set_labeler_color};
+pub(crate) use self::roller::RollerSettings;
 pub use self::six_way::{local_connection_offset, six_way_connection_plan, six_way_offsets};
-pub use self::stamper::StamperSettings;
-pub use self::teleport_entrance::TeleportSettings;
+pub(crate) use self::stamper::StamperSettings;
+pub(crate) use self::teleport_entrance::{
+    set_teleport_settings, teleport_settings, TeleportSettings,
+};
 pub use self::wire::wire_connector_render_plan;
 use crate::shared::i18n::I18n;
 pub(crate) use panel_systems::{
@@ -259,7 +264,7 @@ pub(super) fn edit_labeler(ctx: &mut BlockEditContext, action: BlockEditAction) 
             return;
         }
         BlockEditAction::SetColor(color) => {
-            ctx.world.set_labeler_color(ctx.pos, color);
+            set_labeler_color(ctx.world, ctx.pos, color);
             ctx.close_dropdown();
         }
         _ => return,

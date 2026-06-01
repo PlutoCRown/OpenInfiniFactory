@@ -3,7 +3,7 @@ use crate::game::world::blocks::panel_layout::{spawn_block_panel, spawn_panel_ro
 use crate::game::world::blocks::ui_components::{
     spawn_material_icon_dropdown_list, spawn_material_icon_slot,
 };
-use crate::game::world::blocks::MaterialKind;
+use crate::game::world::blocks::{goal_settings, set_goal_settings, MaterialKind};
 use crate::shared::i18n::I18n;
 use bevy::prelude::*;
 
@@ -38,7 +38,7 @@ pub(super) fn handle_edit_action(
     ctx: &mut BlockEditContext,
     action: BlockEditAction,
 ) {
-    let mut settings = ctx.world.goal_settings(ctx.pos);
+    let mut settings = goal_settings(ctx.world, ctx.pos);
     match action {
         BlockEditAction::ToggleMaterialDropdown => {
             ctx.toggle_dropdown(BlockPanelDropdown::GoalMaterial);
@@ -50,6 +50,6 @@ pub(super) fn handle_edit_action(
         }
         _ => return,
     }
-    ctx.world.set_goal_settings(ctx.pos, settings);
+    set_goal_settings(ctx.world, ctx.pos, settings);
     ctx.mark_dirty();
 }
