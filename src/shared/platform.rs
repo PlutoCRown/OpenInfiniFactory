@@ -1,12 +1,20 @@
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 
 const ASSET_DIR_NAME: &str = "assets";
+#[cfg(not(target_arch = "wasm32"))]
 const ASSET_DIR_ENV: &str = "OPEN_INFINIFACTORY_ASSET_DIR";
 
 pub fn asset_path() -> String {
+    #[cfg(target_arch = "wasm32")]
+    {
+        ASSET_DIR_NAME.to_string()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     resolve_asset_path().to_string_lossy().into_owned()
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn resolve_asset_path() -> PathBuf {
     if let Some(path) = asset_path_from_env() {
         return path;
@@ -21,12 +29,14 @@ fn resolve_asset_path() -> PathBuf {
     PathBuf::from(ASSET_DIR_NAME)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn asset_path_from_env() -> Option<PathBuf> {
     let path = std::env::var_os(ASSET_DIR_ENV)?;
     let path = PathBuf::from(path);
     path.is_dir().then_some(path)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn asset_path_candidates() -> Vec<PathBuf> {
     let mut candidates = Vec::new();
 
@@ -47,12 +57,12 @@ fn asset_path_candidates() -> Vec<PathBuf> {
     candidates
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(target_arch = "wasm32")))]
 fn app_bundle_resource_path(exe_dir: &std::path::Path) -> PathBuf {
     exe_dir.join("..").join("Resources").join(ASSET_DIR_NAME)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_os = "macos"), not(target_arch = "wasm32")))]
 fn app_bundle_resource_path(exe_dir: &std::path::Path) -> PathBuf {
     exe_dir.join(ASSET_DIR_NAME)
 }

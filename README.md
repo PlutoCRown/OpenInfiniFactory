@@ -8,6 +8,21 @@ A small Bevy prototype for a 3D block puzzle factory game.
 cargo run
 ```
 
+WebAssembly build check:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo check-web
+cargo build-web
+```
+
+Run in a browser with Trunk:
+
+```bash
+cargo install trunk
+trunk serve --open
+```
+
 ## Packaging
 
 macOS `.app` bundle:

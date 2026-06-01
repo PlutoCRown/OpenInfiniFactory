@@ -14,6 +14,7 @@ use crate::game::state::{
     TeleportRenameState,
 };
 use crate::game::systems::debug::DebugState;
+use crate::game::systems::virtual_controls::VirtualControls;
 use crate::game::ui::{
     AreaKind, CarriedItem, InventoryItems, PendingKeyBind, TextPromptState, UiRuntime, HOTBAR_SLOTS,
 };
@@ -36,8 +37,21 @@ pub struct PlacementQueries<'w, 's> {
     player: Query<'w, 's, &'static mut Transform, With<FlyCamera>>,
 }
 
+#[derive(SystemParam)]
+pub struct GameplayInputSources<'w> {
+    keys: Res<'w, ButtonInput<KeyCode>>,
+    virtual_controls: Res<'w, VirtualControls>,
+}
+
+#[derive(SystemParam)]
+pub struct PlacementInputSources<'w> {
+    mouse_buttons: Res<'w, ButtonInput<MouseButton>>,
+    keys: Res<'w, ButtonInput<KeyCode>>,
+    virtual_controls: Res<'w, VirtualControls>,
+}
+
 pub fn gameplay_input(
-    keys: Res<ButtonInput<KeyCode>>,
+    input: GameplayInputSources,
     mut mouse_wheel: MessageReader<MouseWheel>,
     config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
@@ -50,6 +64,8 @@ pub fn gameplay_input(
     mut simulation: ResMut<SimulationState>,
 ) {
     let bindings = &config.key_bindings;
+    let keys = &input.keys;
+    let virtual_controls = &input.virtual_controls;
 
     let typing = pending_key_bind.0.is_some()
         || text_prompt.kind.is_some()
@@ -93,7 +109,7 @@ pub fn gameplay_input(
         return;
     }
 
-    if keys.just_pressed(bindings.inventory.key_code()) {
+    if keys.just_pressed(bindings.inventory.key_code()) || virtual_controls.inventory.just_pressed {
         *mode = if *mode == GameMode::Inventory {
             carried.clear();
             GameMode::Playing
@@ -135,8 +151,7 @@ pub fn gameplay_input(
 }
 
 pub fn placement_input(
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
-    keys: Res<ButtonInput<KeyCode>>,
+    input: PlacementInputSources,
     mut commands: Commands,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
@@ -152,6 +167,9 @@ pub fn placement_input(
     mut factory_structures: ResMut<FactoryStructureState>,
     queries: PlacementQueries,
 ) {
+    let mouse_buttons = &input.mouse_buttons;
+    let keys = &input.keys;
+    let virtual_controls = &input.virtual_controls;
     factory_structures.ensure_current_world(&world);
     let PlacementQueries {
         mut meshes,
@@ -171,6 +189,21 @@ pub fn placement_input(
         .input(crate::shared::config::ConfigAction::Pick)
         .mouse_button()
         .unwrap_or(MouseButton::Middle);
+    let place_just_pressed =
+        mouse_buttons.just_pressed(place_button) || virtual_controls.place.just_pressed;
+    let place_just_released =
+        mouse_buttons.just_released(place_button) || virtual_controls.place.just_released;
+    let delete_just_pressed =
+        mouse_buttons.just_pressed(delete_button) || virtual_controls.delete.just_pressed;
+    let delete_just_released =
+        mouse_buttons.just_released(delete_button) || virtual_controls.delete.just_released;
+    let pick_just_pressed = mouse_buttons.just_pressed(pick_button);
+    let alternate_just_pressed =
+        keys.just_pressed(config.key_bindings.alternate.key_code())
+            || virtual_controls.alternate.just_pressed;
+    let rotate_just_pressed =
+        keys.just_pressed(config.key_bindings.rotate_or_rollback.key_code())
+            || virtual_controls.rotate_or_rollback.just_pressed;
 
     if *mode != GameMode::Playing {
         placement.edit_gesture = None;
@@ -192,7 +225,7 @@ pub fn placement_input(
     let current_delete_at = placement.target.map(|target| target.pos);
     let current_target_pos = placement.target.map(|target| target.pos);
     if *builder_mode == BuilderMode::Play
-        && mouse_buttons.just_pressed(place_button)
+        && place_just_pressed
         && try_teleport_player(current_target_pos, &world, &mut player)
     {
         placement.edit_gesture = None;
@@ -208,7 +241,7 @@ pub fn placement_input(
     }
 
     let force_place = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
-    if mouse_buttons.just_pressed(place_button)
+    if place_just_pressed
         && !force_place
         && open_target_block_ui(
             current_target_pos,
@@ -226,7 +259,8 @@ pub fn placement_input(
 
     if selected_area(&inventory, &placement) == Some(AreaKind::Selection) {
         if handle_selection_area_input(
-            &mouse_buttons,
+            mouse_buttons,
+            virtual_controls,
             current_target_pos,
             place_button,
             &mut placement,
@@ -247,7 +281,7 @@ pub fn placement_input(
 
     placement.selection.clear();
 
-    if mouse_buttons.just_pressed(pick_button) {
+    if pick_just_pressed {
         if let Some(pos) = current_target_pos {
             pick_target_block(pos, &world, &mut placement, &mut inventory);
         }
@@ -258,7 +292,7 @@ pub fn placement_input(
 
     if *builder_mode == BuilderMode::Play
         && !simulation.is_active()
-        && keys.just_pressed(config.key_bindings.alternate.key_code())
+        && alternate_just_pressed
     {
         if let Some(pos) = current_target_pos {
             if alternate_block_at(
@@ -279,7 +313,7 @@ pub fn placement_input(
         return;
     }
 
-    if keys.just_pressed(config.key_bindings.rotate_or_rollback.key_code()) {
+    if rotate_just_pressed {
         let reverse_rotation = shift_pressed(&keys);
         if let Some(gesture) = placement.edit_gesture.as_mut() {
             if let EditGestureKind::Place { block } = &mut gesture.kind {
@@ -314,7 +348,7 @@ pub fn placement_input(
         }
     }
 
-    if mouse_buttons.just_pressed(delete_button) {
+    if delete_just_pressed {
         match placement.edit_gesture.as_mut() {
             Some(gesture) if matches!(gesture.kind, EditGestureKind::Place { .. }) => {
                 gesture.canceled = true;
@@ -332,7 +366,7 @@ pub fn placement_input(
         }
     }
 
-    if mouse_buttons.just_pressed(place_button) {
+    if place_just_pressed {
         match placement.edit_gesture.as_mut() {
             Some(gesture) if matches!(gesture.kind, EditGestureKind::Delete) => {
                 gesture.canceled = true;
@@ -353,8 +387,8 @@ pub fn placement_input(
         }
     }
 
-    let released_place = mouse_buttons.just_released(place_button);
-    let released_delete = mouse_buttons.just_released(delete_button);
+    let released_place = place_just_released;
+    let released_delete = delete_just_released;
     let should_finish = placement.edit_gesture.as_ref().is_some_and(|gesture| {
         matches!(gesture.kind, EditGestureKind::Place { .. }) && released_place
             || matches!(gesture.kind, EditGestureKind::Delete) && released_delete
@@ -514,6 +548,7 @@ fn try_teleport_player(
 
 fn handle_selection_area_input(
     mouse_buttons: &ButtonInput<MouseButton>,
+    virtual_controls: &VirtualControls,
     current_target_pos: Option<IVec3>,
     place_button: MouseButton,
     placement: &mut PlacementState,
@@ -535,7 +570,7 @@ fn handle_selection_area_input(
         }
     }
 
-    if mouse_buttons.just_released(place_button) {
+    if mouse_buttons.just_released(place_button) || virtual_controls.place.just_released {
         if let Some(drag) = placement.selection.drag.take() {
             if drag.offset != IVec3::ZERO {
                 if let Some(bounds) = placement.selection.bounds {
@@ -559,7 +594,7 @@ fn handle_selection_area_input(
         return changed;
     }
 
-    if !mouse_buttons.just_pressed(place_button) {
+    if !mouse_buttons.just_pressed(place_button) && !virtual_controls.place.just_pressed {
         return false;
     }
 

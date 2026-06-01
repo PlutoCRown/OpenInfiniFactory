@@ -28,6 +28,10 @@ use systems::gameplay::{
 };
 use systems::menus::{menu_actions, save_list_actions};
 use systems::simulation_controls::simulation_controls;
+use systems::virtual_controls::{
+    setup_virtual_controls_ui, update_virtual_controls, update_virtual_controls_ui,
+    VirtualControls, VirtualTouchState,
+};
 use ui::{GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
@@ -82,6 +86,8 @@ impl Plugin for GamePlugin {
             .insert_resource(simulation::factory_activity::FactoryStructureState::default())
             .insert_resource(simulation::movement::PusherState::default())
             .insert_resource(simulation::structures::MovementInfluenceCache::default())
+            .insert_resource(VirtualControls::default())
+            .insert_resource(VirtualTouchState::default())
             .insert_resource(settings)
             .insert_resource(UiScale(config.ui_scale))
             .insert_resource(config)
@@ -105,6 +111,7 @@ impl Plugin for GamePlugin {
                     refresh_saves_on_startup,
                     ui::load_ui_font,
                     ui::setup_ui,
+                    setup_virtual_controls_ui,
                     systems::debug::setup_debug_ui,
                 )
                     .chain(),
@@ -116,7 +123,13 @@ impl Plugin for GamePlugin {
             )
             .add_systems(
                 Update,
-                (camera_move, camera_look, gameplay_input, placement_input)
+                (
+                    update_virtual_controls,
+                    camera_move,
+                    camera_look,
+                    gameplay_input,
+                    placement_input,
+                )
                     .chain()
                     .before(systems::debug::mark_perf_input),
             )
@@ -147,6 +160,12 @@ impl Plugin for GamePlugin {
             .add_systems(Update, animate_blocks.after(systems::debug::mark_perf_view))
             .add_systems(Update, systems::debug::mark_perf_animation)
             .add_systems(Update, systems::debug::mark_perf_ui)
+            .add_systems(
+                Update,
+                update_virtual_controls_ui
+                    .after(systems::debug::mark_perf_animation)
+                    .before(systems::debug::mark_perf_ui),
+            )
             .add_systems(Update, retire_block_icon_renderers)
             .add_systems(
                 Update,

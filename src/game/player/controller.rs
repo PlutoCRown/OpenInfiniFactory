@@ -9,6 +9,7 @@ use bevy::render::camera::TemporalJitter;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use crate::game::state::{GameMode, GameSettings};
+use crate::game::systems::virtual_controls::VirtualControls;
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::config::{ConfigAction, GameConfig};
@@ -74,6 +75,7 @@ pub fn camera_move(
     settings: Res<GameSettings>,
     mode: Res<GameMode>,
     ui_runtime: Res<UiRuntime>,
+    virtual_controls: Res<VirtualControls>,
     world: Res<WorldBlocks>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
@@ -90,7 +92,7 @@ pub fn camera_move(
     let jump_key = bindings.jump_or_fly_up.key_code();
     let fly_down_key = bindings.fly_down.key_code();
 
-    if keys.just_pressed(jump_key) {
+    if keys.just_pressed(jump_key) || virtual_controls.jump_or_fly_up.just_pressed {
         if now - camera.last_space_press <= DOUBLE_TAP_WINDOW {
             camera.flying = !camera.flying;
             camera.velocity_y = 0.0;
@@ -119,6 +121,9 @@ pub fn camera_move(
     if keys.pressed(config.key(ConfigAction::Left).key_code()) {
         direction -= right;
     }
+    if virtual_controls.movement.length_squared() > 0.0 {
+        direction += forward * virtual_controls.movement.y + right * virtual_controls.movement.x;
+    }
 
     if direction.length_squared() > 0.0 {
         let horizontal = Vec3::new(direction.x, 0.0, direction.z).normalize();
@@ -133,10 +138,10 @@ pub fn camera_move(
 
     if camera.flying {
         let mut vertical = 0.0;
-        if keys.pressed(jump_key) {
+        if keys.pressed(jump_key) || virtual_controls.jump_or_fly_up.pressed {
             vertical += 1.0;
         }
-        if keys.pressed(fly_down_key) {
+        if keys.pressed(fly_down_key) || virtual_controls.fly_down.pressed {
             vertical -= 1.0;
         }
         if vertical != 0.0 {
@@ -182,6 +187,7 @@ pub fn camera_look(
     keys: Res<ButtonInput<KeyCode>>,
     mode: Res<GameMode>,
     ui_runtime: Res<UiRuntime>,
+    virtual_controls: Res<VirtualControls>,
     mut mouse_motion: MessageReader<MouseMotion>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
@@ -198,6 +204,7 @@ pub fn camera_look(
     for event in mouse_motion.read() {
         delta += event.delta;
     }
+    delta += virtual_controls.look_delta;
 
     camera.yaw -= delta.x * camera.sensitivity;
     camera.pitch = (camera.pitch - delta.y * camera.sensitivity).clamp(-1.45, 1.45);
