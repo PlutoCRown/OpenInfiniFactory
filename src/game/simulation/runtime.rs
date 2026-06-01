@@ -13,7 +13,7 @@ use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_pending_generated_previews, despawn_world,
     rebuild_world_with_runtime_animations_for_debug_state, spawn_pending_generated_block,
-    spawn_weld_sparks, BlockEntity, PendingGeneratedPreview, WorldRenderAssets,
+    spawn_weld_sparks, BlockEntity, PendingGeneratedPreview, WorldRenderManager,
 };
 
 use super::behaviors::{
@@ -196,7 +196,7 @@ pub fn run_turn(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     block_entities: &Query<Entity, With<BlockEntity>>,
-    render_assets: &WorldRenderAssets,
+    render_manager: &WorldRenderManager,
     animation_duration: f32,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
@@ -290,7 +290,7 @@ pub fn run_turn(
         commands,
         meshes,
         world,
-        render_assets,
+        render_manager,
         &animations,
         &pusher_animations,
         AnimationTiming::simulation(animation_duration),
@@ -298,8 +298,8 @@ pub fn run_turn(
         factory_structures,
         &render_powered_wires,
     );
-    spawn_weld_sparks(commands, render_assets, &weld_sparks);
-    spawn_weld_sparks(commands, render_assets, &drill_sparks);
+    spawn_weld_sparks(commands, render_manager, &weld_sparks);
+    spawn_weld_sparks(commands, render_manager, &drill_sparks);
     sample.render_rebuild_ms = mark_elapsed_ms(&mut mark);
     sample.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
     sample.has_sample = true;
@@ -318,7 +318,7 @@ pub fn tick_simulation(
     mut meshes: ResMut<Assets<Mesh>>,
     block_entities: Query<Entity, With<BlockEntity>>,
     pending_previews: Query<Entity, With<PendingGeneratedPreview>>,
-    render_assets: Res<WorldRenderAssets>,
+    render_manager: Res<WorldRenderManager>,
     debug: Res<DebugState>,
     mut factory_structures: ResMut<FactoryStructureState>,
     mut movement_influence: ResMut<MovementInfluenceCache>,
@@ -330,7 +330,7 @@ pub fn tick_simulation(
             &mut commands,
             &mut meshes,
             &pending_previews,
-            &render_assets,
+            &render_manager,
             &world,
             &pending_generated,
             simulation.turn,
@@ -351,7 +351,7 @@ pub fn tick_simulation(
             &mut commands,
             &mut meshes,
             &block_entities,
-            &render_assets,
+            &render_manager,
             SIMULATION_TURN_SECONDS,
             &debug,
             &mut factory_structures,
@@ -364,7 +364,7 @@ pub fn tick_simulation(
             &mut commands,
             &mut meshes,
             &pending_previews,
-            &render_assets,
+            &render_manager,
             &world,
             &pending_generated,
             simulation.turn,
@@ -385,7 +385,7 @@ pub fn tick_simulation(
             &mut commands,
             &mut meshes,
             &block_entities,
-            &render_assets,
+            &render_manager,
             SIMULATION_TURN_SECONDS / simulation.speed.max(0.001),
             &debug,
             &mut factory_structures,
@@ -400,7 +400,7 @@ pub fn tick_simulation(
         &mut commands,
         &mut meshes,
         &pending_previews,
-        &render_assets,
+        &render_manager,
         &world,
         &pending_generated,
         simulation.turn,
@@ -498,7 +498,7 @@ fn refresh_pending_generated_previews(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     pending_previews: &Query<Entity, With<PendingGeneratedPreview>>,
-    render_assets: &WorldRenderAssets,
+    render_manager: &WorldRenderManager,
     world: &WorldBlocks,
     pending_generated: &PendingGeneratedMaterials,
     turn: u64,
@@ -508,7 +508,7 @@ fn refresh_pending_generated_previews(
     spawn_pending_generated_previews(
         commands,
         meshes,
-        render_assets,
+        render_manager,
         world,
         pending_generated,
         turn,
@@ -519,7 +519,7 @@ fn refresh_pending_generated_previews(
 fn spawn_pending_generated_previews(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
+    render_manager: &WorldRenderManager,
     world: &WorldBlocks,
     pending_generated: &PendingGeneratedMaterials,
     turn: u64,
@@ -538,7 +538,7 @@ fn spawn_pending_generated_previews(
         spawn_pending_generated_block(
             commands,
             meshes,
-            render_assets,
+            render_manager,
             world,
             *pos,
             pending.block,

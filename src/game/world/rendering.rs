@@ -16,11 +16,11 @@ use crate::game::world::animation::{
     BlockAnimation, BlockAnimationKind, PusherAnimation, WeldSpark,
 };
 use crate::game::world::blocks::{
-    edit_blocks, BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
-    PLAY_BLOCKS,
+    edit_blocks, BlockData, BlockKind, BlockModel, BlockRenderSpec, WeldConnectorBehavior,
+    WireConnectorBehavior, PLAY_BLOCKS,
 };
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
-pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
+pub use crate::game::world::render_manager::{EditPreviewKind, WorldRenderManager};
 
 const ICON_TEXTURE_SIZE: u32 = 256;
 const ICON_RENDER_LAYER: usize = 3;
@@ -115,8 +115,8 @@ pub fn setup_scene(
         .build(),
     ));
 
-    let render_assets = WorldRenderAssets::new(&mut meshes, &mut materials, &mut images);
-    commands.insert_resource(render_assets);
+    let render_manager = WorldRenderManager::new(&mut meshes, &mut materials, &mut images);
+    commands.insert_resource(render_manager);
 
     let marker_mesh = meshes.add(Cuboid::new(0.92, 0.018, 0.92));
     let marker_material = materials.add(StandardMaterial {
@@ -155,7 +155,7 @@ pub fn setup_block_icons(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    assets: Res<WorldRenderAssets>,
+    assets: Res<WorldRenderManager>,
 ) {
     let icon_layer = RenderLayers::layer(ICON_RENDER_LAYER);
     let mut icon_assets = BlockIconAssets::default();
@@ -270,7 +270,7 @@ pub fn retire_block_icon_renderers(
 fn spawn_block_icon_model(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     world: &WorldBlocks,
     kind: BlockKind,
     origin: Vec3,
@@ -303,7 +303,7 @@ pub fn rebuild_world(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
 ) {
     for (pos, data) in &world.blocks {
         spawn_block(commands, meshes, assets, world, *pos, *data);
@@ -317,7 +317,7 @@ pub fn rebuild_world_with_factory_activity_debug(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     factory_structures: &FactoryStructureState,
 ) {
     for (pos, data) in &world.blocks {
@@ -342,7 +342,7 @@ pub fn rebuild_world_for_debug_state(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     debug: &DebugState,
     factory_structures: &FactoryStructureState,
 ) {
@@ -367,7 +367,7 @@ pub fn despawn_world(commands: &mut Commands, block_entities: &Query<Entity, Wit
 
 fn spawn_debug_factory_block(
     commands: &mut Commands,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     pos: IVec3,
     material: Handle<StandardMaterial>,
 ) {
@@ -394,7 +394,11 @@ pub fn despawn_pending_generated_previews(
     }
 }
 
-pub fn spawn_weld_sparks(commands: &mut Commands, assets: &WorldRenderAssets, positions: &[IVec3]) {
+pub fn spawn_weld_sparks(
+    commands: &mut Commands,
+    assets: &WorldRenderManager,
+    positions: &[IVec3],
+) {
     let velocities = [
         Vec3::new(1.60, 2.70, 0.42),
         Vec3::new(-1.44, 2.46, 0.76),
@@ -424,7 +428,7 @@ pub fn spawn_weld_sparks(commands: &mut Commands, assets: &WorldRenderAssets, po
 
 pub fn spawn_edit_preview(
     commands: &mut Commands,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     pos: IVec3,
     kind: EditPreviewKind,
 ) {
@@ -439,7 +443,7 @@ pub fn spawn_edit_preview(
 pub fn spawn_block_preview(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     world: &WorldBlocks,
     pos: IVec3,
     data: BlockData,
@@ -466,7 +470,7 @@ pub fn spawn_block_preview(
 pub fn spawn_block(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     world: &WorldBlocks,
     pos: IVec3,
     data: BlockData,
@@ -477,7 +481,7 @@ pub fn spawn_block(
 pub fn spawn_block_with_animation(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     world: &WorldBlocks,
     pos: IVec3,
     data: BlockData,
@@ -498,7 +502,7 @@ pub fn spawn_block_with_animation(
 pub fn spawn_block_with_timed_animation(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     world: &WorldBlocks,
     pos: IVec3,
     data: BlockData,
@@ -527,7 +531,7 @@ pub fn spawn_block_with_timed_animation(
 pub fn spawn_pending_generated_block(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     world: &WorldBlocks,
     pos: IVec3,
     data: BlockData,
@@ -557,7 +561,7 @@ pub fn rebuild_world_with_animations(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     animations: &HashMap<IVec3, BlockAnimation>,
 ) {
     rebuild_world_with_timed_animations(
@@ -574,7 +578,7 @@ pub fn rebuild_world_with_timed_animations(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     animations: &HashMap<IVec3, BlockAnimation>,
     timing: AnimationTiming,
 ) {
@@ -622,7 +626,7 @@ pub fn rebuild_world_with_runtime_animations(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     animations: &HashMap<IVec3, BlockAnimation>,
     pusher_animations: &HashMap<IVec3, PusherAnimation>,
     timing: AnimationTiming,
@@ -673,7 +677,7 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     animations: &HashMap<IVec3, BlockAnimation>,
     pusher_animations: &HashMap<IVec3, PusherAnimation>,
     timing: AnimationTiming,
@@ -704,7 +708,7 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
 }
 
 fn block_render_material(
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     data: BlockData,
     powered_wire: bool,
 ) -> Handle<StandardMaterial> {
@@ -846,7 +850,7 @@ fn render_rotation(data: BlockData, facing: crate::game::world::direction::Facin
 fn spawn_block_model(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     world: &WorldBlocks,
     pos: IVec3,
     data: BlockData,
@@ -886,13 +890,17 @@ fn spawn_block_model(
         transform.translation += origin;
     }
 
-    let mut entity = if data.kind == crate::game::world::blocks::BlockKind::Wire
-        || matches!(data.kind.model(), BlockModel::PartsOnly(_))
-    {
+    let render_spec = assets.block_render_spec(data.kind, data.facing);
+
+    let mut entity = if matches!(render_spec.model, BlockModel::PartsOnly(_))
+        || matches!(
+            render_spec.behavior.wire_connector,
+            Some(WireConnectorBehavior::Wire)
+        ) {
         commands.spawn((transform, Visibility::default()))
     } else if data.kind == BlockKind::Platform {
         commands.spawn((
-            Mesh3d(assets.block_mesh(data.kind)),
+            Mesh3d(assets.block_mesh_for_spec(render_spec)),
             MeshMaterial3d(
                 assets.model_material(crate::game::world::blocks::ModelMaterial::Platform),
             ),
@@ -907,7 +915,7 @@ fn spawn_block_model(
         commands.spawn((Mesh3d(mesh), MeshMaterial3d(scene_material), transform))
     } else {
         commands.spawn((
-            Mesh3d(assets.block_mesh(data.kind)),
+            Mesh3d(assets.block_mesh_for_spec(render_spec)),
             MeshMaterial3d(material.clone()),
             transform,
         ))
@@ -947,7 +955,7 @@ fn spawn_block_model(
             spawn_model_parts(
                 parent,
                 assets,
-                data,
+                render_spec,
                 is_edit_preview
                     .then(|| material.clone())
                     .filter(|_| icon_render.is_none()),
@@ -956,7 +964,7 @@ fn spawn_block_model(
             );
         });
 
-        let render_behavior = data.kind.render_behavior(data.facing);
+        let render_behavior = render_spec.behavior;
 
         if render_behavior.goal_topper {
             let mut child = parent.spawn((
@@ -976,7 +984,7 @@ fn spawn_block_model(
             };
             for offset in offsets {
                 let neighbor = pos + offset;
-                if weld_neighbor_connects_to(world, neighbor, -offset) {
+                if weld_neighbor_connects_to(assets, world, neighbor, -offset) {
                     let local_offset = local_connector_offset(data, offset);
                     let mut child = parent.spawn((
                         Mesh3d(assets.connector_mesh(local_offset)),
@@ -998,7 +1006,7 @@ fn spawn_block_model(
                     .blocks
                     .get(&neighbor)
                     .or_else(|| world.system_blocks.get(&neighbor))
-                    .is_some_and(|block| wire_connects_to(block, -offset))
+                    .is_some_and(|block| wire_connects_to(assets, block, -offset))
                 {
                     connected_offsets.push(offset);
                     let local_offset = local_connector_offset(data, offset);
@@ -1058,7 +1066,7 @@ fn spawn_block_model(
 
 fn spawn_generator_material_preview(
     parent: &mut ChildSpawnerCommands,
-    assets: &WorldRenderAssets,
+    assets: &WorldRenderManager,
     material: crate::game::world::blocks::MaterialKind,
     icon_render: Option<(Vec3, &RenderLayers)>,
 ) {
@@ -1103,13 +1111,13 @@ fn face_mark_transform(normal: IVec3) -> Transform {
 
 fn spawn_model_parts(
     parent: &mut ChildSpawnerCommands,
-    assets: &WorldRenderAssets,
-    data: BlockData,
+    assets: &WorldRenderManager,
+    render_spec: BlockRenderSpec,
     override_material: Option<Handle<StandardMaterial>>,
     pusher_animation: Option<PusherAnimation>,
     icon_layer: Option<&RenderLayers>,
 ) {
-    let parts = match data.kind.model() {
+    let parts = match render_spec.model {
         BlockModel::Default => &[],
         BlockModel::Parts(parts) => parts,
         BlockModel::PartsOnly(parts) => parts,
@@ -1152,8 +1160,16 @@ fn model_vec3(value: [f32; 3]) -> Vec3 {
     Vec3::new(value[0], value[1], value[2])
 }
 
-fn weld_connects_to(block: &BlockData, connector_from_block: IVec3) -> bool {
-    match block.kind.render_behavior(block.facing).weld_connector {
+fn weld_connects_to(
+    render_manager: &WorldRenderManager,
+    block: &BlockData,
+    connector_from_block: IVec3,
+) -> bool {
+    match render_manager
+        .block_render_spec(block.kind, block.facing)
+        .behavior
+        .weld_connector
+    {
         Some(WeldConnectorBehavior::AllSides) => true,
         Some(WeldConnectorBehavior::Offset(offset)) => connector_from_block == offset,
         None => false,
@@ -1161,18 +1177,19 @@ fn weld_connects_to(block: &BlockData, connector_from_block: IVec3) -> bool {
 }
 
 fn weld_neighbor_connects_to(
+    render_manager: &WorldRenderManager,
     world: &WorldBlocks,
     neighbor: IVec3,
     connector_from_block: IVec3,
 ) -> bool {
     if let Some(block) = world.system_blocks.get(&neighbor) {
-        return weld_connects_to(block, connector_from_block);
+        return weld_connects_to(render_manager, block, connector_from_block);
     }
 
     world
         .blocks
         .get(&neighbor)
-        .is_some_and(|block| weld_connects_to(block, connector_from_block))
+        .is_some_and(|block| weld_connects_to(render_manager, block, connector_from_block))
 }
 
 fn local_connector_offset(data: BlockData, offset: IVec3) -> IVec3 {
@@ -1183,8 +1200,16 @@ fn local_connector_offset(data: BlockData, offset: IVec3) -> IVec3 {
     }
 }
 
-fn wire_connects_to(block: &BlockData, wire_from_block: IVec3) -> bool {
-    match block.kind.render_behavior(block.facing).wire_connector {
+fn wire_connects_to(
+    render_manager: &WorldRenderManager,
+    block: &BlockData,
+    wire_from_block: IVec3,
+) -> bool {
+    match render_manager
+        .block_render_spec(block.kind, block.facing)
+        .behavior
+        .wire_connector
+    {
         Some(WireConnectorBehavior::Wire) => true,
         Some(WireConnectorBehavior::Device { blocked_offset }) => wire_from_block != blocked_offset,
         None => false,

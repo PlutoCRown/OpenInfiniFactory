@@ -10,7 +10,7 @@ use crate::game::systems::debug::DebugState;
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
+    despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderManager,
 };
 use crate::shared::config::{ConfigAction, GameConfig};
 
@@ -29,7 +29,7 @@ pub fn simulation_controls(
     mut world: ResMut<WorldBlocks>,
     block_entities: Query<Entity, With<BlockEntity>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    render_assets: Res<WorldRenderAssets>,
+    render_manager: Res<WorldRenderManager>,
     debug: Res<DebugState>,
 ) {
     if *builder_mode != BuilderMode::Play
@@ -91,7 +91,7 @@ pub fn simulation_controls(
             &mut commands,
             &mut meshes,
             &world,
-            &render_assets,
+            &render_manager,
             &debug,
             &factory_structures,
         );

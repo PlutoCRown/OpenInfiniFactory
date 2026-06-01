@@ -5,13 +5,14 @@ use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
 use crate::game::world::blocks::{
-    all_blocks, BlockKind, BlockShape, BlockTexture, ModelMaterial, ModelMesh, StampColor,
-    BLOCK_SIZE,
+    all_blocks, BlockKind, BlockRenderSpec, BlockShape, BlockTexture, ModelMaterial, ModelMesh,
+    StampColor, BLOCK_SIZE,
 };
+use crate::game::world::direction::Facing;
 use crate::game::world::procedural_textures::block_texture;
 
 #[derive(Resource, Clone)]
-pub struct WorldRenderAssets {
+pub struct WorldRenderManager {
     pub(crate) block: Handle<Mesh>,
     node: Handle<Mesh>,
     wire_node: Handle<Mesh>,
@@ -61,7 +62,7 @@ pub enum EditPreviewKind {
     Selection,
 }
 
-impl WorldRenderAssets {
+impl WorldRenderManager {
     pub(crate) fn new(
         meshes: &mut Assets<Mesh>,
         materials: &mut Assets<StandardMaterial>,
@@ -313,10 +314,18 @@ impl WorldRenderAssets {
     }
 
     pub(crate) fn block_mesh(&self, kind: BlockKind) -> Handle<Mesh> {
-        match kind.shape() {
+        self.block_mesh_for_spec(self.block_render_spec(kind, Facing::North))
+    }
+
+    pub(crate) fn block_mesh_for_spec(&self, spec: BlockRenderSpec) -> Handle<Mesh> {
+        match spec.definition.shape() {
             BlockShape::Cube => self.block.clone(),
             BlockShape::Node => self.node.clone(),
         }
+    }
+
+    pub(crate) fn block_render_spec(&self, kind: BlockKind, facing: Facing) -> BlockRenderSpec {
+        kind.render_spec(facing)
     }
 
     pub(crate) fn wire_node_mesh(&self) -> Handle<Mesh> {

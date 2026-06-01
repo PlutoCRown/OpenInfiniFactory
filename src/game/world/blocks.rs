@@ -40,7 +40,27 @@ use crate::game::world::grid::{BlockSettings, WorldBlocks};
 pub const BLOCK_SIZE: f32 = 1.0;
 pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
 
-pub trait Block: Send + Sync {
+pub trait RenderableBlock {
+    fn render_definition(&self) -> BlockDefinition;
+    fn render_behavior(&self, facing: Facing) -> RenderBehavior;
+    fn render_model(&self) -> BlockModel;
+}
+
+impl<T: Block + ?Sized> RenderableBlock for T {
+    fn render_definition(&self) -> BlockDefinition {
+        self.definition()
+    }
+
+    fn render_behavior(&self, facing: Facing) -> RenderBehavior {
+        Block::render_behavior(self, facing)
+    }
+
+    fn render_model(&self) -> BlockModel {
+        self.model()
+    }
+}
+
+pub trait Block: RenderableBlock + Send + Sync {
     fn id(&self) -> BlockKind;
     fn definition(&self) -> BlockDefinition;
 
@@ -430,6 +450,13 @@ pub enum BlockModel {
 }
 
 #[derive(Clone, Copy)]
+pub struct BlockRenderSpec {
+    pub definition: BlockDefinition,
+    pub behavior: RenderBehavior,
+    pub model: BlockModel,
+}
+
+#[derive(Clone, Copy)]
 pub(crate) struct ColorSpec {
     r: f32,
     g: f32,
@@ -779,10 +806,6 @@ impl BlockKind {
         self.definition().slot_color()
     }
 
-    pub fn shape(self) -> BlockShape {
-        self.definition().shape()
-    }
-
     pub fn is_transparent(self) -> bool {
         self.definition().is_transparent()
     }
@@ -893,11 +916,12 @@ impl BlockKind {
         self.block().signal_behavior(facing)
     }
 
-    pub fn render_behavior(self, facing: Facing) -> RenderBehavior {
-        self.block().render_behavior(facing)
-    }
-
-    pub fn model(self) -> BlockModel {
-        self.block().model()
+    pub fn render_spec(self, facing: Facing) -> BlockRenderSpec {
+        let block = self.block();
+        BlockRenderSpec {
+            definition: RenderableBlock::render_definition(block),
+            behavior: RenderableBlock::render_behavior(block, facing),
+            model: RenderableBlock::render_model(block),
+        }
     }
 }

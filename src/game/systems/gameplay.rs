@@ -25,7 +25,7 @@ use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
     despawn_edit_previews, rebuild_world_for_debug_state, rebuild_world_with_animations,
     spawn_block_preview, spawn_block_with_animation, spawn_edit_preview, BlockEntity, EditPreview,
-    EditPreviewKind, HoverMarker, HoverStructureBounds, PlacementPreview, WorldRenderAssets,
+    EditPreviewKind, HoverMarker, HoverStructureBounds, PlacementPreview, WorldRenderManager,
 };
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
@@ -161,7 +161,7 @@ pub fn placement_input(
     simulation: Res<SimulationState>,
     mut placement: ResMut<PlacementState>,
     mut ui_runtime: ResMut<UiRuntime>,
-    render_assets: Res<WorldRenderAssets>,
+    render_manager: Res<WorldRenderManager>,
     debug: Res<DebugState>,
     mut factory_structures: ResMut<FactoryStructureState>,
     queries: PlacementQueries,
@@ -265,14 +265,14 @@ pub fn placement_input(
             &block_entities,
             &mut commands,
             &mut meshes,
-            &render_assets,
+            &render_manager,
             &debug,
             &mut factory_structures,
         ) {
             solution_state.dirty = true;
         }
         despawn_edit_previews(&mut commands, &edit_previews);
-        spawn_selection_previews(&placement, &mut commands, &render_assets);
+        spawn_selection_previews(&placement, &mut commands, &render_manager);
         return;
     }
 
@@ -295,7 +295,7 @@ pub fn placement_input(
                 &block_entities,
                 &mut commands,
                 &mut meshes,
-                &render_assets,
+                &render_manager,
                 &debug,
                 &mut factory_structures,
             ) {
@@ -324,7 +324,7 @@ pub fn placement_input(
                 &block_entities,
                 &mut commands,
                 &mut meshes,
-                &render_assets,
+                &render_manager,
                 &debug,
                 &mut factory_structures,
             ) {
@@ -401,7 +401,7 @@ pub fn placement_input(
                     &player,
                     &mut commands,
                     &mut meshes,
-                    &render_assets,
+                    &render_manager,
                     &debug,
                     &mut factory_structures,
                     &block_entities,
@@ -425,7 +425,7 @@ pub fn placement_input(
                 &player,
                 &mut commands,
                 &mut meshes,
-                &render_assets,
+                &render_manager,
             );
         }
     }
@@ -550,7 +550,7 @@ fn handle_selection_area_input(
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
+    render_manager: &WorldRenderManager,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
 ) -> bool {
@@ -573,7 +573,7 @@ fn handle_selection_area_input(
                         block_entities,
                         commands,
                         meshes,
-                        render_assets,
+                        render_manager,
                         debug,
                         factory_structures,
                         bounds,
@@ -647,7 +647,7 @@ fn move_selection(
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
+    render_manager: &WorldRenderManager,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     bounds: SelectionBounds,
@@ -694,7 +694,7 @@ fn move_selection(
         spawn_block_with_animation(
             commands,
             meshes,
-            render_assets,
+            render_manager,
             world,
             target,
             block,
@@ -717,7 +717,7 @@ fn move_selection(
             commands,
             meshes,
             world,
-            render_assets,
+            render_manager,
             debug,
             factory_structures,
         );
@@ -741,7 +741,7 @@ fn alternate_block_at(
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
+    render_manager: &WorldRenderManager,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
 ) -> bool {
@@ -767,7 +767,7 @@ fn alternate_block_at(
         commands,
         meshes,
         world,
-        render_assets,
+        render_manager,
         debug,
         factory_structures,
     );
@@ -781,7 +781,7 @@ fn rotate_block_at(
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
+    render_manager: &WorldRenderManager,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
 ) -> bool {
@@ -818,12 +818,12 @@ fn rotate_block_at(
             commands,
             meshes,
             world,
-            render_assets,
+            render_manager,
             debug,
             factory_structures,
         );
     } else {
-        rebuild_world_with_animations(commands, meshes, world, render_assets, &animations);
+        rebuild_world_with_animations(commands, meshes, world, render_manager, &animations);
     }
     true
 }
@@ -867,10 +867,10 @@ fn moved_selection_welds(
 fn spawn_selection_previews(
     placement: &PlacementState,
     commands: &mut Commands,
-    render_assets: &WorldRenderAssets,
+    render_manager: &WorldRenderManager,
 ) {
     if let Some(first) = placement.selection.first_corner {
-        spawn_edit_preview(commands, render_assets, first, EditPreviewKind::Selection);
+        spawn_edit_preview(commands, render_manager, first, EditPreviewKind::Selection);
     }
 
     if let Some(bounds) = placement.selection.bounds {
@@ -880,7 +880,7 @@ fn spawn_selection_previews(
             .map(|drag| drag.offset)
             .unwrap_or(IVec3::ZERO);
         for pos in bounds.moved(offset).positions() {
-            spawn_edit_preview(commands, render_assets, pos, EditPreviewKind::Selection);
+            spawn_edit_preview(commands, render_manager, pos, EditPreviewKind::Selection);
         }
     }
 }
@@ -931,7 +931,7 @@ fn commit_edit_gesture(
     player: &Query<&mut Transform, With<FlyCamera>>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
+    render_manager: &WorldRenderManager,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     block_entities: &Query<(Entity, &BlockEntity)>,
@@ -958,7 +958,7 @@ fn commit_edit_gesture(
                     commands,
                     meshes,
                     world,
-                    render_assets,
+                    render_manager,
                     debug,
                     factory_structures,
                 );
@@ -990,7 +990,7 @@ fn commit_edit_gesture(
                     commands,
                     meshes,
                     world,
-                    render_assets,
+                    render_manager,
                     debug,
                     factory_structures,
                 );
@@ -1010,7 +1010,7 @@ fn spawn_gesture_previews(
     player: &Query<&mut Transform, With<FlyCamera>>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
+    render_manager: &WorldRenderManager,
 ) {
     match gesture.kind {
         EditGestureKind::Place { block } => {
@@ -1025,7 +1025,7 @@ fn spawn_gesture_previews(
                 .collect();
             let preview_world = preview_world(world, &positions, block);
             for pos in positions {
-                spawn_block_preview(commands, meshes, render_assets, &preview_world, pos, block);
+                spawn_block_preview(commands, meshes, render_manager, &preview_world, pos, block);
             }
         }
         EditGestureKind::Delete => {
@@ -1036,7 +1036,7 @@ fn spawn_gesture_previews(
             );
             for pos in positions {
                 if can_delete_at(pos, builder_mode, world) {
-                    spawn_edit_preview(commands, render_assets, pos, EditPreviewKind::Delete);
+                    spawn_edit_preview(commands, render_manager, pos, EditPreviewKind::Delete);
                 }
             }
         }

@@ -10,7 +10,7 @@ use crate::game::state::{BuilderMode, GameMode, SimulationState};
 use crate::game::ui::{PendingKeyBind, UiRuntime};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
+    despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderManager,
 };
 use crate::shared::config::{ConfigAction, GameConfig};
 
@@ -265,7 +265,7 @@ pub fn toggle_factory_activity_debug(
     mut commands: Commands,
     world: Res<WorldBlocks>,
     mut meshes: ResMut<Assets<Mesh>>,
-    render_assets: Res<WorldRenderAssets>,
+    render_manager: Res<WorldRenderManager>,
     block_entities: Query<Entity, With<BlockEntity>>,
 ) {
     if pending_key_bind.0.is_some() || ui_runtime.text_prompt().is_some() || !gameplay_mode(*mode) {
@@ -280,7 +280,7 @@ pub fn toggle_factory_activity_debug(
             &mut commands,
             &mut meshes,
             &world,
-            &render_assets,
+            &render_manager,
             &debug,
             &factory_structures,
         );
