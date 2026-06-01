@@ -31,7 +31,9 @@ mod wire;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-pub use self::registry::{all_blocks, assert_registry_consistent, edit_blocks, PLAY_BLOCKS};
+pub use self::registry::{
+    all_blocks, assert_registry_consistent, block_render_assets, edit_blocks, PLAY_BLOCKS,
+};
 use crate::game::state::SolutionState;
 use crate::game::ui::{BlockEditAction, BlockPanelDropdown, OpenBlockPanelDropdown, UiPanelId};
 pub use crate::game::world::direction::Facing;
@@ -114,6 +116,10 @@ pub trait Block: RenderableBlock + Send + Sync {
 
     fn render_behavior(&self, _facing: Facing) -> RenderBehavior {
         RenderBehavior::default()
+    }
+
+    fn render_assets(&self) -> BlockRenderAssets {
+        BlockRenderAssets::default()
     }
 
     fn model(&self) -> BlockModel {
@@ -282,7 +288,7 @@ pub enum BlockShape {
     Node,
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub enum BlockTexture {
     Material,
     IronMaterial,
@@ -379,36 +385,74 @@ pub enum ModelMesh {
     RodZ,
 }
 
+#[derive(Clone, Copy)]
+pub enum ModelMeshSpec {
+    Cuboid {
+        size: [f32; 3],
+    },
+    CoveredCuboid {
+        size: [f32; 3],
+    },
+    Cylinder {
+        radius: f32,
+        height: f32,
+        resolution: u32,
+    },
+    Ring {
+        outer_radius: f32,
+        inner_radius: f32,
+        height: f32,
+        segments: u32,
+    },
+    DrillTip {
+        radius: f32,
+        length: f32,
+        segments: u32,
+    },
+}
+
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub enum ModelMaterial {
-    ConveyorBase,
     ConveyorBelt,
     DrillTip,
-    Frame,
     DarkFrame,
     Belt,
     BeltStripe,
     WeldCore,
-    Welding,
-    Wire,
     Signal,
     Power,
-    Pusher,
     Platform,
     PlatformBase,
-    Wood,
-    WoodTexture,
     BorderedWoodTexture,
     StoneTexture,
     Lift,
-    Rotation,
-    Drill,
     Laser,
     System,
     SystemAccent,
     Goal,
     TeleportIn,
     TeleportOut,
+}
+
+#[derive(Clone, Copy)]
+pub enum ModelMaterialSpec {
+    Srgb {
+        color: ColorSpec,
+    },
+    Emissive {
+        color: ColorSpec,
+        emissive: ColorSpec,
+    },
+    Textured {
+        color: ColorSpec,
+        texture: BlockTexture,
+    },
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct BlockRenderAssets {
+    pub meshes: &'static [(ModelMesh, ModelMeshSpec)],
+    pub materials: &'static [(ModelMaterial, ModelMaterialSpec)],
 }
 
 #[derive(Clone, Copy)]
@@ -473,7 +517,7 @@ pub(crate) const fn rgba(r: f32, g: f32, b: f32, a: f32) -> ColorSpec {
 }
 
 impl ColorSpec {
-    fn color(self) -> Color {
+    pub(crate) fn color(self) -> Color {
         Color::srgba(self.r, self.g, self.b, self.a)
     }
 }

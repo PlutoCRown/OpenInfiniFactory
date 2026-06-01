@@ -5,8 +5,8 @@ use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
 use crate::game::world::blocks::{
-    all_blocks, BlockKind, BlockRenderSpec, BlockShape, BlockTexture, ModelMaterial, ModelMesh,
-    StampColor, BLOCK_SIZE,
+    all_blocks, block_render_assets, BlockKind, BlockRenderSpec, BlockShape, BlockTexture,
+    ModelMaterial, ModelMaterialSpec, ModelMesh, ModelMeshSpec, StampColor, BLOCK_SIZE,
 };
 use crate::game::world::direction::Facing;
 use crate::game::world::procedural_textures::block_texture;
@@ -25,22 +25,7 @@ pub struct WorldRenderManager {
     wire_connector_x: Handle<Mesh>,
     wire_connector_y: Handle<Mesh>,
     wire_connector_z: Handle<Mesh>,
-    part_conveyor_base: Handle<Mesh>,
-    part_conveyor_belt: Handle<Mesh>,
-    part_drill_body: Handle<Mesh>,
-    part_drill_tip: Handle<Mesh>,
-    part_large: Handle<Mesh>,
-    part_medium: Handle<Mesh>,
-    part_small: Handle<Mesh>,
-    part_plate: Handle<Mesh>,
-    part_rotator_base: Handle<Mesh>,
-    part_rotator_disk: Handle<Mesh>,
-    part_rotator_ring: Handle<Mesh>,
-    part_rod_x: Handle<Mesh>,
-    part_rod_y: Handle<Mesh>,
-    part_rod_z: Handle<Mesh>,
-    part_pusher_body: Handle<Mesh>,
-    part_pusher_head: Handle<Mesh>,
+    model_meshes: HashMap<ModelMesh, Handle<Mesh>>,
     block_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     preview_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     scene_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
@@ -76,19 +61,6 @@ impl WorldRenderManager {
                     .map(|texture| (kind, images.add(block_texture(texture))))
             })
             .collect();
-        let platform_texture = block_textures
-            .get(&BlockKind::Platform)
-            .expect("platform defines a texture")
-            .clone();
-        let stone_texture = block_textures
-            .get(&BlockKind::Stone)
-            .expect("stone defines a texture")
-            .clone();
-        let wood_texture = block_textures
-            .get(&BlockKind::Planks)
-            .expect("planks define a texture")
-            .clone();
-        let bordered_wood_texture = images.add(block_texture(BlockTexture::BorderedWood));
         let block_materials = all_blocks()
             .into_iter()
             .map(|kind| {
@@ -132,93 +104,19 @@ impl WorldRenderManager {
                 )
             })
             .collect();
-        let model_materials = [
-            (ModelMaterial::ConveyorBase, srgb_material(0.16, 0.18, 0.18)),
-            (ModelMaterial::ConveyorBelt, srgb_material(0.02, 0.02, 0.02)),
-            (ModelMaterial::DrillTip, srgb_material(0.82, 0.84, 0.82)),
-            (ModelMaterial::Frame, srgb_material(0.42, 0.44, 0.44)),
-            (ModelMaterial::DarkFrame, srgb_material(0.12, 0.13, 0.15)),
-            (ModelMaterial::Belt, srgb_material(0.86, 0.46, 0.14)),
-            (
-                ModelMaterial::BeltStripe,
-                emissive_material(1.0, 0.76, 0.28, 0.18, 0.10, 0.02),
-            ),
-            (
-                ModelMaterial::WeldCore,
-                emissive_material(1.0, 0.22, 0.10, 0.22, 0.04, 0.02),
-            ),
-            (
-                ModelMaterial::Welding,
-                emissive_material(0.18, 0.58, 1.0, 0.02, 0.12, 0.26),
-            ),
-            (
-                ModelMaterial::Wire,
-                emissive_material(1.0, 0.88, 0.30, 0.20, 0.12, 0.02),
-            ),
-            (
-                ModelMaterial::Signal,
-                emissive_material(0.12, 0.78, 1.0, 0.02, 0.18, 0.24),
-            ),
-            (
-                ModelMaterial::Power,
-                emissive_material(1.0, 0.52, 0.20, 0.22, 0.08, 0.02),
-            ),
-            (ModelMaterial::Pusher, srgb_material(0.54, 0.56, 0.54)),
-            (
-                ModelMaterial::Platform,
-                textured_model_material(Color::WHITE, platform_texture.clone()),
-            ),
-            (
-                ModelMaterial::PlatformBase,
-                block_material(BlockKind::Platform),
-            ),
-            (ModelMaterial::Wood, srgb_material(0.72, 0.46, 0.22)),
-            (
-                ModelMaterial::WoodTexture,
-                textured_model_material(Color::WHITE, wood_texture),
-            ),
-            (
-                ModelMaterial::BorderedWoodTexture,
-                textured_model_material(Color::WHITE, bordered_wood_texture),
-            ),
-            (
-                ModelMaterial::StoneTexture,
-                textured_model_material(Color::WHITE, stone_texture),
-            ),
-            (
-                ModelMaterial::Lift,
-                emissive_material(0.35, 0.82, 1.0, 0.03, 0.16, 0.22),
-            ),
-            (
-                ModelMaterial::Rotation,
-                emissive_material(0.70, 0.36, 1.0, 0.11, 0.04, 0.20),
-            ),
-            (ModelMaterial::Drill, srgb_material(0.06, 0.07, 0.08)),
-            (
-                ModelMaterial::Laser,
-                emissive_material(1.0, 0.10, 0.22, 0.35, 0.01, 0.04),
-            ),
-            (ModelMaterial::System, srgb_material(0.35, 0.28, 0.48)),
-            (
-                ModelMaterial::SystemAccent,
-                emissive_material(0.72, 0.58, 1.0, 0.12, 0.08, 0.24),
-            ),
-            (
-                ModelMaterial::Goal,
-                emissive_material(0.55, 1.0, 0.36, 0.05, 0.22, 0.04),
-            ),
-            (
-                ModelMaterial::TeleportIn,
-                emissive_material(0.18, 0.62, 1.0, 0.02, 0.10, 0.34),
-            ),
-            (
-                ModelMaterial::TeleportOut,
-                emissive_material(1.0, 0.54, 0.18, 0.34, 0.10, 0.02),
-            ),
-        ]
-        .into_iter()
-        .map(|(kind, material)| (kind, materials.add(material)))
-        .collect();
+        let model_meshes = block_render_assets()
+            .flat_map(|assets| assets.meshes.iter().copied())
+            .map(|(mesh, spec)| (mesh, meshes.add(model_mesh(spec))))
+            .collect();
+        let model_materials = block_render_assets()
+            .flat_map(|assets| assets.materials.iter().copied())
+            .map(|(material, spec)| {
+                (
+                    material,
+                    materials.add(model_material(spec, &block_textures, images)),
+                )
+            })
+            .collect();
 
         Self {
             block: meshes.add(Cuboid::new(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)),
@@ -241,22 +139,7 @@ impl WorldRenderManager {
             wire_connector_x: meshes.add(Cuboid::new(0.652, 0.304, 0.304)),
             wire_connector_y: meshes.add(Cuboid::new(0.304, 0.652, 0.304)),
             wire_connector_z: meshes.add(Cuboid::new(0.304, 0.304, 0.652)),
-            part_conveyor_base: meshes.add(Cuboid::new(1.0, 0.90, 1.0)),
-            part_conveyor_belt: meshes.add(Cuboid::new(0.90, 0.10, 1.0)),
-            part_drill_body: meshes.add(Cuboid::new(1.0, 1.0, 0.80)),
-            part_drill_tip: meshes.add(drill_tip_mesh(0.34, 1.0, 48)),
-            part_large: meshes.add(Cuboid::new(0.72, 0.22, 0.72)),
-            part_medium: meshes.add(Cuboid::new(0.44, 0.20, 0.44)),
-            part_small: meshes.add(Cuboid::new(0.22, 0.22, 0.22)),
-            part_plate: meshes.add(Cuboid::new(0.78, 0.06, 0.78)),
-            part_rotator_base: meshes.add(Cuboid::new(1.0, 0.80, 1.0)),
-            part_rotator_disk: meshes.add(Cylinder::new(0.40, 0.20).mesh().resolution(48)),
-            part_rotator_ring: meshes.add(rotator_ring_mesh(0.50, 0.40, 0.20, 64)),
-            part_rod_x: meshes.add(Cuboid::new(0.72, 0.12, 0.12)),
-            part_rod_y: meshes.add(Cuboid::new(0.12, 0.72, 0.12)),
-            part_rod_z: meshes.add(Cuboid::new(0.12, 0.12, 0.72)),
-            part_pusher_body: meshes.add(cover_cuboid_mesh(Vec3::new(1.0, 1.0, 0.80))),
-            part_pusher_head: meshes.add(cover_cuboid_mesh(Vec3::new(1.0, 1.0, 0.20))),
+            model_meshes,
             block_materials,
             preview_materials,
             scene_materials: scene_block_materials,
@@ -397,24 +280,10 @@ impl WorldRenderManager {
     }
 
     pub(crate) fn model_mesh(&self, mesh: ModelMesh) -> Handle<Mesh> {
-        match mesh {
-            ModelMesh::ConveyorBase => self.part_conveyor_base.clone(),
-            ModelMesh::ConveyorBelt => self.part_conveyor_belt.clone(),
-            ModelMesh::DrillBody => self.part_drill_body.clone(),
-            ModelMesh::DrillTip => self.part_drill_tip.clone(),
-            ModelMesh::Large => self.part_large.clone(),
-            ModelMesh::Medium => self.part_medium.clone(),
-            ModelMesh::Small => self.part_small.clone(),
-            ModelMesh::Plate => self.part_plate.clone(),
-            ModelMesh::RotatorBase => self.part_rotator_base.clone(),
-            ModelMesh::RotatorDisk => self.part_rotator_disk.clone(),
-            ModelMesh::RotatorRing => self.part_rotator_ring.clone(),
-            ModelMesh::RodX => self.part_rod_x.clone(),
-            ModelMesh::RodY => self.part_rod_y.clone(),
-            ModelMesh::RodZ => self.part_rod_z.clone(),
-            ModelMesh::PusherBody => self.part_pusher_body.clone(),
-            ModelMesh::PusherHead => self.part_pusher_head.clone(),
-        }
+        self.model_meshes
+            .get(&mesh)
+            .expect("every model mesh exists")
+            .clone()
     }
 
     pub(crate) fn model_material(&self, material: ModelMaterial) -> Handle<StandardMaterial> {
@@ -466,25 +335,6 @@ fn textured_scene_material(base_color: Color, texture: Handle<Image>) -> Standar
         base_color_texture: Some(texture),
         perceptual_roughness: 0.96,
         reflectance: 0.08,
-        ..default()
-    }
-}
-
-fn srgb_material(r: f32, g: f32, b: f32) -> StandardMaterial {
-    StandardMaterial {
-        base_color: Color::srgb(r, g, b),
-        perceptual_roughness: 0.82,
-        reflectance: 0.16,
-        ..default()
-    }
-}
-
-fn textured_model_material(base_color: Color, texture: Handle<Image>) -> StandardMaterial {
-    StandardMaterial {
-        base_color,
-        base_color_texture: Some(texture),
-        perceptual_roughness: 0.90,
-        reflectance: 0.12,
         ..default()
     }
 }
@@ -595,14 +445,72 @@ fn cover_uvs(width: f32, height: f32) -> [[f32; 2]; 4] {
     [[u0, v0], [u1, v0], [u1, v1], [u0, v1]]
 }
 
-fn emissive_material(r: f32, g: f32, b: f32, er: f32, eg: f32, eb: f32) -> StandardMaterial {
-    StandardMaterial {
-        base_color: Color::srgb(r, g, b),
-        emissive: Color::srgb(er, eg, eb).into(),
-        perceptual_roughness: 0.72,
-        reflectance: 0.10,
-        ..default()
+fn model_mesh(spec: ModelMeshSpec) -> Mesh {
+    match spec {
+        ModelMeshSpec::Cuboid { size } => Cuboid::new(size[0], size[1], size[2]).into(),
+        ModelMeshSpec::CoveredCuboid { size } => cover_cuboid_mesh(Vec3::from_array(size)),
+        ModelMeshSpec::Cylinder {
+            radius,
+            height,
+            resolution,
+        } => Cylinder::new(radius, height)
+            .mesh()
+            .resolution(resolution)
+            .into(),
+        ModelMeshSpec::Ring {
+            outer_radius,
+            inner_radius,
+            height,
+            segments,
+        } => rotator_ring_mesh(outer_radius, inner_radius, height, segments),
+        ModelMeshSpec::DrillTip {
+            radius,
+            length,
+            segments,
+        } => drill_tip_mesh(radius, length, segments),
     }
+}
+
+fn model_material(
+    spec: ModelMaterialSpec,
+    block_textures: &HashMap<BlockKind, Handle<Image>>,
+    images: &mut Assets<Image>,
+) -> StandardMaterial {
+    match spec {
+        ModelMaterialSpec::Srgb { color } => StandardMaterial {
+            base_color: color.color(),
+            perceptual_roughness: 0.82,
+            reflectance: 0.16,
+            ..default()
+        },
+        ModelMaterialSpec::Emissive { color, emissive } => StandardMaterial {
+            base_color: color.color(),
+            emissive: emissive.color().into(),
+            perceptual_roughness: 0.72,
+            reflectance: 0.10,
+            ..default()
+        },
+        ModelMaterialSpec::Textured { color, texture } => StandardMaterial {
+            base_color: color.color(),
+            base_color_texture: Some(model_texture(texture, block_textures, images)),
+            perceptual_roughness: 0.90,
+            reflectance: 0.12,
+            ..default()
+        },
+    }
+}
+
+fn model_texture(
+    texture: BlockTexture,
+    block_textures: &HashMap<BlockKind, Handle<Image>>,
+    images: &mut Assets<Image>,
+) -> Handle<Image> {
+    block_textures
+        .iter()
+        .find_map(|(kind, handle)| {
+            (kind.definition().texture() == Some(texture)).then(|| handle.clone())
+        })
+        .unwrap_or_else(|| images.add(block_texture(texture)))
 }
 
 fn rotator_ring_mesh(outer_radius: f32, inner_radius: f32, height: f32, segments: u32) -> Mesh {

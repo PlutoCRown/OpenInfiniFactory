@@ -6,7 +6,7 @@ use super::{
     pusher::PUSHER, reverse_conveyor::REVERSE_CONVEYOR, roller::ROLLER, rotator::ROTATOR,
     stamper::STAMPER, switch::SWITCH, teleport_entrance::TELEPORT_ENTRANCE,
     teleport_exit::TELEPORT_EXIT, weld_point::WELD_POINT, welder::WELDER, wire::WIRE, Block,
-    BlockKind, EditableBlock, MaterialKind,
+    BlockKind, BlockRenderAssets, EditableBlock, MaterialKind,
 };
 
 pub const BUILTIN_EDIT_BLOCKS: [BlockKind; 7] = [
@@ -122,6 +122,12 @@ pub fn all_blocks() -> Vec<BlockKind> {
         .collect();
     sort_blocks(&mut blocks);
     blocks
+}
+
+pub fn block_render_assets() -> impl Iterator<Item = BlockRenderAssets> {
+    basic_block_registrations()
+        .map(|registration| registration.block.render_assets())
+        .chain(BUILTIN_BLOCK_REGISTRY.into_iter().map(Block::render_assets))
 }
 
 pub fn get(kind: BlockKind) -> &'static (dyn Block + Send + Sync) {
