@@ -284,13 +284,13 @@ pub enum SettingsControl {
 
 #[derive(Clone, Copy)]
 pub struct SettingsItem {
-    pub label_key: &'static str,
+    pub text_key: &'static str,
     pub control: SettingsControl,
 }
 
 pub const GAMEPLAY_SETTINGS: &[SettingsItem] = &[
     SettingsItem {
-        label_key: "settings.fov",
+        text_key: "settings.fov",
         control: SettingsControl::Slider {
             field: SettingsField::Fov,
             config: SettingsSliderConfig {
@@ -302,7 +302,7 @@ pub const GAMEPLAY_SETTINGS: &[SettingsItem] = &[
         },
     },
     SettingsItem {
-        label_key: "settings.ui_scale_label",
+        text_key: "settings.ui_scale_label",
         control: SettingsControl::Slider {
             field: SettingsField::UiScale,
             config: SettingsSliderConfig {
@@ -314,7 +314,7 @@ pub const GAMEPLAY_SETTINGS: &[SettingsItem] = &[
         },
     },
     SettingsItem {
-        label_key: "settings.gravity",
+        text_key: "settings.gravity",
         control: SettingsControl::Slider {
             field: SettingsField::Gravity,
             config: SettingsSliderConfig {
@@ -326,15 +326,15 @@ pub const GAMEPLAY_SETTINGS: &[SettingsItem] = &[
         },
     },
     SettingsItem {
-        label_key: "settings.language",
+        text_key: "settings.language",
         control: SettingsControl::Dropdown(SettingsDropdown::Language),
     },
     SettingsItem {
-        label_key: "settings.place_selection_mode",
+        text_key: "settings.place_selection_mode",
         control: SettingsControl::Dropdown(SettingsDropdown::PlaceSelectionMode),
     },
     SettingsItem {
-        label_key: "settings.delete_selection_mode",
+        text_key: "settings.delete_selection_mode",
         control: SettingsControl::Dropdown(SettingsDropdown::DeleteSelectionMode),
     },
 ];
@@ -462,10 +462,6 @@ impl<Action> ButtonSpec<Action> {
     }
 }
 
-pub trait UiActionLabel {
-    fn label_key(self) -> &'static str;
-}
-
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub enum MenuAction {
     EditPuzzle,
@@ -478,23 +474,6 @@ pub enum MenuAction {
     ResetSolution,
     OpenSettings,
     BackToMainMenu,
-}
-
-impl UiActionLabel for MenuAction {
-    fn label_key(self) -> &'static str {
-        match self {
-            Self::EditPuzzle => "button.edit_puzzle",
-            Self::Play => "button.start_playing",
-            Self::Quit => "button.quit_game",
-            Self::Resume => "button.resume",
-            Self::ToggleBuilderMode => "button.toggle_builder_mode",
-            Self::SaveWorld => "button.save_world",
-            Self::SaveAsNewPuzzle => "button.save_as_new_puzzle",
-            Self::ResetSolution => "button.reset_solution",
-            Self::OpenSettings => "button.settings",
-            Self::BackToMainMenu => "button.back_to_main_menu",
-        }
-    }
 }
 
 #[derive(Component, Clone)]
@@ -567,16 +546,6 @@ pub enum ConfirmDialogAction {
     Primary,
     Secondary,
     Cancel,
-}
-
-impl UiActionLabel for ConfirmDialogAction {
-    fn label_key(self) -> &'static str {
-        match self {
-            Self::Primary => "button.confirm",
-            Self::Secondary => "button.confirm",
-            Self::Cancel => "button.cancel",
-        }
-    }
 }
 
 impl ConfirmDialogAction {
@@ -701,24 +670,6 @@ pub enum SettingsAction {
     Back,
 }
 
-impl UiActionLabel for SettingsAction {
-    fn label_key(self) -> &'static str {
-        match self {
-            Self::TabGameplay => "button.gameplay",
-            Self::TabKeyBindings => "button.key_bindings",
-            Self::Bind(action) => action.label_key(),
-            Self::ResetDefaults => "button.reset_defaults",
-            Self::OpenFolder => "button.open_config_folder",
-            Self::Back => "button.back",
-            Self::Field(_)
-            | Self::SetPlaceSelectionMode(_)
-            | Self::SetDeleteSelectionMode(_)
-            | Self::SetLanguage(_)
-            | Self::ToggleDropdown(_) => "",
-        }
-    }
-}
-
 #[derive(Resource, Default)]
 pub struct ActiveSettingsSlider(pub Option<SettingsField>);
 
@@ -736,33 +687,11 @@ pub enum BlockEditAction {
     SetOutput(MaterialKind),
 }
 
-impl UiActionLabel for BlockEditAction {
-    fn label_key(self) -> &'static str {
-        match self {
-            Self::PeriodDown => "button.period_down",
-            Self::PeriodUp => "button.period_up",
-            Self::ToggleMaterialDropdown | Self::SetMaterial(_) => "button.material_next",
-            Self::ToggleColorDropdown | Self::SetColor(_) => "button.next_color",
-            Self::ToggleInputDropdown | Self::SetInput(_) => "button.input_material",
-            Self::ToggleOutputDropdown | Self::SetOutput(_) => "button.output_material",
-        }
-    }
-}
-
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub enum TeleportAction {
     TogglePairDropdown,
     SetPair(Option<IVec3>),
     Rename,
-}
-
-impl UiActionLabel for TeleportAction {
-    fn label_key(self) -> &'static str {
-        match self {
-            Self::TogglePairDropdown | Self::SetPair(_) => "button.teleport_pair",
-            Self::Rename => "button.teleport_rename",
-        }
-    }
 }
 
 #[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]

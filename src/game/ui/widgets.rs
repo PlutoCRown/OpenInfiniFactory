@@ -11,7 +11,7 @@ use super::types::{
     InventorySlot, KeyBindingButton, MenuAction, SettingsAction, SettingsDropdown,
     SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
     SettingsSliderKnob, SettingsText, SettingsTextKind, SettingsValueText, SlotArea,
-    TeleportAction, UiActionLabel,
+    TeleportAction,
 };
 use crate::game::world::blocks::MaterialKind;
 
@@ -92,24 +92,32 @@ pub(super) fn spawn_menu_button(
     height: f32,
     font_size: f32,
     action: MenuAction,
-    label_key: &'static str,
+    text_key: &'static str,
 ) {
     parent
         .spawn((full_width_button(height), action))
         .with_children(|button| {
             button.spawn((
-                label_text(label_key, font_size, Color::WHITE),
-                super::types::LocalizedText { key: label_key },
+                label_text(text_key, font_size, Color::WHITE),
+                super::types::LocalizedText { key: text_key },
             ));
         });
 }
 
-pub(super) fn spawn_block_edit_button(parent: &mut ChildSpawnerCommands, action: BlockEditAction) {
-    spawn_localized_button(parent, 36.0, 14.0, action);
+pub(super) fn spawn_block_edit_button(
+    parent: &mut ChildSpawnerCommands,
+    action: BlockEditAction,
+    text_key: &'static str,
+) {
+    spawn_localized_button(parent, 36.0, 14.0, action, text_key);
 }
 
-pub(super) fn spawn_teleport_button(parent: &mut ChildSpawnerCommands, action: TeleportAction) {
-    spawn_localized_button(parent, 36.0, 14.0, action);
+pub(super) fn spawn_teleport_button(
+    parent: &mut ChildSpawnerCommands,
+    action: TeleportAction,
+    text_key: &'static str,
+) {
+    spawn_localized_button(parent, 36.0, 14.0, action, text_key);
 }
 
 pub(super) fn spawn_block_panel_dropdown<A>(
@@ -288,14 +296,14 @@ pub(super) fn spawn_material_icon_dropdown_list<A>(
 pub(super) fn spawn_confirm_dialog_button(
     parent: &mut ChildSpawnerCommands,
     action: ConfirmDialogAction,
+    text_key: &'static str,
 ) {
-    let key = action.label_key();
     parent
         .spawn((full_width_button(34.0), action))
         .with_children(|button| {
             button.spawn((
-                label_text(key, 15.0, Color::WHITE),
-                super::types::LocalizedText { key },
+                label_text(text_key, 15.0, Color::WHITE),
+                super::types::LocalizedText { key: text_key },
             ));
         });
 }
@@ -303,17 +311,17 @@ pub(super) fn spawn_confirm_dialog_button(
 pub(super) fn spawn_localized_settings_button(
     parent: &mut ChildSpawnerCommands,
     action: SettingsAction,
+    text_key: &'static str,
 ) {
     let is_binding = matches!(action, SettingsAction::Bind(_));
-    let key = action.label_key();
     let mut button = parent.spawn((full_width_button(36.0), action));
     if let SettingsAction::Bind(action) = action {
         button.insert(KeyBindingButton(action));
     }
     button.with_children(|button| {
         let mut label_entity = button.spawn((
-            label_text(key, 14.0, Color::WHITE),
-            super::types::LocalizedText { key },
+            label_text(text_key, 14.0, Color::WHITE),
+            super::types::LocalizedText { key: text_key },
         ));
         if is_binding {
             label_entity.insert(SettingsText(SettingsTextKind::KeyBinding));
@@ -321,8 +329,11 @@ pub(super) fn spawn_localized_settings_button(
     });
 }
 
-pub(super) fn spawn_settings_tab(parent: &mut ChildSpawnerCommands, action: SettingsAction) {
-    let key = action.label_key();
+pub(super) fn spawn_settings_tab(
+    parent: &mut ChildSpawnerCommands,
+    action: SettingsAction,
+    text_key: &'static str,
+) {
     parent
         .spawn((
             styled_button(
@@ -354,8 +365,8 @@ pub(super) fn spawn_settings_tab(parent: &mut ChildSpawnerCommands, action: Sett
         ))
         .with_children(|tab| {
             tab.spawn((
-                label_text(key, 15.0, Color::WHITE),
-                super::types::LocalizedText { key },
+                label_text(text_key, 15.0, Color::WHITE),
+                super::types::LocalizedText { key: text_key },
             ));
         });
 }
@@ -493,16 +504,16 @@ fn spawn_localized_button<'a, A>(
     height: f32,
     font_size: f32,
     action: A,
+    text_key: &'static str,
 ) -> EntityCommands<'a>
 where
-    A: Bundle + Copy + UiActionLabel,
+    A: Bundle + Copy,
 {
-    let key = action.label_key();
     let mut entity = parent.spawn((menu_button(height), action));
     entity.with_children(|button| {
         button.spawn((
-            label_text(key, font_size, Color::WHITE),
-            super::types::LocalizedText { key },
+            label_text(text_key, font_size, Color::WHITE),
+            super::types::LocalizedText { key: text_key },
         ));
     });
     entity

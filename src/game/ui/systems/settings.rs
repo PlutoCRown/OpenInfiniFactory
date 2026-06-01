@@ -19,7 +19,10 @@ pub fn update_settings_text_ui(
                     .filter(|pending| *pending == button.0)
                     .map(|_| "...")
                     .unwrap_or(config.input(button.0).name());
-                format!("{}: {suffix}", i18n.text(button.0.label_key()))
+                format!(
+                    "{}: {suffix}",
+                    i18n.text(super::screens::config_action_text_key(button.0))
+                )
             }
         };
     }
@@ -129,10 +132,14 @@ pub fn update_settings_dropdowns_ui(
         text.0 = match label.0 {
             super::types::SettingsDropdown::Language => i18n.language().native_name().to_string(),
             super::types::SettingsDropdown::PlaceSelectionMode => {
-                i18n.text(config.place_selection_mode.label_key())
+                i18n.text(super::screens::selection_mode_text_key(
+                    config.place_selection_mode,
+                ))
             }
             super::types::SettingsDropdown::DeleteSelectionMode => {
-                i18n.text(config.delete_selection_mode.label_key())
+                i18n.text(super::screens::selection_mode_text_key(
+                    config.delete_selection_mode,
+                ))
             }
         };
     }

@@ -8,8 +8,8 @@ use super::super::components::{
     transparent_node, PanelOptions,
 };
 use super::super::types::{
-    PanelVisibility, SettingsAction, SettingsControl, SettingsDropdown, SettingsDropdownRow,
-    SettingsItem, SettingsTab, UiPanelBinding, UiPanelId, GAMEPLAY_SETTINGS,
+    ButtonSpec, PanelVisibility, SettingsAction, SettingsControl, SettingsDropdown,
+    SettingsDropdownRow, SettingsItem, SettingsTab, UiPanelBinding, UiPanelId, GAMEPLAY_SETTINGS,
 };
 use super::super::widgets::{
     spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_dropdown_list,
@@ -43,15 +43,15 @@ fn spawn_settings_tabs(panel: &mut ChildSpawnerCommands) {
             ..default()
         }))
         .with_children(|tabs| {
-            spawn_settings_tab(tabs, SettingsAction::TabGameplay);
-            spawn_settings_tab(tabs, SettingsAction::TabKeyBindings);
+            spawn_settings_tab(tabs, SettingsAction::TabGameplay, "button.gameplay");
+            spawn_settings_tab(tabs, SettingsAction::TabKeyBindings, "button.key_bindings");
         });
 }
 
 fn spawn_settings_dropdown_row(
     panel: &mut ChildSpawnerCommands,
     i18n: &I18n,
-    label_key: &'static str,
+    text_key: &'static str,
     dropdown: SettingsDropdown,
 ) {
     panel
@@ -62,7 +62,7 @@ fn spawn_settings_dropdown_row(
             ZIndex(300),
         ))
         .with_children(|row| {
-            spawn_settings_label(row, i18n, label_key);
+            spawn_settings_label(row, i18n, text_key);
             row.spawn(transparent_node(Node {
                 width: Val::Px(530.0),
                 flex_direction: FlexDirection::Column,
@@ -89,14 +89,14 @@ fn spawn_settings_dropdown_layers(root: &mut ChildSpawnerCommands, i18n: &I18n) 
 fn spawn_settings_slider_row(
     panel: &mut ChildSpawnerCommands,
     i18n: &I18n,
-    label_key: &'static str,
+    text_key: &'static str,
     item: SettingsItem,
 ) {
     panel
         .spawn(settings_row_node())
         .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
         .with_children(|row| {
-            spawn_settings_label(row, i18n, label_key);
+            spawn_settings_label(row, i18n, text_key);
             row.spawn(transparent_node(Node {
                 width: Val::Px(360.0),
                 justify_content: JustifyContent::Center,
@@ -124,9 +124,9 @@ fn settings_row_node() -> impl Bundle {
     })
 }
 
-fn spawn_settings_label(row: &mut ChildSpawnerCommands, i18n: &I18n, label_key: &'static str) {
+fn spawn_settings_label(row: &mut ChildSpawnerCommands, i18n: &I18n, text_key: &'static str) {
     row.spawn((
-        localized_text(i18n, label_key, 15.0, Color::srgb(0.82, 0.88, 0.90)),
+        localized_text(i18n, text_key, 15.0, Color::srgb(0.82, 0.88, 0.90)),
         Node {
             width: Val::Px(220.0),
             align_self: AlignSelf::Center,
@@ -138,10 +138,10 @@ fn spawn_settings_label(row: &mut ChildSpawnerCommands, i18n: &I18n, label_key: 
 fn spawn_settings_item(panel: &mut ChildSpawnerCommands, i18n: &I18n, item: SettingsItem) {
     match item.control {
         SettingsControl::Slider { .. } => {
-            spawn_settings_slider_row(panel, i18n, item.label_key, item)
+            spawn_settings_slider_row(panel, i18n, item.text_key, item)
         }
         SettingsControl::Dropdown(dropdown) => {
-            spawn_settings_dropdown_row(panel, i18n, item.label_key, dropdown)
+            spawn_settings_dropdown_row(panel, i18n, item.text_key, dropdown)
         }
     }
 }
@@ -187,13 +187,13 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
                         columns,
                         i18n,
                         "settings.group.general",
-                        &ConfigAction::GENERAL,
+                        GENERAL_KEY_BINDINGS,
                     );
                     spawn_key_group(
                         columns,
                         i18n,
                         "settings.group.simulation",
-                        &ConfigAction::SIMULATION,
+                        SIMULATION_KEY_BINDINGS,
                     );
                 });
         });
@@ -202,8 +202,8 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
 fn spawn_key_group(
     columns: &mut ChildSpawnerCommands,
     i18n: &I18n,
-    label_key: &'static str,
-    actions: &[ConfigAction],
+    text_key: &'static str,
+    bindings: &[ButtonSpec<ConfigAction>],
 ) {
     columns
         .spawn(transparent_node(Node {
@@ -214,21 +214,21 @@ fn spawn_key_group(
             ..default()
         }))
         .with_children(|group| {
-            group.spawn(localized_text(i18n, label_key, 18.0, Color::WHITE));
-            for action in actions {
-                spawn_localized_settings_button(group, SettingsAction::Bind(*action));
+            group.spawn(localized_text(i18n, text_key, 18.0, Color::WHITE));
+            for binding in bindings {
+                spawn_localized_settings_button(
+                    group,
+                    SettingsAction::Bind(binding.on_click),
+                    binding.text,
+                );
             }
         });
 }
 
 fn spawn_settings_footer(panel: &mut ChildSpawnerCommands) {
     panel.spawn(flex_row(42.0, 8.0)).with_children(|row| {
-        for action in [
-            SettingsAction::ResetDefaults,
-            SettingsAction::OpenFolder,
-            SettingsAction::Back,
-        ] {
-            spawn_localized_settings_button(row, action);
+        for button in SETTINGS_FOOTER {
+            spawn_localized_settings_button(row, button.on_click, button.text);
         }
     });
 }
@@ -262,7 +262,7 @@ fn settings_dropdown_options(
             .into_iter()
             .map(|mode| {
                 (
-                    i18n.text(mode.label_key()),
+                    i18n.text(selection_mode_text_key(mode)),
                     SettingsAction::SetPlaceSelectionMode(mode),
                 )
             })
@@ -271,10 +271,59 @@ fn settings_dropdown_options(
             .into_iter()
             .map(|mode| {
                 (
-                    i18n.text(mode.label_key()),
+                    i18n.text(selection_mode_text_key(mode)),
                     SettingsAction::SetDeleteSelectionMode(mode),
                 )
             })
             .collect(),
+    }
+}
+
+const GENERAL_KEY_BINDINGS: &[ButtonSpec<ConfigAction>] = &[
+    ButtonSpec::new("action.pause", ConfigAction::Pause),
+    ButtonSpec::new("action.inventory", ConfigAction::Inventory),
+    ButtonSpec::new("action.alternate", ConfigAction::Alternate),
+    ButtonSpec::new("action.rotate", ConfigAction::RotateOrRollback),
+    ButtonSpec::new("action.debug", ConfigAction::Debug),
+    ButtonSpec::new("action.forward", ConfigAction::Forward),
+    ButtonSpec::new("action.backward", ConfigAction::Backward),
+    ButtonSpec::new("action.left", ConfigAction::Left),
+    ButtonSpec::new("action.right", ConfigAction::Right),
+    ButtonSpec::new("action.jump_or_fly_up", ConfigAction::JumpOrFlyUp),
+    ButtonSpec::new("action.fly_down", ConfigAction::FlyDown),
+    ButtonSpec::new("action.place", ConfigAction::Place),
+    ButtonSpec::new("action.delete", ConfigAction::Delete),
+    ButtonSpec::new("action.pick", ConfigAction::Pick),
+];
+
+const SIMULATION_KEY_BINDINGS: &[ButtonSpec<ConfigAction>] = &[
+    ButtonSpec::new("action.simulation_start", ConfigAction::Simulate),
+    ButtonSpec::new("action.simulation_step", ConfigAction::SimulationStep),
+    ButtonSpec::new("action.simulation_fast", ConfigAction::SimulationFast),
+    ButtonSpec::new(
+        "action.simulation_rollback",
+        ConfigAction::SimulationRollback,
+    ),
+];
+
+const SETTINGS_FOOTER: &[ButtonSpec<SettingsAction>] = &[
+    ButtonSpec::new("button.reset_defaults", SettingsAction::ResetDefaults),
+    ButtonSpec::new("button.open_config_folder", SettingsAction::OpenFolder),
+    ButtonSpec::new("button.back", SettingsAction::Back),
+];
+
+pub(crate) fn config_action_text_key(action: ConfigAction) -> &'static str {
+    GENERAL_KEY_BINDINGS
+        .iter()
+        .chain(SIMULATION_KEY_BINDINGS)
+        .find_map(|binding| (binding.on_click == action).then_some(binding.text))
+        .unwrap_or("")
+}
+
+pub(crate) fn selection_mode_text_key(mode: ConfigSelectionMode) -> &'static str {
+    match mode {
+        ConfigSelectionMode::Point => "selection_mode.point",
+        ConfigSelectionMode::Line => "selection_mode.line",
+        ConfigSelectionMode::Plane => "selection_mode.plane",
     }
 }

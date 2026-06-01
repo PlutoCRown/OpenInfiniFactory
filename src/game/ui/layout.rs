@@ -73,12 +73,12 @@ fn spawn_generator_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         UiPanelBinding(UiPanelId::Generator),
         |panel| {
             spawn_panel_row(panel, i18n, "panel.period", |row| {
-                spawn_block_edit_button(row, BlockEditAction::PeriodDown);
+                spawn_block_edit_button(row, BlockEditAction::PeriodDown, "button.period_down");
                 row.spawn((
                     text("", 18.0, Color::WHITE),
                     BlockPanelText(BlockPanelTextKind::GeneratorPeriod),
                 ));
-                spawn_block_edit_button(row, BlockEditAction::PeriodUp);
+                spawn_block_edit_button(row, BlockEditAction::PeriodUp, "button.period_up");
             });
             spawn_panel_row(panel, i18n, "panel.material", |row| {
                 spawn_material_icon_slot(
@@ -117,7 +117,7 @@ fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         UiPanelBinding(UiPanelId::Teleport),
         |panel| {
             spawn_panel_row(panel, i18n, "panel.name", |row| {
-                spawn_teleport_button(row, TeleportAction::Rename);
+                spawn_teleport_button(row, TeleportAction::Rename, "button.teleport_rename");
                 row.spawn((
                     text("", 18.0, Color::WHITE),
                     BlockPanelText(BlockPanelTextKind::TeleportName),
@@ -227,18 +227,18 @@ fn panel_row_node() -> impl Bundle {
 fn spawn_panel_row(
     panel: &mut ChildSpawnerCommands,
     i18n: &I18n,
-    label_key: &'static str,
+    text_key: &'static str,
     controls: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
     panel.spawn(panel_row_node()).with_children(|row| {
-        spawn_panel_label(row, i18n, label_key);
+        spawn_panel_label(row, i18n, text_key);
         controls(row);
     });
 }
 
-fn spawn_panel_label(row: &mut ChildSpawnerCommands, i18n: &I18n, label_key: &'static str) {
+fn spawn_panel_label(row: &mut ChildSpawnerCommands, i18n: &I18n, text_key: &'static str) {
     row.spawn((
-        localized_text(i18n, label_key, 16.0, Color::srgb(0.86, 0.88, 0.86)),
+        localized_text(i18n, text_key, 16.0, Color::srgb(0.86, 0.88, 0.86)),
         Node {
             width: Val::Px(110.0),
             ..default()
@@ -354,9 +354,17 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
             panel
                 .spawn(confirm_dialog_actions_row())
                 .with_children(|row| {
-                    spawn_confirm_dialog_button(row, ConfirmDialogAction::Primary);
-                    spawn_confirm_dialog_button(row, ConfirmDialogAction::Secondary);
-                    spawn_confirm_dialog_button(row, ConfirmDialogAction::Cancel);
+                    spawn_confirm_dialog_button(
+                        row,
+                        ConfirmDialogAction::Primary,
+                        "button.confirm",
+                    );
+                    spawn_confirm_dialog_button(
+                        row,
+                        ConfirmDialogAction::Secondary,
+                        "button.confirm",
+                    );
+                    spawn_confirm_dialog_button(row, ConfirmDialogAction::Cancel, "button.cancel");
                 });
         });
     });

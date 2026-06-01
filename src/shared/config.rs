@@ -78,14 +78,6 @@ impl ConfigSelectionMode {
         ConfigSelectionMode::Line,
         ConfigSelectionMode::Plane,
     ];
-
-    pub fn label_key(self) -> &'static str {
-        match self {
-            Self::Point => "selection_mode.point",
-            Self::Line => "selection_mode.line",
-            Self::Plane => "selection_mode.plane",
-        }
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -174,55 +166,6 @@ pub enum ConfigAction {
     Place,
     Delete,
     Pick,
-}
-
-impl ConfigAction {
-    pub const GENERAL: [ConfigAction; 14] = [
-        ConfigAction::Pause,
-        ConfigAction::Inventory,
-        ConfigAction::Alternate,
-        ConfigAction::RotateOrRollback,
-        ConfigAction::Debug,
-        ConfigAction::Forward,
-        ConfigAction::Backward,
-        ConfigAction::Left,
-        ConfigAction::Right,
-        ConfigAction::JumpOrFlyUp,
-        ConfigAction::FlyDown,
-        ConfigAction::Place,
-        ConfigAction::Delete,
-        ConfigAction::Pick,
-    ];
-
-    pub const SIMULATION: [ConfigAction; 4] = [
-        ConfigAction::Simulate,
-        ConfigAction::SimulationStep,
-        ConfigAction::SimulationFast,
-        ConfigAction::SimulationRollback,
-    ];
-
-    pub fn label_key(self) -> &'static str {
-        match self {
-            ConfigAction::Pause => "action.pause",
-            ConfigAction::Inventory => "action.inventory",
-            ConfigAction::Alternate => "action.alternate",
-            ConfigAction::RotateOrRollback => "action.rotate",
-            ConfigAction::Simulate => "action.simulation_start",
-            ConfigAction::SimulationStep => "action.simulation_step",
-            ConfigAction::SimulationFast => "action.simulation_fast",
-            ConfigAction::SimulationRollback => "action.simulation_rollback",
-            ConfigAction::Debug => "action.debug",
-            ConfigAction::Forward => "action.forward",
-            ConfigAction::Backward => "action.backward",
-            ConfigAction::Left => "action.left",
-            ConfigAction::Right => "action.right",
-            ConfigAction::JumpOrFlyUp => "action.jump_or_fly_up",
-            ConfigAction::FlyDown => "action.fly_down",
-            ConfigAction::Place => "action.place",
-            ConfigAction::Delete => "action.delete",
-            ConfigAction::Pick => "action.pick",
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
