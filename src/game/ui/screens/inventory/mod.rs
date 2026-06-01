@@ -3,15 +3,25 @@ use bevy::prelude::*;
 use crate::game::state::GameMode;
 use crate::shared::i18n::I18n;
 
-use super::super::components::{
+use crate::game::ui::components::{
     default_button_size, default_font_size, localized_text, spawn_panel, text, transparent_node,
     PanelOptions,
 };
-use super::super::types::{
+use crate::game::ui::types::{
     CarriedItemPreview, GameplayHudVisibility, InGameHudStyle, InventoryTooltip, PanelText,
     PanelTextKind, PanelVisibility, SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
-use super::super::widgets::spawn_slot;
+
+mod actions;
+mod carried_item;
+mod render;
+mod widgets;
+
+pub use actions::inventory_slot_clicks;
+pub use carried_item::update_carried_item_ui;
+pub use render::update_inventory_slots;
+
+use widgets::spawn_slot;
 
 pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
     root.spawn((

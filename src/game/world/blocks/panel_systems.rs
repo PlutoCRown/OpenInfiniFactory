@@ -1,3 +1,19 @@
+use bevy::ecs::system::SystemParam;
+use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
+
+use crate::game::state::TeleportRenameState;
+use crate::game::ui::components::{default_font_size, menu_button};
+use crate::game::ui::types::{
+    BlockEditAction, BlockMaterialIcon, BlockMaterialIconSlot, BlockPanelDropdown,
+    BlockPanelDropdownLabel, BlockPanelDropdownList, BlockPanelText, BlockPanelTextKind,
+    ConverterInputRow, LocalizedText, OpenBlockPanelDropdown, TeleportAction, UiRuntime,
+};
+use crate::game::world::blocks::{BlockKind, MaterialKind};
+use crate::game::world::grid::WorldBlocks;
+use crate::game::world::rendering::BlockIconAssets;
+use crate::shared::i18n::{I18n, Language};
+
 #[derive(SystemParam)]
 pub struct BlockPanelDropdownParams<'w, 's> {
     pub labels: Query<'w, 's, (&'static BlockPanelDropdownLabel, &'static mut Text)>,
@@ -66,7 +82,7 @@ pub fn update_labeler_ui(
     ui_runtime: Res<UiRuntime>,
     world: Res<WorldBlocks>,
     i18n: Res<I18n>,
-    mut title_text: Query<&mut Text, With<super::types::LocalizedText>>,
+    mut title_text: Query<&mut Text, With<LocalizedText>>,
 ) {
     let Some(pos) = ui_runtime.active_block_pos() else {
         return;
@@ -358,7 +374,7 @@ fn spawn_teleport_pair_option(
             button.spawn((
                 Text::new(label),
                 TextFont {
-                    font_size: super::components::default_font_size(13.0),
+                    font_size: default_font_size(13.0),
                     ..default()
                 },
                 TextColor(Color::WHITE),
@@ -384,11 +400,4 @@ fn teleport_pair_candidates(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
         .collect();
     candidates.sort_by_key(|candidate| world.teleport_settings(*candidate).name);
     candidates
-}
-
-fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
-    match mode {
-        BuilderMode::Edit => i18n.text("mode.edit"),
-        BuilderMode::Play => i18n.text("mode.play"),
-    }
 }

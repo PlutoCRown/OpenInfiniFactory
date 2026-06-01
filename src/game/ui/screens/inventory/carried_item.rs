@@ -1,3 +1,12 @@
+use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
+
+use crate::game::ui::types::{CarriedItem, CarriedItemPreview};
+use crate::game::world::rendering::BlockIconAssets;
+use crate::shared::i18n::I18n;
+
+use super::widgets::{short_item_name, slot_color};
+
 pub fn update_carried_item_ui(
     carried: Res<CarriedItem>,
     i18n: Res<I18n>,

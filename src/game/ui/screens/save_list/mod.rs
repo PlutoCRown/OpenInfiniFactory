@@ -3,16 +3,20 @@ use bevy::prelude::*;
 use crate::game::state::GameMode;
 use crate::shared::i18n::I18n;
 
-use super::super::components::{
+use crate::game::ui::components::{
     default_button_size, flex_row, full_width_button, panel_bundle, panel_content, panel_title_bar,
     panel_title_button, panel_title_label, raised_border, styled_button, text, transparent_node,
     BUTTON_BG,
 };
-use super::super::types::{
+use crate::game::ui::types::{
     PanelText, PanelTextKind, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListPanel,
     SaveListPrompt, SaveListPuzzleColumn, SaveListSolutionColumn, TextPromptAction, TextPromptRoot,
     TextPromptText,
 };
+
+mod systems;
+
+pub use systems::{update_save_list_ui, update_text_prompt_ui};
 
 pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((

@@ -10,7 +10,7 @@ mod definition;
 mod render;
 mod simulation;
 mod state;
-mod ui;
+pub(crate) mod ui;
 
 pub use state::RollerSettings;
 

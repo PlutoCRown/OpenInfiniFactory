@@ -6,7 +6,7 @@ use crate::game::world::grid::WorldBlocks;
 
 mod definition;
 mod render;
-mod ui;
+pub(crate) mod ui;
 
 pub struct TeleportExitBlock;
 

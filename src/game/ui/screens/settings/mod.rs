@@ -3,16 +3,25 @@ use bevy::prelude::*;
 use crate::shared::config::{ConfigAction, ConfigSelectionMode, GameConfig};
 use crate::shared::i18n::I18n;
 
-use super::super::components::{
+use crate::game::ui::components::{
     default_button_size, flex_row, localized_text, scroll_container, scroll_content, spawn_panel,
     transparent_node, PanelOptions,
 };
-use super::super::types::{
+use crate::game::ui::types::{
     ButtonSpec, PanelVisibility, SettingsAction, SettingsControl, SettingsDropdownRow,
     SettingsDropdownSpec, SettingsDropdownValue, SettingsItem, SettingsTab, UiPanelBinding,
     UiPanelId, GAMEPLAY_SETTINGS,
 };
-use super::super::widgets::{
+
+mod systems;
+mod widgets;
+
+pub(crate) use systems::{
+    update_settings_dropdowns_ui, update_settings_slider_drag_ui, update_settings_sliders_ui,
+    update_settings_tabs_ui, update_settings_text_ui,
+};
+
+use widgets::{
     spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_dropdown_list,
     spawn_settings_slider, spawn_settings_slider_value, spawn_settings_tab,
 };
@@ -351,7 +360,7 @@ pub(crate) fn settings_dropdown_value_text(
 }
 
 pub(crate) fn settings_dropdown_spec_by_id(
-    id: super::super::types::SettingsDropdownId,
+    id: crate::game::ui::types::SettingsDropdownId,
 ) -> Option<SettingsDropdownSpec> {
     [
         SettingsDropdownSpec::LANGUAGE,

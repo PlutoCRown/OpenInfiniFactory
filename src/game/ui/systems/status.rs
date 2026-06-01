@@ -11,6 +11,13 @@ fn pause_action_visible(
     }
 }
 
+fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
+    match mode {
+        BuilderMode::Edit => i18n.text("mode.edit"),
+        BuilderMode::Play => i18n.text("mode.play"),
+    }
+}
+
 pub fn update_status_ui(
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,

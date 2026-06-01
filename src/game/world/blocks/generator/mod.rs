@@ -8,7 +8,7 @@ use crate::game::world::grid::WorldBlocks;
 mod definition;
 mod simulation;
 mod state;
-mod ui;
+pub(crate) mod ui;
 
 pub use state::GeneratorSettings;
 

@@ -9,7 +9,7 @@ use crate::game::world::grid::WorldBlocks;
 mod definition;
 mod render;
 mod state;
-mod ui;
+pub(crate) mod ui;
 
 pub use state::GoalSettings;
 

@@ -1,6 +1,19 @@
-use crate::game::ui::screens::{
-    spawn_save_management_row, spawn_save_select_row,
+use bevy::prelude::*;
+
+use crate::game::state::{GameMode, SolutionState, WorldEntryMode};
+use crate::game::ui::components::{
+    full_width_button, hover_border, inset_border, pressed_border, raised_border, text, BUTTON_BG,
+    BUTTON_HOVER_BG,
 };
+use crate::game::ui::types::{
+    PanelText, PanelTextKind, SaveListAction, SaveListCloseButton, SaveListPanel, SaveListPrompt,
+    SaveListPuzzleColumn, SaveListRenderState, SaveListSolutionColumn, TextPromptAction,
+    TextPromptKind, TextPromptRoot, TextPromptText, UiHoverState, UiRuntime,
+};
+use crate::shared::i18n::I18n;
+use crate::shared::save::SaveState;
+
+use super::{spawn_save_management_row, spawn_save_select_row};
 
 pub fn update_save_list_ui(
     mode: Res<GameMode>,
@@ -262,7 +275,11 @@ enum SaveListColumnKind {
 }
 
 fn save_list_column_width(names: &[String], kind: SaveListColumnKind, i18n: &I18n) -> f32 {
-    let longest_name = names.iter().map(|name| name.chars().count()).max().unwrap_or(0) as f32;
+    let longest_name = names
+        .iter()
+        .map(|name| name.chars().count())
+        .max()
+        .unwrap_or(0) as f32;
     let action_chars = match kind {
         SaveListColumnKind::PuzzleSelect => [
             i18n.text("save.select_puzzle").chars().count(),
@@ -271,7 +288,9 @@ fn save_list_column_width(names: &[String], kind: SaveListColumnKind, i18n: &I18
         .into_iter()
         .max()
         .unwrap_or(0) as f32,
-        SaveListColumnKind::ManagementPuzzle => i18n.text("save.load_puzzle").chars().count() as f32,
+        SaveListColumnKind::ManagementPuzzle => {
+            i18n.text("save.load_puzzle").chars().count() as f32
+        }
         SaveListColumnKind::ManagementSolution => {
             i18n.text("save.load_solution").chars().count() as f32
         }
@@ -452,52 +471,6 @@ fn save_list_button_selected(
         && save_state.selected_puzzle.as_deref() == Some(name.as_str()))
 }
 
-pub fn update_confirm_dialog_ui(
-    ui_runtime: Res<UiRuntime>,
-    i18n: Res<I18n>,
-    mut texts: ParamSet<(
-        Query<(&PanelText, &mut Text)>,
-        Query<&mut Text, Without<PanelText>>,
-    )>,
-    mut action_buttons: Query<(&ConfirmDialogAction, &mut Node, &Children), With<Button>>,
-) {
-    if !ui_runtime.is_changed() && !i18n.is_changed() {
-        return;
-    }
-
-    let Some(dialog) = ui_runtime.confirm_dialog() else {
-        return;
-    };
-    for (panel_text, mut text) in &mut texts.p0() {
-        text.0 = match panel_text.0 {
-            PanelTextKind::ConfirmTitle => i18n.text(dialog.title_key),
-            PanelTextKind::ConfirmMessage => confirm_dialog_message(&dialog.message, &i18n),
-            _ => continue,
-        };
-    }
-    for (action, mut node, children) in &mut action_buttons {
-        if matches!(*action, ConfirmDialogAction::Secondary) {
-            node.display = if dialog.secondary_key.is_some() {
-                Display::Flex
-            } else {
-                Display::None
-            };
-        } else {
-            node.display = Display::Flex;
-        }
-        let label = confirm_dialog_button_label(dialog, *action, &i18n);
-        let width = confirm_dialog_button_width(&label);
-        node.width = Val::Px(width);
-        node.min_width = Val::Px(width);
-        node.flex_grow = 0.0;
-        for child in children.iter() {
-            if let Ok(mut text) = texts.p1().get_mut(child) {
-                text.0 = label.clone();
-            }
-        }
-    }
-}
-
 pub fn update_text_prompt_ui(
     ui_runtime: Res<UiRuntime>,
     i18n: Res<I18n>,
@@ -561,35 +534,4 @@ fn text_prompt_title(kind: &TextPromptKind, i18n: &I18n) -> String {
         TextPromptKind::RenameSolution { .. } => i18n.text("save.prompt.rename_solution"),
         TextPromptKind::SaveAsNewPuzzle => i18n.text("save.prompt.save_as_new_puzzle"),
     }
-}
-
-fn confirm_dialog_button_label(
-    dialog: &ConfirmDialogState,
-    action: ConfirmDialogAction,
-    i18n: &I18n,
-) -> String {
-    match action {
-        ConfirmDialogAction::Primary => i18n.text(dialog.primary_key),
-        ConfirmDialogAction::Secondary => dialog
-            .secondary_key
-            .map(|key| i18n.text(key))
-            .unwrap_or_default(),
-        ConfirmDialogAction::Cancel => i18n.text(dialog.cancel_key),
-    }
-}
-
-fn confirm_dialog_message(message: &ConfirmDialogMessage, i18n: &I18n) -> String {
-    match message {
-        ConfirmDialogMessage::TextKey(key) => i18n.text(key),
-        ConfirmDialogMessage::Named { key, name } => {
-            i18n.fmt(key, &[("name", name.clone())])
-        }
-    }
-}
-
-fn confirm_dialog_button_width(label: &str) -> f32 {
-    let char_count = label.chars().count() as f32;
-    let wide_count = label.chars().filter(|ch| !ch.is_ascii()).count() as f32;
-    let estimated_text_width = char_count * 10.0 + wide_count * 8.0;
-    estimated_text_width.clamp(118.0, 230.0)
 }

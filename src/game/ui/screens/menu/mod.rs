@@ -3,9 +3,12 @@ use bevy::prelude::*;
 use crate::game::state::GameMode;
 use crate::shared::i18n::I18n;
 
-use super::super::components::{spawn_panel, PanelOptions};
-use super::super::types::{ButtonSpec, MenuAction, PanelVisibility};
-use super::super::widgets::spawn_menu_button;
+use crate::game::ui::components::{spawn_panel, PanelOptions};
+use crate::game::ui::types::{ButtonSpec, MenuAction, PanelVisibility};
+
+mod widgets;
+
+use widgets::spawn_menu_button;
 
 const MAIN_MENU_ITEMS: &[ButtonSpec<MenuAction>] = &[
     ButtonSpec::new("button.edit_puzzle", MenuAction::EditPuzzle),

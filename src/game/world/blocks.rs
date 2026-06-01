@@ -3,7 +3,7 @@ mod registry;
 mod blocker;
 mod blocker_head;
 mod catalog;
-mod converter;
+pub(crate) mod converter;
 mod conveyor;
 mod counter_rotator;
 mod detector;
@@ -11,10 +11,13 @@ mod down_detector;
 mod down_welder;
 mod drill;
 mod drill_head;
-mod generator;
-mod goal;
+pub(crate) mod generator;
+pub(crate) mod goal;
+pub(crate) mod labeler;
 mod laser;
 mod lifter;
+pub(crate) mod panel_layout;
+pub(crate) mod panel_systems;
 mod platform;
 mod pusher;
 mod reverse_conveyor;
@@ -23,8 +26,9 @@ mod rotator;
 mod six_way;
 mod stamper;
 mod switch;
-mod teleport_entrance;
+pub(crate) mod teleport_entrance;
 mod teleport_exit;
+pub(crate) mod ui_components;
 mod weld_point;
 mod welder;
 mod wire;
@@ -49,9 +53,30 @@ pub use self::six_way::{local_connection_offset, six_way_connection_plan, six_wa
 pub use self::stamper::StamperSettings;
 pub use self::teleport_entrance::TeleportSettings;
 pub use self::wire::wire_connector_render_plan;
+use crate::shared::i18n::I18n;
+pub(crate) use panel_systems::{
+    update_block_panel_dropdowns_ui, update_converter_ui, update_generator_ui, update_labeler_ui,
+    update_teleport_ui,
+};
 
 pub const BLOCK_SIZE: f32 = 1.0;
 pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
+
+pub(crate) fn spawn_block_panels(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+    generator::ui::spawn_panel(root, i18n);
+    goal::ui::spawn_panel(root, i18n);
+    labeler::ui::spawn_panel(root, i18n);
+    converter::ui::spawn_panel(root, i18n);
+    teleport_entrance::ui::spawn_panel(root, i18n);
+}
+
+pub(crate) fn spawn_block_dropdown_layers(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+    generator::ui::spawn_dropdown_layers(root);
+    goal::ui::spawn_dropdown_layers(root);
+    labeler::ui::spawn_dropdown_layers(root, i18n);
+    converter::ui::spawn_dropdown_layers(root);
+    teleport_entrance::ui::spawn_dropdown_layers(root);
+}
 
 pub trait RenderableBlock {
     fn render_definition(&self) -> BlockDefinition;

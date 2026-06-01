@@ -1,12 +1,12 @@
 use super::{rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockRenderAssets, EditableBlock};
-use crate::game::ui::UiPanelId;
+use crate::game::ui::{BlockPanelDropdown, TeleportAction, UiPanelId};
 use crate::game::world::blocks::SerializedBlockState;
 use crate::game::world::grid::WorldBlocks;
 
 mod definition;
 mod render;
 pub mod state;
-mod ui;
+pub(crate) mod ui;
 
 pub use state::TeleportSettings;
 

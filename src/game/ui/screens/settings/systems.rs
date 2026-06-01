@@ -1,3 +1,20 @@
+use bevy::prelude::*;
+use bevy::ui_widgets::{CoreSliderDragState, Slider, SliderRange, SliderValue};
+use bevy::window::PrimaryWindow;
+
+use crate::game::state::GameSettings;
+use crate::game::ui::components::{
+    hover_border, pressed_border, raised_border, BUTTON_BG, BUTTON_HOVER_BG,
+};
+use crate::game::ui::types::{
+    ActiveSettingsSlider, KeyBindingButton, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
+    SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
+    SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind, SettingsValueText,
+    UiHoverState,
+};
+use crate::shared::config::GameConfig;
+use crate::shared::i18n::I18n;
+
 pub fn update_settings_text_ui(
     config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
@@ -21,7 +38,7 @@ pub fn update_settings_text_ui(
                     .unwrap_or(config.input(button.0).name());
                 format!(
                     "{}: {suffix}",
-                    i18n.text(super::screens::config_action_text_key(button.0))
+                    i18n.text(super::config_action_text_key(button.0))
                 )
             }
         };
@@ -129,10 +146,10 @@ pub fn update_settings_dropdowns_ui(
     triggers: Query<(&SettingsAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     for (label, mut text) in &mut texts.p0() {
-        let Some(spec) = super::screens::settings_dropdown_spec_by_id(label.0) else {
+        let Some(spec) = super::settings_dropdown_spec_by_id(label.0) else {
             continue;
         };
-        text.0 = super::screens::settings_dropdown_value_text(spec, &config, &i18n);
+        text.0 = super::settings_dropdown_value_text(spec, &config, &i18n);
     }
 
     for (value, mut text) in &mut texts.p1() {

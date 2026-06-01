@@ -1,3 +1,11 @@
+use bevy::picking::pointer::PointerButton;
+use bevy::picking::prelude::{Click, Pointer};
+use bevy::prelude::*;
+
+use crate::game::state::{GameMode, PlacementState, SolutionState};
+use crate::game::ui::types::{CarriedItem, InventoryItem, InventoryItems, InventorySlot, SlotArea};
+use crate::shared::config::{ConfigAction, GameConfig};
+
 pub fn inventory_slot_clicks(
     mut click: On<Pointer<Click>>,
     slots: Query<&InventorySlot>,
@@ -84,7 +92,7 @@ pub fn inventory_slot_clicks(
     placement.edit_gesture = None;
 }
 
-fn place_in_backpack(inventory: &mut InventoryItems, item: super::types::InventoryItem) -> bool {
+fn place_in_backpack(inventory: &mut InventoryItems, item: InventoryItem) -> bool {
     if inventory.backpack.iter().any(|slot| *slot == Some(item)) {
         return true;
     }
