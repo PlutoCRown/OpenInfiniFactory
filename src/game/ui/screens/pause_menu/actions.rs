@@ -1,0 +1,167 @@
+use bevy::picking::prelude::{Click, Pointer};
+use bevy::prelude::*;
+
+use crate::game::state::{
+    BuilderMode, GameMode, PlacementState, SimulationState, SolutionState, WorldEntryMode,
+};
+use crate::game::systems::world_flow::{
+    clear_loaded_world, primary_click, puzzle_has_solutions, save_current_world, WorldMenuParams,
+};
+use crate::game::ui::{
+    CarriedItem, ConfirmDialogButtonSpec, ConfirmDialogEffect, ConfirmDialogMessage,
+    ConfirmDialogSpec, InventoryItems, PauseMenuAction, TextPromptKind, UiPanelContext, UiPanelId,
+    UiRuntime,
+};
+use crate::shared::save::{next_named_save, SaveKind, SaveState};
+
+pub fn pause_menu_actions(
+    mut click: On<Pointer<Click>>,
+    mut builder_mode: ResMut<BuilderMode>,
+    mut simulation: ResMut<SimulationState>,
+    mut inventory: ResMut<InventoryItems>,
+    mut carried: ResMut<CarriedItem>,
+    mut placement: ResMut<PlacementState>,
+    mut mode: ResMut<GameMode>,
+    mut save_state: ResMut<SaveState>,
+    mut solution_state: ResMut<SolutionState>,
+    mut ui_runtime: ResMut<UiRuntime>,
+    mut world_menu: WorldMenuParams,
+    actions: Query<&PauseMenuAction>,
+) {
+    if !primary_click(&mut click) || *mode != GameMode::Paused {
+        return;
+    }
+    let Ok(action) = actions.get(click.entity).copied() else {
+        return;
+    };
+    click.propagate(false);
+
+    match action {
+        PauseMenuAction::Resume => *mode = GameMode::Playing,
+        PauseMenuAction::ToggleBuilderMode => {
+            if solution_state.entry == WorldEntryMode::PlaySolution {
+                return;
+            }
+            *builder_mode = match *builder_mode {
+                BuilderMode::Edit => {
+                    simulation.running = false;
+                    simulation.step_requested = false;
+                    simulation.accumulator = 0.0;
+                    simulation.start_snapshot = None;
+                    simulation.start_factory_structures = None;
+                    solution_state.puzzle_snapshot = Some(world_menu.world.clone());
+                    solution_state.puzzle_name = save_state.current.clone();
+                    save_state.current = Some(next_named_save(
+                        &save_state
+                            .entries
+                            .iter()
+                            .map(|entry| entry.name.clone())
+                            .collect::<Vec<_>>(),
+                        save_state.current.as_deref().unwrap_or("solution"),
+                    ));
+                    save_state.current_kind = Some(SaveKind::Solution);
+                    BuilderMode::Play
+                }
+                BuilderMode::Play => {
+                    ui_runtime.open_confirm_dialog(ConfirmDialogSpec::new(
+                        ConfirmDialogMessage::TextKey("confirm.save_solution_before_edit"),
+                        ConfirmDialogButtonSpec::new(
+                            "button.save_solution_and_edit",
+                            ConfirmDialogEffect::SwitchToEditMode { save_first: true },
+                        ),
+                        Some(ConfirmDialogButtonSpec::new(
+                            "button.discard_solution_and_edit",
+                            ConfirmDialogEffect::SwitchToEditMode { save_first: false },
+                        )),
+                    ));
+                    return;
+                }
+            };
+            *inventory = InventoryItems::for_mode(*builder_mode);
+            carried.clear();
+            placement.selected = 0;
+            *mode = GameMode::Playing;
+        }
+        PauseMenuAction::SaveWorld => {
+            if let (Some(SaveKind::Puzzle), Some(name)) =
+                (save_state.current_kind, save_state.current.clone())
+            {
+                if puzzle_has_solutions(&mut save_state, &name) {
+                    ui_runtime.open_confirm_dialog(ConfirmDialogSpec::new(
+                        ConfirmDialogMessage::Named {
+                            key: "confirm.save_puzzle_with_solutions",
+                            name: name.clone(),
+                        },
+                        ConfirmDialogButtonSpec::new(
+                            "button.save_puzzle",
+                            ConfirmDialogEffect::SaveCurrentWorld,
+                        ),
+                        Some(ConfirmDialogButtonSpec::new(
+                            "button.save_as_new_puzzle",
+                            ConfirmDialogEffect::SaveAsNewPuzzle { default_name: name },
+                        )),
+                    ));
+                    return;
+                }
+            }
+            save_current_world(
+                &world_menu.world,
+                &inventory,
+                &mut save_state,
+                &mut solution_state,
+                &simulation,
+            );
+        }
+        PauseMenuAction::SaveAsNewPuzzle => {
+            ui_runtime.open_text_prompt(TextPromptKind::SaveAsNewPuzzle, "puzzle");
+        }
+        PauseMenuAction::ResetSolution => {
+            ui_runtime.open_confirm_dialog(ConfirmDialogSpec::new(
+                ConfirmDialogMessage::TextKey("confirm.reset_solution"),
+                ConfirmDialogButtonSpec::new(
+                    "button.confirm_reset_solution",
+                    ConfirmDialogEffect::ResetSolution,
+                ),
+                None,
+            ));
+        }
+        PauseMenuAction::OpenSettings => {
+            ui_runtime.open(
+                UiPanelId::Settings,
+                UiPanelContext::ReturnTo(GameMode::Paused),
+            );
+        }
+        PauseMenuAction::BackToMainMenu => {
+            if solution_state.dirty {
+                ui_runtime.open_confirm_dialog(ConfirmDialogSpec::new(
+                    ConfirmDialogMessage::TextKey("confirm.return_to_main"),
+                    ConfirmDialogButtonSpec::new(
+                        "button.save_and_back",
+                        ConfirmDialogEffect::ReturnToMain { save_first: true },
+                    ),
+                    Some(ConfirmDialogButtonSpec::new(
+                        "button.discard_and_back",
+                        ConfirmDialogEffect::ReturnToMain { save_first: false },
+                    )),
+                ));
+            } else {
+                clear_loaded_world(
+                    &mut world_menu.world,
+                    &mut placement,
+                    &mut save_state,
+                    &mut solution_state,
+                    &mut simulation,
+                    &mut world_menu.commands,
+                    &mut world_menu.meshes,
+                    &world_menu.block_entities,
+                    &world_menu.render_manager,
+                    &world_menu.debug,
+                    &mut world_menu.factory_structures,
+                    &mut world_menu.movement_influence,
+                    &mut world_menu.pusher_state,
+                );
+                *mode = GameMode::MainMenu;
+            }
+        }
+    }
+}

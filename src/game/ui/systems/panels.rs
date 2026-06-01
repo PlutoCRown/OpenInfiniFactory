@@ -8,7 +8,7 @@ pub fn update_panel_visibility(
     mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut nodes: ParamSet<(
         Query<(&PanelVisibility, &mut Node)>,
-        Query<(&MenuAction, &mut Node), With<Button>>,
+        Query<(&PauseMenuAction, &mut Node), With<Button>>,
         Query<(&UiPanelBinding, &mut Node)>,
         Query<
             (&Node, &mut Visibility, &mut PanelPosition),
@@ -139,7 +139,10 @@ pub fn panel_dragged(
     };
     drag_event.propagate(false);
     let next = drag.panel_pos
-        + screen_to_ui_delta(drag_event.pointer_location.position - drag.cursor, ui_scale.0);
+        + screen_to_ui_delta(
+            drag_event.pointer_location.position - drag.cursor,
+            ui_scale.0,
+        );
     style.left = Val::Px(next.x.max(10.0));
     style.top = Val::Px(next.y.max(10.0));
     style.right = Val::Auto;

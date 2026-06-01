@@ -3,11 +3,13 @@ use crate::game::ui::{BlockPanelDropdown, TeleportAction, UiPanelId};
 use crate::game::world::blocks::SerializedBlockState;
 use crate::game::world::grid::WorldBlocks;
 
+mod actions;
 mod definition;
 mod render;
 pub mod state;
 pub(crate) mod ui;
 
+pub(crate) use actions::{teleport_menu_actions, teleport_rename_input};
 pub(crate) use state::{
     set_settings as set_teleport_settings, settings as teleport_settings, TeleportSettings,
 };

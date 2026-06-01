@@ -487,10 +487,15 @@ impl<Action> ButtonSpec<Action> {
 }
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub enum MenuAction {
+pub enum MainMenuAction {
     EditPuzzle,
     Play,
     Quit,
+    OpenSettings,
+}
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub enum PauseMenuAction {
     Resume,
     ToggleBuilderMode,
     SaveWorld,

@@ -14,8 +14,10 @@ use crate::game::ui::types::{
     TextPromptText,
 };
 
+mod actions;
 mod systems;
 
+pub(crate) use actions::{save_list_actions, text_prompt_actions, text_prompt_input};
 pub use systems::{update_save_list_ui, update_text_prompt_ui};
 
 pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {

@@ -1,13 +1,13 @@
 use bevy::prelude::*;
 
 use crate::game::ui::components::{full_width_button, label_text};
-use crate::game::ui::types::{LocalizedText, MenuAction};
+use crate::game::ui::types::{LocalizedText, PauseMenuAction};
 
 pub(super) fn spawn_menu_button(
     parent: &mut ChildSpawnerCommands,
     height: f32,
     font_size: f32,
-    action: MenuAction,
+    action: PauseMenuAction,
     text_key: &'static str,
 ) {
     parent

@@ -10,6 +10,10 @@ use crate::game::ui::types::{
 };
 use crate::shared::i18n::I18n;
 
+mod actions;
+
+pub(crate) use actions::confirm_dialog_actions;
+
 pub fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
     root.spawn((
         panel_bundle(620.0),

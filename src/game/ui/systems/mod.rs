@@ -15,8 +15,8 @@ use crate::shared::save::{SaveKind, SaveState};
 
 use super::types::{
     Crosshair, GameplayHudVisibility, InGameHudStyle, InGameHudVisibility, InventoryItems,
-    LocalizedText, MenuAction, OpenSettingsDropdown, PanelCloseButton, PanelDragState,
-    PanelPosition, PanelText, PanelTextKind, PanelTitleBar, PanelVisibility, PanelWindow,
+    LocalizedText, OpenSettingsDropdown, PanelCloseButton, PanelDragState, PanelPosition,
+    PanelText, PanelTextKind, PanelTitleBar, PanelVisibility, PanelWindow, PauseMenuAction,
     PendingKeyBind, SettingsTab, StatusText, StatusTextKind, TextPromptRoot, UiHoverState,
     UiPanelBinding, UiPanelContext, UiPanelId, UiRuntime,
 };

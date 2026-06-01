@@ -1,12 +1,12 @@
 fn pause_action_visible(
     save_state: &SaveState,
     solution_state: &SolutionState,
-    action: MenuAction,
+    action: PauseMenuAction,
 ) -> bool {
     match action {
-        MenuAction::ToggleBuilderMode => solution_state.entry != WorldEntryMode::PlaySolution,
-        MenuAction::SaveAsNewPuzzle => save_state.current_kind == Some(SaveKind::Puzzle),
-        MenuAction::ResetSolution => save_state.current_kind == Some(SaveKind::Solution),
+        PauseMenuAction::ToggleBuilderMode => solution_state.entry != WorldEntryMode::PlaySolution,
+        PauseMenuAction::SaveAsNewPuzzle => save_state.current_kind == Some(SaveKind::Puzzle),
+        PauseMenuAction::ResetSolution => save_state.current_kind == Some(SaveKind::Solution),
         _ => true,
     }
 }

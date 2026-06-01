@@ -13,9 +13,11 @@ use crate::game::ui::types::{
     UiPanelId, GAMEPLAY_SETTINGS,
 };
 
+mod actions;
 mod systems;
 mod widgets;
 
+pub(crate) use actions::{settings_action_clicked, settings_menu_actions};
 pub(crate) use systems::{
     update_settings_dropdowns_ui, update_settings_slider_drag_ui, update_settings_sliders_ui,
     update_settings_tabs_ui, update_settings_text_ui,

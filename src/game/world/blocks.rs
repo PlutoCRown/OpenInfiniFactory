@@ -1,5 +1,6 @@
 mod registry;
 
+mod actions;
 mod blocker;
 mod blocker_head;
 mod catalog;
@@ -55,10 +56,12 @@ pub(crate) use self::roller::RollerSettings;
 pub use self::six_way::{local_connection_offset, six_way_connection_plan, six_way_offsets};
 pub(crate) use self::stamper::StamperSettings;
 pub(crate) use self::teleport_entrance::{
-    set_teleport_settings, teleport_settings, TeleportSettings,
+    set_teleport_settings, teleport_menu_actions, teleport_rename_input, teleport_settings,
+    TeleportSettings,
 };
 pub use self::wire::wire_connector_render_plan;
 use crate::shared::i18n::I18n;
+pub(crate) use actions::block_edit_actions;
 pub(crate) use panel_systems::{
     update_block_panel_dropdowns_ui, update_converter_ui, update_generator_ui, update_labeler_ui,
     update_teleport_ui,
