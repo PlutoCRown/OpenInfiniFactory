@@ -20,7 +20,12 @@ use crate::game::world::blocks::{
     WireConnectorBehavior, PLAY_BLOCKS,
 };
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
-pub use crate::game::world::render_manager::{EditPreviewKind, WorldRenderManager};
+pub use crate::game::world::render_manager::WorldRenderManager;
+use crate::game::world::selection_overlays::debug::{
+    ActiveFactoryDebugOverlay, InactiveFactoryDebugOverlay, MaterialDebugOverlay,
+};
+use crate::game::world::selection_overlays::placement::PlacementOverlay;
+use crate::game::world::selection_overlays::SelectionOverlayDefinition;
 
 const ICON_TEXTURE_SIZE: u32 = 256;
 const ICON_RENDER_LAYER: usize = 3;
@@ -76,7 +81,7 @@ pub struct StructureBounds {
 pub struct PlacementPreview;
 
 #[derive(Component)]
-pub struct EditPreview;
+pub struct SelectionOverlay;
 
 #[derive(Component)]
 pub struct PendingGeneratedPreview;
@@ -116,7 +121,6 @@ pub fn setup_scene(
     ));
 
     let render_manager = WorldRenderManager::new(&mut meshes, &mut materials, &mut images);
-    commands.insert_resource(render_manager);
 
     let marker_mesh = meshes.add(Cuboid::new(0.92, 0.018, 0.92));
     let marker_material = materials.add(StandardMaterial {
@@ -135,13 +139,7 @@ pub fn setup_scene(
     ));
 
     let preview_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
-    let preview_material = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.7, 0.95, 1.0, 0.34),
-        alpha_mode: AlphaMode::Blend,
-        perceptual_roughness: 0.92,
-        reflectance: 0.0,
-        ..default()
-    });
+    let preview_material = render_manager.selection_overlay_material::<PlacementOverlay>();
 
     commands.spawn((
         Mesh3d(preview_mesh),
@@ -149,6 +147,8 @@ pub fn setup_scene(
         Visibility::Hidden,
         PlacementPreview,
     ));
+
+    commands.insert_resource(render_manager);
 }
 
 pub fn setup_block_icons(
@@ -323,12 +323,19 @@ pub fn rebuild_world_with_factory_activity_debug(
     for (pos, data) in &world.blocks {
         if data.kind.is_factory() {
             let material = match factory_structures.activity_at(*pos) {
-                Some(FactoryActivity::Inactive) => assets.inactive_factory_debug_material(),
-                _ => assets.active_factory_debug_material(),
+                Some(FactoryActivity::Inactive) => {
+                    assets.selection_overlay_material::<InactiveFactoryDebugOverlay>()
+                }
+                _ => assets.selection_overlay_material::<ActiveFactoryDebugOverlay>(),
             };
             spawn_debug_factory_block(commands, assets, *pos, material);
         } else if data.kind.is_material() {
-            spawn_debug_factory_block(commands, assets, *pos, assets.material_debug_material());
+            spawn_debug_factory_block(
+                commands,
+                assets,
+                *pos,
+                assets.selection_overlay_material::<MaterialDebugOverlay>(),
+            );
         } else {
             spawn_block(commands, meshes, assets, world, *pos, *data);
         }
@@ -379,7 +386,10 @@ fn spawn_debug_factory_block(
     ));
 }
 
-pub fn despawn_edit_previews(commands: &mut Commands, previews: &Query<Entity, With<EditPreview>>) {
+pub fn despawn_selection_overlays(
+    commands: &mut Commands,
+    previews: &Query<Entity, With<SelectionOverlay>>,
+) {
     for entity in previews {
         commands.entity(entity).despawn();
     }
@@ -426,17 +436,16 @@ pub fn spawn_weld_sparks(
     }
 }
 
-pub fn spawn_edit_preview(
+pub fn spawn_selection_overlay<T: SelectionOverlayDefinition>(
     commands: &mut Commands,
     assets: &WorldRenderManager,
     pos: IVec3,
-    kind: EditPreviewKind,
 ) {
     commands.spawn((
         Mesh3d(assets.block.clone()),
-        MeshMaterial3d(assets.edit_preview_material(kind)),
+        MeshMaterial3d(assets.selection_overlay_material::<T>()),
         Transform::from_translation(grid_to_world(pos)).with_scale(Vec3::splat(1.03)),
-        EditPreview,
+        SelectionOverlay,
     ));
 }
 
@@ -456,7 +465,7 @@ pub fn spawn_block_preview(
         pos,
         data,
         assets.block_preview_material(data.kind),
-        Some(EditPreview),
+        Some(SelectionOverlay),
         None,
         None,
         AnimationTiming::edit(),
@@ -855,7 +864,7 @@ fn spawn_block_model(
     pos: IVec3,
     data: BlockData,
     material: Handle<StandardMaterial>,
-    edit_preview: Option<EditPreview>,
+    selection_overlay: Option<SelectionOverlay>,
     animation: Option<BlockAnimation>,
     pusher_animation: Option<PusherAnimation>,
     timing: AnimationTiming,
@@ -937,9 +946,9 @@ fn spawn_block_model(
         entity.insert(PendingGeneratedPreview);
     }
 
-    let is_edit_preview = edit_preview.is_some();
-    if let Some(edit_preview) = edit_preview {
-        entity.insert(edit_preview);
+    let is_selection_overlay = selection_overlay.is_some();
+    if let Some(selection_overlay) = selection_overlay {
+        entity.insert(selection_overlay);
     }
 
     if let Some(animation) = animation.filter(|_| !pending_generated_preview) {
@@ -956,7 +965,7 @@ fn spawn_block_model(
                 parent,
                 assets,
                 render_spec,
-                is_edit_preview
+                is_selection_overlay
                     .then(|| material.clone())
                     .filter(|_| icon_render.is_none()),
                 pusher_animation,

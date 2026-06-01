@@ -5,3 +5,4 @@ pub mod grid;
 pub mod procedural_textures;
 pub mod render_manager;
 pub mod rendering;
+pub mod selection_overlays;

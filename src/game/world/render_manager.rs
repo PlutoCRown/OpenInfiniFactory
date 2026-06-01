@@ -10,6 +10,9 @@ use crate::game::world::blocks::{
 };
 use crate::game::world::direction::Facing;
 use crate::game::world::procedural_textures::block_texture;
+use crate::game::world::selection_overlays::{
+    SelectionOverlayDefinition, SelectionOverlayMaterials,
+};
 
 #[derive(Resource, Clone)]
 pub struct WorldRenderManager {
@@ -35,16 +38,7 @@ pub struct WorldRenderManager {
     pub(crate) active_wire_material: Handle<StandardMaterial>,
     pub(crate) goal_top_material: Handle<StandardMaterial>,
     pub(crate) weld_connector_material: Handle<StandardMaterial>,
-    delete_preview_material: Handle<StandardMaterial>,
-    selection_preview_material: Handle<StandardMaterial>,
-    active_factory_debug_material: Handle<StandardMaterial>,
-    inactive_factory_debug_material: Handle<StandardMaterial>,
-    material_debug_material: Handle<StandardMaterial>,
-}
-
-pub enum EditPreviewKind {
-    Delete,
-    Selection,
+    selection_overlay_materials: SelectionOverlayMaterials,
 }
 
 impl WorldRenderManager {
@@ -166,33 +160,7 @@ impl WorldRenderManager {
                 unlit: true,
                 ..default()
             }),
-            delete_preview_material: materials.add(StandardMaterial {
-                base_color: Color::srgba(1.0, 0.08, 0.04, 0.38),
-                alpha_mode: AlphaMode::Blend,
-                unlit: true,
-                ..default()
-            }),
-            selection_preview_material: materials.add(StandardMaterial {
-                base_color: Color::srgba(0.25, 0.95, 0.88, 0.34),
-                alpha_mode: AlphaMode::Blend,
-                unlit: true,
-                ..default()
-            }),
-            active_factory_debug_material: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.12, 0.90, 0.22),
-                unlit: true,
-                ..default()
-            }),
-            inactive_factory_debug_material: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.95, 0.12, 0.08),
-                unlit: true,
-                ..default()
-            }),
-            material_debug_material: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.12, 0.50, 1.0),
-                unlit: true,
-                ..default()
-            }),
+            selection_overlay_materials: SelectionOverlayMaterials::new(materials),
         }
     }
 
@@ -222,23 +190,10 @@ impl WorldRenderManager {
             .clone()
     }
 
-    pub(crate) fn active_factory_debug_material(&self) -> Handle<StandardMaterial> {
-        self.active_factory_debug_material.clone()
-    }
-
-    pub(crate) fn inactive_factory_debug_material(&self) -> Handle<StandardMaterial> {
-        self.inactive_factory_debug_material.clone()
-    }
-
-    pub(crate) fn material_debug_material(&self) -> Handle<StandardMaterial> {
-        self.material_debug_material.clone()
-    }
-
-    pub(crate) fn edit_preview_material(&self, kind: EditPreviewKind) -> Handle<StandardMaterial> {
-        match kind {
-            EditPreviewKind::Delete => self.delete_preview_material.clone(),
-            EditPreviewKind::Selection => self.selection_preview_material.clone(),
-        }
+    pub(crate) fn selection_overlay_material<T: SelectionOverlayDefinition>(
+        &self,
+    ) -> Handle<StandardMaterial> {
+        self.selection_overlay_materials.get::<T>()
     }
 
     pub(crate) fn block_preview_material(&self, kind: BlockKind) -> Handle<StandardMaterial> {

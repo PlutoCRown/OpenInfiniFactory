@@ -23,17 +23,19 @@ use crate::game::world::blocks::{BlockData, BlockKind};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
-    despawn_edit_previews, rebuild_world_for_debug_state, rebuild_world_with_animations,
-    spawn_block_preview, spawn_block_with_animation, spawn_edit_preview, BlockEntity, EditPreview,
-    EditPreviewKind, HoverMarker, HoverStructureBounds, PlacementPreview, WorldRenderManager,
+    despawn_selection_overlays, rebuild_world_for_debug_state, rebuild_world_with_animations,
+    spawn_block_preview, spawn_block_with_animation, spawn_selection_overlay, BlockEntity,
+    HoverMarker, HoverStructureBounds, PlacementPreview, SelectionOverlay, WorldRenderManager,
 };
+use crate::game::world::selection_overlays::delete::DeleteOverlay;
+use crate::game::world::selection_overlays::selection::AreaSelectionOverlay;
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
 #[derive(SystemParam)]
 pub struct PlacementQueries<'w, 's> {
     meshes: ResMut<'w, Assets<Mesh>>,
     block_entities: Query<'w, 's, (Entity, &'static BlockEntity)>,
-    edit_previews: Query<'w, 's, Entity, With<EditPreview>>,
+    selection_overlays: Query<'w, 's, Entity, With<SelectionOverlay>>,
     player: Query<'w, 's, &'static mut Transform, With<FlyCamera>>,
 }
 
@@ -173,7 +175,7 @@ pub fn placement_input(
     let PlacementQueries {
         mut meshes,
         block_entities,
-        edit_previews,
+        selection_overlays,
         mut player,
     } = queries;
     let place_button = config
@@ -204,13 +206,13 @@ pub fn placement_input(
 
     if *mode != GameMode::Playing {
         placement.edit_gesture = None;
-        despawn_edit_previews(&mut commands, &edit_previews);
+        despawn_selection_overlays(&mut commands, &selection_overlays);
         return;
     }
 
     if ui_runtime.blocks_gameplay() {
         placement.edit_gesture = None;
-        despawn_edit_previews(&mut commands, &edit_previews);
+        despawn_selection_overlays(&mut commands, &selection_overlays);
         return;
     }
 
@@ -227,13 +229,13 @@ pub fn placement_input(
     {
         placement.edit_gesture = None;
         placement.selection.clear();
-        despawn_edit_previews(&mut commands, &edit_previews);
+        despawn_selection_overlays(&mut commands, &selection_overlays);
         return;
     }
 
     if simulation.is_active() {
         placement.edit_gesture = None;
-        despawn_edit_previews(&mut commands, &edit_previews);
+        despawn_selection_overlays(&mut commands, &selection_overlays);
         return;
     }
 
@@ -250,7 +252,7 @@ pub fn placement_input(
     {
         placement.edit_gesture = None;
         placement.selection.clear();
-        despawn_edit_previews(&mut commands, &edit_previews);
+        despawn_selection_overlays(&mut commands, &selection_overlays);
         return;
     }
 
@@ -271,7 +273,7 @@ pub fn placement_input(
         ) {
             solution_state.dirty = true;
         }
-        despawn_edit_previews(&mut commands, &edit_previews);
+        despawn_selection_overlays(&mut commands, &selection_overlays);
         spawn_selection_previews(&placement, &mut commands, &render_manager);
         return;
     }
@@ -283,7 +285,7 @@ pub fn placement_input(
             pick_target_block(pos, &world, &mut placement, &mut inventory);
         }
         placement.edit_gesture = None;
-        despawn_edit_previews(&mut commands, &edit_previews);
+        despawn_selection_overlays(&mut commands, &selection_overlays);
         return;
     }
 
@@ -303,7 +305,7 @@ pub fn placement_input(
             }
         }
         placement.edit_gesture = None;
-        despawn_edit_previews(&mut commands, &edit_previews);
+        despawn_selection_overlays(&mut commands, &selection_overlays);
         return;
     }
 
@@ -412,7 +414,7 @@ pub fn placement_input(
         }
     }
 
-    despawn_edit_previews(&mut commands, &edit_previews);
+    despawn_selection_overlays(&mut commands, &selection_overlays);
     if let Some(gesture) = &placement.edit_gesture {
         if !gesture.canceled {
             spawn_gesture_previews(
@@ -870,7 +872,7 @@ fn spawn_selection_previews(
     render_manager: &WorldRenderManager,
 ) {
     if let Some(first) = placement.selection.first_corner {
-        spawn_edit_preview(commands, render_manager, first, EditPreviewKind::Selection);
+        spawn_selection_overlay::<AreaSelectionOverlay>(commands, render_manager, first);
     }
 
     if let Some(bounds) = placement.selection.bounds {
@@ -880,7 +882,7 @@ fn spawn_selection_previews(
             .map(|drag| drag.offset)
             .unwrap_or(IVec3::ZERO);
         for pos in bounds.moved(offset).positions() {
-            spawn_edit_preview(commands, render_manager, pos, EditPreviewKind::Selection);
+            spawn_selection_overlay::<AreaSelectionOverlay>(commands, render_manager, pos);
         }
     }
 }
@@ -1036,7 +1038,7 @@ fn spawn_gesture_previews(
             );
             for pos in positions {
                 if can_delete_at(pos, builder_mode, world) {
-                    spawn_edit_preview(commands, render_manager, pos, EditPreviewKind::Delete);
+                    spawn_selection_overlay::<DeleteOverlay>(commands, render_manager, pos);
                 }
             }
         }
