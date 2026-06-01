@@ -16,8 +16,8 @@ use crate::game::world::animation::{
     BlockAnimation, BlockAnimationKind, PusherAnimation, WeldSpark,
 };
 use crate::game::world::blocks::{
-    edit_blocks, BlockData, BlockKind, BlockModel, BlockRenderSpec, WeldConnectorBehavior,
-    WireConnectorBehavior, PLAY_BLOCKS,
+    edit_blocks, local_connection_offset, six_way_offsets, wire_connector_render_plan, BlockData,
+    BlockKind, BlockModel, BlockRenderSpec, WeldConnectorBehavior, PLAY_BLOCKS,
 };
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_manager::WorldRenderManager;
@@ -901,11 +901,7 @@ fn spawn_block_model(
 
     let render_spec = assets.block_render_spec(data.kind, data.facing);
 
-    let mut entity = if matches!(render_spec.model, BlockModel::PartsOnly(_))
-        || matches!(
-            render_spec.behavior.wire_connector,
-            Some(WireConnectorBehavior::Wire)
-        ) {
+    let mut entity = if matches!(render_spec.model, BlockModel::PartsOnly(_)) {
         commands.spawn((transform, Visibility::default()))
     } else if data.kind == BlockKind::Platform {
         commands.spawn((
@@ -994,7 +990,7 @@ fn spawn_block_model(
             for offset in offsets {
                 let neighbor = pos + offset;
                 if weld_neighbor_connects_to(assets, world, neighbor, -offset) {
-                    let local_offset = local_connector_offset(data, offset);
+                    let local_offset = local_connection_offset(data, offset);
                     let mut child = parent.spawn((
                         Mesh3d(assets.connector_mesh(local_offset)),
                         MeshMaterial3d(assets.weld_connector_material.clone()),
@@ -1007,36 +1003,23 @@ fn spawn_block_model(
             }
         }
 
-        if render_behavior.wire_connector.is_some() {
-            let mut connected_offsets = Vec::new();
-            for offset in signal_offsets() {
-                let neighbor = pos + offset;
-                if world
-                    .blocks
-                    .get(&neighbor)
-                    .or_else(|| world.system_blocks.get(&neighbor))
-                    .is_some_and(|block| wire_connects_to(assets, block, -offset))
-                {
-                    connected_offsets.push(offset);
-                    let local_offset = local_connector_offset(data, offset);
-                    let mut child = parent.spawn((
-                        Mesh3d(assets.wire_connector_mesh(local_offset)),
-                        MeshMaterial3d(if data.kind == BlockKind::Wire {
-                            material.clone()
-                        } else {
-                            assets.wire_connector_material.clone()
-                        }),
-                        Transform::from_translation(local_offset.as_vec3() * 0.174),
-                    ));
-                    if let Some((_, icon_layer)) = icon_render {
-                        child.insert((icon_layer.clone(), BlockIconRenderEntity));
-                    }
+        if let Some(wire_plan) = wire_connector_render_plan(data, pos, world) {
+            for local_offset in wire_plan.local_connector_offsets {
+                let mut child = parent.spawn((
+                    Mesh3d(assets.wire_connector_mesh(local_offset)),
+                    MeshMaterial3d(if data.kind == BlockKind::Wire {
+                        material.clone()
+                    } else {
+                        assets.wire_connector_material.clone()
+                    }),
+                    Transform::from_translation(local_offset.as_vec3() * 0.174),
+                ));
+                if let Some((_, icon_layer)) = icon_render {
+                    child.insert((icon_layer.clone(), BlockIconRenderEntity));
                 }
             }
 
-            if data.kind == crate::game::world::blocks::BlockKind::Wire
-                && connected_offsets.is_empty()
-            {
+            if wire_plan.isolated_wire_node {
                 let mut child =
                     parent.spawn((Mesh3d(assets.wire_node_mesh()), MeshMaterial3d(material)));
                 if let Some((_, icon_layer)) = icon_render {
@@ -1201,37 +1184,6 @@ fn weld_neighbor_connects_to(
         .is_some_and(|block| weld_connects_to(render_manager, block, connector_from_block))
 }
 
-fn local_connector_offset(data: BlockData, offset: IVec3) -> IVec3 {
-    if data.kind.is_directional() {
-        data.facing.inverse_rotate_offset(offset)
-    } else {
-        offset
-    }
-}
-
-fn wire_connects_to(
-    render_manager: &WorldRenderManager,
-    block: &BlockData,
-    wire_from_block: IVec3,
-) -> bool {
-    match render_manager
-        .block_render_spec(block.kind, block.facing)
-        .behavior
-        .wire_connector
-    {
-        Some(WireConnectorBehavior::Wire) => true,
-        Some(WireConnectorBehavior::Device { blocked_offset }) => wire_from_block != blocked_offset,
-        None => false,
-    }
-}
-
 fn signal_offsets() -> [IVec3; 6] {
-    [
-        IVec3::X,
-        IVec3::NEG_X,
-        IVec3::Y,
-        IVec3::NEG_Y,
-        IVec3::Z,
-        IVec3::NEG_Z,
-    ]
+    six_way_offsets()
 }

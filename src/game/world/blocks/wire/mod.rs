@@ -1,8 +1,10 @@
-use super::{rgb, Block, BlockDefinition, BlockKind, RenderBehavior, SignalBehavior};
+use super::{rgb, Block, BlockDefinition, BlockKind, BlockModel, RenderBehavior, SignalBehavior};
 
 mod definition;
 mod render;
 mod simulation;
+
+pub use render::wire_connector_render_plan;
 
 pub struct WireBlock;
 
@@ -23,5 +25,9 @@ impl Block for WireBlock {
 
     fn render_behavior(&self, _facing: super::Facing) -> RenderBehavior {
         render::render_behavior(self, _facing)
+    }
+
+    fn model(&self) -> BlockModel {
+        render::model(self)
     }
 }

@@ -20,6 +20,7 @@ mod pusher;
 mod reverse_conveyor;
 mod roller;
 mod rotator;
+mod six_way;
 mod stamper;
 mod switch;
 mod teleport_entrance;
@@ -44,8 +45,10 @@ pub use self::converter::{ConverterMode, ConverterSettings};
 pub use self::generator::GeneratorSettings;
 pub use self::goal::GoalSettings;
 pub use self::roller::RollerSettings;
+pub use self::six_way::{local_connection_offset, six_way_connection_plan, six_way_offsets};
 pub use self::stamper::StamperSettings;
 pub use self::teleport_entrance::TeleportSettings;
+pub use self::wire::wire_connector_render_plan;
 
 pub const BLOCK_SIZE: f32 = 1.0;
 pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
