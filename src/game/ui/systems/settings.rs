@@ -129,19 +129,10 @@ pub fn update_settings_dropdowns_ui(
     triggers: Query<(&SettingsAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     for (label, mut text) in &mut texts.p0() {
-        text.0 = match label.0 {
-            super::types::SettingsDropdown::Language => i18n.language().native_name().to_string(),
-            super::types::SettingsDropdown::PlaceSelectionMode => {
-                i18n.text(super::screens::selection_mode_text_key(
-                    config.place_selection_mode,
-                ))
-            }
-            super::types::SettingsDropdown::DeleteSelectionMode => {
-                i18n.text(super::screens::selection_mode_text_key(
-                    config.delete_selection_mode,
-                ))
-            }
+        let Some(spec) = super::screens::settings_dropdown_spec_by_id(label.0) else {
+            continue;
         };
+        text.0 = super::screens::settings_dropdown_value_text(spec, &config, &i18n);
     }
 
     for (value, mut text) in &mut texts.p1() {

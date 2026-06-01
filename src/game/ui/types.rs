@@ -244,13 +244,13 @@ pub struct SettingsSliderFill(pub SettingsField);
 pub struct SettingsSliderKnob(pub SettingsField);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub struct SettingsDropdownLabel(pub SettingsDropdown);
+pub struct SettingsDropdownLabel(pub SettingsDropdownId);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub struct SettingsDropdownList(pub SettingsDropdown);
+pub struct SettingsDropdownList(pub SettingsDropdownId);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub struct SettingsDropdownRow(pub SettingsDropdown);
+pub struct SettingsDropdownRow(pub SettingsDropdownId);
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum SettingsField {
@@ -279,7 +279,7 @@ pub enum SettingsControl {
         field: SettingsField,
         config: SettingsSliderConfig,
     },
-    Dropdown(SettingsDropdown),
+    Dropdown(SettingsDropdownSpec),
 }
 
 #[derive(Clone, Copy)]
@@ -327,15 +327,15 @@ pub const GAMEPLAY_SETTINGS: &[SettingsItem] = &[
     },
     SettingsItem {
         text_key: "settings.language",
-        control: SettingsControl::Dropdown(SettingsDropdown::Language),
+        control: SettingsControl::Dropdown(SettingsDropdownSpec::LANGUAGE),
     },
     SettingsItem {
         text_key: "settings.place_selection_mode",
-        control: SettingsControl::Dropdown(SettingsDropdown::PlaceSelectionMode),
+        control: SettingsControl::Dropdown(SettingsDropdownSpec::PLACE_SELECTION_MODE),
     },
     SettingsItem {
         text_key: "settings.delete_selection_mode",
-        control: SettingsControl::Dropdown(SettingsDropdown::DeleteSelectionMode),
+        control: SettingsControl::Dropdown(SettingsDropdownSpec::DELETE_SELECTION_MODE),
     },
 ];
 
@@ -427,11 +427,35 @@ impl SettingsField {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub enum SettingsDropdown {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SettingsDropdownId(pub u8);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SettingsDropdownValue {
     Language,
     PlaceSelectionMode,
     DeleteSelectionMode,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SettingsDropdownSpec {
+    pub id: SettingsDropdownId,
+    pub value: SettingsDropdownValue,
+}
+
+impl SettingsDropdownSpec {
+    pub const LANGUAGE: Self = Self {
+        id: SettingsDropdownId(0),
+        value: SettingsDropdownValue::Language,
+    };
+    pub const PLACE_SELECTION_MODE: Self = Self {
+        id: SettingsDropdownId(1),
+        value: SettingsDropdownValue::PlaceSelectionMode,
+    };
+    pub const DELETE_SELECTION_MODE: Self = Self {
+        id: SettingsDropdownId(2),
+        value: SettingsDropdownValue::DeleteSelectionMode,
+    };
 }
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
@@ -663,7 +687,7 @@ pub enum SettingsAction {
     SetPlaceSelectionMode(ConfigSelectionMode),
     SetDeleteSelectionMode(ConfigSelectionMode),
     SetLanguage(Language),
-    ToggleDropdown(SettingsDropdown),
+    ToggleDropdown(SettingsDropdownId),
     Bind(ConfigAction),
     ResetDefaults,
     OpenFolder,
@@ -726,7 +750,7 @@ pub enum SettingsTab {
 pub struct PendingKeyBind(pub Option<ConfigAction>);
 
 #[derive(Resource, Default)]
-pub struct OpenSettingsDropdown(pub Option<SettingsDropdown>);
+pub struct OpenSettingsDropdown(pub Option<SettingsDropdownId>);
 
 impl Default for SettingsTab {
     fn default() -> Self {

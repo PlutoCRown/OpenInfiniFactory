@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::shared::config::{ConfigAction, ConfigSelectionMode};
+use crate::shared::config::{ConfigAction, ConfigSelectionMode, GameConfig};
 use crate::shared::i18n::I18n;
 
 use super::super::components::{
@@ -8,8 +8,9 @@ use super::super::components::{
     transparent_node, PanelOptions,
 };
 use super::super::types::{
-    ButtonSpec, PanelVisibility, SettingsAction, SettingsControl, SettingsDropdown,
-    SettingsDropdownRow, SettingsItem, SettingsTab, UiPanelBinding, UiPanelId, GAMEPLAY_SETTINGS,
+    ButtonSpec, PanelVisibility, SettingsAction, SettingsControl, SettingsDropdownRow,
+    SettingsDropdownSpec, SettingsDropdownValue, SettingsItem, SettingsTab, UiPanelBinding,
+    UiPanelId, GAMEPLAY_SETTINGS,
 };
 use super::super::widgets::{
     spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_dropdown_list,
@@ -52,13 +53,13 @@ fn spawn_settings_dropdown_row(
     panel: &mut ChildSpawnerCommands,
     i18n: &I18n,
     text_key: &'static str,
-    dropdown: SettingsDropdown,
+    dropdown: SettingsDropdownSpec,
 ) {
     panel
         .spawn((
             settings_row_node(),
             PanelVisibility::SettingsTab(SettingsTab::Gameplay),
-            SettingsDropdownRow(dropdown),
+            SettingsDropdownRow(dropdown.id),
             ZIndex(300),
         ))
         .with_children(|row| {
@@ -71,19 +72,23 @@ fn spawn_settings_dropdown_row(
                 ..default()
             }))
             .with_children(|controls| {
-                spawn_settings_dropdown(controls, dropdown);
+                spawn_settings_dropdown(controls, dropdown.id);
             });
         });
 }
 
 fn spawn_settings_dropdown_layers(root: &mut ChildSpawnerCommands, i18n: &I18n) {
-    for dropdown in [
-        SettingsDropdown::Language,
-        SettingsDropdown::PlaceSelectionMode,
-        SettingsDropdown::DeleteSelectionMode,
-    ] {
-        spawn_settings_dropdown_list(root, dropdown, settings_dropdown_options(i18n, dropdown));
-    }
+    spawn_settings_dropdown_list(root, SettingsDropdownSpec::LANGUAGE.id, language_options());
+    spawn_settings_dropdown_list(
+        root,
+        SettingsDropdownSpec::PLACE_SELECTION_MODE.id,
+        place_selection_options(i18n),
+    );
+    spawn_settings_dropdown_list(
+        root,
+        SettingsDropdownSpec::DELETE_SELECTION_MODE.id,
+        delete_selection_options(i18n),
+    );
 }
 
 fn spawn_settings_slider_row(
@@ -244,39 +249,40 @@ fn key_bindings_columns_bundle() -> impl Bundle {
     })
 }
 
-fn settings_dropdown_options(
-    i18n: &I18n,
-    dropdown: SettingsDropdown,
-) -> Vec<(String, SettingsAction)> {
-    match dropdown {
-        SettingsDropdown::Language => crate::shared::i18n::Language::ALL
-            .into_iter()
-            .map(|language| {
-                (
-                    language.native_name().to_string(),
-                    SettingsAction::SetLanguage(language),
-                )
-            })
-            .collect(),
-        SettingsDropdown::PlaceSelectionMode => ConfigSelectionMode::ALL
-            .into_iter()
-            .map(|mode| {
-                (
-                    i18n.text(selection_mode_text_key(mode)),
-                    SettingsAction::SetPlaceSelectionMode(mode),
-                )
-            })
-            .collect(),
-        SettingsDropdown::DeleteSelectionMode => ConfigSelectionMode::ALL
-            .into_iter()
-            .map(|mode| {
-                (
-                    i18n.text(selection_mode_text_key(mode)),
-                    SettingsAction::SetDeleteSelectionMode(mode),
-                )
-            })
-            .collect(),
-    }
+fn language_options() -> Vec<(String, SettingsAction)> {
+    crate::shared::i18n::Language::ALL
+        .into_iter()
+        .map(|language| {
+            (
+                language.native_name().to_string(),
+                SettingsAction::SetLanguage(language),
+            )
+        })
+        .collect()
+}
+
+fn place_selection_options(i18n: &I18n) -> Vec<(String, SettingsAction)> {
+    ConfigSelectionMode::ALL
+        .into_iter()
+        .map(|mode| {
+            (
+                i18n.text(selection_mode_text_key(mode)),
+                SettingsAction::SetPlaceSelectionMode(mode),
+            )
+        })
+        .collect()
+}
+
+fn delete_selection_options(i18n: &I18n) -> Vec<(String, SettingsAction)> {
+    ConfigSelectionMode::ALL
+        .into_iter()
+        .map(|mode| {
+            (
+                i18n.text(selection_mode_text_key(mode)),
+                SettingsAction::SetDeleteSelectionMode(mode),
+            )
+        })
+        .collect()
 }
 
 const GENERAL_KEY_BINDINGS: &[ButtonSpec<ConfigAction>] = &[
@@ -326,4 +332,32 @@ pub(crate) fn selection_mode_text_key(mode: ConfigSelectionMode) -> &'static str
         ConfigSelectionMode::Line => "selection_mode.line",
         ConfigSelectionMode::Plane => "selection_mode.plane",
     }
+}
+
+pub(crate) fn settings_dropdown_value_text(
+    dropdown: SettingsDropdownSpec,
+    config: &GameConfig,
+    i18n: &I18n,
+) -> String {
+    match dropdown.value {
+        SettingsDropdownValue::Language => i18n.language().native_name().to_string(),
+        SettingsDropdownValue::PlaceSelectionMode => {
+            i18n.text(selection_mode_text_key(config.place_selection_mode))
+        }
+        SettingsDropdownValue::DeleteSelectionMode => {
+            i18n.text(selection_mode_text_key(config.delete_selection_mode))
+        }
+    }
+}
+
+pub(crate) fn settings_dropdown_spec_by_id(
+    id: super::super::types::SettingsDropdownId,
+) -> Option<SettingsDropdownSpec> {
+    [
+        SettingsDropdownSpec::LANGUAGE,
+        SettingsDropdownSpec::PLACE_SELECTION_MODE,
+        SettingsDropdownSpec::DELETE_SELECTION_MODE,
+    ]
+    .into_iter()
+    .find(|spec| spec.id == id)
 }

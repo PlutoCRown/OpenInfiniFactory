@@ -8,7 +8,7 @@ use super::components::{
 use super::types::{
     AreaKind, BlockEditAction, BlockMaterialIcon, BlockMaterialIconSlot, BlockPanelDropdown,
     BlockPanelDropdownLabel, BlockPanelDropdownList, ConfirmDialogAction, InventoryItem,
-    InventorySlot, KeyBindingButton, MenuAction, SettingsAction, SettingsDropdown,
+    InventorySlot, KeyBindingButton, MenuAction, SettingsAction, SettingsDropdownId,
     SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
     SettingsSliderKnob, SettingsText, SettingsTextKind, SettingsValueText, SlotArea,
     TeleportAction,
@@ -395,7 +395,7 @@ pub(super) fn spawn_settings_slider_value(parent: &mut ChildSpawnerCommands, fie
 
 pub(super) fn spawn_settings_dropdown(
     parent: &mut ChildSpawnerCommands,
-    dropdown: SettingsDropdown,
+    dropdown: SettingsDropdownId,
 ) {
     parent
         .spawn((
@@ -436,7 +436,7 @@ pub(super) fn spawn_settings_dropdown(
 
 pub(super) fn spawn_settings_dropdown_list(
     parent: &mut ChildSpawnerCommands,
-    dropdown: SettingsDropdown,
+    dropdown: SettingsDropdownId,
     options: impl IntoIterator<Item = (String, SettingsAction)>,
 ) {
     parent

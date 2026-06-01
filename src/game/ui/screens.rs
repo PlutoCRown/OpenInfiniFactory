@@ -8,4 +8,7 @@ pub use inventory::{
 };
 pub use menu::{spawn_main_menu, spawn_pause_panel};
 pub use save_list::{spawn_save_list, spawn_save_management_row, spawn_save_select_row};
-pub(super) use settings::{config_action_text_key, selection_mode_text_key, spawn_settings_panel};
+pub(super) use settings::{
+    config_action_text_key, settings_dropdown_spec_by_id, settings_dropdown_value_text,
+    spawn_settings_panel,
+};
