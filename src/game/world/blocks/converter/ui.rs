@@ -1,12 +1,5 @@
 use super::*;
 
-pub(super) fn default_settings(
-    _block: &ConverterBlock,
-    _pos: bevy::prelude::IVec3,
-) -> Option<BlockSettings> {
-    Some(BlockSettings::Converter(ConverterSettings::default()))
-}
-
 pub(super) fn ui_panel(_block: &ConverterBlock) -> Option<UiPanelId> {
     Some(UiPanelId::Converter)
 }

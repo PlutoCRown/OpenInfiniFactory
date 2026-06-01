@@ -3,11 +3,15 @@ use super::{
     EditableBlock,
 };
 use crate::game::ui::{BlockEditAction, BlockPanelDropdown, UiPanelId};
-use crate::game::world::grid::{BlockSettings, ConverterMode, ConverterSettings};
+use crate::game::world::blocks::SerializedBlockState;
+use crate::game::world::grid::WorldBlocks;
 
 mod definition;
 mod render;
+mod state;
 mod ui;
+
+pub use state::{ConverterMode, ConverterSettings};
 
 pub struct ConverterBlock;
 
@@ -22,8 +26,20 @@ impl Block for ConverterBlock {
         definition::definition(self)
     }
 
-    fn default_settings(&self, _pos: bevy::prelude::IVec3) -> Option<BlockSettings> {
-        ui::default_settings(self, _pos)
+    fn default_state(
+        &self,
+        pos: bevy::prelude::IVec3,
+        world: &WorldBlocks,
+    ) -> Option<SerializedBlockState> {
+        state::default_state(pos, world)
+    }
+
+    fn normalize_state(
+        &self,
+        state: &SerializedBlockState,
+        pos: bevy::prelude::IVec3,
+    ) -> Option<SerializedBlockState> {
+        state::normalize_state(state, pos)
     }
 
     fn render_assets(&self) -> BlockRenderAssets {

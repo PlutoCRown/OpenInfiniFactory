@@ -1,12 +1,5 @@
 use super::*;
 
-pub(super) fn default_settings(
-    _block: &GeneratorBlock,
-    _pos: bevy::prelude::IVec3,
-) -> Option<BlockSettings> {
-    Some(BlockSettings::Generator(GeneratorSettings::default()))
-}
-
 pub(super) fn ui_panel(_block: &GeneratorBlock) -> Option<UiPanelId> {
     Some(UiPanelId::Generator)
 }

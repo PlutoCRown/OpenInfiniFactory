@@ -1,12 +1,5 @@
 use super::*;
 
-pub(super) fn default_settings(
-    _block: &GoalBlock,
-    _pos: bevy::prelude::IVec3,
-) -> Option<BlockSettings> {
-    Some(BlockSettings::Goal(GoalSettings::default()))
-}
-
 pub(super) fn ui_panel(_block: &GoalBlock) -> Option<UiPanelId> {
     Some(UiPanelId::Goal)
 }

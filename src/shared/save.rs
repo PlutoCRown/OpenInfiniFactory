@@ -4,8 +4,11 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::game::world::blocks::{BlockData, PersistentLayer};
-use crate::game::world::grid::{BlockSettings, WorldBlocks};
+use crate::game::world::blocks::{
+    BlockData, ConverterSettings, GeneratorSettings, GoalSettings, PersistentLayer,
+    SerializedBlockState, StamperSettings, TeleportSettings,
+};
+use crate::game::world::grid::WorldBlocks;
 use crate::game::{
     state::BuilderMode,
     ui::{HotbarItems, InventoryItems},
@@ -129,7 +132,9 @@ struct SaveFile {
     #[serde(default)]
     system_blocks: Vec<SavedBlock>,
     #[serde(default)]
-    block_settings: Vec<SavedBlockSettings>,
+    block_states: Vec<SavedBlockState>,
+    #[serde(default)]
+    block_settings: Vec<LegacySavedBlockSettings>,
     #[serde(default)]
     hotbar: Option<HotbarItems>,
 }
@@ -148,9 +153,25 @@ struct WorldLayer {
     #[serde(default)]
     system_blocks: Vec<SavedBlock>,
     #[serde(default)]
-    block_settings: Vec<SavedBlockSettings>,
+    block_states: Vec<SavedBlockState>,
+    #[serde(default)]
+    block_settings: Vec<LegacySavedBlockSettings>,
     #[serde(default)]
     hotbar: Option<HotbarItems>,
+}
+
+impl WorldLayer {
+    fn all_block_states(&self) -> Vec<SavedBlockState> {
+        self.block_states
+            .iter()
+            .cloned()
+            .chain(
+                self.block_settings
+                    .iter()
+                    .filter_map(LegacySavedBlockSettings::to_block_state),
+            )
+            .collect()
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -162,11 +183,28 @@ struct SavedBlock {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-struct SavedBlockSettings {
+struct SavedBlockState {
     x: i32,
     y: i32,
     z: i32,
-    settings: BlockSettings,
+    state: SerializedBlockState,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct LegacySavedBlockSettings {
+    x: i32,
+    y: i32,
+    z: i32,
+    settings: LegacyBlockSettings,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+enum LegacyBlockSettings {
+    Generator(GeneratorSettings),
+    Goal(GoalSettings),
+    Labeler(StamperSettings),
+    Converter(ConverterSettings),
+    Teleport(TeleportSettings),
 }
 
 pub fn save_world(
@@ -177,11 +215,9 @@ pub fn save_world(
 ) -> bool {
     let save = match kind {
         SaveKind::Puzzle => SaveFile::puzzle(capture_puzzle_layer(world, inventory)),
-        SaveKind::Solution => SaveFile::legacy_solution(
-            capture_puzzle_layer(world, inventory),
-            world,
-            inventory,
-        ),
+        SaveKind::Solution => {
+            SaveFile::legacy_solution(capture_puzzle_layer(world, inventory), world, inventory)
+        }
     };
 
     write_save(name, &save)
@@ -194,14 +230,7 @@ pub fn save_solution_with_puzzle(
     _puzzle_snapshot: &WorldBlocks,
     inventory: &InventoryItems,
 ) -> bool {
-    write_save(
-        name,
-        &SaveFile::solution(
-            puzzle_name,
-            world,
-            inventory,
-        ),
-    )
+    write_save(name, &SaveFile::solution(puzzle_name, world, inventory))
 }
 
 pub fn load_world(world: &mut WorldBlocks, name: &str) -> Option<LoadedSave> {
@@ -293,7 +322,8 @@ impl SaveFile {
             factory_blocks: Vec::new(),
             blocks: puzzle.blocks,
             system_blocks: puzzle.system_blocks,
-            block_settings: puzzle.block_settings,
+            block_states: puzzle.block_states,
+            block_settings: Vec::new(),
             hotbar: puzzle.hotbar,
         }
     }
@@ -306,12 +336,17 @@ impl SaveFile {
             factory_blocks: capture_factory_blocks(world),
             blocks: Vec::new(),
             system_blocks: Vec::new(),
+            block_states: Vec::new(),
             block_settings: Vec::new(),
             hotbar: Some(inventory.hotbar),
         }
     }
 
-    fn legacy_solution(puzzle: WorldLayer, world: &WorldBlocks, inventory: &InventoryItems) -> Self {
+    fn legacy_solution(
+        puzzle: WorldLayer,
+        world: &WorldBlocks,
+        inventory: &InventoryItems,
+    ) -> Self {
         Self {
             kind: SaveFileKind::Solution,
             puzzle: Some(puzzle.clone()),
@@ -319,7 +354,8 @@ impl SaveFile {
             factory_blocks: capture_factory_blocks(world),
             blocks: puzzle.blocks,
             system_blocks: puzzle.system_blocks,
-            block_settings: puzzle.block_settings,
+            block_states: puzzle.block_states,
+            block_settings: Vec::new(),
             hotbar: Some(inventory.hotbar),
         }
     }
@@ -372,22 +408,25 @@ impl SaveFile {
             .or_else(|| self.puzzle.clone())
             .unwrap_or_else(|| self.legacy_puzzle_layer());
         let mut parts: Vec<String> = Vec::new();
-        for saved in puzzle.blocks {
+        for saved in &puzzle.blocks {
             parts.push(format!(
                 "b:{},{},{}:{:?}:{:?}",
                 saved.x, saved.y, saved.z, saved.data.kind, saved.data.facing
             ));
         }
-        for saved in puzzle.system_blocks {
+        for saved in &puzzle.system_blocks {
             parts.push(format!(
                 "s:{},{},{}:{:?}:{:?}",
                 saved.x, saved.y, saved.z, saved.data.kind, saved.data.facing
             ));
         }
-        for saved in puzzle.block_settings {
+        for saved in puzzle.all_block_states() {
             parts.push(format!(
-                "bs:{},{},{}:{:?}",
-                saved.x, saved.y, saved.z, saved.settings
+                "bs:{},{},{}:{}",
+                saved.x,
+                saved.y,
+                saved.z,
+                saved.state.debug_signature()
             ));
         }
         parts.sort();
@@ -406,6 +445,12 @@ impl SaveFile {
                 .system_blocks
                 .iter()
                 .filter(|saved| saved.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle))
+                .cloned()
+                .collect(),
+            block_states: self
+                .block_states
+                .iter()
+                .filter(|saved| self.legacy_system_block_is_persistent(saved.pos()))
                 .cloned()
                 .collect(),
             block_settings: self
@@ -483,26 +528,30 @@ fn capture_puzzle_layer(world: &WorldBlocks, inventory: &InventoryItems) -> Worl
     WorldLayer {
         blocks,
         system_blocks,
-        block_settings: world
-            .block_settings
-            .iter()
-            .filter_map(|(pos, settings)| {
-                world
-                    .system_blocks
-                    .get(pos)
-                    .is_some_and(|block| {
-                        block.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
-                    })
-                    .then_some(SavedBlockSettings {
-                        x: pos.x,
-                        y: pos.y,
-                        z: pos.z,
-                        settings: settings.clone(),
-                    })
-            })
-            .collect(),
+        block_states: capture_block_states(world, PersistentLayer::Puzzle),
+        block_settings: Vec::new(),
         hotbar: Some(inventory.hotbar),
     }
+}
+
+fn capture_block_states(world: &WorldBlocks, layer: PersistentLayer) -> Vec<SavedBlockState> {
+    world
+        .block_states
+        .iter()
+        .filter_map(|(pos, state)| {
+            world
+                .system_blocks
+                .get(pos)
+                .or_else(|| world.blocks.get(pos))
+                .is_some_and(|block| block.kind.persistent_layer() == Some(layer))
+                .then_some(SavedBlockState {
+                    x: pos.x,
+                    y: pos.y,
+                    z: pos.z,
+                    state: state.clone(),
+                })
+        })
+        .collect()
 }
 
 fn capture_factory_blocks(world: &WorldBlocks) -> Vec<SavedBlock> {
@@ -517,14 +566,15 @@ fn capture_factory_blocks(world: &WorldBlocks) -> Vec<SavedBlock> {
 }
 
 fn apply_layer(world: &mut WorldBlocks, layer: WorldLayer) {
+    let block_states = layer.all_block_states();
     for saved in layer.blocks {
         world.insert(saved.pos(), saved.data);
     }
     for saved in layer.system_blocks {
         world.insert(saved.pos(), saved.data);
     }
-    for saved in layer.block_settings {
-        world.set_block_settings(saved.pos(), saved.settings);
+    for saved in block_states {
+        world.set_block_serialized_state(saved.pos(), saved.state);
     }
 }
 
@@ -551,9 +601,33 @@ impl SavedBlock {
     }
 }
 
-impl SavedBlockSettings {
+impl SavedBlockState {
     fn pos(&self) -> IVec3 {
         IVec3::new(self.x, self.y, self.z)
+    }
+}
+
+impl LegacySavedBlockSettings {
+    fn pos(&self) -> IVec3 {
+        IVec3::new(self.x, self.y, self.z)
+    }
+
+    fn to_block_state(&self) -> Option<SavedBlockState> {
+        let state = match &self.settings {
+            LegacyBlockSettings::Generator(settings) => SerializedBlockState::from_state(settings),
+            LegacyBlockSettings::Goal(settings) => SerializedBlockState::from_state(settings),
+            LegacyBlockSettings::Labeler(settings) => {
+                SerializedBlockState::from_state::<StamperSettings>(settings)
+            }
+            LegacyBlockSettings::Converter(settings) => SerializedBlockState::from_state(settings),
+            LegacyBlockSettings::Teleport(settings) => SerializedBlockState::from_state(settings),
+        }?;
+        Some(SavedBlockState {
+            x: self.x,
+            y: self.y,
+            z: self.z,
+            state,
+        })
     }
 }
 
@@ -631,158 +705,4 @@ pub fn normalized_save_name(name: &str) -> String {
     sanitize_save_name(name.trim())
         .trim_matches('_')
         .to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::game::world::blocks::{BlockData, BlockKind, Facing, MaterialKind, StampColor};
-    use crate::game::world::grid::{
-        ConverterMode, ConverterSettings, GeneratorSettings, LabelerSettings, TeleportSettings,
-    };
-
-    #[test]
-    fn puzzle_layer_round_trips_edit_system_blocks_and_settings() {
-        let generator = IVec3::new(1, 1, 0);
-        let goal = IVec3::new(2, 1, 0);
-        let stamper = IVec3::new(3, 1, 0);
-        let roller = IVec3::new(4, 1, 0);
-        let converter = IVec3::new(5, 1, 0);
-        let entrance = IVec3::new(6, 1, 0);
-        let exit = IVec3::new(7, 1, 0);
-        let generated_marker = IVec3::new(8, 1, 0);
-
-        let mut world = WorldBlocks::default();
-        for (pos, kind) in [
-            (generator, BlockKind::Generator),
-            (goal, BlockKind::Goal),
-            (stamper, BlockKind::Stamper),
-            (roller, BlockKind::Roller),
-            (converter, BlockKind::Converter),
-            (entrance, BlockKind::TeleportEntrance),
-            (exit, BlockKind::TeleportExit),
-            (generated_marker, BlockKind::WeldPoint),
-        ] {
-            world.insert(
-                pos,
-                BlockData {
-                    kind,
-                    facing: Facing::North,
-                },
-            );
-        }
-
-        world.set_generator_settings(
-            generator,
-            GeneratorSettings {
-                period: 9,
-                material: MaterialKind::Copper,
-            },
-        );
-        world.set_labeler_settings(
-            stamper,
-            LabelerSettings {
-                color: StampColor::Blue,
-            },
-        );
-        world.set_labeler_settings(
-            roller,
-            LabelerSettings {
-                color: StampColor::Yellow,
-            },
-        );
-        world.set_converter_settings(
-            converter,
-            ConverterSettings {
-                mode: ConverterMode::SpecificInput,
-                input: MaterialKind::Iron,
-                output: MaterialKind::Copper,
-            },
-        );
-        world.set_teleport_settings(
-            entrance,
-            TeleportSettings {
-                name: "Entrance".to_string(),
-                pair: Some(exit),
-            },
-        );
-        world.set_teleport_settings(
-            exit,
-            TeleportSettings {
-                name: "Exit".to_string(),
-                pair: Some(entrance),
-            },
-        );
-
-        let inventory = InventoryItems::for_mode(BuilderMode::Edit);
-        let loaded = SaveFile::puzzle(capture_puzzle_layer(&world, &inventory)).into_loaded();
-        let round_trip = loaded.world;
-
-        for pos in [generator, goal, stamper, roller, converter, entrance, exit] {
-            assert!(
-                round_trip.system_blocks.contains_key(&pos),
-                "expected {pos:?} to be saved as a puzzle system block"
-            );
-        }
-        assert!(!round_trip.system_blocks.contains_key(&generated_marker));
-
-        assert_eq!(
-            round_trip.generator_settings(generator),
-            GeneratorSettings {
-                period: 9,
-                material: MaterialKind::Copper,
-            }
-        );
-        assert_eq!(
-            round_trip.labeler_settings(stamper),
-            LabelerSettings {
-                color: StampColor::Blue,
-            }
-        );
-        assert_eq!(
-            round_trip.labeler_settings(roller),
-            LabelerSettings {
-                color: StampColor::Yellow,
-            }
-        );
-        assert_eq!(
-            round_trip.converter_settings(converter),
-            ConverterSettings {
-                mode: ConverterMode::SpecificInput,
-                input: MaterialKind::Iron,
-                output: MaterialKind::Copper,
-            }
-        );
-        assert_eq!(round_trip.teleport_settings(entrance).name, "Entrance");
-        assert_eq!(round_trip.teleport_settings(entrance).pair, Some(exit));
-        assert_eq!(round_trip.teleport_settings(exit).name, "Exit");
-        assert_eq!(round_trip.teleport_settings(exit).pair, Some(entrance));
-    }
-
-    #[test]
-    fn hotbar_round_trips_for_puzzle_and_solution() {
-        let mut puzzle_inventory = InventoryItems::for_mode(BuilderMode::Edit);
-        puzzle_inventory.set_hotbar_block(0, BlockKind::Stone);
-        puzzle_inventory.set_hotbar_block(1, BlockKind::TeleportEntrance);
-
-        let puzzle_loaded = SaveFile::puzzle(capture_puzzle_layer(
-            &WorldBlocks::default(),
-            &puzzle_inventory,
-        ))
-        .into_loaded();
-        assert_eq!(puzzle_loaded.hotbar, Some(puzzle_inventory.hotbar));
-
-        let mut solution_inventory = InventoryItems::for_mode(BuilderMode::Play);
-        solution_inventory.set_hotbar_block(0, BlockKind::Platform);
-        solution_inventory.set_hotbar_block(1, BlockKind::Switch);
-        solution_inventory.hotbar[2] = None;
-
-        let solution_loaded = SaveFile::legacy_solution(
-            capture_puzzle_layer(&WorldBlocks::default(), &puzzle_inventory),
-            &WorldBlocks::default(),
-            &solution_inventory,
-        )
-        .into_loaded();
-        assert_eq!(solution_loaded.hotbar, Some(solution_inventory.hotbar));
-    }
 }

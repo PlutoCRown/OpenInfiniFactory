@@ -29,6 +29,7 @@ mod welder;
 mod wire;
 
 use bevy::prelude::*;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 pub use self::registry::{
@@ -37,7 +38,14 @@ pub use self::registry::{
 use crate::game::state::SolutionState;
 use crate::game::ui::{BlockEditAction, BlockPanelDropdown, OpenBlockPanelDropdown, UiPanelId};
 pub use crate::game::world::direction::Facing;
-use crate::game::world::grid::{BlockSettings, WorldBlocks};
+use crate::game::world::grid::WorldBlocks;
+
+pub use self::converter::{ConverterMode, ConverterSettings};
+pub use self::generator::GeneratorSettings;
+pub use self::goal::GoalSettings;
+pub use self::roller::RollerSettings;
+pub use self::stamper::StamperSettings;
+pub use self::teleport_entrance::TeleportSettings;
 
 pub const BLOCK_SIZE: f32 = 1.0;
 pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
@@ -86,9 +94,19 @@ pub trait Block: RenderableBlock + Send + Sync {
         self.definition().persistence
     }
 
-    fn default_settings(&self, _pos: IVec3) -> Option<BlockSettings> {
+    fn default_state(&self, _pos: IVec3, _world: &WorldBlocks) -> Option<SerializedBlockState> {
         None
     }
+
+    fn normalize_state(
+        &self,
+        _state: &SerializedBlockState,
+        _pos: IVec3,
+    ) -> Option<SerializedBlockState> {
+        None
+    }
+
+    fn on_removed(&self, _pos: IVec3, _world: &mut WorldBlocks) {}
 
     fn movement_rule(&self, _facing: Facing) -> Option<MovementRule> {
         None
@@ -128,6 +146,38 @@ pub trait Block: RenderableBlock + Send + Sync {
 
     fn alternate(&self) -> Option<BlockKind> {
         None
+    }
+}
+
+pub trait SerializableBlockState:
+    Clone + Default + DeserializeOwned + PartialEq + Serialize + Send + Sync + 'static
+{
+    const BLOCK_KINDS: &'static [BlockKind];
+
+    fn default_for(_pos: IVec3, _world: &WorldBlocks) -> Self {
+        Self::default()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SerializedBlockState {
+    payload: serde_json::Value,
+}
+
+impl SerializedBlockState {
+    pub fn from_state<T: SerializableBlockState>(state: &T) -> Option<Self> {
+        serde_json::to_value(state)
+            .ok()
+            .map(|payload| Self { payload })
+    }
+
+    pub fn decode<T: SerializableBlockState>(&self) -> Option<T> {
+        serde_json::from_value(self.payload.clone()).ok()
+    }
+
+    pub fn debug_signature(&self) -> String {
+        ron::ser::to_string(&self.payload).unwrap_or_else(|_| format!("{:?}", self.payload))
     }
 }
 
@@ -175,19 +225,17 @@ impl<'a> BlockEditContext<'a> {
 }
 
 pub(super) fn edit_labeler(ctx: &mut BlockEditContext, action: BlockEditAction) {
-    let mut settings = ctx.world.labeler_settings(ctx.pos);
     match action {
         BlockEditAction::ToggleColorDropdown => {
             ctx.toggle_dropdown(BlockPanelDropdown::LabelerColor);
             return;
         }
         BlockEditAction::SetColor(color) => {
-            settings.color = color;
+            ctx.world.set_labeler_color(ctx.pos, color);
             ctx.close_dropdown();
         }
         _ => return,
     }
-    ctx.world.set_labeler_settings(ctx.pos, settings);
     ctx.mark_dirty();
 }
 
@@ -932,8 +980,20 @@ impl BlockKind {
         self.block().persistent_layer()
     }
 
-    pub fn default_settings(self, pos: IVec3) -> Option<BlockSettings> {
-        self.block().default_settings(pos)
+    pub fn default_state(self, pos: IVec3, world: &WorldBlocks) -> Option<SerializedBlockState> {
+        self.block().default_state(pos, world)
+    }
+
+    pub fn normalize_state(
+        self,
+        state: &SerializedBlockState,
+        pos: IVec3,
+    ) -> Option<SerializedBlockState> {
+        self.block().normalize_state(state, pos)
+    }
+
+    pub fn on_removed(self, pos: IVec3, world: &mut WorldBlocks) {
+        self.block().on_removed(pos, world);
     }
 
     pub fn movement_rule(self, facing: Facing) -> Option<MovementRule> {

@@ -2,13 +2,14 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::game::world::blocks::{BlockData, BlockKind, MaterialKind, StampColor};
+use crate::game::world::blocks::{
+    BlockData, BlockKind, ConverterSettings, GeneratorSettings, GoalSettings, RollerSettings,
+    SerializableBlockState, SerializedBlockState, StampColor, StamperSettings, TeleportSettings,
+};
 use crate::game::world::direction::Facing;
 
 pub const REACH: f32 = 12.0;
 pub const FLOOR_RADIUS: i32 = 12;
-const TELEPORT_ENTRANCE_NAMES: &[&str] = &["Alpha In", "Beta In", "Gamma In", "Delta In"];
-const TELEPORT_EXIT_NAMES: &[&str] = &["Alpha Out", "Beta Out", "Gamma Out", "Delta Out"];
 
 #[derive(Resource, Default, Clone)]
 pub struct WorldBlocks {
@@ -16,100 +17,8 @@ pub struct WorldBlocks {
     pub system_blocks: HashMap<IVec3, BlockData>,
     pub material_welds: HashSet<MaterialWeld>,
     pub material_face_marks: HashMap<MaterialFace, MaterialFaceMark>,
-    pub block_settings: HashMap<IVec3, BlockSettings>,
+    pub block_states: HashMap<IVec3, SerializedBlockState>,
     pub topology_revision: u64,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum BlockSettings {
-    Generator(GeneratorSettings),
-    Goal(GoalSettings),
-    Labeler(LabelerSettings),
-    Converter(ConverterSettings),
-    Teleport(TeleportSettings),
-}
-
-impl BlockSettings {
-    fn matches_kind(&self, other: &Self) -> bool {
-        matches!(
-            (self, other),
-            (Self::Generator(_), Self::Generator(_))
-                | (Self::Goal(_), Self::Goal(_))
-                | (Self::Labeler(_), Self::Labeler(_))
-                | (Self::Converter(_), Self::Converter(_))
-                | (Self::Teleport(_), Self::Teleport(_))
-        )
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct GeneratorSettings {
-    pub period: u64,
-    pub material: MaterialKind,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct GoalSettings {
-    pub material: MaterialKind,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct LabelerSettings {
-    pub color: StampColor,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ConverterSettings {
-    pub mode: ConverterMode,
-    pub input: MaterialKind,
-    pub output: MaterialKind,
-}
-
-impl Default for ConverterSettings {
-    fn default() -> Self {
-        Self {
-            mode: ConverterMode::AnyInput,
-            input: MaterialKind::Basic,
-            output: MaterialKind::Iron,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ConverterMode {
-    AnyInput,
-    SpecificInput,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct TeleportSettings {
-    pub name: String,
-    pub pair: Option<IVec3>,
-}
-
-impl TeleportSettings {
-    pub fn unnamed(pos: IVec3) -> Self {
-        Self {
-            name: format!("Portal {}", pos_hash(pos)),
-            pair: None,
-        }
-    }
-}
-
-impl Default for LabelerSettings {
-    fn default() -> Self {
-        Self {
-            color: StampColor::Red,
-        }
-    }
-}
-
-impl Default for GoalSettings {
-    fn default() -> Self {
-        Self {
-            material: MaterialKind::Basic,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
@@ -134,15 +43,6 @@ pub struct MaterialFaceMark {
 pub enum MaterialFaceMarkSource {
     Stamper,
     Roller,
-}
-
-impl Default for GeneratorSettings {
-    fn default() -> Self {
-        Self {
-            period: crate::game::world::blocks::DEFAULT_GENERATOR_PERIOD,
-            material: MaterialKind::Basic,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
@@ -182,12 +82,9 @@ impl WorldBlocks {
         } else {
             self.blocks.insert(pos, block)
         };
-        if !self.block_settings.contains_key(&pos) {
-            if let Some(mut settings) = block.kind.default_settings(pos) {
-                if let BlockSettings::Teleport(teleport_settings) = &mut settings {
-                    teleport_settings.name = self.next_teleport_name(block.kind);
-                }
-                self.block_settings.insert(pos, settings);
+        if !self.block_states.contains_key(&pos) {
+            if let Some(state) = block.kind.default_state(pos, self) {
+                self.block_states.insert(pos, state);
             }
         }
         if previous != Some(block) {
@@ -208,15 +105,9 @@ impl WorldBlocks {
 
     pub fn remove_system(&mut self, pos: &IVec3) -> Option<BlockData> {
         let removed = self.system_blocks.remove(pos);
-        if removed.is_some() {
-            self.block_settings.remove(pos);
-            for settings in self.block_settings.values_mut() {
-                if let BlockSettings::Teleport(settings) = settings {
-                    if settings.pair == Some(*pos) {
-                        settings.pair = None;
-                    }
-                }
-            }
+        if let Some(block) = removed {
+            self.block_states.remove(pos);
+            block.kind.on_removed(*pos, self);
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
         removed
@@ -228,7 +119,7 @@ impl WorldBlocks {
             self.system_blocks.clear();
             self.material_welds.clear();
             self.material_face_marks.clear();
-            self.block_settings.clear();
+            self.block_states.clear();
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -247,115 +138,131 @@ impl WorldBlocks {
     }
 
     pub fn generator_settings(&self, pos: IVec3) -> GeneratorSettings {
-        match self.block_settings.get(&pos) {
-            Some(BlockSettings::Generator(settings)) => *settings,
-            _ => GeneratorSettings::default(),
+        self.block_state(pos).unwrap_or_default()
+    }
+
+    pub fn block_state<T: SerializableBlockState>(&self, pos: IVec3) -> Option<T> {
+        let block = self
+            .system_blocks
+            .get(&pos)
+            .or_else(|| self.blocks.get(&pos))?;
+        if !T::BLOCK_KINDS.contains(&block.kind) {
+            return None;
+        }
+        self.block_states
+            .get(&pos)
+            .and_then(SerializedBlockState::decode)
+            .or_else(|| Some(T::default_for(pos, self)))
+    }
+
+    pub fn set_block_state<T: SerializableBlockState>(&mut self, pos: IVec3, state: T) {
+        let Some(block) = self
+            .system_blocks
+            .get(&pos)
+            .or_else(|| self.blocks.get(&pos))
+            .copied()
+        else {
+            return;
+        };
+        if !T::BLOCK_KINDS.contains(&block.kind) {
+            return;
+        }
+        let Some(state) = SerializedBlockState::from_state(&state)
+            .and_then(|state| block.kind.normalize_state(&state, pos))
+        else {
+            return;
+        };
+        if self.block_states.get(&pos) != Some(&state) {
+            self.block_states.insert(pos, state);
+            self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
 
-    pub fn set_block_settings(&mut self, pos: IVec3, settings: BlockSettings) {
-        let Some(block) = self.system_blocks.get(&pos).copied() else {
+    pub fn set_block_serialized_state(&mut self, pos: IVec3, state: SerializedBlockState) {
+        let Some(block) = self
+            .system_blocks
+            .get(&pos)
+            .or_else(|| self.blocks.get(&pos))
+            .copied()
+        else {
             return;
         };
-        let Some(default_settings) = block.kind.default_settings(pos) else {
+        let Some(state) = block.kind.normalize_state(&state, pos) else {
             return;
         };
-        if !settings.matches_kind(&default_settings) {
-            return;
-        }
-        if self.block_settings.get(&pos) != Some(&settings) {
-            self.block_settings.insert(pos, settings);
+        if self.block_states.get(&pos) != Some(&state) {
+            self.block_states.insert(pos, state);
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
 
     pub fn set_generator_settings(&mut self, pos: IVec3, settings: GeneratorSettings) {
-        self.set_block_settings(pos, BlockSettings::Generator(settings));
+        self.set_block_state(pos, settings);
     }
 
     pub fn goal_settings(&self, pos: IVec3) -> GoalSettings {
-        match self.block_settings.get(&pos) {
-            Some(BlockSettings::Goal(settings)) => *settings,
-            _ => GoalSettings::default(),
-        }
+        self.block_state(pos).unwrap_or_default()
     }
 
     pub fn set_goal_settings(&mut self, pos: IVec3, settings: GoalSettings) {
-        self.set_block_settings(pos, BlockSettings::Goal(settings));
+        self.set_block_state(pos, settings);
     }
 
-    pub fn labeler_settings(&self, pos: IVec3) -> LabelerSettings {
-        match self.block_settings.get(&pos) {
-            Some(BlockSettings::Labeler(settings)) => *settings,
-            _ => LabelerSettings::default(),
+    pub fn stamper_settings(&self, pos: IVec3) -> StamperSettings {
+        self.block_state(pos).unwrap_or_default()
+    }
+
+    pub fn set_stamper_settings(&mut self, pos: IVec3, settings: StamperSettings) {
+        self.set_block_state(pos, settings);
+    }
+
+    pub fn roller_settings(&self, pos: IVec3) -> RollerSettings {
+        self.block_state(pos).unwrap_or_default()
+    }
+
+    pub fn set_roller_settings(&mut self, pos: IVec3, settings: RollerSettings) {
+        self.set_block_state(pos, settings);
+    }
+
+    pub fn labeler_color(&self, pos: IVec3) -> crate::game::world::blocks::StampColor {
+        if self
+            .system_blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind == BlockKind::Roller)
+        {
+            self.roller_settings(pos).color
+        } else {
+            self.stamper_settings(pos).color
         }
     }
 
-    pub fn set_labeler_settings(&mut self, pos: IVec3, settings: LabelerSettings) {
-        self.set_block_settings(pos, BlockSettings::Labeler(settings));
+    pub fn set_labeler_color(&mut self, pos: IVec3, color: crate::game::world::blocks::StampColor) {
+        if self
+            .system_blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind == BlockKind::Roller)
+        {
+            self.set_roller_settings(pos, RollerSettings { color });
+        } else {
+            self.set_stamper_settings(pos, StamperSettings { color });
+        }
     }
 
     pub fn converter_settings(&self, pos: IVec3) -> ConverterSettings {
-        match self.block_settings.get(&pos) {
-            Some(BlockSettings::Converter(settings)) => *settings,
-            _ => ConverterSettings::default(),
-        }
+        self.block_state(pos).unwrap_or_default()
     }
 
     pub fn set_converter_settings(&mut self, pos: IVec3, settings: ConverterSettings) {
-        self.set_block_settings(pos, BlockSettings::Converter(settings));
+        self.set_block_state(pos, settings);
     }
 
     pub fn teleport_settings(&self, pos: IVec3) -> TeleportSettings {
-        match self.block_settings.get(&pos) {
-            Some(BlockSettings::Teleport(settings)) => settings.clone(),
-            _ => TeleportSettings::unnamed(pos),
-        }
+        self.block_state(pos)
+            .unwrap_or_else(|| TeleportSettings::unnamed(pos))
     }
 
     pub fn set_teleport_settings(&mut self, pos: IVec3, settings: TeleportSettings) {
-        self.set_block_settings(pos, BlockSettings::Teleport(settings));
-    }
-
-    fn next_teleport_name(&self, kind: BlockKind) -> String {
-        let base_names = match kind {
-            BlockKind::TeleportEntrance => TELEPORT_ENTRANCE_NAMES,
-            BlockKind::TeleportExit => TELEPORT_EXIT_NAMES,
-            _ => &[],
-        };
-        let used: HashSet<String> = self
-            .block_settings
-            .iter()
-            .filter_map(|(pos, settings)| {
-                if !self
-                    .system_blocks
-                    .get(pos)
-                    .is_some_and(|block| block.kind == kind)
-                {
-                    return None;
-                }
-                match settings {
-                    BlockSettings::Teleport(settings) => Some(settings.name.clone()),
-                    _ => None,
-                }
-            })
-            .collect();
-
-        for name in base_names {
-            if !used.contains(*name) {
-                return (*name).to_owned();
-            }
-        }
-
-        for index in 2.. {
-            for name in base_names {
-                let candidate = format!("{name} {index}");
-                if !used.contains(&candidate) {
-                    return candidate;
-                }
-            }
-        }
-        unreachable!()
+        self.set_block_state(pos, settings);
     }
 
     pub fn set_material_face_mark(&mut self, face: MaterialFace, mark: MaterialFaceMark) {
@@ -467,10 +374,6 @@ pub fn seed_demo_world(world: &mut WorldBlocks) {
 
 pub fn grid_to_world(pos: IVec3) -> Vec3 {
     pos.as_vec3() + Vec3::splat(0.5)
-}
-
-fn pos_hash(pos: IVec3) -> i32 {
-    pos.x.abs() * 31 + pos.y.abs() * 17 + pos.z.abs() * 13
 }
 
 pub fn raycast_blocks(origin: Vec3, dir: Vec3, world: &WorldBlocks) -> Option<TargetHit> {

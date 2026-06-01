@@ -143,7 +143,7 @@ pub fn update_block_panel_dropdowns_ui(
                 .map(|material| i18n.text(material.name_key()))
                 .unwrap_or_default(),
             BlockPanelDropdown::LabelerColor => active_pos
-                .map(|pos| world.labeler_settings(pos).color)
+                .map(|pos| world.labeler_color(pos))
                 .map(|color| i18n.text(color.name_key()))
                 .unwrap_or_default(),
             BlockPanelDropdown::ConverterInput => active_pos

@@ -2,11 +2,11 @@ use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::game::world::blocks::{
-    BlockData, BlockKind, MaterialDestroyer, MaterialLabeler, MaterialSource,
+    BlockData, BlockKind, ConverterMode, MaterialDestroyer, MaterialLabeler, MaterialSource,
 };
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{
-    ConverterMode, MaterialFace, MaterialFaceMark, MaterialFaceMarkSource, WorldBlocks,
+    MaterialFace, MaterialFaceMark, MaterialFaceMarkSource, WorldBlocks,
 };
 
 use super::factory_activity::FactoryStructureState;
@@ -171,11 +171,10 @@ fn run_material_label_phase(world: &mut WorldBlocks) {
             continue;
         }
 
-        let settings = world.labeler_settings(pos);
         world.set_material_face_mark(
             face,
             MaterialFaceMark {
-                color: settings.color,
+                color: world.labeler_color(pos),
                 source,
             },
         );
