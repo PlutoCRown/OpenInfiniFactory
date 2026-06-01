@@ -15,8 +15,18 @@ pub fn update_panel_visibility(
             (With<PanelWindow>, Without<TextPromptRoot>),
         >,
     )>,
-    confirm_dialog: Res<ConfirmDialogState>,
 ) {
+    if !mode.is_changed()
+        && !save_state.is_changed()
+        && !solution_state.is_changed()
+        && !settings_tab.is_changed()
+        && !ui_runtime.is_changed()
+        && !world.is_changed()
+        && !open_block_dropdown.is_changed()
+    {
+        return;
+    }
+
     let active_panel = ui_runtime.active_panel();
     for (visibility, mut style) in &mut nodes.p0() {
         style.display = display_for(panel_visible(
@@ -24,7 +34,6 @@ pub fn update_panel_visibility(
             *mode,
             *settings_tab,
             &ui_runtime,
-            &confirm_dialog,
         ));
     }
 
@@ -180,15 +189,12 @@ fn panel_visible(
     mode: GameMode,
     settings_tab: SettingsTab,
     ui_runtime: &UiRuntime,
-    confirm_dialog: &ConfirmDialogState,
 ) -> bool {
     match visibility {
         PanelVisibility::GameMode(target_mode) => mode == target_mode,
         PanelVisibility::SettingsTab(tab) => ui_runtime.is_settings_open() && settings_tab == tab,
-        PanelVisibility::ConfirmDialog => confirm_dialog.kind.is_some(),
-        PanelVisibility::ModalScrim => {
-            ui_runtime.has_modal_panel() || confirm_dialog.kind.is_some()
-        }
+        PanelVisibility::ConfirmDialog => ui_runtime.confirm_dialog().is_some(),
+        PanelVisibility::ModalScrim => ui_runtime.has_modal_panel() || ui_runtime.has_modal(),
     }
 }
 
@@ -254,25 +260,28 @@ pub fn center_new_panels(
 
 pub fn update_ui_layers(
     ui_runtime: Res<UiRuntime>,
-    confirm_dialog: Res<ConfirmDialogState>,
     mut layered_nodes: Query<(
         &mut GlobalZIndex,
         Option<&UiPanelBinding>,
         Option<&PanelVisibility>,
     )>,
 ) {
+    if !ui_runtime.is_changed() {
+        return;
+    }
+
     const BASE_LAYER: i32 = 100;
 
     let top_panel_z = ui_runtime
         .top_modal_layer()
         .map(panel_layer_z)
         .unwrap_or(PANEL_LAYER_BASE);
-    let confirm_z = if confirm_dialog.kind.is_some() {
+    let confirm_z = if ui_runtime.confirm_dialog().is_some() {
         top_panel_z + CONFIRM_LAYER_STEP
     } else {
         PANEL_LAYER_BASE
     };
-    let scrim_z = if confirm_dialog.kind.is_some() {
+    let scrim_z = if ui_runtime.confirm_dialog().is_some() {
         confirm_z + SCRIM_OFFSET
     } else {
         ui_runtime

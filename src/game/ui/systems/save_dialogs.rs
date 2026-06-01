@@ -453,7 +453,7 @@ fn save_list_button_selected(
 }
 
 pub fn update_confirm_dialog_ui(
-    dialog: Res<ConfirmDialogState>,
+    ui_runtime: Res<UiRuntime>,
     i18n: Res<I18n>,
     mut texts: ParamSet<(
         Query<(&PanelText, &mut Text)>,
@@ -461,44 +461,23 @@ pub fn update_confirm_dialog_ui(
     )>,
     mut action_buttons: Query<(&ConfirmDialogAction, &mut Node, &Children), With<Button>>,
 ) {
-    if !dialog.is_changed() && !i18n.is_changed() {
+    if !ui_runtime.is_changed() && !i18n.is_changed() {
         return;
     }
 
-    let Some(kind) = dialog.kind.as_ref() else {
+    let Some(dialog) = ui_runtime.confirm_dialog() else {
         return;
     };
     for (panel_text, mut text) in &mut texts.p0() {
         text.0 = match panel_text.0 {
-            PanelTextKind::ConfirmTitle => i18n.text("confirm.title"),
-            PanelTextKind::ConfirmMessage => match kind {
-                ConfirmDialogKind::DeleteSave { name } => {
-                    i18n.fmt("save.confirm_delete", &[("name", name.clone())])
-                }
-                ConfirmDialogKind::ResetSolution => i18n.text("confirm.reset_solution"),
-                ConfirmDialogKind::ReturnToMain => i18n.text("confirm.return_to_main"),
-                ConfirmDialogKind::SaveSolutionBeforeEdit => {
-                    i18n.text("confirm.save_solution_before_edit")
-                }
-                ConfirmDialogKind::EditPuzzleWithSolutions { name } => {
-                    i18n.fmt("confirm.edit_puzzle_with_solutions", &[("name", name.clone())])
-                }
-                ConfirmDialogKind::SavePuzzleWithSolutions { name } => {
-                    i18n.fmt("confirm.save_puzzle_with_solutions", &[("name", name.clone())])
-                }
-            },
+            PanelTextKind::ConfirmTitle => i18n.text(dialog.title_key),
+            PanelTextKind::ConfirmMessage => confirm_dialog_message(&dialog.message, &i18n),
             _ => continue,
         };
     }
-    let secondary_visible = matches!(
-        kind,
-            ConfirmDialogKind::ReturnToMain
-            | ConfirmDialogKind::SaveSolutionBeforeEdit
-            | ConfirmDialogKind::SavePuzzleWithSolutions { .. }
-    );
     for (action, mut node, children) in &mut action_buttons {
         if matches!(*action, ConfirmDialogAction::Secondary) {
-            node.display = if secondary_visible {
+            node.display = if dialog.secondary_key.is_some() {
                 Display::Flex
             } else {
                 Display::None
@@ -506,7 +485,7 @@ pub fn update_confirm_dialog_ui(
         } else {
             node.display = Display::Flex;
         }
-        let label = confirm_dialog_button_label(kind, *action, &i18n);
+        let label = confirm_dialog_button_label(dialog, *action, &i18n);
         let width = confirm_dialog_button_width(&label);
         node.width = Val::Px(width);
         node.min_width = Val::Px(width);
@@ -520,7 +499,7 @@ pub fn update_confirm_dialog_ui(
 }
 
 pub fn update_text_prompt_ui(
-    prompt: Res<TextPromptState>,
+    ui_runtime: Res<UiRuntime>,
     i18n: Res<I18n>,
     mut roots: Query<(&mut Node, &mut Visibility), With<TextPromptRoot>>,
     mut texts: ParamSet<(
@@ -529,7 +508,11 @@ pub fn update_text_prompt_ui(
         Query<&mut Text, Without<TextPromptText>>,
     )>,
 ) {
-    let visible = prompt.kind.is_some();
+    if !ui_runtime.is_changed() && !i18n.is_changed() {
+        return;
+    }
+
+    let visible = ui_runtime.text_prompt().is_some();
     for (mut node, mut visibility) in &mut roots {
         node.display = if visible {
             Display::Flex
@@ -542,14 +525,14 @@ pub fn update_text_prompt_ui(
             Visibility::Hidden
         };
     }
-    let Some(kind) = prompt.kind.as_ref() else {
+    let Some(prompt) = ui_runtime.text_prompt() else {
         return;
     };
 
     for (kind_marker, mut text) in &mut texts.p0() {
         text.0 = match kind_marker {
-            TextPromptText::Title => text_prompt_title(kind, &i18n),
-            TextPromptText::Value => format!("{}_", prompt.as_ref().value),
+            TextPromptText::Title => text_prompt_title(&prompt.kind, &i18n),
+            TextPromptText::Value => format!("{}_", prompt.value),
         };
     }
 
@@ -581,28 +564,26 @@ fn text_prompt_title(kind: &TextPromptKind, i18n: &I18n) -> String {
 }
 
 fn confirm_dialog_button_label(
-    kind: &ConfirmDialogKind,
+    dialog: &ConfirmDialogState,
     action: ConfirmDialogAction,
     i18n: &I18n,
 ) -> String {
     match action {
-        ConfirmDialogAction::Primary => match kind {
-            ConfirmDialogKind::DeleteSave { .. } => i18n.text("button.delete"),
-            ConfirmDialogKind::ResetSolution => i18n.text("button.confirm_reset_solution"),
-            ConfirmDialogKind::ReturnToMain => i18n.text("button.save_and_back"),
-            ConfirmDialogKind::SaveSolutionBeforeEdit => i18n.text("button.save_solution_and_edit"),
-            ConfirmDialogKind::EditPuzzleWithSolutions { .. } => i18n.text("button.edit_puzzle"),
-            ConfirmDialogKind::SavePuzzleWithSolutions { .. } => i18n.text("button.save_puzzle"),
-        },
-        ConfirmDialogAction::Secondary => match kind {
-            ConfirmDialogKind::ReturnToMain => i18n.text("button.discard_and_back"),
-            ConfirmDialogKind::SaveSolutionBeforeEdit => {
-                i18n.text("button.discard_solution_and_edit")
-            }
-            ConfirmDialogKind::SavePuzzleWithSolutions { .. } => i18n.text("button.save_as_new_puzzle"),
-            _ => String::new(),
-        },
-        ConfirmDialogAction::Cancel => i18n.text("button.cancel"),
+        ConfirmDialogAction::Primary => i18n.text(dialog.primary_key),
+        ConfirmDialogAction::Secondary => dialog
+            .secondary_key
+            .map(|key| i18n.text(key))
+            .unwrap_or_default(),
+        ConfirmDialogAction::Cancel => i18n.text(dialog.cancel_key),
+    }
+}
+
+fn confirm_dialog_message(message: &ConfirmDialogMessage, i18n: &I18n) -> String {
+    match message {
+        ConfirmDialogMessage::TextKey(key) => i18n.text(key),
+        ConfirmDialogMessage::Named { key, name } => {
+            i18n.fmt(key, &[("name", name.clone())])
+        }
     }
 }
 

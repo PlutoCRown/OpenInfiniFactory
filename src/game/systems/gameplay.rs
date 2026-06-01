@@ -16,7 +16,7 @@ use crate::game::state::{
 use crate::game::systems::debug::DebugState;
 use crate::game::systems::virtual_controls::VirtualControls;
 use crate::game::ui::{
-    AreaKind, CarriedItem, InventoryItems, PendingKeyBind, TextPromptState, UiRuntime, HOTBAR_SLOTS,
+    AreaKind, CarriedItem, InventoryItems, PendingKeyBind, UiRuntime, HOTBAR_SLOTS,
 };
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::blocks::{BlockData, BlockKind};
@@ -55,7 +55,6 @@ pub fn gameplay_input(
     mut mouse_wheel: MessageReader<MouseWheel>,
     config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
-    text_prompt: Res<TextPromptState>,
     mut mode: ResMut<GameMode>,
     mut placement: ResMut<PlacementState>,
     teleport_rename: Res<TeleportRenameState>,
@@ -68,7 +67,7 @@ pub fn gameplay_input(
     let virtual_controls = &input.virtual_controls;
 
     let typing = pending_key_bind.0.is_some()
-        || text_prompt.kind.is_some()
+        || ui_runtime.text_prompt().is_some()
         || teleport_rename.editing.is_some();
     if typing {
         mouse_wheel.clear();
@@ -198,12 +197,10 @@ pub fn placement_input(
     let delete_just_released =
         mouse_buttons.just_released(delete_button) || virtual_controls.delete.just_released;
     let pick_just_pressed = mouse_buttons.just_pressed(pick_button);
-    let alternate_just_pressed =
-        keys.just_pressed(config.key_bindings.alternate.key_code())
-            || virtual_controls.alternate.just_pressed;
-    let rotate_just_pressed =
-        keys.just_pressed(config.key_bindings.rotate_or_rollback.key_code())
-            || virtual_controls.rotate_or_rollback.just_pressed;
+    let alternate_just_pressed = keys.just_pressed(config.key_bindings.alternate.key_code())
+        || virtual_controls.alternate.just_pressed;
+    let rotate_just_pressed = keys.just_pressed(config.key_bindings.rotate_or_rollback.key_code())
+        || virtual_controls.rotate_or_rollback.just_pressed;
 
     if *mode != GameMode::Playing {
         placement.edit_gesture = None;
@@ -290,10 +287,7 @@ pub fn placement_input(
         return;
     }
 
-    if *builder_mode == BuilderMode::Play
-        && !simulation.is_active()
-        && alternate_just_pressed
-    {
+    if *builder_mode == BuilderMode::Play && !simulation.is_active() && alternate_just_pressed {
         if let Some(pos) = current_target_pos {
             if alternate_block_at(
                 pos,

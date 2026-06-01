@@ -92,8 +92,16 @@ pub(super) fn spawn_menu_button(
     height: f32,
     font_size: f32,
     action: MenuAction,
+    label_key: &'static str,
 ) {
-    spawn_full_width_localized_button(parent, height, font_size, action);
+    parent
+        .spawn((full_width_button(height), action))
+        .with_children(|button| {
+            button.spawn((
+                label_text(label_key, font_size, Color::WHITE),
+                super::types::LocalizedText { key: label_key },
+            ));
+        });
 }
 
 pub(super) fn spawn_block_edit_button(parent: &mut ChildSpawnerCommands, action: BlockEditAction) {
@@ -491,26 +499,6 @@ where
 {
     let key = action.label_key();
     let mut entity = parent.spawn((menu_button(height), action));
-    entity.with_children(|button| {
-        button.spawn((
-            label_text(key, font_size, Color::WHITE),
-            super::types::LocalizedText { key },
-        ));
-    });
-    entity
-}
-
-fn spawn_full_width_localized_button<'a, A>(
-    parent: &'a mut ChildSpawnerCommands,
-    height: f32,
-    font_size: f32,
-    action: A,
-) -> EntityCommands<'a>
-where
-    A: Bundle + Copy + UiActionLabel,
-{
-    let key = action.label_key();
-    let mut entity = parent.spawn((full_width_button(height), action));
     entity.with_children(|button| {
         button.spawn((
             label_text(key, font_size, Color::WHITE),

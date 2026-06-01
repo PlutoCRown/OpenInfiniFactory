@@ -21,11 +21,11 @@ pub use systems::{
 };
 pub use types::{
     ActiveSettingsSlider, AreaKind, BlockEditAction, BlockPanelDropdown, CarriedItem,
-    ConfirmDialogAction, ConfirmDialogKind, ConfirmDialogState, HotbarItems, InventoryItems,
-    MenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown, PanelDragState, PendingKeyBind,
-    SaveListAction, SaveListRenderState, SettingsAction, SettingsSliderTrigger, SettingsTab,
-    TeleportAction, TextPromptAction, TextPromptKind, TextPromptState, UiHoverState,
-    UiPanelContext, UiRuntime, HOTBAR_SLOTS,
+    ConfirmDialogAction, ConfirmDialogButtonSpec, ConfirmDialogEffect, ConfirmDialogMessage,
+    ConfirmDialogResult, ConfirmDialogSpec, HotbarItems, InventoryItems, MenuAction,
+    OpenBlockPanelDropdown, OpenSettingsDropdown, PanelDragState, PendingKeyBind, SaveListAction,
+    SaveListRenderState, SettingsAction, SettingsSliderTrigger, SettingsTab, TeleportAction,
+    TextPromptAction, TextPromptKind, UiHoverState, UiPanelContext, UiRuntime, HOTBAR_SLOTS,
 };
 
 use crate::game::systems::menus::{
@@ -47,8 +47,6 @@ impl Plugin for GameUiPlugin {
             .insert_resource(PendingKeyBind::default())
             .insert_resource(ActiveSettingsSlider::default())
             .insert_resource(UiRuntime::default())
-            .insert_resource(ConfirmDialogState::default())
-            .insert_resource(TextPromptState::default())
             .insert_resource(SaveListRenderState::default())
             .insert_resource(CarriedItem::default())
             .insert_resource(PanelDragState::default())

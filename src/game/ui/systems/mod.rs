@@ -23,7 +23,7 @@ use super::components::{
 use super::types::{
     ActiveSettingsSlider, BlockEditAction, BlockMaterialIcon, BlockMaterialIconSlot,
     BlockPanelDropdown, BlockPanelDropdownLabel, BlockPanelDropdownList, BlockPanelText,
-    BlockPanelTextKind, CarriedItem, CarriedItemPreview, ConfirmDialogAction, ConfirmDialogKind,
+    BlockPanelTextKind, CarriedItem, CarriedItemPreview, ConfirmDialogAction, ConfirmDialogMessage,
     ConfirmDialogState, ConverterInputRow, Crosshair, GameplayHudVisibility, InGameHudStyle,
     InGameHudVisibility, InventoryItems, InventorySlot, InventoryTooltip, KeyBindingButton,
     LocalizedText, MenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown, PanelCloseButton,
@@ -33,8 +33,7 @@ use super::types::{
     SettingsAction, SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
     SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind, SettingsValueText, SlotArea,
     StatusText, StatusTextKind, TeleportAction, TextPromptAction, TextPromptKind, TextPromptRoot,
-    TextPromptState, TextPromptText, UiHoverState, UiPanelBinding, UiPanelContext, UiPanelId,
-    UiRuntime,
+    TextPromptText, UiHoverState, UiPanelBinding, UiPanelContext, UiPanelId, UiRuntime,
 };
 use super::widgets::{short_item_name, slot_color};
 include!("font.rs");

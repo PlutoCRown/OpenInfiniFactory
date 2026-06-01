@@ -7,7 +7,7 @@ use crate::game::player::controller::{player_collision_box, FlyCamera};
 use crate::game::simulation::factory_activity::FactoryStructureState;
 use crate::game::simulation::runtime::{MovementPreview, SimulationStepStats};
 use crate::game::state::{BuilderMode, GameMode, SimulationState};
-use crate::game::ui::{PendingKeyBind, TextPromptState};
+use crate::game::ui::{PendingKeyBind, UiRuntime};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
@@ -242,11 +242,11 @@ pub fn toggle_debug(
     keys: Res<ButtonInput<KeyCode>>,
     config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
-    text_prompt: Res<TextPromptState>,
+    ui_runtime: Res<UiRuntime>,
     mode: Res<GameMode>,
     mut debug: ResMut<DebugState>,
 ) {
-    if pending_key_bind.0.is_some() || text_prompt.kind.is_some() || !gameplay_mode(*mode) {
+    if pending_key_bind.0.is_some() || ui_runtime.text_prompt().is_some() || !gameplay_mode(*mode) {
         return;
     }
 
@@ -258,7 +258,7 @@ pub fn toggle_debug(
 pub fn toggle_factory_activity_debug(
     keys: Res<ButtonInput<KeyCode>>,
     pending_key_bind: Res<PendingKeyBind>,
-    text_prompt: Res<TextPromptState>,
+    ui_runtime: Res<UiRuntime>,
     mode: Res<GameMode>,
     mut debug: ResMut<DebugState>,
     mut factory_structures: ResMut<FactoryStructureState>,
@@ -268,7 +268,7 @@ pub fn toggle_factory_activity_debug(
     render_assets: Res<WorldRenderAssets>,
     block_entities: Query<Entity, With<BlockEntity>>,
 ) {
-    if pending_key_bind.0.is_some() || text_prompt.kind.is_some() || !gameplay_mode(*mode) {
+    if pending_key_bind.0.is_some() || ui_runtime.text_prompt().is_some() || !gameplay_mode(*mode) {
         return;
     }
 

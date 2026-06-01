@@ -39,6 +39,7 @@ pub struct UiPanelSession {
 #[derive(Resource, Default)]
 pub struct UiRuntime {
     stack: Vec<UiPanelSession>,
+    modal: Option<UiModal>,
 }
 
 impl UiRuntime {
@@ -95,6 +96,46 @@ impl UiRuntime {
 
     pub fn has_modal_panel(&self) -> bool {
         self.top_modal_layer().is_some()
+    }
+
+    pub fn open_confirm_dialog(&mut self, spec: ConfirmDialogSpec) {
+        self.modal = Some(UiModal::Confirm(ConfirmDialogState::from(spec)));
+    }
+
+    pub fn open_text_prompt(&mut self, kind: TextPromptKind, value: &str) {
+        self.modal = Some(UiModal::TextPrompt(TextPromptState {
+            kind,
+            value: value.chars().take(24).collect(),
+        }));
+    }
+
+    pub fn close_modal(&mut self) {
+        self.modal = None;
+    }
+
+    pub fn confirm_dialog(&self) -> Option<&ConfirmDialogState> {
+        match self.modal.as_ref()? {
+            UiModal::Confirm(dialog) => Some(dialog),
+            _ => None,
+        }
+    }
+
+    pub fn text_prompt(&self) -> Option<&TextPromptState> {
+        match self.modal.as_ref()? {
+            UiModal::TextPrompt(prompt) => Some(prompt),
+            _ => None,
+        }
+    }
+
+    pub fn text_prompt_mut(&mut self) -> Option<&mut TextPromptState> {
+        match self.modal.as_mut()? {
+            UiModal::TextPrompt(prompt) => Some(prompt),
+            _ => None,
+        }
+    }
+
+    pub fn has_modal(&self) -> bool {
+        self.modal.is_some()
     }
 }
 
@@ -409,6 +450,18 @@ pub struct LocalizedText {
     pub key: &'static str,
 }
 
+#[derive(Clone, Copy)]
+pub struct ButtonSpec<Action> {
+    pub text: &'static str,
+    pub on_click: Action,
+}
+
+impl<Action> ButtonSpec<Action> {
+    pub const fn new(text: &'static str, on_click: Action) -> Self {
+        Self { text, on_click }
+    }
+}
+
 pub trait UiActionLabel {
     fn label_key(self) -> &'static str;
 }
@@ -503,9 +556,9 @@ pub enum TextPromptKind {
     SaveAsNewPuzzle,
 }
 
-#[derive(Resource, Default)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct TextPromptState {
-    pub kind: Option<TextPromptKind>,
+    pub kind: TextPromptKind,
     pub value: String,
 }
 
@@ -526,19 +579,111 @@ impl UiActionLabel for ConfirmDialogAction {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
-pub enum ConfirmDialogKind {
-    DeleteSave { name: String },
-    ResetSolution,
-    ReturnToMain,
-    SaveSolutionBeforeEdit,
-    EditPuzzleWithSolutions { name: String },
-    SavePuzzleWithSolutions { name: String },
+impl ConfirmDialogAction {
+    pub fn result(self) -> ConfirmDialogResult {
+        match self {
+            Self::Primary => ConfirmDialogResult::Primary,
+            Self::Secondary => ConfirmDialogResult::Secondary,
+            Self::Cancel => ConfirmDialogResult::Cancel,
+        }
+    }
 }
 
-#[derive(Resource, Default)]
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum ConfirmDialogResult {
+    Primary,
+    Secondary,
+    Cancel,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ConfirmDialogButtonSpec {
+    pub text_key: &'static str,
+    pub effect: ConfirmDialogEffect,
+}
+
+impl ConfirmDialogButtonSpec {
+    pub fn new(text_key: &'static str, effect: ConfirmDialogEffect) -> Self {
+        Self { text_key, effect }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ConfirmDialogSpec {
+    pub title_key: &'static str,
+    pub message: ConfirmDialogMessage,
+    pub primary: ConfirmDialogButtonSpec,
+    pub secondary: Option<ConfirmDialogButtonSpec>,
+    pub cancel_key: &'static str,
+}
+
+impl ConfirmDialogSpec {
+    pub fn new(
+        message: ConfirmDialogMessage,
+        primary: ConfirmDialogButtonSpec,
+        secondary: Option<ConfirmDialogButtonSpec>,
+    ) -> Self {
+        Self {
+            title_key: "confirm.title",
+            message,
+            primary,
+            secondary,
+            cancel_key: "button.cancel",
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
 pub struct ConfirmDialogState {
-    pub kind: Option<ConfirmDialogKind>,
+    pub title_key: &'static str,
+    pub message: ConfirmDialogMessage,
+    pub primary_key: &'static str,
+    pub primary_effect: ConfirmDialogEffect,
+    pub secondary_key: Option<&'static str>,
+    pub secondary_effect: Option<ConfirmDialogEffect>,
+    pub cancel_key: &'static str,
+}
+
+impl From<ConfirmDialogSpec> for ConfirmDialogState {
+    fn from(spec: ConfirmDialogSpec) -> Self {
+        let (secondary_key, secondary_effect) = spec
+            .secondary
+            .map(|button| (Some(button.text_key), Some(button.effect)))
+            .unwrap_or((None, None));
+        Self {
+            title_key: spec.title_key,
+            message: spec.message,
+            primary_key: spec.primary.text_key,
+            primary_effect: spec.primary.effect,
+            secondary_key,
+            secondary_effect,
+            cancel_key: spec.cancel_key,
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub enum ConfirmDialogMessage {
+    TextKey(&'static str),
+    Named { key: &'static str, name: String },
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub enum ConfirmDialogEffect {
+    None,
+    DeleteSave { name: String },
+    ResetSolution,
+    ReturnToMain { save_first: bool },
+    SwitchToEditMode { save_first: bool },
+    OpenPuzzleForEdit { name: String },
+    SaveCurrentWorld,
+    SaveAsNewPuzzle { default_name: String },
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub enum UiModal {
+    Confirm(ConfirmDialogState),
+    TextPrompt(TextPromptState),
 }
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
