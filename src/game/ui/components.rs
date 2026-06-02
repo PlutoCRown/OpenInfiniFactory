@@ -6,8 +6,8 @@ mod slider;
 mod text;
 
 pub use button::{
-    button_hovered, button_pressed, button_released, button_unhovered, hover_border, inset_border,
-    pressed_border, raised_border, HoverButton, BUTTON_BG, BUTTON_HOVER_BG,
+    hover_border, inset_border, pressed_border, raised_border, update_button_interactions,
+    HoverButton, BUTTON_BG, BUTTON_HOVER_BG,
 };
 pub use layout::{flex_row, root_node, transparent_node};
 pub use panel::{

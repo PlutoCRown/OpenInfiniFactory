@@ -30,7 +30,7 @@ use systems::virtual_controls::{
     setup_virtual_controls_ui, update_virtual_controls, update_virtual_controls_ui,
     VirtualControls, VirtualTouchState,
 };
-use ui::{main_menu_actions, pause_menu_actions, save_list_actions, GameUiPlugin, InventoryItems};
+use ui::{pause_menu_actions, save_list_actions, GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
 use world::rendering::{
@@ -96,7 +96,6 @@ impl Plugin for GamePlugin {
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(GameUiPlugin)
             .add_observer(slider_self_update)
-            .add_observer(main_menu_actions)
             .add_observer(pause_menu_actions)
             .add_observer(save_list_actions)
             .add_systems(

@@ -1,5 +1,3 @@
-use bevy::picking::pointer::PointerButton;
-use bevy::picking::prelude::{Out, Over, Pointer, Press, Release};
 use bevy::prelude::*;
 
 pub const BUTTON_BG: Color = Color::srgb(0.56, 0.56, 0.56);
@@ -61,56 +59,26 @@ pub fn inset_border() -> BorderColor {
     }
 }
 
-pub fn button_hovered(
-    mut event: On<Pointer<Over>>,
-    mut buttons: Query<(&mut BackgroundColor, &mut BorderColor), With<HoverButton>>,
+pub fn update_button_interactions(
+    mut buttons: Query<
+        (&Interaction, &mut BackgroundColor, &mut BorderColor),
+        (Changed<Interaction>, With<HoverButton>),
+    >,
 ) {
-    let Ok((mut background, mut border)) = buttons.get_mut(event.entity) else {
-        return;
-    };
-    event.propagate(false);
-    *background = BUTTON_HOVER_BG.into();
-    *border = hover_border();
-}
-
-pub fn button_unhovered(
-    mut event: On<Pointer<Out>>,
-    mut buttons: Query<(&mut BackgroundColor, &mut BorderColor), With<HoverButton>>,
-) {
-    let Ok((mut background, mut border)) = buttons.get_mut(event.entity) else {
-        return;
-    };
-    event.propagate(false);
-    *background = BUTTON_BG.into();
-    *border = raised_border();
-}
-
-pub fn button_pressed(
-    mut event: On<Pointer<Press>>,
-    mut buttons: Query<(&mut BackgroundColor, &mut BorderColor), With<HoverButton>>,
-) {
-    if event.event.button != PointerButton::Primary {
-        return;
+    for (interaction, mut background, mut border) in &mut buttons {
+        match *interaction {
+            Interaction::Pressed => {
+                *background = BUTTON_PRESSED_BG.into();
+                *border = pressed_border();
+            }
+            Interaction::Hovered => {
+                *background = BUTTON_HOVER_BG.into();
+                *border = hover_border();
+            }
+            Interaction::None => {
+                *background = BUTTON_BG.into();
+                *border = raised_border();
+            }
+        }
     }
-    let Ok((mut background, mut border)) = buttons.get_mut(event.entity) else {
-        return;
-    };
-    event.propagate(false);
-    *background = BUTTON_PRESSED_BG.into();
-    *border = pressed_border();
-}
-
-pub fn button_released(
-    mut event: On<Pointer<Release>>,
-    mut buttons: Query<(&mut BackgroundColor, &mut BorderColor), With<HoverButton>>,
-) {
-    if event.event.button != PointerButton::Primary {
-        return;
-    }
-    let Ok((mut background, mut border)) = buttons.get_mut(event.entity) else {
-        return;
-    };
-    event.propagate(false);
-    *background = BUTTON_HOVER_BG.into();
-    *border = hover_border();
 }

@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use super::text::default_button_size;
 
 pub fn transparent_node(style: Node) -> impl Bundle {
-    (style, BackgroundColor(Color::NONE))
+    (style, BackgroundColor(Color::NONE), Visibility::Visible)
 }
 
 pub fn root_node() -> impl Bundle {

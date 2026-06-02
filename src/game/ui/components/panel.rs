@@ -133,10 +133,7 @@ pub fn panel_window_scene(width: f32) -> impl bevy_scene::Scene {
             Val::Px(0.0),
             Val::Px(3.0),
         )
-        Pickable {
-            should_block_lower: true,
-            is_hoverable: false,
-        }
+        Pickable::IGNORE
     }
 }
 

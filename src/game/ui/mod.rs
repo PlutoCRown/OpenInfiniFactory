@@ -46,9 +46,7 @@ use crate::game::world::blocks::{
     update_teleport_ui,
 };
 use crate::game::{player, systems as game_systems};
-use components::{
-    button_hovered, button_pressed, button_released, button_unhovered, update_scroll_containers,
-};
+use components::{update_button_interactions, update_scroll_containers};
 use systems::{
     close_panel_messages, modal_messages, open_panel_button_clicked, open_panel_messages,
 };
@@ -96,10 +94,6 @@ impl Plugin for GameUiPlugin {
             .add_observer(panel_drag_started)
             .add_observer(panel_dragged)
             .add_observer(panel_drag_ended)
-            .add_observer(button_hovered)
-            .add_observer(button_unhovered)
-            .add_observer(button_pressed)
-            .add_observer(button_released)
             .add_observer(ui_hovered)
             .add_observer(ui_unhovered)
             .add_systems(Startup, (register_legacy_panels, register_demo_panel))
@@ -109,6 +103,7 @@ impl Plugin for GameUiPlugin {
                 (
                     open_demo_panel_shortcut,
                     sync_mode_panels,
+                    main_menu_actions,
                     open_panel_messages,
                     close_panel_messages,
                     modal_messages,
@@ -140,6 +135,7 @@ impl Plugin for GameUiPlugin {
                     update_settings_dropdowns_ui,
                     update_block_panel_dropdowns_ui,
                     update_settings_tabs_ui,
+                    update_button_interactions,
                     update_scroll_containers,
                 )
                     .after(game_systems::debug::mark_perf_animation)
