@@ -13,8 +13,8 @@ use crate::game::systems::world_flow::{
 use crate::game::ui::{
     CarriedItem, CloseUiModal, ConfirmDialogButtonSpec, ConfirmDialogEffect, ConfirmDialogMessage,
     ConfirmDialogSpec, InventoryChanged, InventoryItems, OpenConfirmDialog, OpenTextPrompt,
-    SaveListAction, SaveListChanged, TextPromptAction, TextPromptKind, UiModalKind, UiModalOpened,
-    UiRuntime,
+    SaveListAction, SaveListButton, SaveListChanged, TextPromptAction, TextPromptKind, UiModalKind,
+    UiModalOpened, UiRuntime,
 };
 use crate::game::world::grid::seed_demo_world;
 use crate::shared::save::{
@@ -36,25 +36,26 @@ pub fn save_list_actions(
     mut open_prompt: MessageWriter<OpenTextPrompt>,
     mut inventory_changed: MessageWriter<InventoryChanged>,
     mut save_list_changed: MessageWriter<SaveListChanged>,
-    actions: Query<&SaveListAction>,
+    actions: Query<(&SaveListAction, &SaveListButton)>,
 ) {
     if !primary_click(&mut click) || *mode != GameMode::SaveListMain {
         return;
     }
-    let Ok(action) = actions.get(click.entity).cloned() else {
+    let Ok((action, button)) = actions.get(click.entity) else {
         return;
     };
+    let entry = button.0;
     click.propagate(false);
 
-    match action {
+    match action.clone() {
         SaveListAction::NewPuzzle => {
-            if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
+            if entry != WorldEntryMode::EditPuzzle {
                 return;
             }
             open_prompt.write(OpenTextPrompt::new(TextPromptKind::NewPuzzle, "puzzle"));
         }
         SaveListAction::NewSolution => {
-            if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
+            if entry != WorldEntryMode::PlaySolution {
                 return;
             }
             let Some(puzzle_name) = save_state.selected_puzzle.clone() else {
@@ -68,7 +69,7 @@ pub fn save_list_actions(
             ));
         }
         SaveListAction::LoadPuzzle(name) => {
-            if solution_state.save_list_entry == WorldEntryMode::EditPuzzle {
+            if entry == WorldEntryMode::EditPuzzle {
                 if !save_state.puzzles().iter().any(|entry| entry.name == *name) {
                     return;
                 }
@@ -115,7 +116,7 @@ pub fn save_list_actions(
             }
         }
         SaveListAction::LoadSolution(name) => {
-            if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
+            if entry != WorldEntryMode::PlaySolution {
                 return;
             }
             if save_state.selected_puzzle.is_none() {
@@ -146,7 +147,7 @@ pub fn save_list_actions(
             }
         }
         SaveListAction::RenamePuzzle(name) => {
-            if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
+            if entry != WorldEntryMode::EditPuzzle {
                 return;
             }
             if save_state.puzzles().iter().any(|entry| entry.name == *name) {
@@ -157,7 +158,7 @@ pub fn save_list_actions(
             }
         }
         SaveListAction::RenameSolution(name) => {
-            if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
+            if entry != WorldEntryMode::PlaySolution {
                 return;
             }
             if save_state
@@ -172,7 +173,7 @@ pub fn save_list_actions(
             }
         }
         SaveListAction::DeletePuzzle(name) => {
-            if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
+            if entry != WorldEntryMode::EditPuzzle {
                 return;
             }
             if save_state.puzzles().iter().any(|entry| entry.name == *name) {

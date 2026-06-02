@@ -8,9 +8,9 @@ use crate::game::ui::components::{
     default_button_size, default_font_size, spawn_panel, PanelOptions,
 };
 use crate::game::ui::types::{
-    CarriedItemPreview, GameplayHudVisibility, InGameHudStyle, InventoryTooltip, LocalizedText,
-    InventoryRuntimeEntity, PanelText, PanelTextKind, PanelVisibility, SlotArea, UiPanelBinding,
-    UiPanelKey, BACKPACK_SLOTS, HOTBAR_SLOTS,
+    CarriedItemPreview, GameplayHudVisibility, InGameHudStyle, InventoryRuntimeEntity,
+    InventoryTooltip, LocalizedText, PanelText, PanelTextKind, PanelVisibility, SlotArea,
+    UiPanelBinding, UiPanelKey, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 
 mod actions;

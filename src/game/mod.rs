@@ -104,7 +104,7 @@ impl Plugin for GamePlugin {
                     placement_input,
                 )
                     .chain()
-                    .run_if(world_loaded)
+                    .run_if(world_loaded),
             )
             .add_systems(
                 Update,

@@ -13,7 +13,8 @@ pub use inventory::{
 pub(crate) use main_menu::spawn_main_menu;
 pub(crate) use pause_menu::spawn_pause_panel;
 pub(crate) use save_list::{
-    spawn_save_list, text_prompt_input, update_save_list_ui, update_text_prompt_ui,
+    spawn_edit_save_list, spawn_play_save_list, text_prompt_input, update_save_list_ui,
+    update_text_prompt_ui,
 };
 pub(crate) use settings::{
     cleanup_closed_settings_panel, settings_action_clicked, settings_menu_actions,

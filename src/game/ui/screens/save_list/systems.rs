@@ -6,7 +6,7 @@ use crate::game::ui::components::{
     hover_border, inset_border, pressed_border, raised_border, BUTTON_BG, BUTTON_HOVER_BG,
 };
 use crate::game::ui::types::{
-    LanguageChanged, PanelText, PanelTextKind, SaveListAction, SaveListChanged,
+    LanguageChanged, PanelText, PanelTextKind, SaveListAction, SaveListButton, SaveListChanged,
     SaveListCloseButton, SaveListPanel, SaveListPrompt, SaveListPuzzleColumn, SaveListRenderState,
     SaveListSolutionColumn, TextPromptAction, TextPromptKind, TextPromptRoot, TextPromptText,
     UiHoverState, UiModalClosed, UiModalKind, UiModalOpened, UiPanelContextChanged, UiPanelKey,
@@ -32,6 +32,12 @@ pub struct SaveListRefreshTriggers<'w, 's> {
 }
 
 impl SaveListRefreshTriggers<'_, '_> {
+    fn layout_added(&self) -> bool {
+        !self.added_panels.is_empty()
+            || !self.added_puzzle_columns.is_empty()
+            || !self.added_solution_columns.is_empty()
+    }
+
     fn structure_dirty(&mut self) -> bool {
         !self.added_panel_texts.is_empty()
             || !self.added_prompts.is_empty()
@@ -41,11 +47,11 @@ impl SaveListRefreshTriggers<'_, '_> {
             || self
                 .opened
                 .read()
-                .any(|message| message.key == UiPanelKey::SAVE_LIST)
+                .any(|message| save_list_entry_for_key(message.key).is_some())
             || self
                 .context_changed
                 .read()
-                .any(|message| message.key == UiPanelKey::SAVE_LIST)
+                .any(|message| save_list_entry_for_key(message.key).is_some())
             || self.save_list_changed.read().next().is_some()
             || self.language_changed.read().next().is_some()
     }
@@ -67,18 +73,18 @@ pub fn update_save_list_ui(
     mut texts: ParamSet<(
         Query<(&PanelText, &mut Text)>,
         Query<&mut Text, (Without<PanelText>, Without<SaveListPrompt>)>,
-        Query<&mut Text, With<SaveListPrompt>>,
+        Query<(&SaveListPrompt, &mut Text)>,
     )>,
     mut puzzle_columns: Query<
-        (Entity, &mut Node, &Children),
+        (&SaveListPuzzleColumn, Entity, &mut Node, &Children),
         (With<SaveListPuzzleColumn>, Without<SaveListSolutionColumn>),
     >,
     mut solution_columns: Query<
-        (Entity, &mut Node, &Children),
+        (&SaveListSolutionColumn, Entity, &mut Node, &Children),
         (With<SaveListSolutionColumn>, Without<SaveListPuzzleColumn>),
     >,
     mut panels: Query<
-        &mut Node,
+        (&SaveListPanel, &mut Node),
         (
             With<SaveListPanel>,
             Without<SaveListPuzzleColumn>,
@@ -89,6 +95,7 @@ pub fn update_save_list_ui(
         (
             Entity,
             &SaveListAction,
+            &SaveListButton,
             &Children,
             &mut BackgroundColor,
             &mut BorderColor,
@@ -96,15 +103,22 @@ pub fn update_save_list_ui(
         (With<Button>, Without<SaveListCloseButton>),
     >,
 ) {
-    let refresh_structure = render_state.entry.is_none() || triggers.structure_dirty();
+    let force_rebuild = triggers.layout_added();
+    let entry = solution_state.save_list_entry;
+    let current_render_state = match entry {
+        WorldEntryMode::EditPuzzle => &render_state.edit,
+        WorldEntryMode::PlaySolution => &render_state.play,
+    };
+    let refresh_structure =
+        current_render_state.puzzle_keys.is_empty() || force_rebuild || triggers.structure_dirty();
     let refresh_buttons = refresh_structure || hover.is_changed() || triggers.buttons_added();
 
     if !refresh_structure && !refresh_buttons {
         return;
     }
 
-    let play_flow = solution_state.save_list_entry == WorldEntryMode::PlaySolution;
-    let edit_flow = solution_state.save_list_entry == WorldEntryMode::EditPuzzle;
+    let play_flow = entry == WorldEntryMode::PlaySolution;
+    let edit_flow = entry == WorldEntryMode::EditPuzzle;
     let puzzle_rows = save_list_puzzle_rows(&save_state, edit_flow);
     let solution_rows = save_state
         .selected_puzzle_solutions()
@@ -114,7 +128,7 @@ pub fn update_save_list_ui(
     let show_solutions = play_flow && save_state.selected_puzzle.is_some();
 
     if refresh_structure {
-        update_save_list_title(&mode, &solution_state, &i18n, &mut texts);
+        update_save_list_title(&mode, entry, &i18n, &mut texts);
         update_save_list_columns(
             &mut commands,
             &mut render_state,
@@ -124,22 +138,32 @@ pub fn update_save_list_ui(
             &puzzle_rows,
             &solution_rows,
             &i18n,
-            solution_state.save_list_entry,
+            entry,
             edit_flow,
             show_solutions,
+            force_rebuild,
         );
         update_save_list_prompt(play_flow, &save_state, &i18n, &mut texts);
     }
 
     if refresh_buttons {
-        update_save_list_buttons(
-            &save_state,
-            &solution_state,
-            &i18n,
-            &hover,
-            &mut texts,
-            &mut buttons,
-        );
+        update_save_list_buttons(&save_state, &i18n, &hover, &mut texts, &mut buttons, entry);
+    }
+}
+
+fn save_list_entry_for_key(key: UiPanelKey) -> Option<WorldEntryMode> {
+    match key {
+        UiPanelKey::SAVE_LIST_EDIT => Some(WorldEntryMode::EditPuzzle),
+        UiPanelKey::SAVE_LIST_PLAY => Some(WorldEntryMode::PlaySolution),
+        _ => None,
+    }
+}
+
+fn save_list_entry_for_flow(play_flow: bool) -> WorldEntryMode {
+    if play_flow {
+        WorldEntryMode::PlaySolution
+    } else {
+        WorldEntryMode::EditPuzzle
     }
 }
 
@@ -161,18 +185,18 @@ fn save_list_puzzle_rows(save_state: &SaveState, edit_flow: bool) -> Vec<String>
 
 fn update_save_list_title(
     mode: &GameMode,
-    solution_state: &SolutionState,
+    entry: WorldEntryMode,
     i18n: &I18n,
     texts: &mut ParamSet<(
         Query<(&PanelText, &mut Text)>,
         Query<&mut Text, (Without<PanelText>, Without<SaveListPrompt>)>,
-        Query<&mut Text, With<SaveListPrompt>>,
+        Query<(&SaveListPrompt, &mut Text)>,
     )>,
 ) {
     for (panel_text, mut text) in &mut texts.p0() {
         if panel_text.0 == PanelTextKind::SaveListTitle {
             text.0 = match *mode {
-                GameMode::SaveListMain => match solution_state.save_list_entry {
+                GameMode::SaveListMain => match entry {
                     WorldEntryMode::EditPuzzle => i18n.text("save.title.edit_puzzle"),
                     WorldEntryMode::PlaySolution => i18n.text("save.title.play_solution"),
                 },
@@ -184,9 +208,9 @@ fn update_save_list_title(
 
 fn update_save_list_columns(
     commands: &mut Commands,
-    render_state: &mut SaveListRenderState,
+    render_states: &mut SaveListRenderState,
     panels: &mut Query<
-        &mut Node,
+        (&SaveListPanel, &mut Node),
         (
             With<SaveListPanel>,
             Without<SaveListPuzzleColumn>,
@@ -194,11 +218,11 @@ fn update_save_list_columns(
         ),
     >,
     puzzle_columns: &mut Query<
-        (Entity, &mut Node, &Children),
+        (&SaveListPuzzleColumn, Entity, &mut Node, &Children),
         (With<SaveListPuzzleColumn>, Without<SaveListSolutionColumn>),
     >,
     solution_columns: &mut Query<
-        (Entity, &mut Node, &Children),
+        (&SaveListSolutionColumn, Entity, &mut Node, &Children),
         (With<SaveListSolutionColumn>, Without<SaveListPuzzleColumn>),
     >,
     puzzle_rows: &[String],
@@ -207,7 +231,12 @@ fn update_save_list_columns(
     entry: WorldEntryMode,
     edit_flow: bool,
     show_solutions: bool,
+    force_rebuild: bool,
 ) {
+    let render_state = match entry {
+        WorldEntryMode::EditPuzzle => &mut render_states.edit,
+        WorldEntryMode::PlaySolution => &mut render_states.play,
+    };
     let puzzle_width = save_list_column_width(
         puzzle_rows,
         if edit_flow {
@@ -224,19 +253,26 @@ fn update_save_list_columns(
     } else {
         puzzle_width + 32.0
     };
-    for mut panel in panels {
+    for (panel_entry, mut panel) in panels {
+        if panel_entry.0 != entry {
+            continue;
+        }
         panel.width = Val::Px(panel_width);
     }
 
-    for (entity, mut node, children) in puzzle_columns {
+    for (column_entry, entity, mut node, children) in puzzle_columns {
+        if column_entry.0 != entry {
+            continue;
+        }
         node.display = Display::Flex;
         node.width = Val::Px(puzzle_width);
-        if render_state.entry != Some(entry) || render_state.puzzle_keys != puzzle_rows {
+        if force_rebuild || render_state.puzzle_keys != puzzle_rows {
             if edit_flow {
                 rebuild_management_column(
                     commands,
                     entity,
                     children,
+                    entry,
                     Some(SaveListAction::NewPuzzle),
                     puzzle_rows,
                     SaveListAction::LoadPuzzle,
@@ -249,28 +285,33 @@ fn update_save_list_columns(
                     commands,
                     entity,
                     children,
+                    entry,
                     puzzle_rows,
                     SaveListAction::LoadPuzzle,
                 );
             }
         }
     }
-    if render_state.entry != Some(entry) || render_state.puzzle_keys != puzzle_rows {
+    if render_state.puzzle_keys != puzzle_rows {
         render_state.puzzle_keys = puzzle_rows.to_vec();
     }
 
-    for (entity, mut node, children) in solution_columns {
+    for (column_entry, entity, mut node, children) in solution_columns {
+        if column_entry.0 != entry {
+            continue;
+        }
         node.display = if show_solutions {
             Display::Flex
         } else {
             Display::None
         };
         node.width = Val::Px(solution_width);
-        if render_state.entry != Some(entry) || render_state.solution_keys != solution_rows {
+        if force_rebuild || render_state.solution_keys != solution_rows {
             rebuild_management_column(
                 commands,
                 entity,
                 children,
+                entry,
                 Some(SaveListAction::NewSolution),
                 solution_rows,
                 SaveListAction::LoadSolution,
@@ -280,16 +321,16 @@ fn update_save_list_columns(
             );
         }
     }
-    if render_state.entry != Some(entry) || render_state.solution_keys != solution_rows {
+    if render_state.solution_keys != solution_rows {
         render_state.solution_keys = solution_rows.to_vec();
     }
-    render_state.entry = Some(entry);
 }
 
 fn rebuild_management_column(
     commands: &mut Commands,
     column_entity: Entity,
     children: &Children,
+    entry: WorldEntryMode,
     create_action: Option<SaveListAction>,
     names: &[String],
     load: fn(String) -> SaveListAction,
@@ -304,6 +345,7 @@ fn rebuild_management_column(
         for name in names {
             spawn_save_management_row(
                 column,
+                entry,
                 load(name.clone()),
                 rename(name.clone()),
                 delete(name.clone()),
@@ -311,7 +353,7 @@ fn rebuild_management_column(
             );
         }
         if let Some(create_action) = create_action {
-            spawn_save_slot_button(column, create_action);
+            spawn_save_slot_button(column, entry, create_action);
         }
     });
 }
@@ -357,6 +399,7 @@ fn rebuild_selection_column(
     commands: &mut Commands,
     column_entity: Entity,
     children: &Children,
+    entry: WorldEntryMode,
     names: &[String],
     load: fn(String) -> SaveListAction,
 ) {
@@ -365,7 +408,7 @@ fn rebuild_selection_column(
     }
     commands.entity(column_entity).with_children(|column| {
         for name in names {
-            spawn_save_select_row(column, load(name.clone()));
+            spawn_save_select_row(column, entry, load(name.clone()));
         }
     });
 }
@@ -377,10 +420,13 @@ fn update_save_list_prompt(
     texts: &mut ParamSet<(
         Query<(&PanelText, &mut Text)>,
         Query<&mut Text, (Without<PanelText>, Without<SaveListPrompt>)>,
-        Query<&mut Text, With<SaveListPrompt>>,
+        Query<(&SaveListPrompt, &mut Text)>,
     )>,
 ) {
-    for mut text in &mut texts.p2() {
+    for (prompt, mut text) in &mut texts.p2() {
+        if prompt.0 != save_list_entry_for_flow(play_flow) {
+            continue;
+        }
         text.0 = if play_flow && save_state.selected_puzzle.is_none() {
             i18n.text("save.choose_puzzle_prompt")
         } else {
@@ -391,29 +437,33 @@ fn update_save_list_prompt(
 
 fn update_save_list_buttons(
     save_state: &SaveState,
-    solution_state: &SolutionState,
     i18n: &I18n,
     hover: &UiHoverState,
     texts: &mut ParamSet<(
         Query<(&PanelText, &mut Text)>,
         Query<&mut Text, (Without<PanelText>, Without<SaveListPrompt>)>,
-        Query<&mut Text, With<SaveListPrompt>>,
+        Query<(&SaveListPrompt, &mut Text)>,
     )>,
     buttons: &mut Query<
         (
             Entity,
             &SaveListAction,
+            &SaveListButton,
             &Children,
             &mut BackgroundColor,
             &mut BorderColor,
         ),
         (With<Button>, Without<SaveListCloseButton>),
     >,
+    entry: WorldEntryMode,
 ) {
-    let play_flow = solution_state.save_list_entry == WorldEntryMode::PlaySolution;
-    let edit_flow = solution_state.save_list_entry == WorldEntryMode::EditPuzzle;
+    let play_flow = entry == WorldEntryMode::PlaySolution;
+    let edit_flow = entry == WorldEntryMode::EditPuzzle;
 
-    for (entity, action, children, mut background, mut border) in buttons {
+    for (entity, action, button, children, mut background, mut border) in buttons {
+        if button.0 != entry {
+            continue;
+        }
         let label = save_list_button_label(action, save_state, play_flow, i18n);
         let enabled = save_list_button_enabled(action, save_state, edit_flow, play_flow);
         let selected = save_list_button_selected(action, save_state, play_flow);

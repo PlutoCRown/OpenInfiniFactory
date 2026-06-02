@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_scene::{bsn, prelude::EntityCommandsSceneExt};
 
-use crate::game::state::GameMode;
+use crate::game::state::{GameMode, WorldEntryMode};
 use crate::shared::i18n::I18n;
 
 use crate::game::ui::components::{
@@ -11,9 +11,9 @@ use crate::game::ui::components::{
 };
 use crate::game::ui::types::{
     PanelPosition, PanelText, PanelTextKind, PanelTitleBar, PanelVisibility, PanelWindow,
-    SaveListAction, SaveListCloseButton, SaveListPanel, SaveListPrompt, SaveListPuzzleColumn,
-    SaveListSolutionColumn, TextPromptAction, TextPromptRoot, TextPromptText, UiPanelBinding,
-    UiPanelKey,
+    SaveListAction, SaveListButton, SaveListCloseButton, SaveListPanel, SaveListPrompt,
+    SaveListPuzzleColumn, SaveListSolutionColumn, TextPromptAction, TextPromptRoot, TextPromptText,
+    UiPanelBinding, UiPanelKey,
 };
 
 mod actions;
@@ -22,7 +22,29 @@ mod systems;
 pub(crate) use actions::{save_list_actions, text_prompt_actions, text_prompt_input};
 pub use systems::{update_save_list_ui, update_text_prompt_ui};
 
-pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
+pub fn spawn_edit_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
+    spawn_save_list(root, i18n, WorldEntryMode::EditPuzzle)
+}
+
+pub fn spawn_play_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
+    spawn_save_list(root, i18n, WorldEntryMode::PlaySolution)
+}
+
+fn save_list_key(entry: WorldEntryMode) -> UiPanelKey {
+    match entry {
+        WorldEntryMode::EditPuzzle => UiPanelKey::SAVE_LIST_EDIT,
+        WorldEntryMode::PlaySolution => UiPanelKey::SAVE_LIST_PLAY,
+    }
+}
+
+fn save_list_title_key(entry: WorldEntryMode) -> &'static str {
+    match entry {
+        WorldEntryMode::EditPuzzle => "save.title.edit_puzzle",
+        WorldEntryMode::PlaySolution => "save.title.play_solution",
+    }
+}
+
+fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n, entry: WorldEntryMode) -> Entity {
     let panel = root
         .spawn((
             GlobalZIndex(0),
@@ -30,8 +52,8 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
             PanelPosition::default(),
             Visibility::Hidden,
             PanelVisibility::GameMode(GameMode::SaveListMain),
-            UiPanelBinding(UiPanelKey::SAVE_LIST),
-            SaveListPanel,
+            UiPanelBinding(save_list_key(entry)),
+            SaveListPanel(entry),
         ))
         .queue_apply_scene(panel_window_scene(900.0))
         .with_children(|panel| {
@@ -42,7 +64,7 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
                     title
                         .spawn(PanelText(PanelTextKind::SaveListTitle))
                         .queue_apply_scene(panel_title_label_scene(
-                            i18n.text("save.title.default"),
+                            i18n.text(save_list_title_key(entry)),
                             26.0,
                         ));
                     title
@@ -50,6 +72,7 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
                             Button,
                             HoverButton,
                             SaveListAction::Back,
+                            SaveListButton(entry),
                             SaveListCloseButton,
                         ))
                         .observe(save_list_actions)
@@ -66,18 +89,20 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
                         .with_children(|columns| {
                             spawn_save_column(
                                 columns,
+                                entry,
                                 SaveListAction::NewPuzzle,
-                                SaveListPuzzleColumn,
+                                SaveListPuzzleColumn(entry),
                             );
                             spawn_save_column(
                                 columns,
+                                entry,
                                 SaveListAction::NewSolution,
-                                SaveListSolutionColumn,
+                                SaveListSolutionColumn(entry),
                             );
                         });
                     panel.spawn((
                         text("", 16.0, Color::srgb(0.82, 0.86, 0.88)),
-                        SaveListPrompt,
+                        SaveListPrompt(entry),
                     ));
                 });
         })
@@ -100,6 +125,7 @@ fn save_columns_row_scene() -> impl bevy_scene::Scene {
 
 fn spawn_save_column(
     columns: &mut ChildSpawnerCommands,
+    entry: WorldEntryMode,
     create: SaveListAction,
     marker: impl Component + Copy,
 ) {
@@ -107,7 +133,7 @@ fn spawn_save_column(
         .spawn(marker)
         .queue_apply_scene(save_column_scene())
         .with_children(|column| {
-            spawn_save_slot_button(column, create);
+            spawn_save_slot_button(column, entry, create);
         });
 }
 
@@ -122,9 +148,13 @@ fn save_column_scene() -> impl bevy_scene::Scene {
     }
 }
 
-pub(super) fn spawn_save_slot_button(parent: &mut ChildSpawnerCommands, action: SaveListAction) {
+pub(super) fn spawn_save_slot_button(
+    parent: &mut ChildSpawnerCommands,
+    entry: WorldEntryMode,
+    action: SaveListAction,
+) {
     parent
-        .spawn((Button, HoverButton, action))
+        .spawn((Button, HoverButton, action, SaveListButton(entry)))
         .observe(save_list_actions)
         .queue_apply_scene(save_full_width_button_scene(34.0))
         .queue_spawn_related_scenes::<Children>(save_button_label_scene("", 15.0));
@@ -132,6 +162,7 @@ pub(super) fn spawn_save_slot_button(parent: &mut ChildSpawnerCommands, action: 
 
 pub fn spawn_save_management_row(
     parent: &mut ChildSpawnerCommands,
+    entry: WorldEntryMode,
     load: SaveListAction,
     rename: SaveListAction,
     delete: SaveListAction,
@@ -140,22 +171,31 @@ pub fn spawn_save_management_row(
     let side_width = 82.0;
     let load_width = (width - side_width * 2.0 - 12.0).max(180.0);
     parent.spawn(flex_row(32.0, 6.0)).with_children(|row| {
-        spawn_save_row_button(row, load, load_width);
-        spawn_save_row_button(row, rename, side_width);
-        spawn_save_row_button(row, delete, side_width);
+        spawn_save_row_button(row, entry, load, load_width);
+        spawn_save_row_button(row, entry, rename, side_width);
+        spawn_save_row_button(row, entry, delete, side_width);
     });
 }
 
-pub fn spawn_save_select_row(parent: &mut ChildSpawnerCommands, load: SaveListAction) {
+pub fn spawn_save_select_row(
+    parent: &mut ChildSpawnerCommands,
+    entry: WorldEntryMode,
+    load: SaveListAction,
+) {
     parent
-        .spawn((Button, HoverButton, load))
+        .spawn((Button, HoverButton, load, SaveListButton(entry)))
         .queue_apply_scene(save_full_width_button_scene(32.0))
         .queue_spawn_related_scenes::<Children>(save_button_label_scene("", 13.0));
 }
 
-fn spawn_save_row_button(parent: &mut ChildSpawnerCommands, action: SaveListAction, width: f32) {
+fn spawn_save_row_button(
+    parent: &mut ChildSpawnerCommands,
+    entry: WorldEntryMode,
+    action: SaveListAction,
+    width: f32,
+) {
     parent
-        .spawn((Button, HoverButton, action))
+        .spawn((Button, HoverButton, action, SaveListButton(entry)))
         .observe(save_list_actions)
         .queue_apply_scene(save_fixed_width_button_scene(width, 30.0))
         .queue_spawn_related_scenes::<Children>(save_button_label_scene("", 13.0));

@@ -25,14 +25,14 @@ pub use types::{
     ActiveSettingsSlider, AreaKind, BlockEditAction, BlockPanelDropdown, BlockSettingsChanged,
     CarriedItem, CloseUiModal, CloseUiPanel, ConfirmDialogAction, ConfirmDialogButtonSpec,
     ConfirmDialogEffect, ConfirmDialogMessage, ConfirmDialogResult, ConfirmDialogSpec,
-    GameplayUiChanged, HotbarItems, InventoryChanged, InventoryItems, LanguageChanged,
-    MainMenuAction, OpenBlockPanelDropdown, OpenConfirmDialog, OpenSettingsDropdown,
-    OpenTextPrompt, OpenUiPanel, PanelDragState, PauseMenuAction, PendingKeyBind, SaveListAction,
-    SaveListChanged, SaveListRenderState, SettingsAction, SettingsChanged, SettingsSliderTrigger,
-    SettingsTab, TeleportAction, TextPromptAction, TextPromptKind, UiHoverState, UiModalClosed,
-    UiModalKind, UiModalOpened, UiPanelBinding, UiPanelClosed, UiPanelContext,
-    UiPanelContextChanged, UiPanelDescriptor, UiPanelHost, UiPanelKey, UiPanelOpened,
-    UiPanelRegistry, UiRoot, UiRuntime, HOTBAR_SLOTS, InventoryRuntimeEntity,
+    GameplayUiChanged, HotbarItems, InventoryChanged, InventoryItems, InventoryRuntimeEntity,
+    LanguageChanged, MainMenuAction, OpenBlockPanelDropdown, OpenConfirmDialog,
+    OpenSettingsDropdown, OpenTextPrompt, OpenUiPanel, PanelDragState, PauseMenuAction,
+    PendingKeyBind, SaveListAction, SaveListButton, SaveListChanged, SaveListRenderState,
+    SettingsAction, SettingsChanged, SettingsSliderTrigger, SettingsTab, TeleportAction,
+    TextPromptAction, TextPromptKind, UiHoverState, UiModalClosed, UiModalKind, UiModalOpened,
+    UiPanelBinding, UiPanelClosed, UiPanelContext, UiPanelContextChanged, UiPanelDescriptor,
+    UiPanelHost, UiPanelKey, UiPanelOpened, UiPanelRegistry, UiRoot, UiRuntime, HOTBAR_SLOTS,
 };
 
 pub(crate) use crate::game::ui::demo_panel::{open_demo_panel_shortcut, register_demo_panel};
@@ -130,10 +130,7 @@ impl Plugin for GameUiPlugin {
                     update_scroll_containers,
                 ),
             )
-            .add_systems(
-                Update,
-                update_block_panel_dropdowns_ui.run_if(world_loaded),
-            )
+            .add_systems(Update, update_block_panel_dropdowns_ui.run_if(world_loaded))
             .add_systems(
                 Update,
                 (

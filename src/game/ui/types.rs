@@ -38,7 +38,8 @@ pub struct UiPanelKey(pub &'static str);
 
 impl UiPanelKey {
     pub const MAIN_MENU: Self = Self("core.main_menu");
-    pub const SAVE_LIST: Self = Self("core.save_list");
+    pub const SAVE_LIST_EDIT: Self = Self("core.save_list.edit");
+    pub const SAVE_LIST_PLAY: Self = Self("core.save_list.play");
     pub const PAUSE_MENU: Self = Self("core.pause_menu");
     pub const INVENTORY: Self = Self("core.inventory");
     pub const SETTINGS: Self = Self("core.settings");
@@ -745,26 +746,34 @@ pub enum SaveListAction {
     Back,
 }
 
+#[derive(Component, Clone, Copy)]
+pub struct SaveListButton(pub WorldEntryMode);
+
 #[derive(Component)]
 pub struct SaveListCloseButton;
 
 #[derive(Component)]
-pub struct SaveListPanel;
+pub struct SaveListPanel(pub WorldEntryMode);
 
 #[derive(Component, Clone, Copy)]
-pub struct SaveListPuzzleColumn;
+pub struct SaveListPuzzleColumn(pub WorldEntryMode);
 
 #[derive(Component, Clone, Copy)]
-pub struct SaveListSolutionColumn;
+pub struct SaveListSolutionColumn(pub WorldEntryMode);
 
 #[derive(Component)]
-pub struct SaveListPrompt;
+pub struct SaveListPrompt(pub WorldEntryMode);
+
+#[derive(Default)]
+pub struct SaveListPanelRenderState {
+    pub puzzle_keys: Vec<String>,
+    pub solution_keys: Vec<String>,
+}
 
 #[derive(Resource, Default)]
 pub struct SaveListRenderState {
-    pub entry: Option<WorldEntryMode>,
-    pub puzzle_keys: Vec<String>,
-    pub solution_keys: Vec<String>,
+    pub edit: SaveListPanelRenderState,
+    pub play: SaveListPanelRenderState,
 }
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]

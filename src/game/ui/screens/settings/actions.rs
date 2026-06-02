@@ -6,8 +6,8 @@ use crate::game::state::GameSettings;
 use crate::game::systems::world_flow::primary_click;
 use crate::game::ui::{
     ActiveSettingsSlider, CloseUiPanel, LanguageChanged, OpenSettingsDropdown, PendingKeyBind,
-    SettingsAction, SettingsChanged, SettingsSliderTrigger, SettingsTab, UiPanelClosed,
-    UiPanelKey, UiRuntime,
+    SettingsAction, SettingsChanged, SettingsSliderTrigger, SettingsTab, UiPanelClosed, UiPanelKey,
+    UiRuntime,
 };
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{input_from_buttons, open_config_folder, save_config, GameConfig};

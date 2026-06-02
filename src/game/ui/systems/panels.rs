@@ -8,10 +8,16 @@ pub fn register_legacy_panels(mut registry: ResMut<UiPanelRegistry>) {
         crate::game::ui::screens::spawn_main_menu,
     ));
     registry.register(crate::game::ui::types::UiPanelDescriptor::new(
-        crate::game::ui::types::UiPanelKey::SAVE_LIST,
-        "save.title.default",
+        crate::game::ui::types::UiPanelKey::SAVE_LIST_EDIT,
+        "save.title.edit_puzzle",
         true,
-        crate::game::ui::screens::spawn_save_list,
+        crate::game::ui::screens::spawn_edit_save_list,
+    ));
+    registry.register(crate::game::ui::types::UiPanelDescriptor::new(
+        crate::game::ui::types::UiPanelKey::SAVE_LIST_PLAY,
+        "save.title.play_solution",
+        true,
+        crate::game::ui::screens::spawn_play_save_list,
     ));
     registry.register(crate::game::ui::types::UiPanelDescriptor::new(
         crate::game::ui::types::UiPanelKey::PAUSE_MENU,
@@ -120,13 +126,20 @@ pub fn open_initial_panel(mut open: MessageWriter<OpenUiPanel>) {
     ));
 }
 
-pub fn sync_mode_panels(mode: Res<GameMode>, mut open: MessageWriter<OpenUiPanel>) {
+pub fn sync_mode_panels(
+    mode: Res<GameMode>,
+    solution_state: Res<SolutionState>,
+    mut open: MessageWriter<OpenUiPanel>,
+) {
     if !mode.is_changed() {
         return;
     }
     let key = match *mode {
         GameMode::MainMenu => UiPanelKey::MAIN_MENU,
-        GameMode::SaveListMain => UiPanelKey::SAVE_LIST,
+        GameMode::SaveListMain => match solution_state.save_list_entry {
+            WorldEntryMode::EditPuzzle => UiPanelKey::SAVE_LIST_EDIT,
+            WorldEntryMode::PlaySolution => UiPanelKey::SAVE_LIST_PLAY,
+        },
         GameMode::Inventory => UiPanelKey::INVENTORY,
         GameMode::Paused => UiPanelKey::PAUSE_MENU,
         GameMode::Playing => return,
