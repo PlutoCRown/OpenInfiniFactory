@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_scene::bsn;
 
 use crate::game::ui::components::{default_button_size, spawn_panel, PanelOptions};
-use crate::game::ui::types::UiPanelBinding;
+use crate::game::ui::types::{BlockPanelText, UiPanelBinding};
 use crate::game::ui::UiPanelId;
 use crate::shared::i18n::I18n;
 
@@ -18,6 +18,26 @@ pub fn spawn_block_panel(
         root,
         i18n,
         PanelOptions::new(width, title_key).closable(),
+        UiPanelBinding::from(panel),
+        content,
+    )
+}
+
+pub fn spawn_block_panel_with_title_marker(
+    root: &mut ChildSpawnerCommands,
+    i18n: &I18n,
+    width: f32,
+    title_key: &'static str,
+    title_marker: BlockPanelText,
+    panel: UiPanelId,
+    content: impl FnOnce(&mut ChildSpawnerCommands),
+) -> Entity {
+    spawn_panel(
+        root,
+        i18n,
+        PanelOptions::new(width, title_key)
+            .closable()
+            .block_title_marker(title_marker),
         UiPanelBinding::from(panel),
         content,
     )

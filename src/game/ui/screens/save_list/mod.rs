@@ -10,10 +10,10 @@ use crate::game::ui::components::{
     raised_border, text, HoverButton, BUTTON_BG,
 };
 use crate::game::ui::types::{
-    PanelPosition, PanelText, PanelTextKind, PanelTitleBar, PanelVisibility, PanelWindow,
-    SaveListAction, SaveListButton, SaveListCloseButton, SaveListPanel, SaveListPrompt,
-    SaveListPuzzleColumn, SaveListSolutionColumn, TextPromptAction, TextPromptRoot, TextPromptText,
-    UiPanelBinding, UiPanelKey,
+    LocalizedText, PanelPosition, PanelTitleBar, PanelVisibility, PanelWindow, SaveListAction,
+    SaveListButton, SaveListCloseButton, SaveListPanel, SaveListPrompt, SaveListPuzzleColumn,
+    SaveListSolutionColumn, TextPromptAction, TextPromptRoot, TextPromptText, UiPanelBinding,
+    UiPanelKey,
 };
 
 mod actions;
@@ -62,7 +62,9 @@ fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n, entry: WorldEnt
                 .queue_apply_scene(panel_title_bar_scene())
                 .with_children(|title| {
                     title
-                        .spawn(PanelText(PanelTextKind::SaveListTitle))
+                        .spawn(LocalizedText {
+                            key: save_list_title_key(entry),
+                        })
                         .queue_apply_scene(panel_title_label_scene(
                             i18n.text(save_list_title_key(entry)),
                             26.0,
@@ -184,6 +186,7 @@ pub fn spawn_save_select_row(
 ) {
     parent
         .spawn((Button, HoverButton, load, SaveListButton(entry)))
+        .observe(save_list_actions)
         .queue_apply_scene(save_full_width_button_scene(32.0))
         .queue_spawn_related_scenes::<Children>(save_button_label_scene("", 13.0));
 }

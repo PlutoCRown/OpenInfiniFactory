@@ -10,9 +10,8 @@ use crate::game::ui::components::{
 use crate::game::ui::types::{
     BlockEditAction, BlockMaterialIcon, BlockMaterialIconSlot, BlockPanelDropdown,
     BlockPanelDropdownLabel, BlockPanelDropdownList, BlockPanelText, BlockPanelTextKind,
-    BlockSettingsChanged, ConverterInputRow, LanguageChanged, LocalizedText,
-    OpenBlockPanelDropdown, TeleportAction, UiPanelContextChanged, UiPanelKey, UiPanelOpened,
-    UiRuntime,
+    BlockSettingsChanged, ConverterInputRow, LanguageChanged, OpenBlockPanelDropdown,
+    TeleportAction, UiPanelContextChanged, UiPanelKey, UiPanelOpened, UiRuntime,
 };
 use crate::game::world::blocks::{
     converter_settings, generator_settings, goal_settings, labeler_color, teleport_settings,
@@ -148,13 +147,13 @@ pub fn update_labeler_ui(
     ui_runtime: Res<UiRuntime>,
     world: Res<WorldBlocks>,
     i18n: Res<I18n>,
-    mut title_text: Query<&mut Text, With<LocalizedText>>,
-    added_title_text: Query<(), Added<LocalizedText>>,
+    mut panel_texts: Query<(&BlockPanelText, &mut Text)>,
+    added_panel_texts: Query<(), Added<BlockPanelText>>,
     mut lifecycle: BlockPanelLifecycle,
 ) {
     let active_pos = ui_runtime.active_block_pos();
     if !world.is_changed()
-        && added_title_text.is_empty()
+        && added_panel_texts.is_empty()
         && !lifecycle.dirty(UiPanelKey::LABELER, active_pos)
     {
         return;
@@ -172,11 +171,8 @@ pub fn update_labeler_ui(
         BlockKind::Roller => "roller.title",
         _ => "labeler.title",
     };
-    for mut text in &mut title_text {
-        if text.0 == i18n.text("labeler.title")
-            || text.0 == i18n.text("stamper.title")
-            || text.0 == i18n.text("roller.title")
-        {
+    for (panel_text, mut text) in &mut panel_texts {
+        if panel_text.kind == BlockPanelTextKind::LabelerTitle {
             text.0 = i18n.text(key);
         }
     }

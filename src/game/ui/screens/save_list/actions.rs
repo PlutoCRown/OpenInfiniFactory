@@ -181,6 +181,9 @@ pub fn save_list_actions(
             }
         }
         SaveListAction::DeleteSolution(name) => {
+            if entry != WorldEntryMode::PlaySolution {
+                return;
+            }
             if save_state
                 .selected_puzzle_solutions()
                 .iter()

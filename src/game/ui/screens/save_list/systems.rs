@@ -1,12 +1,12 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::game::state::{GameMode, SolutionState, WorldEntryMode};
+use crate::game::state::{SolutionState, WorldEntryMode};
 use crate::game::ui::components::{
     hover_border, inset_border, pressed_border, raised_border, BUTTON_BG, BUTTON_HOVER_BG,
 };
 use crate::game::ui::types::{
-    LanguageChanged, PanelText, PanelTextKind, SaveListAction, SaveListButton, SaveListChanged,
+    LanguageChanged, PanelText, SaveListAction, SaveListButton, SaveListChanged,
     SaveListCloseButton, SaveListPanel, SaveListPrompt, SaveListPuzzleColumn, SaveListRenderState,
     SaveListSolutionColumn, TextPromptAction, TextPromptKind, TextPromptRoot, TextPromptText,
     UiHoverState, UiModalClosed, UiModalKind, UiModalOpened, UiPanelContextChanged, UiPanelKey,
@@ -62,7 +62,6 @@ impl SaveListRefreshTriggers<'_, '_> {
 }
 
 pub fn update_save_list_ui(
-    mode: Res<GameMode>,
     save_state: Res<SaveState>,
     solution_state: Res<SolutionState>,
     i18n: Res<I18n>,
@@ -110,7 +109,7 @@ pub fn update_save_list_ui(
         WorldEntryMode::PlaySolution => &render_state.play,
     };
     let refresh_structure =
-        current_render_state.puzzle_keys.is_empty() || force_rebuild || triggers.structure_dirty();
+        !current_render_state.initialized || force_rebuild || triggers.structure_dirty();
     let refresh_buttons = refresh_structure || hover.is_changed() || triggers.buttons_added();
 
     if !refresh_structure && !refresh_buttons {
@@ -128,7 +127,6 @@ pub fn update_save_list_ui(
     let show_solutions = play_flow && save_state.selected_puzzle.is_some();
 
     if refresh_structure {
-        update_save_list_title(&mode, entry, &i18n, &mut texts);
         update_save_list_columns(
             &mut commands,
             &mut render_state,
@@ -180,29 +178,6 @@ fn save_list_puzzle_rows(save_state: &SaveState, edit_flow: bool) -> Vec<String>
             .into_iter()
             .map(|choice| choice.name)
             .collect()
-    }
-}
-
-fn update_save_list_title(
-    mode: &GameMode,
-    entry: WorldEntryMode,
-    i18n: &I18n,
-    texts: &mut ParamSet<(
-        Query<(&PanelText, &mut Text)>,
-        Query<&mut Text, (Without<PanelText>, Without<SaveListPrompt>)>,
-        Query<(&SaveListPrompt, &mut Text)>,
-    )>,
-) {
-    for (panel_text, mut text) in &mut texts.p0() {
-        if panel_text.0 == PanelTextKind::SaveListTitle {
-            text.0 = match *mode {
-                GameMode::SaveListMain => match entry {
-                    WorldEntryMode::EditPuzzle => i18n.text("save.title.edit_puzzle"),
-                    WorldEntryMode::PlaySolution => i18n.text("save.title.play_solution"),
-                },
-                _ => i18n.text("save.title.default"),
-            };
-        }
     }
 }
 
@@ -324,6 +299,7 @@ fn update_save_list_columns(
     if render_state.solution_keys != solution_rows {
         render_state.solution_keys = solution_rows.to_vec();
     }
+    render_state.initialized = true;
 }
 
 fn rebuild_management_column(

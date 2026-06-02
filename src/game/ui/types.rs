@@ -431,6 +431,7 @@ pub struct BlockPanelText {
 pub enum BlockPanelTextKind {
     #[default]
     GeneratorPeriod,
+    LabelerTitle,
     TeleportName,
 }
 
@@ -446,7 +447,6 @@ pub struct PanelText(pub PanelTextKind);
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum PanelTextKind {
     InventoryTitle,
-    SaveListTitle,
     ConfirmTitle,
     ConfirmMessage,
 }
@@ -766,6 +766,7 @@ pub struct SaveListPrompt(pub WorldEntryMode);
 
 #[derive(Default)]
 pub struct SaveListPanelRenderState {
+    pub initialized: bool,
     pub puzzle_keys: Vec<String>,
     pub solution_keys: Vec<String>,
 }

@@ -2,7 +2,8 @@ use bevy::prelude::*;
 use bevy_scene::{bsn, prelude::EntityCommandsSceneExt};
 
 use super::super::types::{
-    LocalizedText, PanelCloseButton, PanelPosition, PanelText, PanelTitleBar, PanelWindow,
+    BlockPanelText, LocalizedText, PanelCloseButton, PanelPosition, PanelText, PanelTitleBar,
+    PanelWindow,
 };
 use super::button::{raised_border, HoverButton, BUTTON_BG};
 use super::text::default_font_size;
@@ -23,6 +24,7 @@ pub struct PanelOptions {
     pub show_close: bool,
     pub title_size: f32,
     pub title_marker: Option<PanelText>,
+    pub block_title_marker: Option<BlockPanelText>,
 }
 
 impl PanelOptions {
@@ -33,6 +35,7 @@ impl PanelOptions {
             show_close: false,
             title_size: 26.0,
             title_marker: None,
+            block_title_marker: None,
         }
     }
 
@@ -48,6 +51,11 @@ impl PanelOptions {
 
     pub const fn title_marker(mut self, marker: PanelText) -> Self {
         self.title_marker = Some(marker);
+        self
+    }
+
+    pub const fn block_title_marker(mut self, marker: BlockPanelText) -> Self {
+        self.block_title_marker = Some(marker);
         self
     }
 }
@@ -78,6 +86,8 @@ pub fn spawn_panel(
                     options.title_size,
                 ));
                 if let Some(marker) = options.title_marker {
+                    title_text.insert(marker);
+                } else if let Some(marker) = options.block_title_marker {
                     title_text.insert(marker);
                 } else {
                     title_text.insert(LocalizedText {

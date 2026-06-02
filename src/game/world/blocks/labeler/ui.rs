@@ -2,19 +2,26 @@ use bevy::prelude::*;
 use bevy_scene::{bsn, prelude::EntityCommandsSceneExt};
 
 use crate::game::ui::components::{default_button_size, default_font_size, HoverButton};
-use crate::game::ui::types::{BlockPanelDropdownLabel, LocalizedText};
+use crate::game::ui::types::{
+    BlockPanelDropdownLabel, BlockPanelText, BlockPanelTextKind, LocalizedText,
+};
 use crate::game::ui::{BlockEditAction, BlockPanelDropdown, UiPanelId};
-use crate::game::world::blocks::panel_layout::{panel_row_scene, spawn_block_panel};
+use crate::game::world::blocks::panel_layout::{
+    panel_row_scene, spawn_block_panel_with_title_marker,
+};
 use crate::game::world::blocks::ui_components::spawn_block_panel_dropdown_list;
 use crate::game::world::blocks::StampColor;
 use crate::shared::i18n::I18n;
 
 pub(crate) fn spawn_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
-    spawn_block_panel(
+    spawn_block_panel_with_title_marker(
         root,
         i18n,
         420.0,
         "labeler.title",
+        BlockPanelText {
+            kind: BlockPanelTextKind::LabelerTitle,
+        },
         UiPanelId::Labeler,
         |panel| {
             panel
