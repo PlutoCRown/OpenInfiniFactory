@@ -105,6 +105,7 @@ pub(super) fn spawn_settings_dropdown_list(
             BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
             GlobalZIndex(20_000),
             SettingsDropdownList(dropdown),
+            Visibility::Hidden,
         ))
         .with_children(|list| {
             for (label, action) in options {

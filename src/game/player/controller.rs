@@ -12,6 +12,7 @@ use crate::game::state::{GameMode, GameSettings};
 use crate::game::systems::virtual_controls::VirtualControls;
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::WorldBlocks;
+use crate::game::world::rendering::GameplayRuntimeEntity;
 use crate::shared::config::{ConfigAction, GameConfig};
 
 pub const EYE_HEIGHT: f32 = 1.7;
@@ -40,7 +41,11 @@ pub struct FlyCamera {
 pub fn spawn_player_entity(commands: &mut Commands) {
     commands.spawn((
         Camera3d::default(),
-        Camera::default(),
+        Camera {
+            order: 0,
+            clear_color: ClearColorConfig::Default,
+            ..default()
+        },
         Msaa::Off,
         Tonemapping::SomewhatBoringDisplayTransform,
         DebandDither::Enabled,
@@ -56,6 +61,7 @@ pub fn spawn_player_entity(commands: &mut Commands) {
         NormalPrepass,
         MotionVectorPrepass,
         ShadowFilteringMethod::Temporal,
+        GameplayRuntimeEntity,
         FlyCamera {
             yaw: std::f32::consts::PI,
             pitch: -0.15,

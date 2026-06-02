@@ -4,7 +4,7 @@ use bevy::picking::pointer::PointerButton;
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
-use crate::game::player::controller::{spawn_player_entity, FlyCamera};
+use crate::game::player::controller::spawn_player_entity;
 use crate::game::simulation::factory_activity::FactoryStructureState;
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::movement::PusherState;
@@ -13,16 +13,16 @@ use crate::game::state::{
     BuilderMode, GameMode, PlacementState, SimulationState, SolutionState, WorldEntryMode,
 };
 use crate::game::systems::debug::DebugState;
-use crate::game::systems::virtual_controls::{spawn_virtual_controls_ui, VirtualControlsOverlay};
+use crate::game::systems::virtual_controls::spawn_virtual_controls_ui;
 use crate::game::ui::{
     spawn_carried_label, spawn_hotbar, spawn_inventory_tooltip, BlockPanelDropdown, CarriedItem,
     ConfirmDialogButtonSpec, ConfirmDialogEffect, ConfirmDialogMessage, ConfirmDialogSpec,
-    InventoryItems, InventoryRuntimeEntity, OpenBlockPanelDropdown, UiRoot,
+    InventoryItems, OpenBlockPanelDropdown, UiRoot,
 };
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, spawn_block_icons, spawn_scene_entities,
-    BlockEntity, BlockIconRenderEntity, GameWorldRuntime, GameWorldSceneEntity, WorldRenderManager,
+    BlockEntity, GameWorldRuntime, GameplayRuntimeEntity, WorldRenderManager,
 };
 use crate::shared::save::{
     load_world, next_named_save, reset_solution_world, save_solution_with_puzzle, save_world,
@@ -43,12 +43,8 @@ pub struct WorldMenuParams<'w, 's> {
     pub movement_influence: ResMut<'w, MovementInfluenceCache>,
     pub pusher_state: ResMut<'w, PusherState>,
     pub block_entities: Query<'w, 's, Entity, With<BlockEntity>>,
-    pub scene_entities: Query<'w, 's, Entity, With<GameWorldSceneEntity>>,
-    pub block_icon_entities: Query<'w, 's, Entity, With<BlockIconRenderEntity>>,
-    pub players: Query<'w, 's, Entity, With<FlyCamera>>,
-    pub virtual_controls: Query<'w, 's, Entity, With<VirtualControlsOverlay>>,
+    pub runtime_entities: Query<'w, 's, Entity, With<GameplayRuntimeEntity>>,
     pub ui_roots: Query<'w, 's, Entity, With<UiRoot>>,
-    pub inventory_ui: Query<'w, 's, Entity, With<InventoryRuntimeEntity>>,
 }
 
 pub(crate) fn ensure_gameplay_runtime(world_menu: &mut WorldMenuParams) {
@@ -91,19 +87,7 @@ pub(crate) fn ensure_gameplay_runtime(world_menu: &mut WorldMenuParams) {
 }
 
 pub(crate) fn teardown_gameplay_runtime(world_menu: &mut WorldMenuParams) {
-    for entity in &world_menu.scene_entities {
-        world_menu.commands.entity(entity).despawn();
-    }
-    for entity in &world_menu.block_icon_entities {
-        world_menu.commands.entity(entity).despawn();
-    }
-    for entity in &world_menu.players {
-        world_menu.commands.entity(entity).despawn();
-    }
-    for entity in &world_menu.virtual_controls {
-        world_menu.commands.entity(entity).despawn();
-    }
-    for entity in &world_menu.inventory_ui {
+    for entity in &world_menu.runtime_entities {
         world_menu.commands.entity(entity).despawn();
     }
     world_menu
@@ -129,11 +113,6 @@ pub(crate) fn clear_loaded_world_from_menu(
         save_state,
         solution_state,
         simulation,
-        &mut world_menu.commands,
-        &mut world_menu.meshes,
-        &world_menu.block_entities,
-        &world_menu.render_manager,
-        &world_menu.debug,
         &mut world_menu.factory_structures,
         &mut world_menu.movement_influence,
         &mut world_menu.pusher_state,
@@ -426,11 +405,6 @@ pub(crate) fn clear_loaded_world(
     save_state: &mut SaveState,
     solution_state: &mut SolutionState,
     simulation: &mut SimulationState,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    block_entities: &Query<Entity, With<BlockEntity>>,
-    render_manager: &WorldRenderManager,
-    debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
@@ -453,16 +427,6 @@ pub(crate) fn clear_loaded_world(
     factory_structures.clear();
     movement_influence.clear();
     pusher_state.clear();
-    factory_structures.ensure_current_world(world);
-    despawn_world(commands, block_entities);
-    rebuild_world_for_debug_state(
-        commands,
-        meshes,
-        world,
-        render_manager,
-        debug,
-        factory_structures,
-    );
 }
 
 pub(crate) fn switch_to_edit_mode(

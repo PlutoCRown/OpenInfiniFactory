@@ -2,7 +2,6 @@ pub fn update_hud_visibility(
     mode: Res<GameMode>,
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
-    save_state: Res<SaveState>,
     added_hud_nodes: Query<(), Added<InGameHudStyle>>,
     added_crosshair: Query<(), Added<Crosshair>>,
     added_in_game_visibility: Query<(), Added<InGameHudVisibility>>,
@@ -27,7 +26,7 @@ pub fn update_hud_visibility(
         return;
     }
 
-    let has_world = save_state.current.is_some();
+    let has_world = matches!(*mode, GameMode::Playing | GameMode::Inventory | GameMode::Paused);
     let hide_gameplay_hud = *builder_mode == BuilderMode::Play && simulation.running;
 
     for mut style in &mut hud_style {

@@ -16,23 +16,24 @@ pub(crate) use screens::{
     update_settings_tabs_ui, update_settings_text_ui, update_text_prompt_ui,
 };
 pub use systems::{
-    apply_ui_font, center_new_panels, cleanup_closed_panel_state, load_ui_font, open_initial_panel,
-    panel_close_clicked, panel_drag_ended, panel_drag_started, panel_dragged,
-    register_legacy_panels, sync_mode_panels, ui_hovered, ui_unhovered, update_hud_visibility,
-    update_localized_ui, update_panel_visibility, update_status_ui, update_ui_layers,
+    apply_game_mode_lifecycle, apply_ui_font, center_new_panels, cleanup_closed_panel_state,
+    load_ui_font, open_initial_panel, panel_close_clicked, panel_drag_ended, panel_drag_started,
+    panel_dragged, register_legacy_panels, sync_mode_panels, ui_hovered, ui_unhovered,
+    update_hud_visibility, update_localized_ui, update_panel_visibility, update_status_ui,
+    update_ui_layers,
 };
 pub use types::{
     ActiveSettingsSlider, AreaKind, BlockEditAction, BlockPanelDropdown, BlockSettingsChanged,
     CarriedItem, CloseUiModal, CloseUiPanel, ConfirmDialogAction, ConfirmDialogButtonSpec,
     ConfirmDialogEffect, ConfirmDialogMessage, ConfirmDialogResult, ConfirmDialogSpec,
-    GameplayUiChanged, HotbarItems, InventoryChanged, InventoryItems, InventoryRuntimeEntity,
-    LanguageChanged, MainMenuAction, OpenBlockPanelDropdown, OpenConfirmDialog,
-    OpenSettingsDropdown, OpenTextPrompt, OpenUiPanel, PanelDragState, PauseMenuAction,
-    PendingKeyBind, SaveListAction, SaveListButton, SaveListChanged, SaveListRenderState,
-    SettingsAction, SettingsChanged, SettingsSliderTrigger, SettingsTab, TeleportAction,
-    TextPromptAction, TextPromptKind, UiHoverState, UiModalClosed, UiModalKind, UiModalOpened,
-    UiPanelBinding, UiPanelClosed, UiPanelContext, UiPanelContextChanged, UiPanelDescriptor,
-    UiPanelHost, UiPanelKey, UiPanelOpened, UiPanelRegistry, UiRoot, UiRuntime, HOTBAR_SLOTS,
+    GameplayUiChanged, HotbarItems, InventoryChanged, InventoryItems, LanguageChanged,
+    MainMenuAction, OpenBlockPanelDropdown, OpenConfirmDialog, OpenSettingsDropdown,
+    OpenTextPrompt, OpenUiPanel, PanelDragState, PauseMenuAction, PendingKeyBind, SaveListAction,
+    SaveListButton, SaveListChanged, SaveListRenderState, SettingsAction, SettingsChanged,
+    SettingsSliderTrigger, SettingsTab, TeleportAction, TextPromptAction, TextPromptKind,
+    UiHoverState, UiModalClosed, UiModalKind, UiModalOpened, UiPanelBinding, UiPanelClosed,
+    UiPanelContext, UiPanelContextChanged, UiPanelDescriptor, UiPanelHost, UiPanelKey,
+    UiPanelOpened, UiPanelRegistry, UiRoot, UiRuntime, HOTBAR_SLOTS,
 };
 
 pub(crate) use crate::game::ui::demo_panel::{open_demo_panel_shortcut, register_demo_panel};
@@ -103,6 +104,7 @@ impl Plugin for GameUiPlugin {
                     open_panel_messages,
                     close_panel_messages,
                     modal_messages,
+                    apply_game_mode_lifecycle,
                     cleanup_closed_panel_state,
                 )
                     .chain(),

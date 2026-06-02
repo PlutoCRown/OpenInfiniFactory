@@ -342,6 +342,29 @@ pub fn cleanup_closed_panel_state(
     drag.clear();
 }
 
+pub fn apply_game_mode_lifecycle(
+    mode: Res<GameMode>,
+    mut ui_runtime: ResMut<UiRuntime>,
+    mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
+    mut teleport_rename: ResMut<TeleportRenameState>,
+    mut drag: ResMut<PanelDragState>,
+    mut hover: ResMut<UiHoverState>,
+) {
+    if !mode.is_changed() {
+        return;
+    }
+
+    match *mode {
+        GameMode::MainMenu => ui_runtime.show_main_menu(),
+        GameMode::Playing => ui_runtime.clear_runtime_panels(),
+        GameMode::SaveListMain | GameMode::Inventory | GameMode::Paused => {}
+    }
+    open_block_dropdown.0 = None;
+    teleport_rename.editing = None;
+    drag.clear();
+    hover.entity = None;
+}
+
 pub fn panel_drag_started(
     mut drag_start: On<Pointer<DragStart>>,
     title_bars: Query<&ChildOf, With<PanelTitleBar>>,

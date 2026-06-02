@@ -16,7 +16,7 @@ pub(super) fn spawn_menu_button(
     text_key: &'static str,
 ) {
     parent
-        .spawn((Button, HoverButton, action))
+        .spawn((Button, HoverButton, action, Visibility::Visible))
         .observe(main_menu_actions)
         .queue_apply_scene(menu_button_visual_scene(height))
         .queue_spawn_related_scenes::<Children>(menu_button_label_scene(text_key, font_size));
@@ -45,6 +45,7 @@ fn menu_button_visual_scene(height: f32) -> impl bevy_scene::Scene {
             left: {raised_border().left},
         }
         BackgroundColor(BUTTON_BG)
+        Visibility::Visible
         BoxShadow::new(
             Color::srgba(0.0, 0.0, 0.0, 0.62),
             Val::Px(0.0),

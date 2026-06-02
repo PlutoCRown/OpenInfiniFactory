@@ -15,7 +15,11 @@ pub fn spawn_block_panel_dropdown_list<A>(
     A: Component + Copy,
 {
     parent
-        .spawn((BlockPanelDropdownList(dropdown), GlobalZIndex(20_000)))
+        .spawn((
+            BlockPanelDropdownList(dropdown),
+            GlobalZIndex(20_000),
+            Visibility::Hidden,
+        ))
         .queue_apply_scene(dropdown_list_scene(230.0))
         .with_children(|list| {
             for (label, action) in options {
@@ -32,7 +36,11 @@ pub fn spawn_material_icon_dropdown_list<A>(
     A: Component + Copy,
 {
     parent
-        .spawn((BlockPanelDropdownList(dropdown), GlobalZIndex(20_000)))
+        .spawn((
+            BlockPanelDropdownList(dropdown),
+            GlobalZIndex(20_000),
+            Visibility::Hidden,
+        ))
         .queue_apply_scene(icon_dropdown_list_scene())
         .with_children(|list| {
             for (material, action) in options {

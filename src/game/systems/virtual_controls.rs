@@ -3,6 +3,7 @@ use bevy::window::PrimaryWindow;
 
 use crate::game::state::{GameMode, SimulationState};
 use crate::game::ui::UiRuntime;
+use crate::game::world::rendering::GameplayRuntimeEntity;
 
 const ENABLED_ON_THIS_PLATFORM: bool = cfg!(target_arch = "wasm32");
 const JOYSTICK_RADIUS: f32 = 58.0;
@@ -129,6 +130,7 @@ pub fn spawn_virtual_controls_ui(commands: &mut Commands) {
             },
             GlobalZIndex(80),
             VirtualControlsOverlay,
+            GameplayRuntimeEntity,
         ))
         .with_children(|root| {
             root.spawn((

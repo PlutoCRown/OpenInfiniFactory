@@ -79,6 +79,7 @@ pub struct BlockPanelDropdownParams<'w, 's> {
         (
             &'static BlockPanelDropdownList,
             &'static mut Node,
+            &'static mut Visibility,
             &'static ComputedNode,
         ),
     >,
@@ -323,9 +324,14 @@ pub fn update_block_panel_dropdowns_ui(
             .map(|window| Vec2::new(window.width(), window.height()))
             .unwrap_or(Vec2::ZERO);
         let scale = ui_transform_scale(window, ui_scale.0);
-        for (list, mut style, list_node) in &mut dropdowns.lists {
+        for (list, mut style, mut visibility, list_node) in &mut dropdowns.lists {
             let open = open_dropdown.0 == Some(list.0);
             style.display = if open { Display::Flex } else { Display::None };
+            *visibility = if open {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            };
             if !open {
                 continue;
             }

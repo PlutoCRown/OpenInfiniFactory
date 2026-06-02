@@ -349,6 +349,29 @@ impl UiRuntime {
     pub fn has_modal(&self) -> bool {
         self.modal.is_some()
     }
+
+    pub fn clear_runtime_panels(&mut self) {
+        self.stack.retain(|session| {
+            matches!(
+                session.panel,
+                UiPanelKey::MAIN_MENU
+                    | UiPanelKey::SAVE_LIST_EDIT
+                    | UiPanelKey::SAVE_LIST_PLAY
+                    | UiPanelKey::SETTINGS
+            )
+        });
+        self.modal = None;
+    }
+
+    pub fn show_main_menu(&mut self) {
+        self.stack.clear();
+        self.stack.push(UiPanelSession {
+            panel: UiPanelKey::MAIN_MENU,
+            context: UiPanelContext::None,
+            blocks_gameplay: true,
+        });
+        self.modal = None;
+    }
 }
 
 #[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]

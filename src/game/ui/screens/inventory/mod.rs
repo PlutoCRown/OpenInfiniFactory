@@ -12,6 +12,7 @@ use crate::game::ui::types::{
     InventoryTooltip, LocalizedText, PanelText, PanelTextKind, PanelVisibility, SlotArea,
     UiPanelBinding, UiPanelKey, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
+use crate::game::world::rendering::GameplayRuntimeEntity;
 
 mod actions;
 mod carried_item;
@@ -45,6 +46,7 @@ pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
         InGameHudStyle,
         GameplayHudVisibility,
         InventoryRuntimeEntity,
+        GameplayRuntimeEntity,
     ))
     .with_children(|bar| {
         for index in 0..HOTBAR_SLOTS {
@@ -82,24 +84,32 @@ pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> En
 }
 
 pub fn spawn_carried_label(root: &mut ChildSpawnerCommands) {
-    root.spawn((CarriedItemPreview, InventoryRuntimeEntity))
-        .queue_apply_scene(carried_item_preview_scene())
-        .with_children(|icon| {
-            icon.spawn_empty()
-                .queue_apply_scene(carried_item_icon_scene());
-            icon.spawn_empty()
-                .queue_apply_scene(carried_item_label_scene());
-        });
+    root.spawn((
+        CarriedItemPreview,
+        InventoryRuntimeEntity,
+        GameplayRuntimeEntity,
+    ))
+    .queue_apply_scene(carried_item_preview_scene())
+    .with_children(|icon| {
+        icon.spawn_empty()
+            .queue_apply_scene(carried_item_icon_scene());
+        icon.spawn_empty()
+            .queue_apply_scene(carried_item_label_scene());
+    });
 }
 
 pub fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
-    root.spawn((InventoryTooltip, InventoryRuntimeEntity))
-        .queue_apply_scene(inventory_tooltip_scene())
-        .with_children(|tooltip| {
-            tooltip
-                .spawn_empty()
-                .queue_apply_scene(inventory_tooltip_text_scene());
-        });
+    root.spawn((
+        InventoryTooltip,
+        InventoryRuntimeEntity,
+        GameplayRuntimeEntity,
+    ))
+    .queue_apply_scene(inventory_tooltip_scene())
+    .with_children(|tooltip| {
+        tooltip
+            .spawn_empty()
+            .queue_apply_scene(inventory_tooltip_text_scene());
+    });
 }
 
 fn carried_item_preview_scene() -> impl bevy_scene::Scene {

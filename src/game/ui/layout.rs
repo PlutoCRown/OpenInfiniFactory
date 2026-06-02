@@ -12,7 +12,24 @@ use super::types::{
 use crate::game::world::blocks::spawn_block_dropdown_layers;
 
 pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
-    commands.spawn((Camera2d, IsDefaultUiCamera));
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: -10,
+            clear_color: ClearColorConfig::Default,
+            ..default()
+        },
+    ));
+
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 10,
+            clear_color: ClearColorConfig::None,
+            ..default()
+        },
+        IsDefaultUiCamera,
+    ));
 
     commands.spawn((root_node(), UiRoot)).with_children(|root| {
         spawn_status_overlays(root);

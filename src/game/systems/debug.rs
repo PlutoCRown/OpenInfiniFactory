@@ -97,6 +97,7 @@ fn gameplay_mode(mode: GameMode) -> bool {
 }
 
 pub fn update_debug_ui(
+    mode: Res<GameMode>,
     debug: Res<DebugState>,
     diagnostics: Res<DiagnosticsStore>,
     world: Res<WorldBlocks>,
@@ -112,7 +113,8 @@ pub fn update_debug_ui(
         return;
     };
 
-    style.display = if debug.enabled {
+    let visible = debug.enabled && gameplay_mode(*mode);
+    style.display = if visible {
         Display::Flex
     } else {
         Display::None
@@ -128,7 +130,7 @@ pub fn update_debug_ui(
         Val::Auto
     };
 
-    if !debug.enabled {
+    if !visible {
         return;
     }
 

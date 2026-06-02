@@ -77,10 +77,10 @@ pub fn spawn_panel(
     .queue_apply_scene(panel_window_scene(options.width))
     .with_children(|panel| {
         panel
-            .spawn((Button, PanelTitleBar))
+            .spawn((Button, PanelTitleBar, Visibility::Visible))
             .queue_apply_scene(panel_title_bar_scene())
             .with_children(|title| {
-                let mut title_text = title.spawn_empty();
+                let mut title_text = title.spawn(Visibility::Visible);
                 title_text.queue_apply_scene(panel_title_label_scene(
                     i18n.text(options.title_key),
                     options.title_size,
@@ -96,13 +96,13 @@ pub fn spawn_panel(
                 }
                 if options.show_close {
                     title
-                        .spawn((Button, HoverButton, PanelCloseButton))
+                        .spawn((Button, HoverButton, PanelCloseButton, Visibility::Visible))
                         .queue_apply_scene(panel_title_button_scene())
                         .queue_spawn_related_scenes::<Children>(panel_close_label_scene());
                 }
             });
         panel
-            .spawn_empty()
+            .spawn(Visibility::Visible)
             .queue_apply_scene(panel_content_scene())
             .with_children(content);
     })
@@ -163,6 +163,7 @@ pub fn panel_title_bar_scene() -> impl bevy_scene::Scene {
             flex_shrink: 0.0,
         }
         BackgroundColor(Color::NONE)
+        Visibility::Visible
         BorderColor {
             bottom: PANEL_DARK_EDGE,
         }
@@ -204,6 +205,7 @@ pub fn panel_title_button_scene() -> impl bevy_scene::Scene {
             left: {raised_border().left},
         }
         BackgroundColor(BUTTON_BG)
+        Visibility::Visible
     }
 }
 
@@ -229,5 +231,6 @@ pub fn panel_content_scene() -> impl bevy_scene::Scene {
             padding: UiRect::all(Val::Px(8.0)),
         }
         BackgroundColor(Color::NONE)
+        Visibility::Visible
     }
 }

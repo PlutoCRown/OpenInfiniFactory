@@ -144,12 +144,15 @@ impl Plugin for GamePlugin {
                 (
                     systems::debug::toggle_debug,
                     systems::debug::toggle_factory_activity_debug,
-                    systems::debug::update_debug_ui,
                     systems::debug::draw_player_collider,
                 )
                     .chain()
                     .run_if(world_loaded)
                     .after(update_virtual_controls_ui),
+            )
+            .add_systems(
+                Update,
+                systems::debug::update_debug_ui.after(update_virtual_controls_ui),
             );
     }
 }
@@ -170,6 +173,9 @@ fn setup_gameplay_state_resources(mut commands: Commands) {
     commands.insert_resource(simulation::structures::MovementInfluenceCache::default());
 }
 
-pub(crate) fn world_loaded(save_state: Res<SaveState>) -> bool {
-    save_state.current.is_some()
+pub(crate) fn world_loaded(mode: Res<GameMode>) -> bool {
+    matches!(
+        *mode,
+        GameMode::Playing | GameMode::Inventory | GameMode::Paused
+    )
 }

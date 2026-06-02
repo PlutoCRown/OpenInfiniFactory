@@ -41,6 +41,9 @@ pub struct BlockEntity {
 #[derive(Component)]
 pub struct GameWorldSceneEntity;
 
+#[derive(Component)]
+pub struct GameplayRuntimeEntity;
+
 #[derive(Resource, Default)]
 pub struct GameWorldRuntime {
     pub scene_ready: bool,
@@ -128,6 +131,7 @@ pub fn spawn_scene_entities(
         },
         Transform::from_xyz(3.5, 5.5, 4.5),
         GameWorldSceneEntity,
+        GameplayRuntimeEntity,
     ));
 
     commands.spawn((
@@ -146,6 +150,7 @@ pub fn spawn_scene_entities(
         }
         .build(),
         GameWorldSceneEntity,
+        GameplayRuntimeEntity,
     ));
 
     let marker_mesh = meshes.add(Cuboid::new(0.92, 0.018, 0.92));
@@ -163,6 +168,7 @@ pub fn spawn_scene_entities(
         Visibility::Hidden,
         HoverMarker,
         GameWorldSceneEntity,
+        GameplayRuntimeEntity,
     ));
 
     let preview_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
@@ -174,6 +180,7 @@ pub fn spawn_scene_entities(
         Visibility::Hidden,
         PlacementPreview,
         GameWorldSceneEntity,
+        GameplayRuntimeEntity,
     ));
 }
 
@@ -198,6 +205,7 @@ pub fn spawn_block_icons(
         icon_layer.clone(),
         BlockIconRenderEntity,
         BlockIconRenderRoot,
+        GameplayRuntimeEntity,
     ));
 
     for (index, kind) in icon_kinds.into_iter().enumerate() {
@@ -247,6 +255,7 @@ pub fn spawn_block_icons(
             BlockIconRenderEntity,
             BlockIconRenderRoot,
             BlockIconRenderCamera,
+            GameplayRuntimeEntity,
         ));
     }
 
@@ -457,6 +466,7 @@ pub fn spawn_weld_sparks(
                 MeshMaterial3d(assets.weld_connector_material.clone()),
                 Transform::from_translation(origin + offset),
                 WeldSpark::new(velocity, 0.28),
+                GameplayRuntimeEntity,
             ));
         }
     }
@@ -957,20 +967,21 @@ fn spawn_block_model(
             icon_layer.clone(),
             BlockIconRenderEntity,
             BlockIconRenderRoot,
+            GameplayRuntimeEntity,
         ));
     }
 
     if with_block_entity {
-        entity.insert(BlockEntity { pos });
+        entity.insert((BlockEntity { pos }, GameplayRuntimeEntity));
     }
 
     if pending_generated_preview {
-        entity.insert(PendingGeneratedPreview);
+        entity.insert((PendingGeneratedPreview, GameplayRuntimeEntity));
     }
 
     let is_selection_overlay = selection_overlay.is_some();
     if let Some(selection_overlay) = selection_overlay {
-        entity.insert(selection_overlay);
+        entity.insert((selection_overlay, GameplayRuntimeEntity));
     }
 
     if let Some(animation) = animation.filter(|_| !pending_generated_preview) {
