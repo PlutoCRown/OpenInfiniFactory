@@ -262,6 +262,7 @@ fn save_button_label_scene(value: &'static str, font_size: f32) -> impl bevy_sce
                 font_size: {default_font_size(font_size)}
             }
             TextColor(Color::WHITE)
+            Pickable::IGNORE
         )
     }
 }

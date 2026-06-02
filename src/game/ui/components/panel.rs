@@ -207,6 +207,7 @@ pub fn panel_close_label_scene() -> impl bevy_scene::SceneList {
                 font_size: {default_font_size(12.0)}
             }
             TextColor(Color::WHITE)
+            Pickable::IGNORE
         )
     }
 }

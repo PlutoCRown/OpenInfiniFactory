@@ -63,6 +63,7 @@ fn menu_button_label_scene(text_key: &'static str, font_size: f32) -> impl bevy_
             LocalizedText {
                 key: {text_key}
             }
+            Pickable::IGNORE
         )
     }
 }

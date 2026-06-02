@@ -225,6 +225,7 @@ fn confirm_dialog_button_label_scene(text_key: &'static str) -> impl bevy_scene:
             LocalizedText {
                 key: {text_key}
             }
+            Pickable::IGNORE
         )
     }
 }

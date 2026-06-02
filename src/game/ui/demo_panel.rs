@@ -3,8 +3,7 @@ use bevy_scene::{bsn, prelude::EntityCommandsSceneExt};
 
 use crate::game::ui::components::{spawn_panel, PanelOptions};
 use crate::game::ui::{
-    OpenUiPanel, OpensPanel, UiPanelBinding, UiPanelContext, UiPanelDescriptor, UiPanelKey,
-    UiPanelRegistry,
+    OpenUiPanel, UiPanelBinding, UiPanelContext, UiPanelDescriptor, UiPanelKey, UiPanelRegistry,
 };
 use crate::shared::i18n::I18n;
 
@@ -50,34 +49,6 @@ fn demo_panel_scene() -> impl bevy_scene::SceneList {
                 font_size: FontSize::Px(24.0)
             }
             TextColor(Color::srgb(0.90, 0.84, 0.76))
-        )
-    }
-}
-
-pub fn spawn_open_demo_button(root: &mut ChildSpawnerCommands) {
-    root.spawn((
-        Button,
-        OpensPanel {
-            key: PANEL_DEMO,
-            context: UiPanelContext::None,
-        },
-        Node {
-            width: Val::Px(120.0),
-            height: Val::Px(36.0),
-            ..default()
-        },
-    ))
-    .queue_spawn_related_scenes::<Children>(open_demo_button_label_scene());
-}
-
-fn open_demo_button_label_scene() -> impl bevy_scene::SceneList {
-    bsn! {
-        (
-            Text("Open Demo")
-            TextFont {
-                font_size: FontSize::Px(14.0)
-            }
-            TextColor(Color::WHITE)
         )
     }
 }

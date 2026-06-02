@@ -203,6 +203,8 @@ pub fn modal_messages(
 
 #[derive(SystemParam)]
 pub struct PanelLifecycleTriggers<'w, 's> {
+    added_panel_visibility: Query<'w, 's, (), Added<PanelVisibility>>,
+    added_panel_windows: Query<'w, 's, (), Added<PanelWindow>>,
     opened: MessageReader<'w, 's, UiPanelOpened>,
     closed: MessageReader<'w, 's, UiPanelClosed>,
     context_changed: MessageReader<'w, 's, UiPanelContextChanged>,
@@ -210,7 +212,9 @@ pub struct PanelLifecycleTriggers<'w, 's> {
 
 impl PanelLifecycleTriggers<'_, '_> {
     fn dirty(&mut self) -> bool {
-        self.opened.read().next().is_some()
+        !self.added_panel_visibility.is_empty()
+            || !self.added_panel_windows.is_empty()
+            || self.opened.read().next().is_some()
             || self.closed.read().next().is_some()
             || self.context_changed.read().next().is_some()
     }
@@ -243,11 +247,7 @@ pub fn update_panel_visibility(
     mut nodes: ParamSet<(
         Query<
             (&PanelVisibility, &mut Node),
-            (
-                Without<PauseMenuAction>,
-                Without<UiPanelBinding>,
-                Without<PanelWindow>,
-            ),
+            (Without<PauseMenuAction>, Without<UiPanelBinding>),
         >,
         Query<
             (&PauseMenuAction, &mut Node),
@@ -259,20 +259,11 @@ pub fn update_panel_visibility(
         >,
         Query<
             (&Node, &mut Visibility, &mut PanelPosition),
-            (With<PanelWindow>, Without<TextPromptRoot>, Without<PanelVisibility>),
+            (With<PanelWindow>, Without<TextPromptRoot>),
         >,
     )>,
 ) {
-    if !mode.is_changed()
-        && !save_state.is_changed()
-        && !solution_state.is_changed()
-        && !settings_tab.is_changed()
-        && !lifecycle.dirty()
-        && !world.is_changed()
-        && !open_block_dropdown.is_changed()
-    {
-        return;
-    }
+    let _ = lifecycle.dirty();
 
     let active_panel = ui_runtime.active_key();
     for (visibility, mut style) in &mut nodes.p0() {

@@ -27,7 +27,7 @@ pub use types::{
     ConfirmDialogEffect, ConfirmDialogMessage, ConfirmDialogResult, ConfirmDialogSpec,
     GameplayUiChanged, HotbarItems, InventoryChanged, InventoryItems, LanguageChanged,
     MainMenuAction, OpenBlockPanelDropdown, OpenConfirmDialog, OpenSettingsDropdown,
-    OpenTextPrompt, OpenUiPanel, OpensPanel, PanelDragState, PauseMenuAction, PendingKeyBind,
+    OpenTextPrompt, OpenUiPanel, PanelDragState, PauseMenuAction, PendingKeyBind,
     SaveListAction, SaveListChanged, SaveListRenderState, SettingsAction, SettingsChanged,
     SettingsSliderTrigger, SettingsTab, TeleportAction, TextPromptAction, TextPromptKind,
     UiHoverState, UiModalClosed, UiModalKind, UiModalOpened, UiPanelBinding, UiPanelClosed,
@@ -35,9 +35,7 @@ pub use types::{
     UiPanelOpened, UiPanelRegistry, UiRuntime, HOTBAR_SLOTS,
 };
 
-pub(crate) use crate::game::ui::demo_panel::{
-    open_demo_panel_shortcut, register_demo_panel, spawn_open_demo_button,
-};
+pub(crate) use crate::game::ui::demo_panel::{open_demo_panel_shortcut, register_demo_panel};
 use crate::game::ui::screens::{
     cleanup_closed_settings_panel, confirm_dialog_actions, settings_action_clicked,
     settings_menu_actions, text_prompt_actions, text_prompt_input,

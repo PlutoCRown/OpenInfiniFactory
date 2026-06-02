@@ -256,14 +256,14 @@ pub fn update_virtual_controls_ui(
     mode: Res<GameMode>,
     simulation: Res<SimulationState>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut overlays: Query<&mut Node, With<VirtualControlsOverlay>>,
+    mut overlays: Query<&mut Node, (With<VirtualControlsOverlay>, Without<VirtualControlVisual>)>,
     mut visuals: Query<(
         &mut Node,
         &mut BackgroundColor,
         &VirtualControlVisual,
         Option<&Children>,
     )>,
-    mut text_query: Query<&mut Text>,
+    mut text_query: Query<&mut Text, Without<VirtualControlVisual>>,
 ) {
     if !ENABLED_ON_THIS_PLATFORM {
         return;

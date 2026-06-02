@@ -9,13 +9,11 @@ use super::types::{
     Crosshair, GameplayHudVisibility, InGameHudVisibility, PanelVisibility, StatusText,
     StatusTextKind, UiRoot,
 };
-use crate::game::ui::spawn_open_demo_button;
 use crate::game::world::blocks::spawn_block_dropdown_layers;
 
 pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
     commands.spawn((root_node(), UiRoot)).with_children(|root| {
         spawn_status_overlays(root);
-        spawn_open_demo_button(root);
         spawn_hotbar(root);
         spawn_modal_scrim(root);
         spawn_carried_label(root);
@@ -130,6 +128,7 @@ fn status_text_scene(
             font_size: {default_font_size(font_size)}
         }
         TextColor(color)
+        Visibility::Hidden
         Node {
             position_type: PositionType::Absolute,
             left: {left},
