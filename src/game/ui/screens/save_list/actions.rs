@@ -7,8 +7,8 @@ use crate::game::state::{
     BuilderMode, GameMode, PlacementState, SimulationState, SolutionState, WorldEntryMode,
 };
 use crate::game::systems::world_flow::{
-    delete_save_dialog, open_loaded_world, open_loaded_world_from_menu, primary_click,
-    push_text_input, puzzle_has_solutions, WorldMenuParams,
+    delete_save_dialog, open_loaded_world_from_menu, primary_click, push_text_input,
+    puzzle_has_solutions, WorldMenuParams,
 };
 use crate::game::ui::{
     CarriedItem, CloseUiModal, ConfirmDialogButtonSpec, ConfirmDialogEffect, ConfirmDialogMessage,
@@ -26,7 +26,6 @@ pub fn save_list_actions(
     mut click: On<Pointer<Click>>,
     mut mode: ResMut<GameMode>,
     mut builder_mode: ResMut<BuilderMode>,
-    mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mut save_state: ResMut<SaveState>,
@@ -87,29 +86,22 @@ pub fn save_list_actions(
                     )));
                     return;
                 }
-                open_loaded_world(
+                let loaded = open_loaded_world_from_menu(
                     &name,
                     WorldEntryMode::EditPuzzle,
-                    &mut world_menu.world,
+                    &mut mode,
                     &mut builder_mode,
-                    &mut inventory,
                     &mut carried,
                     &mut placement,
                     &mut save_state,
                     &mut solution_state,
                     &mut simulation,
-                    &mut world_menu.commands,
-                    &mut world_menu.meshes,
-                    &world_menu.block_entities,
-                    &world_menu.render_manager,
-                    &world_menu.debug,
-                    &mut world_menu.factory_structures,
-                    &mut world_menu.movement_influence,
-                    &mut world_menu.pusher_state,
-                    &mut mode,
+                    &mut world_menu,
                 );
-                inventory_changed.write(InventoryChanged);
-                save_list_changed.write(SaveListChanged);
+                if loaded {
+                    inventory_changed.write(InventoryChanged);
+                    save_list_changed.write(SaveListChanged);
+                }
             } else {
                 let Some(choice) = save_state
                     .puzzle_choices()
@@ -136,29 +128,22 @@ pub fn save_list_actions(
             {
                 return;
             }
-            open_loaded_world(
+            let loaded = open_loaded_world_from_menu(
                 &name,
                 WorldEntryMode::PlaySolution,
-                &mut world_menu.world,
+                &mut mode,
                 &mut builder_mode,
-                &mut inventory,
                 &mut carried,
                 &mut placement,
                 &mut save_state,
                 &mut solution_state,
                 &mut simulation,
-                &mut world_menu.commands,
-                &mut world_menu.meshes,
-                &world_menu.block_entities,
-                &world_menu.render_manager,
-                &world_menu.debug,
-                &mut world_menu.factory_structures,
-                &mut world_menu.movement_influence,
-                &mut world_menu.pusher_state,
-                &mut mode,
+                &mut world_menu,
             );
-            inventory_changed.write(InventoryChanged);
-            save_list_changed.write(SaveListChanged);
+            if loaded {
+                inventory_changed.write(InventoryChanged);
+                save_list_changed.write(SaveListChanged);
+            }
         }
         SaveListAction::RenamePuzzle(name) => {
             if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
@@ -215,12 +200,12 @@ pub fn text_prompt_actions(
     mut close_modal: MessageWriter<CloseUiModal>,
     mut mode: ResMut<GameMode>,
     mut builder_mode: ResMut<BuilderMode>,
-    mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
     mut simulation: ResMut<SimulationState>,
+    inventory: Option<Res<InventoryItems>>,
     mut world_menu: WorldMenuParams,
     actions: Query<&TextPromptAction>,
     mut inventory_changed: MessageWriter<InventoryChanged>,
@@ -239,12 +224,12 @@ pub fn text_prompt_actions(
             &mut close_modal,
             &mut mode,
             &mut builder_mode,
-            &mut inventory,
             &mut carried,
             &mut placement,
             &mut save_state,
             &mut solution_state,
             &mut simulation,
+            inventory.as_deref(),
             &mut world_menu,
             &mut inventory_changed,
             &mut save_list_changed,
@@ -259,12 +244,12 @@ pub fn text_prompt_input(
     mut ui_runtime: ResMut<UiRuntime>,
     mut mode: ResMut<GameMode>,
     mut builder_mode: ResMut<BuilderMode>,
-    mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
     mut simulation: ResMut<SimulationState>,
+    inventory: Option<Res<InventoryItems>>,
     mut world_menu: WorldMenuParams,
     mut close_modal: MessageWriter<CloseUiModal>,
     mut keyboard_input: MessageReader<KeyboardInput>,
@@ -308,12 +293,12 @@ pub fn text_prompt_input(
             &mut close_modal,
             &mut mode,
             &mut builder_mode,
-            &mut inventory,
             &mut carried,
             &mut placement,
             &mut save_state,
             &mut solution_state,
             &mut simulation,
+            inventory.as_deref(),
             &mut world_menu,
             &mut inventory_changed,
             &mut save_list_changed,
@@ -328,12 +313,12 @@ fn confirm_active_text_prompt(
     close_modal: &mut MessageWriter<CloseUiModal>,
     mode: &mut GameMode,
     builder_mode: &mut BuilderMode,
-    inventory: &mut InventoryItems,
     carried: &mut CarriedItem,
     placement: &mut PlacementState,
     save_state: &mut SaveState,
     solution_state: &mut SolutionState,
     simulation: &mut SimulationState,
+    current_inventory: Option<&InventoryItems>,
     world_menu: &mut WorldMenuParams,
     inventory_changed: &mut MessageWriter<InventoryChanged>,
     save_list_changed: &mut MessageWriter<SaveListChanged>,
@@ -366,17 +351,16 @@ fn confirm_active_text_prompt(
         TextPromptKind::NewPuzzle => {
             world_menu.world.clear();
             seed_demo_world(&mut world_menu.world);
-            *inventory = InventoryItems::for_mode(BuilderMode::Edit);
-            if save_world(&world_menu.world, &name, SaveKind::Puzzle, inventory) {
+            let inventory = InventoryItems::for_mode(BuilderMode::Edit);
+            if save_world(&world_menu.world, &name, SaveKind::Puzzle, &inventory) {
                 save_state.refresh();
                 inventory_changed.write(InventoryChanged);
                 save_list_changed.write(SaveListChanged);
-                open_loaded_world_from_menu(
+                let loaded = open_loaded_world_from_menu(
                     &name,
                     WorldEntryMode::EditPuzzle,
                     mode,
                     builder_mode,
-                    inventory,
                     carried,
                     placement,
                     save_state,
@@ -384,8 +368,10 @@ fn confirm_active_text_prompt(
                     simulation,
                     world_menu,
                 );
-                inventory_changed.write(InventoryChanged);
-                save_list_changed.write(SaveListChanged);
+                if loaded {
+                    inventory_changed.write(InventoryChanged);
+                    save_list_changed.write(SaveListChanged);
+                }
             }
         }
         TextPromptKind::NewSolution { puzzle } => {
@@ -396,23 +382,22 @@ fn confirm_active_text_prompt(
                 .puzzle_snapshot
                 .unwrap_or_else(|| world_menu.world.clone());
             *world_menu.world = puzzle_snapshot.clone();
-            *inventory = InventoryItems::for_mode(BuilderMode::Play);
+            let inventory = InventoryItems::for_mode(BuilderMode::Play);
             if save_solution_with_puzzle(
                 &world_menu.world,
                 &name,
                 &puzzle,
                 &puzzle_snapshot,
-                inventory,
+                &inventory,
             ) {
                 save_state.refresh();
                 inventory_changed.write(InventoryChanged);
                 save_list_changed.write(SaveListChanged);
-                open_loaded_world_from_menu(
+                let loaded = open_loaded_world_from_menu(
                     &name,
                     WorldEntryMode::PlaySolution,
                     mode,
                     builder_mode,
-                    inventory,
                     carried,
                     placement,
                     save_state,
@@ -420,8 +405,10 @@ fn confirm_active_text_prompt(
                     simulation,
                     world_menu,
                 );
-                inventory_changed.write(InventoryChanged);
-                save_list_changed.write(SaveListChanged);
+                if loaded {
+                    inventory_changed.write(InventoryChanged);
+                    save_list_changed.write(SaveListChanged);
+                }
             }
         }
         TextPromptKind::RenamePuzzle { name: old }
@@ -438,6 +425,9 @@ fn confirm_active_text_prompt(
             }
         }
         TextPromptKind::SaveAsNewPuzzle => {
+            let Some(inventory) = current_inventory else {
+                return;
+            };
             let world = simulation.authoring_world(&world_menu.world);
             if save_world(world, &name, SaveKind::Puzzle, inventory) {
                 save_state.current = Some(name);

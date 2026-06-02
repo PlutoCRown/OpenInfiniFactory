@@ -37,7 +37,7 @@ pub struct FlyCamera {
     sensitivity: f32,
 }
 
-pub fn spawn_player(mut commands: Commands) {
+pub fn spawn_player_entity(commands: &mut Commands) {
     commands.spawn((
         Camera3d::default(),
         Camera::default(),

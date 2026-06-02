@@ -20,7 +20,7 @@ fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
 
 pub fn update_status_ui(
     placement: Res<PlacementState>,
-    inventory: Res<InventoryItems>,
+    inventory: Option<Res<InventoryItems>>,
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
     save_state: Res<SaveState>,
@@ -54,7 +54,7 @@ pub fn update_status_ui(
         text.0 = status_text_value(
             status.0,
             &placement,
-            &inventory,
+            inventory.as_deref(),
             *builder_mode,
             &simulation,
             &save_state,
@@ -76,7 +76,7 @@ pub fn update_status_ui(
 fn status_text_value(
     kind: StatusTextKind,
     placement: &PlacementState,
-    inventory: &InventoryItems,
+    inventory: Option<&InventoryItems>,
     builder_mode: BuilderMode,
     simulation: &SimulationState,
     save_state: &SaveState,
@@ -85,6 +85,9 @@ fn status_text_value(
 ) -> String {
     match kind {
         StatusTextKind::Hotbar => {
+            let Some(inventory) = inventory else {
+                return String::new();
+            };
             let selected_item = inventory.hotbar[placement.selected];
             let selected = selected_item
                 .map(|item| i18n.text(item.name_key()))

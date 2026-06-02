@@ -38,6 +38,18 @@ pub struct BlockEntity {
     pub pos: IVec3,
 }
 
+#[derive(Component)]
+pub struct GameWorldSceneEntity;
+
+#[derive(Resource, Default)]
+pub struct GameWorldRuntime {
+    pub scene_ready: bool,
+    pub block_icons_ready: bool,
+    pub player_ready: bool,
+    pub virtual_controls_ready: bool,
+    pub inventory_ui_ready: bool,
+}
+
 #[derive(Resource, Default)]
 pub struct BlockIconAssets {
     icons: HashMap<BlockKind, Handle<Image>>,
@@ -87,11 +99,24 @@ pub struct SelectionOverlay;
 #[derive(Component)]
 pub struct PendingGeneratedPreview;
 
-pub fn setup_scene(
+pub fn setup_render_manager(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
+) {
+    commands.insert_resource(WorldRenderManager::new(
+        &mut meshes,
+        &mut materials,
+        &mut images,
+    ));
+}
+
+pub fn spawn_scene_entities(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    render_manager: &WorldRenderManager,
 ) {
     commands.spawn((
         PointLight {
@@ -102,6 +127,7 @@ pub fn setup_scene(
             ..default()
         },
         Transform::from_xyz(3.5, 5.5, 4.5),
+        GameWorldSceneEntity,
     ));
 
     commands.spawn((
@@ -119,9 +145,8 @@ pub fn setup_scene(
             overlap_proportion: 0.16,
         }
         .build(),
+        GameWorldSceneEntity,
     ));
-
-    let render_manager = WorldRenderManager::new(&mut meshes, &mut materials, &mut images);
 
     let marker_mesh = meshes.add(Cuboid::new(0.92, 0.018, 0.92));
     let marker_material = materials.add(StandardMaterial {
@@ -137,6 +162,7 @@ pub fn setup_scene(
         MeshMaterial3d(marker_material),
         Visibility::Hidden,
         HoverMarker,
+        GameWorldSceneEntity,
     ));
 
     let preview_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
@@ -147,16 +173,15 @@ pub fn setup_scene(
         MeshMaterial3d(preview_material),
         Visibility::Hidden,
         PlacementPreview,
+        GameWorldSceneEntity,
     ));
-
-    commands.insert_resource(render_manager);
 }
 
-pub fn setup_block_icons(
-    mut commands: Commands,
-    mut images: ResMut<Assets<Image>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    assets: Res<WorldRenderManager>,
+pub fn spawn_block_icons(
+    commands: &mut Commands,
+    images: &mut Assets<Image>,
+    meshes: &mut Assets<Mesh>,
+    assets: &WorldRenderManager,
 ) {
     let icon_layer = RenderLayers::layer(ICON_RENDER_LAYER);
     let mut icon_assets = BlockIconAssets::default();
@@ -187,9 +212,9 @@ pub fn setup_block_icons(
 
         let origin = Vec3::new(index as f32 * ICON_SPACING, -100.0, 0.0);
         spawn_block_icon_model(
-            &mut commands,
-            &mut meshes,
-            &assets,
+            commands,
+            meshes,
+            assets,
             &icon_world,
             kind,
             origin,

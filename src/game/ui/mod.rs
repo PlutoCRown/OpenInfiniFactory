@@ -11,7 +11,8 @@ pub use crate::game::state::UiPanelId;
 pub use layout::setup_ui;
 pub(crate) use screens::{
     inventory_slot_clicks, main_menu_actions, pause_menu_actions, save_list_actions,
-    update_carried_item_ui, update_confirm_dialog_ui, update_inventory_slots, update_save_list_ui,
+    spawn_carried_label, spawn_hotbar, spawn_inventory_tooltip, update_carried_item_ui,
+    update_confirm_dialog_ui, update_inventory_slots, update_save_list_ui,
     update_settings_dropdowns_ui, update_settings_slider_drag_ui, update_settings_sliders_ui,
     update_settings_tabs_ui, update_settings_text_ui, update_text_prompt_ui,
 };
@@ -27,12 +28,12 @@ pub use types::{
     ConfirmDialogEffect, ConfirmDialogMessage, ConfirmDialogResult, ConfirmDialogSpec,
     GameplayUiChanged, HotbarItems, InventoryChanged, InventoryItems, LanguageChanged,
     MainMenuAction, OpenBlockPanelDropdown, OpenConfirmDialog, OpenSettingsDropdown,
-    OpenTextPrompt, OpenUiPanel, PanelDragState, PauseMenuAction, PendingKeyBind,
-    SaveListAction, SaveListChanged, SaveListRenderState, SettingsAction, SettingsChanged,
-    SettingsSliderTrigger, SettingsTab, TeleportAction, TextPromptAction, TextPromptKind,
-    UiHoverState, UiModalClosed, UiModalKind, UiModalOpened, UiPanelBinding, UiPanelClosed,
-    UiPanelContext, UiPanelContextChanged, UiPanelDescriptor, UiPanelHost, UiPanelKey,
-    UiPanelOpened, UiPanelRegistry, UiRuntime, HOTBAR_SLOTS,
+    OpenTextPrompt, OpenUiPanel, PanelDragState, PauseMenuAction, PendingKeyBind, SaveListAction,
+    SaveListChanged, SaveListRenderState, SettingsAction, SettingsChanged, SettingsSliderTrigger,
+    SettingsTab, TeleportAction, TextPromptAction, TextPromptKind, UiHoverState, UiModalClosed,
+    UiModalKind, UiModalOpened, UiPanelBinding, UiPanelClosed, UiPanelContext,
+    UiPanelContextChanged, UiPanelDescriptor, UiPanelHost, UiPanelKey, UiPanelOpened,
+    UiPanelRegistry, UiRoot, UiRuntime, HOTBAR_SLOTS, InventoryRuntimeEntity,
 };
 
 pub(crate) use crate::game::ui::demo_panel::{open_demo_panel_shortcut, register_demo_panel};
@@ -45,7 +46,7 @@ use crate::game::world::blocks::{
     update_block_panel_dropdowns_ui, update_converter_ui, update_generator_ui, update_labeler_ui,
     update_teleport_ui,
 };
-use crate::game::{player, systems as game_systems};
+use crate::game::{player, world_loaded};
 use components::{update_button_interactions, update_scroll_containers};
 use systems::{
     close_panel_messages, modal_messages, open_panel_button_clicked, open_panel_messages,
@@ -109,9 +110,7 @@ impl Plugin for GameUiPlugin {
                     modal_messages,
                     cleanup_closed_panel_state,
                 )
-                    .chain()
-                    .after(game_systems::debug::mark_perf_input)
-                    .before(game_systems::debug::mark_perf_menus),
+                    .chain(),
             )
             .add_systems(
                 Update,
@@ -121,9 +120,7 @@ impl Plugin for GameUiPlugin {
                     settings_menu_actions,
                     cleanup_closed_settings_panel,
                 )
-                    .chain()
-                    .after(game_systems::debug::mark_perf_input)
-                    .before(game_systems::debug::mark_perf_menus),
+                    .chain(),
             )
             .add_systems(
                 Update,
@@ -133,18 +130,28 @@ impl Plugin for GameUiPlugin {
                     update_settings_text_ui,
                     (update_settings_sliders_ui, update_settings_slider_drag_ui).chain(),
                     update_settings_dropdowns_ui,
-                    update_block_panel_dropdowns_ui,
                     update_settings_tabs_ui,
                     update_button_interactions,
                     update_scroll_containers,
-                )
-                    .after(game_systems::debug::mark_perf_animation)
-                    .before(game_systems::debug::mark_perf_ui),
+                ),
+            )
+            .add_systems(
+                Update,
+                update_block_panel_dropdowns_ui.run_if(world_loaded),
             )
             .add_systems(
                 Update,
                 (
                     (update_panel_visibility, center_new_panels, update_ui_layers).chain(),
+                    update_save_list_ui,
+                    update_confirm_dialog_ui,
+                    update_text_prompt_ui,
+                    apply_ui_font,
+                ),
+            )
+            .add_systems(
+                Update,
+                (
                     update_hud_visibility,
                     update_generator_ui,
                     update_labeler_ui,
@@ -152,14 +159,9 @@ impl Plugin for GameUiPlugin {
                     update_teleport_ui,
                     update_inventory_slots,
                     update_carried_item_ui,
-                    update_save_list_ui,
-                    update_confirm_dialog_ui,
-                    update_text_prompt_ui,
-                    apply_ui_font,
                     player::controller::sync_cursor_grab,
                 )
-                    .after(game_systems::debug::mark_perf_animation)
-                    .before(game_systems::debug::mark_perf_ui),
+                    .run_if(world_loaded),
             );
     }
 }

@@ -109,7 +109,7 @@ enum VirtualControlButton {
     Alternate,
 }
 
-pub fn setup_virtual_controls_ui(mut commands: Commands) {
+pub fn spawn_virtual_controls_ui(commands: &mut Commands) {
     if !ENABLED_ON_THIS_PLATFORM {
         return;
     }

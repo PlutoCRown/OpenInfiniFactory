@@ -4,6 +4,7 @@ use bevy::picking::pointer::PointerButton;
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
+use crate::game::player::controller::{spawn_player_entity, FlyCamera};
 use crate::game::simulation::factory_activity::FactoryStructureState;
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::movement::PusherState;
@@ -12,13 +13,16 @@ use crate::game::state::{
     BuilderMode, GameMode, PlacementState, SimulationState, SolutionState, WorldEntryMode,
 };
 use crate::game::systems::debug::DebugState;
+use crate::game::systems::virtual_controls::{spawn_virtual_controls_ui, VirtualControlsOverlay};
 use crate::game::ui::{
-    BlockPanelDropdown, CarriedItem, ConfirmDialogButtonSpec, ConfirmDialogEffect,
-    ConfirmDialogMessage, ConfirmDialogSpec, InventoryItems, OpenBlockPanelDropdown,
+    spawn_carried_label, spawn_hotbar, spawn_inventory_tooltip, BlockPanelDropdown, CarriedItem,
+    ConfirmDialogButtonSpec, ConfirmDialogEffect, ConfirmDialogMessage, ConfirmDialogSpec,
+    InventoryItems, InventoryRuntimeEntity, OpenBlockPanelDropdown, UiRoot,
 };
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderManager,
+    despawn_world, rebuild_world_for_debug_state, spawn_block_icons, spawn_scene_entities,
+    BlockEntity, BlockIconRenderEntity, GameWorldRuntime, GameWorldSceneEntity, WorldRenderManager,
 };
 use crate::shared::save::{
     load_world, next_named_save, reset_solution_world, save_solution_with_puzzle, save_world,
@@ -29,13 +33,130 @@ use crate::shared::save::{
 pub struct WorldMenuParams<'w, 's> {
     pub commands: Commands<'w, 's>,
     pub meshes: ResMut<'w, Assets<Mesh>>,
+    pub materials: ResMut<'w, Assets<StandardMaterial>>,
+    pub images: ResMut<'w, Assets<Image>>,
     pub world: ResMut<'w, WorldBlocks>,
     pub render_manager: Res<'w, WorldRenderManager>,
+    pub runtime: ResMut<'w, GameWorldRuntime>,
     pub debug: Res<'w, DebugState>,
     pub factory_structures: ResMut<'w, FactoryStructureState>,
     pub movement_influence: ResMut<'w, MovementInfluenceCache>,
     pub pusher_state: ResMut<'w, PusherState>,
     pub block_entities: Query<'w, 's, Entity, With<BlockEntity>>,
+    pub scene_entities: Query<'w, 's, Entity, With<GameWorldSceneEntity>>,
+    pub block_icon_entities: Query<'w, 's, Entity, With<BlockIconRenderEntity>>,
+    pub players: Query<'w, 's, Entity, With<FlyCamera>>,
+    pub virtual_controls: Query<'w, 's, Entity, With<VirtualControlsOverlay>>,
+    pub ui_roots: Query<'w, 's, Entity, With<UiRoot>>,
+    pub inventory_ui: Query<'w, 's, Entity, With<InventoryRuntimeEntity>>,
+}
+
+pub(crate) fn ensure_gameplay_runtime(world_menu: &mut WorldMenuParams) {
+    if !world_menu.runtime.scene_ready {
+        spawn_scene_entities(
+            &mut world_menu.commands,
+            &mut world_menu.meshes,
+            &mut world_menu.materials,
+            &world_menu.render_manager,
+        );
+        world_menu.runtime.scene_ready = true;
+    }
+    if !world_menu.runtime.block_icons_ready {
+        spawn_block_icons(
+            &mut world_menu.commands,
+            &mut world_menu.images,
+            &mut world_menu.meshes,
+            &world_menu.render_manager,
+        );
+        world_menu.runtime.block_icons_ready = true;
+    }
+    if !world_menu.runtime.player_ready {
+        spawn_player_entity(&mut world_menu.commands);
+        world_menu.runtime.player_ready = true;
+    }
+    if !world_menu.runtime.virtual_controls_ready {
+        spawn_virtual_controls_ui(&mut world_menu.commands);
+        world_menu.runtime.virtual_controls_ready = true;
+    }
+    if !world_menu.runtime.inventory_ui_ready {
+        if let Ok(root) = world_menu.ui_roots.single() {
+            world_menu.commands.entity(root).with_children(|root| {
+                spawn_hotbar(root);
+                spawn_carried_label(root);
+                spawn_inventory_tooltip(root);
+            });
+            world_menu.runtime.inventory_ui_ready = true;
+        }
+    }
+}
+
+pub(crate) fn teardown_gameplay_runtime(world_menu: &mut WorldMenuParams) {
+    for entity in &world_menu.scene_entities {
+        world_menu.commands.entity(entity).despawn();
+    }
+    for entity in &world_menu.block_icon_entities {
+        world_menu.commands.entity(entity).despawn();
+    }
+    for entity in &world_menu.players {
+        world_menu.commands.entity(entity).despawn();
+    }
+    for entity in &world_menu.virtual_controls {
+        world_menu.commands.entity(entity).despawn();
+    }
+    for entity in &world_menu.inventory_ui {
+        world_menu.commands.entity(entity).despawn();
+    }
+    world_menu
+        .commands
+        .remove_resource::<crate::game::world::rendering::BlockIconAssets>();
+    world_menu
+        .commands
+        .remove_resource::<crate::game::world::rendering::BlockIconRenderState>();
+    world_menu.commands.remove_resource::<InventoryItems>();
+    *world_menu.runtime = GameWorldRuntime::default();
+}
+
+pub(crate) fn clear_loaded_world_from_menu(
+    placement: &mut PlacementState,
+    save_state: &mut SaveState,
+    solution_state: &mut SolutionState,
+    simulation: &mut SimulationState,
+    world_menu: &mut WorldMenuParams,
+) {
+    clear_loaded_world(
+        &mut world_menu.world,
+        placement,
+        save_state,
+        solution_state,
+        simulation,
+        &mut world_menu.commands,
+        &mut world_menu.meshes,
+        &world_menu.block_entities,
+        &world_menu.render_manager,
+        &world_menu.debug,
+        &mut world_menu.factory_structures,
+        &mut world_menu.movement_influence,
+        &mut world_menu.pusher_state,
+    );
+    teardown_gameplay_runtime(world_menu);
+}
+
+pub(crate) fn return_to_main_menu_from_menu(
+    placement: &mut PlacementState,
+    save_state: &mut SaveState,
+    solution_state: &mut SolutionState,
+    simulation: &mut SimulationState,
+    mode: &mut GameMode,
+    world_menu: &mut WorldMenuParams,
+) {
+    clear_loaded_world_from_menu(
+        placement,
+        save_state,
+        solution_state,
+        simulation,
+        world_menu,
+    );
+    *mode = GameMode::MainMenu;
 }
 
 pub(crate) fn puzzle_has_solutions(save_state: &mut SaveState, puzzle: &str) -> bool {
@@ -66,20 +187,19 @@ pub(crate) fn open_loaded_world_from_menu(
     entry: WorldEntryMode,
     mode: &mut GameMode,
     builder_mode: &mut BuilderMode,
-    inventory: &mut InventoryItems,
     carried: &mut CarriedItem,
     placement: &mut PlacementState,
     save_state: &mut SaveState,
     solution_state: &mut SolutionState,
     simulation: &mut SimulationState,
     world_menu: &mut WorldMenuParams,
-) {
+) -> bool {
+    ensure_gameplay_runtime(world_menu);
     open_loaded_world(
         name,
         entry,
         &mut world_menu.world,
         builder_mode,
-        inventory,
         carried,
         placement,
         save_state,
@@ -94,7 +214,7 @@ pub(crate) fn open_loaded_world_from_menu(
         &mut world_menu.movement_influence,
         &mut world_menu.pusher_state,
         mode,
-    );
+    )
 }
 
 pub(crate) fn save_current_world(
@@ -217,46 +337,11 @@ pub(crate) fn reset_current_solution(
     }
 }
 
-pub(crate) fn return_to_main_menu(
-    world: &mut WorldBlocks,
-    placement: &mut PlacementState,
-    save_state: &mut SaveState,
-    solution_state: &mut SolutionState,
-    simulation: &mut SimulationState,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    block_entities: &Query<Entity, With<BlockEntity>>,
-    render_manager: &WorldRenderManager,
-    debug: &DebugState,
-    factory_structures: &mut FactoryStructureState,
-    movement_influence: &mut MovementInfluenceCache,
-    pusher_state: &mut PusherState,
-    mode: &mut GameMode,
-) {
-    clear_loaded_world(
-        world,
-        placement,
-        save_state,
-        solution_state,
-        simulation,
-        commands,
-        meshes,
-        block_entities,
-        render_manager,
-        debug,
-        factory_structures,
-        movement_influence,
-        pusher_state,
-    );
-    *mode = GameMode::MainMenu;
-}
-
 pub(crate) fn open_loaded_world(
     name: &str,
     entry: WorldEntryMode,
     world: &mut WorldBlocks,
     builder_mode: &mut BuilderMode,
-    inventory: &mut InventoryItems,
     carried: &mut CarriedItem,
     placement: &mut PlacementState,
     save_state: &mut SaveState,
@@ -271,9 +356,9 @@ pub(crate) fn open_loaded_world(
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     mode: &mut GameMode,
-) {
+) -> bool {
     let Some(loaded) = load_world(world, name) else {
-        return;
+        return false;
     };
 
     simulation.running = false;
@@ -290,10 +375,11 @@ pub(crate) fn open_loaded_world(
         WorldEntryMode::EditPuzzle => BuilderMode::Edit,
         WorldEntryMode::PlaySolution => BuilderMode::Play,
     };
-    *inventory = InventoryItems::for_mode(*builder_mode);
+    let mut inventory = InventoryItems::for_mode(*builder_mode);
     if let Some(hotbar) = loaded.hotbar {
         inventory.set_hotbar(hotbar);
     }
+    commands.insert_resource(inventory);
     placement.selected = 0;
 
     save_state.current = Some(name.to_string());
@@ -331,6 +417,7 @@ pub(crate) fn open_loaded_world(
         factory_structures,
     );
     *mode = GameMode::Playing;
+    true
 }
 
 pub(crate) fn clear_loaded_world(

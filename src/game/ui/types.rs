@@ -96,6 +96,9 @@ impl UiPanelRegistry {
 #[derive(Component)]
 pub struct UiRoot;
 
+#[derive(Component)]
+pub struct InventoryRuntimeEntity;
+
 #[derive(Resource, Default)]
 pub struct UiPanelHost {
     spawned: HashMap<UiPanelKey, Entity>,

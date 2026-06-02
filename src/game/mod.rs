@@ -5,19 +5,16 @@ pub mod systems;
 pub mod ui;
 pub mod world;
 
-use bevy::camera::visibility::VisibilitySystems;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::light::{DirectionalLightShadowMap, GlobalAmbientLight};
 use bevy::prelude::*;
-use bevy::transform::TransformSystems;
-use bevy::ui::UiSystems;
 use bevy::ui_widgets::slider_self_update;
 
 use crate::shared::config::load_config;
 use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::save::SaveState;
 
-use player::controller::{camera_look, camera_move, spawn_player};
+use player::controller::{camera_look, camera_move};
 use state::{
     BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
     TeleportRenameState,
@@ -27,14 +24,13 @@ use systems::gameplay::{
 };
 use systems::simulation_controls::simulation_controls;
 use systems::virtual_controls::{
-    setup_virtual_controls_ui, update_virtual_controls, update_virtual_controls_ui,
-    VirtualControls, VirtualTouchState,
+    update_virtual_controls, update_virtual_controls_ui, VirtualControls, VirtualTouchState,
 };
-use ui::{pause_menu_actions, save_list_actions, GameUiPlugin, InventoryItems};
+use ui::{pause_menu_actions, save_list_actions, GameUiPlugin};
 use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
 use world::rendering::{
-    retire_block_icon_renderers, setup_block_icons, setup_scene, HoverStructureBounds,
+    retire_block_icon_renderers, setup_render_manager, GameWorldRuntime, HoverStructureBounds,
 };
 
 pub struct GamePlugin;
@@ -70,20 +66,11 @@ impl Plugin for GamePlugin {
             .insert_resource(DirectionalLightShadowMap { size: 2048 })
             .insert_resource(WorldBlocks::default())
             .insert_resource(HoverStructureBounds::default())
+            .insert_resource(GameWorldRuntime::default())
             .insert_resource(PlacementState::default())
             .insert_resource(TeleportRenameState::default())
-            .insert_resource(InventoryItems::default())
             .insert_resource(GameMode::MainMenu)
             .insert_resource(BuilderMode::default())
-            .insert_resource(SimulationState::default())
-            .insert_resource(SolutionState::default())
-            .insert_resource(simulation::runtime::SignalNetworkCache::default())
-            .insert_resource(simulation::runtime::SimulationStepStats::default())
-            .insert_resource(simulation::runtime::MovementPreview::default())
-            .insert_resource(simulation::runtime::PendingGeneratedMaterials::default())
-            .insert_resource(simulation::factory_activity::FactoryStructureState::default())
-            .insert_resource(simulation::movement::PusherState::default())
-            .insert_resource(simulation::structures::MovementInfluenceCache::default())
             .insert_resource(VirtualControls::default())
             .insert_resource(VirtualTouchState::default())
             .insert_resource(settings)
@@ -92,7 +79,6 @@ impl Plugin for GamePlugin {
             .insert_resource(i18n)
             .insert_resource(SaveState::default())
             .insert_resource(systems::debug::DebugState::default())
-            .insert_resource(systems::debug::PerfStats::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(GameUiPlugin)
             .add_observer(slider_self_update)
@@ -101,21 +87,14 @@ impl Plugin for GamePlugin {
             .add_systems(
                 Startup,
                 (
-                    setup_scene,
-                    setup_block_icons,
-                    spawn_player,
+                    setup_render_manager,
                     refresh_saves_on_startup,
                     ui::load_ui_font,
                     ui::setup_ui,
-                    setup_virtual_controls_ui,
+                    setup_gameplay_state_resources,
                     systems::debug::setup_debug_ui,
                 )
                     .chain(),
-            )
-            .add_systems(First, systems::debug::begin_perf_frame)
-            .add_systems(
-                PreUpdate,
-                systems::debug::mark_perf_pre_update.after(UiSystems::Focus),
             )
             .add_systems(
                 Update,
@@ -127,40 +106,39 @@ impl Plugin for GamePlugin {
                     placement_input,
                 )
                     .chain()
-                    .before(systems::debug::mark_perf_input),
+                    .run_if(world_loaded)
             )
-            .add_systems(Update, systems::debug::mark_perf_input)
-            .add_systems(Update, systems::debug::mark_perf_menus)
             .add_systems(
                 Update,
                 (simulation_controls, simulation::runtime::tick_simulation)
                     .chain()
-                    .after(systems::debug::mark_perf_menus)
-                    .before(systems::debug::mark_perf_simulation),
+                    .run_if(world_loaded)
+                    .after(placement_input),
             )
-            .add_systems(Update, systems::debug::mark_perf_simulation)
             .add_systems(
                 Update,
                 (apply_fov, update_hover, draw_hover_structure_bounds)
                     .chain()
-                    .after(systems::debug::mark_perf_simulation)
-                    .before(systems::debug::mark_perf_view),
+                    .run_if(world_loaded)
+                    .after(simulation::runtime::tick_simulation),
             )
             .add_systems(
                 Update,
                 simulation::runtime::update_movement_preview
-                    .after(update_hover)
-                    .before(systems::debug::mark_perf_view),
+                    .run_if(world_loaded)
+                    .after(update_hover),
             )
-            .add_systems(Update, systems::debug::mark_perf_view)
-            .add_systems(Update, animate_blocks.after(systems::debug::mark_perf_view))
-            .add_systems(Update, systems::debug::mark_perf_animation)
-            .add_systems(Update, systems::debug::mark_perf_ui)
+            .add_systems(
+                Update,
+                animate_blocks
+                    .run_if(world_loaded)
+                    .after(simulation::runtime::update_movement_preview),
+            )
             .add_systems(
                 Update,
                 update_virtual_controls_ui
-                    .after(systems::debug::mark_perf_animation)
-                    .before(systems::debug::mark_perf_ui),
+                    .run_if(world_loaded)
+                    .after(animate_blocks),
             )
             .add_systems(Update, retire_block_icon_renderers)
             .add_systems(
@@ -172,39 +150,28 @@ impl Plugin for GamePlugin {
                     systems::debug::draw_player_collider,
                 )
                     .chain()
-                    .after(systems::debug::mark_perf_ui)
-                    .before(systems::debug::mark_perf_debug),
-            )
-            .add_systems(Update, systems::debug::mark_perf_debug)
-            .add_systems(
-                PostUpdate,
-                systems::debug::mark_perf_post_update_start.before(UiSystems::Prepare),
-            )
-            .add_systems(
-                PostUpdate,
-                systems::debug::mark_perf_post_update_ui
-                    .after(UiSystems::Layout)
-                    .before(TransformSystems::Propagate),
-            )
-            .add_systems(
-                PostUpdate,
-                systems::debug::mark_perf_post_update_transform
-                    .after(TransformSystems::Propagate)
-                    .before(VisibilitySystems::UpdateFrusta),
-            )
-            .add_systems(
-                PostUpdate,
-                systems::debug::mark_perf_post_update_visibility
-                    .after(VisibilitySystems::MarkNewlyHiddenEntitiesInvisible),
-            )
-            .add_systems(
-                Last,
-                systems::debug::mark_perf_last.before(systems::debug::finish_perf_frame),
-            )
-            .add_systems(Last, systems::debug::finish_perf_frame);
+                    .run_if(world_loaded)
+                    .after(update_virtual_controls_ui),
+            );
     }
 }
 
 fn refresh_saves_on_startup(mut save_state: ResMut<SaveState>) {
     save_state.refresh();
+}
+
+fn setup_gameplay_state_resources(mut commands: Commands) {
+    commands.insert_resource(SimulationState::default());
+    commands.insert_resource(SolutionState::default());
+    commands.insert_resource(simulation::runtime::SignalNetworkCache::default());
+    commands.insert_resource(simulation::runtime::SimulationStepStats::default());
+    commands.insert_resource(simulation::runtime::MovementPreview::default());
+    commands.insert_resource(simulation::runtime::PendingGeneratedMaterials::default());
+    commands.insert_resource(simulation::factory_activity::FactoryStructureState::default());
+    commands.insert_resource(simulation::movement::PusherState::default());
+    commands.insert_resource(simulation::structures::MovementInfluenceCache::default());
+}
+
+pub(crate) fn world_loaded(save_state: Res<SaveState>) -> bool {
+    save_state.current.is_some()
 }

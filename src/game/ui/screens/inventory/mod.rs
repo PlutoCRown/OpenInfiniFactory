@@ -9,7 +9,8 @@ use crate::game::ui::components::{
 };
 use crate::game::ui::types::{
     CarriedItemPreview, GameplayHudVisibility, InGameHudStyle, InventoryTooltip, LocalizedText,
-    PanelText, PanelTextKind, PanelVisibility, SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
+    InventoryRuntimeEntity, PanelText, PanelTextKind, PanelVisibility, SlotArea, BACKPACK_SLOTS,
+    HOTBAR_SLOTS,
 };
 
 mod actions;
@@ -43,6 +44,7 @@ pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
         BackgroundColor(Color::srgba(0.04, 0.04, 0.04, 0.38)),
         InGameHudStyle,
         GameplayHudVisibility,
+        InventoryRuntimeEntity,
     ))
     .with_children(|bar| {
         for index in 0..HOTBAR_SLOTS {
@@ -77,7 +79,7 @@ pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> En
 }
 
 pub fn spawn_carried_label(root: &mut ChildSpawnerCommands) {
-    root.spawn(CarriedItemPreview)
+    root.spawn((CarriedItemPreview, InventoryRuntimeEntity))
         .queue_apply_scene(carried_item_preview_scene())
         .with_children(|icon| {
             icon.spawn_empty()
@@ -88,7 +90,7 @@ pub fn spawn_carried_label(root: &mut ChildSpawnerCommands) {
 }
 
 pub fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
-    root.spawn(InventoryTooltip)
+    root.spawn((InventoryTooltip, InventoryRuntimeEntity))
         .queue_apply_scene(inventory_tooltip_scene())
         .with_children(|tooltip| {
             tooltip

@@ -1,10 +1,10 @@
 use bevy::prelude::*;
+use bevy::ui::IsDefaultUiCamera;
 use bevy_scene::{bsn, prelude::EntityCommandsSceneExt};
 
 use crate::shared::i18n::I18n;
 
 use super::components::{default_font_size, root_node, STATUS_TEXT};
-use super::screens::{spawn_carried_label, spawn_hotbar, spawn_inventory_tooltip};
 use super::types::{
     Crosshair, GameplayHudVisibility, InGameHudVisibility, PanelVisibility, StatusText,
     StatusTextKind, UiRoot,
@@ -12,12 +12,11 @@ use super::types::{
 use crate::game::world::blocks::spawn_block_dropdown_layers;
 
 pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
+    commands.spawn((Camera2d, IsDefaultUiCamera));
+
     commands.spawn((root_node(), UiRoot)).with_children(|root| {
         spawn_status_overlays(root);
-        spawn_hotbar(root);
         spawn_modal_scrim(root);
-        spawn_carried_label(root);
-        spawn_inventory_tooltip(root);
         spawn_block_dropdown_layers(root, &i18n);
     });
 }

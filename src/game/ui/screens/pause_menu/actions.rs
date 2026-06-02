@@ -5,7 +5,8 @@ use crate::game::state::{
     BuilderMode, GameMode, PlacementState, SimulationState, SolutionState, WorldEntryMode,
 };
 use crate::game::systems::world_flow::{
-    clear_loaded_world, primary_click, puzzle_has_solutions, save_current_world, WorldMenuParams,
+    primary_click, puzzle_has_solutions, return_to_main_menu_from_menu, save_current_world,
+    WorldMenuParams,
 };
 use crate::game::ui::{
     CarriedItem, ConfirmDialogButtonSpec, ConfirmDialogEffect, ConfirmDialogMessage,
@@ -159,24 +160,16 @@ pub fn pause_menu_actions(
                     )),
                 )));
             } else {
-                clear_loaded_world(
-                    &mut world_menu.world,
+                return_to_main_menu_from_menu(
                     &mut placement,
                     &mut save_state,
                     &mut solution_state,
                     &mut simulation,
-                    &mut world_menu.commands,
-                    &mut world_menu.meshes,
-                    &world_menu.block_entities,
-                    &world_menu.render_manager,
-                    &world_menu.debug,
-                    &mut world_menu.factory_structures,
-                    &mut world_menu.movement_influence,
-                    &mut world_menu.pusher_state,
+                    &mut mode,
+                    &mut world_menu,
                 );
                 save_list_changed.write(SaveListChanged);
                 gameplay_ui_changed.write(GameplayUiChanged);
-                *mode = GameMode::MainMenu;
             }
         }
     }

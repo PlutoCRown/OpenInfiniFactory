@@ -5,8 +5,9 @@ use crate::game::state::{
     BuilderMode, GameMode, PlacementState, SimulationState, SolutionState, WorldEntryMode,
 };
 use crate::game::systems::world_flow::{
-    open_loaded_world_from_menu, primary_click, reset_current_solution, return_to_main_menu,
-    save_current_world, switch_to_edit_mode_and_rebuild, WorldMenuParams,
+    open_loaded_world_from_menu, primary_click, reset_current_solution,
+    return_to_main_menu_from_menu, save_current_world, switch_to_edit_mode_and_rebuild,
+    WorldMenuParams,
 };
 use crate::game::ui::{
     CarriedItem, CloseUiModal, ConfirmDialogAction, ConfirmDialogEffect, ConfirmDialogResult,
@@ -94,21 +95,13 @@ pub fn confirm_dialog_actions(
                 );
                 save_list_changed.write(SaveListChanged);
             }
-            return_to_main_menu(
-                &mut world_menu.world,
+            return_to_main_menu_from_menu(
                 &mut placement,
                 &mut save_state,
                 &mut solution_state,
                 &mut simulation,
-                &mut world_menu.commands,
-                &mut world_menu.meshes,
-                &world_menu.block_entities,
-                &world_menu.render_manager,
-                &world_menu.debug,
-                &mut world_menu.factory_structures,
-                &mut world_menu.movement_influence,
-                &mut world_menu.pusher_state,
                 &mut mode,
+                &mut world_menu,
             );
             save_list_changed.write(SaveListChanged);
             gameplay_ui_changed.write(GameplayUiChanged);
@@ -152,7 +145,6 @@ pub fn confirm_dialog_actions(
                 WorldEntryMode::EditPuzzle,
                 &mut mode,
                 &mut builder_mode,
-                &mut inventory,
                 &mut carried,
                 &mut placement,
                 &mut save_state,
