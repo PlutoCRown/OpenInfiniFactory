@@ -2,12 +2,12 @@ use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 use bevy::ui_widgets::{Slider, SliderDragState, SliderRange, SliderValue};
 
-use crate::game::state::{GameMode, GameSettings};
+use crate::game::state::GameSettings;
 use crate::game::systems::world_flow::primary_click;
 use crate::game::ui::{
     ActiveSettingsSlider, CloseUiPanel, LanguageChanged, OpenSettingsDropdown, PendingKeyBind,
     SettingsAction, SettingsChanged, SettingsSliderTrigger, SettingsTab, UiPanelClosed,
-    UiPanelContext, UiPanelKey, UiRuntime,
+    UiPanelKey, UiRuntime,
 };
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{input_from_buttons, open_config_folder, save_config, GameConfig};
@@ -91,7 +91,6 @@ pub fn cleanup_closed_settings_panel(
 
 pub fn settings_action_clicked(
     mut click: On<Pointer<Click>>,
-    mut mode: ResMut<GameMode>,
     mut settings: ResMut<GameSettings>,
     mut ui_scale: ResMut<UiScale>,
     mut config: ResMut<GameConfig>,
@@ -177,21 +176,9 @@ pub fn settings_action_clicked(
         SettingsAction::Back => {
             open_dropdown.0 = None;
             pending_key_bind.0 = None;
-            let return_mode = settings_return_mode(&ui_runtime, *mode);
             close_panel.write(CloseUiPanel { key: None });
-            *mode = return_mode;
         }
     }
-}
-
-fn settings_return_mode(ui_runtime: &UiRuntime, fallback: GameMode) -> GameMode {
-    ui_runtime
-        .active()
-        .and_then(|session| match session.context {
-            UiPanelContext::ReturnTo(mode) => Some(mode),
-            _ => None,
-        })
-        .unwrap_or(fallback)
 }
 
 fn update_settings_sliders_from_input(

@@ -6,9 +6,12 @@ use crate::game::ui::components::{
 };
 use crate::game::ui::types::{AreaKind, InventoryItem, InventorySlot, SlotArea};
 
+use super::inventory_slot_clicks;
+
 pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, index: usize) {
     parent
         .spawn((Button, HoverButton, InventorySlot { area, index }))
+        .observe(inventory_slot_clicks)
         .queue_apply_scene(inventory_slot_visual_scene())
         .with_children(|slot| {
             slot.spawn_empty()

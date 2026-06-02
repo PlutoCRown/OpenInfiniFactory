@@ -69,6 +69,7 @@ pub fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
 fn confirm_dialog_title_scene() -> impl bevy_scene::Scene {
     bsn! {
         Text("")
+        Pickable::IGNORE
         TextFont {
             font_size: {default_font_size(24.0 * 0.8)}
         }
@@ -177,6 +178,7 @@ fn spawn_confirm_dialog_button(
 ) {
     parent
         .spawn((Button, HoverButton, action))
+        .observe(confirm_dialog_actions)
         .queue_apply_scene(confirm_dialog_button_visual_scene())
         .queue_spawn_related_scenes::<Children>(confirm_dialog_button_label_scene(text_key));
 }

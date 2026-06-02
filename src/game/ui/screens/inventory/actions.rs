@@ -12,7 +12,7 @@ pub fn inventory_slot_clicks(
     mut click: On<Pointer<Click>>,
     slots: Query<&InventorySlot>,
     config: Res<GameConfig>,
-    mut inventory: ResMut<InventoryItems>,
+    inventory: Option<ResMut<InventoryItems>>,
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mut solution_state: ResMut<SolutionState>,
@@ -22,6 +22,9 @@ pub fn inventory_slot_clicks(
     if *mode != GameMode::Inventory {
         return;
     }
+    let Some(mut inventory) = inventory else {
+        return;
+    };
     let Ok(slot) = slots.get(click.entity) else {
         return;
     };

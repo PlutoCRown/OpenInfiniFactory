@@ -9,8 +9,8 @@ use crate::game::ui::components::{
 };
 use crate::game::ui::types::{
     CarriedItemPreview, GameplayHudVisibility, InGameHudStyle, InventoryTooltip, LocalizedText,
-    InventoryRuntimeEntity, PanelText, PanelTextKind, PanelVisibility, SlotArea, BACKPACK_SLOTS,
-    HOTBAR_SLOTS,
+    InventoryRuntimeEntity, PanelText, PanelTextKind, PanelVisibility, SlotArea, UiPanelBinding,
+    UiPanelKey, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
 
 mod actions;
@@ -59,7 +59,10 @@ pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> En
         i18n,
         PanelOptions::new(640.0, "inventory.title")
             .title_marker(PanelText(PanelTextKind::InventoryTitle)),
-        PanelVisibility::GameMode(GameMode::Inventory),
+        (
+            PanelVisibility::GameMode(GameMode::Inventory),
+            UiPanelBinding(UiPanelKey::INVENTORY),
+        ),
         |panel| {
             panel
                 .spawn_empty()

@@ -166,6 +166,7 @@ pub fn panel_title_bar_scene() -> impl bevy_scene::Scene {
 pub fn panel_title_label_scene(value: String, font_size: f32) -> impl bevy_scene::Scene {
     bsn! {
         Text({value})
+        Pickable::IGNORE
         TextFont {
             font_size: {default_font_size(font_size * TITLE_FONT_SCALE)}
         }

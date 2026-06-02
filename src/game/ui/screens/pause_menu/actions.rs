@@ -20,7 +20,7 @@ pub fn pause_menu_actions(
     mut click: On<Pointer<Click>>,
     mut builder_mode: ResMut<BuilderMode>,
     mut simulation: ResMut<SimulationState>,
-    mut inventory: ResMut<InventoryItems>,
+    mut inventory: Option<ResMut<InventoryItems>>,
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mut mode: ResMut<GameMode>,
@@ -46,6 +46,9 @@ pub fn pause_menu_actions(
     match action {
         PauseMenuAction::Resume => *mode = GameMode::Playing,
         PauseMenuAction::ToggleBuilderMode => {
+            let Some(inventory) = inventory.as_deref_mut() else {
+                return;
+            };
             if solution_state.entry == WorldEntryMode::PlaySolution {
                 return;
             }
@@ -93,6 +96,9 @@ pub fn pause_menu_actions(
             *mode = GameMode::Playing;
         }
         PauseMenuAction::SaveWorld => {
+            let Some(inventory) = inventory.as_deref() else {
+                return;
+            };
             if let (Some(SaveKind::Puzzle), Some(name)) =
                 (save_state.current_kind, save_state.current.clone())
             {
@@ -116,7 +122,7 @@ pub fn pause_menu_actions(
             }
             save_current_world(
                 &world_menu.world,
-                &inventory,
+                inventory,
                 &mut save_state,
                 &mut solution_state,
                 &simulation,

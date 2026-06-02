@@ -5,18 +5,15 @@ mod pause_menu;
 mod save_list;
 mod settings;
 
-pub(crate) use confirm_dialog::{
-    confirm_dialog_actions, spawn_confirm_dialog, update_confirm_dialog_ui,
-};
+pub(crate) use confirm_dialog::{spawn_confirm_dialog, update_confirm_dialog_ui};
 pub use inventory::{
-    inventory_slot_clicks, spawn_carried_label, spawn_hotbar, spawn_inventory_panel,
-    spawn_inventory_tooltip, update_carried_item_ui, update_inventory_slots,
+    spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_inventory_tooltip,
+    update_carried_item_ui, update_inventory_slots,
 };
-pub(crate) use main_menu::{main_menu_actions, spawn_main_menu};
-pub(crate) use pause_menu::{pause_menu_actions, spawn_pause_panel};
+pub(crate) use main_menu::spawn_main_menu;
+pub(crate) use pause_menu::spawn_pause_panel;
 pub(crate) use save_list::{
-    save_list_actions, spawn_save_list, text_prompt_actions, text_prompt_input,
-    update_save_list_ui, update_text_prompt_ui,
+    spawn_save_list, text_prompt_input, update_save_list_ui, update_text_prompt_ui,
 };
 pub(crate) use settings::{
     cleanup_closed_settings_panel, settings_action_clicked, settings_menu_actions,

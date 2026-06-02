@@ -20,7 +20,7 @@ pub fn confirm_dialog_actions(
     mut click: On<Pointer<Click>>,
     mut builder_mode: ResMut<BuilderMode>,
     mut simulation: ResMut<SimulationState>,
-    mut inventory: ResMut<InventoryItems>,
+    mut inventory: Option<ResMut<InventoryItems>>,
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mut mode: ResMut<GameMode>,
@@ -86,9 +86,12 @@ pub fn confirm_dialog_actions(
         }
         ConfirmDialogEffect::ReturnToMain { save_first } => {
             if save_first {
+                let Some(inventory) = inventory.as_deref() else {
+                    return;
+                };
                 save_current_world(
                     &world_menu.world,
-                    &inventory,
+                    inventory,
                     &mut save_state,
                     &mut solution_state,
                     &simulation,
@@ -108,19 +111,25 @@ pub fn confirm_dialog_actions(
         }
         ConfirmDialogEffect::SwitchToEditMode { save_first } => {
             if save_first {
+                let Some(inventory) = inventory.as_deref() else {
+                    return;
+                };
                 save_current_world(
                     &world_menu.world,
-                    &inventory,
+                    inventory,
                     &mut save_state,
                     &mut solution_state,
                     &simulation,
                 );
                 save_list_changed.write(SaveListChanged);
             }
+            let Some(inventory) = inventory.as_deref_mut() else {
+                return;
+            };
             switch_to_edit_mode_and_rebuild(
                 &mut world_menu.world,
                 &mut builder_mode,
-                &mut inventory,
+                inventory,
                 &mut carried,
                 &mut placement,
                 &mut mode,
@@ -157,9 +166,12 @@ pub fn confirm_dialog_actions(
             gameplay_ui_changed.write(GameplayUiChanged);
         }
         ConfirmDialogEffect::SaveCurrentWorld => {
+            let Some(inventory) = inventory.as_deref() else {
+                return;
+            };
             save_current_world(
                 &world_menu.world,
-                &inventory,
+                inventory,
                 &mut save_state,
                 &mut solution_state,
                 &simulation,

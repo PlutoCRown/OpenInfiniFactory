@@ -6,6 +6,8 @@ use crate::game::ui::components::{
 };
 use crate::game::ui::types::{LocalizedText, MainMenuAction};
 
+use super::main_menu_actions;
+
 pub(super) fn spawn_menu_button(
     parent: &mut ChildSpawnerCommands,
     height: f32,
@@ -15,6 +17,7 @@ pub(super) fn spawn_menu_button(
 ) {
     parent
         .spawn((Button, HoverButton, action))
+        .observe(main_menu_actions)
         .queue_apply_scene(menu_button_visual_scene(height))
         .queue_spawn_related_scenes::<Children>(menu_button_label_scene(text_key, font_size));
 }

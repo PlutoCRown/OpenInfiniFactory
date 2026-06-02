@@ -10,7 +10,6 @@ use bevy::prelude::*;
 pub use crate::game::state::UiPanelId;
 pub use layout::setup_ui;
 pub(crate) use screens::{
-    inventory_slot_clicks, main_menu_actions, pause_menu_actions, save_list_actions,
     spawn_carried_label, spawn_hotbar, spawn_inventory_tooltip, update_carried_item_ui,
     update_confirm_dialog_ui, update_inventory_slots, update_save_list_ui,
     update_settings_dropdowns_ui, update_settings_slider_drag_ui, update_settings_sliders_ui,
@@ -38,8 +37,8 @@ pub use types::{
 
 pub(crate) use crate::game::ui::demo_panel::{open_demo_panel_shortcut, register_demo_panel};
 use crate::game::ui::screens::{
-    cleanup_closed_settings_panel, confirm_dialog_actions, settings_action_clicked,
-    settings_menu_actions, text_prompt_actions, text_prompt_input,
+    cleanup_closed_settings_panel, settings_action_clicked, settings_menu_actions,
+    text_prompt_input,
 };
 use crate::game::world::blocks::{
     block_edit_actions, teleport_menu_actions, teleport_rename_input,
@@ -86,10 +85,7 @@ impl Plugin for GameUiPlugin {
             .insert_resource(UiHoverState::default())
             .add_observer(block_edit_actions)
             .add_observer(teleport_menu_actions)
-            .add_observer(confirm_dialog_actions)
             .add_observer(settings_action_clicked)
-            .add_observer(text_prompt_actions)
-            .add_observer(inventory_slot_clicks)
             .add_observer(open_panel_button_clicked)
             .add_observer(panel_close_clicked)
             .add_observer(panel_drag_started)
@@ -104,7 +100,6 @@ impl Plugin for GameUiPlugin {
                 (
                     open_demo_panel_shortcut,
                     sync_mode_panels,
-                    main_menu_actions,
                     open_panel_messages,
                     close_panel_messages,
                     modal_messages,

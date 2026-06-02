@@ -12,7 +12,8 @@ use crate::game::ui::components::{
 use crate::game::ui::types::{
     PanelPosition, PanelText, PanelTextKind, PanelTitleBar, PanelVisibility, PanelWindow,
     SaveListAction, SaveListCloseButton, SaveListPanel, SaveListPrompt, SaveListPuzzleColumn,
-    SaveListSolutionColumn, TextPromptAction, TextPromptRoot, TextPromptText,
+    SaveListSolutionColumn, TextPromptAction, TextPromptRoot, TextPromptText, UiPanelBinding,
+    UiPanelKey,
 };
 
 mod actions;
@@ -29,6 +30,7 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
             PanelPosition::default(),
             Visibility::Hidden,
             PanelVisibility::GameMode(GameMode::SaveListMain),
+            UiPanelBinding(UiPanelKey::SAVE_LIST),
             SaveListPanel,
         ))
         .queue_apply_scene(panel_window_scene(900.0))
@@ -50,6 +52,7 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
                             SaveListAction::Back,
                             SaveListCloseButton,
                         ))
+                        .observe(save_list_actions)
                         .queue_apply_scene(panel_title_button_scene())
                         .queue_spawn_related_scenes::<Children>(panel_close_label_scene());
                 });
@@ -122,6 +125,7 @@ fn save_column_scene() -> impl bevy_scene::Scene {
 pub(super) fn spawn_save_slot_button(parent: &mut ChildSpawnerCommands, action: SaveListAction) {
     parent
         .spawn((Button, HoverButton, action))
+        .observe(save_list_actions)
         .queue_apply_scene(save_full_width_button_scene(34.0))
         .queue_spawn_related_scenes::<Children>(save_button_label_scene("", 15.0));
 }
@@ -152,6 +156,7 @@ pub fn spawn_save_select_row(parent: &mut ChildSpawnerCommands, load: SaveListAc
 fn spawn_save_row_button(parent: &mut ChildSpawnerCommands, action: SaveListAction, width: f32) {
     parent
         .spawn((Button, HoverButton, action))
+        .observe(save_list_actions)
         .queue_apply_scene(save_fixed_width_button_scene(width, 30.0))
         .queue_spawn_related_scenes::<Children>(save_button_label_scene("", 13.0));
 }
@@ -197,6 +202,7 @@ fn spawn_text_prompt(root: &mut ChildSpawnerCommands) {
 fn spawn_prompt_button(parent: &mut ChildSpawnerCommands, action: TextPromptAction) {
     parent
         .spawn((Button, HoverButton, action))
+        .observe(text_prompt_actions)
         .queue_apply_scene(save_full_width_button_scene(34.0))
         .queue_spawn_related_scenes::<Children>(save_button_label_scene("", 15.0));
 }

@@ -246,8 +246,8 @@ pub fn update_panel_visibility(
     mut lifecycle: PanelLifecycleTriggers,
     mut nodes: ParamSet<(
         Query<
-            (&PanelVisibility, &mut Node),
-            (Without<PauseMenuAction>, Without<UiPanelBinding>),
+            (&PanelVisibility, Option<&UiPanelBinding>, &mut Node),
+            Without<PauseMenuAction>,
         >,
         Query<
             (&PauseMenuAction, &mut Node),
@@ -266,13 +266,11 @@ pub fn update_panel_visibility(
     let _ = lifecycle.dirty();
 
     let active_panel = ui_runtime.active_key();
-    for (visibility, mut style) in &mut nodes.p0() {
-        style.display = display_for(panel_visible(
-            *visibility,
-            *mode,
-            *settings_tab,
-            &ui_runtime,
-        ));
+    for (visibility, binding, mut style) in &mut nodes.p0() {
+        let stack_visible = binding.is_none_or(|binding| active_panel == Some(binding.0));
+        style.display = display_for(
+            stack_visible && panel_visible(*visibility, *mode, *settings_tab, &ui_runtime),
+        );
     }
 
     for (action, mut style) in &mut nodes.p1() {
@@ -306,8 +304,6 @@ pub fn update_panel_visibility(
 
 pub fn panel_close_clicked(
     mut click: On<Pointer<Click>>,
-    mut mode: ResMut<GameMode>,
-    ui_runtime: Res<UiRuntime>,
     mut close_panel: MessageWriter<CloseUiPanel>,
     close_buttons: Query<(), With<PanelCloseButton>>,
 ) {
@@ -316,11 +312,7 @@ pub fn panel_close_clicked(
     }
     click.propagate(false);
 
-    let return_mode = panel_close_return_mode(&ui_runtime);
     close_panel.write(CloseUiPanel { key: None });
-    if let Some(return_mode) = return_mode {
-        *mode = return_mode;
-    }
 }
 
 pub fn cleanup_closed_panel_state(
@@ -402,15 +394,6 @@ pub fn panel_drag_ended(
     }
     drag_end.propagate(false);
     drag.clear();
-}
-
-fn panel_close_return_mode(ui_runtime: &UiRuntime) -> Option<GameMode> {
-    ui_runtime
-        .active()
-        .and_then(|session| match session.context {
-            UiPanelContext::ReturnTo(mode) => Some(mode),
-            _ => None,
-        })
 }
 
 fn active_block_has_panel(

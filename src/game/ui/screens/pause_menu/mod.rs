@@ -2,7 +2,9 @@ use bevy::prelude::*;
 
 use crate::game::state::GameMode;
 use crate::game::ui::components::{spawn_panel, PanelOptions};
-use crate::game::ui::types::{ButtonSpec, PanelVisibility, PauseMenuAction};
+use crate::game::ui::types::{
+    ButtonSpec, PanelVisibility, PauseMenuAction, UiPanelBinding, UiPanelKey,
+};
 use crate::shared::i18n::I18n;
 
 mod actions;
@@ -33,7 +35,10 @@ pub fn spawn_pause_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity
         root,
         i18n,
         PanelOptions::new(420.0, "state.paused").title_size(30.0),
-        PanelVisibility::GameMode(GameMode::Paused),
+        (
+            PanelVisibility::GameMode(GameMode::Paused),
+            UiPanelBinding(UiPanelKey::PAUSE_MENU),
+        ),
         |panel| {
             for item in PAUSE_MENU_ITEMS {
                 spawn_menu_button(panel, 38.0, 16.0, item.on_click, item.text);
