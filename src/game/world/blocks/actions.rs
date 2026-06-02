@@ -3,13 +3,17 @@ use bevy::prelude::*;
 
 use crate::game::state::SolutionState;
 use crate::game::systems::world_flow::{primary_click, WorldMenuParams};
-use crate::game::ui::{BlockEditAction, OpenBlockPanelDropdown, UiRuntime};
+use crate::game::ui::{
+    BlockEditAction, BlockSettingsChanged, CloseUiPanel, OpenBlockPanelDropdown,
+};
 use crate::game::world::rendering::{despawn_world, rebuild_world_for_debug_state};
 
 pub fn block_edit_actions(
     mut click: On<Pointer<Click>>,
-    mut ui_runtime: ResMut<UiRuntime>,
+    ui_runtime: Res<crate::game::ui::UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
+    mut close_panel: MessageWriter<CloseUiPanel>,
+    mut block_settings_changed: MessageWriter<BlockSettingsChanged>,
     mut solution_state: ResMut<SolutionState>,
     mut world_menu: WorldMenuParams,
     actions: Query<&BlockEditAction>,
@@ -21,7 +25,7 @@ pub fn block_edit_actions(
         return;
     };
     let Some(block) = world_menu.world.system_blocks.get(&pos).copied() else {
-        ui_runtime.close_current();
+        close_panel.write(CloseUiPanel { key: None });
         return;
     };
     let Ok(action) = actions.get(click.entity).copied() else {
@@ -38,6 +42,7 @@ pub fn block_edit_actions(
     if !block_edit_action_mutates_world(action) {
         return;
     }
+    block_settings_changed.write(BlockSettingsChanged { pos });
     despawn_world(&mut world_menu.commands, &world_menu.block_entities);
     world_menu.factory_structures.clear();
     world_menu.movement_influence.clear();

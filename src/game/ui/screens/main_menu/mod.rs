@@ -19,7 +19,7 @@ const MAIN_MENU_ITEMS: &[ButtonSpec<MainMenuAction>] = &[
     ButtonSpec::new("button.quit_game", MainMenuAction::Quit),
 ];
 
-pub fn spawn_main_menu(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+pub fn spawn_main_menu(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
     spawn_panel(
         root,
         i18n,
@@ -30,5 +30,5 @@ pub fn spawn_main_menu(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                 spawn_menu_button(panel, 44.0, 17.0, item.on_click, item.text);
             }
         },
-    );
+    )
 }

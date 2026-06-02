@@ -1,12 +1,14 @@
 use bevy::prelude::*;
+use bevy_scene::{bsn, prelude::EntityCommandsSceneExt};
 
 use crate::game::ui::components::{
-    default_button_size, full_width_button, label_text, panel_bundle, panel_content,
-    panel_title_bar, panel_title_label, text, transparent_node, STATUS_TEXT,
+    default_button_size, default_font_size, panel_content_scene, panel_title_bar_scene,
+    panel_window_scene, raised_border, HoverButton, BUTTON_BG, STATUS_TEXT,
 };
 use crate::game::ui::types::{
-    ConfirmDialogAction, ConfirmDialogMessage, ConfirmDialogState, PanelText, PanelTextKind,
-    PanelVisibility, UiRuntime,
+    ConfirmDialogAction, ConfirmDialogMessage, ConfirmDialogRoot, ConfirmDialogState,
+    LanguageChanged, LocalizedText, PanelPosition, PanelText, PanelTextKind, PanelTitleBar,
+    PanelVisibility, PanelWindow, UiModalClosed, UiModalKind, UiModalOpened, UiRuntime,
 };
 use crate::shared::i18n::I18n;
 
@@ -16,45 +18,80 @@ pub(crate) use actions::confirm_dialog_actions;
 
 pub fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
     root.spawn((
-        panel_bundle(620.0),
         GlobalZIndex(0),
+        PanelWindow,
+        PanelPosition::default(),
+        Visibility::Hidden,
         PanelVisibility::ConfirmDialog,
+        ConfirmDialogRoot,
     ))
+    .queue_apply_scene(panel_window_scene(620.0))
     .with_children(|panel| {
-        panel.spawn(panel_title_bar()).with_children(|title| {
-            title.spawn((
-                panel_title_label("", 24.0),
-                PanelText(PanelTextKind::ConfirmTitle),
-            ));
-        });
-        panel.spawn(panel_content()).with_children(|panel| {
-            panel.spawn((
-                text("", 15.0, STATUS_TEXT),
-                TextLayout::new_with_justify(Justify::Center),
-                Node {
-                    min_height: Val::Px(54.0),
-                    align_self: AlignSelf::Stretch,
-                    ..default()
-                },
-                PanelText(PanelTextKind::ConfirmMessage),
-            ));
-            panel
-                .spawn(confirm_dialog_actions_row())
-                .with_children(|row| {
-                    spawn_confirm_dialog_button(
-                        row,
-                        ConfirmDialogAction::Primary,
-                        "button.confirm",
-                    );
-                    spawn_confirm_dialog_button(
-                        row,
-                        ConfirmDialogAction::Secondary,
-                        "button.confirm",
-                    );
-                    spawn_confirm_dialog_button(row, ConfirmDialogAction::Cancel, "button.cancel");
-                });
-        });
+        panel
+            .spawn((Button, PanelTitleBar))
+            .queue_apply_scene(panel_title_bar_scene())
+            .with_children(|title| {
+                title
+                    .spawn(PanelText(PanelTextKind::ConfirmTitle))
+                    .queue_apply_scene(confirm_dialog_title_scene());
+            });
+        panel
+            .spawn_empty()
+            .queue_apply_scene(panel_content_scene())
+            .with_children(|panel| {
+                panel
+                    .spawn(PanelText(PanelTextKind::ConfirmMessage))
+                    .queue_apply_scene(confirm_dialog_message_scene());
+                panel
+                    .spawn_empty()
+                    .queue_apply_scene(confirm_dialog_actions_row_scene())
+                    .with_children(|row| {
+                        spawn_confirm_dialog_button(
+                            row,
+                            ConfirmDialogAction::Primary,
+                            "button.confirm",
+                        );
+                        spawn_confirm_dialog_button(
+                            row,
+                            ConfirmDialogAction::Secondary,
+                            "button.confirm",
+                        );
+                        spawn_confirm_dialog_button(
+                            row,
+                            ConfirmDialogAction::Cancel,
+                            "button.cancel",
+                        );
+                    });
+            });
     });
+}
+
+fn confirm_dialog_title_scene() -> impl bevy_scene::Scene {
+    bsn! {
+        Text("")
+        TextFont {
+            font_size: {default_font_size(24.0 * 0.8)}
+        }
+        TextColor(Color::srgb(1.0, 0.902, 0.753))
+        Node {
+            flex_grow: 1.0,
+        }
+    }
+}
+
+fn confirm_dialog_message_scene() -> impl bevy_scene::Scene {
+    bsn! {
+        Text("")
+        TextFont {
+            font_size: {default_font_size(15.0)}
+        }
+        TextColor(STATUS_TEXT)
+        TextLayout::justify(Justify::Center)
+        Node {
+            min_height: Val::Px(54.0),
+            align_self: AlignSelf::Stretch,
+        }
+    }
 }
 
 pub fn update_confirm_dialog_ui(
@@ -62,11 +99,27 @@ pub fn update_confirm_dialog_ui(
     i18n: Res<I18n>,
     mut texts: ParamSet<(
         Query<(&PanelText, &mut Text)>,
-        Query<&mut Text, Without<PanelText>>,
+        Query<&mut Text, (With<LocalizedText>, Without<PanelText>)>,
     )>,
+    added_panel_texts: Query<(), Added<PanelText>>,
+    added_actions: Query<(), Added<ConfirmDialogAction>>,
+    mut modal_opened: MessageReader<UiModalOpened>,
+    mut modal_closed: MessageReader<UiModalClosed>,
+    mut language_changed: MessageReader<LanguageChanged>,
     mut action_buttons: Query<(&ConfirmDialogAction, &mut Node, &Children), With<Button>>,
 ) {
-    if !ui_runtime.is_changed() && !i18n.is_changed() {
+    let modal_dirty = modal_opened
+        .read()
+        .any(|message| message.kind == UiModalKind::ConfirmDialog)
+        || modal_closed
+            .read()
+            .any(|message| message.kind == UiModalKind::ConfirmDialog);
+
+    if !modal_dirty
+        && language_changed.read().next().is_none()
+        && added_panel_texts.is_empty()
+        && added_actions.is_empty()
+    {
         return;
     }
 
@@ -103,16 +156,18 @@ pub fn update_confirm_dialog_ui(
     }
 }
 
-fn confirm_dialog_actions_row() -> impl Bundle {
-    transparent_node(Node {
-        width: Val::Percent(100.0),
-        height: Val::Px(default_button_size(40.0)),
-        display: Display::Flex,
-        align_items: AlignItems::Center,
-        justify_content: JustifyContent::Center,
-        column_gap: Val::Px(8.0),
-        ..default()
-    })
+fn confirm_dialog_actions_row_scene() -> impl bevy_scene::Scene {
+    bsn! {
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Px(default_button_size(40.0)),
+            display: Display::Flex,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            column_gap: Val::Px(8.0),
+        }
+        BackgroundColor(Color::NONE)
+    }
 }
 
 fn spawn_confirm_dialog_button(
@@ -121,13 +176,57 @@ fn spawn_confirm_dialog_button(
     text_key: &'static str,
 ) {
     parent
-        .spawn((full_width_button(34.0), action))
-        .with_children(|button| {
-            button.spawn((
-                label_text(text_key, 15.0, Color::WHITE),
-                crate::game::ui::types::LocalizedText { key: text_key },
-            ));
-        });
+        .spawn((Button, HoverButton, action))
+        .queue_apply_scene(confirm_dialog_button_visual_scene())
+        .queue_spawn_related_scenes::<Children>(confirm_dialog_button_label_scene(text_key));
+}
+
+fn confirm_dialog_button_visual_scene() -> impl bevy_scene::Scene {
+    bsn! {
+        Node {
+            width: Val::Percent(100.0),
+            flex_grow: 1.0,
+            height: Val::Px(default_button_size(34.0)),
+            border: UiRect {
+                left: Val::Px(3.0),
+                right: Val::Px(3.0),
+                top: Val::Px(4.0),
+                bottom: Val::Px(5.0),
+            },
+            padding: UiRect::horizontal(Val::Px(14.0)),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+        }
+        BorderColor {
+            top: {raised_border().top},
+            right: {raised_border().right},
+            bottom: {raised_border().bottom},
+            left: {raised_border().left},
+        }
+        BackgroundColor(BUTTON_BG)
+        BoxShadow::new(
+            Color::srgba(0.0, 0.0, 0.0, 0.62),
+            Val::Px(0.0),
+            Val::Px(0.0),
+            Val::Px(0.0),
+            Val::Px(4.0),
+        )
+    }
+}
+
+fn confirm_dialog_button_label_scene(text_key: &'static str) -> impl bevy_scene::SceneList {
+    bsn! {
+        (
+            Text({text_key})
+            TextFont {
+                font_size: {default_font_size(15.0)}
+            }
+            TextColor(Color::WHITE)
+            LocalizedText {
+                key: {text_key}
+            }
+        )
+    }
 }
 
 fn confirm_dialog_button_label(

@@ -140,16 +140,6 @@ pub enum UiPanelId {
     Teleport,
 }
 
-impl UiPanelId {
-    pub fn is_settings(self) -> bool {
-        self == Self::Settings
-    }
-
-    pub fn is_blocking_gameplay(self) -> bool {
-        true
-    }
-}
-
 #[derive(Resource, Clone, Copy, Eq, PartialEq)]
 pub enum BuilderMode {
     Edit,

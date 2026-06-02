@@ -68,11 +68,14 @@ pub fn simulation_controls(
         }
     }
 
-    simulation.speed = if simulation.running && keys.pressed(fast_key) {
+    let next_speed = if simulation.running && keys.pressed(fast_key) {
         4.0
     } else {
         1.0
     };
+    if (simulation.speed - next_speed).abs() > f32::EPSILON {
+        simulation.speed = next_speed;
+    }
 
     if keys.just_pressed(rollback_key) && simulation.is_active() {
         let factory_snapshot = rollback_simulation(&mut simulation, &mut world);

@@ -1,19 +1,59 @@
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::game::state::{GameMode, SolutionState, WorldEntryMode};
 use crate::game::ui::components::{
-    full_width_button, hover_border, inset_border, pressed_border, raised_border, text, BUTTON_BG,
-    BUTTON_HOVER_BG,
+    hover_border, inset_border, pressed_border, raised_border, BUTTON_BG, BUTTON_HOVER_BG,
 };
 use crate::game::ui::types::{
-    PanelText, PanelTextKind, SaveListAction, SaveListCloseButton, SaveListPanel, SaveListPrompt,
-    SaveListPuzzleColumn, SaveListRenderState, SaveListSolutionColumn, TextPromptAction,
-    TextPromptKind, TextPromptRoot, TextPromptText, UiHoverState, UiRuntime,
+    LanguageChanged, PanelText, PanelTextKind, SaveListAction, SaveListChanged,
+    SaveListCloseButton, SaveListPanel, SaveListPrompt, SaveListPuzzleColumn, SaveListRenderState,
+    SaveListSolutionColumn, TextPromptAction, TextPromptKind, TextPromptRoot, TextPromptText,
+    UiHoverState, UiModalClosed, UiModalKind, UiModalOpened, UiPanelContextChanged, UiPanelKey,
+    UiPanelOpened, UiRuntime,
 };
 use crate::shared::i18n::I18n;
 use crate::shared::save::SaveState;
 
-use super::{spawn_save_management_row, spawn_save_select_row};
+use super::{spawn_save_management_row, spawn_save_select_row, spawn_save_slot_button};
+
+#[derive(SystemParam)]
+pub struct SaveListRefreshTriggers<'w, 's> {
+    added_panel_texts: Query<'w, 's, (), Added<PanelText>>,
+    added_prompts: Query<'w, 's, (), Added<SaveListPrompt>>,
+    added_panels: Query<'w, 's, (), Added<SaveListPanel>>,
+    added_puzzle_columns: Query<'w, 's, (), Added<SaveListPuzzleColumn>>,
+    added_solution_columns: Query<'w, 's, (), Added<SaveListSolutionColumn>>,
+    added_buttons: Query<'w, 's, (), Added<SaveListAction>>,
+    opened: MessageReader<'w, 's, UiPanelOpened>,
+    context_changed: MessageReader<'w, 's, UiPanelContextChanged>,
+    save_list_changed: MessageReader<'w, 's, SaveListChanged>,
+    language_changed: MessageReader<'w, 's, LanguageChanged>,
+}
+
+impl SaveListRefreshTriggers<'_, '_> {
+    fn structure_dirty(&mut self) -> bool {
+        !self.added_panel_texts.is_empty()
+            || !self.added_prompts.is_empty()
+            || !self.added_panels.is_empty()
+            || !self.added_puzzle_columns.is_empty()
+            || !self.added_solution_columns.is_empty()
+            || self
+                .opened
+                .read()
+                .any(|message| message.key == UiPanelKey::SAVE_LIST)
+            || self
+                .context_changed
+                .read()
+                .any(|message| message.key == UiPanelKey::SAVE_LIST)
+            || self.save_list_changed.read().next().is_some()
+            || self.language_changed.read().next().is_some()
+    }
+
+    fn buttons_added(&self) -> bool {
+        !self.added_buttons.is_empty()
+    }
+}
 
 pub fn update_save_list_ui(
     mode: Res<GameMode>,
@@ -22,6 +62,7 @@ pub fn update_save_list_ui(
     i18n: Res<I18n>,
     hover: Res<UiHoverState>,
     mut render_state: ResMut<SaveListRenderState>,
+    mut triggers: SaveListRefreshTriggers,
     mut commands: Commands,
     mut texts: ParamSet<(
         Query<(&PanelText, &mut Text)>,
@@ -55,6 +96,13 @@ pub fn update_save_list_ui(
         (With<Button>, Without<SaveListCloseButton>),
     >,
 ) {
+    let refresh_structure = render_state.entry.is_none() || triggers.structure_dirty();
+    let refresh_buttons = refresh_structure || hover.is_changed() || triggers.buttons_added();
+
+    if !refresh_structure && !refresh_buttons {
+        return;
+    }
+
     let play_flow = solution_state.save_list_entry == WorldEntryMode::PlaySolution;
     let edit_flow = solution_state.save_list_entry == WorldEntryMode::EditPuzzle;
     let puzzle_rows = save_list_puzzle_rows(&save_state, edit_flow);
@@ -65,29 +113,34 @@ pub fn update_save_list_ui(
         .collect::<Vec<_>>();
     let show_solutions = play_flow && save_state.selected_puzzle.is_some();
 
-    update_save_list_title(&mode, &solution_state, &i18n, &mut texts);
-    update_save_list_columns(
-        &mut commands,
-        &mut render_state,
-        &mut panels,
-        &mut puzzle_columns,
-        &mut solution_columns,
-        &puzzle_rows,
-        &solution_rows,
-        &i18n,
-        solution_state.save_list_entry,
-        edit_flow,
-        show_solutions,
-    );
-    update_save_list_prompt(play_flow, &save_state, &i18n, &mut texts);
-    update_save_list_buttons(
-        &save_state,
-        &solution_state,
-        &i18n,
-        &hover,
-        &mut texts,
-        &mut buttons,
-    );
+    if refresh_structure {
+        update_save_list_title(&mode, &solution_state, &i18n, &mut texts);
+        update_save_list_columns(
+            &mut commands,
+            &mut render_state,
+            &mut panels,
+            &mut puzzle_columns,
+            &mut solution_columns,
+            &puzzle_rows,
+            &solution_rows,
+            &i18n,
+            solution_state.save_list_entry,
+            edit_flow,
+            show_solutions,
+        );
+        update_save_list_prompt(play_flow, &save_state, &i18n, &mut texts);
+    }
+
+    if refresh_buttons {
+        update_save_list_buttons(
+            &save_state,
+            &solution_state,
+            &i18n,
+            &hover,
+            &mut texts,
+            &mut buttons,
+        );
+    }
 }
 
 fn save_list_puzzle_rows(save_state: &SaveState, edit_flow: bool) -> Vec<String> {
@@ -258,11 +311,7 @@ fn rebuild_management_column(
             );
         }
         if let Some(create_action) = create_action {
-            column
-                .spawn((full_width_button(34.0), create_action))
-                .with_children(|button| {
-                    button.spawn(text("", 15.0, Color::WHITE));
-                });
+            spawn_save_slot_button(column, create_action);
         }
     });
 }
@@ -480,8 +529,27 @@ pub fn update_text_prompt_ui(
         Query<(&TextPromptAction, &Children)>,
         Query<&mut Text, Without<TextPromptText>>,
     )>,
+    added_roots: Query<(), Added<TextPromptRoot>>,
+    added_texts: Query<(), Added<TextPromptText>>,
+    added_actions: Query<(), Added<TextPromptAction>>,
+    mut modal_opened: MessageReader<UiModalOpened>,
+    mut modal_closed: MessageReader<UiModalClosed>,
+    mut language_changed: MessageReader<LanguageChanged>,
 ) {
-    if !ui_runtime.is_changed() && !i18n.is_changed() {
+    let modal_dirty = modal_opened
+        .read()
+        .any(|message| message.kind == UiModalKind::TextPrompt)
+        || modal_closed
+            .read()
+            .any(|message| message.kind == UiModalKind::TextPrompt);
+    let language_dirty = language_changed.read().next().is_some();
+
+    if !modal_dirty
+        && !language_dirty
+        && added_roots.is_empty()
+        && added_texts.is_empty()
+        && added_actions.is_empty()
+    {
         return;
     }
 

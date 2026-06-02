@@ -1,5 +1,6 @@
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy::ui_widgets::{CoreSliderDragState, Slider, SliderRange, SliderValue};
+use bevy::ui_widgets::{Slider, SliderDragState, SliderRange, SliderValue};
 use bevy::window::PrimaryWindow;
 
 use crate::game::state::GameSettings;
@@ -7,21 +8,49 @@ use crate::game::ui::components::{
     hover_border, pressed_border, raised_border, BUTTON_BG, BUTTON_HOVER_BG,
 };
 use crate::game::ui::types::{
-    ActiveSettingsSlider, KeyBindingButton, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
-    SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
-    SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind, SettingsValueText,
-    UiHoverState,
+    ActiveSettingsSlider, KeyBindingButton, LanguageChanged, OpenSettingsDropdown, PendingKeyBind,
+    SettingsAction, SettingsChanged, SettingsDropdownLabel, SettingsDropdownList, SettingsField,
+    SettingsSliderFill, SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind,
+    SettingsValueText, UiHoverState, UiPanelContextChanged, UiPanelKey, UiPanelOpened,
 };
 use crate::shared::config::GameConfig;
 use crate::shared::i18n::I18n;
+
+#[derive(SystemParam)]
+pub struct SettingsPanelLifecycle<'w, 's> {
+    opened: MessageReader<'w, 's, UiPanelOpened>,
+    context_changed: MessageReader<'w, 's, UiPanelContextChanged>,
+    settings_changed: MessageReader<'w, 's, SettingsChanged>,
+    language_changed: MessageReader<'w, 's, LanguageChanged>,
+}
+
+impl SettingsPanelLifecycle<'_, '_> {
+    fn dirty(&mut self) -> bool {
+        self.opened
+            .read()
+            .any(|message| message.key == UiPanelKey::SETTINGS)
+            || self
+                .context_changed
+                .read()
+                .any(|message| message.key == UiPanelKey::SETTINGS)
+            || self.settings_changed.read().next().is_some()
+            || self.language_changed.read().next().is_some()
+    }
+}
 
 pub fn update_settings_text_ui(
     config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
     i18n: Res<I18n>,
     mut settings_texts: Query<(&SettingsText, Option<&ChildOf>, &mut Text)>,
+    added_settings_texts: Query<(), Added<SettingsText>>,
+    mut lifecycle: SettingsPanelLifecycle,
     key_buttons: Query<&KeyBindingButton>,
 ) {
+    if !pending_key_bind.is_changed() && added_settings_texts.is_empty() && !lifecycle.dirty() {
+        return;
+    }
+
     for (settings_text, parent, mut text) in &mut settings_texts {
         text.0 = match settings_text.0 {
             SettingsTextKind::KeyBinding => {
@@ -56,12 +85,26 @@ pub fn update_settings_sliders_ui(
         (&SettingsSliderKnob, &mut Node),
         (Without<SettingsSliderFill>, Without<SettingsDropdownList>),
     >,
-    slider_values: Query<
-        (Entity, &SettingsAction, &SliderValue, &CoreSliderDragState),
-        With<Slider>,
-    >,
+    slider_values: Query<(Entity, &SettingsAction, &SliderValue, &SliderDragState), With<Slider>>,
+    added_slider_fills: Query<(), Added<SettingsSliderFill>>,
+    added_slider_knobs: Query<(), Added<SettingsSliderKnob>>,
+    added_sliders: Query<(), Added<Slider>>,
+    mut lifecycle: SettingsPanelLifecycle,
     mut commands: Commands,
 ) {
+    let has_active_drag = slider_values
+        .iter()
+        .any(|(_, _, _, drag_state)| drag_state.dragging);
+    if !active_slider.is_changed()
+        && !has_active_drag
+        && added_slider_fills.is_empty()
+        && added_slider_knobs.is_empty()
+        && added_sliders.is_empty()
+        && !lifecycle.dirty()
+    {
+        return;
+    }
+
     for (entity, action, value, drag_state) in &slider_values {
         if drag_state.dragging {
             continue;
@@ -129,6 +172,10 @@ pub fn update_settings_dropdowns_ui(
     i18n: Res<I18n>,
     ui_scale: Res<UiScale>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    added_dropdown_labels: Query<(), Added<SettingsDropdownLabel>>,
+    added_value_texts: Query<(), Added<SettingsValueText>>,
+    added_dropdown_lists: Query<(), Added<SettingsDropdownList>>,
+    mut lifecycle: SettingsPanelLifecycle,
     mut texts: ParamSet<(
         Query<
             (&SettingsDropdownLabel, &mut Text),
@@ -145,15 +192,37 @@ pub fn update_settings_dropdowns_ui(
     >,
     triggers: Query<(&SettingsAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
-    for (label, mut text) in &mut texts.p0() {
-        let Some(spec) = super::settings_dropdown_spec_by_id(label.0) else {
-            continue;
-        };
-        text.0 = super::settings_dropdown_value_text(spec, &config, &i18n);
+    let dropdown_open = open_dropdown.0.is_some();
+    let lifecycle_dirty = lifecycle.dirty();
+    let refresh_dropdown_labels = !added_dropdown_labels.is_empty() || lifecycle_dirty;
+    let refresh_value_texts = !added_value_texts.is_empty() || lifecycle_dirty;
+    let refresh_dropdown_layout = dropdown_open
+        || open_dropdown.is_changed()
+        || ui_scale.is_changed()
+        || !added_dropdown_lists.is_empty()
+        || lifecycle_dirty;
+
+    if !refresh_dropdown_labels && !refresh_value_texts && !refresh_dropdown_layout {
+        return;
     }
 
-    for (value, mut text) in &mut texts.p1() {
-        text.0 = value.0.display(&settings, &i18n);
+    if refresh_dropdown_labels {
+        for (label, mut text) in &mut texts.p0() {
+            let Some(spec) = super::settings_dropdown_spec_by_id(label.0) else {
+                continue;
+            };
+            text.0 = super::settings_dropdown_value_text(spec, &config, &i18n);
+        }
+    }
+
+    if refresh_value_texts {
+        for (value, mut text) in &mut texts.p1() {
+            text.0 = value.0.display(&settings, &i18n);
+        }
+    }
+
+    if !refresh_dropdown_layout {
+        return;
     }
 
     let window = windows.single().ok();
@@ -212,6 +281,8 @@ fn settings_ui_transform_scale(window: Option<&Window>, ui_scale: f32) -> f32 {
 pub fn update_settings_tabs_ui(
     settings_tab: Res<SettingsTab>,
     hover: Res<UiHoverState>,
+    added_tabs: Query<(), (Added<SettingsAction>, With<Button>)>,
+    mut lifecycle: SettingsPanelLifecycle,
     mut tab_buttons: Query<
         (
             Entity,
@@ -222,6 +293,14 @@ pub fn update_settings_tabs_ui(
         With<Button>,
     >,
 ) {
+    if !settings_tab.is_changed()
+        && !hover.is_changed()
+        && added_tabs.is_empty()
+        && !lifecycle.dirty()
+    {
+        return;
+    }
+
     for (entity, action, mut background, mut border) in &mut tab_buttons {
         let selected = matches!(
             (*action, *settings_tab),
@@ -259,10 +338,7 @@ fn live_slider_percent(
     field: SettingsField,
     settings: &GameSettings,
     active_slider: &ActiveSettingsSlider,
-    slider_values: &Query<
-        (Entity, &SettingsAction, &SliderValue, &CoreSliderDragState),
-        With<Slider>,
-    >,
+    slider_values: &Query<(Entity, &SettingsAction, &SliderValue, &SliderDragState), With<Slider>>,
 ) -> f32 {
     slider_values
         .iter()

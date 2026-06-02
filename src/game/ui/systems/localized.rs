@@ -1,9 +1,15 @@
 pub fn update_localized_ui(
     i18n: Res<I18n>,
     save_state: Res<SaveState>,
+    added_localized_text: Query<(), Added<LocalizedText>>,
+    mut language_changed: MessageReader<LanguageChanged>,
+    mut save_list_changed: MessageReader<SaveListChanged>,
     mut localized_text: Query<(&LocalizedText, &mut Text)>,
 ) {
-    if !i18n.is_changed() && !save_state.is_changed() {
+    if language_changed.read().next().is_none()
+        && save_list_changed.read().next().is_none()
+        && added_localized_text.is_empty()
+    {
         return;
     }
 

@@ -14,6 +14,6 @@ pub fn apply_ui_font(
     };
 
     for mut font in &mut text_query {
-        font.font = ui_font.0.clone();
+        font.font = FontSource::Handle(ui_font.0.clone());
     }
 }

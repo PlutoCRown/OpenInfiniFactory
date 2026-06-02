@@ -28,7 +28,7 @@ const PAUSE_MENU_ITEMS: &[ButtonSpec<PauseMenuAction>] = &[
     ButtonSpec::new("button.back_to_main_menu", PauseMenuAction::BackToMainMenu),
 ];
 
-pub fn spawn_pause_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+pub fn spawn_pause_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
     spawn_panel(
         root,
         i18n,
@@ -39,5 +39,5 @@ pub fn spawn_pause_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                 spawn_menu_button(panel, 38.0, 16.0, item.on_click, item.text);
             }
         },
-    );
+    )
 }

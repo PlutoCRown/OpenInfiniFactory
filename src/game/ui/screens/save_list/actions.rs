@@ -11,8 +11,10 @@ use crate::game::systems::world_flow::{
     push_text_input, puzzle_has_solutions, WorldMenuParams,
 };
 use crate::game::ui::{
-    CarriedItem, ConfirmDialogButtonSpec, ConfirmDialogEffect, ConfirmDialogMessage,
-    ConfirmDialogSpec, InventoryItems, SaveListAction, TextPromptAction, TextPromptKind, UiRuntime,
+    CarriedItem, CloseUiModal, ConfirmDialogButtonSpec, ConfirmDialogEffect, ConfirmDialogMessage,
+    ConfirmDialogSpec, InventoryChanged, InventoryItems, OpenConfirmDialog, OpenTextPrompt,
+    SaveListAction, SaveListChanged, TextPromptAction, TextPromptKind, UiModalKind, UiModalOpened,
+    UiRuntime,
 };
 use crate::game::world::grid::seed_demo_world;
 use crate::shared::save::{
@@ -31,7 +33,10 @@ pub fn save_list_actions(
     mut solution_state: ResMut<SolutionState>,
     mut simulation: ResMut<SimulationState>,
     mut world_menu: WorldMenuParams,
-    mut ui_runtime: ResMut<UiRuntime>,
+    mut open_confirm: MessageWriter<OpenConfirmDialog>,
+    mut open_prompt: MessageWriter<OpenTextPrompt>,
+    mut inventory_changed: MessageWriter<InventoryChanged>,
+    mut save_list_changed: MessageWriter<SaveListChanged>,
     actions: Query<&SaveListAction>,
 ) {
     if !primary_click(&mut click) || *mode != GameMode::SaveListMain {
@@ -47,7 +52,7 @@ pub fn save_list_actions(
             if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
                 return;
             }
-            ui_runtime.open_text_prompt(TextPromptKind::NewPuzzle, "puzzle");
+            open_prompt.write(OpenTextPrompt::new(TextPromptKind::NewPuzzle, "puzzle"));
         }
         SaveListAction::NewSolution => {
             if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
@@ -56,12 +61,12 @@ pub fn save_list_actions(
             let Some(puzzle_name) = save_state.selected_puzzle.clone() else {
                 return;
             };
-            ui_runtime.open_text_prompt(
+            open_prompt.write(OpenTextPrompt::new(
                 TextPromptKind::NewSolution {
                     puzzle: puzzle_name,
                 },
                 "solution",
-            );
+            ));
         }
         SaveListAction::LoadPuzzle(name) => {
             if solution_state.save_list_entry == WorldEntryMode::EditPuzzle {
@@ -69,7 +74,7 @@ pub fn save_list_actions(
                     return;
                 }
                 if puzzle_has_solutions(&mut save_state, &name) {
-                    ui_runtime.open_confirm_dialog(ConfirmDialogSpec::new(
+                    open_confirm.write(OpenConfirmDialog(ConfirmDialogSpec::new(
                         ConfirmDialogMessage::Named {
                             key: "confirm.edit_puzzle_with_solutions",
                             name: name.clone(),
@@ -79,7 +84,7 @@ pub fn save_list_actions(
                             ConfirmDialogEffect::OpenPuzzleForEdit { name: name.clone() },
                         ),
                         None,
-                    ));
+                    )));
                     return;
                 }
                 open_loaded_world(
@@ -103,6 +108,8 @@ pub fn save_list_actions(
                     &mut world_menu.pusher_state,
                     &mut mode,
                 );
+                inventory_changed.write(InventoryChanged);
+                save_list_changed.write(SaveListChanged);
             } else {
                 let Some(choice) = save_state
                     .puzzle_choices()
@@ -112,6 +119,7 @@ pub fn save_list_actions(
                     return;
                 };
                 save_state.select_puzzle(Some(choice.name), Some(choice.source));
+                save_list_changed.write(SaveListChanged);
             }
         }
         SaveListAction::LoadSolution(name) => {
@@ -149,14 +157,18 @@ pub fn save_list_actions(
                 &mut world_menu.pusher_state,
                 &mut mode,
             );
+            inventory_changed.write(InventoryChanged);
+            save_list_changed.write(SaveListChanged);
         }
         SaveListAction::RenamePuzzle(name) => {
             if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
                 return;
             }
             if save_state.puzzles().iter().any(|entry| entry.name == *name) {
-                ui_runtime
-                    .open_text_prompt(TextPromptKind::RenamePuzzle { name: name.clone() }, &name);
+                open_prompt.write(OpenTextPrompt::new(
+                    TextPromptKind::RenamePuzzle { name: name.clone() },
+                    name.clone(),
+                ));
             }
         }
         SaveListAction::RenameSolution(name) => {
@@ -168,8 +180,10 @@ pub fn save_list_actions(
                 .iter()
                 .any(|entry| entry.name == *name)
             {
-                ui_runtime
-                    .open_text_prompt(TextPromptKind::RenameSolution { name: name.clone() }, &name);
+                open_prompt.write(OpenTextPrompt::new(
+                    TextPromptKind::RenameSolution { name: name.clone() },
+                    name.clone(),
+                ));
             }
         }
         SaveListAction::DeletePuzzle(name) => {
@@ -177,7 +191,7 @@ pub fn save_list_actions(
                 return;
             }
             if save_state.puzzles().iter().any(|entry| entry.name == *name) {
-                ui_runtime.open_confirm_dialog(delete_save_dialog(name.clone()));
+                open_confirm.write(OpenConfirmDialog(delete_save_dialog(name.clone())));
             }
         }
         SaveListAction::DeleteSolution(name) => {
@@ -186,7 +200,7 @@ pub fn save_list_actions(
                 .iter()
                 .any(|entry| entry.name == *name)
             {
-                ui_runtime.open_confirm_dialog(delete_save_dialog(name.clone()));
+                open_confirm.write(OpenConfirmDialog(delete_save_dialog(name.clone())));
             }
         }
         SaveListAction::Back => {
@@ -198,6 +212,7 @@ pub fn save_list_actions(
 pub fn text_prompt_actions(
     mut click: On<Pointer<Click>>,
     mut ui_runtime: ResMut<UiRuntime>,
+    mut close_modal: MessageWriter<CloseUiModal>,
     mut mode: ResMut<GameMode>,
     mut builder_mode: ResMut<BuilderMode>,
     mut inventory: ResMut<InventoryItems>,
@@ -208,6 +223,8 @@ pub fn text_prompt_actions(
     mut simulation: ResMut<SimulationState>,
     mut world_menu: WorldMenuParams,
     actions: Query<&TextPromptAction>,
+    mut inventory_changed: MessageWriter<InventoryChanged>,
+    mut save_list_changed: MessageWriter<SaveListChanged>,
 ) {
     if !primary_click(&mut click) {
         return;
@@ -219,6 +236,7 @@ pub fn text_prompt_actions(
     match action {
         TextPromptAction::Confirm => confirm_active_text_prompt(
             &mut ui_runtime,
+            &mut close_modal,
             &mut mode,
             &mut builder_mode,
             &mut inventory,
@@ -228,8 +246,12 @@ pub fn text_prompt_actions(
             &mut solution_state,
             &mut simulation,
             &mut world_menu,
+            &mut inventory_changed,
+            &mut save_list_changed,
         ),
-        TextPromptAction::Cancel => ui_runtime.close_modal(),
+        TextPromptAction::Cancel => {
+            close_modal.write(CloseUiModal);
+        }
     }
 }
 
@@ -244,7 +266,11 @@ pub fn text_prompt_input(
     mut solution_state: ResMut<SolutionState>,
     mut simulation: ResMut<SimulationState>,
     mut world_menu: WorldMenuParams,
+    mut close_modal: MessageWriter<CloseUiModal>,
     mut keyboard_input: MessageReader<KeyboardInput>,
+    mut modal_opened: MessageWriter<UiModalOpened>,
+    mut inventory_changed: MessageWriter<InventoryChanged>,
+    mut save_list_changed: MessageWriter<SaveListChanged>,
 ) {
     if ui_runtime.text_prompt().is_none() {
         return;
@@ -261,11 +287,17 @@ pub fn text_prompt_input(
             Key::Backspace => {
                 if let Some(prompt) = ui_runtime.text_prompt_mut() {
                     prompt.value.pop();
+                    modal_opened.write(UiModalOpened {
+                        kind: UiModalKind::TextPrompt,
+                    });
                 }
             }
             _ => {
                 if let Some(prompt) = ui_runtime.text_prompt_mut() {
                     push_text_input(&mut prompt.value, event);
+                    modal_opened.write(UiModalOpened {
+                        kind: UiModalKind::TextPrompt,
+                    });
                 }
             }
         }
@@ -273,6 +305,7 @@ pub fn text_prompt_input(
     if confirm {
         confirm_active_text_prompt(
             &mut ui_runtime,
+            &mut close_modal,
             &mut mode,
             &mut builder_mode,
             &mut inventory,
@@ -282,14 +315,17 @@ pub fn text_prompt_input(
             &mut solution_state,
             &mut simulation,
             &mut world_menu,
+            &mut inventory_changed,
+            &mut save_list_changed,
         );
     } else if cancel {
-        ui_runtime.close_modal();
+        close_modal.write(CloseUiModal);
     }
 }
 
 fn confirm_active_text_prompt(
     ui_runtime: &mut UiRuntime,
+    close_modal: &mut MessageWriter<CloseUiModal>,
     mode: &mut GameMode,
     builder_mode: &mut BuilderMode,
     inventory: &mut InventoryItems,
@@ -299,11 +335,13 @@ fn confirm_active_text_prompt(
     solution_state: &mut SolutionState,
     simulation: &mut SimulationState,
     world_menu: &mut WorldMenuParams,
+    inventory_changed: &mut MessageWriter<InventoryChanged>,
+    save_list_changed: &mut MessageWriter<SaveListChanged>,
 ) {
     let Some(prompt) = ui_runtime.text_prompt().cloned() else {
         return;
     };
-    ui_runtime.close_modal();
+    close_modal.write(CloseUiModal);
     let kind = prompt.kind;
     let requested = prompt.value.clone();
     let existing = save_state
@@ -331,6 +369,8 @@ fn confirm_active_text_prompt(
             *inventory = InventoryItems::for_mode(BuilderMode::Edit);
             if save_world(&world_menu.world, &name, SaveKind::Puzzle, inventory) {
                 save_state.refresh();
+                inventory_changed.write(InventoryChanged);
+                save_list_changed.write(SaveListChanged);
                 open_loaded_world_from_menu(
                     &name,
                     WorldEntryMode::EditPuzzle,
@@ -344,6 +384,8 @@ fn confirm_active_text_prompt(
                     simulation,
                     world_menu,
                 );
+                inventory_changed.write(InventoryChanged);
+                save_list_changed.write(SaveListChanged);
             }
         }
         TextPromptKind::NewSolution { puzzle } => {
@@ -363,6 +405,8 @@ fn confirm_active_text_prompt(
                 inventory,
             ) {
                 save_state.refresh();
+                inventory_changed.write(InventoryChanged);
+                save_list_changed.write(SaveListChanged);
                 open_loaded_world_from_menu(
                     &name,
                     WorldEntryMode::PlaySolution,
@@ -376,6 +420,8 @@ fn confirm_active_text_prompt(
                     simulation,
                     world_menu,
                 );
+                inventory_changed.write(InventoryChanged);
+                save_list_changed.write(SaveListChanged);
             }
         }
         TextPromptKind::RenamePuzzle { name: old }
@@ -388,6 +434,7 @@ fn confirm_active_text_prompt(
                     save_state.select_puzzle(Some(name.clone()), save_state.selected_puzzle_kind);
                 }
                 save_state.refresh();
+                save_list_changed.write(SaveListChanged);
             }
         }
         TextPromptKind::SaveAsNewPuzzle => {
@@ -397,6 +444,7 @@ fn confirm_active_text_prompt(
                 save_state.current_kind = Some(SaveKind::Puzzle);
                 solution_state.dirty = false;
                 save_state.refresh();
+                save_list_changed.write(SaveListChanged);
             }
         }
     }

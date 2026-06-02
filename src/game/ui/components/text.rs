@@ -1,14 +1,10 @@
 use bevy::prelude::*;
 
-use crate::shared::i18n::I18n;
-
-use super::super::types::LocalizedText;
-
 const DEFAULT_BUTTON_SCALE: f32 = 1.2;
 const DEFAULT_TEXT_SCALE: f32 = 1.5;
 
-pub fn default_font_size(font_size: f32) -> f32 {
-    font_size * DEFAULT_TEXT_SCALE
+pub fn default_font_size(font_size: f32) -> FontSize {
+    FontSize::Px(font_size * DEFAULT_TEXT_SCALE)
 }
 
 pub fn default_button_size(size: f32) -> f32 {
@@ -23,17 +19,5 @@ pub fn text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bund
             ..default()
         },
         TextColor(color),
-    )
-}
-
-pub fn localized_text(
-    i18n: &I18n,
-    key: &'static str,
-    font_size: f32,
-    color: Color,
-) -> (impl Bundle, LocalizedText) {
-    (
-        text(i18n.text(key), font_size, color),
-        LocalizedText { key },
     )
 }

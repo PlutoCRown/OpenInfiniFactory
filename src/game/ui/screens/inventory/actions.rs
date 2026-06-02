@@ -3,7 +3,9 @@ use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
 use crate::game::state::{GameMode, PlacementState, SolutionState};
-use crate::game::ui::types::{CarriedItem, InventoryItem, InventoryItems, InventorySlot, SlotArea};
+use crate::game::ui::types::{
+    CarriedItem, InventoryChanged, InventoryItem, InventoryItems, InventorySlot, SlotArea,
+};
 use crate::shared::config::{ConfigAction, GameConfig};
 
 pub fn inventory_slot_clicks(
@@ -14,6 +16,7 @@ pub fn inventory_slot_clicks(
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mut solution_state: ResMut<SolutionState>,
+    mut inventory_changed: MessageWriter<InventoryChanged>,
     mode: Res<GameMode>,
 ) {
     if *mode != GameMode::Inventory {
@@ -35,9 +38,11 @@ pub fn inventory_slot_clicks(
             if inventory.hotbar[slot.index].is_some() {
                 inventory.hotbar[slot.index] = None;
                 solution_state.dirty = true;
+                inventory_changed.write(InventoryChanged);
             }
             if placement.selected == slot.index {
                 carried.clear();
+                inventory_changed.write(InventoryChanged);
             }
         }
         placement.selection.clear();
@@ -60,16 +65,20 @@ pub fn inventory_slot_clicks(
             inventory.hotbar[slot.index] = Some(item);
             placement.selected = slot.index;
             carried.clear();
+            inventory_changed.write(InventoryChanged);
         } else {
             if let Some(item) = clicked_item {
                 if place_in_backpack(&mut inventory, item) {
                     inventory.hotbar[slot.index] = None;
                     carried.clear();
+                    inventory_changed.write(InventoryChanged);
                 } else {
                     carried.set(Some(item));
+                    inventory_changed.write(InventoryChanged);
                 }
             } else {
                 carried.clear();
+                inventory_changed.write(InventoryChanged);
             }
             placement.selected = slot.index;
         }
@@ -84,8 +93,10 @@ pub fn inventory_slot_clicks(
                 let previous = inventory.backpack[slot.index].replace(item);
                 carried.set(previous);
             }
+            inventory_changed.write(InventoryChanged);
         } else {
             carried.set(clicked_item);
+            inventory_changed.write(InventoryChanged);
         }
     }
     placement.selection.clear();

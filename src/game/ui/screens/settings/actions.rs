@@ -1,12 +1,13 @@
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
-use bevy::ui_widgets::{CoreSliderDragState, Slider, SliderRange, SliderValue};
+use bevy::ui_widgets::{Slider, SliderDragState, SliderRange, SliderValue};
 
 use crate::game::state::{GameMode, GameSettings};
 use crate::game::systems::world_flow::primary_click;
 use crate::game::ui::{
-    ActiveSettingsSlider, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
-    SettingsSliderTrigger, SettingsTab, UiPanelContext, UiRuntime,
+    ActiveSettingsSlider, CloseUiPanel, LanguageChanged, OpenSettingsDropdown, PendingKeyBind,
+    SettingsAction, SettingsChanged, SettingsSliderTrigger, SettingsTab, UiPanelClosed,
+    UiPanelContext, UiPanelKey, UiRuntime,
 };
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{input_from_buttons, open_config_folder, save_config, GameConfig};
@@ -18,27 +19,25 @@ pub fn settings_menu_actions(
     mut settings: ResMut<GameSettings>,
     mut ui_scale: ResMut<UiScale>,
     mut config: ResMut<GameConfig>,
-    mut open_dropdown: ResMut<OpenSettingsDropdown>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut active_slider: ResMut<ActiveSettingsSlider>,
     ui_runtime: Res<UiRuntime>,
+    mut settings_changed: MessageWriter<SettingsChanged>,
     slider_values: Query<(&SettingsAction, &SliderValue, &SliderRange), With<Slider>>,
     slider_changes: Query<
         (
             &SettingsAction,
             Ref<SliderValue>,
             &SliderRange,
-            &CoreSliderDragState,
+            &SliderDragState,
         ),
         (
             With<Slider>,
-            Or<(Changed<SliderValue>, Changed<CoreSliderDragState>)>,
+            Or<(Changed<SliderValue>, Changed<SliderDragState>)>,
         ),
     >,
 ) {
     if !ui_runtime.is_settings_open() {
-        pending_key_bind.0 = None;
-        open_dropdown.0 = None;
         active_slider.0 = None;
         return;
     }
@@ -47,6 +46,7 @@ pub fn settings_menu_actions(
         if let Some(input) = input_from_buttons(&keys, &mouse_buttons) {
             config.set_input(action, input);
             save_config(&config);
+            settings_changed.write(SettingsChanged);
             pending_key_bind.0 = None;
         }
     }
@@ -57,6 +57,7 @@ pub fn settings_menu_actions(
         &mut settings,
         &mut ui_scale,
         &mut config,
+        &mut settings_changed,
     );
 
     if mouse_buttons.just_released(MouseButton::Left) {
@@ -66,8 +67,26 @@ pub fn settings_menu_actions(
             &mut settings,
             &mut ui_scale,
             &mut config,
+            &mut settings_changed,
         );
     }
+}
+
+pub fn cleanup_closed_settings_panel(
+    mut closed: MessageReader<UiPanelClosed>,
+    mut open_dropdown: ResMut<OpenSettingsDropdown>,
+    mut pending_key_bind: ResMut<PendingKeyBind>,
+    mut active_slider: ResMut<ActiveSettingsSlider>,
+) {
+    if !closed
+        .read()
+        .any(|message| message.key == UiPanelKey::SETTINGS)
+    {
+        return;
+    }
+    open_dropdown.0 = None;
+    pending_key_bind.0 = None;
+    active_slider.0 = None;
 }
 
 pub fn settings_action_clicked(
@@ -81,7 +100,10 @@ pub fn settings_action_clicked(
     mut open_dropdown: ResMut<OpenSettingsDropdown>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut active_slider: ResMut<ActiveSettingsSlider>,
-    mut ui_runtime: ResMut<UiRuntime>,
+    ui_runtime: Res<UiRuntime>,
+    mut close_panel: MessageWriter<CloseUiPanel>,
+    mut settings_changed: MessageWriter<SettingsChanged>,
+    mut language_changed: MessageWriter<LanguageChanged>,
     actions: Query<&SettingsAction>,
 ) {
     if !primary_click(&mut click) || !ui_runtime.is_settings_open() {
@@ -108,17 +130,21 @@ pub fn settings_action_clicked(
             config.place_selection_mode = selection_mode;
             open_dropdown.0 = None;
             save_config(&config);
+            settings_changed.write(SettingsChanged);
         }
         SettingsAction::SetDeleteSelectionMode(selection_mode) => {
             config.delete_selection_mode = selection_mode;
             open_dropdown.0 = None;
             save_config(&config);
+            settings_changed.write(SettingsChanged);
         }
         SettingsAction::SetLanguage(language) => {
             i18n.set_language(language);
             config.language = Some(language);
             open_dropdown.0 = None;
             save_config(&config);
+            settings_changed.write(SettingsChanged);
+            language_changed.write(LanguageChanged);
         }
         SettingsAction::ToggleDropdown(dropdown) => {
             open_dropdown.0 = if open_dropdown.0 == Some(dropdown) {
@@ -142,6 +168,8 @@ pub fn settings_action_clicked(
             open_dropdown.0 = None;
             pending_key_bind.0 = None;
             save_config(&config);
+            settings_changed.write(SettingsChanged);
+            language_changed.write(LanguageChanged);
         }
         SettingsAction::OpenFolder => {
             open_config_folder();
@@ -150,7 +178,7 @@ pub fn settings_action_clicked(
             open_dropdown.0 = None;
             pending_key_bind.0 = None;
             let return_mode = settings_return_mode(&ui_runtime, *mode);
-            ui_runtime.close_active();
+            close_panel.write(CloseUiPanel { key: None });
             *mode = return_mode;
         }
     }
@@ -172,17 +200,18 @@ fn update_settings_sliders_from_input(
             &SettingsAction,
             Ref<SliderValue>,
             &SliderRange,
-            &CoreSliderDragState,
+            &SliderDragState,
         ),
         (
             With<Slider>,
-            Or<(Changed<SliderValue>, Changed<CoreSliderDragState>)>,
+            Or<(Changed<SliderValue>, Changed<SliderDragState>)>,
         ),
     >,
     active_slider: &mut ActiveSettingsSlider,
     settings: &mut GameSettings,
     ui_scale: &mut UiScale,
     config: &mut GameConfig,
+    settings_changed: &mut MessageWriter<SettingsChanged>,
 ) {
     for (action, value, range, drag_state) in slider_changes {
         let SettingsAction::Field(field) = *action else {
@@ -197,6 +226,7 @@ fn update_settings_sliders_from_input(
                 .is_some_and(|slider| slider.trigger == SettingsSliderTrigger::Live)
             {
                 field.apply_percent(percent, settings, ui_scale, config);
+                settings_changed.write(SettingsChanged);
             }
             continue;
         }
@@ -204,6 +234,7 @@ fn update_settings_sliders_from_input(
         if active_slider.0 == Some(field) || value.is_changed() {
             field.apply_percent(percent, settings, ui_scale, config);
             save_config(config);
+            settings_changed.write(SettingsChanged);
             if active_slider.0 == Some(field) {
                 active_slider.0 = None;
             }
@@ -217,6 +248,7 @@ fn commit_active_settings_slider(
     settings: &mut GameSettings,
     ui_scale: &mut UiScale,
     config: &mut GameConfig,
+    settings_changed: &mut MessageWriter<SettingsChanged>,
 ) {
     let Some(field) = active_slider.0.take() else {
         return;
@@ -229,6 +261,7 @@ fn commit_active_settings_slider(
         let percent = range.thumb_position(value.0).clamp(0.0, 1.0);
         field.apply_percent(percent, settings, ui_scale, config);
         save_config(config);
+        settings_changed.write(SettingsChanged);
         return;
     }
 }

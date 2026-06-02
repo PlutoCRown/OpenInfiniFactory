@@ -1,8 +1,7 @@
 use bevy::prelude::*;
+use bevy_scene::bsn;
 
-use crate::game::ui::components::{
-    default_button_size, localized_text, spawn_panel, text, transparent_node, PanelOptions,
-};
+use crate::game::ui::components::{default_button_size, spawn_panel, PanelOptions};
 use crate::game::ui::types::UiPanelBinding;
 use crate::game::ui::UiPanelId;
 use crate::shared::i18n::I18n;
@@ -14,49 +13,25 @@ pub fn spawn_block_panel(
     title_key: &'static str,
     panel: UiPanelId,
     content: impl FnOnce(&mut ChildSpawnerCommands),
-) {
+) -> Entity {
     spawn_panel(
         root,
         i18n,
         PanelOptions::new(width, title_key).closable(),
-        UiPanelBinding(panel),
+        UiPanelBinding::from(panel),
         content,
-    );
+    )
 }
 
-pub fn panel_row_node() -> impl Bundle {
-    transparent_node(Node {
-        width: Val::Percent(100.0),
-        height: Val::Px(default_button_size(40.0)),
-        display: Display::Flex,
-        align_items: AlignItems::Center,
-        column_gap: Val::Px(10.0),
-        ..default()
-    })
-}
-
-pub fn spawn_panel_row(
-    panel: &mut ChildSpawnerCommands,
-    i18n: &I18n,
-    text_key: &'static str,
-    controls: impl FnOnce(&mut ChildSpawnerCommands),
-) {
-    panel.spawn(panel_row_node()).with_children(|row| {
-        spawn_panel_label(row, i18n, text_key);
-        controls(row);
-    });
-}
-
-pub fn spawn_panel_label(row: &mut ChildSpawnerCommands, i18n: &I18n, text_key: &'static str) {
-    row.spawn((
-        localized_text(i18n, text_key, 16.0, Color::srgb(0.86, 0.88, 0.86)),
+pub fn panel_row_scene() -> impl bevy_scene::Scene {
+    bsn! {
         Node {
-            width: Val::Px(110.0),
-            ..default()
-        },
-    ));
-}
-
-pub fn panel_text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bundle {
-    text(value, font_size, color)
+            width: Val::Percent(100.0),
+            height: Val::Px(default_button_size(40.0)),
+            display: Display::Flex,
+            align_items: AlignItems::Center,
+            column_gap: Val::Px(10.0),
+        }
+        BackgroundColor(Color::NONE)
+    }
 }

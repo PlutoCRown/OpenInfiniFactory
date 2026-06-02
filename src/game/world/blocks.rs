@@ -42,7 +42,7 @@ pub use self::registry::{
     all_blocks, assert_registry_consistent, block_render_assets, edit_blocks, PLAY_BLOCKS,
 };
 use crate::game::state::SolutionState;
-use crate::game::ui::{BlockEditAction, BlockPanelDropdown, OpenBlockPanelDropdown, UiPanelId};
+use crate::game::ui::{BlockEditAction, BlockPanelDropdown, OpenBlockPanelDropdown, UiPanelKey};
 pub use crate::game::world::direction::Facing;
 use crate::game::world::grid::WorldBlocks;
 
@@ -69,14 +69,6 @@ pub(crate) use panel_systems::{
 
 pub const BLOCK_SIZE: f32 = 1.0;
 pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
-
-pub(crate) fn spawn_block_panels(root: &mut ChildSpawnerCommands, i18n: &I18n) {
-    generator::ui::spawn_panel(root, i18n);
-    goal::ui::spawn_panel(root, i18n);
-    labeler::ui::spawn_panel(root, i18n);
-    converter::ui::spawn_panel(root, i18n);
-    teleport_entrance::ui::spawn_panel(root, i18n);
-}
 
 pub(crate) fn spawn_block_dropdown_layers(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     generator::ui::spawn_dropdown_layers(root);
@@ -218,7 +210,7 @@ impl SerializedBlockState {
 }
 
 pub trait EditableBlock: Block {
-    fn ui_panel(&self) -> Option<UiPanelId> {
+    fn ui_panel_key(&self) -> Option<UiPanelKey> {
         None
     }
 
@@ -978,8 +970,8 @@ impl BlockKind {
         self.block().alternate()
     }
 
-    pub fn ui_panel(self) -> Option<UiPanelId> {
-        registry::editable(self).and_then(EditableBlock::ui_panel)
+    pub fn ui_panel_key(self) -> Option<UiPanelKey> {
+        registry::editable(self).and_then(EditableBlock::ui_panel_key)
     }
 
     pub fn handle_edit_action(

@@ -3,6 +3,12 @@ pub fn update_hud_visibility(
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
     save_state: Res<SaveState>,
+    added_hud_nodes: Query<(), Added<InGameHudStyle>>,
+    added_crosshair: Query<(), Added<Crosshair>>,
+    added_in_game_visibility: Query<(), Added<InGameHudVisibility>>,
+    added_gameplay_visibility: Query<(), Added<GameplayHudVisibility>>,
+    mut gameplay_ui_changed: MessageReader<GameplayUiChanged>,
+    mut save_list_changed: MessageReader<SaveListChanged>,
     mut hud_style: Query<&mut Node, With<InGameHudStyle>>,
     mut visibility_sets: ParamSet<(
         Query<&mut Visibility, With<Crosshair>>,
@@ -10,6 +16,17 @@ pub fn update_hud_visibility(
         Query<&mut Visibility, With<GameplayHudVisibility>>,
     )>,
 ) {
+    if gameplay_ui_changed.read().next().is_none()
+        && save_list_changed.read().next().is_none()
+        && !simulation.is_changed()
+        && added_hud_nodes.is_empty()
+        && added_crosshair.is_empty()
+        && added_in_game_visibility.is_empty()
+        && added_gameplay_visibility.is_empty()
+    {
+        return;
+    }
+
     let has_world = save_state.current.is_some();
     let hide_gameplay_hud = *builder_mode == BuilderMode::Play && simulation.running;
 

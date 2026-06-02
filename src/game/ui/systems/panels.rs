@@ -1,3 +1,236 @@
+use bevy::ecs::system::SystemParam;
+
+pub fn register_legacy_panels(mut registry: ResMut<UiPanelRegistry>) {
+    registry.register(crate::game::ui::types::UiPanelDescriptor::new(
+        crate::game::ui::types::UiPanelKey::MAIN_MENU,
+        "main.title",
+        true,
+        crate::game::ui::screens::spawn_main_menu,
+    ));
+    registry.register(crate::game::ui::types::UiPanelDescriptor::new(
+        crate::game::ui::types::UiPanelKey::SAVE_LIST,
+        "save.title.default",
+        true,
+        crate::game::ui::screens::spawn_save_list,
+    ));
+    registry.register(crate::game::ui::types::UiPanelDescriptor::new(
+        crate::game::ui::types::UiPanelKey::PAUSE_MENU,
+        "state.paused",
+        true,
+        crate::game::ui::screens::spawn_pause_panel,
+    ));
+    registry.register(crate::game::ui::types::UiPanelDescriptor::new(
+        crate::game::ui::types::UiPanelKey::INVENTORY,
+        "inventory.title",
+        true,
+        crate::game::ui::screens::spawn_inventory_panel,
+    ));
+    registry.register(crate::game::ui::types::UiPanelDescriptor::new(
+        crate::game::ui::types::UiPanelKey::SETTINGS,
+        "settings.title",
+        true,
+        crate::game::ui::screens::spawn_settings_panel,
+    ));
+    registry.register(crate::game::ui::types::UiPanelDescriptor::new(
+        crate::game::ui::types::UiPanelKey::GENERATOR,
+        "generator.title",
+        true,
+        crate::game::world::blocks::generator::ui::spawn_panel,
+    ));
+    registry.register(crate::game::ui::types::UiPanelDescriptor::new(
+        crate::game::ui::types::UiPanelKey::GOAL,
+        "goal.title",
+        true,
+        crate::game::world::blocks::goal::ui::spawn_panel,
+    ));
+    registry.register(crate::game::ui::types::UiPanelDescriptor::new(
+        crate::game::ui::types::UiPanelKey::LABELER,
+        "labeler.title",
+        true,
+        crate::game::world::blocks::labeler::ui::spawn_panel,
+    ));
+    registry.register(crate::game::ui::types::UiPanelDescriptor::new(
+        crate::game::ui::types::UiPanelKey::CONVERTER,
+        "converter.title",
+        true,
+        crate::game::world::blocks::converter::ui::spawn_panel,
+    ));
+    registry.register(crate::game::ui::types::UiPanelDescriptor::new(
+        crate::game::ui::types::UiPanelKey::TELEPORT,
+        "teleport.title",
+        true,
+        crate::game::world::blocks::teleport_entrance::ui::spawn_panel,
+    ));
+}
+
+pub fn open_panel_messages(
+    mut commands: Commands,
+    i18n: Res<I18n>,
+    registry: Res<UiPanelRegistry>,
+    mut host: ResMut<UiPanelHost>,
+    mut ui_runtime: ResMut<UiRuntime>,
+    mut messages: MessageReader<OpenUiPanel>,
+    mut opened: MessageWriter<UiPanelOpened>,
+    mut context_changed: MessageWriter<UiPanelContextChanged>,
+    roots: Query<Entity, With<UiRoot>>,
+) {
+    let Ok(root) = roots.single() else {
+        return;
+    };
+    for message in messages.read() {
+        let Some(descriptor) = registry.get(message.key) else {
+            warn!("Ignoring unregistered UI panel {:?}", message.key);
+            continue;
+        };
+        if host.get(descriptor.key).is_none() {
+            let mut spawned = None;
+            commands.entity(root).with_children(|root| {
+                spawned = Some((descriptor.spawn)(root, &i18n));
+            });
+            if let Some(spawned) = spawned {
+                host.insert(descriptor.key, spawned);
+            }
+        }
+        let old_context = ui_runtime.open_key(
+            descriptor.key,
+            message.context,
+            descriptor.blocks_gameplay,
+        );
+        if let Some(old) = old_context {
+            if old != message.context {
+                context_changed.write(UiPanelContextChanged {
+                    key: descriptor.key,
+                    old,
+                    new: message.context,
+                });
+            }
+        } else {
+            opened.write(UiPanelOpened {
+                key: descriptor.key,
+                context: message.context,
+            });
+        }
+    }
+}
+
+pub fn open_initial_panel(mut open: MessageWriter<OpenUiPanel>) {
+    open.write(OpenUiPanel::new(
+        UiPanelKey::MAIN_MENU,
+        UiPanelContext::None,
+    ));
+}
+
+pub fn sync_mode_panels(mode: Res<GameMode>, mut open: MessageWriter<OpenUiPanel>) {
+    if !mode.is_changed() {
+        return;
+    }
+    let key = match *mode {
+        GameMode::MainMenu => UiPanelKey::MAIN_MENU,
+        GameMode::SaveListMain => UiPanelKey::SAVE_LIST,
+        GameMode::Inventory => UiPanelKey::INVENTORY,
+        GameMode::Paused => UiPanelKey::PAUSE_MENU,
+        GameMode::Playing => return,
+    };
+    open.write(OpenUiPanel::new(key, UiPanelContext::None));
+}
+
+pub fn close_panel_messages(
+    registry: Res<UiPanelRegistry>,
+    mut ui_runtime: ResMut<UiRuntime>,
+    mut messages: MessageReader<CloseUiPanel>,
+    mut closed: MessageWriter<UiPanelClosed>,
+) {
+    for message in messages.read() {
+        let Some(key) = message.key else {
+            if let Some(session) = ui_runtime.close_active() {
+                closed.write(UiPanelClosed { key: session.panel });
+            }
+            continue;
+        };
+        let Some(descriptor) = registry.get(key) else {
+            continue;
+        };
+        if let Some(session) = ui_runtime.close_panel(descriptor.key) {
+            closed.write(UiPanelClosed { key: session.panel });
+        }
+    }
+}
+
+pub fn modal_messages(
+    mut commands: Commands,
+    mut ui_runtime: ResMut<UiRuntime>,
+    mut confirm: MessageReader<OpenConfirmDialog>,
+    mut prompt: MessageReader<OpenTextPrompt>,
+    mut close: MessageReader<CloseUiModal>,
+    mut opened: MessageWriter<UiModalOpened>,
+    mut closed: MessageWriter<UiModalClosed>,
+    roots: Query<Entity, With<UiRoot>>,
+    confirm_roots: Query<(), With<ConfirmDialogRoot>>,
+) {
+    for message in close.read() {
+        let _ = message;
+        if let Some(kind) = ui_runtime.modal_kind() {
+            closed.write(UiModalClosed { kind });
+        }
+        ui_runtime.close_modal();
+    }
+    for message in confirm.read() {
+        if confirm_roots.is_empty() {
+            if let Ok(root) = roots.single() {
+                commands.entity(root).with_children(|root| {
+                    crate::game::ui::screens::spawn_confirm_dialog(root);
+                });
+            }
+        }
+        if let Some(kind) = ui_runtime.modal_kind() {
+            closed.write(UiModalClosed { kind });
+        }
+        ui_runtime.open_confirm_dialog(message.0.clone());
+        opened.write(UiModalOpened {
+            kind: UiModalKind::ConfirmDialog,
+        });
+    }
+    for message in prompt.read() {
+        if let Some(kind) = ui_runtime.modal_kind() {
+            closed.write(UiModalClosed { kind });
+        }
+        ui_runtime.open_text_prompt(message.kind.clone(), &message.value);
+        opened.write(UiModalOpened {
+            kind: UiModalKind::TextPrompt,
+        });
+    }
+}
+
+#[derive(SystemParam)]
+pub struct PanelLifecycleTriggers<'w, 's> {
+    opened: MessageReader<'w, 's, UiPanelOpened>,
+    closed: MessageReader<'w, 's, UiPanelClosed>,
+    context_changed: MessageReader<'w, 's, UiPanelContextChanged>,
+}
+
+impl PanelLifecycleTriggers<'_, '_> {
+    fn dirty(&mut self) -> bool {
+        self.opened.read().next().is_some()
+            || self.closed.read().next().is_some()
+            || self.context_changed.read().next().is_some()
+    }
+}
+
+pub fn open_panel_button_clicked(
+    mut click: On<Pointer<Click>>,
+    buttons: Query<&OpensPanel>,
+    mut open: MessageWriter<OpenUiPanel>,
+) {
+    if click.event.button != PointerButton::Primary {
+        return;
+    }
+    let Ok(target) = buttons.get(click.entity).copied() else {
+        return;
+    };
+    click.propagate(false);
+    open.write(OpenUiPanel::new(target.key, target.context));
+}
+
 pub fn update_panel_visibility(
     mode: Res<GameMode>,
     save_state: Res<SaveState>,
@@ -6,13 +239,27 @@ pub fn update_panel_visibility(
     ui_runtime: Res<UiRuntime>,
     world: Res<WorldBlocks>,
     mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
+    mut lifecycle: PanelLifecycleTriggers,
     mut nodes: ParamSet<(
-        Query<(&PanelVisibility, &mut Node)>,
-        Query<(&PauseMenuAction, &mut Node), With<Button>>,
-        Query<(&UiPanelBinding, &mut Node)>,
+        Query<
+            (&PanelVisibility, &mut Node),
+            (
+                Without<PauseMenuAction>,
+                Without<UiPanelBinding>,
+                Without<PanelWindow>,
+            ),
+        >,
+        Query<
+            (&PauseMenuAction, &mut Node),
+            (With<Button>, Without<PanelVisibility>, Without<UiPanelBinding>),
+        >,
+        Query<
+            (&UiPanelBinding, &mut Node),
+            (Without<PanelVisibility>, Without<PauseMenuAction>),
+        >,
         Query<
             (&Node, &mut Visibility, &mut PanelPosition),
-            (With<PanelWindow>, Without<TextPromptRoot>),
+            (With<PanelWindow>, Without<TextPromptRoot>, Without<PanelVisibility>),
         >,
     )>,
 ) {
@@ -20,14 +267,14 @@ pub fn update_panel_visibility(
         && !save_state.is_changed()
         && !solution_state.is_changed()
         && !settings_tab.is_changed()
-        && !ui_runtime.is_changed()
+        && !lifecycle.dirty()
         && !world.is_changed()
         && !open_block_dropdown.is_changed()
     {
         return;
     }
 
-    let active_panel = ui_runtime.active_panel();
+    let active_panel = ui_runtime.active_key();
     for (visibility, mut style) in &mut nodes.p0() {
         style.display = display_for(panel_visible(
             *visibility,
@@ -69,12 +316,8 @@ pub fn update_panel_visibility(
 pub fn panel_close_clicked(
     mut click: On<Pointer<Click>>,
     mut mode: ResMut<GameMode>,
-    mut ui_runtime: ResMut<UiRuntime>,
-    mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
-    mut open_settings_dropdown: ResMut<OpenSettingsDropdown>,
-    mut pending_key_bind: ResMut<PendingKeyBind>,
-    mut teleport_rename: ResMut<TeleportRenameState>,
-    mut drag: ResMut<PanelDragState>,
+    ui_runtime: Res<UiRuntime>,
+    mut close_panel: MessageWriter<CloseUiPanel>,
     close_buttons: Query<(), With<PanelCloseButton>>,
 ) {
     if click.event.button != PointerButton::Primary || close_buttons.get(click.entity).is_err() {
@@ -82,17 +325,24 @@ pub fn panel_close_clicked(
     }
     click.propagate(false);
 
-    if ui_runtime.is_settings_open() {
-        open_settings_dropdown.0 = None;
-        pending_key_bind.0 = None;
-    }
-    open_block_dropdown.0 = None;
-    teleport_rename.editing = None;
     let return_mode = panel_close_return_mode(&ui_runtime);
-    ui_runtime.close_active();
+    close_panel.write(CloseUiPanel { key: None });
     if let Some(return_mode) = return_mode {
         *mode = return_mode;
     }
+}
+
+pub fn cleanup_closed_panel_state(
+    mut closed: MessageReader<UiPanelClosed>,
+    mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
+    mut teleport_rename: ResMut<TeleportRenameState>,
+    mut drag: ResMut<PanelDragState>,
+) {
+    if closed.read().next().is_none() {
+        return;
+    }
+    open_block_dropdown.0 = None;
+    teleport_rename.editing = None;
     drag.clear();
 }
 
@@ -175,7 +425,7 @@ fn panel_close_return_mode(ui_runtime: &UiRuntime) -> Option<GameMode> {
 fn active_block_has_panel(
     ui_runtime: &UiRuntime,
     world: &WorldBlocks,
-    active_panel: Option<UiPanelId>,
+    active_panel: Option<UiPanelKey>,
 ) -> bool {
     let Some(pos) = ui_runtime.active_block_pos() else {
         return false;
@@ -183,7 +433,7 @@ fn active_block_has_panel(
     world
         .system_blocks
         .get(&pos)
-        .and_then(|block| block.kind.ui_panel())
+        .and_then(|block| block.kind.ui_panel_key())
         == active_panel
 }
 
@@ -263,13 +513,14 @@ pub fn center_new_panels(
 
 pub fn update_ui_layers(
     ui_runtime: Res<UiRuntime>,
+    mut lifecycle: PanelLifecycleTriggers,
     mut layered_nodes: Query<(
         &mut GlobalZIndex,
         Option<&UiPanelBinding>,
         Option<&PanelVisibility>,
     )>,
 ) {
-    if !ui_runtime.is_changed() {
+    if !ui_runtime.is_changed() && !lifecycle.dirty() {
         return;
     }
 

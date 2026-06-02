@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -6,7 +8,7 @@ use crate::game::state::{BuilderMode, GameMode, WorldEntryMode};
 use crate::game::world::blocks::{edit_blocks, BlockKind, MaterialKind, StampColor, PLAY_BLOCKS};
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ConfigAction, ConfigSelectionMode};
-use crate::shared::i18n::Language;
+use crate::shared::i18n::{I18n, Language};
 
 pub const HOTBAR_SLOTS: usize = 9;
 pub(super) const BACKPACK_SLOTS: usize = 27;
@@ -26,14 +28,195 @@ const PLAY_HOTBAR_BLOCKS: [BlockKind; HOTBAR_SLOTS] = [
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UiPanelContext {
+    None,
     ReturnTo(GameMode),
     Block { pos: IVec3 },
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct UiPanelKey(pub &'static str);
+
+impl UiPanelKey {
+    pub const MAIN_MENU: Self = Self("core.main_menu");
+    pub const SAVE_LIST: Self = Self("core.save_list");
+    pub const PAUSE_MENU: Self = Self("core.pause_menu");
+    pub const INVENTORY: Self = Self("core.inventory");
+    pub const SETTINGS: Self = Self("core.settings");
+    pub const GENERATOR: Self = Self("block.generator");
+    pub const GOAL: Self = Self("block.goal");
+    pub const LABELER: Self = Self("block.labeler");
+    pub const CONVERTER: Self = Self("block.converter");
+    pub const TELEPORT: Self = Self("block.teleport");
+
+    pub fn is_settings(self) -> bool {
+        self == Self::SETTINGS
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct UiPanelDescriptor {
+    pub key: UiPanelKey,
+    pub title_key: &'static str,
+    pub blocks_gameplay: bool,
+    pub spawn: fn(&mut ChildSpawnerCommands, &I18n) -> Entity,
+}
+
+impl UiPanelDescriptor {
+    pub const fn new(
+        key: UiPanelKey,
+        title_key: &'static str,
+        blocks_gameplay: bool,
+        spawn: fn(&mut ChildSpawnerCommands, &I18n) -> Entity,
+    ) -> Self {
+        Self {
+            key,
+            title_key,
+            blocks_gameplay,
+            spawn,
+        }
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct UiPanelRegistry {
+    panels: HashMap<UiPanelKey, UiPanelDescriptor>,
+}
+
+impl UiPanelRegistry {
+    pub fn register(&mut self, descriptor: UiPanelDescriptor) {
+        let _ = (descriptor.title_key, descriptor.blocks_gameplay);
+        self.panels.insert(descriptor.key, descriptor);
+    }
+
+    pub fn get(&self, key: UiPanelKey) -> Option<&UiPanelDescriptor> {
+        self.panels.get(&key)
+    }
+}
+
+#[derive(Component)]
+pub struct UiRoot;
+
+#[derive(Resource, Default)]
+pub struct UiPanelHost {
+    spawned: HashMap<UiPanelKey, Entity>,
+}
+
+impl UiPanelHost {
+    pub fn get(&self, key: UiPanelKey) -> Option<Entity> {
+        self.spawned.get(&key).copied()
+    }
+
+    pub fn insert(&mut self, key: UiPanelKey, entity: Entity) {
+        self.spawned.insert(key, entity);
+    }
+}
+
+#[derive(Message, Clone, Copy, Debug, Eq, PartialEq)]
+pub struct OpenUiPanel {
+    pub key: UiPanelKey,
+    pub context: UiPanelContext,
+}
+
+impl OpenUiPanel {
+    pub const fn new(key: UiPanelKey, context: UiPanelContext) -> Self {
+        Self { key, context }
+    }
+}
+
+#[derive(Message, Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CloseUiPanel {
+    pub key: Option<UiPanelKey>,
+}
+
+#[derive(Message, Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UiPanelOpened {
+    pub key: UiPanelKey,
+    pub context: UiPanelContext,
+}
+
+#[derive(Message, Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UiPanelClosed {
+    pub key: UiPanelKey,
+}
+
+#[derive(Message, Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UiPanelContextChanged {
+    pub key: UiPanelKey,
+    pub old: UiPanelContext,
+    pub new: UiPanelContext,
+}
+
+#[derive(Message, Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SettingsChanged;
+
+#[derive(Message, Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct InventoryChanged;
+
+#[derive(Message, Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct LanguageChanged;
+
+#[derive(Message, Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SaveListChanged;
+
+#[derive(Message, Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct GameplayUiChanged;
+
+#[derive(Message, Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BlockSettingsChanged {
+    pub pos: IVec3,
+}
+
+#[derive(Message, Clone)]
+pub struct OpenConfirmDialog(pub ConfirmDialogSpec);
+
+#[derive(Message, Clone)]
+pub struct OpenTextPrompt {
+    pub kind: TextPromptKind,
+    pub value: String,
+}
+
+impl OpenTextPrompt {
+    pub fn new(kind: TextPromptKind, value: impl Into<String>) -> Self {
+        Self {
+            kind,
+            value: value.into(),
+        }
+    }
+}
+
+#[derive(Message, Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CloseUiModal;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UiModalKind {
+    ConfirmDialog,
+    TextPrompt,
+}
+
+#[derive(Message, Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UiModalOpened {
+    pub kind: UiModalKind,
+}
+
+#[derive(Message, Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UiModalClosed {
+    pub kind: UiModalKind,
+}
+
+#[derive(Component, Clone, Copy)]
+pub struct OpensPanel {
+    pub key: UiPanelKey,
+    pub context: UiPanelContext,
+}
+
+#[derive(Component, Clone, Copy)]
+pub struct ConfirmDialogRoot;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct UiPanelSession {
-    pub panel: UiPanelId,
+    pub panel: UiPanelKey,
     pub context: UiPanelContext,
+    pub blocks_gameplay: bool,
 }
 
 #[derive(Resource, Default)]
@@ -43,38 +226,56 @@ pub struct UiRuntime {
 }
 
 impl UiRuntime {
-    pub fn open(&mut self, panel: UiPanelId, context: UiPanelContext) {
+    pub fn open_key(
+        &mut self,
+        panel: UiPanelKey,
+        context: UiPanelContext,
+        blocks_gameplay: bool,
+    ) -> Option<UiPanelContext> {
+        let previous = self
+            .stack
+            .iter()
+            .find(|session| session.panel == panel)
+            .map(|session| session.context);
         self.stack.retain(|session| session.panel != panel);
-        self.stack.push(UiPanelSession { panel, context });
+        self.stack.push(UiPanelSession {
+            panel,
+            context,
+            blocks_gameplay,
+        });
+        previous
     }
 
-    pub fn open_block(&mut self, panel: UiPanelId, pos: IVec3) {
-        self.open(panel, UiPanelContext::Block { pos })
+    pub fn close_active(&mut self) -> Option<UiPanelSession> {
+        self.stack.pop()
     }
 
-    pub fn close_active(&mut self) {
-        self.stack.pop();
-    }
-
-    pub fn close_current(&mut self) {
-        self.close_active();
+    pub fn close_panel(&mut self, panel: UiPanelKey) -> Option<UiPanelSession> {
+        if let Some(index) = self
+            .stack
+            .iter()
+            .rposition(|session| session.panel == panel)
+        {
+            Some(self.stack.remove(index))
+        } else {
+            None
+        }
     }
 
     pub fn active(&self) -> Option<UiPanelSession> {
         self.stack.last().copied()
     }
 
-    pub fn active_panel(&self) -> Option<UiPanelId> {
+    pub fn active_key(&self) -> Option<UiPanelKey> {
         self.active().map(|session| session.panel)
     }
 
     pub fn is_settings_open(&self) -> bool {
-        self.active_panel().is_some_and(UiPanelId::is_settings)
+        self.active_key().is_some_and(UiPanelKey::is_settings)
     }
 
     pub fn blocks_gameplay(&self) -> bool {
-        self.active_panel()
-            .is_some_and(UiPanelId::is_blocking_gameplay)
+        self.active().is_some_and(|session| session.blocks_gameplay)
     }
 
     pub fn active_block_pos(&self) -> Option<IVec3> {
@@ -84,14 +285,14 @@ impl UiRuntime {
         }
     }
 
-    pub fn panel_layer(&self, panel: UiPanelId) -> Option<usize> {
+    pub fn panel_layer(&self, panel: UiPanelKey) -> Option<usize> {
         self.stack.iter().position(|session| session.panel == panel)
     }
 
     pub fn top_modal_layer(&self) -> Option<usize> {
         self.stack
             .iter()
-            .rposition(|session| session.panel.is_blocking_gameplay())
+            .rposition(|session| session.blocks_gameplay)
     }
 
     pub fn has_modal_panel(&self) -> bool {
@@ -111,6 +312,13 @@ impl UiRuntime {
 
     pub fn close_modal(&mut self) {
         self.modal = None;
+    }
+
+    pub fn modal_kind(&self) -> Option<UiModalKind> {
+        match self.modal.as_ref()? {
+            UiModal::Confirm(_) => Some(UiModalKind::ConfirmDialog),
+            UiModal::TextPrompt(_) => Some(UiModalKind::TextPrompt),
+        }
     }
 
     pub fn confirm_dialog(&self) -> Option<&ConfirmDialogState> {
@@ -140,7 +348,20 @@ impl UiRuntime {
 }
 
 #[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
-pub struct UiPanelBinding(pub UiPanelId);
+pub struct UiPanelBinding(pub UiPanelKey);
+
+impl From<UiPanelId> for UiPanelBinding {
+    fn from(panel: UiPanelId) -> Self {
+        Self(match panel {
+            UiPanelId::Settings => UiPanelKey::SETTINGS,
+            UiPanelId::Generator => UiPanelKey::GENERATOR,
+            UiPanelId::Goal => UiPanelKey::GOAL,
+            UiPanelId::Labeler => UiPanelKey::LABELER,
+            UiPanelId::Converter => UiPanelKey::CONVERTER,
+            UiPanelId::Teleport => UiPanelKey::TELEPORT,
+        })
+    }
+}
 
 #[derive(Component)]
 pub struct PanelWindow;
@@ -197,11 +418,14 @@ pub struct GameplayHudVisibility;
 #[derive(Component)]
 pub struct ConverterInputRow;
 
-#[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub struct BlockPanelText(pub BlockPanelTextKind);
+#[derive(Component, Clone, Copy, Default, Eq, PartialEq)]
+pub struct BlockPanelText {
+    pub kind: BlockPanelTextKind,
+}
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Default, Eq, PartialEq)]
 pub enum BlockPanelTextKind {
+    #[default]
     GeneratorPeriod,
     TeleportName,
 }
@@ -469,7 +693,7 @@ pub enum StatusTextKind {
     SimulationOverlay,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Default)]
 pub struct LocalizedText {
     pub key: &'static str,
 }
@@ -702,8 +926,9 @@ pub enum SettingsAction {
 #[derive(Resource, Default)]
 pub struct ActiveSettingsSlider(pub Option<SettingsField>);
 
-#[derive(Component, Clone, Copy, Eq, PartialEq)]
+#[derive(Component, Clone, Copy, Default, Eq, PartialEq)]
 pub enum BlockEditAction {
+    #[default]
     PeriodDown,
     PeriodUp,
     ToggleMaterialDropdown,
@@ -723,8 +948,9 @@ pub enum TeleportAction {
     Rename,
 }
 
-#[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Component, Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum BlockPanelDropdown {
+    #[default]
     GeneratorMaterial,
     GoalMaterial,
     LabelerColor,
@@ -739,8 +965,10 @@ pub struct BlockPanelDropdownLabel(pub BlockPanelDropdown);
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct BlockPanelDropdownList(pub BlockPanelDropdown);
 
-#[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub struct BlockMaterialIconSlot(pub BlockPanelDropdown);
+#[derive(Component, Clone, Copy, Default, Eq, PartialEq)]
+pub struct BlockMaterialIconSlot {
+    pub dropdown: BlockPanelDropdown,
+}
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct BlockMaterialIcon(pub MaterialKind);

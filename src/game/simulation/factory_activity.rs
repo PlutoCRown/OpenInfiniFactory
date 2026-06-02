@@ -168,11 +168,7 @@ impl FactoryStructureState {
         (!structure.contains(&pusher_pos)).then_some(structure)
     }
 
-    pub fn falling_structure_at(
-        &self,
-        pos: IVec3,
-        offset: IVec3,
-    ) -> Option<HashSet<IVec3>> {
+    pub fn falling_structure_at(&self, pos: IVec3, offset: IVec3) -> Option<HashSet<IVec3>> {
         let structure = self.structure(pos)?;
         if structure.activity != FactoryActivity::Active || !structure.freedom.can_translate(offset)
         {
@@ -245,7 +241,6 @@ impl FactoryStructureState {
             .get(&pos)
             .and_then(|index| self.structures.get(*index))
     }
-
 }
 
 fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
@@ -312,8 +307,9 @@ fn is_blocked_pusher_edge(
     let Some(pusher_pos) = pusher_pos else {
         return false;
     };
-    pusher_front_neighbor(world, pusher_pos)
-        .is_some_and(|front| (from == pusher_pos && to == front) || (from == front && to == pusher_pos))
+    pusher_front_neighbor(world, pusher_pos).is_some_and(|front| {
+        (from == pusher_pos && to == front) || (from == front && to == pusher_pos)
+    })
 }
 
 fn is_blocked_factory_connection(world: &WorldBlocks, from: IVec3, to: IVec3) -> bool {
@@ -325,21 +321,16 @@ fn is_blocked_factory_connection(world: &WorldBlocks, from: IVec3, to: IVec3) ->
 
 fn pusher_front_neighbor(world: &WorldBlocks, pos: IVec3) -> Option<IVec3> {
     world.blocks.get(&pos).and_then(|block| {
-        matches!(
-            block.kind,
-            BlockKind::Pusher | BlockKind::Blocker
-        )
+        matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker)
             .then_some(pos + block.facing.forward_ivec3())
     })
 }
 
 fn touches_scene(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
     structure.iter().any(|pos| {
-        signal_offsets()
-            .into_iter()
-            .any(|offset| {
-                let neighbor = *pos + offset;
-                world.is_scene_at(neighbor) && !is_blocked_factory_connection(world, *pos, neighbor)
-            })
+        signal_offsets().into_iter().any(|offset| {
+            let neighbor = *pos + offset;
+            world.is_scene_at(neighbor) && !is_blocked_factory_connection(world, *pos, neighbor)
+        })
     })
 }

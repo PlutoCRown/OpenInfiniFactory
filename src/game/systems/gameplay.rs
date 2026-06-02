@@ -16,7 +16,8 @@ use crate::game::state::{
 use crate::game::systems::debug::DebugState;
 use crate::game::systems::virtual_controls::VirtualControls;
 use crate::game::ui::{
-    AreaKind, CarriedItem, InventoryItems, PendingKeyBind, UiRuntime, HOTBAR_SLOTS,
+    AreaKind, CarriedItem, CloseUiPanel, GameplayUiChanged, InventoryItems, OpenUiPanel,
+    PendingKeyBind, UiPanelContext, UiRuntime, HOTBAR_SLOTS,
 };
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::blocks::{teleport_settings, BlockData, BlockKind};
@@ -52,6 +53,12 @@ pub struct PlacementInputSources<'w> {
     virtual_controls: Res<'w, VirtualControls>,
 }
 
+#[derive(SystemParam)]
+pub struct GameplayUiWriters<'w> {
+    open_panel: MessageWriter<'w, OpenUiPanel>,
+    gameplay_ui_changed: MessageWriter<'w, GameplayUiChanged>,
+}
+
 pub fn gameplay_input(
     input: GameplayInputSources,
     mut mouse_wheel: MessageReader<MouseWheel>,
@@ -61,8 +68,10 @@ pub fn gameplay_input(
     mut placement: ResMut<PlacementState>,
     teleport_rename: Res<TeleportRenameState>,
     mut carried: ResMut<CarriedItem>,
-    mut ui_runtime: ResMut<UiRuntime>,
+    ui_runtime: Res<UiRuntime>,
+    mut close_panel: MessageWriter<CloseUiPanel>,
     mut simulation: ResMut<SimulationState>,
+    mut gameplay_ui_changed: MessageWriter<GameplayUiChanged>,
 ) {
     let bindings = &config.key_bindings;
     let keys = &input.keys;
@@ -86,20 +95,25 @@ pub fn gameplay_input(
 
     if keys.just_pressed(bindings.pause.key_code()) {
         if ui_runtime.blocks_gameplay() {
-            ui_runtime.close_current();
+            close_panel.write(CloseUiPanel { key: None });
         } else {
             *mode = match *mode {
                 GameMode::Playing => {
                     simulation.running = false;
                     simulation.step_requested = false;
                     simulation.speed = 1.0;
+                    gameplay_ui_changed.write(GameplayUiChanged);
                     GameMode::Paused
                 }
                 GameMode::Inventory => {
                     carried.clear();
+                    gameplay_ui_changed.write(GameplayUiChanged);
                     GameMode::Playing
                 }
-                GameMode::Paused => GameMode::Playing,
+                GameMode::Paused => {
+                    gameplay_ui_changed.write(GameplayUiChanged);
+                    GameMode::Playing
+                }
                 other => other,
             };
         }
@@ -113,8 +127,10 @@ pub fn gameplay_input(
     if keys.just_pressed(bindings.inventory.key_code()) || virtual_controls.inventory.just_pressed {
         *mode = if *mode == GameMode::Inventory {
             carried.clear();
+            gameplay_ui_changed.write(GameplayUiChanged);
             GameMode::Playing
         } else {
+            gameplay_ui_changed.write(GameplayUiChanged);
             GameMode::Inventory
         };
     }
@@ -135,6 +151,7 @@ pub fn gameplay_input(
                 placement.selection.clear();
                 placement.edit_gesture = None;
                 placement.selected = index;
+                gameplay_ui_changed.write(GameplayUiChanged);
             }
         }
     }
@@ -147,6 +164,7 @@ pub fn gameplay_input(
             placement.selection.clear();
             placement.edit_gesture = None;
             placement.selected = selected as usize;
+            gameplay_ui_changed.write(GameplayUiChanged);
         }
     }
 }
@@ -162,11 +180,12 @@ pub fn placement_input(
     mut mode: ResMut<GameMode>,
     simulation: Res<SimulationState>,
     mut placement: ResMut<PlacementState>,
-    mut ui_runtime: ResMut<UiRuntime>,
+    ui_runtime: ResMut<UiRuntime>,
     render_manager: Res<WorldRenderManager>,
     debug: Res<DebugState>,
     mut factory_structures: ResMut<FactoryStructureState>,
     queries: PlacementQueries,
+    mut ui_writers: GameplayUiWriters,
 ) {
     let mouse_buttons = &input.mouse_buttons;
     let keys = &input.keys;
@@ -246,7 +265,7 @@ pub fn placement_input(
             current_target_pos,
             &world,
             *builder_mode,
-            &mut ui_runtime,
+            &mut ui_writers.open_panel,
             &mut mode,
         )
     {
@@ -283,6 +302,7 @@ pub fn placement_input(
     if pick_just_pressed {
         if let Some(pos) = current_target_pos {
             pick_target_block(pos, &world, &mut placement, &mut inventory);
+            ui_writers.gameplay_ui_changed.write(GameplayUiChanged);
         }
         placement.edit_gesture = None;
         despawn_selection_overlays(&mut commands, &selection_overlays);
@@ -454,7 +474,7 @@ fn open_target_block_ui(
     target: Option<IVec3>,
     world: &WorldBlocks,
     builder_mode: BuilderMode,
-    ui_runtime: &mut UiRuntime,
+    open_panel: &mut MessageWriter<OpenUiPanel>,
     mode: &mut GameMode,
 ) -> bool {
     if builder_mode != BuilderMode::Edit {
@@ -468,11 +488,11 @@ fn open_target_block_ui(
         return false;
     };
 
-    let Some(panel) = block.kind.ui_panel() else {
+    let Some(panel) = block.kind.ui_panel_key() else {
         return false;
     };
 
-    ui_runtime.open_block(panel, pos);
+    open_panel.write(OpenUiPanel::new(panel, UiPanelContext::Block { pos }));
     *mode = GameMode::Playing;
     true
 }

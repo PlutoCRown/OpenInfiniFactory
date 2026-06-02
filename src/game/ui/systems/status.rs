@@ -26,11 +26,30 @@ pub fn update_status_ui(
     save_state: Res<SaveState>,
     config: Res<GameConfig>,
     i18n: Res<I18n>,
+    added_status_texts: Query<(), Added<StatusText>>,
+    added_panel_texts: Query<(), Added<PanelText>>,
+    mut gameplay_ui_changed: MessageReader<GameplayUiChanged>,
+    mut inventory_changed: MessageReader<InventoryChanged>,
+    mut language_changed: MessageReader<LanguageChanged>,
+    mut save_list_changed: MessageReader<SaveListChanged>,
+    mut settings_changed: MessageReader<SettingsChanged>,
     mut texts: ParamSet<(
         Query<(&StatusText, &mut Text)>,
         Query<(&PanelText, &mut Text)>,
     )>,
 ) {
+    if gameplay_ui_changed.read().next().is_none()
+        && inventory_changed.read().next().is_none()
+        && !simulation.is_changed()
+        && save_list_changed.read().next().is_none()
+        && settings_changed.read().next().is_none()
+        && added_status_texts.is_empty()
+        && added_panel_texts.is_empty()
+        && language_changed.read().next().is_none()
+    {
+        return;
+    }
+
     for (status, mut text) in &mut texts.p0() {
         text.0 = status_text_value(
             status.0,

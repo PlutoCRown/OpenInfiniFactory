@@ -1,23 +1,26 @@
 use bevy::prelude::*;
+use bevy_scene::{bsn, prelude::EntityCommandsSceneExt};
 
 use crate::shared::config::{ConfigAction, ConfigSelectionMode, GameConfig};
 use crate::shared::i18n::I18n;
 
 use crate::game::ui::components::{
-    default_button_size, flex_row, localized_text, scroll_container, scroll_content, spawn_panel,
-    transparent_node, PanelOptions,
+    default_button_size, default_font_size, flex_row, scroll_container, scroll_content,
+    spawn_panel, transparent_node, PanelOptions,
 };
 use crate::game::ui::types::{
-    ButtonSpec, PanelVisibility, SettingsAction, SettingsControl, SettingsDropdownRow,
-    SettingsDropdownSpec, SettingsDropdownValue, SettingsItem, SettingsTab, UiPanelBinding,
-    UiPanelId, GAMEPLAY_SETTINGS,
+    ButtonSpec, LocalizedText, PanelVisibility, SettingsAction, SettingsControl,
+    SettingsDropdownRow, SettingsDropdownSpec, SettingsDropdownValue, SettingsItem, SettingsTab,
+    UiPanelBinding, UiPanelId, GAMEPLAY_SETTINGS,
 };
 
 mod actions;
 mod systems;
 mod widgets;
 
-pub(crate) use actions::{settings_action_clicked, settings_menu_actions};
+pub(crate) use actions::{
+    cleanup_closed_settings_panel, settings_action_clicked, settings_menu_actions,
+};
 pub(crate) use systems::{
     update_settings_dropdowns_ui, update_settings_slider_drag_ui, update_settings_sliders_ui,
     update_settings_tabs_ui, update_settings_text_ui,
@@ -28,14 +31,14 @@ use widgets::{
     spawn_settings_slider, spawn_settings_slider_value, spawn_settings_tab,
 };
 
-pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
-    spawn_panel(
+pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
+    let panel = spawn_panel(
         root,
         i18n,
         PanelOptions::new(840.0, "settings.title")
             .closable()
             .title_size(30.0),
-        UiPanelBinding(UiPanelId::Settings),
+        UiPanelBinding::from(UiPanelId::Settings),
         |panel| {
             spawn_settings_tabs(panel);
             spawn_gameplay_settings(panel, i18n);
@@ -43,6 +46,7 @@ pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         },
     );
     spawn_settings_dropdown_layers(root, i18n);
+    panel
 }
 
 fn spawn_settings_tabs(panel: &mut ChildSpawnerCommands) {
@@ -68,11 +72,11 @@ fn spawn_settings_dropdown_row(
 ) {
     panel
         .spawn((
-            settings_row_node(),
             PanelVisibility::SettingsTab(SettingsTab::Gameplay),
             SettingsDropdownRow(dropdown.id),
             ZIndex(300),
         ))
+        .queue_apply_scene(settings_row_scene())
         .with_children(|row| {
             spawn_settings_label(row, i18n, text_key);
             row.spawn(transparent_node(Node {
@@ -109,7 +113,8 @@ fn spawn_settings_slider_row(
     item: SettingsItem,
 ) {
     panel
-        .spawn(settings_row_node())
+        .spawn_empty()
+        .queue_apply_scene(settings_row_scene())
         .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
         .with_children(|row| {
             spawn_settings_label(row, i18n, text_key);
@@ -129,26 +134,36 @@ fn spawn_settings_slider_row(
         });
 }
 
-fn settings_row_node() -> impl Bundle {
-    transparent_node(Node {
-        width: Val::Percent(100.0),
-        min_height: Val::Px(default_button_size(54.0)),
-        display: Display::Flex,
-        align_items: AlignItems::Center,
-        column_gap: Val::Px(18.0),
-        ..default()
-    })
+fn settings_row_scene() -> impl bevy_scene::Scene {
+    bsn! {
+        Node {
+            width: Val::Percent(100.0),
+            min_height: Val::Px(default_button_size(54.0)),
+            display: Display::Flex,
+            align_items: AlignItems::Center,
+            column_gap: Val::Px(18.0),
+        }
+        BackgroundColor(Color::NONE)
+    }
 }
 
 fn spawn_settings_label(row: &mut ChildSpawnerCommands, i18n: &I18n, text_key: &'static str) {
-    row.spawn((
-        localized_text(i18n, text_key, 15.0, Color::srgb(0.82, 0.88, 0.90)),
+    row.spawn(LocalizedText { key: text_key })
+        .queue_apply_scene(settings_label_scene(i18n.text(text_key)));
+}
+
+fn settings_label_scene(text: String) -> impl bevy_scene::Scene {
+    bsn! {
+        Text({text})
+        TextFont {
+            font_size: {default_font_size(15.0)}
+        }
+        TextColor(Color::srgb(0.82, 0.88, 0.90))
         Node {
             width: Val::Px(220.0),
             align_self: AlignSelf::Center,
-            ..default()
-        },
-    ));
+        }
+    }
 }
 
 fn spawn_settings_item(panel: &mut ChildSpawnerCommands, i18n: &I18n, item: SettingsItem) {
@@ -197,7 +212,8 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
         .insert(PanelVisibility::SettingsTab(SettingsTab::KeyBindings))
         .with_children(|container| {
             container
-                .spawn((key_bindings_columns_bundle(), scroll_content()))
+                .spawn(scroll_content())
+                .queue_apply_scene(key_bindings_columns_scene())
                 .with_children(|columns| {
                     spawn_key_group(
                         columns,
@@ -230,7 +246,9 @@ fn spawn_key_group(
             ..default()
         }))
         .with_children(|group| {
-            group.spawn(localized_text(i18n, text_key, 18.0, Color::WHITE));
+            group
+                .spawn(LocalizedText { key: text_key })
+                .queue_apply_scene(key_group_label_scene(i18n.text(text_key)));
             for binding in bindings {
                 spawn_localized_settings_button(
                     group,
@@ -249,15 +267,27 @@ fn spawn_settings_footer(panel: &mut ChildSpawnerCommands) {
     });
 }
 
-fn key_bindings_columns_bundle() -> impl Bundle {
-    transparent_node(Node {
-        position_type: PositionType::Absolute,
-        width: Val::Percent(100.0),
-        flex_direction: FlexDirection::Row,
-        align_items: AlignItems::FlexStart,
-        column_gap: Val::Px(14.0),
-        ..default()
-    })
+fn key_bindings_columns_scene() -> impl bevy_scene::Scene {
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::FlexStart,
+            column_gap: Val::Px(14.0),
+        }
+        BackgroundColor(Color::NONE)
+    }
+}
+
+fn key_group_label_scene(text: String) -> impl bevy_scene::Scene {
+    bsn! {
+        Text({text})
+        TextFont {
+            font_size: {default_font_size(18.0)}
+        }
+        TextColor(Color::WHITE)
+    }
 }
 
 fn language_options() -> Vec<(String, SettingsAction)> {

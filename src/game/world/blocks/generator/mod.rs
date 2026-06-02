@@ -1,7 +1,7 @@
 use super::{
     rgba, Block, BlockDefinition, BlockEditContext, BlockKind, EditableBlock, MaterialSource,
 };
-use crate::game::ui::{BlockEditAction, BlockPanelDropdown, UiPanelId};
+use crate::game::ui::{BlockEditAction, BlockPanelDropdown, UiPanelKey};
 use crate::game::world::blocks::SerializedBlockState;
 use crate::game::world::grid::WorldBlocks;
 
@@ -48,8 +48,8 @@ impl Block for GeneratorBlock {
     }
 }
 impl EditableBlock for GeneratorBlock {
-    fn ui_panel(&self) -> Option<UiPanelId> {
-        ui::ui_panel(self)
+    fn ui_panel_key(&self) -> Option<UiPanelKey> {
+        Some(UiPanelKey::GENERATOR)
     }
     fn handle_edit_action(&self, ctx: &mut BlockEditContext, action: BlockEditAction) {
         ui::handle_edit_action(self, ctx, action)

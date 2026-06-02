@@ -1,5 +1,5 @@
 use super::{rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockRenderAssets, EditableBlock};
-use crate::game::ui::UiPanelId;
+use crate::game::ui::UiPanelKey;
 use crate::game::world::blocks::teleport_entrance::state;
 use crate::game::world::blocks::SerializedBlockState;
 use crate::game::world::grid::WorldBlocks;
@@ -50,7 +50,7 @@ impl Block for TeleportExitBlock {
     }
 }
 impl EditableBlock for TeleportExitBlock {
-    fn ui_panel(&self) -> Option<UiPanelId> {
-        ui::ui_panel(self)
+    fn ui_panel_key(&self) -> Option<UiPanelKey> {
+        Some(UiPanelKey::TELEPORT)
     }
 }

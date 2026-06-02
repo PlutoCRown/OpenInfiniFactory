@@ -6,7 +6,8 @@ use bevy::prelude::*;
 use crate::game::state::{SolutionState, TeleportRenameState};
 use crate::game::systems::world_flow::{primary_click, push_text_input, toggle_block_dropdown};
 use crate::game::ui::{
-    BlockPanelDropdown, OpenBlockPanelDropdown, TeleportAction, UiPanelId, UiRuntime,
+    BlockPanelDropdown, BlockSettingsChanged, OpenBlockPanelDropdown, TeleportAction, UiPanelKey,
+    UiRuntime,
 };
 use crate::game::world::blocks::{set_teleport_settings, teleport_settings};
 use crate::game::world::grid::WorldBlocks;
@@ -18,9 +19,10 @@ pub fn teleport_menu_actions(
     mut rename_state: ResMut<TeleportRenameState>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
+    mut block_settings_changed: MessageWriter<BlockSettingsChanged>,
     actions: Query<&TeleportAction>,
 ) {
-    if !primary_click(&mut click) || ui_runtime.active_panel() != Some(UiPanelId::Teleport) {
+    if !primary_click(&mut click) || ui_runtime.active_key() != Some(UiPanelKey::TELEPORT) {
         return;
     }
 
@@ -42,6 +44,7 @@ pub fn teleport_menu_actions(
             settings.pair = pair;
             set_teleport_settings(&mut world, pos, settings);
             solution_state.dirty = true;
+            block_settings_changed.write(BlockSettingsChanged { pos });
             open_dropdown.0 = None;
         }
         TeleportAction::Rename => {
@@ -58,8 +61,9 @@ pub fn teleport_rename_input(
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
     mut keyboard_input: MessageReader<KeyboardInput>,
+    mut block_settings_changed: MessageWriter<BlockSettingsChanged>,
 ) {
-    if ui_runtime.active_panel() != Some(UiPanelId::Teleport) || rename_state.editing.is_none() {
+    if ui_runtime.active_key() != Some(UiPanelKey::TELEPORT) || rename_state.editing.is_none() {
         return;
     }
 
@@ -88,6 +92,7 @@ pub fn teleport_rename_input(
             settings.name = trimmed.chars().take(24).collect();
             set_teleport_settings(&mut world, pos, settings);
             solution_state.dirty = true;
+            block_settings_changed.write(BlockSettingsChanged { pos });
         }
         rename_state.editing = None;
     } else if cancel {

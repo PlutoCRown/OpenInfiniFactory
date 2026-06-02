@@ -2,7 +2,7 @@ use super::{
     rgb, Block, BlockDefinition, BlockEditContext, BlockKind, BlockModel, BlockRenderAssets,
     EditableBlock, RenderBehavior,
 };
-use crate::game::ui::{BlockEditAction, BlockPanelDropdown, UiPanelId};
+use crate::game::ui::{BlockEditAction, UiPanelKey};
 use crate::game::world::blocks::SerializedBlockState;
 use crate::game::world::grid::WorldBlocks;
 
@@ -57,8 +57,8 @@ impl Block for GoalBlock {
     }
 }
 impl EditableBlock for GoalBlock {
-    fn ui_panel(&self) -> Option<UiPanelId> {
-        ui::ui_panel(self)
+    fn ui_panel_key(&self) -> Option<UiPanelKey> {
+        Some(UiPanelKey::GOAL)
     }
     fn handle_edit_action(&self, ctx: &mut BlockEditContext, action: BlockEditAction) {
         ui::handle_edit_action(self, ctx, action)

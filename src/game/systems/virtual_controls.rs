@@ -186,9 +186,7 @@ pub fn update_virtual_controls(
 
     for touch in touches.iter_just_pressed() {
         let pos = touch.position();
-        if state.movement_touch.is_none()
-            && pos.distance(left_center) <= JOYSTICK_RADIUS * 1.9
-        {
+        if state.movement_touch.is_none() && pos.distance(left_center) <= JOYSTICK_RADIUS * 1.9 {
             state.movement_touch = Some(touch.id());
         } else if state.look_touch.is_none()
             && pos.x >= look_zone_x
@@ -277,7 +275,11 @@ pub fn update_virtual_controls_ui(
     let screen_size = Vec2::new(window.width(), window.height());
     let visible = *mode == GameMode::Playing;
     for mut node in &mut overlays {
-        node.display = if visible { Display::Flex } else { Display::None };
+        node.display = if visible {
+            Display::Flex
+        } else {
+            Display::None
+        };
     }
     if !visible {
         return;
@@ -380,7 +382,7 @@ fn spawn_action_button(
         button.spawn((
             Text::new(label),
             TextFont {
-                font_size: 20.0,
+                font_size: FontSize::Px(20.0),
                 ..default()
             },
             TextColor(Color::srgba(1.0, 1.0, 1.0, 0.86)),
@@ -401,10 +403,8 @@ fn action_button_at(pos: Vec2, screen_size: Vec2) -> Option<VirtualControlButton
     .into_iter()
     .find_map(|(button, column, row)| {
         let step = ACTION_BUTTON_SIZE + ACTION_BUTTON_GAP;
-        let left =
-            screen_size.x - ACTION_BUTTON_RIGHT - ACTION_BUTTON_SIZE - column as f32 * step;
-        let top =
-            screen_size.y - ACTION_BUTTON_BOTTOM - ACTION_BUTTON_SIZE - row as f32 * step;
+        let left = screen_size.x - ACTION_BUTTON_RIGHT - ACTION_BUTTON_SIZE - column as f32 * step;
+        let top = screen_size.y - ACTION_BUTTON_BOTTOM - ACTION_BUTTON_SIZE - row as f32 * step;
         (pos.x >= left
             && pos.x <= left + ACTION_BUTTON_SIZE
             && pos.y >= top

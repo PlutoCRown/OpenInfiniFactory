@@ -9,8 +9,9 @@ use crate::game::systems::world_flow::{
 };
 use crate::game::ui::{
     CarriedItem, ConfirmDialogButtonSpec, ConfirmDialogEffect, ConfirmDialogMessage,
-    ConfirmDialogSpec, InventoryItems, PauseMenuAction, TextPromptKind, UiPanelContext, UiPanelId,
-    UiRuntime,
+    ConfirmDialogSpec, GameplayUiChanged, InventoryChanged, InventoryItems, OpenConfirmDialog,
+    OpenTextPrompt, OpenUiPanel, PauseMenuAction, SaveListChanged, TextPromptKind, UiPanelContext,
+    UiPanelKey,
 };
 use crate::shared::save::{next_named_save, SaveKind, SaveState};
 
@@ -24,7 +25,12 @@ pub fn pause_menu_actions(
     mut mode: ResMut<GameMode>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
-    mut ui_runtime: ResMut<UiRuntime>,
+    mut open_confirm: MessageWriter<OpenConfirmDialog>,
+    mut open_prompt: MessageWriter<OpenTextPrompt>,
+    mut open_panel: MessageWriter<OpenUiPanel>,
+    mut gameplay_ui_changed: MessageWriter<GameplayUiChanged>,
+    mut inventory_changed: MessageWriter<InventoryChanged>,
+    mut save_list_changed: MessageWriter<SaveListChanged>,
     mut world_menu: WorldMenuParams,
     actions: Query<&PauseMenuAction>,
 ) {
@@ -63,7 +69,7 @@ pub fn pause_menu_actions(
                     BuilderMode::Play
                 }
                 BuilderMode::Play => {
-                    ui_runtime.open_confirm_dialog(ConfirmDialogSpec::new(
+                    open_confirm.write(OpenConfirmDialog(ConfirmDialogSpec::new(
                         ConfirmDialogMessage::TextKey("confirm.save_solution_before_edit"),
                         ConfirmDialogButtonSpec::new(
                             "button.save_solution_and_edit",
@@ -73,13 +79,16 @@ pub fn pause_menu_actions(
                             "button.discard_solution_and_edit",
                             ConfirmDialogEffect::SwitchToEditMode { save_first: false },
                         )),
-                    ));
+                    )));
                     return;
                 }
             };
             *inventory = InventoryItems::for_mode(*builder_mode);
             carried.clear();
             placement.selected = 0;
+            inventory_changed.write(InventoryChanged);
+            save_list_changed.write(SaveListChanged);
+            gameplay_ui_changed.write(GameplayUiChanged);
             *mode = GameMode::Playing;
         }
         PauseMenuAction::SaveWorld => {
@@ -87,7 +96,7 @@ pub fn pause_menu_actions(
                 (save_state.current_kind, save_state.current.clone())
             {
                 if puzzle_has_solutions(&mut save_state, &name) {
-                    ui_runtime.open_confirm_dialog(ConfirmDialogSpec::new(
+                    open_confirm.write(OpenConfirmDialog(ConfirmDialogSpec::new(
                         ConfirmDialogMessage::Named {
                             key: "confirm.save_puzzle_with_solutions",
                             name: name.clone(),
@@ -100,7 +109,7 @@ pub fn pause_menu_actions(
                             "button.save_as_new_puzzle",
                             ConfirmDialogEffect::SaveAsNewPuzzle { default_name: name },
                         )),
-                    ));
+                    )));
                     return;
                 }
             }
@@ -111,29 +120,34 @@ pub fn pause_menu_actions(
                 &mut solution_state,
                 &simulation,
             );
+            save_list_changed.write(SaveListChanged);
+            gameplay_ui_changed.write(GameplayUiChanged);
         }
         PauseMenuAction::SaveAsNewPuzzle => {
-            ui_runtime.open_text_prompt(TextPromptKind::SaveAsNewPuzzle, "puzzle");
+            open_prompt.write(OpenTextPrompt::new(
+                TextPromptKind::SaveAsNewPuzzle,
+                "puzzle",
+            ));
         }
         PauseMenuAction::ResetSolution => {
-            ui_runtime.open_confirm_dialog(ConfirmDialogSpec::new(
+            open_confirm.write(OpenConfirmDialog(ConfirmDialogSpec::new(
                 ConfirmDialogMessage::TextKey("confirm.reset_solution"),
                 ConfirmDialogButtonSpec::new(
                     "button.confirm_reset_solution",
                     ConfirmDialogEffect::ResetSolution,
                 ),
                 None,
-            ));
+            )));
         }
         PauseMenuAction::OpenSettings => {
-            ui_runtime.open(
-                UiPanelId::Settings,
+            open_panel.write(OpenUiPanel::new(
+                UiPanelKey::SETTINGS,
                 UiPanelContext::ReturnTo(GameMode::Paused),
-            );
+            ));
         }
         PauseMenuAction::BackToMainMenu => {
             if solution_state.dirty {
-                ui_runtime.open_confirm_dialog(ConfirmDialogSpec::new(
+                open_confirm.write(OpenConfirmDialog(ConfirmDialogSpec::new(
                     ConfirmDialogMessage::TextKey("confirm.return_to_main"),
                     ConfirmDialogButtonSpec::new(
                         "button.save_and_back",
@@ -143,7 +157,7 @@ pub fn pause_menu_actions(
                         "button.discard_and_back",
                         ConfirmDialogEffect::ReturnToMain { save_first: false },
                     )),
-                ));
+                )));
             } else {
                 clear_loaded_world(
                     &mut world_menu.world,
@@ -160,6 +174,8 @@ pub fn pause_menu_actions(
                     &mut world_menu.movement_influence,
                     &mut world_menu.pusher_state,
                 );
+                save_list_changed.write(SaveListChanged);
+                gameplay_ui_changed.write(GameplayUiChanged);
                 *mode = GameMode::MainMenu;
             }
         }

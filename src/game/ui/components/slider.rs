@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use bevy::ui_widgets::{Slider, SliderRange, SliderThumb, SliderValue, TrackClick};
+use bevy::ui_widgets::{
+    Slider, SliderOrientation, SliderRange, SliderThumb, SliderValue, TrackClick,
+};
 
 use super::button::{inset_border, styled_button};
 use super::text::default_button_size;
@@ -26,6 +28,7 @@ pub fn slider_bundle(action: impl Component + Copy) -> impl Bundle {
         ),
         Slider {
             track_click: TrackClick::Snap,
+            orientation: SliderOrientation::Horizontal,
         },
         SliderValue(0.0),
         SliderRange::new(0.0, 100.0),

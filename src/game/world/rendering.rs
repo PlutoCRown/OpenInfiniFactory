@@ -96,7 +96,7 @@ pub fn setup_scene(
     commands.spawn((
         PointLight {
             intensity: 1100.0,
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             range: 18.0,
             radius: 3.5,
             ..default()
@@ -107,7 +107,7 @@ pub fn setup_scene(
     commands.spawn((
         DirectionalLight {
             illuminance: 9500.0,
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -1.05, -0.55, -0.28)),
@@ -166,7 +166,7 @@ pub fn setup_block_icons(
     commands.spawn((
         DirectionalLight {
             illuminance: 7800.0,
-            shadows_enabled: false,
+            shadow_maps_enabled: false,
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.85, -0.55, -0.25)),

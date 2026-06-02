@@ -7,12 +7,11 @@ pub mod world;
 
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
-use bevy::input_focus::InputDispatchPlugin;
 use bevy::light::{DirectionalLightShadowMap, GlobalAmbientLight};
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 use bevy::ui::UiSystems;
-use bevy::ui_widgets::{slider_self_update, UiWidgetsPlugins};
+use bevy::ui_widgets::slider_self_update;
 
 use crate::shared::config::load_config;
 use crate::shared::i18n::{resolve_language, I18n};
@@ -95,8 +94,6 @@ impl Plugin for GamePlugin {
             .insert_resource(systems::debug::DebugState::default())
             .insert_resource(systems::debug::PerfStats::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
-            .add_plugins(InputDispatchPlugin)
-            .add_plugins(UiWidgetsPlugins)
             .add_plugins(GameUiPlugin)
             .add_observer(slider_self_update)
             .add_observer(main_menu_actions)

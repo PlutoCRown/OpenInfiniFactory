@@ -223,7 +223,7 @@ pub fn setup_debug_ui(mut commands: Commands) {
     commands.spawn((
         Text::new(""),
         TextFont {
-            font_size: 16.0,
+            font_size: FontSize::Px(16.0),
             ..default()
         },
         TextColor(Color::srgb(0.95, 1.0, 0.72)),

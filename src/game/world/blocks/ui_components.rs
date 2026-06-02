@@ -1,74 +1,11 @@
 use bevy::prelude::*;
+use bevy_scene::{bsn, prelude::EntityCommandsSceneExt};
 
 use crate::game::ui::components::{
-    default_button_size, inset_border, label_text, menu_button, styled_button, transparent_node,
+    default_button_size, default_font_size, inset_border, raised_border, HoverButton, BUTTON_BG,
 };
-use crate::game::ui::types::{
-    BlockEditAction, BlockMaterialIcon, BlockMaterialIconSlot, BlockPanelDropdown,
-    BlockPanelDropdownLabel, BlockPanelDropdownList, LocalizedText,
-};
+use crate::game::ui::types::{BlockMaterialIcon, BlockPanelDropdown, BlockPanelDropdownList};
 use crate::game::world::blocks::MaterialKind;
-
-pub fn spawn_block_edit_button(
-    parent: &mut ChildSpawnerCommands,
-    action: BlockEditAction,
-    text_key: &'static str,
-) {
-    parent
-        .spawn((menu_button(36.0), action))
-        .with_children(|button| {
-            button.spawn((
-                label_text(text_key, 14.0, Color::WHITE),
-                LocalizedText { key: text_key },
-            ));
-        });
-}
-
-pub fn spawn_block_panel_dropdown<A>(
-    parent: &mut ChildSpawnerCommands,
-    dropdown: BlockPanelDropdown,
-    toggle_action: A,
-) where
-    A: Component + Copy,
-{
-    parent
-        .spawn((
-            transparent_node(Node {
-                width: Val::Px(230.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(4.0),
-                position_type: PositionType::Relative,
-                ..default()
-            }),
-            ZIndex(300),
-        ))
-        .with_children(|container| {
-            container
-                .spawn((
-                    styled_button(
-                        Node {
-                            width: Val::Percent(100.0),
-                            height: Val::Px(default_button_size(34.0)),
-                            padding: UiRect::horizontal(Val::Px(12.0)),
-                            border: UiRect::all(Val::Px(1.0)),
-                            align_items: AlignItems::Center,
-                            justify_content: JustifyContent::SpaceBetween,
-                            ..default()
-                        },
-                        Color::srgb(0.38, 0.39, 0.40),
-                        Color::srgba(0.18, 0.20, 0.22, 0.96),
-                    ),
-                    toggle_action,
-                ))
-                .with_children(|button| {
-                    button.spawn((
-                        label_text("", 14.0, Color::WHITE),
-                        BlockPanelDropdownLabel(dropdown),
-                    ));
-                    button.spawn(label_text("v", 12.0, Color::srgb(0.72, 0.80, 0.84)));
-                });
-        });
-}
 
 pub fn spawn_block_panel_dropdown_list<A>(
     parent: &mut ChildSpawnerCommands,
@@ -78,48 +15,13 @@ pub fn spawn_block_panel_dropdown_list<A>(
     A: Component + Copy,
 {
     parent
-        .spawn((
-            dropdown_list_node(230.0),
-            GlobalZIndex(20_000),
-            BlockPanelDropdownList(dropdown),
-        ))
+        .spawn((BlockPanelDropdownList(dropdown), GlobalZIndex(20_000)))
+        .queue_apply_scene(dropdown_list_scene(230.0))
         .with_children(|list| {
             for (label, action) in options {
                 spawn_dropdown_option(list, label, action);
             }
         });
-}
-
-pub fn spawn_material_icon_slot<A>(
-    parent: &mut ChildSpawnerCommands,
-    dropdown: BlockPanelDropdown,
-    toggle_action: A,
-) where
-    A: Component + Copy,
-{
-    parent
-        .spawn((
-            styled_button(
-                Node {
-                    width: Val::Px(default_button_size(54.0)),
-                    height: Val::Px(default_button_size(54.0)),
-                    border: UiRect {
-                        left: Val::Px(4.0),
-                        right: Val::Px(4.0),
-                        top: Val::Px(5.0),
-                        bottom: Val::Px(5.0),
-                    },
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },
-                inset_border(),
-                Color::srgb(0.255, 0.251, 0.251),
-            ),
-            BlockMaterialIconSlot(dropdown),
-            toggle_action,
-        ))
-        .with_children(spawn_material_icon);
 }
 
 pub fn spawn_material_icon_dropdown_list<A>(
@@ -130,60 +32,19 @@ pub fn spawn_material_icon_dropdown_list<A>(
     A: Component + Copy,
 {
     parent
-        .spawn((
-            icon_dropdown_list_node(),
-            GlobalZIndex(20_000),
-            BlockPanelDropdownList(dropdown),
-        ))
+        .spawn((BlockPanelDropdownList(dropdown), GlobalZIndex(20_000)))
+        .queue_apply_scene(icon_dropdown_list_scene())
         .with_children(|list| {
             for (material, action) in options {
-                list.spawn((
-                    styled_button(
-                        Node {
-                            width: Val::Px(default_button_size(54.0)),
-                            height: Val::Px(default_button_size(54.0)),
-                            border: UiRect {
-                                left: Val::Px(4.0),
-                                right: Val::Px(4.0),
-                                top: Val::Px(5.0),
-                                bottom: Val::Px(5.0),
-                            },
-                            align_items: AlignItems::Center,
-                            justify_content: JustifyContent::Center,
-                            ..default()
-                        },
-                        inset_border(),
-                        Color::srgb(0.255, 0.251, 0.251),
-                    ),
-                    BlockMaterialIcon(material),
-                    action,
-                ))
-                .with_children(spawn_material_icon);
+                list.spawn((Button, HoverButton, BlockMaterialIcon(material), action))
+                    .queue_apply_scene(material_icon_option_scene())
+                    .queue_spawn_related_scenes::<Children>(material_icon_scene());
             }
         });
 }
 
-fn spawn_material_icon(slot: &mut ChildSpawnerCommands) {
-    slot.spawn((
-        ImageNode::default(),
-        Node {
-            width: Val::Px(default_button_size(64.0)),
-            height: Val::Px(default_button_size(64.0)),
-            position_type: PositionType::Absolute,
-            left: Val::Percent(50.0),
-            top: Val::Percent(50.0),
-            margin: UiRect {
-                left: Val::Px(-default_button_size(32.0)),
-                top: Val::Px(-default_button_size(32.0)),
-                ..default()
-            },
-            ..default()
-        },
-    ));
-}
-
-fn dropdown_list_node(width: f32) -> impl Bundle {
-    (
+fn dropdown_list_scene(width: f32) -> impl bevy_scene::Scene {
+    bsn! {
         Node {
             width: Val::Px(width),
             display: Display::None,
@@ -193,14 +54,13 @@ fn dropdown_list_node(width: f32) -> impl Bundle {
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(3.0),
             padding: UiRect::all(Val::Px(4.0)),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
-    )
+        }
+        BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98))
+    }
 }
 
-fn icon_dropdown_list_node() -> impl Bundle {
-    (
+fn icon_dropdown_list_scene() -> impl bevy_scene::Scene {
+    bsn! {
         Node {
             width: Val::Px(192.0),
             display: Display::None,
@@ -212,10 +72,52 @@ fn icon_dropdown_list_node() -> impl Bundle {
             row_gap: Val::Px(4.0),
             column_gap: Val::Px(4.0),
             padding: UiRect::all(Val::Px(4.0)),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
-    )
+        }
+        BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98))
+    }
+}
+
+fn material_icon_option_scene() -> impl bevy_scene::Scene {
+    bsn! {
+        Node {
+            width: Val::Px(default_button_size(54.0)),
+            height: Val::Px(default_button_size(54.0)),
+            border: UiRect {
+                left: Val::Px(4.0),
+                right: Val::Px(4.0),
+                top: Val::Px(5.0),
+                bottom: Val::Px(5.0),
+            },
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+        }
+        BorderColor {
+            top: {inset_border().top},
+            right: {inset_border().right},
+            bottom: {inset_border().bottom},
+            left: {inset_border().left},
+        }
+        BackgroundColor(Color::srgb(0.255, 0.251, 0.251))
+    }
+}
+
+fn material_icon_scene() -> impl bevy_scene::SceneList {
+    bsn! {
+        (
+            ImageNode::default()
+            Node {
+                width: Val::Px(default_button_size(64.0)),
+                height: Val::Px(default_button_size(64.0)),
+                position_type: PositionType::Absolute,
+                left: Val::Percent(50.0),
+                top: Val::Percent(50.0),
+                margin: UiRect {
+                    left: {Val::Px(-default_button_size(32.0))},
+                    top: {Val::Px(-default_button_size(32.0))},
+                },
+            }
+        )
+    }
 }
 
 fn spawn_dropdown_option<A>(parent: &mut ChildSpawnerCommands, label: String, action: A)
@@ -223,8 +125,50 @@ where
     A: Component + Copy,
 {
     parent
-        .spawn((menu_button(32.0), action))
-        .with_children(|button| {
-            button.spawn(label_text(label, 13.0, Color::WHITE));
-        });
+        .spawn((Button, HoverButton, action))
+        .queue_apply_scene(dropdown_option_button_scene())
+        .queue_spawn_related_scenes::<Children>(dropdown_option_label_scene(label));
+}
+
+fn dropdown_option_button_scene() -> impl bevy_scene::Scene {
+    bsn! {
+        Node {
+            height: Val::Px(default_button_size(32.0)),
+            border: UiRect {
+                left: Val::Px(3.0),
+                right: Val::Px(3.0),
+                top: Val::Px(4.0),
+                bottom: Val::Px(5.0),
+            },
+            padding: UiRect::horizontal(Val::Px(14.0)),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+        }
+        BorderColor {
+            top: {raised_border().top},
+            right: {raised_border().right},
+            bottom: {raised_border().bottom},
+            left: {raised_border().left},
+        }
+        BackgroundColor(BUTTON_BG)
+        BoxShadow::new(
+            Color::srgba(0.0, 0.0, 0.0, 0.62),
+            Val::Px(0.0),
+            Val::Px(0.0),
+            Val::Px(0.0),
+            Val::Px(4.0),
+        )
+    }
+}
+
+fn dropdown_option_label_scene(label: String) -> impl bevy_scene::SceneList {
+    bsn! {
+        (
+            Text({label})
+            TextFont {
+                font_size: {default_font_size(13.0)}
+            }
+            TextColor(Color::WHITE)
+        )
+    }
 }

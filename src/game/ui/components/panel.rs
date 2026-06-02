@@ -1,10 +1,11 @@
 use bevy::prelude::*;
+use bevy_scene::{bsn, prelude::EntityCommandsSceneExt};
 
 use super::super::types::{
     LocalizedText, PanelCloseButton, PanelPosition, PanelText, PanelTitleBar, PanelWindow,
 };
-use super::button::{raised_border, HoverButton};
-use super::text::{default_font_size, text};
+use super::button::{raised_border, HoverButton, BUTTON_BG};
+use super::text::default_font_size;
 use crate::shared::i18n::I18n;
 
 pub const PANEL_BG: Color = Color::srgb(0.192, 0.188, 0.192);
@@ -57,11 +58,22 @@ pub fn spawn_panel(
     options: PanelOptions,
     markers: impl Bundle,
     content: impl FnOnce(&mut ChildSpawnerCommands),
-) {
-    root.spawn((panel_bundle(options.width), GlobalZIndex(0), markers))
-        .with_children(|panel| {
-            panel.spawn(panel_title_bar()).with_children(|title| {
-                let mut title_text = title.spawn(panel_title_label(
+) -> Entity {
+    root.spawn((
+        GlobalZIndex(0),
+        PanelWindow,
+        PanelPosition::default(),
+        Visibility::Hidden,
+        markers,
+    ))
+    .queue_apply_scene(panel_window_scene(options.width))
+    .with_children(|panel| {
+        panel
+            .spawn((Button, PanelTitleBar))
+            .queue_apply_scene(panel_title_bar_scene())
+            .with_children(|title| {
+                let mut title_text = title.spawn_empty();
+                title_text.queue_apply_scene(panel_title_label_scene(
                     i18n.text(options.title_key),
                     options.title_size,
                 ));
@@ -73,17 +85,22 @@ pub fn spawn_panel(
                     });
                 }
                 if options.show_close {
-                    title.spawn(panel_close_button()).with_children(|button| {
-                        button.spawn(text("x", 12.0, Color::WHITE));
-                    });
+                    title
+                        .spawn((Button, HoverButton, PanelCloseButton))
+                        .queue_apply_scene(panel_title_button_scene())
+                        .queue_spawn_related_scenes::<Children>(panel_close_label_scene());
                 }
             });
-            panel.spawn(panel_content()).with_children(content);
-        });
+        panel
+            .spawn_empty()
+            .queue_apply_scene(panel_content_scene())
+            .with_children(content);
+    })
+    .id()
 }
 
-pub fn panel_bundle(width: f32) -> impl Bundle {
-    (
+pub fn panel_window_scene(width: f32) -> impl bevy_scene::Scene {
+    bsn! {
         Node {
             width: Val::Px(width),
             height: Val::Auto,
@@ -101,85 +118,69 @@ pub fn panel_bundle(width: f32) -> impl Bundle {
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(12.0),
             overflow: Overflow::scroll_y(),
-            ..default()
-        },
-        PanelWindow,
-        PanelPosition::default(),
-        Visibility::Hidden,
-        BackgroundColor(PANEL_BG),
+        }
+        BackgroundColor(PANEL_BG)
         BorderColor {
             top: PANEL_LIGHT_EDGE,
             left: PANEL_LIGHT_EDGE,
             right: PANEL_DARK_EDGE,
             bottom: PANEL_DARK_EDGE,
-        },
+        }
         BoxShadow::new(
             PANEL_SHADOW,
             Val::Px(0.0),
             Val::Px(0.0),
             Val::Px(0.0),
             Val::Px(3.0),
-        ),
+        )
         Pickable {
             should_block_lower: true,
             is_hoverable: false,
-        },
-    )
+        }
+    }
 }
 
-pub fn panel_title_bar() -> impl Bundle {
-    (
-        Button,
+pub fn panel_title_bar_scene() -> impl bevy_scene::Scene {
+    bsn! {
         Node {
             width: Val::Percent(100.0),
             min_height: Val::Px(38.0),
             padding: UiRect::horizontal(Val::Px(10.0)),
             border: UiRect {
                 bottom: Val::Px(2.0),
-                ..default()
             },
             display: Display::Flex,
             align_items: AlignItems::Center,
             justify_content: JustifyContent::SpaceBetween,
             column_gap: Val::Px(10.0),
             flex_shrink: 0.0,
-            ..default()
-        },
-        PanelTitleBar,
-        BackgroundColor(Color::NONE),
+        }
+        BackgroundColor(Color::NONE)
         BorderColor {
             bottom: PANEL_DARK_EDGE,
-            ..Default::default()
-        },
+        }
         Pickable {
             should_block_lower: true,
             is_hoverable: true,
-        },
-    )
+        }
+    }
 }
 
-pub fn panel_title_label(value: impl Into<String>, font_size: f32) -> impl Bundle {
-    (
-        Text::new(value),
+pub fn panel_title_label_scene(value: String, font_size: f32) -> impl bevy_scene::Scene {
+    bsn! {
+        Text({value})
         TextFont {
-            font_size: default_font_size(font_size * TITLE_FONT_SCALE),
-            ..default()
-        },
-        TextColor(TITLE_TEXT),
+            font_size: {default_font_size(font_size * TITLE_FONT_SCALE)}
+        }
+        TextColor(TITLE_TEXT)
         Node {
             flex_grow: 1.0,
-            ..default()
-        },
-    )
+        }
+    }
 }
 
-pub fn panel_close_button() -> impl Bundle {
-    (panel_title_button(), PanelCloseButton)
-}
-
-pub fn panel_title_button() -> impl Bundle {
-    (
-        Button,
+pub fn panel_title_button_scene() -> impl bevy_scene::Scene {
+    bsn! {
         Node {
             width: Val::Px(28.0),
             height: Val::Px(28.0),
@@ -187,50 +188,37 @@ pub fn panel_title_button() -> impl Bundle {
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
             flex_shrink: 0.0,
-            ..default()
-        },
-        HoverButton,
-        raised_border(),
-        BackgroundColor(super::button::BUTTON_BG),
-    )
+        }
+        BorderColor {
+            top: {raised_border().top},
+            right: {raised_border().right},
+            bottom: {raised_border().bottom},
+            left: {raised_border().left},
+        }
+        BackgroundColor(BUTTON_BG)
+    }
 }
 
-pub fn panel_content() -> impl Bundle {
-    (
+pub fn panel_close_label_scene() -> impl bevy_scene::SceneList {
+    bsn! {
+        (
+            Text("x")
+            TextFont {
+                font_size: {default_font_size(12.0)}
+            }
+            TextColor(Color::WHITE)
+        )
+    }
+}
+
+pub fn panel_content_scene() -> impl bevy_scene::Scene {
+    bsn! {
         Node {
             width: Val::Percent(100.0),
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(12.0),
             padding: UiRect::all(Val::Px(8.0)),
-            ..default()
-        },
-        BackgroundColor(Color::NONE),
-    )
-}
-
-pub fn absolute_text_bundle(
-    value: impl Into<String>,
-    font_size: f32,
-    color: Color,
-    left: Option<Val>,
-    right: Option<Val>,
-    top: Option<Val>,
-    bottom: Option<Val>,
-) -> impl Bundle {
-    (
-        Text::new(value),
-        TextFont {
-            font_size: default_font_size(font_size),
-            ..default()
-        },
-        TextColor(color),
-        Node {
-            position_type: PositionType::Absolute,
-            left: left.unwrap_or(Val::Auto),
-            right: right.unwrap_or(Val::Auto),
-            top: top.unwrap_or(Val::Auto),
-            bottom: bottom.unwrap_or(Val::Auto),
-            ..default()
-        },
-    )
+        }
+        BackgroundColor(Color::NONE)
+    }
 }

@@ -19,7 +19,7 @@ pub(crate) use save_list::{
     update_save_list_ui, update_text_prompt_ui,
 };
 pub(crate) use settings::{
-    settings_action_clicked, settings_menu_actions, spawn_settings_panel,
-    update_settings_dropdowns_ui, update_settings_slider_drag_ui, update_settings_sliders_ui,
-    update_settings_tabs_ui, update_settings_text_ui,
+    cleanup_closed_settings_panel, settings_action_clicked, settings_menu_actions,
+    spawn_settings_panel, update_settings_dropdowns_ui, update_settings_slider_drag_ui,
+    update_settings_sliders_ui, update_settings_tabs_ui, update_settings_text_ui,
 };

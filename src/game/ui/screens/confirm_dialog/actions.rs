@@ -9,7 +9,8 @@ use crate::game::systems::world_flow::{
     save_current_world, switch_to_edit_mode_and_rebuild, WorldMenuParams,
 };
 use crate::game::ui::{
-    CarriedItem, ConfirmDialogAction, ConfirmDialogEffect, ConfirmDialogResult, InventoryItems,
+    CarriedItem, CloseUiModal, ConfirmDialogAction, ConfirmDialogEffect, ConfirmDialogResult,
+    GameplayUiChanged, InventoryChanged, InventoryItems, OpenTextPrompt, SaveListChanged,
     TextPromptKind, UiRuntime,
 };
 use crate::shared::save::{delete_save, SaveState};
@@ -25,7 +26,12 @@ pub fn confirm_dialog_actions(
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
     mut world_menu: WorldMenuParams,
-    mut ui_runtime: ResMut<UiRuntime>,
+    ui_runtime: Res<UiRuntime>,
+    mut close_modal: MessageWriter<CloseUiModal>,
+    mut open_prompt: MessageWriter<OpenTextPrompt>,
+    mut gameplay_ui_changed: MessageWriter<GameplayUiChanged>,
+    mut inventory_changed: MessageWriter<InventoryChanged>,
+    mut save_list_changed: MessageWriter<SaveListChanged>,
     actions: Query<&ConfirmDialogAction>,
 ) {
     if !primary_click(&mut click) {
@@ -40,7 +46,7 @@ pub fn confirm_dialog_actions(
     click.propagate(false);
 
     let result = action.result();
-    ui_runtime.close_modal();
+    close_modal.write(CloseUiModal);
     let effect = match result {
         ConfirmDialogResult::Primary => dialog.primary_effect,
         ConfirmDialogResult::Secondary => {
@@ -57,6 +63,7 @@ pub fn confirm_dialog_actions(
             if save_state.selected_puzzle.as_deref() == Some(name.as_str()) {
                 save_state.select_puzzle(None, None);
             }
+            save_list_changed.write(SaveListChanged);
         }
         ConfirmDialogEffect::ResetSolution => {
             reset_current_solution(
@@ -72,6 +79,8 @@ pub fn confirm_dialog_actions(
                 &mut world_menu.pusher_state,
                 &solution_state,
             );
+            inventory_changed.write(InventoryChanged);
+            gameplay_ui_changed.write(GameplayUiChanged);
             *mode = GameMode::Paused;
         }
         ConfirmDialogEffect::ReturnToMain { save_first } => {
@@ -83,6 +92,7 @@ pub fn confirm_dialog_actions(
                     &mut solution_state,
                     &simulation,
                 );
+                save_list_changed.write(SaveListChanged);
             }
             return_to_main_menu(
                 &mut world_menu.world,
@@ -100,6 +110,8 @@ pub fn confirm_dialog_actions(
                 &mut world_menu.pusher_state,
                 &mut mode,
             );
+            save_list_changed.write(SaveListChanged);
+            gameplay_ui_changed.write(GameplayUiChanged);
         }
         ConfirmDialogEffect::SwitchToEditMode { save_first } => {
             if save_first {
@@ -110,6 +122,7 @@ pub fn confirm_dialog_actions(
                     &mut solution_state,
                     &simulation,
                 );
+                save_list_changed.write(SaveListChanged);
             }
             switch_to_edit_mode_and_rebuild(
                 &mut world_menu.world,
@@ -129,6 +142,9 @@ pub fn confirm_dialog_actions(
                 &mut world_menu.movement_influence,
                 &mut world_menu.pusher_state,
             );
+            inventory_changed.write(InventoryChanged);
+            save_list_changed.write(SaveListChanged);
+            gameplay_ui_changed.write(GameplayUiChanged);
         }
         ConfirmDialogEffect::OpenPuzzleForEdit { name } => {
             open_loaded_world_from_menu(
@@ -144,6 +160,9 @@ pub fn confirm_dialog_actions(
                 &mut simulation,
                 &mut world_menu,
             );
+            inventory_changed.write(InventoryChanged);
+            save_list_changed.write(SaveListChanged);
+            gameplay_ui_changed.write(GameplayUiChanged);
         }
         ConfirmDialogEffect::SaveCurrentWorld => {
             save_current_world(
@@ -153,9 +172,14 @@ pub fn confirm_dialog_actions(
                 &mut solution_state,
                 &simulation,
             );
+            save_list_changed.write(SaveListChanged);
+            gameplay_ui_changed.write(GameplayUiChanged);
         }
         ConfirmDialogEffect::SaveAsNewPuzzle { default_name } => {
-            ui_runtime.open_text_prompt(TextPromptKind::SaveAsNewPuzzle, &default_name);
+            open_prompt.write(OpenTextPrompt::new(
+                TextPromptKind::SaveAsNewPuzzle,
+                default_name,
+            ));
         }
     }
 }
