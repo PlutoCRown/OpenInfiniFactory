@@ -12,7 +12,7 @@ use bevy_scene::{bsn, prelude::EntityCommandsSceneExt};
 pub(crate) fn spawn_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity {
     spawn_block_panel(root, i18n, 430.0, "goal.title", UiPanelId::Goal, |panel| {
         panel
-            .spawn_empty()
+            .spawn(Visibility::Visible)
             .queue_apply_scene(panel_row_scene())
             .with_children(|row| {
                 spawn_goal_label(row, "panel.material", i18n);
@@ -26,7 +26,7 @@ pub(crate) fn spawn_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entit
 }
 
 fn spawn_goal_label(row: &mut ChildSpawnerCommands, text_key: &'static str, i18n: &I18n) {
-    row.spawn_empty()
+    row.spawn(Visibility::Visible)
         .queue_apply_scene(goal_label_scene(text_key, i18n));
 }
 

@@ -25,7 +25,7 @@ pub(crate) fn spawn_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entit
         UiPanelId::Labeler,
         |panel| {
             panel
-                .spawn_empty()
+                .spawn(Visibility::Visible)
                 .queue_apply_scene(panel_row_scene())
                 .with_children(|row| {
                     spawn_labeler_label(row, "panel.color", i18n);
@@ -36,7 +36,7 @@ pub(crate) fn spawn_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entit
 }
 
 fn spawn_labeler_label(row: &mut ChildSpawnerCommands, text_key: &'static str, i18n: &I18n) {
-    row.spawn_empty()
+    row.spawn(Visibility::Visible)
         .queue_apply_scene(labeler_label_scene(text_key, i18n));
 }
 
@@ -58,7 +58,7 @@ fn labeler_label_scene(text_key: &'static str, i18n: &I18n) -> impl bevy_scene::
 }
 
 fn spawn_labeler_color_dropdown(row: &mut ChildSpawnerCommands) {
-    row.spawn_empty()
+    row.spawn(Visibility::Visible)
         .queue_apply_scene(labeler_dropdown_container_scene())
         .with_children(|container| {
             container
@@ -69,7 +69,7 @@ fn spawn_labeler_color_dropdown(row: &mut ChildSpawnerCommands) {
                         .spawn(BlockPanelDropdownLabel(BlockPanelDropdown::LabelerColor))
                         .queue_apply_scene(labeler_dropdown_label_scene());
                     button
-                        .spawn_empty()
+                        .spawn(Visibility::Visible)
                         .queue_apply_scene(labeler_dropdown_caret_scene());
                 });
         });

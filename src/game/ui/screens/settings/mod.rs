@@ -75,6 +75,7 @@ fn spawn_settings_dropdown_row(
             PanelVisibility::SettingsTab(SettingsTab::Gameplay),
             SettingsDropdownRow(dropdown.id),
             ZIndex(300),
+            Visibility::Visible,
         ))
         .queue_apply_scene(settings_row_scene())
         .with_children(|row| {
@@ -113,9 +114,12 @@ fn spawn_settings_slider_row(
     item: SettingsItem,
 ) {
     panel
-        .spawn_empty()
+        .spawn(Visibility::Visible)
         .queue_apply_scene(settings_row_scene())
-        .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
+        .insert((
+            PanelVisibility::SettingsTab(SettingsTab::Gameplay),
+            Visibility::Visible,
+        ))
         .with_children(|row| {
             spawn_settings_label(row, i18n, text_key);
             row.spawn(transparent_node(Node {
@@ -180,7 +184,10 @@ fn spawn_settings_item(panel: &mut ChildSpawnerCommands, i18n: &I18n, item: Sett
 fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
     panel
         .spawn(scroll_container(500.0))
-        .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
+        .insert((
+            PanelVisibility::SettingsTab(SettingsTab::Gameplay),
+            Visibility::Visible,
+        ))
         .with_children(|container| {
             container
                 .spawn((
@@ -209,7 +216,10 @@ fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
 fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
     panel
         .spawn(scroll_container(360.0))
-        .insert(PanelVisibility::SettingsTab(SettingsTab::KeyBindings))
+        .insert((
+            PanelVisibility::SettingsTab(SettingsTab::KeyBindings),
+            Visibility::Visible,
+        ))
         .with_children(|container| {
             container
                 .spawn(scroll_content())

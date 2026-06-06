@@ -95,6 +95,7 @@ impl UiPanelRegistry {
 }
 
 #[derive(Component)]
+#[require(Visibility)]
 pub struct UiRoot;
 
 #[derive(Component)]
@@ -214,6 +215,7 @@ pub struct OpensPanel {
 }
 
 #[derive(Component, Clone, Copy)]
+#[require(Visibility)]
 pub struct ConfirmDialogRoot;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -391,6 +393,7 @@ impl From<UiPanelId> for UiPanelBinding {
 }
 
 #[derive(Component)]
+#[require(Visibility)]
 pub struct PanelWindow;
 
 #[derive(Component, Default)]
@@ -400,6 +403,7 @@ pub struct PanelPosition {
 }
 
 #[derive(Component)]
+#[require(Visibility)]
 pub struct PanelTitleBar;
 
 #[derive(Component)]
@@ -498,9 +502,11 @@ pub struct SettingsSliderKnob(pub SettingsField);
 pub struct SettingsDropdownLabel(pub SettingsDropdownId);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
+#[require(Visibility)]
 pub struct SettingsDropdownList(pub SettingsDropdownId);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
+#[require(Visibility)]
 pub struct SettingsDropdownRow(pub SettingsDropdownId);
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -776,12 +782,15 @@ pub struct SaveListButton(pub WorldEntryMode);
 pub struct SaveListCloseButton;
 
 #[derive(Component)]
+#[require(Visibility)]
 pub struct SaveListPanel(pub WorldEntryMode);
 
 #[derive(Component, Clone, Copy)]
+#[require(Visibility)]
 pub struct SaveListPuzzleColumn(pub WorldEntryMode);
 
 #[derive(Component, Clone, Copy)]
+#[require(Visibility)]
 pub struct SaveListSolutionColumn(pub WorldEntryMode);
 
 #[derive(Component)]
@@ -807,6 +816,7 @@ pub enum TextPromptAction {
 }
 
 #[derive(Component)]
+#[require(Visibility)]
 pub struct TextPromptRoot;
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
@@ -999,6 +1009,7 @@ pub enum BlockPanelDropdown {
 pub struct BlockPanelDropdownLabel(pub BlockPanelDropdown);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
+#[require(Visibility)]
 pub struct BlockPanelDropdownList(pub BlockPanelDropdown);
 
 #[derive(Component, Clone, Copy, Default, Eq, PartialEq)]

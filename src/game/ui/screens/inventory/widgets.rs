@@ -14,9 +14,9 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
         .observe(inventory_slot_clicks)
         .queue_apply_scene(inventory_slot_visual_scene())
         .with_children(|slot| {
-            slot.spawn_empty()
+            slot.spawn(Visibility::Visible)
                 .queue_apply_scene(inventory_slot_icon_scene());
-            slot.spawn_empty()
+            slot.spawn(Visibility::Visible)
                 .queue_apply_scene(inventory_slot_label_scene());
         });
 }

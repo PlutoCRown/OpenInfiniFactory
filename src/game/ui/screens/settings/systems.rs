@@ -187,12 +187,7 @@ pub fn update_settings_dropdowns_ui(
         >,
     )>,
     mut dropdown_lists: Query<
-        (
-            &SettingsDropdownList,
-            &mut Node,
-            &mut Visibility,
-            &ComputedNode,
-        ),
+        (&SettingsDropdownList, &mut Node, &ComputedNode),
         (Without<SettingsSliderFill>, Without<SettingsSliderKnob>),
     >,
     triggers: Query<(&SettingsAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
@@ -235,14 +230,9 @@ pub fn update_settings_dropdowns_ui(
         .map(|window| Vec2::new(window.width(), window.height()))
         .unwrap_or(Vec2::ZERO);
     let scale = settings_ui_transform_scale(window, ui_scale.0);
-    for (list, mut style, mut visibility, list_node) in &mut dropdown_lists {
+    for (list, mut style, list_node) in &mut dropdown_lists {
         let open = open_dropdown.0 == Some(list.0);
         style.display = if open { Display::Flex } else { Display::None };
-        *visibility = if open {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
         if !open {
             continue;
         }

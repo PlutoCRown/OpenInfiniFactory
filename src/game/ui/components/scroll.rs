@@ -2,12 +2,14 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
 #[derive(Component)]
+#[require(Visibility)]
 pub struct ScrollContainer {
     pub offset: f32,
     pub max_offset: f32,
 }
 
 #[derive(Component)]
+#[require(Visibility)]
 pub struct ScrollContent;
 
 pub fn scroll_container(height: f32) -> (impl Bundle, ScrollContainer) {

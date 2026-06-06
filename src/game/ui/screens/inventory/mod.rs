@@ -67,7 +67,7 @@ pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> En
         ),
         |panel| {
             panel
-                .spawn_empty()
+                .spawn(Visibility::Visible)
                 .queue_apply_scene(inventory_grid_scene())
                 .with_children(|grid| {
                     for index in 0..BACKPACK_SLOTS {
@@ -91,9 +91,9 @@ pub fn spawn_carried_label(root: &mut ChildSpawnerCommands) {
     ))
     .queue_apply_scene(carried_item_preview_scene())
     .with_children(|icon| {
-        icon.spawn_empty()
+        icon.spawn(Visibility::Visible)
             .queue_apply_scene(carried_item_icon_scene());
-        icon.spawn_empty()
+        icon.spawn(Visibility::Visible)
             .queue_apply_scene(carried_item_label_scene());
     });
 }
@@ -107,7 +107,7 @@ pub fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
     .queue_apply_scene(inventory_tooltip_scene())
     .with_children(|tooltip| {
         tooltip
-            .spawn_empty()
+            .spawn(Visibility::Visible)
             .queue_apply_scene(inventory_tooltip_text_scene());
     });
 }

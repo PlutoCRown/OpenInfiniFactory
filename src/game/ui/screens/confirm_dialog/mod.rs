@@ -21,7 +21,7 @@ pub fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
         GlobalZIndex(0),
         PanelWindow,
         PanelPosition::default(),
-        Visibility::Hidden,
+        Visibility::Visible,
         PanelVisibility::ConfirmDialog,
         ConfirmDialogRoot,
     ))
@@ -36,14 +36,14 @@ pub fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
                     .queue_apply_scene(confirm_dialog_title_scene());
             });
         panel
-            .spawn_empty()
+            .spawn(Visibility::Visible)
             .queue_apply_scene(panel_content_scene())
             .with_children(|panel| {
                 panel
                     .spawn(PanelText(PanelTextKind::ConfirmMessage))
                     .queue_apply_scene(confirm_dialog_message_scene());
                 panel
-                    .spawn_empty()
+                    .spawn(Visibility::Visible)
                     .queue_apply_scene(confirm_dialog_actions_row_scene())
                     .with_children(|row| {
                         spawn_confirm_dialog_button(

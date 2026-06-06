@@ -21,7 +21,7 @@ pub(crate) fn spawn_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entit
         UiPanelId::Teleport,
         |panel| {
             panel
-                .spawn_empty()
+                .spawn(Visibility::Visible)
                 .queue_apply_scene(panel_row_scene())
                 .with_children(|row| {
                     spawn_teleport_label(row, "panel.name", i18n);
@@ -32,7 +32,7 @@ pub(crate) fn spawn_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entit
                     .queue_apply_scene(teleport_name_text_scene());
                 });
             panel
-                .spawn_empty()
+                .spawn(Visibility::Visible)
                 .queue_apply_scene(panel_row_scene())
                 .with_children(|row| {
                     spawn_teleport_label(row, "panel.pair", i18n);
@@ -43,7 +43,7 @@ pub(crate) fn spawn_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entit
 }
 
 fn spawn_teleport_label(row: &mut ChildSpawnerCommands, text_key: &'static str, i18n: &I18n) {
-    row.spawn_empty()
+    row.spawn(Visibility::Visible)
         .queue_apply_scene(teleport_label_scene(text_key, i18n));
 }
 
@@ -75,7 +75,7 @@ fn teleport_name_text_scene() -> impl bevy_scene::Scene {
 }
 
 fn spawn_teleport_pair_dropdown(row: &mut ChildSpawnerCommands) {
-    row.spawn_empty()
+    row.spawn(Visibility::Visible)
         .queue_apply_scene(teleport_dropdown_container_scene())
         .with_children(|container| {
             container
@@ -86,7 +86,7 @@ fn spawn_teleport_pair_dropdown(row: &mut ChildSpawnerCommands) {
                         .spawn(BlockPanelDropdownLabel(BlockPanelDropdown::TeleportPair))
                         .queue_apply_scene(teleport_dropdown_label_scene());
                     button
-                        .spawn_empty()
+                        .spawn(Visibility::Visible)
                         .queue_apply_scene(teleport_dropdown_caret_scene());
                 });
         });

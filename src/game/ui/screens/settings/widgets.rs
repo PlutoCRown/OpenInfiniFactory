@@ -63,7 +63,7 @@ pub(super) fn spawn_settings_dropdown(
     dropdown: SettingsDropdownId,
 ) {
     parent
-        .spawn_empty()
+        .spawn(Visibility::Visible)
         .queue_apply_scene(settings_dropdown_container_scene())
         .with_children(|container| {
             container
@@ -78,7 +78,7 @@ pub(super) fn spawn_settings_dropdown(
                         .spawn(SettingsDropdownLabel(dropdown))
                         .queue_apply_scene(settings_dropdown_label_scene());
                     button
-                        .spawn_empty()
+                        .spawn(Visibility::Visible)
                         .queue_apply_scene(settings_dropdown_caret_scene());
                 });
         });
@@ -105,7 +105,7 @@ pub(super) fn spawn_settings_dropdown_list(
             BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
             GlobalZIndex(20_000),
             SettingsDropdownList(dropdown),
-            Visibility::Hidden,
+            Visibility::Visible,
         ))
         .with_children(|list| {
             for (label, action) in options {

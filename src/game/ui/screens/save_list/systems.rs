@@ -549,7 +549,7 @@ fn save_list_button_selected(
 pub fn update_text_prompt_ui(
     ui_runtime: Res<UiRuntime>,
     i18n: Res<I18n>,
-    mut roots: Query<(&mut Node, &mut Visibility), With<TextPromptRoot>>,
+    mut roots: Query<&mut Node, With<TextPromptRoot>>,
     mut texts: ParamSet<(
         Query<(&TextPromptText, &mut Text)>,
         Query<(&TextPromptAction, &Children)>,
@@ -580,16 +580,11 @@ pub fn update_text_prompt_ui(
     }
 
     let visible = ui_runtime.text_prompt().is_some();
-    for (mut node, mut visibility) in &mut roots {
+    for mut node in &mut roots {
         node.display = if visible {
             Display::Flex
         } else {
             Display::None
-        };
-        *visibility = if visible {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
         };
     }
     let Some(prompt) = ui_runtime.text_prompt() else {

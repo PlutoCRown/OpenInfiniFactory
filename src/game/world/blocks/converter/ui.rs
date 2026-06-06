@@ -29,7 +29,7 @@ pub(crate) fn spawn_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entit
                     );
                 });
             panel
-                .spawn_empty()
+                .spawn(Visibility::Visible)
                 .queue_apply_scene(panel_row_scene())
                 .with_children(|row| {
                     spawn_converter_label(row, "panel.output", i18n);
@@ -44,7 +44,7 @@ pub(crate) fn spawn_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entit
 }
 
 fn spawn_converter_label(row: &mut ChildSpawnerCommands, text_key: &'static str, i18n: &I18n) {
-    row.spawn_empty()
+    row.spawn(Visibility::Visible)
         .queue_apply_scene(converter_label_scene(text_key, i18n));
 }
 

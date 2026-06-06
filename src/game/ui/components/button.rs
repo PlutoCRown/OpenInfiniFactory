@@ -7,6 +7,7 @@ pub const BUTTON_LIGHT_EDGE: Color = Color::srgb(0.89, 0.89, 0.89);
 pub const BUTTON_DARK_EDGE: Color = Color::srgb(0.02, 0.02, 0.02);
 
 #[derive(Component, Clone, Default)]
+#[require(Visibility)]
 pub struct HoverButton;
 
 pub fn styled_button(

@@ -35,7 +35,7 @@ pub fn spawn_demo_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entity 
         UiPanelBinding(PANEL_DEMO),
         |panel| {
             panel
-                .spawn_empty()
+                .spawn(Visibility::Visible)
                 .queue_spawn_related_scenes::<Children>(demo_panel_scene());
         },
     )

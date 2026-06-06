@@ -71,7 +71,7 @@ pub fn spawn_panel(
         GlobalZIndex(0),
         PanelWindow,
         PanelPosition::default(),
-        Visibility::Hidden,
+        Visibility::Visible,
         markers,
     ))
     .queue_apply_scene(panel_window_scene(options.width))

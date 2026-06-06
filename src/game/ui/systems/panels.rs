@@ -270,10 +270,7 @@ pub fn update_panel_visibility(
             (&UiPanelBinding, &mut Node),
             (Without<PanelVisibility>, Without<PauseMenuAction>),
         >,
-        Query<
-            (&Node, &mut Visibility, &mut PanelPosition),
-            (With<PanelWindow>, Without<TextPromptRoot>),
-        >,
+        Query<(&Node, &mut PanelPosition), (With<PanelWindow>, Without<TextPromptRoot>)>,
     )>,
 ) {
     let _ = lifecycle.dirty();
@@ -281,9 +278,8 @@ pub fn update_panel_visibility(
     let active_panel = ui_runtime.active_key();
     for (visibility, binding, mut style) in &mut nodes.p0() {
         let stack_visible = binding.is_none_or(|binding| active_panel == Some(binding.0));
-        style.display = display_for(
-            stack_visible && panel_visible(*visibility, *mode, *settings_tab, &ui_runtime),
-        );
+        let visible = stack_visible && panel_visible(*visibility, *mode, *settings_tab, &ui_runtime);
+        style.display = display_for(visible);
     }
 
     for (action, mut style) in &mut nodes.p1() {
@@ -302,15 +298,10 @@ pub fn update_panel_visibility(
         style.display = display_for(active_panel == Some(binding.0));
     }
 
-    for (style, mut visibility, mut position) in &mut nodes.p3() {
+    for (style, mut position) in &mut nodes.p3() {
         if style.display == Display::None {
             position.centered = false;
             position.dragged = false;
-            *visibility = Visibility::Hidden;
-        } else if position.centered || position.dragged {
-            *visibility = Visibility::Visible;
-        } else {
-            *visibility = Visibility::Hidden;
         }
     }
 }
@@ -487,12 +478,7 @@ fn screen_to_ui_delta(delta: Vec2, ui_scale: f32) -> Vec2 {
 pub fn center_new_panels(
     windows: Query<&Window, With<PrimaryWindow>>,
     mut panels: Query<
-        (
-            &mut Node,
-            &ComputedNode,
-            &mut PanelPosition,
-            &mut Visibility,
-        ),
+        (&mut Node, &ComputedNode, &mut PanelPosition),
         With<PanelWindow>,
     >,
 ) {
@@ -501,7 +487,7 @@ pub fn center_new_panels(
     };
     let viewport = Vec2::new(window.width(), window.height());
 
-    for (mut style, node, mut position, mut visibility) in &mut panels {
+    for (mut style, node, mut position) in &mut panels {
         if style.display == Display::None || position.dragged {
             continue;
         }
@@ -517,7 +503,6 @@ pub fn center_new_panels(
         style.bottom = Val::Auto;
         style.margin = UiRect::ZERO;
         position.centered = true;
-        *visibility = Visibility::Visible;
     }
 }
 

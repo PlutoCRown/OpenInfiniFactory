@@ -18,7 +18,7 @@ pub fn spawn_block_panel_dropdown_list<A>(
         .spawn((
             BlockPanelDropdownList(dropdown),
             GlobalZIndex(20_000),
-            Visibility::Hidden,
+            Visibility::Visible,
         ))
         .queue_apply_scene(dropdown_list_scene(230.0))
         .with_children(|list| {
@@ -39,7 +39,7 @@ pub fn spawn_material_icon_dropdown_list<A>(
         .spawn((
             BlockPanelDropdownList(dropdown),
             GlobalZIndex(20_000),
-            Visibility::Hidden,
+            Visibility::Visible,
         ))
         .queue_apply_scene(icon_dropdown_list_scene())
         .with_children(|list| {

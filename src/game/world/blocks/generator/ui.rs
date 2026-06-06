@@ -18,17 +18,17 @@ pub(crate) fn spawn_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entit
         UiPanelId::Generator,
         |panel| {
             panel
-                .spawn_empty()
+                .spawn(Visibility::Visible)
                 .queue_apply_scene(panel_row_scene())
                 .with_children(|row| {
                     spawn_generator_label(row, "panel.period", i18n);
                     spawn_generator_button(row, BlockEditAction::PeriodDown, "button.period_down");
-                    row.spawn_empty()
+                    row.spawn(Visibility::Visible)
                         .queue_spawn_related_scenes::<Children>(generator_period_text_scene());
                     spawn_generator_button(row, BlockEditAction::PeriodUp, "button.period_up");
                 });
             panel
-                .spawn_empty()
+                .spawn(Visibility::Visible)
                 .queue_apply_scene(panel_row_scene())
                 .with_children(|row| {
                     spawn_generator_label(row, "panel.material", i18n);
@@ -43,7 +43,7 @@ pub(crate) fn spawn_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) -> Entit
 }
 
 fn spawn_generator_label(row: &mut ChildSpawnerCommands, text_key: &'static str, i18n: &I18n) {
-    row.spawn_empty()
+    row.spawn(Visibility::Visible)
         .queue_apply_scene(generator_label_scene(text_key, i18n));
 }
 

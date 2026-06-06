@@ -50,7 +50,7 @@ fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n, entry: WorldEnt
             GlobalZIndex(0),
             PanelWindow,
             PanelPosition::default(),
-            Visibility::Hidden,
+            Visibility::Visible,
             PanelVisibility::GameMode(GameMode::SaveListMain),
             UiPanelBinding(save_list_key(entry)),
             SaveListPanel(entry),
@@ -82,11 +82,11 @@ fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n, entry: WorldEnt
                         .queue_spawn_related_scenes::<Children>(panel_close_label_scene());
                 });
             panel
-                .spawn_empty()
+                .spawn(Visibility::Visible)
                 .queue_apply_scene(panel_content_scene())
                 .with_children(|panel| {
                     panel
-                        .spawn_empty()
+                        .spawn(Visibility::Visible)
                         .queue_apply_scene(save_columns_row_scene())
                         .with_children(|columns| {
                             spawn_save_column(
@@ -209,7 +209,7 @@ fn spawn_text_prompt(root: &mut ChildSpawnerCommands) {
         GlobalZIndex(30_000),
         PanelWindow,
         PanelPosition::default(),
-        Visibility::Hidden,
+        Visibility::Visible,
         TextPromptRoot,
     ))
     .queue_apply_scene(panel_window_scene(420.0))
@@ -223,7 +223,7 @@ fn spawn_text_prompt(root: &mut ChildSpawnerCommands) {
                     .queue_apply_scene(panel_title_label_scene(String::new(), 20.0));
             });
         panel
-            .spawn_empty()
+            .spawn(Visibility::Visible)
             .queue_apply_scene(panel_content_scene())
             .with_children(|content| {
                 content
