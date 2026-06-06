@@ -2,7 +2,7 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-pub use crate::game::block_editing::{BlockPanelAction, OpenBlockPanelDropdown};
+pub use crate::game::block_editing::OpenBlockPanelDropdown;
 pub use crate::game::ui::core::{
     ConfirmButtonId, InlineTextEditState, PanelCloseButton, PanelDragState, PanelPosition,
     PanelTitleBar, PanelVisibility, PanelWindow, TextPromptRoot, TextPromptState, UiActionLabel,
@@ -20,14 +20,8 @@ pub use crate::game::ui::features::settings::types::{
     SettingsValueText, GAMEPLAY_SETTINGS,
 };
 
-impl UiActionLabel for BlockPanelAction {
-    fn label_key(self) -> &'static str {
-        BlockPanelAction::label_key(self)
-    }
-}
-
 use crate::game::state::BuilderMode;
-use crate::game::world::blocks::{edit_blocks, BlockKind, PLAY_BLOCKS};
+use crate::game::blocks::{edit_blocks, BlockKind, PLAY_BLOCKS};
 use crate::shared::config::ActionKeyName;
 
 pub const HOTBAR_SLOTS: usize = 9;

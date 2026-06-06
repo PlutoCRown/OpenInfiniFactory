@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::collections::HashSet;
 
-use crate::game::world::blocks::{BlockData, BlockKind, MarkerBehavior};
+use crate::game::blocks::{BlockData, BlockKind, MarkerBehavior};
 use crate::game::world::grid::WorldBlocks;
 
 pub fn refresh_static_generated_markers(world: &mut WorldBlocks) {

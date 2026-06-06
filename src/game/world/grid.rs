@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::game::world::blocks::{BlockData, BlockKind, MaterialKind, StampColor};
+use crate::game::blocks::{BlockData, BlockKind, MaterialKind, StampColor};
 use crate::game::world::direction::Facing;
 
 pub const REACH: f32 = 12.0;
@@ -139,7 +139,7 @@ pub enum MaterialFaceMarkSource {
 impl Default for GeneratorSettings {
     fn default() -> Self {
         Self {
-            period: crate::game::world::blocks::DEFAULT_GENERATOR_PERIOD,
+            period: crate::game::blocks::DEFAULT_GENERATOR_PERIOD,
             material: MaterialKind::Basic,
         }
     }

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::game::world::blocks::BlockKind;
+use crate::game::blocks::BlockKind;
 use crate::game::world::grid::WorldBlocks;
 
 use super::signal_offsets;

@@ -1,11 +1,11 @@
 pub mod access;
-mod components;
+pub(crate) mod components;
 pub mod core;
 pub mod features;
 mod layout;
 mod screens;
 mod systems;
-mod types;
+pub(crate) mod types;
 mod widgets;
 
 use bevy::prelude::*;

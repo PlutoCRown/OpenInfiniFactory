@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 use crate::game::world::animation::PusherAnimation;
-use crate::game::world::blocks::{BlockKind, MovementRule};
+use crate::game::blocks::{BlockKind, MovementRule};
 use crate::game::world::grid::WorldBlocks;
 
 use super::factory_activity::FactoryStructureState;

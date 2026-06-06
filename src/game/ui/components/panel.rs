@@ -83,7 +83,7 @@ pub fn spawn_panel_with_title_marker(
                     options.title_size,
                 ));
                 if options.dynamic_title {
-                    title_text.insert(crate::game::block_editing::BlockPanelTitle);
+                    // Prefer spawn_panel_with_title_marker for runtime titles.
                 } else {
                     title_text.insert(title_marker);
                 }

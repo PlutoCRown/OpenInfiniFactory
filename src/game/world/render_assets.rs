@@ -4,7 +4,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
-use crate::game::world::blocks::{
+use crate::game::blocks::{
     all_blocks, BlockKind, BlockShape, BlockTexture, ModelMaterial, ModelMesh, StampColor,
     BLOCK_SIZE,
 };

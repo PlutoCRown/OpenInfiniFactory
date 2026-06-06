@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::collections::HashSet;
 
-use crate::game::world::blocks::{
+use crate::game::blocks::{
     BlockData, BlockKind, MaterialDestroyer, MaterialLabeler, MaterialSource,
 };
 use crate::game::world::direction::Facing;

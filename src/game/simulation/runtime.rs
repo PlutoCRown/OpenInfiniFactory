@@ -8,7 +8,7 @@ use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     AnimationTiming, BlockAnimation, BlockAnimationKind, SIMULATION_TURN_SECONDS,
 };
-use crate::game::world::blocks::BlockData;
+use crate::game::blocks::BlockData;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_pending_generated_previews, despawn_world,

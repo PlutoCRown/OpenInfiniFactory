@@ -6,7 +6,6 @@ pub mod settings;
 
 use bevy::prelude::*;
 
-use block_panels::inline_text_edit_input;
 use save::text_prompt_input;
 use settings::settings_menu_actions;
 
@@ -39,23 +38,11 @@ impl Plugin for UiFeaturesPlugin {
                 dispatch_ui_action,
                 dispatch_ui_host_completions,
                 settings_menu_actions,
-                inline_text_edit_input,
             )
                 .chain()
                 .in_set(UiAccessScope)
                 .after(PerfScope::Input)
                 .before(PerfScope::Menus),
-        )
-        .add_systems(
-            Update,
-            (
-                block_panels::update_active_block_panel,
-                block_panels::update_block_panel_dropdowns,
-            )
-                .chain()
-                .in_set(UiAccessScope)
-                .after(PerfScope::Animation)
-                .before(PerfScope::Ui),
         );
     }
 }

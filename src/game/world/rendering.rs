@@ -15,7 +15,7 @@ use crate::game::world::animation::{
     rotate_world_pos_y, AnimatedBlock, AnimatedPusher, AnimationEasing, AnimationTiming,
     BlockAnimation, BlockAnimationKind, PusherAnimation, WeldSpark,
 };
-use crate::game::world::blocks::{
+use crate::game::blocks::{
     edit_blocks, BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
     PLAY_BLOCKS,
 };
@@ -915,7 +915,7 @@ fn spawn_block_model(
         transform.translation += origin;
     }
 
-    let mut entity = if data.kind == crate::game::world::blocks::BlockKind::Wire
+    let mut entity = if data.kind == crate::game::blocks::BlockKind::Wire
         || matches!(data.kind.model(), BlockModel::PartsOnly(_))
     {
         commands.spawn((transform, Visibility::default()))
@@ -923,7 +923,7 @@ fn spawn_block_model(
         commands.spawn((
             Mesh3d(assets.block_mesh(data.kind)),
             MeshMaterial3d(
-                assets.model_material(crate::game::world::blocks::ModelMaterial::Platform),
+                assets.model_material(crate::game::blocks::ModelMaterial::Platform),
             ),
             transform,
         ))
@@ -1042,7 +1042,7 @@ fn spawn_block_model(
                 }
             }
 
-            if data.kind == crate::game::world::blocks::BlockKind::Wire
+            if data.kind == crate::game::blocks::BlockKind::Wire
                 && connected_offsets.is_empty()
             {
                 let mut child =
@@ -1084,7 +1084,7 @@ fn spawn_block_model(
 fn spawn_generator_material_preview(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
-    material: crate::game::world::blocks::MaterialKind,
+    material: crate::game::blocks::MaterialKind,
     icon_render: Option<(Vec3, &RenderLayers)>,
 ) {
     let Some(kind) = BlockKind::material_block_kind(material) else {
@@ -1155,8 +1155,8 @@ fn spawn_model_parts(
         }
         if matches!(
             part.mesh,
-            crate::game::world::blocks::ModelMesh::PusherHead
-                | crate::game::world::blocks::ModelMesh::RodZ
+            crate::game::blocks::ModelMesh::PusherHead
+                | crate::game::blocks::ModelMesh::RodZ
         ) {
             if let Some(pusher_animation) = pusher_animation {
                 child.insert(AnimatedPusher::new(

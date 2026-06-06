@@ -20,7 +20,7 @@ use crate::game::ui::{
 };
 use crate::game::ui::UiHost;
 use crate::game::world::animation::BlockAnimation;
-use crate::game::world::blocks::{BlockData, BlockKind};
+use crate::game::blocks::{BlockData, BlockKind};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
@@ -749,9 +749,9 @@ fn rotate_block_at(
 }
 
 fn rotate_facing(
-    facing: crate::game::world::blocks::Facing,
+    facing: crate::game::blocks::Facing,
     reverse: bool,
-) -> crate::game::world::blocks::Facing {
+) -> crate::game::blocks::Facing {
     if reverse {
         facing.rotate_counter()
     } else {

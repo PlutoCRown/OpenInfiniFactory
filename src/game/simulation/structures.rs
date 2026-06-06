@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAnimation};
-use crate::game::world::blocks::{BlockData, MovementRule};
+use crate::game::blocks::{BlockData, MovementRule};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks};
 
@@ -657,8 +657,8 @@ fn hard_pusher_head_blocked_below(
         };
         if !matches!(
             block.kind,
-            crate::game::world::blocks::BlockKind::Pusher
-                | crate::game::world::blocks::BlockKind::Blocker
+            crate::game::blocks::BlockKind::Pusher
+                | crate::game::blocks::BlockKind::Blocker
         ) {
             return false;
         }

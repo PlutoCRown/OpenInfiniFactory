@@ -2,7 +2,6 @@ use bevy::ecs::system::SystemParam;
 use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 
-use crate::game::block_editing::BlockPanelAction;
 use crate::game::ui::core::confirm_dialog::{
     ConfirmDialogState, ConfirmProps, ConfirmResult, PendingConfirmHandler,
 };
@@ -60,7 +59,6 @@ pub enum UiActionKind {
     Menu(MenuAction),
     SaveList(SaveListAction),
     Settings(SettingsAction),
-    BlockPanel(BlockPanelAction),
     InventorySlot {
         slot: InventorySlot,
         button: PointerButton,
@@ -415,7 +413,6 @@ pub fn dispatch_ui_action(
             UiActionKind::Menu(_)
             | UiActionKind::SaveList(_)
             | UiActionKind::Settings(_)
-            | UiActionKind::BlockPanel(_)
             | UiActionKind::InventorySlot { .. } => {}
             UiActionKind::PanelClose => {}
         }

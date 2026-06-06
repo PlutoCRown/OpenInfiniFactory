@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::game::world::blocks::{BlockData, PersistentLayer};
+use crate::game::blocks::{BlockData, PersistentLayer};
 use crate::game::world::grid::{BlockSettings, WorldBlocks};
 use crate::game::{
     state::BuilderMode,
@@ -600,7 +600,7 @@ pub fn normalized_save_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::game::world::blocks::{BlockData, BlockKind, Facing, MaterialKind, StampColor};
+    use crate::game::blocks::{BlockData, BlockKind, Facing, MaterialKind, StampColor};
     use crate::game::world::grid::{
         ConverterMode, ConverterSettings, GeneratorSettings, LabelerSettings, TeleportSettings,
     };

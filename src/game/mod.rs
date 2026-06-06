@@ -1,4 +1,5 @@
 pub mod block_editing;
+pub mod blocks;
 pub mod cameras;
 pub mod player;
 pub mod session;
@@ -45,7 +46,7 @@ pub const GRAVITY_SCALE_DEFAULT: f32 = 1.2;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        world::blocks::assert_registry_consistent();
+        blocks::assert_registry_consistent();
 
         let mut config = load_config();
         config.ui_scale = config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);

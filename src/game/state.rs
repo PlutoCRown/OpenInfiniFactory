@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game::world::blocks::BlockData;
+use crate::game::blocks::BlockData;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::TargetHit;
 

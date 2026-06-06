@@ -3,7 +3,7 @@ use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
-use crate::game::world::blocks::BlockTexture;
+use crate::game::blocks::BlockTexture;
 
 pub fn block_texture(kind: BlockTexture) -> Image {
     const SIZE: u32 = 32;
