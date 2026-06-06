@@ -21,7 +21,7 @@ pub use world_access::PlayingWorldParams;
 
 use bevy::prelude::*;
 
-use crate::game::simulation::factory_activity::FactoryStructureState;
+use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{PlayingUiState, StartMenuScreen, UiPanelId};
 use crate::game::systems::debug::DebugPanel;
 use crate::game::systems::debug::DebugState;
@@ -87,7 +87,7 @@ pub fn rebuild_playing_world(
     world: Res<WorldBlocks>,
     render_assets: Res<WorldRenderAssets>,
     debug: Res<DebugState>,
-    mut factory_structures: ResMut<FactoryStructureState>,
+    mut structure_state: ResMut<StructureState>,
 ) {
     crate::game::world::rendering::rebuild_world_on_enter(
         &mut commands,
@@ -95,7 +95,7 @@ pub fn rebuild_playing_world(
         &world,
         &render_assets,
         &debug,
-        &mut factory_structures,
+        &mut structure_state,
     );
 }
 

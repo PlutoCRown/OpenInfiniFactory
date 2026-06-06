@@ -19,7 +19,7 @@ use crate::game::world::rendering::{
 use super::behaviors::{
     material_source_generation, run_material_behavior_phase, run_weld_behavior_phase,
 };
-use super::factory_activity::FactoryStructureState;
+use super::structure_state::StructureState;
 use super::gravity::mark_gravity_phase;
 use super::markers::{run_powered_marker_phase, run_static_marker_phase};
 use super::movement::{blocker_animations, mark_structure_movement_phase, PusherState};
@@ -96,7 +96,7 @@ pub fn run_turn(
     render_assets: &WorldRenderAssets,
     animation_duration: f32,
     debug: &DebugState,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     stats: &mut SimulationStepStats,
@@ -110,6 +110,7 @@ pub fn run_turn(
     let generated_animations = place_ready_generated_materials(world, pending_generated, turn);
     run_static_marker_phase(world);
     let weld_sparks = run_weld_behavior_phase(world);
+    structure_state.refresh_material_structures(world);
     sample.prep_ms = mark_elapsed_ms(&mut mark);
 
     signal_cache.refresh(world);
@@ -122,7 +123,7 @@ pub fn run_turn(
     let hard_pusher_head_occupancy = pusher_state.hard_head_occupancy(world);
     let mut movement_plan = mark_gravity_phase(
         world,
-        factory_structures,
+        structure_state,
         &actuating_devices,
         &hard_pusher_head_occupancy,
     );
@@ -132,12 +133,12 @@ pub fn run_turn(
     sample.marker_before_move_ms = mark_elapsed_ms(&mut mark);
 
     let device_movement_plan =
-        mark_structure_movement_phase(world, &powered_devices, factory_structures, pusher_state);
+        mark_structure_movement_phase(world, &powered_devices, structure_state, pusher_state);
     movement_plan = merge_structure_movement_plan(
         movement_plan,
         device_movement_plan,
         world,
-        factory_structures,
+        structure_state,
         movement_influence,
     );
     sample.movement_mark_ms = mark_elapsed_ms(&mut mark);
@@ -145,7 +146,7 @@ pub fn run_turn(
     let (mut animations, pusher_animations) = execute_structure_moves_with_pushers(
         world,
         movement_plan,
-        factory_structures,
+        structure_state,
         movement_influence,
     );
     merge_generated_animations(&mut animations, generated_animations);
@@ -171,7 +172,7 @@ pub fn run_turn(
     let drill_sparks = run_material_behavior_phase(
         world,
         &powered_devices,
-        factory_structures,
+        structure_state,
         pending_generated,
         turn + 1,
     );
@@ -192,7 +193,7 @@ pub fn run_turn(
         &pusher_animations,
         AnimationTiming::simulation(animation_duration),
         debug,
-        factory_structures,
+        structure_state,
         &render_powered_wires,
     );
     spawn_weld_sparks(commands, render_assets, &weld_sparks);
@@ -217,7 +218,7 @@ pub fn tick_simulation(
     pending_previews: Query<Entity, With<PendingGeneratedPreview>>,
     render_assets: Option<Res<WorldRenderAssets>>,
     debug: Res<DebugState>,
-    mut factory_structures: ResMut<FactoryStructureState>,
+    mut structure_state: ResMut<StructureState>,
     mut movement_influence: ResMut<MovementInfluenceCache>,
     mut pusher_state: ResMut<PusherState>,
 ) {
@@ -254,7 +255,7 @@ pub fn tick_simulation(
             &render_assets,
             SIMULATION_TURN_SECONDS,
             &debug,
-            &mut factory_structures,
+            &mut structure_state,
             &mut movement_influence,
             &mut pusher_state,
             &mut sim_stats,
@@ -288,7 +289,7 @@ pub fn tick_simulation(
             &render_assets,
             SIMULATION_TURN_SECONDS / simulation.speed.max(0.001),
             &debug,
-            &mut factory_structures,
+            &mut structure_state,
             &mut movement_influence,
             &mut pusher_state,
             &mut sim_stats,

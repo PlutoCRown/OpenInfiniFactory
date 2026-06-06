@@ -2,21 +2,19 @@ use crate::game::world::grid::WorldBlocks;
 use bevy::prelude::*;
 use std::collections::HashSet;
 
-use super::factory_activity::FactoryStructureState;
-use super::structures::{factory_gravity_moves, material_gravity_moves, StructureMove};
+use super::structure_state::StructureState;
+use super::structures::{gravity_moves, StructureMove};
 
 pub(super) fn mark_gravity_phase(
     world: &WorldBlocks,
-    factory_structures: &FactoryStructureState,
+    structures: &mut StructureState,
     skip_factory_positions: &HashSet<IVec3>,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> Vec<StructureMove> {
-    let mut moves = material_gravity_moves(world, factory_structures, hard_pusher_head_occupancy);
-    moves.extend(factory_gravity_moves(
+    gravity_moves(
         world,
-        factory_structures,
+        structures,
         skip_factory_positions,
         hard_pusher_head_occupancy,
-    ));
-    moves
+    )
 }

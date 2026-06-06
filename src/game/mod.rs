@@ -80,7 +80,7 @@ impl Plugin for GamePlugin {
             .insert_resource(simulation::runtime::SignalNetworkCache::default())
             .insert_resource(simulation::runtime::SimulationStepStats::default())
             .insert_resource(simulation::runtime::PendingGeneratedMaterials::default())
-            .insert_resource(simulation::factory_activity::FactoryStructureState::default())
+            .insert_resource(simulation::structure_state::StructureState::default())
             .insert_resource(simulation::movement::PusherState::default())
             .insert_resource(simulation::structures::MovementInfluenceCache::default())
             .insert_resource(settings)

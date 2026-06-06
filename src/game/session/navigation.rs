@@ -42,7 +42,7 @@ pub fn handle_exit_to_main_menu(
             world.render_assets.as_deref(),
             &world.block_entities,
             &world.debug,
-            &mut world.factory_structures,
+            &mut world.structure_state,
             &mut world.movement_influence,
             &mut world.pusher_state,
             &mut next_state,

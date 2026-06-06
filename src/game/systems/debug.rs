@@ -3,8 +3,8 @@ use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
 use crate::game::player::controller::{player_collision_box, FlyCamera};
-use crate::game::simulation::factory_activity::FactoryStructureState;
 use crate::game::simulation::runtime::SimulationStepStats;
+use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
 use crate::game::ui::{PendingKeyBind, TextPromptState};
 use crate::game::world::grid::WorldBlocks;
@@ -88,7 +88,8 @@ pub fn toggle_factory_activity_debug(
     mode: Res<State<GameMode>>,
     playing_ui: Res<PlayingUiState>,
     mut debug: ResMut<DebugState>,
-    mut factory_structures: ResMut<FactoryStructureState>,
+    mut structure_state: ResMut<StructureState>,
+    simulation: Res<SimulationState>,
     mut commands: Commands,
     world: Res<WorldBlocks>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -107,7 +108,13 @@ pub fn toggle_factory_activity_debug(
 
     if keys.just_pressed(KeyCode::KeyP) {
         debug.factory_activity = !debug.factory_activity;
-        factory_structures.ensure_current_world(&world);
+        if debug.factory_activity {
+            if structure_state.is_empty() {
+                structure_state.rebuild_factory_for_debug(&world);
+            }
+        } else if structure_state.is_empty() || !simulation.is_active() {
+            structure_state.clear();
+        }
         despawn_world(&mut commands, &block_entities);
         rebuild_world_for_debug_state(
             &mut commands,
@@ -115,7 +122,7 @@ pub fn toggle_factory_activity_debug(
             &world,
             &render_assets,
             &debug,
-            &factory_structures,
+            &structure_state,
         );
     }
 }

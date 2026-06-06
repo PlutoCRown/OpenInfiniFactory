@@ -11,8 +11,8 @@ use crate::game::blocks::{
     edit_blocks, BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
     PLAY_BLOCKS,
 };
-use crate::game::simulation::factory_activity::{
-    FactoryActivity, FactoryStructureState, StructureKind,
+use crate::game::simulation::structure_state::{
+    FactoryActivity, StructureState, StructureKind,
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
@@ -163,16 +163,19 @@ pub fn rebuild_world_on_enter(
     world: &WorldBlocks,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
 ) {
-    factory_structures.ensure_current_world(world);
+    structure_state.clear();
+    if debug.factory_activity {
+        structure_state.rebuild_factory_for_debug(world);
+    }
     rebuild_world_for_debug_state(
         commands,
         meshes,
         world,
         render_assets,
         debug,
-        factory_structures,
+        structure_state,
     );
 }
 
@@ -349,11 +352,11 @@ pub fn rebuild_world_with_factory_activity_debug(
     meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
-    factory_structures: &FactoryStructureState,
+    structure_state: &StructureState,
 ) {
     for (pos, data) in &world.blocks {
         if data.kind.is_factory() {
-            let material = match factory_structures.activity_at(*pos) {
+            let material = match structure_state.activity_at(*pos) {
                 Some(FactoryActivity::Inactive) => assets.inactive_factory_debug_material(),
                 _ => assets.active_factory_debug_material(),
             };
@@ -373,7 +376,7 @@ pub fn rebuild_world_for_debug_state(
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     debug: &DebugState,
-    factory_structures: &FactoryStructureState,
+    structure_state: &StructureState,
 ) {
     if debug.factory_activity {
         rebuild_world_with_factory_activity_debug(
@@ -381,7 +384,7 @@ pub fn rebuild_world_for_debug_state(
             meshes,
             world,
             assets,
-            factory_structures,
+            structure_state,
         );
     } else {
         rebuild_world(commands, meshes, world, assets);
@@ -707,7 +710,7 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
     pusher_animations: &HashMap<IVec3, PusherAnimation>,
     timing: AnimationTiming,
     debug: &DebugState,
-    factory_structures: &FactoryStructureState,
+    structure_state: &StructureState,
     powered_wires: &HashSet<IVec3>,
 ) {
     if debug.factory_activity {
@@ -716,7 +719,7 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
             meshes,
             world,
             assets,
-            factory_structures,
+            structure_state,
         );
     } else {
         rebuild_world_with_runtime_animations(

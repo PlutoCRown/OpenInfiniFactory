@@ -138,7 +138,7 @@ fn dispatch_menu_action(
                     simulation.step_requested = false;
                     simulation.accumulator = 0.0;
                     simulation.start_snapshot = None;
-                    simulation.start_factory_structures = None;
+                    simulation.start_structures = None;
                     solution_state.puzzle_snapshot = Some(world.clone());
                     save_state.current = Some(next_named_save(
                         &save_state

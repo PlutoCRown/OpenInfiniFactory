@@ -4,8 +4,8 @@ use bevy::prelude::*;
 
 use crate::game::blocks::{BlockData, BlockKind};
 use crate::game::player::controller::{player_intersects_block, FlyCamera};
-use crate::game::simulation::factory_activity::{
-    FactoryStructureState, StructureFreedom, StructureKind,
+use crate::game::simulation::structure_state::{
+    query_factory_structure, StructureFreedom, StructureKind, StructureState,
 };
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structures::material_structure;
@@ -38,7 +38,7 @@ pub struct PlacementQueries<'w, 's> {
     player: Query<'w, 's, &'static Transform, With<FlyCamera>>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
     debug: Res<'w, DebugState>,
-    factory_structures: ResMut<'w, FactoryStructureState>,
+    structure_state: ResMut<'w, StructureState>,
 }
 
 pub fn gameplay_input(
@@ -157,7 +157,7 @@ pub fn placement_input(
         player,
         render_assets,
         debug,
-        mut factory_structures,
+        mut structure_state,
     } = queries;
 
     if *mode.get() != GameMode::Playing || !playing_ui.active_play() {
@@ -168,7 +168,6 @@ pub fn placement_input(
     let Some(render_assets) = render_assets.as_ref() else {
         return;
     };
-    factory_structures.ensure_current_world(&world);
     let place_button = config
         .input(crate::shared::config::ActionKeyName::Place)
         .mouse_button()
@@ -218,7 +217,7 @@ pub fn placement_input(
             &mut meshes,
             &render_assets,
             &debug,
-            &mut factory_structures,
+            &mut structure_state,
         ) {
             solution_state.dirty = true;
         }
@@ -251,7 +250,7 @@ pub fn placement_input(
                 &mut meshes,
                 &render_assets,
                 &debug,
-                &mut factory_structures,
+                &mut structure_state,
             ) {
                 solution_state.dirty = true;
             }
@@ -280,7 +279,7 @@ pub fn placement_input(
                 &mut meshes,
                 &render_assets,
                 &debug,
-                &mut factory_structures,
+                &mut structure_state,
             ) {
                 solution_state.dirty = true;
             } else if selected_place_block(&inventory, *builder_mode, &placement)
@@ -357,7 +356,7 @@ pub fn placement_input(
                     &mut meshes,
                     &render_assets,
                     &debug,
-                    &mut factory_structures,
+                    &mut structure_state,
                     &block_entities,
                 ) {
                     solution_state.dirty = true;
@@ -465,7 +464,7 @@ fn handle_selection_area_input(
     meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
 ) -> bool {
     let mut changed = false;
     if let Some(drag) = placement.selection.drag.as_mut() {
@@ -488,7 +487,7 @@ fn handle_selection_area_input(
                         meshes,
                         render_assets,
                         debug,
-                        factory_structures,
+                        structure_state,
                         bounds,
                         drag.offset,
                     ) {
@@ -562,7 +561,7 @@ fn move_selection(
     meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
     bounds: SelectionBounds,
     offset: IVec3,
 ) -> bool {
@@ -623,11 +622,6 @@ fn move_selection(
         );
     }
     world.replace_material_welds(updated_welds);
-    let mut changed = selected_positions.clone();
-    for pos in &selected_positions {
-        changed.insert(*pos + offset);
-    }
-    factory_structures.rebuild_near(world, changed);
     if debug.factory_activity {
         despawn_block_entities(commands, block_entities);
         rebuild_world_for_debug_state(
@@ -636,7 +630,7 @@ fn move_selection(
             world,
             render_assets,
             debug,
-            factory_structures,
+            structure_state,
         );
     }
     true
@@ -660,7 +654,7 @@ fn alternate_block_at(
     meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
 ) -> bool {
     let Some(block) = world.blocks.get_mut(&pos) else {
         return false;
@@ -678,7 +672,6 @@ fn alternate_block_at(
     }
     block.kind = kind;
     refresh_edit_generated_markers(world);
-    factory_structures.rebuild_near(world, [pos]);
     despawn_block_entities(commands, block_entities);
     rebuild_world_for_debug_state(
         commands,
@@ -686,7 +679,7 @@ fn alternate_block_at(
         world,
         render_assets,
         debug,
-        factory_structures,
+        structure_state,
     );
     true
 }
@@ -700,7 +693,7 @@ fn rotate_block_at(
     meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
 ) -> bool {
     let Some(block) = world.blocks.get_mut(&pos) else {
         return false;
@@ -714,7 +707,6 @@ fn rotate_block_at(
     let updated = *block;
 
     refresh_edit_generated_markers(world);
-    factory_structures.rebuild_near(world, [pos]);
     let mut animations = std::collections::HashMap::new();
     animations.insert(
         pos,
@@ -737,7 +729,7 @@ fn rotate_block_at(
             world,
             render_assets,
             debug,
-            factory_structures,
+            structure_state,
         );
     } else {
         rebuild_world_with_animations(commands, meshes, world, render_assets, &animations);
@@ -850,7 +842,7 @@ fn commit_edit_gesture(
     meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
     block_entities: &Query<(Entity, &BlockEntity)>,
 ) -> bool {
     let mut changed = false;
@@ -869,7 +861,6 @@ fn commit_edit_gesture(
             }
             if changed {
                 refresh_edit_generated_markers(world);
-                factory_structures.rebuild_near(world, positions.iter().copied());
                 despawn_block_entities(commands, block_entities);
                 rebuild_world_for_debug_state(
                     commands,
@@ -877,7 +868,7 @@ fn commit_edit_gesture(
                     world,
                     render_assets,
                     debug,
-                    factory_structures,
+                    structure_state,
                 );
             }
         }
@@ -901,7 +892,6 @@ fn commit_edit_gesture(
             }
             if changed {
                 refresh_edit_generated_markers(world);
-                factory_structures.rebuild_near(world, positions.iter().copied());
                 despawn_block_entities(commands, block_entities);
                 rebuild_world_for_debug_state(
                     commands,
@@ -909,7 +899,7 @@ fn commit_edit_gesture(
                     world,
                     render_assets,
                     debug,
-                    factory_structures,
+                    structure_state,
                 );
             }
         }
@@ -1047,7 +1037,7 @@ pub fn update_hover(
     builder_mode: Res<BuilderMode>,
     camera: Query<&Transform, (With<FlyCamera>, Without<HoverMarker>)>,
     world: Res<WorldBlocks>,
-    mut factory_structures: ResMut<FactoryStructureState>,
+    structure_state: Res<StructureState>,
     mut hover_bounds: ResMut<HoverStructureBounds>,
     player: Query<&Transform, With<FlyCamera>>,
     mut marker: Query<
@@ -1072,7 +1062,6 @@ pub fn update_hover(
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    factory_structures.ensure_current_world(&world);
     if *mode.get() != GameMode::Playing || !playing_ui.active_play() || ui_runtime.blocks_gameplay()
     {
         placement.target = None;
@@ -1106,7 +1095,7 @@ pub fn update_hover(
         hover_bounds.bounds = placement.target.and_then(|target| {
             hover_structure_bounds(
                 &world,
-                &factory_structures,
+                &structure_state,
                 debug.factory_activity,
                 target.pos,
             )
@@ -1126,7 +1115,7 @@ pub fn update_hover(
 
 fn hover_structure_bounds(
     world: &WorldBlocks,
-    factory_structures: &FactoryStructureState,
+    structure_state: &StructureState,
     debug_factory: bool,
     pos: IVec3,
 ) -> Option<StructureBounds> {
@@ -1135,22 +1124,22 @@ fn hover_structure_bounds(
         return None;
     }
     if block.kind.is_material() {
-        return structure_bounds(
-            StructureKind::Material,
-            material_structure(world, pos).into_iter(),
-        );
+        let positions = structure_state
+            .pushable_structure_at(pos, IVec3::ZERO)
+            .unwrap_or_else(|| material_structure(world, pos));
+        return structure_bounds(StructureKind::Material, positions.into_iter());
     }
     if block.kind.is_factory() {
         if !debug_factory {
             return None;
         }
-        if factory_structures.freedom_at(pos) == Some(StructureFreedom::None) {
+        if structure_state.freedom_at(pos) == Some(StructureFreedom::None) {
             return None;
         }
-        return structure_bounds(
-            factory_structures.kind_at(pos)?,
-            factory_structures.movable_structure_at(pos)?.into_iter(),
-        );
+        let positions = structure_state
+            .movable_structure_at(pos)
+            .or_else(|| query_factory_structure(world, pos))?;
+        return structure_bounds(StructureKind::Factory, positions.into_iter());
     }
     None
 }

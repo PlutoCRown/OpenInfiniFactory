@@ -7,89 +7,61 @@ use crate::game::blocks::{BlockData, MovementRule};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks};
 
-use super::factory_activity::FactoryStructureState;
+use super::structure_state::StructureState;
 
-pub(super) fn material_gravity_moves(
+pub(crate) use super::structure_state::material_structure;
+
+pub(super) fn gravity_moves(
     world: &WorldBlocks,
-    factory_structures: &FactoryStructureState,
+    structures: &mut StructureState,
+    skip_factory_positions: &HashSet<IVec3>,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> Vec<StructureMove> {
-    let mut materials: Vec<IVec3> = world
-        .blocks
-        .iter()
-        .filter_map(|(pos, block)| block.kind.is_material().then_some(*pos))
-        .collect();
-    materials.sort_by_key(|pos| pos.y);
-
-    let mut handled = HashSet::new();
+    let indices = structures.gravity_structure_indices();
     let mut moves = Vec::new();
-    for pos in materials {
-        if handled.contains(&pos) || !world.is_material_at(pos) {
+    let mut handled = HashSet::new();
+
+    for index in indices {
+        let Some(positions) = structures.structure_positions(index) else {
             continue;
         };
+        let Some(&sample) = positions.iter().next() else {
+            continue;
+        };
+        if handled.contains(&sample) {
+            continue;
+        }
 
-        let structure = material_structure(world, pos);
+        let structure = positions.clone();
         handled.extend(structure.iter().copied());
+
+        if structure
+            .iter()
+            .any(|pos| skip_factory_positions.contains(pos))
+        {
+            continue;
+        }
         if structure_supported_by_lifter(world, &structure) {
+            structures.clear_gravity_support(index);
+            continue;
+        }
+        if structures.gravity_support_valid(index, world) {
             continue;
         }
         if can_move_gravity_structure(
             world,
             &structure,
-            factory_structures,
+            structures,
             hard_pusher_head_occupancy,
         ) {
+            structures.clear_gravity_support(index);
             moves.push(StructureMove::translate_marked(
                 structure,
                 IVec3::NEG_Y,
                 MovementMark::Vertical,
             ));
-        }
-    }
-    moves
-}
-
-pub(super) fn factory_gravity_moves(
-    world: &WorldBlocks,
-    factory_structures: &FactoryStructureState,
-    skip_positions: &HashSet<IVec3>,
-    hard_pusher_head_occupancy: &HashSet<IVec3>,
-) -> Vec<StructureMove> {
-    let mut factory_blocks: Vec<IVec3> = world
-        .blocks
-        .iter()
-        .filter_map(|(pos, block)| block.kind.is_factory().then_some(*pos))
-        .collect();
-    factory_blocks.sort_by_key(|pos| pos.y);
-
-    let mut handled = HashSet::new();
-    let mut moves = Vec::new();
-    for pos in factory_blocks {
-        if handled.contains(&pos) || !world.is_factory_at(pos) {
-            continue;
-        };
-
-        let Some(structure) = factory_structures.falling_structure_at(pos, IVec3::NEG_Y) else {
-            continue;
-        };
-        handled.extend(structure.iter().copied());
-        if structure.iter().any(|pos| skip_positions.contains(pos)) {
-            continue;
-        }
-        if structure_supported_by_lifter(world, &structure) {
-            continue;
-        }
-        if can_move_gravity_structure(
-            world,
-            &structure,
-            factory_structures,
-            hard_pusher_head_occupancy,
-        ) {
-            moves.push(StructureMove::translate_marked(
-                structure,
-                IVec3::NEG_Y,
-                MovementMark::Vertical,
-            ));
+        } else {
+            structures.record_gravity_support(index, world);
         }
     }
     moves
@@ -270,7 +242,7 @@ impl StructureMove {
     fn expanded_for_plan(
         self,
         world: &WorldBlocks,
-        factory_structures: &FactoryStructureState,
+        structures: &StructureState,
     ) -> Self {
         match self {
             Self::Translate {
@@ -285,7 +257,7 @@ impl StructureMove {
                     world,
                     &structure,
                     offset,
-                    factory_structures,
+                    structures,
                     mode,
                 )
                 .unwrap_or(structure);
@@ -306,11 +278,11 @@ pub(super) fn merge_structure_movement_plan(
     mut planned_moves: Vec<StructureMove>,
     device_moves: Vec<StructureMove>,
     world: &WorldBlocks,
-    factory_structures: &FactoryStructureState,
+    structures: &StructureState,
     influence_cache: &mut MovementInfluenceCache,
 ) -> Vec<StructureMove> {
-    planned_moves = expand_structure_movement_plan(planned_moves, world, factory_structures);
-    let mut device_moves = expand_structure_movement_plan(device_moves, world, factory_structures);
+    planned_moves = expand_structure_movement_plan(planned_moves, world, structures);
+    let mut device_moves = expand_structure_movement_plan(device_moves, world, structures);
     let active_sources = active_device_sources(&device_moves);
     influence_cache.retain_active_sources(&active_sources);
     device_moves.sort_by(|a, b| compare_movement_priority(a, b, influence_cache));
@@ -441,11 +413,11 @@ impl ConveyorSourcePriority {
 fn expand_structure_movement_plan(
     moves: Vec<StructureMove>,
     world: &WorldBlocks,
-    factory_structures: &FactoryStructureState,
+    structures: &StructureState,
 ) -> Vec<StructureMove> {
     moves
         .into_iter()
-        .map(|movement| movement.expanded_for_plan(world, factory_structures))
+        .map(|movement| movement.expanded_for_plan(world, structures))
         .collect()
 }
 
@@ -461,16 +433,16 @@ fn structure_supported_by_lifter(world: &WorldBlocks, structure: &HashSet<IVec3>
 pub(super) fn execute_structure_moves(
     world: &mut WorldBlocks,
     moves: Vec<StructureMove>,
-    factory_structures: &mut FactoryStructureState,
+    structures: &mut StructureState,
 ) -> HashMap<IVec3, BlockAnimation> {
     let mut influence_cache = MovementInfluenceCache::default();
-    execute_structure_moves_with_pushers(world, moves, factory_structures, &mut influence_cache).0
+    execute_structure_moves_with_pushers(world, moves, structures, &mut influence_cache).0
 }
 
 pub(super) fn execute_structure_moves_with_pushers(
     world: &mut WorldBlocks,
     moves: Vec<StructureMove>,
-    factory_structures: &mut FactoryStructureState,
+    structures: &mut StructureState,
     influence_cache: &mut MovementInfluenceCache,
 ) -> (
     HashMap<IVec3, BlockAnimation>,
@@ -496,7 +468,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                     world,
                     &structure,
                     offset,
-                    factory_structures,
+                    structures,
                     movement_expansion_mode(mark, source),
                 ) {
                     let before_key = StructureKey::from_structure(&structure);
@@ -534,7 +506,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                     }
                     moved.extend(structure.iter().copied());
                     move_structure(world, &structure, offset);
-                    factory_structures.move_positions(&structure, offset);
+                    structures.move_positions(&structure, offset);
                     let target_structure: HashSet<IVec3> =
                         structure.into_iter().map(|pos| pos + offset).collect();
                     if let Some(source) = source {
@@ -581,15 +553,16 @@ pub(super) fn execute_structure_moves_with_pushers(
                     }
                     moved.extend(structure.iter().copied());
                     rotate_structure(world, &structure, pivot, clockwise);
+                    let target_structure: HashSet<IVec3> = targets.iter().copied().collect();
+                    structures.replace_structure_positions(&structure, target_structure.clone());
                     if let Some(source) = source {
-                        let target_structure: HashSet<IVec3> = targets.iter().copied().collect();
                         executed.push(ExecutedMovement {
                             before: before_key,
                             after: StructureKey::from_structure(&target_structure),
                             source,
                         });
                     }
-                    moved.extend(targets);
+                    moved.extend(target_structure);
                 }
             }
         }
@@ -598,37 +571,10 @@ pub(super) fn execute_structure_moves_with_pushers(
     (animations, pusher_animations)
 }
 
-pub(crate) fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
-    let mut structure = HashSet::new();
-    let mut queue = VecDeque::from([start]);
-    structure.insert(start);
-
-    while let Some(pos) = queue.pop_front() {
-        for neighbor in welded_neighbors(world, pos) {
-            if structure.contains(&neighbor) {
-                continue;
-            }
-            structure.insert(neighbor);
-            queue.push_back(neighbor);
-        }
-    }
-
-    structure
-}
-
-fn welded_neighbors(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
-    world
-        .material_welds
-        .iter()
-        .filter_map(|weld| weld.other(pos))
-        .filter(|neighbor| world.is_material_at(*neighbor))
-        .collect()
-}
-
 fn can_move_gravity_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
-    factory_structures: &FactoryStructureState,
+    structures: &StructureState,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> bool {
     if hard_pusher_head_blocked_below(world, structure, hard_pusher_head_occupancy) {
@@ -638,7 +584,7 @@ fn can_move_gravity_structure(
         world,
         structure,
         IVec3::NEG_Y,
-        factory_structures,
+        structures,
         MovementExpansionMode::Gravity,
     ) else {
         return false;
@@ -686,7 +632,7 @@ fn expanded_move_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,
-    factory_structures: &FactoryStructureState,
+    structures: &StructureState,
     mode: MovementExpansionMode,
 ) -> Option<HashSet<IVec3>> {
     if offset.abs().element_sum() != 1 {
@@ -705,7 +651,7 @@ fn expanded_move_structure(
             continue;
         }
 
-        let pushed = pushable_structure_at(world, factory_structures, target, offset)?;
+        let pushed = pushable_structure_at(world, structures, target, offset)?;
         if mode == MovementExpansionMode::Gravity && structure_supported_by_lifter(world, &pushed)
         {
             return None;
@@ -724,13 +670,13 @@ pub(super) fn can_translate_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,
-    factory_structures: &FactoryStructureState,
+    structures: &StructureState,
 ) -> bool {
     expanded_move_structure(
         world,
         structure,
         offset,
-        factory_structures,
+        structures,
         MovementExpansionMode::Normal,
     )
     .is_some()
@@ -752,16 +698,13 @@ fn movement_expansion_mode(mark: MovementMark, source: Option<IVec3>) -> Movemen
 
 fn pushable_structure_at(
     world: &WorldBlocks,
-    factory_structures: &FactoryStructureState,
+    structures: &StructureState,
     pos: IVec3,
     offset: IVec3,
 ) -> Option<HashSet<IVec3>> {
     let block = world.blocks.get(&pos)?;
-    if block.kind.is_material() {
-        return Some(material_structure(world, pos));
-    }
-    if block.kind.is_factory() {
-        return factory_structures.active_structure_at(pos, offset);
+    if block.kind.is_material() || block.kind.is_factory() {
+        return structures.pushable_structure_at(pos, offset);
     }
     None
 }

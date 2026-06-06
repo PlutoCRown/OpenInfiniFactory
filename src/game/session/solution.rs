@@ -26,7 +26,7 @@ pub fn handle_reset_solution(
             &world.block_entities,
             world.render_assets.as_deref(),
             &world.debug,
-            &mut world.factory_structures,
+            &mut world.structure_state,
             &mut world.movement_influence,
             &mut world.pusher_state,
             &solution_state,
@@ -71,7 +71,7 @@ pub fn handle_switch_to_edit_mode(
             &world.block_entities,
             world.render_assets.as_deref(),
             &world.debug,
-            &mut world.factory_structures,
+            &mut world.structure_state,
             &mut world.movement_influence,
             &mut world.pusher_state,
         );

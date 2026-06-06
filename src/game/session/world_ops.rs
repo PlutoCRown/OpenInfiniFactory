@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game::simulation::factory_activity::FactoryStructureState;
+use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::structures::MovementInfluenceCache;
@@ -70,7 +70,7 @@ pub fn switch_to_edit_mode_and_rebuild(
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: Option<&WorldRenderAssets>,
     debug: &DebugState,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
 ) {
@@ -86,17 +86,16 @@ pub fn switch_to_edit_mode_and_rebuild(
     );
     if let Some(render_assets) = render_assets {
         despawn_world(commands, block_entities);
-        factory_structures.clear();
+        structure_state.clear();
         movement_influence.clear();
         pusher_state.clear();
-        factory_structures.ensure_current_world(world);
         rebuild_world_for_debug_state(
             commands,
             meshes,
             world,
             render_assets,
             debug,
-            factory_structures,
+            structure_state,
         );
     }
 }
@@ -109,7 +108,7 @@ pub fn reset_current_solution(
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: Option<&WorldRenderAssets>,
     debug: &DebugState,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     solution_state: &SolutionState,
@@ -122,11 +121,10 @@ pub fn reset_current_solution(
         simulation.turn = 0;
         simulation.accumulator = 0.0;
         simulation.start_snapshot = None;
-        simulation.start_factory_structures = None;
-        factory_structures.clear();
+        simulation.start_structures = None;
+        structure_state.clear();
         movement_influence.clear();
         pusher_state.clear();
-        factory_structures.ensure_current_world(world);
         if let Some(render_assets) = render_assets {
             despawn_world(commands, block_entities);
             rebuild_world_for_debug_state(
@@ -135,7 +133,7 @@ pub fn reset_current_solution(
                 world,
                 render_assets,
                 debug,
-                factory_structures,
+                structure_state,
             );
         }
     }
@@ -152,7 +150,7 @@ pub fn exit_to_main_menu(
     render_assets: Option<&WorldRenderAssets>,
     block_entities: &Query<Entity, With<BlockEntity>>,
     debug: &DebugState,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     next_state: &mut NextState<GameMode>,
@@ -169,7 +167,7 @@ pub fn exit_to_main_menu(
         render_assets,
         block_entities,
         debug,
-        factory_structures,
+        structure_state,
         movement_influence,
         pusher_state,
     );
@@ -193,7 +191,7 @@ pub fn load_world_into_session(
     block_entities: &Query<Entity, With<BlockEntity>>,
     render_assets: Option<&WorldRenderAssets>,
     debug: &DebugState,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     current_mode: GameMode,
@@ -208,7 +206,7 @@ pub fn load_world_into_session(
     simulation.turn = 0;
     simulation.accumulator = 0.0;
     simulation.start_snapshot = None;
-    simulation.start_factory_structures = None;
+    simulation.start_structures = None;
     placement.selection.clear();
     placement.edit_gesture = None;
     carried.clear();
@@ -238,10 +236,9 @@ pub fn load_world_into_session(
     };
 
     refresh_static_generated_markers(world);
-    factory_structures.clear();
+    structure_state.clear();
     movement_influence.clear();
     pusher_state.clear();
-    factory_structures.ensure_current_world(world);
 
     match current_mode {
         GameMode::StartMenu => next_state.set(GameMode::Playing),
@@ -254,7 +251,7 @@ pub fn load_world_into_session(
                     world,
                     render_assets,
                     debug,
-                    factory_structures,
+                    structure_state,
                 );
             }
         }
@@ -272,7 +269,7 @@ pub fn clear_loaded_world(
     render_assets: Option<&WorldRenderAssets>,
     block_entities: &Query<Entity, With<BlockEntity>>,
     debug: &DebugState,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
 ) {
@@ -280,7 +277,7 @@ pub fn clear_loaded_world(
     simulation.step_requested = false;
     simulation.accumulator = 0.0;
     simulation.start_snapshot = None;
-    simulation.start_factory_structures = None;
+    simulation.start_structures = None;
     placement.selection.clear();
     placement.edit_gesture = None;
     world.clear();
@@ -290,10 +287,9 @@ pub fn clear_loaded_world(
     solution_state.puzzle_snapshot = None;
     solution_state.dirty = false;
     solution_state.entry = WorldEntryMode::EditPuzzle;
-    factory_structures.clear();
+    structure_state.clear();
     movement_influence.clear();
     pusher_state.clear();
-    factory_structures.ensure_current_world(world);
     if let Some(render_assets) = render_assets {
         despawn_world(commands, block_entities);
         rebuild_world_for_debug_state(
@@ -302,7 +298,7 @@ pub fn clear_loaded_world(
             world,
             render_assets,
             debug,
-            factory_structures,
+            structure_state,
         );
     }
 }

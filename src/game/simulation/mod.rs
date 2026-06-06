@@ -1,10 +1,10 @@
 mod behaviors;
-pub mod factory_activity;
 mod gravity;
 pub mod markers;
 pub mod movement;
 pub mod runtime;
 mod signals;
+pub mod structure_state;
 pub mod structures;
 
 use bevy::prelude::*;

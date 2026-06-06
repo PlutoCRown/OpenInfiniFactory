@@ -1,7 +1,7 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::game::simulation::factory_activity::FactoryStructureState;
+use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::runtime::PendingGeneratedMaterials;
@@ -23,7 +23,7 @@ pub(crate) struct SimulationControlDeps<'w> {
     ui_runtime: Res<'w, UiRuntime>,
     simulation: ResMut<'w, SimulationState>,
     pending_generated: ResMut<'w, PendingGeneratedMaterials>,
-    factory_structures: ResMut<'w, FactoryStructureState>,
+    structure_state: ResMut<'w, StructureState>,
     movement_influence: ResMut<'w, MovementInfluenceCache>,
     pusher_state: ResMut<'w, PusherState>,
     world: ResMut<'w, WorldBlocks>,
@@ -60,7 +60,7 @@ pub fn simulation_controls(
             start_simulation_state(
                 &mut deps.simulation,
                 &deps.world,
-                &mut deps.factory_structures,
+                &mut deps.structure_state,
                 &mut deps.pusher_state,
             );
         }
@@ -89,13 +89,13 @@ pub fn simulation_controls(
         let factory_snapshot = rollback_simulation(&mut deps.simulation, &mut deps.world);
         refresh_static_generated_markers(&mut deps.world);
         deps.pending_generated.clear();
-        deps.factory_structures.clear();
+        deps.structure_state.clear();
         deps.movement_influence.clear();
         deps.pusher_state.clear();
         if let Some(snapshot) = factory_snapshot {
-            *deps.factory_structures = snapshot;
+            *deps.structure_state = snapshot;
         } else {
-            deps.factory_structures.rebuild_from_world(&deps.world);
+            deps.structure_state.clear();
         }
         despawn_world(&mut commands, &block_entities);
         rebuild_world_for_debug_state(
@@ -104,7 +104,7 @@ pub fn simulation_controls(
             &deps.world,
             render_assets,
             &deps.debug,
-            &deps.factory_structures,
+            &deps.structure_state,
         );
     }
 }
@@ -112,23 +112,23 @@ pub fn simulation_controls(
 fn start_simulation_state(
     simulation: &mut SimulationState,
     world: &WorldBlocks,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
     pusher_state: &mut PusherState,
 ) {
     simulation.start_snapshot = Some(world.clone());
     *pusher_state = PusherState::rebuild_from_world(world);
-    factory_structures.rebuild_from_world(world);
-    simulation.start_factory_structures = Some(factory_structures.clone());
+    structure_state.rebuild_for_simulation(world);
+    simulation.start_structures = Some(structure_state.clone());
 }
 fn rollback_simulation(
     simulation: &mut SimulationState,
     world: &mut WorldBlocks,
-) -> Option<FactoryStructureState> {
+) -> Option<StructureState> {
     simulation.running = false;
     simulation.step_requested = false;
     simulation.turn = 0;
     simulation.accumulator = 0.0;
-    let factory_snapshot = simulation.start_factory_structures.take();
+    let factory_snapshot = simulation.start_structures.take();
     if let Some(snapshot) = simulation.start_snapshot.take() {
         *world = snapshot;
     } else {

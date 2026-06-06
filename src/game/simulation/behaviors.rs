@@ -9,7 +9,7 @@ use crate::game::world::grid::{
     ConverterMode, MaterialFace, MaterialFaceMark, MaterialFaceMarkSource, WorldBlocks,
 };
 
-use super::factory_activity::FactoryStructureState;
+use super::structure_state::StructureState;
 use super::runtime::PendingGeneratedMaterials;
 use super::signal_offsets;
 use super::structures::{execute_structure_moves, material_structure, MovementMark, StructureMove};
@@ -17,7 +17,7 @@ use super::structures::{execute_structure_moves, material_structure, MovementMar
 pub(super) fn run_material_behavior_phase(
     world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
     pending_destroyed: &mut PendingGeneratedMaterials,
     ready_turn: u64,
 ) -> Vec<IVec3> {
@@ -26,7 +26,7 @@ pub(super) fn run_material_behavior_phase(
         run_material_destroy_phase(world, powered_devices, pending_destroyed, ready_turn);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
-    run_material_teleport_phase(world, factory_structures);
+    run_material_teleport_phase(world, structure_state);
     run_material_acceptance_phase(world);
     drill_sparks
 }
@@ -212,7 +212,7 @@ fn run_material_conversion_phase(world: &mut WorldBlocks) {
 
 fn run_material_teleport_phase(
     world: &mut WorldBlocks,
-    factory_structures: &mut FactoryStructureState,
+    structure_state: &mut StructureState,
 ) {
     let entrances: Vec<IVec3> = world
         .system_blocks
@@ -236,7 +236,9 @@ fn run_material_teleport_phase(
             continue;
         }
 
-        let structure = material_structure(world, entrance);
+        let structure = structure_state
+            .pushable_structure_at(entrance, IVec3::ZERO)
+            .unwrap_or_else(|| material_structure(world, entrance));
         let offset = exit - entrance;
         handled.extend(structure.iter().copied());
         handled.extend(structure.iter().map(|pos| *pos + offset));
@@ -247,7 +249,7 @@ fn run_material_teleport_phase(
                 offset,
                 MovementMark::Push,
             )],
-            factory_structures,
+            structure_state,
         );
     }
 }

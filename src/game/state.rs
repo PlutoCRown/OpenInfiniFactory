@@ -185,8 +185,8 @@ pub struct SimulationState {
     pub turn: u64,
     pub accumulator: f32,
     pub start_snapshot: Option<crate::game::world::grid::WorldBlocks>,
-    pub start_factory_structures:
-        Option<crate::game::simulation::factory_activity::FactoryStructureState>,
+    pub start_structures:
+        Option<crate::game::simulation::structure_state::StructureState>,
 }
 
 impl Default for SimulationState {
@@ -198,7 +198,7 @@ impl Default for SimulationState {
             turn: 0,
             accumulator: 0.0,
             start_snapshot: None,
-            start_factory_structures: None,
+            start_structures: None,
         }
     }
 }
