@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 
 use crate::shared::config::{ActionKeyName, ConfigSelectionMode};
-use crate::shared::i18n::I18n;
 
 use super::super::components::{
     default_button_size, flex_row, localized_text, scroll_container, scroll_content, spawn_panel,
@@ -12,26 +11,26 @@ use super::super::types::{
     SettingsItem, SettingsTab, UiPanelBinding, GAMEPLAY_SETTINGS,
 };
 use crate::game::state::UiPanelId;
+use crate::game::ui::access::i18n;
 use super::super::widgets::{
     spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_dropdown_list,
     spawn_settings_slider, spawn_settings_slider_value, spawn_settings_tab,
 };
 
-pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands) {
     spawn_panel(
         root,
-        i18n,
         PanelOptions::new(840.0, "settings.title")
             .closable()
             .title_size(30.0),
         UiPanelBinding(UiPanelId::Settings),
         |panel| {
             spawn_settings_tabs(panel);
-            spawn_gameplay_settings(panel, i18n);
-            spawn_key_bindings(panel, i18n);
+            spawn_gameplay_settings(panel);
+            spawn_key_bindings(panel);
         },
     );
-    spawn_settings_dropdown_layers(root, i18n);
+    spawn_settings_dropdown_layers(root);
 }
 
 fn spawn_settings_tabs(panel: &mut ChildSpawnerCommands) {
@@ -51,7 +50,6 @@ fn spawn_settings_tabs(panel: &mut ChildSpawnerCommands) {
 
 fn spawn_settings_dropdown_row(
     panel: &mut ChildSpawnerCommands,
-    i18n: &I18n,
     label_key: &'static str,
     dropdown: SettingsDropdown,
 ) {
@@ -63,7 +61,7 @@ fn spawn_settings_dropdown_row(
             ZIndex(300),
         ))
         .with_children(|row| {
-            spawn_settings_label(row, i18n, label_key);
+            spawn_settings_label(row, label_key);
             row.spawn(transparent_node(Node {
                 width: Val::Px(530.0),
                 flex_direction: FlexDirection::Column,
@@ -77,19 +75,18 @@ fn spawn_settings_dropdown_row(
         });
 }
 
-fn spawn_settings_dropdown_layers(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+fn spawn_settings_dropdown_layers(root: &mut ChildSpawnerCommands) {
     for dropdown in [
         SettingsDropdown::Language,
         SettingsDropdown::PlaceSelectionMode,
         SettingsDropdown::DeleteSelectionMode,
     ] {
-        spawn_settings_dropdown_list(root, dropdown, settings_dropdown_options(i18n, dropdown));
+        spawn_settings_dropdown_list(root, dropdown, settings_dropdown_options(dropdown));
     }
 }
 
 fn spawn_settings_slider_row(
     panel: &mut ChildSpawnerCommands,
-    i18n: &I18n,
     label_key: &'static str,
     item: SettingsItem,
 ) {
@@ -97,7 +94,7 @@ fn spawn_settings_slider_row(
         .spawn(settings_row_node())
         .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
         .with_children(|row| {
-            spawn_settings_label(row, i18n, label_key);
+            spawn_settings_label(row, label_key);
             row.spawn(transparent_node(Node {
                 width: Val::Px(360.0),
                 justify_content: JustifyContent::Center,
@@ -125,9 +122,9 @@ fn settings_row_node() -> impl Bundle {
     })
 }
 
-fn spawn_settings_label(row: &mut ChildSpawnerCommands, i18n: &I18n, label_key: &'static str) {
+fn spawn_settings_label(row: &mut ChildSpawnerCommands, label_key: &'static str) {
     row.spawn((
-        localized_text(i18n, label_key, 15.0, Color::srgb(0.82, 0.88, 0.90)),
+        localized_text(label_key, 15.0, Color::srgb(0.82, 0.88, 0.90)),
         Node {
             width: Val::Px(220.0),
             align_self: AlignSelf::Center,
@@ -136,18 +133,18 @@ fn spawn_settings_label(row: &mut ChildSpawnerCommands, i18n: &I18n, label_key: 
     ));
 }
 
-fn spawn_settings_item(panel: &mut ChildSpawnerCommands, i18n: &I18n, item: SettingsItem) {
+fn spawn_settings_item(panel: &mut ChildSpawnerCommands, item: SettingsItem) {
     match item.control {
         SettingsControl::Slider { .. } => {
-            spawn_settings_slider_row(panel, i18n, item.label_key, item)
+            spawn_settings_slider_row(panel, item.label_key, item)
         }
         SettingsControl::Dropdown(dropdown) => {
-            spawn_settings_dropdown_row(panel, i18n, item.label_key, dropdown)
+            spawn_settings_dropdown_row(panel, item.label_key, dropdown)
         }
     }
 }
 
-fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
+fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands) {
     panel
         .spawn(scroll_container(500.0))
         .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
@@ -164,7 +161,7 @@ fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
                 ))
                 .with_children(|content| {
                     for item in GAMEPLAY_SETTINGS {
-                        spawn_settings_item(content, i18n, *item);
+                        spawn_settings_item(content, *item);
                     }
                     content.spawn(transparent_node(Node {
                         width: Val::Percent(100.0),
@@ -176,7 +173,7 @@ fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
         });
 }
 
-fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
+fn spawn_key_bindings(panel: &mut ChildSpawnerCommands) {
     panel
         .spawn(scroll_container(360.0))
         .insert(PanelVisibility::SettingsTab(SettingsTab::KeyBindings))
@@ -186,13 +183,11 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
                 .with_children(|columns| {
                     spawn_key_group(
                         columns,
-                        i18n,
                         "settings.group.general",
                         &ActionKeyName::GENERAL,
                     );
                     spawn_key_group(
                         columns,
-                        i18n,
                         "settings.group.simulation",
                         &ActionKeyName::SIMULATION,
                     );
@@ -202,7 +197,6 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
 
 fn spawn_key_group(
     columns: &mut ChildSpawnerCommands,
-    i18n: &I18n,
     label_key: &'static str,
     actions: &[ActionKeyName],
 ) {
@@ -215,7 +209,7 @@ fn spawn_key_group(
             ..default()
         }))
         .with_children(|group| {
-            group.spawn(localized_text(i18n, label_key, 18.0, Color::WHITE));
+            group.spawn(localized_text(label_key, 18.0, Color::WHITE));
             for action in actions {
                 spawn_localized_settings_button(group, SettingsAction::Bind(*action));
             }
@@ -245,10 +239,7 @@ fn key_bindings_columns_bundle() -> impl Bundle {
     })
 }
 
-fn settings_dropdown_options(
-    i18n: &I18n,
-    dropdown: SettingsDropdown,
-) -> Vec<(String, SettingsAction)> {
+fn settings_dropdown_options(dropdown: SettingsDropdown) -> Vec<(String, SettingsAction)> {
     match dropdown {
         SettingsDropdown::Language => crate::shared::i18n::Language::ALL
             .into_iter()
@@ -263,7 +254,7 @@ fn settings_dropdown_options(
             .into_iter()
             .map(|mode| {
                 (
-                    i18n.text(mode.label_key()),
+                    i18n.t(mode.label_key()),
                     SettingsAction::SetPlaceSelectionMode(mode),
                 )
             })
@@ -272,7 +263,7 @@ fn settings_dropdown_options(
             .into_iter()
             .map(|mode| {
                 (
-                    i18n.text(mode.label_key()),
+                    i18n.t(mode.label_key()),
                     SettingsAction::SetDeleteSelectionMode(mode),
                 )
             })

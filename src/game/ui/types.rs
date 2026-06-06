@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::game::block_editing::{BlockPanelAction, OpenBlockPanelDropdown};
 pub use crate::game::ui::core::{
-    ConfirmButtonId, ConfirmDialogState, InlineTextEditState, PanelCloseButton, PanelDragState,
-    PanelPosition, PanelTitleBar, PanelVisibility, PanelWindow, TextPromptRoot, TextPromptState,
-    UiActionLabel, UiHoverState, UiPanelBinding, UiRuntime,
+    ConfirmButtonId, InlineTextEditState, PanelCloseButton, PanelDragState, PanelPosition,
+    PanelTitleBar, PanelVisibility, PanelWindow, TextPromptRoot, TextPromptState, UiActionLabel,
+    UiHost, UiHoverState, UiPanelBinding, UiRuntime,
 };
 pub use crate::game::ui::features::menu::types::MenuAction;
 pub use crate::game::ui::features::save::types::{
@@ -92,8 +92,8 @@ pub(crate) struct InventoryTooltip;
 #[derive(Component)]
 pub(crate) struct CarriedItemPreview;
 
-#[derive(Component, Clone, Copy)]
-pub(crate) struct InventorySlot {
+#[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InventorySlot {
     pub area: SlotArea,
     pub index: usize,
 }
@@ -230,8 +230,8 @@ impl CarriedItem {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub(crate) enum SlotArea {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SlotArea {
     Hotbar,
     Backpack,
 }

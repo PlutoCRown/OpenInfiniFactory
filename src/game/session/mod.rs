@@ -22,11 +22,12 @@ pub use world_access::PlayingWorldParams;
 use bevy::prelude::*;
 
 use crate::game::simulation::factory_activity::FactoryStructureState;
-use crate::game::state::{PlayingUiState, StartMenuScreen};
+use crate::game::state::{PlayingUiState, StartMenuScreen, UiPanelId};
 use crate::game::systems::debug::DebugPanel;
 use crate::game::systems::debug::DebugState;
 use crate::game::systems::perf::PerfScope;
-use crate::game::ui::PlayingUiRoot;
+use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost};
+use crate::game::ui::{PlayingUiRoot, UiRuntime};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     teardown_playing_scene, BlockIconRenderRoot, GameplayScene, WorldRenderAssets,
@@ -101,6 +102,8 @@ pub fn rebuild_playing_world(
 pub fn on_exit_playing(
     mut commands: Commands,
     mut playing_ui: ResMut<PlayingUiState>,
+    mut ui_runtime: ResMut<UiRuntime>,
+    mut ui_host: ResMut<UiHost>,
     gameplay_scene: Query<Entity, With<GameplayScene>>,
     icon_roots: Query<Entity, With<BlockIconRenderRoot>>,
     playing_ui_roots: Query<Entity, With<PlayingUiRoot>>,
@@ -120,6 +123,8 @@ pub fn on_exit_playing(
     for entity in &debug_panels {
         commands.entity(entity).despawn();
     }
+    ui_host.unmount_panel(UiPanelId::Settings, &mut ui_runtime, None);
+    commands.remove_resource::<PlayingUiRootEntity>();
 
     teardown_playing_scene(&mut commands);
 }

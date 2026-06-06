@@ -2,51 +2,108 @@ use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
 use crate::game::session;
-use crate::game::state::UiPanelId;
 use crate::game::state::{
     BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
     StartMenuScreen, WorldEntryMode,
 };
-use crate::game::ui::core::runtime::{UiPanelContext, UiRuntime};
+use crate::game::ui::access::{ui, UiMainThread};
+use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost, UiRootEntity};
+use crate::game::ui::core::host::{UiAction, UiActionKind, UiInstanceId};
+use crate::game::ui::core::runtime::UiPanelContext;
 use crate::game::ui::core::text_input::primary_click;
-use crate::game::ui::features::save::{open_save_as_new_puzzle_prompt, SaveTextPromptParams};
+use crate::game::ui::features::save::open_save_as_new_puzzle_prompt;
 use crate::game::ui::types::{CarriedItem, InventoryItems};
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::save::{next_named_save, SaveKind, SaveState};
 
 use super::confirm::{
     on_reset_solution, on_return_to_main, on_save_before_edit, reset_solution_spec,
-    return_to_main_spec, save_before_edit_spec, MenuDialogParams,
+    return_to_main_spec, save_before_edit_spec,
 };
 use super::types::MenuAction;
 
-pub fn menu_actions(
+pub fn emit_menu_actions(
     mut click: On<Pointer<Click>>,
+    mut writer: MessageWriter<UiAction>,
+    ui_host: Res<UiHost>,
+    actions: Query<&MenuAction>,
+) {
+    if ui_host.modal_open() || !primary_click(&mut click) {
+        return;
+    }
+    let Ok(action) = actions.get(click.entity).copied() else {
+        return;
+    };
+    click.propagate(false);
+    writer.write(UiAction {
+        instance: UiInstanceId::MENU,
+        kind: UiActionKind::Menu(action),
+    });
+}
+
+pub fn dispatch_menu_actions(
+    _ui_thread: UiMainThread,
+    mut actions: MessageReader<UiAction>,
     mut builder_mode: ResMut<BuilderMode>,
     mut simulation: ResMut<SimulationState>,
     mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
-    world: ResMut<WorldBlocks>,
+    mut world: ResMut<WorldBlocks>,
     mode: Res<State<GameMode>>,
     mut playing_ui: ResMut<PlayingUiState>,
     mut start_menu_screen: ResMut<StartMenuScreen>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
-    mut ui_runtime: ResMut<UiRuntime>,
+    ui_root: Option<Res<UiRootEntity>>,
+    playing_ui_root: Option<Res<PlayingUiRootEntity>>,
     mut commands: Commands,
-    mut dialog: MenuDialogParams,
-    mut text_prompt: SaveTextPromptParams,
-    actions: Query<&MenuAction>,
 ) {
-    if !primary_click(&mut click) {
-        return;
+    for action in actions.read() {
+        if action.instance != UiInstanceId::MENU {
+            continue;
+        }
+        let UiActionKind::Menu(action) = action.kind.clone() else {
+            continue;
+        };
+        dispatch_menu_action(
+            action,
+            &mut builder_mode,
+            &mut simulation,
+            &mut inventory,
+            &mut carried,
+            &mut placement,
+            &mut world,
+            &mode,
+            &mut playing_ui,
+            &mut start_menu_screen,
+            &mut save_state,
+            &mut solution_state,
+            ui_root.as_deref(),
+            playing_ui_root.as_deref(),
+            &mut commands,
+        );
     }
-    let Ok(action) = actions.get(click.entity).cloned() else {
-        return;
-    };
-    click.propagate(false);
+}
 
+#[allow(clippy::too_many_arguments)]
+fn dispatch_menu_action(
+    action: MenuAction,
+    builder_mode: &mut BuilderMode,
+    simulation: &mut SimulationState,
+    inventory: &mut InventoryItems,
+    carried: &mut CarriedItem,
+    placement: &mut PlacementState,
+    world: &mut WorldBlocks,
+    mode: &State<GameMode>,
+    playing_ui: &mut PlayingUiState,
+    start_menu_screen: &mut StartMenuScreen,
+    save_state: &mut SaveState,
+    solution_state: &mut SolutionState,
+    ui_root: Option<&UiRootEntity>,
+    playing_ui_root: Option<&PlayingUiRootEntity>,
+    commands: &mut Commands,
+) {
     match (*mode.get(), action) {
         (GameMode::StartMenu, MenuAction::EditPuzzle) => {
             save_state.refresh();
@@ -61,7 +118,11 @@ pub fn menu_actions(
             *start_menu_screen = StartMenuScreen::SaveList;
         }
         (GameMode::StartMenu, MenuAction::OpenSettings) => {
-            ui_runtime.open(UiPanelId::Settings, UiPanelContext::SettingsFromStartMenu);
+            ui.mount_settings(
+                commands,
+                ui_root.map(|root| root.0),
+                UiPanelContext::SettingsFromStartMenu,
+            );
         }
         (GameMode::StartMenu, MenuAction::Quit) => {
             std::process::exit(0);
@@ -91,8 +152,7 @@ pub fn menu_actions(
                     BuilderMode::Play
                 }
                 BuilderMode::Play => {
-                    let spec = save_before_edit_spec(&dialog.i18n);
-                    dialog.confirm.open_then(spec, on_save_before_edit);
+                    ui.open_confirm_then(save_before_edit_spec(), on_save_before_edit);
                     return;
                 }
             };
@@ -102,26 +162,26 @@ pub fn menu_actions(
             playing_ui.paused = false;
         }
         (GameMode::Playing, MenuAction::SaveWorld) if playing_ui.paused => {
-            session::save_current_world(&mut commands);
+            session::save_current_world(commands);
         }
         (GameMode::Playing, MenuAction::SaveAsNewPuzzle) if playing_ui.paused => {
-            open_save_as_new_puzzle_prompt(&mut text_prompt);
+            open_save_as_new_puzzle_prompt();
         }
         (GameMode::Playing, MenuAction::ResetSolution) if playing_ui.paused => {
-            dialog
-                .confirm
-                .open_then(reset_solution_spec(&dialog.i18n), on_reset_solution);
+            ui.open_confirm_then(reset_solution_spec(), on_reset_solution);
         }
         (GameMode::Playing, MenuAction::OpenSettings) if playing_ui.paused => {
-            ui_runtime.open(UiPanelId::Settings, UiPanelContext::SettingsFromPause);
+            ui.mount_settings(
+                commands,
+                playing_ui_root.map(|root| root.0),
+                UiPanelContext::SettingsFromPause,
+            );
         }
         (GameMode::Playing, MenuAction::BackToMainMenu) if playing_ui.paused => {
             if solution_state.dirty {
-                dialog
-                    .confirm
-                    .open_then(return_to_main_spec(&dialog.i18n), on_return_to_main);
+                ui.open_confirm_then(return_to_main_spec(), on_return_to_main);
             } else {
-                session::exit_to_main_menu(&mut commands, false);
+                session::exit_to_main_menu(commands, false);
             }
         }
         _ => {}

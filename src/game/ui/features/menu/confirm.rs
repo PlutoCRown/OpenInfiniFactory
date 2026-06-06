@@ -1,49 +1,42 @@
-use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::game::session;
-use crate::game::ui::core::confirm_dialog::{ActiveConfirmDialog, ConfirmExtraButton, ConfirmOpen, ConfirmResult};
-use crate::shared::i18n::I18n;
+use crate::game::ui::access::i18n;
+use crate::game::ui::core::confirm_dialog::{ConfirmExtraButton, ConfirmProps, ConfirmResult};
 
 pub const EXTRA_DISCARD: u32 = 0;
 
-#[derive(SystemParam)]
-pub struct MenuDialogParams<'w> {
-    pub confirm: ActiveConfirmDialog<'w>,
-    pub i18n: Res<'w, I18n>,
-}
-
-pub fn reset_solution_spec(i18n: &I18n) -> ConfirmOpen {
-    ConfirmOpen {
-        title: i18n.text("confirm.title"),
-        message: i18n.text("confirm.reset_solution"),
-        confirm_text: i18n.text("button.confirm_reset_solution"),
-        cancel_text: i18n.text("button.cancel"),
+pub fn reset_solution_spec() -> ConfirmProps {
+    ConfirmProps {
+        title: i18n.t("confirm.title"),
+        message: i18n.t("confirm.reset_solution"),
+        confirm_text: i18n.t("button.confirm_reset_solution"),
+        cancel_text: i18n.t("button.cancel"),
         extra: None,
     }
 }
 
-pub fn return_to_main_spec(i18n: &I18n) -> ConfirmOpen {
-    ConfirmOpen {
-        title: i18n.text("confirm.title"),
-        message: i18n.text("confirm.return_to_main"),
-        confirm_text: i18n.text("button.save_and_back"),
-        cancel_text: i18n.text("button.cancel"),
+pub fn return_to_main_spec() -> ConfirmProps {
+    ConfirmProps {
+        title: i18n.t("confirm.title"),
+        message: i18n.t("confirm.return_to_main"),
+        confirm_text: i18n.t("button.save_and_back"),
+        cancel_text: i18n.t("button.cancel"),
         extra: Some(ConfirmExtraButton {
-            text: i18n.text("button.discard_and_back"),
+            text: i18n.t("button.discard_and_back"),
             tag: EXTRA_DISCARD,
         }),
     }
 }
 
-pub fn save_before_edit_spec(i18n: &I18n) -> ConfirmOpen {
-    ConfirmOpen {
-        title: i18n.text("confirm.title"),
-        message: i18n.text("confirm.save_solution_before_edit"),
-        confirm_text: i18n.text("button.save_solution_and_edit"),
-        cancel_text: i18n.text("button.cancel"),
+pub fn save_before_edit_spec() -> ConfirmProps {
+    ConfirmProps {
+        title: i18n.t("confirm.title"),
+        message: i18n.t("confirm.save_solution_before_edit"),
+        confirm_text: i18n.t("button.save_solution_and_edit"),
+        cancel_text: i18n.t("button.cancel"),
         extra: Some(ConfirmExtraButton {
-            text: i18n.text("button.discard_solution_and_edit"),
+            text: i18n.t("button.discard_solution_and_edit"),
             tag: EXTRA_DISCARD,
         }),
     }

@@ -1,7 +1,5 @@
 use bevy::prelude::*;
 
-use crate::shared::i18n::I18n;
-
 use super::super::types::LocalizedText;
 
 const DEFAULT_BUTTON_SCALE: f32 = 1.2;
@@ -27,13 +25,14 @@ pub fn text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bund
 }
 
 pub fn localized_text(
-    i18n: &I18n,
     key: &'static str,
     font_size: f32,
     color: Color,
 ) -> (impl Bundle, LocalizedText) {
+    use crate::game::ui::access::i18n;
+
     (
-        text(i18n.text(key), font_size, color),
+        text(i18n.t(key), font_size, color),
         LocalizedText { key },
     )
 }

@@ -33,7 +33,7 @@ pub struct SettingsDropdownList(pub SettingsDropdown);
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct SettingsDropdownRow(pub SettingsDropdown);
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SettingsField {
     Fov,
     UiScale,
@@ -137,11 +137,9 @@ impl SettingsField {
         ((self.value(settings) - slider.min) / (slider.max - slider.min) * 100.0).clamp(0.0, 100.0)
     }
 
-    pub fn display(
-        self,
-        settings: &GameSettings,
-        i18n: &crate::shared::i18n::I18n,
-    ) -> String {
+    pub fn display(self, settings: &GameSettings) -> String {
+        use crate::game::ui::access::i18n;
+
         match self {
             Self::Fov => format!("FOV {:.0}", settings.fov_degrees),
             Self::UiScale => i18n.fmt(
@@ -208,7 +206,7 @@ impl SettingsField {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SettingsDropdown {
     Language,
     PlaceSelectionMode,
@@ -216,16 +214,18 @@ pub enum SettingsDropdown {
 }
 
 impl SettingsDropdown {
-    pub fn trigger_label(self, config: &crate::shared::config::GameConfig, i18n: &crate::shared::i18n::I18n) -> String {
+    pub fn trigger_label(self, config: &crate::shared::config::GameConfig) -> String {
+        use crate::game::ui::access::i18n;
+
         match self {
             Self::Language => i18n.language().native_name().to_string(),
-            Self::PlaceSelectionMode => i18n.text(config.place_selection_mode.label_key()),
-            Self::DeleteSelectionMode => i18n.text(config.delete_selection_mode.label_key()),
+            Self::PlaceSelectionMode => i18n.t(config.place_selection_mode.label_key()),
+            Self::DeleteSelectionMode => i18n.t(config.delete_selection_mode.label_key()),
         }
     }
 }
 
-#[derive(Component, Clone, Copy, Eq, PartialEq)]
+#[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SettingsAction {
     TabGameplay,
     TabKeyBindings,

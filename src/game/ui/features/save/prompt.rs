@@ -1,27 +1,16 @@
-use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::game::session;
-use crate::game::ui::core::text_prompt::{ActiveTextPrompt, TextPromptOpen, TextPromptResult};
-use crate::shared::i18n::I18n;
+use crate::game::ui::access::{i18n, ui};
+use crate::game::ui::core::text_prompt::{TextPromptProps, TextPromptResult};
 use crate::shared::save::{next_named_save, rename_save, SaveState};
 
-#[derive(SystemParam)]
-pub struct SaveTextPromptParams<'w> {
-    pub prompt: ActiveTextPrompt<'w>,
-    pub i18n: Res<'w, I18n>,
-}
-
-pub fn text_prompt_spec(
-    i18n: &I18n,
-    title_key: &'static str,
-    default_value: &str,
-) -> TextPromptOpen {
-    TextPromptOpen {
-        title: i18n.text(title_key),
+pub fn text_prompt_spec(title_key: &'static str, default_value: &str) -> TextPromptProps {
+    TextPromptProps {
+        title: i18n.t(title_key),
         default_value: default_value.to_string(),
-        save_text: i18n.text("button.confirm"),
-        cancel_text: i18n.text("button.cancel"),
+        save_text: i18n.t("button.confirm"),
+        cancel_text: i18n.t("button.cancel"),
     }
 }
 
@@ -48,9 +37,9 @@ fn resolved_name(
     }
 }
 
-pub fn open_new_puzzle_prompt(params: &mut SaveTextPromptParams) {
-    let spec = text_prompt_spec(&params.i18n, "save.prompt.new_puzzle", "puzzle");
-    params.prompt.open_then(spec, |result, world| {
+pub fn open_new_puzzle_prompt() {
+    let spec = text_prompt_spec("save.prompt.new_puzzle", "puzzle");
+    ui.open_text_prompt_then(spec, |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
@@ -62,9 +51,9 @@ pub fn open_new_puzzle_prompt(params: &mut SaveTextPromptParams) {
     });
 }
 
-pub fn open_new_solution_prompt(params: &mut SaveTextPromptParams, puzzle: String) {
-    let spec = text_prompt_spec(&params.i18n, "save.prompt.new_solution", "solution");
-    params.prompt.open_then(spec, move |result, world| {
+pub fn open_new_solution_prompt(puzzle: String) {
+    let spec = text_prompt_spec("save.prompt.new_solution", "solution");
+    ui.open_text_prompt_then(spec, move |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
@@ -76,9 +65,9 @@ pub fn open_new_solution_prompt(params: &mut SaveTextPromptParams, puzzle: Strin
     });
 }
 
-pub fn open_rename_puzzle_prompt(params: &mut SaveTextPromptParams, old_name: String) {
-    let spec = text_prompt_spec(&params.i18n, "save.prompt.rename_puzzle", old_name.as_str());
-    params.prompt.open_then(spec, move |result, world| {
+pub fn open_rename_puzzle_prompt(old_name: String) {
+    let spec = text_prompt_spec("save.prompt.rename_puzzle", old_name.as_str());
+    ui.open_text_prompt_then(spec, move |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
@@ -99,13 +88,9 @@ pub fn open_rename_puzzle_prompt(params: &mut SaveTextPromptParams, old_name: St
     });
 }
 
-pub fn open_rename_solution_prompt(params: &mut SaveTextPromptParams, old_name: String) {
-    let spec = text_prompt_spec(
-        &params.i18n,
-        "save.prompt.rename_solution",
-        old_name.as_str(),
-    );
-    params.prompt.open_then(spec, move |result, world| {
+pub fn open_rename_solution_prompt(old_name: String) {
+    let spec = text_prompt_spec("save.prompt.rename_solution", old_name.as_str());
+    ui.open_text_prompt_then(spec, move |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
@@ -126,9 +111,9 @@ pub fn open_rename_solution_prompt(params: &mut SaveTextPromptParams, old_name: 
     });
 }
 
-pub fn open_save_as_new_puzzle_prompt(params: &mut SaveTextPromptParams) {
-    let spec = text_prompt_spec(&params.i18n, "save.prompt.save_as_new_puzzle", "puzzle");
-    params.prompt.open_then(spec, |result, world| {
+pub fn open_save_as_new_puzzle_prompt() {
+    let spec = text_prompt_spec("save.prompt.save_as_new_puzzle", "puzzle");
+    ui.open_text_prompt_then(spec, |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };

@@ -10,14 +10,13 @@
 
 | 类别 | 数量 | 挂载根 | 典型可见性驱动 |
 | --- | --- | --- | --- |
-| 全局 / 菜单层 Panel | 6 | `UiRoot`（Startup） | `GameMode::StartMenu`、`StartMenuScreen`、`ConfirmDialogState`、`TextPromptState` |
+| 全局 / 菜单层 Panel | 4 | `UiRoot`（Startup） | `GameMode::StartMenu`、`StartMenuScreen`、`UiHost` / `TextPromptState` |
 | 游玩流程 Panel | 2 | `PlayingUiRoot`（`OnEnter(Playing)`） | `PlayingUiState`（暂停 / 背包） |
 | 方块配置 Panel | 5 | `PlayingUiRoot` | `UiRuntime.open_block` + `UiPanelBinding` |
-| 跨层全局配置 | 1（设置） | `UiRoot` | `UiRuntime.open(Settings, …)`，Playing 时仍可打开 |
+| 跨层全局配置 | 1（设置） | `UiHost` 动态挂到当前 UI root | `UiHost::mount_settings` / `unmount_panel` |
 | 非 Panel 浮层 | 1 组 | `PlayingUiRoot` | `OpenBlockPanelDropdown`（材料 / 颜色 / 传送门配对下拉） |
-| 模态遮罩 | 1 | `UiRoot` | 任意 modal panel 或确认框打开时 |
 
-带 `PanelWindow` 组件的窗体共 **13 个**（含 TextPrompt；不含 ModalScrim）。
+带 `PanelWindow` 组件的窗体共 **12 个**（含 TextPrompt；Settings 按需动态 spawn）。
 
 ---
 
@@ -26,8 +25,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  UiRoot（Startup，全程存在）                                  │
-│  ├─ 主菜单 / 存档列表 / 设置 / 确认框 / TextPrompt            │
-│  └─ ModalScrim（全屏半透明，非窗体）                          │
+│  └─ 主菜单 / 存档列表 / 确认框 / TextPrompt                    │
 └─────────────────────────────────────────────────────────────┘
                               │
                     GameMode::Playing
@@ -49,12 +47,11 @@
 | --- | --- | --- | --- |
 | 主菜单 | `screens/menu.rs` | `StartMenu` + `StartMenuScreen::Main` | 编辑谜题、游玩、设置、退出 |
 | 存档列表 | `screens/save_list.rs` | `StartMenu` + `StartMenuScreen::SaveList` | 谜题/解法列表、新建、重命名、删除 |
-| 设置 | `screens/settings.rs` | `UiRuntime` 栈顶为 `Settings` + 当前 `SettingsTab` | Gameplay 滑块 / 键位绑定（840px 宽） |
-| 确认框 | `layout.rs` `spawn_confirm_dialog` | `ConfirmDialogState.kind` 有值 | 存档删除等二次确认 |
-| 文本输入 | `layout.rs` `spawn_text_prompt` | `TextPromptState.title_key` 有值 | 通用单行输入（存档重命名等） |
-| 模态遮罩 | `layout.rs` `spawn_modal_scrim` | 设置/方块 Panel 栈非空，或确认框打开 | 半透明 scrim，阻挡下层点击 |
+| 设置 | `screens/settings.rs` | `UiHost::mount_settings` 动态 spawn，`UiRuntime` 栈顶为 `Settings` + 当前 `SettingsTab` | Gameplay 滑块 / 键位绑定（840px 宽） |
+| 确认框 | `layout.rs` `spawn_confirm_dialog` | `UiHost` 中存在 Confirm 实例 | 存档删除等二次确认 |
+| 文本输入 | `layout.rs` `spawn_text_prompt` | `TextPromptState` open | 通用单行输入（存档重命名等） |
 
-**设置 Panel 的特殊性**：实体在 `UiRoot` 下于 Startup 创建，但 Playing 时仍可通过暂停菜单或（历史上）主菜单入口调用 `ui_runtime.open(UiPanelId::Settings, …)` 打开。它是**全局配置 UI**，不是方块配置 UI。
+**设置 Panel 的特殊性**：实体不再于 Startup 预创建；主菜单或暂停菜单调用 `UiHost::mount_settings` 后，设置面板会挂到对应 root，关闭时 despawn。它是**全局配置 UI**，不是方块配置 UI。
 
 ### 2. 游玩层（非方块）
 
@@ -90,11 +87,11 @@
 
 | 阶段 | 系统 | 创建内容 |
 | --- | --- | --- |
-| `Startup` | `ui::setup_menu_ui` | `UiRoot` 及其子节点（菜单、设置、确认框、TextPrompt、ModalScrim） |
+| `Startup` | `ui::setup_menu_ui` | `UiRoot` 及其子节点（菜单、存档列表、确认框、TextPrompt） |
 | `OnEnter(Playing)` | `ui::setup_playing_ui_system` | `PlayingUiRoot` 及游玩 HUD、流程 Panel、方块 Panel、下拉层 |
 | `OnExit(Playing)` | `session::on_exit_playing` | despawn `PlayingUiRoot`（方块 Panel 与游玩 HUD 一并销毁） |
 
-全局 Panel 在整局应用生命周期内保留；退出 Playing 不会销毁主菜单或设置实体。
+主菜单、存档列表、Confirm、TextPrompt 在整局应用生命周期内保留；Settings 由 `UiHost` 按需创建/销毁。
 
 ---
 
@@ -104,27 +101,27 @@
 
 | 机制 | 标记 / 资源 | 更新系统 | 适用对象 |
 | --- | --- | --- | --- |
-| 流程可见性 | `PanelVisibility` | `update_panel_visibility` → `panel_visible()` | 主菜单、存档列表、暂停、背包、设置 Tab、确认框、ModalScrim |
+| 流程可见性 | `PanelVisibility` | `update_panel_visibility` → `panel_visible()` | 主菜单、存档列表、暂停、背包、设置 Tab、确认框 |
 | 栈顶 Panel | `UiPanelBinding` + `UiRuntime` | 同上，`active_panel == binding.0` | 设置 + 5 个方块 Panel |
 | 独立状态 | `TextPromptState` | `update_text_prompt_ui` | TextPrompt（有 `PanelWindow` 但排除在 `panel_visible` 之外） |
 
 `PanelWindow` 实体在 `display: None` 时还会重置 `PanelPosition`（取消拖动居中），并通过 `Visibility::Hidden` 避免误渲染。
 
-层级：`update_ui_layers` 按 `UiRuntime` 栈深度、`ConfirmDialog`、ModalScrim 计算 `GlobalZIndex`。
+层级：`update_ui_layers` 按 `UiRuntime` 栈深度与 `UiHost` Confirm 实例计算 `GlobalZIndex`。Modal 打开时由业务 action emitter 检查 `UiHost::modal_open()`，不再使用 `ModalScrim` 节点阻挡下层点击。
 
 ---
 
 ## Panel 完整清单
 
-### 带 `PanelWindow` 的窗体（13）
+### 带 `PanelWindow` 的窗体（12）
 
 | # | 名称 | 根 | 分类 | 关闭方式 |
 | --- | --- | --- | --- | --- |
 | 1 | 主菜单 | UiRoot | 全局 | 切屏 / 进入 Playing |
 | 2 | 存档列表 | UiRoot | 全局 | 返回主菜单 |
-| 3 | 设置 | UiRoot | 全局（跨模式） | 关闭按钮 → `UiRuntime.close_active` |
-| 4 | 确认框 | UiRoot | 全局 | 按钮 → 清空 `ConfirmDialogState` |
-| 5 | TextPrompt | UiRoot | 全局 | 确认 / 取消 → `TextPromptState.close` |
+| 3 | 设置 | UiHost 动态根 | 全局（跨模式） | 关闭按钮 → `UiHost::unmount_panel(Settings)` |
+| 4 | 确认框 | UiRoot | 全局 | 按钮 → `UiAction` → `UiHost::dispatch_completions` |
+| 5 | TextPrompt | UiRoot | 全局 | 确认 / 取消 → `UiAction` → `UiHost::dispatch_completions` |
 | 6 | 暂停菜单 | PlayingUiRoot | 游玩流程 | Esc / 继续 |
 | 7 | 背包 | PlayingUiRoot | 游玩流程 | 再按背包键 |
 | 8 | Generator | PlayingUiRoot | 方块 | 标题栏 × |
@@ -132,13 +129,11 @@
 | 10 | Labeler | PlayingUiRoot | 方块 | 标题栏 × |
 | 11 | Converter | PlayingUiRoot | 方块 | 标题栏 × |
 | 12 | Teleport | PlayingUiRoot | 方块 | 标题栏 × |
-| 13 | （设置占 #3，已列） | | | |
 
 ### 无 `PanelWindow` 的相关 UI
 
 | 名称 | 组件 | 说明 |
 | --- | --- | --- |
-| ModalScrim | `PanelVisibility::ModalScrim` | 全屏 Node，非窗体 |
 | Block 下拉层 | `BlockPanelDropdown` 标记 | 6 组浮层列表，依附方块 Panel |
 
 ---
@@ -181,7 +176,7 @@ pub enum UiPanelId {
 
 | 路径 | 职责 |
 | --- | --- |
-| `src/game/ui/layout.rs` | `setup_menu_ui` / `setup_playing_ui`、方块 Panel spawn、ModalScrim、确认框、TextPrompt |
+| `src/game/ui/layout.rs` | `setup_menu_ui` / `setup_playing_ui`、方块 Panel spawn、确认框、TextPrompt |
 | `src/game/ui/screens/` | 主菜单、暂停、背包、设置、存档列表 spawn |
 | `src/game/ui/components/panel.rs` | `spawn_panel`、`panel_bundle`（含 `PanelWindow`） |
 | `src/game/ui/core/panel.rs` | `PanelVisibility` 枚举 |

@@ -1,7 +1,5 @@
 use bevy::prelude::*;
 
-use crate::shared::i18n::I18n;
-
 use super::super::components::{
     default_button_size, default_font_size, localized_text, spawn_panel_with_title_marker, text,
     transparent_node, PanelOptions,
@@ -41,10 +39,9 @@ pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
     });
 }
 
-pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands) {
     spawn_panel_with_title_marker(
         root,
-        i18n,
         PanelOptions::new(640.0, "inventory.title"),
         PanelVisibility::Inventory,
         InventoryTitleText,
@@ -55,7 +52,6 @@ pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                 }
             });
             panel.spawn(localized_text(
-                i18n,
                 "inventory.help",
                 15.0,
                 Color::srgb(0.78, 0.78, 0.76),

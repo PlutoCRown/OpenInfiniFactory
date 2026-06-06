@@ -5,7 +5,7 @@ use super::super::types::{
 };
 use super::button::{raised_border, HoverButton};
 use super::text::{default_font_size, text};
-use crate::shared::i18n::I18n;
+use crate::game::ui::access::i18n;
 
 pub const PANEL_BG: Color = Color::srgb(0.192, 0.188, 0.192);
 pub const PANEL_LIGHT_EDGE: Color = Color::srgb(0.40, 0.38, 0.36);
@@ -53,14 +53,12 @@ impl PanelOptions {
 
 pub fn spawn_panel(
     root: &mut ChildSpawnerCommands,
-    i18n: &I18n,
     options: PanelOptions,
     markers: impl Bundle,
     content: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
     spawn_panel_with_title_marker(
         root,
-        i18n,
         options,
         markers,
         LocalizedText {
@@ -72,7 +70,6 @@ pub fn spawn_panel(
 
 pub fn spawn_panel_with_title_marker(
     root: &mut ChildSpawnerCommands,
-    i18n: &I18n,
     options: PanelOptions,
     markers: impl Bundle,
     title_marker: impl Component,
@@ -82,7 +79,7 @@ pub fn spawn_panel_with_title_marker(
         .with_children(|panel| {
             panel.spawn(panel_title_bar()).with_children(|title| {
                 let mut title_text = title.spawn(panel_title_label(
-                    i18n.text(options.title_key),
+                    i18n.t(options.title_key),
                     options.title_size,
                 ));
                 if options.dynamic_title {

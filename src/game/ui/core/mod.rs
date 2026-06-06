@@ -1,12 +1,14 @@
 pub mod action;
 pub mod confirm_dialog;
+pub mod host;
 pub mod panel;
 pub mod runtime;
 pub mod text_input;
 pub mod text_prompt;
 
 pub use action::UiActionLabel;
-pub use confirm_dialog::{ConfirmButtonId, ConfirmDialogState};
+pub use confirm_dialog::ConfirmButtonId;
+pub use host::UiHost;
 pub use panel::{
     PanelCloseButton, PanelDragState, PanelPosition, PanelTitleBar, PanelVisibility, PanelWindow,
     UiHoverState,

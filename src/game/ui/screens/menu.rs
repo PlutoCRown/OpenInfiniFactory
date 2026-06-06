@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 
 use crate::game::state::StartMenuScreen;
-use crate::shared::i18n::I18n;
 
 use super::super::components::{spawn_panel, PanelOptions};
 use super::super::types::{MenuAction, PanelVisibility};
@@ -75,20 +74,18 @@ const PAUSE_MENU_ITEMS: &[MenuItem] = &[
     },
 ];
 
-pub fn spawn_main_menu(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+pub fn spawn_main_menu(root: &mut ChildSpawnerCommands) {
     spawn_menu_panel(
         root,
-        i18n,
         PanelOptions::new(420.0, "main.title").title_size(30.0),
         PanelVisibility::StartMenuScreen(StartMenuScreen::Main),
         MAIN_MENU_ITEMS,
     );
 }
 
-pub fn spawn_pause_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+pub fn spawn_pause_panel(root: &mut ChildSpawnerCommands) {
     spawn_menu_panel(
         root,
-        i18n,
         PanelOptions::new(420.0, "state.paused").title_size(30.0),
         PanelVisibility::PauseMenu,
         PAUSE_MENU_ITEMS,
@@ -97,12 +94,11 @@ pub fn spawn_pause_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
 
 fn spawn_menu_panel(
     root: &mut ChildSpawnerCommands,
-    i18n: &I18n,
     options: PanelOptions,
     visibility: PanelVisibility,
     items: &[MenuItem],
 ) {
-    spawn_panel(root, i18n, options, visibility, |panel| {
+    spawn_panel(root, options, visibility, |panel| {
         for item in items {
             spawn_menu_button(panel, item.height, item.font_size, item.action);
         }

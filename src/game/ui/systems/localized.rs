@@ -1,12 +1,19 @@
 pub fn update_localized_ui(
-    i18n: Res<I18n>,
-    mut localized_text: Query<(&LocalizedText, &mut Text)>,
+    _ui_thread: UiMainThread,
+    revision: Res<I18nRevision>,
+    mut labels: ParamSet<(
+        Query<(&LocalizedText, &mut Text)>,
+        Query<(&LocalizedText, &mut Text), Added<LocalizedText>>,
+    )>,
 ) {
-    if !i18n.is_changed() {
+    if revision.is_changed() {
+        for (localized, mut text) in &mut labels.p0() {
+            text.0 = i18n.t(localized.key);
+        }
         return;
     }
 
-    for (localized, mut text) in &mut localized_text {
-        text.0 = i18n.text(localized.key);
+    for (localized, mut text) in &mut labels.p1() {
+        text.0 = i18n.t(localized.key);
     }
 }

@@ -5,24 +5,66 @@ use crate::game::block_editing::{
     BlockPanelAction, OpenBlockPanelDropdown,
 };
 use crate::game::state::{SolutionState, UiPanelId};
+use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::{primary_click, read_inline_text_input, InlineTextEditState};
 use crate::game::session::PlayingWorldParams;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{despawn_world, rebuild_world_for_debug_state};
 
-pub fn block_panel_actions(
+pub fn emit_block_panel_actions(
     mut click: On<Pointer<Click>>,
+    ui_host: Res<UiHost>,
+    mut writer: MessageWriter<UiAction>,
+    actions: Query<&BlockPanelAction>,
+) {
+    if ui_host.modal_open() || !primary_click(&mut click) {
+        return;
+    }
+    let Ok(action) = actions.get(click.entity).copied() else {
+        return;
+    };
+    click.propagate(false);
+    writer.write(UiAction {
+        instance: UiInstanceId::BLOCK_PANEL,
+        kind: UiActionKind::BlockPanel(action),
+    });
+}
+
+pub fn dispatch_block_panel_actions(
+    mut actions: MessageReader<UiAction>,
     mut ui_runtime: ResMut<UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut inline_edit: ResMut<InlineTextEditState>,
     mut solution_state: ResMut<SolutionState>,
     mut world: PlayingWorldParams,
-    actions: Query<&BlockPanelAction>,
 ) {
-    if !primary_click(&mut click) {
-        return;
+    for action in actions.read() {
+        if action.instance != UiInstanceId::BLOCK_PANEL {
+            continue;
+        }
+        let UiActionKind::BlockPanel(action) = action.kind.clone() else {
+            continue;
+        };
+        dispatch_block_panel_action(
+            action,
+            &mut ui_runtime,
+            &mut open_dropdown,
+            &mut inline_edit,
+            &mut solution_state,
+            &mut world,
+        );
     }
+}
+
+fn dispatch_block_panel_action(
+    action: BlockPanelAction,
+    ui_runtime: &mut UiRuntime,
+    open_dropdown: &mut OpenBlockPanelDropdown,
+    inline_edit: &mut InlineTextEditState,
+    solution_state: &mut SolutionState,
+    world: &mut PlayingWorldParams,
+) {
     let Some(pos) = ui_runtime.active_block_pos() else {
         return;
     };
@@ -30,10 +72,6 @@ pub fn block_panel_actions(
         ui_runtime.close_current();
         return;
     };
-    let Ok(action) = actions.get(click.entity).copied() else {
-        return;
-    };
-    click.propagate(false);
 
     if action == BlockPanelAction::StartTeleportRename {
         let settings = world.world.teleport_settings(pos);
@@ -50,8 +88,8 @@ pub fn block_panel_actions(
         pos,
         action,
         &mut world.world,
-        &mut solution_state,
-        &mut open_dropdown,
+        solution_state,
+        open_dropdown,
     );
 
     if !action.mutates_world() {

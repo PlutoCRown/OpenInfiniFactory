@@ -9,37 +9,38 @@ use crate::game::ui::types::{
 };
 use crate::game::ui::widgets::{short_item_name, slot_color};
 use crate::game::world::rendering::BlockIconAssets;
-use crate::shared::i18n::I18n;
+use crate::game::ui::access::{i18n, I18nRevision, UiMainThread};
 
 use super::types::InventoryTitleText;
 
-fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
-    i18n.text(match mode {
+fn builder_mode_name(mode: BuilderMode) -> String {
+    i18n.t(match mode {
         BuilderMode::Edit => "mode.edit",
         BuilderMode::Play => "mode.play",
     })
 }
 
 pub fn update_inventory_title(
+    _ui_thread: UiMainThread,
     builder_mode: Res<BuilderMode>,
-    i18n: Res<I18n>,
+    i18n_revision: Res<I18nRevision>,
     mut titles: Query<&mut Text, With<InventoryTitleText>>,
 ) {
-    if !builder_mode.is_changed() && !i18n.is_changed() {
+    if !builder_mode.is_changed() && !i18n_revision.is_changed() {
         return;
     }
     for mut text in &mut titles {
         text.0 = i18n.fmt(
             "inventory.title",
-            &[("mode", builder_mode_name(*builder_mode, &i18n))],
+            &[("mode", builder_mode_name(*builder_mode))],
         );
     }
 }
 
 pub fn update_inventory_slots(
+    _ui_thread: UiMainThread,
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
-    i18n: Res<I18n>,
     hover: Res<UiHoverState>,
     block_icons: Option<Res<BlockIconAssets>>,
     mut slot_query: Query<
@@ -114,7 +115,7 @@ pub fn update_inventory_slots(
                 text.0 = if has_icon {
                     String::new()
                 } else {
-                    item.map(|kind| i18n.text(short_item_name(kind)))
+                    item.map(|kind| i18n.t(short_item_name(kind)))
                         .unwrap_or_default()
                 };
             }
@@ -145,14 +146,14 @@ pub fn update_inventory_slots(
     tooltip_node.top = Val::Px(cursor.y + 16.0);
     for child in tooltip_children.iter() {
         if let Ok(mut text) = texts.p1().get_mut(child) {
-            text.0 = i18n.text(item.name_key());
+            text.0 = i18n.t(item.name_key());
         }
     }
 }
 
 pub fn update_carried_item_ui(
+    _ui_thread: UiMainThread,
     carried: Res<CarriedItem>,
-    i18n: Res<I18n>,
     block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut preview: Query<(&mut Node, &mut BackgroundColor, &Children), With<CarriedItemPreview>>,
@@ -204,7 +205,7 @@ pub fn update_carried_item_ui(
             text.0 = if icon_handle.is_some() {
                 String::new()
             } else {
-                i18n.text(short_item_name(item))
+                i18n.t(short_item_name(item))
             };
         }
     }

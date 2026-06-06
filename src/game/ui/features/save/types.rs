@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Debug, Eq, PartialEq)]
 pub enum SaveListAction {
     NewPuzzle,
     NewSolution,

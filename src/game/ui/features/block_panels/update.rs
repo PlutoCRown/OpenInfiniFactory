@@ -14,7 +14,8 @@ use crate::game::ui::types::ConverterInputRow;
 use crate::game::world::blocks::{BlockKind, MaterialKind};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockIconAssets;
-use crate::shared::i18n::{I18n, Language};
+use crate::game::ui::access::{i18n, UiMainThread};
+use crate::shared::i18n::Language;
 
 #[derive(SystemParam)]
 pub struct BlockPanelDropdownParams<'w, 's> {
@@ -54,10 +55,10 @@ pub struct BlockPanelDropdownParams<'w, 's> {
 }
 
 pub fn update_active_block_panel(
+    _ui_thread: UiMainThread,
     ui_runtime: Res<UiRuntime>,
     inline_edit: Res<InlineTextEditState>,
     world: Res<WorldBlocks>,
-    i18n: Res<I18n>,
     mut texts: ParamSet<(
         Query<(&BlockPanelText, &mut Text)>,
         Query<&mut Text, With<BlockPanelTitle>>,
@@ -95,7 +96,7 @@ pub fn update_active_block_panel(
             _ => "labeler.title",
         };
         for mut text in &mut texts.p1() {
-            text.0 = i18n.text(key);
+            text.0 = i18n.t(key);
         }
     }
 
@@ -105,11 +106,11 @@ pub fn update_active_block_panel(
 }
 
 pub fn update_block_panel_dropdowns(
+    _ui_thread: UiMainThread,
     mut commands: Commands,
     ui_runtime: Res<UiRuntime>,
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
-    i18n: Res<I18n>,
     block_icons: Option<Res<BlockIconAssets>>,
     ui_scale: Res<UiScale>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -119,7 +120,7 @@ pub fn update_block_panel_dropdowns(
     let active_pos = ui_runtime.active_block_pos();
 
     for (label, mut text) in &mut dropdowns.labels {
-        text.0 = label.0.selected_label(active_pos, &world, &i18n);
+        text.0 = label.0.selected_label(active_pos, &world);
     }
 
     if let Some(block_icons) = block_icons.as_deref() {
@@ -199,7 +200,7 @@ pub fn update_block_panel_dropdowns(
                 continue;
             };
             commands.entity(entity).with_children(|parent| {
-                spawn_teleport_pair_option(parent, i18n.text("teleport.none"), None);
+                spawn_teleport_pair_option(parent, i18n.t("teleport.none"), None);
                 for pair in teleport_pair_candidates(&world, pos) {
                     spawn_teleport_pair_option(
                         parent,

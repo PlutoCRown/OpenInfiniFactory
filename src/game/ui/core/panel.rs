@@ -42,5 +42,4 @@ pub enum PanelVisibility {
     Inventory,
     SettingsTab(crate::game::ui::features::settings::types::SettingsTab),
     ConfirmDialog,
-    ModalScrim,
 }

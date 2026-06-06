@@ -8,8 +8,8 @@ use crate::game::ui::components::{
 };
 use crate::game::ui::types::{KeyBindingButton, UiHoverState};
 use crate::shared::config::GameConfig;
-use crate::shared::i18n::I18n;
 
+use crate::game::ui::access::UiMainThread;
 use super::types::{
     ActiveSettingsSlider, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
     SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
@@ -17,12 +17,14 @@ use super::types::{
 };
 
 pub fn update_settings_text_ui(
+    _ui_thread: UiMainThread,
     config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
-    i18n: Res<I18n>,
     mut settings_texts: Query<(&SettingsText, Option<&ChildOf>, &mut Text)>,
     key_buttons: Query<&KeyBindingButton>,
 ) {
+    use crate::game::ui::access::i18n;
+
     for (settings_text, parent, mut text) in &mut settings_texts {
         text.0 = match settings_text.0 {
             SettingsTextKind::KeyBinding => {
@@ -37,7 +39,7 @@ pub fn update_settings_text_ui(
                     .filter(|pending| *pending == button.0)
                     .map(|_| "...")
                     .unwrap_or(config.input(button.0).name());
-                format!("{}: {suffix}", i18n.text(button.0.label_key()))
+                format!("{}: {suffix}", i18n.t(button.0.label_key()))
             }
         };
     }
@@ -121,10 +123,10 @@ pub fn update_settings_slider_drag_ui(
 }
 
 pub fn update_settings_dropdowns_ui(
+    _ui_thread: UiMainThread,
     config: Res<GameConfig>,
     settings: Res<GameSettings>,
     open_dropdown: Res<OpenSettingsDropdown>,
-    i18n: Res<I18n>,
     ui_scale: Res<UiScale>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut texts: ParamSet<(
@@ -144,11 +146,11 @@ pub fn update_settings_dropdowns_ui(
     triggers: Query<(&SettingsAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     for (label, mut text) in &mut texts.p0() {
-        text.0 = label.0.trigger_label(&config, &i18n);
+        text.0 = label.0.trigger_label(&config);
     }
 
     for (value, mut text) in &mut texts.p1() {
-        text.0 = value.0.display(&settings, &i18n);
+        text.0 = value.0.display(&settings);
     }
 
     let window = windows.single().ok();

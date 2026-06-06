@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::game::state::{GameMode, StartMenuScreen, WorldEntryMode};
-use crate::shared::i18n::I18n;
+use crate::game::ui::access::i18n;
 use crate::shared::save::SaveState;
 
 use super::types::{
@@ -56,7 +56,6 @@ pub struct SaveListViewCtx<'a> {
     pub save_state: &'a SaveState,
     pub edit_flow: bool,
     pub play_flow: bool,
-    pub i18n: &'a I18n,
 }
 
 pub struct ActionButtonView {
@@ -78,7 +77,6 @@ impl SaveListAction {
         let SaveListViewCtx {
             save_state,
             play_flow,
-            i18n,
             ..
         } = ctx;
         match self {
@@ -96,11 +94,11 @@ impl SaveListAction {
             Self::LoadSolution(name) => {
                 i18n.fmt("save.load_solution", &[("name", name.clone())])
             }
-            Self::RenamePuzzle(_) | Self::RenameSolution(_) => i18n.text("button.rename"),
-            Self::DeletePuzzle(_) | Self::DeleteSolution(_) => i18n.text("button.delete"),
-            Self::NewPuzzle => i18n.text("button.new_puzzle"),
-            Self::NewSolution => i18n.text("button.new_solution"),
-            Self::Back => i18n.text("button.back"),
+            Self::RenamePuzzle(_) | Self::RenameSolution(_) => i18n.t("button.rename"),
+            Self::DeletePuzzle(_) | Self::DeleteSolution(_) => i18n.t("button.delete"),
+            Self::NewPuzzle => i18n.t("button.new_puzzle"),
+            Self::NewSolution => i18n.t("button.new_solution"),
+            Self::Back => i18n.t("button.back"),
         }
     }
 
@@ -168,13 +166,12 @@ pub fn save_list_title(
     mode: GameMode,
     start_menu_screen: StartMenuScreen,
     entry: WorldEntryMode,
-    i18n: &I18n,
 ) -> String {
     match (mode, start_menu_screen) {
         (GameMode::StartMenu, StartMenuScreen::SaveList) => match entry {
-            WorldEntryMode::EditPuzzle => i18n.text("save.title.edit_puzzle"),
-            WorldEntryMode::PlaySolution => i18n.text("save.title.play_solution"),
+            WorldEntryMode::EditPuzzle => i18n.t("save.title.edit_puzzle"),
+            WorldEntryMode::PlaySolution => i18n.t("save.title.play_solution"),
         },
-        _ => i18n.text("save.title.default"),
+        _ => i18n.t("save.title.default"),
     }
 }

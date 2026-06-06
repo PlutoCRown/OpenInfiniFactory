@@ -1,25 +1,18 @@
-use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::game::ui::core::confirm_dialog::{ActiveConfirmDialog, ConfirmOpen, ConfirmResult};
-use crate::shared::i18n::I18n;
+use crate::game::ui::access::{i18n, ui};
+use crate::game::ui::core::confirm_dialog::{ConfirmProps, ConfirmResult};
 use crate::shared::save::{delete_save, SaveState};
 
-#[derive(SystemParam)]
-pub struct SaveDialogParams<'w> {
-    pub confirm: ActiveConfirmDialog<'w>,
-    pub i18n: Res<'w, I18n>,
-}
-
-pub fn open_delete_confirm(params: &mut SaveDialogParams, name: String) {
-    let spec = ConfirmOpen {
-        title: params.i18n.text("confirm.title"),
-        message: params.i18n.fmt("save.confirm_delete", &[("name", name.clone())]),
-        confirm_text: params.i18n.text("button.delete"),
-        cancel_text: params.i18n.text("button.cancel"),
+pub fn open_delete_confirm(name: String) {
+    let spec = ConfirmProps {
+        title: i18n.t("confirm.title"),
+        message: i18n.fmt("save.confirm_delete", &[("name", name.clone())]),
+        confirm_text: i18n.t("button.delete"),
+        cancel_text: i18n.t("button.cancel"),
         extra: None,
     };
-    params.confirm.open_then(spec, move |result, world| {
+    ui.open_confirm_then(spec, move |result, world| {
         if !matches!(result, ConfirmResult::Confirmed) {
             return;
         }

@@ -2,8 +2,8 @@ use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
 
 use super::components::{
-    default_button_size, default_font_size, full_width_button, inset_border, menu_button,
-    raised_border, slider_bundle, slider_fill, slider_knob, styled_button,
+    default_button_size, default_font_size, full_width_button, inset_border, localized_text,
+    menu_button, raised_border, slider_bundle, slider_fill, slider_knob, styled_button,
 };
 use super::types::{
     AreaKind, ConfirmButtonId, InventoryItem, InventorySlot, KeyBindingButton, MenuAction,
@@ -304,12 +304,13 @@ pub(super) fn spawn_localized_settings_button(
         button.insert(KeyBindingButton(action));
     }
     button.with_children(|button| {
-        let mut label_entity = button.spawn((
-            label_text(key, 14.0, Color::WHITE),
-            super::types::LocalizedText { key },
-        ));
         if is_binding {
-            label_entity.insert(SettingsText(SettingsTextKind::KeyBinding));
+            button.spawn((
+                label_text("", 14.0, Color::WHITE),
+                SettingsText(SettingsTextKind::KeyBinding),
+            ));
+        } else {
+            button.spawn(localized_text(key, 14.0, Color::WHITE));
         }
     });
 }
@@ -346,10 +347,7 @@ pub(super) fn spawn_settings_tab(parent: &mut ChildSpawnerCommands, action: Sett
             action,
         ))
         .with_children(|tab| {
-            tab.spawn((
-                label_text(key, 15.0, Color::WHITE),
-                super::types::LocalizedText { key },
-            ));
+            tab.spawn(localized_text(key, 15.0, Color::WHITE));
         });
 }
 
@@ -493,10 +491,7 @@ where
     let key = action.label_key();
     let mut entity = parent.spawn((menu_button(height), action));
     entity.with_children(|button| {
-        button.spawn((
-            label_text(key, font_size, Color::WHITE),
-            super::types::LocalizedText { key },
-        ));
+        button.spawn(localized_text(key, font_size, Color::WHITE));
     });
     entity
 }

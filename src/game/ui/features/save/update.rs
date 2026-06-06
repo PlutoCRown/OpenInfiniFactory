@@ -14,7 +14,7 @@ use crate::game::ui::types::{
     SaveListPrompt, SaveListPuzzleColumn, SaveListRenderState, SaveListSolutionColumn,
     SaveListTitleText, UiHoverState,
 };
-use crate::shared::i18n::I18n;
+use crate::game::ui::access::{i18n, UiMainThread};
 use crate::shared::save::SaveState;
 
 use super::view::{
@@ -22,11 +22,11 @@ use super::view::{
 };
 
 pub fn update_save_list_ui(
+    _ui_thread: UiMainThread,
     mode: Res<State<GameMode>>,
     start_menu_screen: Res<StartMenuScreen>,
     save_state: Res<SaveState>,
     solution_state: Res<SolutionState>,
-    i18n: Res<I18n>,
     hover: Res<UiHoverState>,
     mut render_state: ResMut<SaveListRenderState>,
     mut commands: Commands,
@@ -77,7 +77,6 @@ pub fn update_save_list_ui(
             *mode.get(),
             *start_menu_screen,
             solution_state.save_list_entry,
-            &i18n,
         );
     }
 
@@ -96,7 +95,7 @@ pub fn update_save_list_ui(
 
     for mut text in &mut texts.p2() {
         text.0 = if play_flow && save_state.selected_puzzle.is_none() {
-            i18n.text("save.choose_puzzle_prompt")
+            i18n.t("save.choose_puzzle_prompt")
         } else {
             String::new()
         };
@@ -106,7 +105,6 @@ pub fn update_save_list_ui(
         save_state: &save_state,
         edit_flow,
         play_flow,
-        i18n: &i18n,
     };
     for (entity, action, children, mut background, mut border) in &mut buttons {
         let view = action.button_view(&ctx);

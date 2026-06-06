@@ -6,6 +6,7 @@ pub fn update_panel_visibility(
     solution_state: Res<SolutionState>,
     settings_tab: Res<SettingsTab>,
     ui_runtime: Res<UiRuntime>,
+    ui_host: Res<UiHost>,
     world: Res<WorldBlocks>,
     mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut nodes: ParamSet<(
@@ -17,7 +18,6 @@ pub fn update_panel_visibility(
             (With<PanelWindow>, Without<TextPromptRoot>),
         >,
     )>,
-    confirm_dialog: Res<ConfirmDialogState>,
 ) {
     let active_panel = ui_runtime.active_panel();
     let mode = mode.get();
@@ -29,7 +29,7 @@ pub fn update_panel_visibility(
             &playing_ui,
             *settings_tab,
             &ui_runtime,
-            &confirm_dialog,
+            &ui_host,
         ));
     }
 
@@ -66,11 +66,13 @@ pub fn update_panel_visibility(
 pub fn panel_close_clicked(
     mut click: On<Pointer<Click>>,
     mut ui_runtime: ResMut<UiRuntime>,
+    mut ui_host: ResMut<UiHost>,
     mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut open_settings_dropdown: ResMut<OpenSettingsDropdown>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut inline_edit: ResMut<InlineTextEditState>,
     mut drag: ResMut<PanelDragState>,
+    mut commands: Commands,
     close_buttons: Query<(), With<PanelCloseButton>>,
 ) {
     if click.event.button != PointerButton::Primary || close_buttons.get(click.entity).is_err() {
@@ -78,13 +80,18 @@ pub fn panel_close_clicked(
     }
     click.propagate(false);
 
+    let active_panel = ui_runtime.active_panel();
     if ui_runtime.is_settings_open() {
         open_settings_dropdown.0 = None;
         pending_key_bind.0 = None;
     }
     open_block_dropdown.0 = None;
     inline_edit.clear();
-    ui_runtime.close_active();
+    if let Some(UiPanelId::Settings) = active_panel {
+        ui_host.unmount_panel(UiPanelId::Settings, &mut ui_runtime, Some(&mut commands));
+    } else {
+        ui_runtime.close_active();
+    }
     drag.clear();
 }
 
@@ -173,7 +180,7 @@ fn panel_visible(
     playing_ui: &PlayingUiState,
     settings_tab: SettingsTab,
     ui_runtime: &UiRuntime,
-    confirm_dialog: &ConfirmDialogState,
+    ui_host: &UiHost,
 ) -> bool {
     match visibility {
         PanelVisibility::StartMenuScreen(screen) => {
@@ -182,10 +189,7 @@ fn panel_visible(
         PanelVisibility::PauseMenu => mode == GameMode::Playing && playing_ui.paused,
         PanelVisibility::Inventory => mode == GameMode::Playing && playing_ui.inventory_open,
         PanelVisibility::SettingsTab(tab) => ui_runtime.is_settings_open() && settings_tab == tab,
-        PanelVisibility::ConfirmDialog => confirm_dialog.is_open(),
-        PanelVisibility::ModalScrim => {
-            ui_runtime.has_modal_panel() || confirm_dialog.is_open()
-        }
+        PanelVisibility::ConfirmDialog => ui_host.confirm_open(),
     }
 }
 
@@ -227,7 +231,7 @@ fn reset_panel_centering(style: &mut Node) {
 
 pub fn update_ui_layers(
     ui_runtime: Res<UiRuntime>,
-    confirm_dialog: Res<ConfirmDialogState>,
+    ui_host: Res<UiHost>,
     mut layered_nodes: Query<(
         &mut GlobalZIndex,
         Option<&UiPanelBinding>,
@@ -240,24 +244,13 @@ pub fn update_ui_layers(
         .top_modal_layer()
         .map(panel_layer_z)
         .unwrap_or(PANEL_LAYER_BASE);
-    let confirm_z = if confirm_dialog.is_open() {
+    let confirm_z = if ui_host.confirm_open() {
         top_panel_z + CONFIRM_LAYER_STEP
     } else {
         PANEL_LAYER_BASE
     };
-    let scrim_z = if confirm_dialog.is_open() {
-        confirm_z + SCRIM_OFFSET
-    } else {
-        ui_runtime
-            .top_modal_layer()
-            .map(|layer| panel_layer_z(layer) + SCRIM_OFFSET)
-            .unwrap_or(PANEL_LAYER_BASE + SCRIM_OFFSET)
-    };
-
     for (mut z, binding, visibility) in &mut layered_nodes {
-        z.0 = if visibility == Some(&PanelVisibility::ModalScrim) {
-            scrim_z
-        } else if visibility == Some(&PanelVisibility::ConfirmDialog) {
+        z.0 = if visibility == Some(&PanelVisibility::ConfirmDialog) {
             confirm_z
         } else if let Some(binding) = binding {
             ui_runtime
@@ -274,7 +267,6 @@ pub fn update_ui_layers(
 
 const PANEL_LAYER_BASE: i32 = 1_000;
 const PANEL_LAYER_STEP: i32 = 20;
-const SCRIM_OFFSET: i32 = -1;
 const CONFIRM_LAYER_STEP: i32 = 20;
 
 fn panel_layer_z(layer: usize) -> i32 {

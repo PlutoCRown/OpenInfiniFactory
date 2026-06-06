@@ -1,7 +1,7 @@
-use bevy::ecs::system::SystemParam;
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
+use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost};
 use crate::game::ui::core::text_input::primary_click;
 
 const TEXT_PROMPT_MAX_LEN: usize = 24;
@@ -12,27 +12,6 @@ type TextPromptHandler = Box<dyn FnOnce(TextPromptResult, &mut World) + Send>;
 #[derive(Default)]
 pub(crate) struct PendingTextPromptHandler {
     pub handler: Option<TextPromptHandler>,
-}
-
-#[derive(SystemParam)]
-pub struct ActiveTextPrompt<'w> {
-    pub prompt: ResMut<'w, TextPromptState>,
-    pub pending: NonSendMut<'w, PendingTextPromptHandler>,
-}
-
-impl ActiveTextPrompt<'_> {
-    /// Opens the prompt and runs `on_complete` once the user saves or cancels.
-    ///
-    /// Bevy 主循环是同步的，无法真正 `.await` 用户输入；语义上等价于
-    /// `let result = prompt.open(spec).await; match result { ... }`。
-    pub fn open_then(
-        &mut self,
-        spec: TextPromptOpen,
-        on_complete: impl FnOnce(TextPromptResult, &mut World) + Send + 'static,
-    ) {
-        self.prompt.reset_for_open(spec);
-        self.pending.handler = Some(Box::new(on_complete));
-    }
 }
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
@@ -51,7 +30,7 @@ pub enum TextPromptText {
 }
 
 #[derive(Clone)]
-pub struct TextPromptOpen {
+pub struct TextPromptProps {
     pub title: String,
     pub default_value: String,
     pub save_text: String,
@@ -79,7 +58,7 @@ impl TextPromptState {
         self.open
     }
 
-    pub(crate) fn reset_for_open(&mut self, spec: TextPromptOpen) {
+    pub(crate) fn reset_for_open(&mut self, spec: TextPromptProps) {
         self.open = true;
         self.title = spec.title;
         self.value = spec
@@ -113,29 +92,11 @@ impl TextPromptState {
     }
 }
 
-/// Runs [`ActiveTextPrompt::open_then`] callbacks after the user closes the prompt.
-pub fn dispatch_text_prompt_completion(
-    mut prompt: ResMut<TextPromptState>,
-    mut pending: NonSendMut<PendingTextPromptHandler>,
-    mut commands: Commands,
-) {
-    if pending.handler.is_none() {
-        return;
-    }
-    let Some(result) = prompt.take_result() else {
-        return;
-    };
-    let Some(handler) = pending.handler.take() else {
-        return;
-    };
-    commands.queue(move |world: &mut World| {
-        handler(result, world);
-    });
-}
-
-pub fn text_prompt_clicks(
+pub fn emit_text_prompt_actions(
     mut click: On<Pointer<Click>>,
-    mut prompt: ResMut<TextPromptState>,
+    prompt: Res<TextPromptState>,
+    host: Res<UiHost>,
+    mut actions: MessageWriter<UiAction>,
     buttons: Query<&TextPromptButtonId>,
 ) {
     if !primary_click(&mut click) || !prompt.is_open() {
@@ -144,11 +105,17 @@ pub fn text_prompt_clicks(
     let Ok(button) = buttons.get(click.entity).copied() else {
         return;
     };
+    let Some(instance) = host.active_text_prompt_instance() else {
+        return;
+    };
     click.propagate(false);
-    match button {
-        TextPromptButtonId::Save => prompt.submit(),
-        TextPromptButtonId::Cancel => prompt.cancel(),
-    }
+    let kind = match button {
+        TextPromptButtonId::Save => UiActionKind::TextPromptSubmit {
+            value: prompt.value.clone(),
+        },
+        TextPromptButtonId::Cancel => UiActionKind::TextPromptCancel,
+    };
+    actions.write(UiAction { instance, kind });
 }
 
 pub fn update_text_prompt_ui(

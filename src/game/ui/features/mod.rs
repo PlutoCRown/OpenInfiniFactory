@@ -10,8 +10,7 @@ use block_panels::inline_text_edit_input;
 use save::text_prompt_input;
 use settings::settings_menu_actions;
 
-use crate::game::ui::core::confirm_dialog::dispatch_confirm_completion;
-use crate::game::ui::core::text_prompt::dispatch_text_prompt_completion;
+use crate::game::ui::core::host::{dispatch_ui_action, dispatch_ui_host_completions};
 
 pub use block_panels::BlockPanelsPlugin;
 pub use inventory::InventoryPlugin;
@@ -20,6 +19,7 @@ pub use save::SavePlugin;
 pub use settings::SettingsPlugin;
 
 use crate::game::systems::perf::PerfScope;
+use crate::game::ui::access::UiAccessScope;
 
 pub struct UiFeaturesPlugin;
 
@@ -36,12 +36,13 @@ impl Plugin for UiFeaturesPlugin {
             Update,
             (
                 text_prompt_input,
-                dispatch_text_prompt_completion,
-                dispatch_confirm_completion,
+                dispatch_ui_action,
+                dispatch_ui_host_completions,
                 settings_menu_actions,
                 inline_text_edit_input,
             )
                 .chain()
+                .in_set(UiAccessScope)
                 .after(PerfScope::Input)
                 .before(PerfScope::Menus),
         )
@@ -52,6 +53,7 @@ impl Plugin for UiFeaturesPlugin {
                 block_panels::update_block_panel_dropdowns,
             )
                 .chain()
+                .in_set(UiAccessScope)
                 .after(PerfScope::Animation)
                 .before(PerfScope::Ui),
         );

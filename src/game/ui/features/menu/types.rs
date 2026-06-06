@@ -1,11 +1,11 @@
 use bevy::prelude::*;
 
 use crate::game::state::SolutionState;
+use crate::game::ui::access::i18n;
 use crate::game::ui::core::action::UiActionLabel;
-use crate::shared::i18n::I18n;
 use crate::shared::save::{SaveKind, SaveState};
 
-#[derive(Component, Clone, Copy, Eq, PartialEq)]
+#[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MenuAction {
     EditPuzzle,
     Play,
@@ -37,13 +37,13 @@ impl UiActionLabel for MenuAction {
 }
 
 impl MenuAction {
-    pub fn label(self, save_state: &SaveState, i18n: &I18n) -> String {
+    pub fn label(self, save_state: &SaveState) -> String {
         match self {
             Self::SaveWorld => match save_state.current_kind {
-                Some(SaveKind::Solution) => i18n.text("button.save_solution"),
-                _ => i18n.text("button.save_puzzle"),
+                Some(SaveKind::Solution) => i18n.t("button.save_solution"),
+                _ => i18n.t("button.save_puzzle"),
             },
-            _ => i18n.text(self.label_key()),
+            _ => i18n.t(self.label_key()),
         }
     }
 

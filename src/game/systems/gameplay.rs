@@ -11,12 +11,14 @@ use crate::game::simulation::structures::material_structure;
 use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, GameSettings, PlacementState,
     PlayingUiState, SelectionAxis, SelectionBounds, SelectionDrag, SimulationState, SolutionState,
+    UiPanelId,
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{
     AreaKind, CarriedItem, InlineTextEditState, InventoryItems, PendingKeyBind, TextPromptState,
     UiRuntime, HOTBAR_SLOTS,
 };
+use crate::game::ui::UiHost;
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::blocks::{BlockData, BlockKind};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
@@ -51,7 +53,9 @@ pub fn gameplay_input(
     inline_edit: Res<InlineTextEditState>,
     mut carried: ResMut<CarriedItem>,
     mut ui_runtime: ResMut<UiRuntime>,
+    mut ui_host: ResMut<UiHost>,
     mut simulation: ResMut<SimulationState>,
+    mut commands: Commands,
 ) {
     let bindings = &config.key_bindings;
 
@@ -70,7 +74,11 @@ pub fn gameplay_input(
 
     if keys.just_pressed(bindings.pause.key_code()) {
         if ui_runtime.blocks_gameplay() {
-            ui_runtime.close_current();
+            if ui_runtime.active_panel() == Some(UiPanelId::Settings) {
+                ui_host.unmount_panel(UiPanelId::Settings, &mut ui_runtime, Some(&mut commands));
+            } else {
+                ui_runtime.close_current();
+            }
         } else if playing_ui.inventory_open {
             playing_ui.inventory_open = false;
             carried.clear();

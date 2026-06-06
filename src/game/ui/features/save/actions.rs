@@ -4,29 +4,30 @@ use bevy::prelude::*;
 
 use crate::game::session;
 use crate::game::state::{GameMode, SolutionState, StartMenuScreen, WorldEntryMode};
+use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
 use crate::game::ui::core::text_input::{primary_click, push_text_input};
 use crate::game::ui::core::text_prompt::TextPromptState;
 use crate::shared::save::SaveState;
 
-use super::confirm::{open_delete_confirm, SaveDialogParams};
+use crate::game::ui::access::UiMainThread;
+
+use super::confirm::open_delete_confirm;
 use super::prompt::{
     open_new_puzzle_prompt, open_new_solution_prompt, open_rename_puzzle_prompt,
-    open_rename_solution_prompt, SaveTextPromptParams,
+    open_rename_solution_prompt,
 };
 use super::types::SaveListAction;
 
-pub fn save_list_actions(
+pub fn emit_save_list_actions(
     mut click: On<Pointer<Click>>,
     mode: Res<State<GameMode>>,
-    mut start_menu_screen: ResMut<StartMenuScreen>,
-    mut save_state: ResMut<SaveState>,
-    solution_state: Res<SolutionState>,
-    mut commands: Commands,
-    mut confirm: SaveDialogParams,
-    mut text_prompt: SaveTextPromptParams,
+    start_menu_screen: Res<StartMenuScreen>,
+    ui_host: Res<UiHost>,
+    mut writer: MessageWriter<UiAction>,
     actions: Query<&SaveListAction>,
 ) {
-    if !primary_click(&mut click)
+    if ui_host.modal_open()
+        || !primary_click(&mut click)
         || *mode.get() != GameMode::StartMenu
         || *start_menu_screen != StartMenuScreen::SaveList
     {
@@ -36,13 +37,50 @@ pub fn save_list_actions(
         return;
     };
     click.propagate(false);
+    writer.write(UiAction {
+        instance: UiInstanceId::SAVE_LIST,
+        kind: UiActionKind::SaveList(action),
+    });
+}
 
+pub fn dispatch_save_list_actions(
+    _ui_thread: UiMainThread,
+    mut actions: MessageReader<UiAction>,
+    mut start_menu_screen: ResMut<StartMenuScreen>,
+    mut save_state: ResMut<SaveState>,
+    solution_state: Res<SolutionState>,
+    mut commands: Commands,
+) {
+    for action in actions.read() {
+        if action.instance != UiInstanceId::SAVE_LIST {
+            continue;
+        }
+        let UiActionKind::SaveList(action) = action.kind.clone() else {
+            continue;
+        };
+        dispatch_save_list_action(
+            action,
+            &mut start_menu_screen,
+            &mut save_state,
+            &solution_state,
+            &mut commands,
+        );
+    }
+}
+
+fn dispatch_save_list_action(
+    action: SaveListAction,
+    start_menu_screen: &mut StartMenuScreen,
+    save_state: &mut SaveState,
+    solution_state: &SolutionState,
+    commands: &mut Commands,
+) {
     match action {
         SaveListAction::NewPuzzle => {
             if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
                 return;
             }
-            open_new_puzzle_prompt(&mut text_prompt);
+            open_new_puzzle_prompt();
         }
         SaveListAction::NewSolution => {
             if solution_state.save_list_entry != WorldEntryMode::PlaySolution {
@@ -51,14 +89,14 @@ pub fn save_list_actions(
             let Some(puzzle_name) = save_state.selected_puzzle.clone() else {
                 return;
             };
-            open_new_solution_prompt(&mut text_prompt, puzzle_name);
+            open_new_solution_prompt(puzzle_name);
         }
         SaveListAction::LoadPuzzle(name) => {
             if solution_state.save_list_entry == WorldEntryMode::EditPuzzle {
                 if !save_state.puzzles().iter().any(|entry| entry.name == *name) {
                     return;
                 }
-                session::load_world(&mut commands, name.clone(), WorldEntryMode::EditPuzzle);
+                session::load_world(commands, name.clone(), WorldEntryMode::EditPuzzle);
             } else {
                 let Some(choice) = save_state
                     .puzzle_choices()
@@ -84,14 +122,14 @@ pub fn save_list_actions(
             {
                 return;
             }
-            session::load_world(&mut commands, name.clone(), WorldEntryMode::PlaySolution);
+            session::load_world(commands, name.clone(), WorldEntryMode::PlaySolution);
         }
         SaveListAction::RenamePuzzle(name) => {
             if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
                 return;
             }
             if save_state.puzzles().iter().any(|entry| entry.name == *name) {
-                open_rename_puzzle_prompt(&mut text_prompt, name.clone());
+                open_rename_puzzle_prompt(name.clone());
             }
         }
         SaveListAction::RenameSolution(name) => {
@@ -103,7 +141,7 @@ pub fn save_list_actions(
                 .iter()
                 .any(|entry| entry.name == *name)
             {
-                open_rename_solution_prompt(&mut text_prompt, name.clone());
+                open_rename_solution_prompt(name.clone());
             }
         }
         SaveListAction::DeletePuzzle(name) => {
@@ -111,7 +149,7 @@ pub fn save_list_actions(
                 return;
             }
             if save_state.puzzles().iter().any(|entry| entry.name == *name) {
-                open_delete_confirm(&mut confirm, name.clone());
+                open_delete_confirm(name.clone());
             }
         }
         SaveListAction::DeleteSolution(name) => {
@@ -120,7 +158,7 @@ pub fn save_list_actions(
                 .iter()
                 .any(|entry| entry.name == *name)
             {
-                open_delete_confirm(&mut confirm, name.clone());
+                open_delete_confirm(name.clone());
             }
         }
         SaveListAction::Back => {
@@ -132,6 +170,8 @@ pub fn save_list_actions(
 pub fn text_prompt_input(
     mut prompt: ResMut<TextPromptState>,
     mut keyboard_input: MessageReader<KeyboardInput>,
+    host: Res<UiHost>,
+    mut actions: MessageWriter<UiAction>,
 ) {
     if !prompt.is_open() {
         return;
@@ -151,9 +191,20 @@ pub fn text_prompt_input(
             _ => push_text_input(&mut prompt.value, event),
         }
     }
+    let Some(instance) = host.active_text_prompt_instance() else {
+        return;
+    };
     if submit {
-        prompt.submit();
+        actions.write(UiAction {
+            instance,
+            kind: UiActionKind::TextPromptSubmit {
+                value: prompt.value.clone(),
+            },
+        });
     } else if cancel {
-        prompt.cancel();
+        actions.write(UiAction {
+            instance,
+            kind: UiActionKind::TextPromptCancel,
+        });
     }
 }

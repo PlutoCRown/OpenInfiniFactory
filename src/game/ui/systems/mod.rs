@@ -8,15 +8,16 @@ use crate::game::state::{
 };
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::config::{ActionKeyName, GameConfig};
-use crate::shared::i18n::I18n;
 use crate::shared::save::SaveState;
 
+use crate::game::ui::access::{i18n, I18nRevision, UiMainThread};
+
 use super::types::{
-    ConfirmDialogState, Crosshair, GameplayHudVisibility, InGameHudStyle, InGameHudVisibility,
-    InlineTextEditState, InventoryItems, LocalizedText, MenuAction, OpenBlockPanelDropdown,
-    OpenSettingsDropdown, PanelCloseButton, PanelDragState, PanelPosition, PanelTitleBar,
-    PanelVisibility, PanelWindow, PendingKeyBind, SettingsTab, StatusText, StatusTextKind,
-    TextPromptRoot, UiHoverState, UiPanelBinding, UiRuntime,
+    Crosshair, GameplayHudVisibility, InGameHudStyle, InGameHudVisibility, InlineTextEditState,
+    InventoryItems, LocalizedText, MenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown,
+    PanelCloseButton, PanelDragState, PanelPosition, PanelTitleBar, PanelVisibility, PanelWindow,
+    PendingKeyBind, SettingsTab, StatusText, StatusTextKind, TextPromptRoot, UiHost, UiHoverState,
+    UiPanelBinding, UiRuntime,
 };
 include!("font.rs");
 include!("status.rs");

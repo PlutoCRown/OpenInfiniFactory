@@ -1,7 +1,7 @@
-use bevy::ecs::system::SystemParam;
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
+use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost};
 use crate::game::ui::core::text_input::primary_click;
 
 type ConfirmHandler = Box<dyn FnOnce(ConfirmResult, &mut World) + Send>;
@@ -12,32 +12,6 @@ pub(crate) struct PendingConfirmHandler {
     pub handler: Option<ConfirmHandler>,
 }
 
-#[derive(SystemParam)]
-pub struct ActiveConfirmDialog<'w> {
-    pub dialog: ResMut<'w, ConfirmDialogState>,
-    pub pending: NonSendMut<'w, PendingConfirmHandler>,
-}
-
-impl ActiveConfirmDialog<'_> {
-    /// Opens the dialog and runs `on_complete` once the user closes it.
-    ///
-    /// Bevy 主循环是同步的，无法真正 `.await` 用户点击；这个 API 在**同一次调用**里
-    /// 注册关闭后的逻辑，语义上等价于：
-    ///
-    /// ```ignore
-    /// let result = dialog.open(spec).await;
-    /// match result { ... }
-    /// ```
-    pub fn open_then(
-        &mut self,
-        spec: ConfirmOpen,
-        on_complete: impl FnOnce(ConfirmResult, &mut World) + Send + 'static,
-    ) {
-        self.dialog.reset_for_open(spec);
-        self.pending.handler = Some(Box::new(on_complete));
-    }
-}
-
 #[derive(Component)]
 pub struct ConfirmTitleText;
 
@@ -45,7 +19,7 @@ pub struct ConfirmTitleText;
 pub struct ConfirmMessageText;
 
 /// Which physical button was pressed — not a business outcome.
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConfirmButtonId {
     Confirm,
     Extra,
@@ -59,7 +33,7 @@ pub struct ConfirmExtraButton {
 }
 
 #[derive(Clone)]
-pub struct ConfirmOpen {
+pub struct ConfirmProps {
     pub title: String,
     pub message: String,
     pub confirm_text: String,
@@ -90,13 +64,7 @@ impl ConfirmDialogState {
         self.open
     }
 
-    /// Shows the dialog shell without a completion handler.
-    #[allow(dead_code)]
-    pub fn open(&mut self, spec: ConfirmOpen) {
-        self.reset_for_open(spec);
-    }
-
-    pub(crate) fn reset_for_open(&mut self, spec: ConfirmOpen) {
+    pub(crate) fn reset_for_open(&mut self, spec: ConfirmProps) {
         self.open = true;
         self.title = spec.title;
         self.message = spec.message;
@@ -125,39 +93,26 @@ impl ConfirmDialogState {
     }
 }
 
-/// Runs [`ConfirmDialogState::open_then`] callbacks after the user closes the dialog.
-pub fn dispatch_confirm_completion(
-    mut dialog: ResMut<ConfirmDialogState>,
-    mut pending: NonSendMut<PendingConfirmHandler>,
-    mut commands: Commands,
-) {
-    if pending.handler.is_none() {
-        return;
-    }
-    let Some(result) = dialog.take_result() else {
-        return;
-    };
-    let Some(handler) = pending.handler.take() else {
-        return;
-    };
-    commands.queue(move |world: &mut World| {
-        handler(result, world);
-    });
-}
-
-pub fn confirm_dialog_clicks(
+pub fn emit_confirm_dialog_actions(
     mut click: On<Pointer<Click>>,
-    mut dialog: ResMut<ConfirmDialogState>,
+    host: Res<UiHost>,
+    mut actions: MessageWriter<UiAction>,
     buttons: Query<&ConfirmButtonId>,
 ) {
-    if !primary_click(&mut click) || !dialog.is_open() {
+    if !primary_click(&mut click) {
         return;
     }
     let Ok(button) = buttons.get(click.entity).copied() else {
         return;
     };
+    let Some(instance) = host.active_confirm_instance() else {
+        return;
+    };
     click.propagate(false);
-    dialog.resolve(button);
+    actions.write(UiAction {
+        instance,
+        kind: UiActionKind::ConfirmDialog(button),
+    });
 }
 
 pub fn update_confirm_dialog_ui(

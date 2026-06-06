@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::game::state::StartMenuScreen;
-use crate::shared::i18n::I18n;
+use crate::game::ui::access::i18n;
 
 use super::super::components::{
     default_button_size, flex_row, full_width_button, panel_bundle, panel_content, panel_title_bar,
@@ -13,7 +13,7 @@ use super::super::types::{
     SaveListPrompt, SaveListPuzzleColumn, SaveListSolutionColumn, SaveListTitleText,
 };
 
-pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+pub fn spawn_save_list(root: &mut ChildSpawnerCommands) {
     root.spawn((
         panel_bundle(900.0),
         GlobalZIndex(0),
@@ -23,7 +23,7 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     .with_children(|panel| {
         panel.spawn(panel_title_bar()).with_children(|title| {
             title.spawn((
-                panel_title_label(i18n.text("save.title.default"), 26.0),
+                panel_title_label(i18n.t("save.title.default"), 26.0),
                 SaveListTitleText,
             ));
             title

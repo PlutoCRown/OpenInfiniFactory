@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use super::action::BlockPanelAction;
 use crate::game::world::blocks::MaterialKind;
 use crate::game::world::grid::WorldBlocks;
-use crate::shared::i18n::I18n;
+use crate::game::ui::access::i18n;
 
 #[derive(Resource, Default)]
 pub struct OpenBlockPanelDropdown(pub Option<BlockPanelDropdown>);
@@ -48,21 +48,20 @@ impl BlockPanelDropdown {
         self,
         active_pos: Option<IVec3>,
         world: &WorldBlocks,
-        i18n: &I18n,
     ) -> String {
         let Some(pos) = active_pos else {
             return String::new();
         };
         match self {
-            Self::GeneratorMaterial => i18n.text(world.generator_settings(pos).material.name_key()),
-            Self::GoalMaterial => i18n.text(world.goal_settings(pos).material.name_key()),
-            Self::LabelerColor => i18n.text(world.labeler_settings(pos).color.name_key()),
-            Self::ConverterInput => i18n.text(world.converter_settings(pos).input.name_key()),
-            Self::ConverterOutput => i18n.text(world.converter_settings(pos).output.name_key()),
+            Self::GeneratorMaterial => i18n.t(world.generator_settings(pos).material.name_key()),
+            Self::GoalMaterial => i18n.t(world.goal_settings(pos).material.name_key()),
+            Self::LabelerColor => i18n.t(world.labeler_settings(pos).color.name_key()),
+            Self::ConverterInput => i18n.t(world.converter_settings(pos).input.name_key()),
+            Self::ConverterOutput => i18n.t(world.converter_settings(pos).output.name_key()),
             Self::TeleportPair => active_pos
                 .and_then(|pos| world.teleport_settings(pos).pair)
                 .map(|pair| world.teleport_settings(pair).name)
-                .unwrap_or_else(|| i18n.text("teleport.none")),
+                .unwrap_or_else(|| i18n.t("teleport.none")),
         }
     }
 

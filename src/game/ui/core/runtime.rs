@@ -34,6 +34,10 @@ impl UiRuntime {
         self.stack.pop();
     }
 
+    pub fn close_panel(&mut self, panel: UiPanelId) {
+        self.stack.retain(|session| session.panel != panel);
+    }
+
     pub fn close_current(&mut self) {
         self.close_active();
     }
@@ -72,9 +76,6 @@ impl UiRuntime {
             .rposition(|session| session.panel.is_blocking_gameplay())
     }
 
-    pub fn has_modal_panel(&self) -> bool {
-        self.top_modal_layer().is_some()
-    }
 }
 
 #[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]

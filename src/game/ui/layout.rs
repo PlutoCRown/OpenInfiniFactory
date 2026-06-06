@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::shared::i18n::I18n;
+use crate::game::ui::access::{bind_ui_scope, i18n};
 
 use super::components::{
     absolute_text_bundle, default_button_size, flex_row, full_width_button, localized_text,
@@ -11,12 +11,13 @@ use crate::game::block_editing::{BlockPanelAction, BlockPanelDropdown, BlockPane
 use crate::game::ui::core::confirm_dialog::{
     ConfirmButtonId, ConfirmMessageText, ConfirmTitleText,
 };
+use crate::game::ui::core::host::{PlayingUiRootEntity, UiRootEntity};
 use crate::game::ui::core::text_prompt::{
     TextPromptButtonId, TextPromptRoot, TextPromptText,
 };
 use super::screens::{
     spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_inventory_tooltip,
-    spawn_main_menu, spawn_pause_panel, spawn_save_list, spawn_settings_panel,
+    spawn_main_menu, spawn_pause_panel, spawn_save_list,
 };
 use crate::game::state::UiPanelId;
 use super::types::{
@@ -29,67 +30,55 @@ use super::widgets::{
 };
 use crate::game::world::blocks::{MaterialKind, StampColor};
 
-pub fn setup_menu_ui(mut commands: Commands, i18n: Res<I18n>) {
-    commands.spawn((root_node(), UiRoot)).with_children(|root| {
-        spawn_settings_panel(root, &i18n);
-        spawn_confirm_dialog(root);
-        spawn_text_prompt(root);
-        spawn_modal_scrim(root);
-        spawn_main_menu(root, &i18n);
-        spawn_save_list(root, &i18n);
-    });
+pub fn setup_menu_ui(world: &mut World) {
+    bind_ui_scope(world);
+    let mut commands = world.commands();
+    let root = commands
+        .spawn((root_node(), UiRoot))
+        .with_children(|root| {
+            spawn_confirm_dialog(root);
+            spawn_text_prompt(root);
+            spawn_main_menu(root);
+            spawn_save_list(root);
+        })
+        .id();
+    commands.insert_resource(UiRootEntity(root));
 }
 
-pub fn setup_playing_ui(commands: &mut Commands, i18n: &I18n) {
-    commands
+pub fn setup_playing_ui(commands: &mut Commands) {
+    let root = commands
         .spawn((root_node(), PlayingUiRoot))
         .with_children(|root| {
             spawn_status_overlays(root);
             spawn_hotbar(root);
-            spawn_inventory_panel(root, i18n);
-            spawn_generator_panel(root, i18n);
-            spawn_goal_panel(root, i18n);
-            spawn_labeler_panel(root, i18n);
-            spawn_converter_panel(root, i18n);
-            spawn_teleport_panel(root, i18n);
-            spawn_pause_panel(root, i18n);
+            spawn_inventory_panel(root);
+            spawn_generator_panel(root);
+            spawn_goal_panel(root);
+            spawn_labeler_panel(root);
+            spawn_converter_panel(root);
+            spawn_teleport_panel(root);
+            spawn_pause_panel(root);
             spawn_carried_label(root);
             spawn_inventory_tooltip(root);
-            spawn_block_dropdown_layers(root, i18n);
-        });
+            spawn_block_dropdown_layers(root);
+        })
+        .id();
+    commands.insert_resource(PlayingUiRootEntity(root));
 }
 
-pub fn setup_playing_ui_system(mut commands: Commands, i18n: Res<I18n>) {
-    setup_playing_ui(&mut commands, &i18n);
+pub fn setup_playing_ui_system(world: &mut World) {
+    bind_ui_scope(world);
+    let mut commands = world.commands();
+    setup_playing_ui(&mut commands);
 }
 
-fn spawn_modal_scrim(root: &mut ChildSpawnerCommands) {
-    root.spawn((
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            position_type: PositionType::Absolute,
-            display: Display::None,
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.16)),
-        Pickable {
-            should_block_lower: true,
-            is_hoverable: false,
-        },
-        GlobalZIndex(0),
-        PanelVisibility::ModalScrim,
-    ));
-}
-
-fn spawn_generator_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+fn spawn_generator_panel(root: &mut ChildSpawnerCommands) {
     spawn_panel(
         root,
-        i18n,
         PanelOptions::new(430.0, "generator.title").closable(),
         UiPanelBinding(UiPanelId::Generator),
         |panel| {
-            spawn_panel_row(panel, i18n, "panel.period", |row| {
+            spawn_panel_row(panel, "panel.period", |row| {
                 spawn_block_panel_button(row, BlockPanelAction::PeriodDown);
                 row.spawn((
                     text("", 18.0, Color::WHITE),
@@ -97,7 +86,7 @@ fn spawn_generator_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                 ));
                 spawn_block_panel_button(row, BlockPanelAction::PeriodUp);
             });
-            spawn_panel_row(panel, i18n, "panel.material", |row| {
+            spawn_panel_row(panel, "panel.material", |row| {
                 spawn_material_icon_slot(
                     row,
                     BlockPanelDropdown::GeneratorMaterial,
@@ -108,14 +97,13 @@ fn spawn_generator_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     );
 }
 
-fn spawn_goal_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+fn spawn_goal_panel(root: &mut ChildSpawnerCommands) {
     spawn_panel(
         root,
-        i18n,
         PanelOptions::new(430.0, "goal.title").closable(),
         UiPanelBinding(UiPanelId::Goal),
         |panel| {
-            spawn_panel_row(panel, i18n, "panel.material", |row| {
+            spawn_panel_row(panel, "panel.material", |row| {
                 spawn_material_icon_slot(
                     row,
                     BlockPanelDropdown::GoalMaterial,
@@ -126,21 +114,20 @@ fn spawn_goal_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     );
 }
 
-fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+fn spawn_teleport_panel(root: &mut ChildSpawnerCommands) {
     spawn_panel(
         root,
-        i18n,
         PanelOptions::new(460.0, "teleport.title").closable(),
         UiPanelBinding(UiPanelId::Teleport),
         |panel| {
-            spawn_panel_row(panel, i18n, "panel.name", |row| {
+            spawn_panel_row(panel, "panel.name", |row| {
                 spawn_block_panel_button(row, BlockPanelAction::StartTeleportRename);
                 row.spawn((
                     text("", 18.0, Color::WHITE),
                     BlockPanelText(BlockPanelTextKind::TeleportName),
                 ));
             });
-            spawn_panel_row(panel, i18n, "panel.pair", |row| {
+            spawn_panel_row(panel, "panel.pair", |row| {
                 spawn_block_panel_dropdown(
                     row,
                     BlockPanelDropdown::TeleportPair,
@@ -151,24 +138,23 @@ fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     );
 }
 
-fn spawn_converter_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+fn spawn_converter_panel(root: &mut ChildSpawnerCommands) {
     spawn_panel(
         root,
-        i18n,
         PanelOptions::new(460.0, "converter.title").closable(),
         UiPanelBinding(UiPanelId::Converter),
         |panel| {
             panel
                 .spawn((panel_row_node(), ConverterInputRow))
                 .with_children(|row| {
-                    spawn_panel_label(row, i18n, "panel.input");
+                    spawn_panel_label(row, "panel.input");
                     spawn_material_icon_slot(
                         row,
                         BlockPanelDropdown::ConverterInput,
                         BlockPanelAction::ToggleInputDropdown,
                     );
                 });
-            spawn_panel_row(panel, i18n, "panel.output", |row| {
+            spawn_panel_row(panel, "panel.output", |row| {
                 spawn_material_icon_slot(
                     row,
                     BlockPanelDropdown::ConverterOutput,
@@ -179,14 +165,13 @@ fn spawn_converter_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     );
 }
 
-fn spawn_labeler_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+fn spawn_labeler_panel(root: &mut ChildSpawnerCommands) {
     spawn_panel(
         root,
-        i18n,
         PanelOptions::new(420.0, "labeler.title").closable().dynamic_title(),
         UiPanelBinding(UiPanelId::Labeler),
         |panel| {
-            spawn_panel_row(panel, i18n, "panel.color", |row| {
+            spawn_panel_row(panel, "panel.color", |row| {
                 spawn_block_panel_dropdown(
                     row,
                     BlockPanelDropdown::LabelerColor,
@@ -197,7 +182,7 @@ fn spawn_labeler_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     );
 }
 
-fn spawn_block_dropdown_layers(root: &mut ChildSpawnerCommands, i18n: &I18n) {
+fn spawn_block_dropdown_layers(root: &mut ChildSpawnerCommands) {
     spawn_material_icon_dropdown_list(
         root,
         BlockPanelDropdown::GeneratorMaterial,
@@ -221,7 +206,7 @@ fn spawn_block_dropdown_layers(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     spawn_block_panel_dropdown_list(
         root,
         BlockPanelDropdown::LabelerColor,
-        stamp_color_options(i18n).map(|(label, color)| (label, BlockPanelAction::SetColor(color))),
+        stamp_color_options().map(|(label, color)| (label, BlockPanelAction::SetColor(color))),
     );
     spawn_block_panel_dropdown_list(
         root,
@@ -243,19 +228,18 @@ fn panel_row_node() -> impl Bundle {
 
 fn spawn_panel_row(
     panel: &mut ChildSpawnerCommands,
-    i18n: &I18n,
     label_key: &'static str,
     controls: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
     panel.spawn(panel_row_node()).with_children(|row| {
-        spawn_panel_label(row, i18n, label_key);
+        spawn_panel_label(row, label_key);
         controls(row);
     });
 }
 
-fn spawn_panel_label(row: &mut ChildSpawnerCommands, i18n: &I18n, label_key: &'static str) {
+fn spawn_panel_label(row: &mut ChildSpawnerCommands, label_key: &'static str) {
     row.spawn((
-        localized_text(i18n, label_key, 16.0, Color::srgb(0.86, 0.88, 0.86)),
+        localized_text(label_key, 16.0, Color::srgb(0.86, 0.88, 0.86)),
         Node {
             width: Val::Px(110.0),
             ..default()
@@ -267,10 +251,10 @@ fn material_options() -> impl Iterator<Item = MaterialKind> {
     MaterialKind::ALL.into_iter()
 }
 
-fn stamp_color_options(i18n: &I18n) -> impl Iterator<Item = (String, StampColor)> + '_ {
+fn stamp_color_options() -> impl Iterator<Item = (String, StampColor)> {
     StampColor::ALL
         .into_iter()
-        .map(|color| (i18n.text(color.name_key()), color))
+        .map(|color| (i18n.t(color.name_key()), color))
 }
 
 fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {

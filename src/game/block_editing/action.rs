@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::game::world::blocks::{MaterialKind, StampColor};
 
-#[derive(Component, Clone, Copy, Eq, PartialEq)]
+#[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BlockPanelAction {
     PeriodDown,
     PeriodUp,

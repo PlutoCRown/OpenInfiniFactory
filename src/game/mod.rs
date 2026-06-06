@@ -101,6 +101,7 @@ impl Plugin for GamePlugin {
                     spawn_ui_camera,
                     refresh_saves_on_startup,
                     ui::load_ui_font,
+                    systems::debug::load_debug_font,
                     ui::setup_menu_ui,
                 )
                     .chain(),
