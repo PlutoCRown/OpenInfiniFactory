@@ -13,12 +13,6 @@ pub struct PlacementState {
     pub selection: SelectionState,
 }
 
-#[derive(Resource, Default)]
-pub struct TeleportRenameState {
-    pub editing: Option<IVec3>,
-    pub buffer: String,
-}
-
 impl Default for PlacementState {
     fn default() -> Self {
         Self {

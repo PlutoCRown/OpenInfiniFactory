@@ -11,11 +11,11 @@ use crate::game::simulation::structures::material_structure;
 use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, GameSettings, PlacementState,
     PlayingUiState, SelectionAxis, SelectionBounds, SelectionDrag, SimulationState, SolutionState,
-    TeleportRenameState,
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{
-    AreaKind, CarriedItem, InventoryItems, PendingKeyBind, TextPromptState, UiRuntime, HOTBAR_SLOTS,
+    AreaKind, CarriedItem, InlineTextEditState, InventoryItems, PendingKeyBind, TextPromptState,
+    UiRuntime, HOTBAR_SLOTS,
 };
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::blocks::{BlockData, BlockKind};
@@ -48,7 +48,7 @@ pub fn gameplay_input(
     mode: Res<State<GameMode>>,
     mut playing_ui: ResMut<PlayingUiState>,
     mut placement: ResMut<PlacementState>,
-    teleport_rename: Res<TeleportRenameState>,
+    inline_edit: Res<InlineTextEditState>,
     mut carried: ResMut<CarriedItem>,
     mut ui_runtime: ResMut<UiRuntime>,
     mut simulation: ResMut<SimulationState>,
@@ -57,7 +57,7 @@ pub fn gameplay_input(
 
     let typing = pending_key_bind.0.is_some()
         || text_prompt.kind.is_some()
-        || teleport_rename.editing.is_some();
+        || inline_edit.is_active();
     if typing {
         mouse_wheel.clear();
         return;

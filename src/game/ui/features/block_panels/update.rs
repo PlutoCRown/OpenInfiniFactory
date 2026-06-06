@@ -1,3 +1,21 @@
+use bevy::ecs::system::SystemParam;
+use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
+
+use crate::game::block_editing::{
+    BlockMaterialIcon, BlockMaterialIconSlot, BlockPanelAction, BlockPanelDropdown,
+    BlockPanelDropdownLabel, BlockPanelDropdownList, BlockPanelText, BlockPanelTextKind,
+    OpenBlockPanelDropdown,
+};
+use crate::game::ui::components::{default_font_size, menu_button};
+use crate::game::ui::core::runtime::UiRuntime;
+use crate::game::ui::core::text_input::InlineTextEditState;
+use crate::game::ui::types::{ConverterInputRow, LocalizedText};
+use crate::game::world::blocks::{BlockKind, MaterialKind};
+use crate::game::world::grid::WorldBlocks;
+use crate::game::world::rendering::BlockIconAssets;
+use crate::shared::i18n::{I18n, Language};
+
 #[derive(SystemParam)]
 pub struct BlockPanelDropdownParams<'w, 's> {
     pub labels: Query<'w, 's, (&'static BlockPanelDropdownLabel, &'static mut Text)>,
@@ -17,17 +35,7 @@ pub struct BlockPanelDropdownParams<'w, 's> {
         'w,
         's,
         (
-            &'static BlockEditAction,
-            &'static ComputedNode,
-            &'static UiGlobalTransform,
-        ),
-        With<Button>,
-    >,
-    pub teleport_triggers: Query<
-        'w,
-        's,
-        (
-            &'static TeleportAction,
+            &'static BlockPanelAction,
             &'static ComputedNode,
             &'static UiGlobalTransform,
         ),
@@ -42,83 +50,66 @@ pub struct BlockPanelDropdownParams<'w, 's> {
             Option<&'static Children>,
         ),
     >,
-    pub teleport_pair_options: Query<'w, 's, Entity, With<TeleportAction>>,
+    pub teleport_pair_options: Query<'w, 's, Entity, With<BlockPanelAction>>,
 }
 
-pub fn update_generator_ui(
+pub fn update_active_block_panel(
     ui_runtime: Res<UiRuntime>,
+    inline_edit: Res<InlineTextEditState>,
     world: Res<WorldBlocks>,
-    mut panel_texts: Query<(&BlockPanelText, &mut Text)>,
+    i18n: Res<I18n>,
+    mut texts: ParamSet<(
+        Query<(&BlockPanelText, &mut Text)>,
+        Query<&mut Text, With<LocalizedText>>,
+    )>,
+    mut converter_input_row: Query<&mut Node, With<ConverterInputRow>>,
 ) {
     let Some(pos) = ui_runtime.active_block_pos() else {
         return;
     };
 
     let generator_settings = world.generator_settings(pos);
-    for (panel_text, mut text) in &mut panel_texts {
-        if panel_text.0 == BlockPanelTextKind::GeneratorPeriod {
-            text.0 = generator_settings.period.to_string();
+    for (panel_text, mut text) in &mut texts.p0() {
+        match panel_text.0 {
+            BlockPanelTextKind::GeneratorPeriod => {
+                text.0 = generator_settings.period.to_string();
+            }
+            BlockPanelTextKind::TeleportName => {
+                let settings = world.teleport_settings(pos);
+                text.0 = if inline_edit.is_active()
+                    && inline_edit.pos == Some(pos)
+                    && inline_edit.field == Some(BlockPanelTextKind::TeleportName)
+                {
+                    format!("{}_", inline_edit.buffer)
+                } else {
+                    settings.name.clone()
+                };
+            }
         }
     }
-}
 
-pub fn update_labeler_ui(
-    ui_runtime: Res<UiRuntime>,
-    world: Res<WorldBlocks>,
-    i18n: Res<I18n>,
-    mut title_text: Query<&mut Text, With<super::types::LocalizedText>>,
-) {
-    let Some(pos) = ui_runtime.active_block_pos() else {
-        return;
-    };
-
-    let Some(block) = world.system_blocks.get(&pos) else {
-        return;
-    };
-    let key = match block.kind {
-        BlockKind::Stamper => "stamper.title",
-        BlockKind::Roller => "roller.title",
-        _ => "labeler.title",
-    };
-    for mut text in &mut title_text {
-        if text.0 == i18n.text("labeler.title")
-            || text.0 == i18n.text("stamper.title")
-            || text.0 == i18n.text("roller.title")
-        {
-            text.0 = i18n.text(key);
+    if let Some(block) = world.system_blocks.get(&pos) {
+        let key = match block.kind {
+            BlockKind::Stamper => "stamper.title",
+            BlockKind::Roller => "roller.title",
+            _ => "labeler.title",
+        };
+        for mut text in &mut texts.p1() {
+            if text.0 == i18n.text("labeler.title")
+                || text.0 == i18n.text("stamper.title")
+                || text.0 == i18n.text("roller.title")
+            {
+                text.0 = i18n.text(key);
+            }
         }
     }
-}
 
-pub fn update_converter_ui(mut converter_input_row: Query<&mut Node, With<ConverterInputRow>>) {
     for mut style in &mut converter_input_row {
         style.display = Display::Flex;
     }
 }
 
-pub fn update_teleport_ui(
-    ui_runtime: Res<UiRuntime>,
-    rename_state: Res<TeleportRenameState>,
-    world: Res<WorldBlocks>,
-    mut panel_texts: Query<(&BlockPanelText, &mut Text)>,
-) {
-    let Some(pos) = ui_runtime.active_block_pos() else {
-        return;
-    };
-
-    let settings = world.teleport_settings(pos);
-    for (panel_text, mut text) in &mut panel_texts {
-        if panel_text.0 == BlockPanelTextKind::TeleportName {
-            text.0 = if rename_state.editing == Some(pos) {
-                format!("{}_", rename_state.buffer)
-            } else {
-                settings.name.clone()
-            };
-        }
-    }
-}
-
-pub fn update_block_panel_dropdowns_ui(
+pub fn update_block_panel_dropdowns(
     mut commands: Commands,
     ui_runtime: Res<UiRuntime>,
     open_dropdown: Res<OpenBlockPanelDropdown>,
@@ -195,7 +186,6 @@ pub fn update_block_panel_dropdowns_ui(
         if let Some((left, top)) = block_dropdown_position(
             list.0,
             &dropdowns.triggers,
-            &dropdowns.teleport_triggers,
             list_node.size(),
             viewport,
             scale,
@@ -282,42 +272,33 @@ fn update_material_children(
 
 fn block_dropdown_position(
     dropdown: BlockPanelDropdown,
-    triggers: &Query<(&BlockEditAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
-    teleport_triggers: &Query<(&TeleportAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
+    triggers: &Query<
+        (&BlockPanelAction, &ComputedNode, &UiGlobalTransform),
+        With<Button>,
+    >,
     list_size: Vec2,
     viewport: Vec2,
     scale: f32,
 ) -> Option<(f32, f32)> {
     let target = block_dropdown_toggle_action(dropdown);
-    let trigger = target
-        .and_then(|target| {
-            triggers
-                .iter()
-                .find(|(action, node, _)| **action == target && !node.is_empty())
-                .map(|(_, node, transform)| (node, transform))
-        })
-        .or_else(|| {
-            (dropdown == BlockPanelDropdown::TeleportPair).then(|| {
-                teleport_triggers
-                    .iter()
-                    .find(|(action, node, _)| {
-                        **action == TeleportAction::TogglePairDropdown && !node.is_empty()
-                    })
-                    .map(|(_, node, transform)| (node, transform))
-            })?
-        })?;
+    let trigger = target.and_then(|target| {
+        triggers
+            .iter()
+            .find(|(action, node, _)| **action == target && !node.is_empty())
+            .map(|(_, node, transform)| (node, transform))
+    })?;
     dropdown_position_from_trigger(trigger.0, trigger.1, list_size, viewport, scale)
 }
 
-fn block_dropdown_toggle_action(dropdown: BlockPanelDropdown) -> Option<BlockEditAction> {
+fn block_dropdown_toggle_action(dropdown: BlockPanelDropdown) -> Option<BlockPanelAction> {
     match dropdown {
         BlockPanelDropdown::GeneratorMaterial | BlockPanelDropdown::GoalMaterial => {
-            Some(BlockEditAction::ToggleMaterialDropdown)
+            Some(BlockPanelAction::ToggleMaterialDropdown)
         }
-        BlockPanelDropdown::LabelerColor => Some(BlockEditAction::ToggleColorDropdown),
-        BlockPanelDropdown::ConverterInput => Some(BlockEditAction::ToggleInputDropdown),
-        BlockPanelDropdown::ConverterOutput => Some(BlockEditAction::ToggleOutputDropdown),
-        BlockPanelDropdown::TeleportPair => None,
+        BlockPanelDropdown::LabelerColor => Some(BlockPanelAction::ToggleColorDropdown),
+        BlockPanelDropdown::ConverterInput => Some(BlockPanelAction::ToggleInputDropdown),
+        BlockPanelDropdown::ConverterOutput => Some(BlockPanelAction::ToggleOutputDropdown),
+        BlockPanelDropdown::TeleportPair => Some(BlockPanelAction::ToggleTeleportPairDropdown),
     }
 }
 
@@ -353,12 +334,12 @@ fn spawn_teleport_pair_option(
     pair: Option<IVec3>,
 ) {
     parent
-        .spawn((menu_button(32.0), TeleportAction::SetPair(pair)))
+        .spawn((menu_button(32.0), BlockPanelAction::SetTeleportPair(pair)))
         .with_children(|button| {
             button.spawn((
                 Text::new(label),
                 TextFont {
-                    font_size: super::components::default_font_size(13.0),
+                    font_size: default_font_size(13.0),
                     ..default()
                 },
                 TextColor(Color::WHITE),
@@ -384,11 +365,4 @@ fn teleport_pair_candidates(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
         .collect();
     candidates.sort_by_key(|candidate| world.teleport_settings(*candidate).name);
     candidates
-}
-
-fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
-    match mode {
-        BuilderMode::Edit => i18n.text("mode.edit"),
-        BuilderMode::Play => i18n.text("mode.play"),
-    }
 }

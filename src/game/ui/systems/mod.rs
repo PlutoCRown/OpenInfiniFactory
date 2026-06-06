@@ -1,37 +1,36 @@
-use bevy::ecs::system::SystemParam;
 use bevy::picking::pointer::PointerButton;
 use bevy::picking::prelude::{Click, Drag, DragEnd, DragStart, Out, Over, Pointer};
 use bevy::prelude::*;
 use bevy::ui_widgets::{CoreSliderDragState, Slider, SliderRange, SliderValue};
 use bevy::window::PrimaryWindow;
 
-use crate::game::state::{BuilderMode, GameMode, GameSettings, PlacementState, PlayingUiState, SimulationState, SolutionState, StartMenuScreen, TeleportRenameState, WorldEntryMode};
-use crate::game::world::blocks::{BlockKind, MaterialKind};
+use crate::game::state::{
+    BuilderMode, GameMode, GameSettings, PlacementState, PlayingUiState, SimulationState,
+    SolutionState, StartMenuScreen, UiPanelId, WorldEntryMode,
+};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockIconAssets;
 use crate::shared::config::{ActionKeyName, GameConfig};
-use crate::shared::i18n::{I18n, Language};
+use crate::shared::i18n::I18n;
 use crate::shared::save::{SaveKind, SaveState};
 
 use super::components::{
-    full_width_button, hover_border, inset_border, menu_button, pressed_border, raised_border,
-    text, BUTTON_BG, BUTTON_HOVER_BG,
+    full_width_button, hover_border, inset_border, pressed_border, raised_border, text,
+    BUTTON_BG, BUTTON_HOVER_BG,
 };
 use super::types::{
-    ActiveSettingsSlider, BlockEditAction, BlockMaterialIcon, BlockMaterialIconSlot,
-    BlockPanelDropdown, BlockPanelDropdownLabel, BlockPanelDropdownList, BlockPanelText,
-    BlockPanelTextKind, CarriedItem, CarriedItemPreview, ConfirmDialogAction, ConfirmDialogKind,
-    ConfirmDialogState, ConverterInputRow, Crosshair, GameplayHudVisibility, InGameHudStyle,
-    InGameHudVisibility, InventoryItems, InventorySlot, InventoryTooltip, KeyBindingButton,
-    LocalizedText, MenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown, PanelCloseButton,
-    PanelDragState, PanelPosition, PanelText, PanelTextKind, PanelTitleBar, PanelVisibility,
-    PanelWindow, PendingKeyBind, SaveListAction, SaveListCloseButton, SaveListPanel,
-    SaveListPrompt, SaveListPuzzleColumn, SaveListRenderState, SaveListSolutionColumn,
-    SettingsAction, SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
-    SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind, SettingsValueText, SlotArea,
-    StatusText, StatusTextKind, TeleportAction, TextPromptAction, TextPromptKind, TextPromptRoot,
-    TextPromptState, TextPromptText, UiHoverState, UiPanelBinding, UiPanelId,
-    UiRuntime,
+    ActiveSettingsSlider, CarriedItem, CarriedItemPreview, ConfirmDialogAction,
+    ConfirmDialogKind, ConfirmDialogState, Crosshair, GameplayHudVisibility, InGameHudStyle,
+    InGameHudVisibility, InlineTextEditState, InventoryItems, InventorySlot, InventoryTooltip,
+    KeyBindingButton, LocalizedText, MenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown,
+    PanelCloseButton, PanelDragState, PanelPosition, PanelText, PanelTextKind, PanelTitleBar,
+    PanelVisibility, PanelWindow, PendingKeyBind, SaveListAction, SaveListCloseButton,
+    SaveListPanel, SaveListPrompt, SaveListPuzzleColumn, SaveListRenderState,
+    SaveListSolutionColumn, SettingsAction, SettingsDropdownLabel, SettingsDropdownList,
+    SettingsField, SettingsSliderFill, SettingsSliderKnob, SettingsTab, SettingsText,
+    SettingsTextKind, SettingsValueText, SlotArea, StatusText, StatusTextKind, TextPromptAction,
+    TextPromptKind, TextPromptRoot, TextPromptState, TextPromptText, UiHoverState,
+    UiPanelBinding, UiRuntime,
 };
 use super::widgets::{short_item_name, slot_color};
 include!("font.rs");
@@ -39,7 +38,6 @@ include!("inventory_actions.rs");
 include!("status.rs");
 include!("cursor_scroll.rs");
 include!("hover.rs");
-include!("block_panels.rs");
 include!("settings.rs");
 include!("localized.rs");
 include!("panels.rs");

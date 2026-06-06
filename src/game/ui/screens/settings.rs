@@ -9,8 +9,9 @@ use super::super::components::{
 };
 use super::super::types::{
     PanelVisibility, SettingsAction, SettingsControl, SettingsDropdown, SettingsDropdownRow,
-    SettingsItem, SettingsTab, UiPanelBinding, UiPanelId, GAMEPLAY_SETTINGS,
+    SettingsItem, SettingsTab, UiPanelBinding, GAMEPLAY_SETTINGS,
 };
+use crate::game::state::UiPanelId;
 use super::super::widgets::{
     spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_dropdown_list,
     spawn_settings_slider, spawn_settings_slider_value, spawn_settings_tab,

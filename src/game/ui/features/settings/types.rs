@@ -1,0 +1,270 @@
+use bevy::prelude::*;
+
+use crate::game::state::GameSettings;
+use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
+use crate::shared::config::{ActionKeyName, ConfigSelectionMode};
+use crate::shared::i18n::Language;
+
+use crate::game::ui::core::action::UiActionLabel;
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsText(pub SettingsTextKind);
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum SettingsTextKind {
+    KeyBinding,
+}
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsValueText(pub SettingsField);
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsSliderFill(pub SettingsField);
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsSliderKnob(pub SettingsField);
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsDropdownLabel(pub SettingsDropdown);
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsDropdownList(pub SettingsDropdown);
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub struct SettingsDropdownRow(pub SettingsDropdown);
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum SettingsField {
+    Fov,
+    UiScale,
+    Gravity,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum SettingsSliderTrigger {
+    Live,
+    Commit,
+}
+
+#[derive(Clone, Copy)]
+pub struct SettingsSliderConfig {
+    pub min: f32,
+    pub max: f32,
+    pub step: f32,
+    pub trigger: SettingsSliderTrigger,
+}
+
+#[derive(Clone, Copy)]
+pub enum SettingsControl {
+    Slider {
+        field: SettingsField,
+        config: SettingsSliderConfig,
+    },
+    Dropdown(SettingsDropdown),
+}
+
+#[derive(Clone, Copy)]
+pub struct SettingsItem {
+    pub label_key: &'static str,
+    pub control: SettingsControl,
+}
+
+pub const GAMEPLAY_SETTINGS: &[SettingsItem] = &[
+    SettingsItem {
+        label_key: "settings.fov",
+        control: SettingsControl::Slider {
+            field: SettingsField::Fov,
+            config: SettingsSliderConfig {
+                min: 50.0,
+                max: 110.0,
+                step: 1.0,
+                trigger: SettingsSliderTrigger::Live,
+            },
+        },
+    },
+    SettingsItem {
+        label_key: "settings.ui_scale_label",
+        control: SettingsControl::Slider {
+            field: SettingsField::UiScale,
+            config: SettingsSliderConfig {
+                min: UI_SCALE_MIN,
+                max: UI_SCALE_MAX,
+                step: 0.1,
+                trigger: SettingsSliderTrigger::Commit,
+            },
+        },
+    },
+    SettingsItem {
+        label_key: "settings.gravity",
+        control: SettingsControl::Slider {
+            field: SettingsField::Gravity,
+            config: SettingsSliderConfig {
+                min: GRAVITY_SCALE_MIN,
+                max: GRAVITY_SCALE_MAX,
+                step: 0.1,
+                trigger: SettingsSliderTrigger::Commit,
+            },
+        },
+    },
+    SettingsItem {
+        label_key: "settings.language",
+        control: SettingsControl::Dropdown(SettingsDropdown::Language),
+    },
+    SettingsItem {
+        label_key: "settings.place_selection_mode",
+        control: SettingsControl::Dropdown(SettingsDropdown::PlaceSelectionMode),
+    },
+    SettingsItem {
+        label_key: "settings.delete_selection_mode",
+        control: SettingsControl::Dropdown(SettingsDropdown::DeleteSelectionMode),
+    },
+];
+
+impl SettingsField {
+    pub fn slider(self) -> Option<SettingsSliderConfig> {
+        GAMEPLAY_SETTINGS
+            .iter()
+            .find_map(|item| match item.control {
+                SettingsControl::Slider { field, config } if field == self => Some(config),
+                _ => None,
+            })
+    }
+
+    pub fn percent(self, settings: &GameSettings) -> f32 {
+        let Some(slider) = self.slider() else {
+            return 0.0;
+        };
+        ((self.value(settings) - slider.min) / (slider.max - slider.min) * 100.0).clamp(0.0, 100.0)
+    }
+
+    pub fn display(
+        self,
+        settings: &GameSettings,
+        i18n: &crate::shared::i18n::I18n,
+    ) -> String {
+        match self {
+            Self::Fov => format!("FOV {:.0}", settings.fov_degrees),
+            Self::UiScale => i18n.fmt(
+                "settings.ui_scale",
+                &[("scale", format!("{:.1}", settings.ui_scale))],
+            ),
+            Self::Gravity => i18n.fmt(
+                "settings.gravity_value",
+                &[("scale", format!("{:.1}", settings.gravity_scale))],
+            ),
+        }
+    }
+
+    pub fn apply_percent(
+        self,
+        percent: f32,
+        settings: &mut GameSettings,
+        ui_scale: &mut UiScale,
+        config: &mut crate::shared::config::GameConfig,
+    ) {
+        let Some(slider) = self.slider() else {
+            return;
+        };
+        let raw = slider.min + percent.clamp(0.0, 1.0) * (slider.max - slider.min);
+        let value = (raw / slider.step).round() * slider.step;
+        self.apply_value(
+            value.clamp(slider.min, slider.max),
+            settings,
+            ui_scale,
+            config,
+        );
+    }
+
+    fn value(self, settings: &GameSettings) -> f32 {
+        match self {
+            Self::Fov => settings.fov_degrees,
+            Self::UiScale => settings.ui_scale,
+            Self::Gravity => settings.gravity_scale,
+        }
+    }
+
+    fn apply_value(
+        self,
+        value: f32,
+        settings: &mut GameSettings,
+        ui_scale: &mut UiScale,
+        config: &mut crate::shared::config::GameConfig,
+    ) {
+        match self {
+            Self::Fov => {
+                settings.fov_degrees = value;
+                config.fov_degrees = value;
+            }
+            Self::UiScale => {
+                settings.ui_scale = value;
+                ui_scale.0 = value;
+                config.ui_scale = value;
+            }
+            Self::Gravity => {
+                settings.gravity_scale = value;
+                config.gravity_scale = value;
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum SettingsDropdown {
+    Language,
+    PlaceSelectionMode,
+    DeleteSelectionMode,
+}
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+pub enum SettingsAction {
+    TabGameplay,
+    TabKeyBindings,
+    Field(SettingsField),
+    SetPlaceSelectionMode(ConfigSelectionMode),
+    SetDeleteSelectionMode(ConfigSelectionMode),
+    SetLanguage(Language),
+    ToggleDropdown(SettingsDropdown),
+    Bind(ActionKeyName),
+    ResetDefaults,
+    OpenFolder,
+    Back,
+}
+
+impl UiActionLabel for SettingsAction {
+    fn label_key(self) -> &'static str {
+        match self {
+            Self::TabGameplay => "button.gameplay",
+            Self::TabKeyBindings => "button.key_bindings",
+            Self::Bind(action) => action.label_key(),
+            Self::ResetDefaults => "button.reset_defaults",
+            Self::OpenFolder => "button.open_config_folder",
+            Self::Back => "button.back",
+            Self::Field(_)
+            | Self::SetPlaceSelectionMode(_)
+            | Self::SetDeleteSelectionMode(_)
+            | Self::SetLanguage(_)
+            | Self::ToggleDropdown(_) => "",
+        }
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct ActiveSettingsSlider(pub Option<SettingsField>);
+
+#[derive(Resource, Clone, Copy, Eq, PartialEq)]
+pub enum SettingsTab {
+    Gameplay,
+    KeyBindings,
+}
+
+impl Default for SettingsTab {
+    fn default() -> Self {
+        Self::Gameplay
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct PendingKeyBind(pub Option<ActionKeyName>);
+
+#[derive(Resource, Default)]
+pub struct OpenSettingsDropdown(pub Option<SettingsDropdown>);

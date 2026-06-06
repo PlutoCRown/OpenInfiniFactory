@@ -5,13 +5,13 @@ use super::components::{
     default_button_size, default_font_size, full_width_button, inset_border, menu_button,
     raised_border, slider_bundle, slider_fill, slider_knob, styled_button,
 };
+use crate::game::block_editing::{BlockPanelAction, BlockPanelDropdown, BlockMaterialIcon, BlockMaterialIconSlot, BlockPanelDropdownLabel, BlockPanelDropdownList};
 use super::types::{
-    AreaKind, BlockEditAction, BlockMaterialIcon, BlockMaterialIconSlot, BlockPanelDropdown,
-    BlockPanelDropdownLabel, BlockPanelDropdownList, ConfirmDialogAction, InventoryItem,
+    AreaKind, ConfirmDialogAction, InventoryItem,
     InventorySlot, KeyBindingButton, MenuAction, SettingsAction, SettingsDropdown,
     SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
     SettingsSliderKnob, SettingsText, SettingsTextKind, SettingsValueText, SlotArea,
-    TeleportAction, UiActionLabel,
+    UiActionLabel,
 };
 use crate::game::world::blocks::MaterialKind;
 
@@ -96,11 +96,7 @@ pub(super) fn spawn_menu_button(
     spawn_full_width_localized_button(parent, height, font_size, action);
 }
 
-pub(super) fn spawn_block_edit_button(parent: &mut ChildSpawnerCommands, action: BlockEditAction) {
-    spawn_localized_button(parent, 36.0, 14.0, action);
-}
-
-pub(super) fn spawn_teleport_button(parent: &mut ChildSpawnerCommands, action: TeleportAction) {
+pub(super) fn spawn_block_panel_button(parent: &mut ChildSpawnerCommands, action: BlockPanelAction) {
     spawn_localized_button(parent, 36.0, 14.0, action);
 }
 

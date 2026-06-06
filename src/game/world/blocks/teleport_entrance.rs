@@ -1,8 +1,9 @@
 use super::{
-    rgb, Block, BlockDefinition, BlockKind, BlockModel, BlockModelPart, EditableBlock,
-    ModelMaterial, ModelMesh,
+    rgb, Block, BlockDefinition, BlockEditContext, BlockKind, BlockModel, BlockModelPart,
+    EditableBlock, ModelMaterial, ModelMesh,
 };
-use crate::game::ui::UiPanelId;
+use crate::game::block_editing::{edit_teleport, BlockPanelAction};
+use crate::game::state::UiPanelId;
 use crate::game::world::grid::{BlockSettings, TeleportSettings};
 
 const MODEL: &[BlockModelPart] = &[
@@ -69,5 +70,9 @@ impl Block for TeleportEntranceBlock {
 impl EditableBlock for TeleportEntranceBlock {
     fn ui_panel(&self) -> Option<UiPanelId> {
         Some(UiPanelId::Teleport)
+    }
+
+    fn handle_edit_action(&self, ctx: &mut BlockEditContext, action: BlockPanelAction) {
+        edit_teleport(ctx, action);
     }
 }

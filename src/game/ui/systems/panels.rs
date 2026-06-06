@@ -69,7 +69,7 @@ pub fn panel_close_clicked(
     mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut open_settings_dropdown: ResMut<OpenSettingsDropdown>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
-    mut teleport_rename: ResMut<TeleportRenameState>,
+    mut inline_edit: ResMut<InlineTextEditState>,
     mut drag: ResMut<PanelDragState>,
     close_buttons: Query<(), With<PanelCloseButton>>,
 ) {
@@ -83,7 +83,7 @@ pub fn panel_close_clicked(
         pending_key_bind.0 = None;
     }
     open_block_dropdown.0 = None;
-    teleport_rename.editing = None;
+    inline_edit.clear();
     ui_runtime.close_active();
     drag.clear();
 }

@@ -31,8 +31,10 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub use self::registry::{all_blocks, assert_registry_consistent, edit_blocks, PLAY_BLOCKS};
-use crate::game::state::SolutionState;
-use crate::game::ui::{BlockEditAction, BlockPanelDropdown, OpenBlockPanelDropdown, UiPanelId};
+use crate::game::block_editing::{
+    edit_labeler, BlockEditContext, BlockPanelAction, OpenBlockPanelDropdown,
+};
+use crate::game::state::{SolutionState, UiPanelId};
 pub use crate::game::world::direction::Facing;
 use crate::game::world::grid::{BlockSettings, WorldBlocks};
 
@@ -101,63 +103,9 @@ pub trait Block: Send + Sync {
 }
 
 pub trait EditableBlock: Block {
-    fn ui_panel(&self) -> Option<UiPanelId> {
-        None
-    }
+    fn ui_panel(&self) -> Option<UiPanelId>;
 
-    fn handle_edit_action(&self, _ctx: &mut BlockEditContext, _action: BlockEditAction) {}
-}
-
-pub struct BlockEditContext<'a> {
-    pub pos: IVec3,
-    pub world: &'a mut WorldBlocks,
-    solution_state: &'a mut SolutionState,
-    open_dropdown: &'a mut OpenBlockPanelDropdown,
-}
-
-impl<'a> BlockEditContext<'a> {
-    pub fn new(
-        pos: IVec3,
-        world: &'a mut WorldBlocks,
-        solution_state: &'a mut SolutionState,
-        open_dropdown: &'a mut OpenBlockPanelDropdown,
-    ) -> Self {
-        Self {
-            pos,
-            world,
-            solution_state,
-            open_dropdown,
-        }
-    }
-
-    pub fn toggle_dropdown(&mut self, dropdown: BlockPanelDropdown) {
-        self.open_dropdown.0 = (self.open_dropdown.0 != Some(dropdown)).then_some(dropdown);
-    }
-
-    pub fn close_dropdown(&mut self) {
-        self.open_dropdown.0 = None;
-    }
-
-    pub fn mark_dirty(&mut self) {
-        self.solution_state.dirty = true;
-    }
-}
-
-pub(super) fn edit_labeler(ctx: &mut BlockEditContext, action: BlockEditAction) {
-    let mut settings = ctx.world.labeler_settings(ctx.pos);
-    match action {
-        BlockEditAction::ToggleColorDropdown => {
-            ctx.toggle_dropdown(BlockPanelDropdown::LabelerColor);
-            return;
-        }
-        BlockEditAction::SetColor(color) => {
-            settings.color = color;
-            ctx.close_dropdown();
-        }
-        _ => return,
-    }
-    ctx.world.set_labeler_settings(ctx.pos, settings);
-    ctx.mark_dirty();
+    fn handle_edit_action(&self, ctx: &mut BlockEditContext, action: BlockPanelAction);
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -830,7 +778,7 @@ impl BlockKind {
     pub fn handle_edit_action(
         self,
         pos: IVec3,
-        action: BlockEditAction,
+        action: BlockPanelAction,
         world: &mut WorldBlocks,
         solution_state: &mut SolutionState,
         open_dropdown: &mut OpenBlockPanelDropdown,

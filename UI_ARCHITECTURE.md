@@ -243,3 +243,47 @@ src/game/ui/
 ---
 
 *最后更新：2026-06-07*
+
+---
+
+## 8. 重构执行记录（2026-06-07）
+
+以下重构已落地，`cargo check` 通过。
+
+### 新目录结构
+
+```
+src/game/
+  block_editing/          # 方块 panel 动作与 dropdown，world 层依赖此模块而非 ui
+    action.rs             # BlockPanelAction（合并 BlockEditAction + TeleportAction）
+    context.rs            # BlockEditContext、edit_labeler、edit_teleport
+    dropdown.rs           # BlockPanelDropdown、OpenBlockPanelDropdown
+    markers.rs            # BlockPanelText、dropdown 组件标记
+
+  ui/
+    core/                 # UiRuntime、面板组件、WorldMenuParams、InlineTextEditState
+    features/
+      menu/               # MenuAction + menu_actions
+      save/               # 存档列表、确认框、TextPrompt
+      settings/           # 设置面板
+      block_panels/       # 统一 block_panel_actions + update 系统
+      inventory/          # 背包点击与渲染
+    types.rs              # 背包类型 + 各模块 re-export
+```
+
+### 已消除的问题
+
+- `TeleportAction` / `teleport_menu_actions` 双轨 → 统一为 `BlockPanelAction`
+- `TeleportRenameState` → `InlineTextEditState`（位于 `ui/core/text_input.rs`）
+- `menus.rs`（1400+ 行）→ 拆入 `ui/features/*/actions.rs` 与 `ui/core/world_menu.rs`
+- `types.rs`（800+ 行）→ 瘦身为 re-export + 背包类型
+- `update_*_ui` 多个薄系统 → `update_active_block_panel` + `update_block_panel_dropdowns`
+- `world/blocks` 不再 `use crate::game::ui`，改为 `use crate::game::block_editing`
+
+### 仍可后续改进
+
+- `ui/core` 对 `ui/features` 仍有少量依赖（PanelVisibility → SettingsTab）
+- 背包 handler/render 仍在 `ui/systems/`，未迁入 `features/inventory/`
+- `RegisteredBasicBlock` 的 `EditableBlock` 仍为 stub 实现（无 UI 的 palette 方块）
+- 部分 dead_code / unused import 警告待清理
+

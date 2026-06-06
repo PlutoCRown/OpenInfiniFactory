@@ -1,3 +1,4 @@
+pub mod block_editing;
 pub mod cameras;
 pub mod player;
 pub mod session;
@@ -22,12 +23,11 @@ use player::controller::{camera_look, camera_move, spawn_player, sync_cursor_gra
 use session::{on_exit_playing, prepare_playing_session, rebuild_playing_world};
 use state::{
     BuilderMode, GameMode, GameSettings, PlacementState, PlayingUiState, SimulationState,
-    SolutionState, StartMenuScreen, TeleportRenameState,
+    SolutionState, StartMenuScreen,
 };
 use systems::gameplay::{
     apply_fov, draw_hover_structure_bounds, gameplay_input, placement_input, update_hover,
 };
-use systems::menus::{menu_actions, save_list_actions};
 use systems::perf::{PerfPlugin, PerfScope};
 use systems::simulation_controls::simulation_controls;
 use ui::{GameUiPlugin, InventoryItems};
@@ -69,7 +69,6 @@ impl Plugin for GamePlugin {
             .insert_resource(WorldBlocks::default())
             .insert_resource(HoverStructureBounds::default())
             .insert_resource(PlacementState::default())
-            .insert_resource(TeleportRenameState::default())
             .insert_resource(InventoryItems::default())
             .init_state::<GameMode>()
             .insert_resource(StartMenuScreen::default())
@@ -95,8 +94,6 @@ impl Plugin for GamePlugin {
             .add_plugins(GameUiPlugin)
             .add_plugins(PerfPlugin)
             .add_observer(slider_self_update)
-            .add_observer(menu_actions)
-            .add_observer(save_list_actions)
             .add_systems(
                 Startup,
                 (

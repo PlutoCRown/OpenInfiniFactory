@@ -11,16 +11,16 @@ use super::screens::{
     spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_inventory_tooltip,
     spawn_main_menu, spawn_pause_panel, spawn_save_list, spawn_settings_panel,
 };
+use crate::game::block_editing::{BlockPanelAction, BlockPanelDropdown, BlockPanelText, BlockPanelTextKind};
+use crate::game::state::UiPanelId;
 use super::types::{
-    BlockEditAction, BlockPanelDropdown, BlockPanelText, BlockPanelTextKind, ConfirmDialogAction,
-    ConverterInputRow, Crosshair, GameplayHudVisibility, InGameHudVisibility, PanelText,
-    PanelTextKind, PanelVisibility, PlayingUiRoot, StatusText, StatusTextKind, TeleportAction,
-    UiPanelBinding, UiPanelId, UiRoot,
+    ConfirmDialogAction, ConverterInputRow, Crosshair, GameplayHudVisibility, InGameHudVisibility,
+    PanelText, PanelTextKind, PanelVisibility, PlayingUiRoot, StatusText, StatusTextKind,
+    UiPanelBinding, UiRoot,
 };
 use super::widgets::{
-    spawn_block_edit_button, spawn_block_panel_dropdown, spawn_block_panel_dropdown_list,
+    spawn_block_panel_button, spawn_block_panel_dropdown, spawn_block_panel_dropdown_list,
     spawn_confirm_dialog_button, spawn_material_icon_dropdown_list, spawn_material_icon_slot,
-    spawn_teleport_button,
 };
 use crate::game::world::blocks::{MaterialKind, StampColor};
 
@@ -84,18 +84,18 @@ fn spawn_generator_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         UiPanelBinding(UiPanelId::Generator),
         |panel| {
             spawn_panel_row(panel, i18n, "panel.period", |row| {
-                spawn_block_edit_button(row, BlockEditAction::PeriodDown);
+                spawn_block_panel_button(row, BlockPanelAction::PeriodDown);
                 row.spawn((
                     text("", 18.0, Color::WHITE),
                     BlockPanelText(BlockPanelTextKind::GeneratorPeriod),
                 ));
-                spawn_block_edit_button(row, BlockEditAction::PeriodUp);
+                spawn_block_panel_button(row, BlockPanelAction::PeriodUp);
             });
             spawn_panel_row(panel, i18n, "panel.material", |row| {
                 spawn_material_icon_slot(
                     row,
                     BlockPanelDropdown::GeneratorMaterial,
-                    BlockEditAction::ToggleMaterialDropdown,
+                    BlockPanelAction::ToggleMaterialDropdown,
                 );
             });
         },
@@ -113,7 +113,7 @@ fn spawn_goal_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                 spawn_material_icon_slot(
                     row,
                     BlockPanelDropdown::GoalMaterial,
-                    BlockEditAction::ToggleMaterialDropdown,
+                    BlockPanelAction::ToggleMaterialDropdown,
                 );
             });
         },
@@ -128,7 +128,7 @@ fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         UiPanelBinding(UiPanelId::Teleport),
         |panel| {
             spawn_panel_row(panel, i18n, "panel.name", |row| {
-                spawn_teleport_button(row, TeleportAction::Rename);
+                spawn_block_panel_button(row, BlockPanelAction::StartTeleportRename);
                 row.spawn((
                     text("", 18.0, Color::WHITE),
                     BlockPanelText(BlockPanelTextKind::TeleportName),
@@ -138,7 +138,7 @@ fn spawn_teleport_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                 spawn_block_panel_dropdown(
                     row,
                     BlockPanelDropdown::TeleportPair,
-                    TeleportAction::TogglePairDropdown,
+                    BlockPanelAction::ToggleTeleportPairDropdown,
                 );
             });
         },
@@ -159,14 +159,14 @@ fn spawn_converter_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                     spawn_material_icon_slot(
                         row,
                         BlockPanelDropdown::ConverterInput,
-                        BlockEditAction::ToggleInputDropdown,
+                        BlockPanelAction::ToggleInputDropdown,
                     );
                 });
             spawn_panel_row(panel, i18n, "panel.output", |row| {
                 spawn_material_icon_slot(
                     row,
                     BlockPanelDropdown::ConverterOutput,
-                    BlockEditAction::ToggleOutputDropdown,
+                    BlockPanelAction::ToggleOutputDropdown,
                 );
             });
         },
@@ -184,7 +184,7 @@ fn spawn_labeler_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
                 spawn_block_panel_dropdown(
                     row,
                     BlockPanelDropdown::LabelerColor,
-                    BlockEditAction::ToggleColorDropdown,
+                    BlockPanelAction::ToggleColorDropdown,
                 );
             });
         },
@@ -195,32 +195,32 @@ fn spawn_block_dropdown_layers(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     spawn_material_icon_dropdown_list(
         root,
         BlockPanelDropdown::GeneratorMaterial,
-        material_options().map(|material| (material, BlockEditAction::SetMaterial(material))),
+        material_options().map(|material| (material, BlockPanelAction::SetMaterial(material))),
     );
     spawn_material_icon_dropdown_list(
         root,
         BlockPanelDropdown::GoalMaterial,
-        material_options().map(|material| (material, BlockEditAction::SetMaterial(material))),
+        material_options().map(|material| (material, BlockPanelAction::SetMaterial(material))),
     );
     spawn_material_icon_dropdown_list(
         root,
         BlockPanelDropdown::ConverterInput,
-        material_options().map(|material| (material, BlockEditAction::SetInput(material))),
+        material_options().map(|material| (material, BlockPanelAction::SetInput(material))),
     );
     spawn_material_icon_dropdown_list(
         root,
         BlockPanelDropdown::ConverterOutput,
-        material_options().map(|material| (material, BlockEditAction::SetOutput(material))),
+        material_options().map(|material| (material, BlockPanelAction::SetOutput(material))),
     );
     spawn_block_panel_dropdown_list(
         root,
         BlockPanelDropdown::LabelerColor,
-        stamp_color_options(i18n).map(|(label, color)| (label, BlockEditAction::SetColor(color))),
+        stamp_color_options(i18n).map(|(label, color)| (label, BlockPanelAction::SetColor(color))),
     );
     spawn_block_panel_dropdown_list(
         root,
         BlockPanelDropdown::TeleportPair,
-        std::iter::empty::<(String, TeleportAction)>(),
+        std::iter::empty::<(String, BlockPanelAction)>(),
     );
 }
 

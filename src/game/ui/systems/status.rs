@@ -1,3 +1,10 @@
+fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
+    i18n.text(match mode {
+        BuilderMode::Edit => "mode.edit",
+        BuilderMode::Play => "mode.play",
+    })
+}
+
 fn pause_action_visible(
     save_state: &SaveState,
     solution_state: &SolutionState,

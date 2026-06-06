@@ -2,7 +2,8 @@ use super::{
     rgb, Block, BlockDefinition, BlockEditContext, BlockKind, BlockModel, BlockModelPart,
     EditableBlock, ModelMaterial, ModelMesh,
 };
-use crate::game::ui::{BlockEditAction, BlockPanelDropdown, UiPanelId};
+use crate::game::block_editing::{BlockPanelAction, BlockPanelDropdown};
+use crate::game::state::UiPanelId;
 use crate::game::world::grid::{BlockSettings, ConverterMode, ConverterSettings};
 
 const MODEL: &[BlockModelPart] = &[
@@ -58,23 +59,23 @@ impl EditableBlock for ConverterBlock {
         Some(UiPanelId::Converter)
     }
 
-    fn handle_edit_action(&self, ctx: &mut BlockEditContext, action: BlockEditAction) {
+    fn handle_edit_action(&self, ctx: &mut BlockEditContext, action: BlockPanelAction) {
         let mut settings = ctx.world.converter_settings(ctx.pos);
         match action {
-            BlockEditAction::ToggleInputDropdown => {
+            BlockPanelAction::ToggleInputDropdown => {
                 ctx.toggle_dropdown(BlockPanelDropdown::ConverterInput);
                 return;
             }
-            BlockEditAction::ToggleOutputDropdown => {
+            BlockPanelAction::ToggleOutputDropdown => {
                 ctx.toggle_dropdown(BlockPanelDropdown::ConverterOutput);
                 return;
             }
-            BlockEditAction::SetInput(material) => {
+            BlockPanelAction::SetInput(material) => {
                 settings.input = material;
                 settings.mode = ConverterMode::SpecificInput;
                 ctx.close_dropdown();
             }
-            BlockEditAction::SetOutput(material) => {
+            BlockPanelAction::SetOutput(material) => {
                 settings.output = material;
                 ctx.close_dropdown();
             }

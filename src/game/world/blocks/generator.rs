@@ -1,7 +1,8 @@
 use super::{
     rgba, Block, BlockDefinition, BlockEditContext, BlockKind, EditableBlock, MaterialSource,
 };
-use crate::game::ui::{BlockEditAction, BlockPanelDropdown, UiPanelId};
+use crate::game::block_editing::{BlockPanelAction, BlockPanelDropdown};
+use crate::game::state::UiPanelId;
 use crate::game::world::grid::{BlockSettings, GeneratorSettings};
 
 pub struct GeneratorBlock;
@@ -39,18 +40,18 @@ impl EditableBlock for GeneratorBlock {
         Some(UiPanelId::Generator)
     }
 
-    fn handle_edit_action(&self, ctx: &mut BlockEditContext, action: BlockEditAction) {
+    fn handle_edit_action(&self, ctx: &mut BlockEditContext, action: BlockPanelAction) {
         let mut settings = ctx.world.generator_settings(ctx.pos);
         match action {
-            BlockEditAction::PeriodDown => {
+            BlockPanelAction::PeriodDown => {
                 settings.period = settings.period.saturating_sub(1).max(1)
             }
-            BlockEditAction::PeriodUp => settings.period = (settings.period + 1).min(120),
-            BlockEditAction::ToggleMaterialDropdown => {
+            BlockPanelAction::PeriodUp => settings.period = (settings.period + 1).min(120),
+            BlockPanelAction::ToggleMaterialDropdown => {
                 ctx.toggle_dropdown(BlockPanelDropdown::GeneratorMaterial);
                 return;
             }
-            BlockEditAction::SetMaterial(material) => {
+            BlockPanelAction::SetMaterial(material) => {
                 settings.material = material;
                 ctx.close_dropdown();
             }

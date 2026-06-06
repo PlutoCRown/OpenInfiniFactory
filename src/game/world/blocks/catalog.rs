@@ -69,7 +69,18 @@ inventory::collect!(BasicBlockRegistration);
 
 pub struct Grass;
 
-impl<T: BasicBlockDef> EditableBlock for RegisteredBasicBlock<T> {}
+impl<T: BasicBlockDef> EditableBlock for RegisteredBasicBlock<T> {
+    fn ui_panel(&self) -> Option<crate::game::state::UiPanelId> {
+        None
+    }
+
+    fn handle_edit_action(
+        &self,
+        _ctx: &mut super::BlockEditContext,
+        _action: crate::game::block_editing::BlockPanelAction,
+    ) {
+    }
+}
 
 impl BasicBlockDef for Grass {
     const KIND: BlockKind = BlockKind::Grass;

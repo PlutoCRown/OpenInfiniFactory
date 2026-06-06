@@ -2,7 +2,8 @@ use super::{
     rgb, Block, BlockDefinition, BlockEditContext, BlockKind, BlockModel, BlockModelPart,
     EditableBlock, ModelMaterial, ModelMesh, RenderBehavior,
 };
-use crate::game::ui::{BlockEditAction, BlockPanelDropdown, UiPanelId};
+use crate::game::block_editing::{BlockPanelAction, BlockPanelDropdown};
+use crate::game::state::UiPanelId;
 use crate::game::world::grid::{BlockSettings, GoalSettings};
 
 const MODEL: &[BlockModelPart] = &[
@@ -52,14 +53,14 @@ impl EditableBlock for GoalBlock {
         Some(UiPanelId::Goal)
     }
 
-    fn handle_edit_action(&self, ctx: &mut BlockEditContext, action: BlockEditAction) {
+    fn handle_edit_action(&self, ctx: &mut BlockEditContext, action: BlockPanelAction) {
         let mut settings = ctx.world.goal_settings(ctx.pos);
         match action {
-            BlockEditAction::ToggleMaterialDropdown => {
+            BlockPanelAction::ToggleMaterialDropdown => {
                 ctx.toggle_dropdown(BlockPanelDropdown::GoalMaterial);
                 return;
             }
-            BlockEditAction::SetMaterial(material) => {
+            BlockPanelAction::SetMaterial(material) => {
                 settings.material = material;
                 ctx.close_dropdown();
             }
