@@ -8,6 +8,18 @@ A small Bevy prototype for a 3D block puzzle factory game.
 cargo run
 ```
 
+## Web
+
+Build WebGPU-only wasm with the project `webgpu` feature:
+
+```bash
+trunk build --release --features webgpu --dist dist/web
+```
+
+Serve the generated files over `http://localhost` or HTTPS. Browser WebGPU is
+only exposed in secure contexts; opening `dist/web/index.html` directly from the
+filesystem is not a valid WebGPU runtime environment.
+
 ## Packaging
 
 macOS `.app` bundle:

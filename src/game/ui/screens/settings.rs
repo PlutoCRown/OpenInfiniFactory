@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::shared::config::{ConfigAction, ConfigSelectionMode};
+use crate::shared::config::{ActionKeyName, ConfigSelectionMode};
 use crate::shared::i18n::I18n;
 
 use super::super::components::{
@@ -187,13 +187,13 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, i18n: &I18n) {
                         columns,
                         i18n,
                         "settings.group.general",
-                        &ConfigAction::GENERAL,
+                        &ActionKeyName::GENERAL,
                     );
                     spawn_key_group(
                         columns,
                         i18n,
                         "settings.group.simulation",
-                        &ConfigAction::SIMULATION,
+                        &ActionKeyName::SIMULATION,
                     );
                 });
         });
@@ -203,7 +203,7 @@ fn spawn_key_group(
     columns: &mut ChildSpawnerCommands,
     i18n: &I18n,
     label_key: &'static str,
-    actions: &[ConfigAction],
+    actions: &[ActionKeyName],
 ) {
     columns
         .spawn(transparent_node(Node {

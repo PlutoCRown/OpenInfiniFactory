@@ -12,7 +12,7 @@ use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
 };
-use crate::shared::config::{ConfigAction, GameConfig};
+use crate::shared::config::{ActionKeyName, GameConfig};
 
 #[derive(Resource, Default)]
 pub struct DebugState {
@@ -22,6 +22,9 @@ pub struct DebugState {
 
 #[derive(Component)]
 pub struct DebugPanel;
+
+#[derive(Component)]
+pub struct DebugText;
 
 #[derive(Resource)]
 pub struct PerfStats {
@@ -46,8 +49,23 @@ pub struct PerfStats {
     main_other_ms: SmoothedMs,
     render_other_ms: SmoothedMs,
     render_gap_ms: SmoothedMs,
-    display_timer: Timer,
-    display_text: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, SystemSet)]
+pub enum PerfMark {
+    Input,
+    PreUpdate,
+    Menus,
+    Simulation,
+    View,
+    Animation,
+    Ui,
+    Debug,
+    PostUpdateStart,
+    PostUpdateUi,
+    PostUpdateTransform,
+    PostUpdateVisibility,
+    Last,
 }
 
 impl Default for PerfStats {
@@ -75,8 +93,6 @@ impl Default for PerfStats {
             main_other_ms: SmoothedMs::default(),
             render_other_ms: SmoothedMs::default(),
             render_gap_ms: SmoothedMs::default(),
-            display_timer: Timer::from_seconds(0.25, TimerMode::Repeating),
-            display_text: String::new(),
         }
     }
 }
@@ -115,69 +131,23 @@ pub fn begin_perf_frame(mut perf: ResMut<PerfStats>) {
     perf.mark = now;
 }
 
-pub fn mark_perf_input(mut perf: ResMut<PerfStats>) {
+pub fn mark_perf(mut perf: ResMut<PerfStats>, mark: PerfMark) {
     let elapsed = perf.mark_elapsed();
-    perf.input_ms.sample(elapsed);
-}
-
-pub fn mark_perf_pre_update(mut perf: ResMut<PerfStats>) {
-    let elapsed = perf.mark_elapsed();
-    perf.pre_update_ms.sample(elapsed);
-}
-
-pub fn mark_perf_menus(mut perf: ResMut<PerfStats>) {
-    let elapsed = perf.mark_elapsed();
-    perf.menu_ms.sample(elapsed);
-}
-
-pub fn mark_perf_simulation(mut perf: ResMut<PerfStats>) {
-    let elapsed = perf.mark_elapsed();
-    perf.simulation_ms.sample(elapsed);
-}
-
-pub fn mark_perf_view(mut perf: ResMut<PerfStats>) {
-    let elapsed = perf.mark_elapsed();
-    perf.view_ms.sample(elapsed);
-}
-
-pub fn mark_perf_animation(mut perf: ResMut<PerfStats>) {
-    let elapsed = perf.mark_elapsed();
-    perf.animation_ms.sample(elapsed);
-}
-
-pub fn mark_perf_ui(mut perf: ResMut<PerfStats>) {
-    let elapsed = perf.mark_elapsed();
-    perf.ui_ms.sample(elapsed);
-}
-
-pub fn mark_perf_debug(mut perf: ResMut<PerfStats>) {
-    let elapsed = perf.mark_elapsed();
-    perf.debug_ms.sample(elapsed);
-}
-
-pub fn mark_perf_post_update_start(mut perf: ResMut<PerfStats>) {
-    let elapsed = perf.mark_elapsed();
-    perf.update_tail_ms.sample(elapsed);
-}
-
-pub fn mark_perf_post_update_ui(mut perf: ResMut<PerfStats>) {
-    let elapsed = perf.mark_elapsed();
-    perf.post_update_ui_ms.sample(elapsed);
-}
-
-pub fn mark_perf_post_update_transform(mut perf: ResMut<PerfStats>) {
-    let elapsed = perf.mark_elapsed();
-    perf.post_update_transform_ms.sample(elapsed);
-}
-
-pub fn mark_perf_post_update_visibility(mut perf: ResMut<PerfStats>) {
-    let elapsed = perf.mark_elapsed();
-    perf.post_update_visibility_ms.sample(elapsed);
-}
-
-pub fn mark_perf_last(mut perf: ResMut<PerfStats>) {
-    let elapsed = perf.mark_elapsed();
-    perf.last_ms.sample(elapsed);
+    match mark {
+        PerfMark::Input => perf.input_ms.sample(elapsed),
+        PerfMark::PreUpdate => perf.pre_update_ms.sample(elapsed),
+        PerfMark::Menus => perf.menu_ms.sample(elapsed),
+        PerfMark::Simulation => perf.simulation_ms.sample(elapsed),
+        PerfMark::View => perf.view_ms.sample(elapsed),
+        PerfMark::Animation => perf.animation_ms.sample(elapsed),
+        PerfMark::Ui => perf.ui_ms.sample(elapsed),
+        PerfMark::Debug => perf.debug_ms.sample(elapsed),
+        PerfMark::PostUpdateStart => perf.update_tail_ms.sample(elapsed),
+        PerfMark::PostUpdateUi => perf.post_update_ui_ms.sample(elapsed),
+        PerfMark::PostUpdateTransform => perf.post_update_transform_ms.sample(elapsed),
+        PerfMark::PostUpdateVisibility => perf.post_update_visibility_ms.sample(elapsed),
+        PerfMark::Last => perf.last_ms.sample(elapsed),
+    }
 }
 
 pub fn finish_perf_frame(mut perf: ResMut<PerfStats>) {
@@ -235,6 +205,7 @@ pub fn setup_debug_ui(mut commands: Commands) {
             ..default()
         },
         DebugPanel,
+        DebugText,
     ));
 }
 
@@ -250,7 +221,7 @@ pub fn toggle_debug(
         return;
     }
 
-    if keys.just_pressed(config.key(ConfigAction::Debug).key_code()) {
+    if keys.just_pressed(config.key(ActionKeyName::Debug).key_code()) {
         debug.enabled = !debug.enabled;
     }
 }
@@ -295,9 +266,8 @@ fn gameplay_mode(mode: GameMode) -> bool {
 }
 
 pub fn update_debug_ui(
-    time: Res<Time>,
     debug: Res<DebugState>,
-    mut perf: ResMut<PerfStats>,
+    perf: ResMut<PerfStats>,
     diagnostics: Res<DiagnosticsStore>,
     world: Res<WorldBlocks>,
     builder_mode: Res<BuilderMode>,
@@ -318,12 +288,6 @@ pub fn update_debug_ui(
     };
 
     if !debug.enabled {
-        return;
-    }
-
-    perf.display_timer.tick(time.delta());
-    if !perf.display_timer.is_finished() && !perf.display_text.is_empty() {
-        text.0.clone_from(&perf.display_text);
         return;
     }
 
@@ -361,7 +325,7 @@ pub fn update_debug_ui(
 
     let render_remainder_ms = (perf.render_other_ms.value - perf.render_gap_ms.value).max(0.0);
 
-    perf.display_text = format!(
+    text.0 = format!(
         "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n  PreUpdate/Input Plumbing: {:>8.2} us\n  Input: {:>8.2} us\n  Menus: {:>8.2} us\n  Sim Systems: {:>8.2} us\n  View: {:>8.2} us\n  Anim: {:>8.2} us\n  UI: {:>8.2} us\n  Debug UI: {:>8.2} us\n  Update Tail: {:>8.2} us\n  PostUpdate/UI Layout: {:>8.2} us\n  PostUpdate/Transform: {:>8.2} us\n  PostUpdate/Visibility: {:>8.2} us\n  Last: {:>8.2} us\n  Schedule/Untracked: {:>8.2} us\nRender/Engine: {:>5.2} ms\n  Frame Gap: {:>5.2} ms\n  Timing Remainder: {:>5.2} ms{}\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
         fps,
         perf.frame_ms.value,
@@ -390,7 +354,6 @@ pub fn update_debug_ui(
         player_pos.y,
         player_pos.z
     );
-    text.0.clone_from(&perf.display_text);
 }
 
 pub fn draw_player_collider(

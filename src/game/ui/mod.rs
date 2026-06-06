@@ -32,7 +32,8 @@ use crate::game::systems::menus::{
     block_edit_actions, confirm_dialog_actions, settings_action_clicked, settings_menu_actions,
     teleport_menu_actions, teleport_rename_input, text_prompt_actions, text_prompt_input,
 };
-use crate::game::{player, systems as game_systems};
+use crate::game::systems::debug::PerfMark;
+use crate::game::player;
 use components::{
     button_hovered, button_pressed, button_released, button_unhovered, update_scroll_containers,
 };
@@ -77,8 +78,8 @@ impl Plugin for GameUiPlugin {
                     settings_menu_actions,
                 )
                     .chain()
-                    .after(game_systems::debug::mark_perf_input)
-                    .before(game_systems::debug::mark_perf_menus),
+                    .after(PerfMark::Input)
+                    .before(PerfMark::Menus),
             )
             .add_systems(
                 Update,
@@ -92,8 +93,8 @@ impl Plugin for GameUiPlugin {
                     update_settings_tabs_ui,
                     update_scroll_containers,
                 )
-                    .after(game_systems::debug::mark_perf_animation)
-                    .before(game_systems::debug::mark_perf_ui),
+                    .after(PerfMark::Animation)
+                    .before(PerfMark::Ui),
             )
             .add_systems(
                 Update,
@@ -112,8 +113,8 @@ impl Plugin for GameUiPlugin {
                     apply_ui_font,
                     player::controller::sync_cursor_grab,
                 )
-                    .after(game_systems::debug::mark_perf_animation)
-                    .before(game_systems::debug::mark_perf_ui),
+                    .after(PerfMark::Animation)
+                    .before(PerfMark::Ui),
             );
     }
 }

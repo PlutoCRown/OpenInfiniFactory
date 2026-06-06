@@ -160,15 +160,15 @@ pub fn placement_input(
         player,
     } = queries;
     let place_button = config
-        .input(crate::shared::config::ConfigAction::Place)
+        .input(crate::shared::config::ActionKeyName::Place)
         .mouse_button()
         .unwrap_or(MouseButton::Left);
     let delete_button = config
-        .input(crate::shared::config::ConfigAction::Delete)
+        .input(crate::shared::config::ActionKeyName::Delete)
         .mouse_button()
         .unwrap_or(MouseButton::Right);
     let pick_button = config
-        .input(crate::shared::config::ConfigAction::Pick)
+        .input(crate::shared::config::ActionKeyName::Pick)
         .mouse_button()
         .unwrap_or(MouseButton::Middle);
 

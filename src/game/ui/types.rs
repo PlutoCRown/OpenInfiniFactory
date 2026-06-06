@@ -5,7 +5,7 @@ pub use crate::game::state::UiPanelId;
 use crate::game::state::{BuilderMode, GameMode, WorldEntryMode};
 use crate::game::world::blocks::{edit_blocks, BlockKind, MaterialKind, StampColor, PLAY_BLOCKS};
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
-use crate::shared::config::{ConfigAction, ConfigSelectionMode};
+use crate::shared::config::{ActionKeyName, ConfigSelectionMode};
 use crate::shared::i18n::Language;
 
 pub const HOTBAR_SLOTS: usize = 9;
@@ -169,7 +169,7 @@ pub enum BlockPanelTextKind {
 pub struct OpenBlockPanelDropdown(pub Option<BlockPanelDropdown>);
 
 #[derive(Component, Clone, Copy)]
-pub struct KeyBindingButton(pub ConfigAction);
+pub struct KeyBindingButton(pub ActionKeyName);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct PanelText(pub PanelTextKind);
@@ -548,7 +548,7 @@ pub enum SettingsAction {
     SetDeleteSelectionMode(ConfigSelectionMode),
     SetLanguage(Language),
     ToggleDropdown(SettingsDropdown),
-    Bind(ConfigAction),
+    Bind(ActionKeyName),
     ResetDefaults,
     OpenFolder,
     Back,
@@ -647,7 +647,7 @@ pub enum SettingsTab {
 }
 
 #[derive(Resource, Default)]
-pub struct PendingKeyBind(pub Option<ConfigAction>);
+pub struct PendingKeyBind(pub Option<ActionKeyName>);
 
 #[derive(Resource, Default)]
 pub struct OpenSettingsDropdown(pub Option<SettingsDropdown>);

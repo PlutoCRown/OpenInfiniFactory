@@ -107,17 +107,17 @@ fn simulation_status_text_value(
     config: &GameConfig,
     i18n: &I18n,
 ) -> String {
-    let start = config.input(ConfigAction::Simulate).name().to_string();
+    let start = config.input(ActionKeyName::Simulate).name().to_string();
     let fast = config
-        .input(ConfigAction::SimulationFast)
+        .input(ActionKeyName::SimulationFast)
         .name()
         .to_string();
     let step = config
-        .input(ConfigAction::SimulationStep)
+        .input(ActionKeyName::SimulationStep)
         .name()
         .to_string();
     let rollback = config
-        .input(ConfigAction::SimulationRollback)
+        .input(ActionKeyName::SimulationRollback)
         .name()
         .to_string();
 

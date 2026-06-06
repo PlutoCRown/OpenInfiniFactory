@@ -12,7 +12,7 @@ use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
 };
-use crate::shared::config::{ConfigAction, GameConfig};
+use crate::shared::config::{ActionKeyName, GameConfig};
 
 pub fn simulation_controls(
     keys: Res<ButtonInput<KeyCode>>,
@@ -39,10 +39,10 @@ pub fn simulation_controls(
         return;
     }
 
-    let simulate_key = config.key(ConfigAction::Simulate).key_code();
-    let fast_key = config.key(ConfigAction::SimulationFast).key_code();
-    let rollback_key = config.key(ConfigAction::SimulationRollback).key_code();
-    let step_key = config.key(ConfigAction::SimulationStep).key_code();
+    let simulate_key = config.key(ActionKeyName::Simulate).key_code();
+    let fast_key = config.key(ActionKeyName::SimulationFast).key_code();
+    let rollback_key = config.key(ActionKeyName::SimulationRollback).key_code();
+    let step_key = config.key(ActionKeyName::SimulationStep).key_code();
 
     if keys.just_pressed(simulate_key) {
         if !simulation.is_active() {

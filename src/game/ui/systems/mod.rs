@@ -12,7 +12,7 @@ use crate::game::state::{
 use crate::game::world::blocks::{BlockKind, MaterialKind};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockIconAssets;
-use crate::shared::config::{ConfigAction, GameConfig};
+use crate::shared::config::{ActionKeyName, GameConfig};
 use crate::shared::i18n::{I18n, Language};
 use crate::shared::save::{SaveKind, SaveState};
 

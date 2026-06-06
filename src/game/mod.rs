@@ -28,6 +28,7 @@ use systems::gameplay::{
 };
 use systems::menus::{menu_actions, save_list_actions};
 use systems::simulation_controls::simulation_controls;
+use systems::debug::{PerfMark, PerfStats};
 use ui::{GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
@@ -111,35 +112,61 @@ impl Plugin for GamePlugin {
             .add_systems(First, systems::debug::begin_perf_frame)
             .add_systems(
                 PreUpdate,
-                systems::debug::mark_perf_pre_update.after(UiSystems::Focus),
+                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::PreUpdate))
+                    .in_set(PerfMark::PreUpdate)
+                    .after(UiSystems::Focus),
             )
             .add_systems(
                 Update,
                 (camera_move, camera_look, gameplay_input, placement_input)
                     .chain()
-                    .before(systems::debug::mark_perf_input),
+                    .before(PerfMark::Input),
             )
-            .add_systems(Update, systems::debug::mark_perf_input)
-            .add_systems(Update, systems::debug::mark_perf_menus)
+            .add_systems(
+                Update,
+                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Input))
+                    .in_set(PerfMark::Input),
+            )
+            .add_systems(
+                Update,
+                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Menus))
+                    .in_set(PerfMark::Menus),
+            )
             .add_systems(
                 Update,
                 (simulation_controls, simulation::runtime::tick_simulation)
                     .chain()
-                    .after(systems::debug::mark_perf_menus)
-                    .before(systems::debug::mark_perf_simulation),
+                    .after(PerfMark::Menus)
+                    .before(PerfMark::Simulation),
             )
-            .add_systems(Update, systems::debug::mark_perf_simulation)
+            .add_systems(
+                Update,
+                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Simulation))
+                    .in_set(PerfMark::Simulation),
+            )
             .add_systems(
                 Update,
                 (apply_fov, update_hover, draw_hover_structure_bounds)
                     .chain()
-                    .after(systems::debug::mark_perf_simulation)
-                    .before(systems::debug::mark_perf_view),
+                    .after(PerfMark::Simulation)
+                    .before(PerfMark::View),
             )
-            .add_systems(Update, systems::debug::mark_perf_view)
-            .add_systems(Update, animate_blocks.after(systems::debug::mark_perf_view))
-            .add_systems(Update, systems::debug::mark_perf_animation)
-            .add_systems(Update, systems::debug::mark_perf_ui)
+            .add_systems(
+                Update,
+                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::View))
+                    .in_set(PerfMark::View),
+            )
+            .add_systems(Update, animate_blocks.after(PerfMark::View))
+            .add_systems(
+                Update,
+                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Animation))
+                    .in_set(PerfMark::Animation),
+            )
+            .add_systems(
+                Update,
+                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Ui))
+                    .in_set(PerfMark::Ui),
+            )
             .add_systems(Update, retire_block_icon_renderers)
             .add_systems(
                 Update,
@@ -150,34 +177,53 @@ impl Plugin for GamePlugin {
                     systems::debug::draw_player_collider,
                 )
                     .chain()
-                    .after(systems::debug::mark_perf_ui)
-                    .before(systems::debug::mark_perf_debug),
-            )
-            .add_systems(Update, systems::debug::mark_perf_debug)
-            .add_systems(
-                PostUpdate,
-                systems::debug::mark_perf_post_update_start.before(UiSystems::Prepare),
+                    .after(PerfMark::Ui)
+                    .before(PerfMark::Debug),
             )
             .add_systems(
+                Update,
+                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Debug))
+                    .in_set(PerfMark::Debug),
+            )
+            .add_systems(
                 PostUpdate,
-                systems::debug::mark_perf_post_update_ui
+                (|perf: ResMut<PerfStats>| {
+                    systems::debug::mark_perf(perf, PerfMark::PostUpdateStart)
+                })
+                    .in_set(PerfMark::PostUpdateStart)
+                    .before(UiSystems::Prepare),
+            )
+            .add_systems(
+                PostUpdate,
+                (|perf: ResMut<PerfStats>| {
+                    systems::debug::mark_perf(perf, PerfMark::PostUpdateUi)
+                })
+                    .in_set(PerfMark::PostUpdateUi)
                     .after(UiSystems::Layout)
                     .before(TransformSystems::Propagate),
             )
             .add_systems(
                 PostUpdate,
-                systems::debug::mark_perf_post_update_transform
+                (|perf: ResMut<PerfStats>| {
+                    systems::debug::mark_perf(perf, PerfMark::PostUpdateTransform)
+                })
+                    .in_set(PerfMark::PostUpdateTransform)
                     .after(TransformSystems::Propagate)
                     .before(VisibilitySystems::UpdateFrusta),
             )
             .add_systems(
                 PostUpdate,
-                systems::debug::mark_perf_post_update_visibility
+                (|perf: ResMut<PerfStats>| {
+                    systems::debug::mark_perf(perf, PerfMark::PostUpdateVisibility)
+                })
+                    .in_set(PerfMark::PostUpdateVisibility)
                     .after(VisibilitySystems::MarkNewlyHiddenEntitiesInvisible),
             )
             .add_systems(
                 Last,
-                systems::debug::mark_perf_last.before(systems::debug::finish_perf_frame),
+                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Last))
+                    .in_set(PerfMark::Last)
+                    .before(systems::debug::finish_perf_frame),
             )
             .add_systems(Last, systems::debug::finish_perf_frame);
     }

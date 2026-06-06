@@ -1,3 +1,5 @@
+use crate::game::systems::debug::DebugText;
+
 #[derive(Resource, Clone)]
 pub struct UiFont(pub Handle<Font>);
 
@@ -7,7 +9,7 @@ pub fn load_ui_font(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 pub fn apply_ui_font(
     ui_font: Option<Res<UiFont>>,
-    mut text_query: Query<&mut TextFont, Added<Text>>,
+    mut text_query: Query<&mut TextFont, (Added<Text>, Without<DebugText>)>,
 ) {
     let Some(ui_font) = ui_font else {
         return;

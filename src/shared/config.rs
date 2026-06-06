@@ -10,6 +10,37 @@ use crate::shared::save::SAVE_DIR;
 
 pub const CONFIG_FILE: &str = "config.ron";
 
+pub const DEFAULT_KEY_BINDINGS: KeyBindings = KeyBindings {
+    pause: ConfigKey::Escape,
+    inventory: ConfigKey::KeyE,
+    alternate: ConfigKey::KeyC,
+    rotate_or_rollback: ConfigKey::KeyR,
+    simulate: ConfigKey::KeyF,
+    simulation_step: ConfigKey::KeyC,
+    simulation_fast: ConfigKey::KeyF,
+    simulation_rollback: ConfigKey::KeyR,
+    debug: ConfigKey::Slash,
+    forward: ConfigKey::KeyW,
+    backward: ConfigKey::KeyS,
+    left: ConfigKey::KeyA,
+    right: ConfigKey::KeyD,
+    jump_or_fly_up: ConfigKey::Space,
+    fly_down: ConfigKey::ShiftLeft,
+    place: ConfigInput::MouseLeft,
+    delete: ConfigInput::MouseRight,
+    pick: ConfigInput::MouseMiddle,
+};
+
+pub const DEFAULT_CONFIG: GameConfig = GameConfig {
+    fov_degrees: 70.0,
+    ui_scale: 1.0,
+    gravity_scale: 1.2,
+    language: None,
+    place_selection_mode: ConfigSelectionMode::Point,
+    delete_selection_mode: ConfigSelectionMode::Point,
+    key_bindings: DEFAULT_KEY_BINDINGS,
+};
+
 #[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct GameConfig {
     pub fov_degrees: f32,
@@ -23,45 +54,26 @@ pub struct GameConfig {
     pub place_selection_mode: ConfigSelectionMode,
     #[serde(default)]
     pub delete_selection_mode: ConfigSelectionMode,
+    #[serde(default = "default_key_bindings")]
     pub key_bindings: KeyBindings,
 }
 
 impl Default for GameConfig {
     fn default() -> Self {
-        Self {
-            fov_degrees: 70.0,
-            ui_scale: default_ui_scale(),
-            gravity_scale: default_gravity_scale(),
-            language: None,
-            place_selection_mode: ConfigSelectionMode::Point,
-            delete_selection_mode: ConfigSelectionMode::Point,
-            key_bindings: KeyBindings::default(),
-        }
+        DEFAULT_CONFIG
     }
 }
 
 fn default_ui_scale() -> f32 {
-    1.0
+    DEFAULT_CONFIG.ui_scale
 }
 
 fn default_gravity_scale() -> f32 {
-    1.2
+    DEFAULT_CONFIG.gravity_scale
 }
 
-fn default_alternate_key() -> ConfigKey {
-    ConfigKey::KeyC
-}
-
-fn default_simulation_step_key() -> ConfigKey {
-    ConfigKey::KeyC
-}
-
-fn default_simulation_fast_key() -> ConfigKey {
-    ConfigKey::KeyF
-}
-
-fn default_simulation_rollback_key() -> ConfigKey {
-    ConfigKey::KeyR
+fn default_key_bindings() -> KeyBindings {
+    DEFAULT_CONFIG.key_bindings
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Reflect, Serialize, Deserialize)]
@@ -92,15 +104,11 @@ impl ConfigSelectionMode {
 pub struct KeyBindings {
     pub pause: ConfigKey,
     pub inventory: ConfigKey,
-    #[serde(default = "default_alternate_key")]
     pub alternate: ConfigKey,
     pub rotate_or_rollback: ConfigKey,
     pub simulate: ConfigKey,
-    #[serde(default = "default_simulation_step_key")]
     pub simulation_step: ConfigKey,
-    #[serde(default = "default_simulation_fast_key")]
     pub simulation_fast: ConfigKey,
-    #[serde(default = "default_simulation_rollback_key")]
     pub simulation_rollback: ConfigKey,
     pub debug: ConfigKey,
     pub forward: ConfigKey,
@@ -109,118 +117,100 @@ pub struct KeyBindings {
     pub right: ConfigKey,
     pub jump_or_fly_up: ConfigKey,
     pub fly_down: ConfigKey,
-    #[serde(default = "default_place_button")]
     pub place: ConfigInput,
-    #[serde(default = "default_delete_button")]
     pub delete: ConfigInput,
-    #[serde(default = "default_pick_button")]
     pub pick: ConfigInput,
 }
 
 impl Default for KeyBindings {
     fn default() -> Self {
-        Self {
-            pause: ConfigKey::Escape,
-            inventory: ConfigKey::KeyE,
-            alternate: default_alternate_key(),
-            rotate_or_rollback: ConfigKey::KeyR,
-            simulate: ConfigKey::KeyF,
-            simulation_step: default_simulation_step_key(),
-            simulation_fast: default_simulation_fast_key(),
-            simulation_rollback: default_simulation_rollback_key(),
-            debug: ConfigKey::Slash,
-            forward: ConfigKey::KeyW,
-            backward: ConfigKey::KeyS,
-            left: ConfigKey::KeyA,
-            right: ConfigKey::KeyD,
-            jump_or_fly_up: ConfigKey::Space,
-            fly_down: ConfigKey::ShiftLeft,
-            place: default_place_button(),
-            delete: default_delete_button(),
-            pick: default_pick_button(),
-        }
+        DEFAULT_KEY_BINDINGS
     }
 }
 
-fn default_place_button() -> ConfigInput {
-    ConfigInput::MouseLeft
-}
-
-fn default_delete_button() -> ConfigInput {
-    ConfigInput::MouseRight
-}
-
-fn default_pick_button() -> ConfigInput {
-    ConfigInput::MouseMiddle
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ConfigAction {
+pub enum ActionKeyName {
+    /// 暂停游戏
     Pause,
+    /// 打开背包
     Inventory,
+    /// 替换方块
     Alternate,
     RotateOrRollback,
+    /// 开始模拟
     Simulate,
+    /// 单步模拟
     SimulationStep,
+    /// 快速模拟
     SimulationFast,
+    /// 回滚模拟
     SimulationRollback,
+    /// 调试模式
     Debug,
+    /// 向前移动
     Forward,
+    /// 向后移动
     Backward,
+    /// 向左移动
     Left,
+    /// 向右移动
     Right,
     JumpOrFlyUp,
+    /// 向下飞行
     FlyDown,
+    /// 放置方块
     Place,
+    /// 删除方块
     Delete,
+    /// 拾取方块
     Pick,
 }
 
-impl ConfigAction {
-    pub const GENERAL: [ConfigAction; 14] = [
-        ConfigAction::Pause,
-        ConfigAction::Inventory,
-        ConfigAction::Alternate,
-        ConfigAction::RotateOrRollback,
-        ConfigAction::Debug,
-        ConfigAction::Forward,
-        ConfigAction::Backward,
-        ConfigAction::Left,
-        ConfigAction::Right,
-        ConfigAction::JumpOrFlyUp,
-        ConfigAction::FlyDown,
-        ConfigAction::Place,
-        ConfigAction::Delete,
-        ConfigAction::Pick,
+impl ActionKeyName {
+    pub const GENERAL: [ActionKeyName; 14] = [
+        ActionKeyName::Pause,
+        ActionKeyName::Inventory,
+        ActionKeyName::Alternate,
+        ActionKeyName::RotateOrRollback,
+        ActionKeyName::Debug,
+        ActionKeyName::Forward,
+        ActionKeyName::Backward,
+        ActionKeyName::Left,
+        ActionKeyName::Right,
+        ActionKeyName::JumpOrFlyUp,
+        ActionKeyName::FlyDown,
+        ActionKeyName::Place,
+        ActionKeyName::Delete,
+        ActionKeyName::Pick,
     ];
 
-    pub const SIMULATION: [ConfigAction; 4] = [
-        ConfigAction::Simulate,
-        ConfigAction::SimulationStep,
-        ConfigAction::SimulationFast,
-        ConfigAction::SimulationRollback,
+    pub const SIMULATION: [ActionKeyName; 4] = [
+        ActionKeyName::Simulate,
+        ActionKeyName::SimulationStep,
+        ActionKeyName::SimulationFast,
+        ActionKeyName::SimulationRollback,
     ];
 
     pub fn label_key(self) -> &'static str {
         match self {
-            ConfigAction::Pause => "action.pause",
-            ConfigAction::Inventory => "action.inventory",
-            ConfigAction::Alternate => "action.alternate",
-            ConfigAction::RotateOrRollback => "action.rotate",
-            ConfigAction::Simulate => "action.simulation_start",
-            ConfigAction::SimulationStep => "action.simulation_step",
-            ConfigAction::SimulationFast => "action.simulation_fast",
-            ConfigAction::SimulationRollback => "action.simulation_rollback",
-            ConfigAction::Debug => "action.debug",
-            ConfigAction::Forward => "action.forward",
-            ConfigAction::Backward => "action.backward",
-            ConfigAction::Left => "action.left",
-            ConfigAction::Right => "action.right",
-            ConfigAction::JumpOrFlyUp => "action.jump_or_fly_up",
-            ConfigAction::FlyDown => "action.fly_down",
-            ConfigAction::Place => "action.place",
-            ConfigAction::Delete => "action.delete",
-            ConfigAction::Pick => "action.pick",
+            ActionKeyName::Pause => "action.pause",
+            ActionKeyName::Inventory => "action.inventory",
+            ActionKeyName::Alternate => "action.alternate",
+            ActionKeyName::RotateOrRollback => "action.rotate",
+            ActionKeyName::Simulate => "action.simulation_start",
+            ActionKeyName::SimulationStep => "action.simulation_step",
+            ActionKeyName::SimulationFast => "action.simulation_fast",
+            ActionKeyName::SimulationRollback => "action.simulation_rollback",
+            ActionKeyName::Debug => "action.debug",
+            ActionKeyName::Forward => "action.forward",
+            ActionKeyName::Backward => "action.backward",
+            ActionKeyName::Left => "action.left",
+            ActionKeyName::Right => "action.right",
+            ActionKeyName::JumpOrFlyUp => "action.jump_or_fly_up",
+            ActionKeyName::FlyDown => "action.fly_down",
+            ActionKeyName::Place => "action.place",
+            ActionKeyName::Delete => "action.delete",
+            ActionKeyName::Pick => "action.pick",
         }
     }
 }
@@ -346,24 +336,24 @@ impl ConfigKey {
 }
 
 impl GameConfig {
-    pub fn key(&self, action: ConfigAction) -> ConfigKey {
+    pub fn key(&self, action: ActionKeyName) -> ConfigKey {
         match action {
-            ConfigAction::Pause => self.key_bindings.pause,
-            ConfigAction::Inventory => self.key_bindings.inventory,
-            ConfigAction::Alternate => self.key_bindings.alternate,
-            ConfigAction::RotateOrRollback => self.key_bindings.rotate_or_rollback,
-            ConfigAction::Simulate => self.key_bindings.simulate,
-            ConfigAction::SimulationStep => self.key_bindings.simulation_step,
-            ConfigAction::SimulationFast => self.key_bindings.simulation_fast,
-            ConfigAction::SimulationRollback => self.key_bindings.simulation_rollback,
-            ConfigAction::Debug => self.key_bindings.debug,
-            ConfigAction::Forward => self.key_bindings.forward,
-            ConfigAction::Backward => self.key_bindings.backward,
-            ConfigAction::Left => self.key_bindings.left,
-            ConfigAction::Right => self.key_bindings.right,
-            ConfigAction::JumpOrFlyUp => self.key_bindings.jump_or_fly_up,
-            ConfigAction::FlyDown => self.key_bindings.fly_down,
-            ConfigAction::Place | ConfigAction::Delete | ConfigAction::Pick => {
+            ActionKeyName::Pause => self.key_bindings.pause,
+            ActionKeyName::Inventory => self.key_bindings.inventory,
+            ActionKeyName::Alternate => self.key_bindings.alternate,
+            ActionKeyName::RotateOrRollback => self.key_bindings.rotate_or_rollback,
+            ActionKeyName::Simulate => self.key_bindings.simulate,
+            ActionKeyName::SimulationStep => self.key_bindings.simulation_step,
+            ActionKeyName::SimulationFast => self.key_bindings.simulation_fast,
+            ActionKeyName::SimulationRollback => self.key_bindings.simulation_rollback,
+            ActionKeyName::Debug => self.key_bindings.debug,
+            ActionKeyName::Forward => self.key_bindings.forward,
+            ActionKeyName::Backward => self.key_bindings.backward,
+            ActionKeyName::Left => self.key_bindings.left,
+            ActionKeyName::Right => self.key_bindings.right,
+            ActionKeyName::JumpOrFlyUp => self.key_bindings.jump_or_fly_up,
+            ActionKeyName::FlyDown => self.key_bindings.fly_down,
+            ActionKeyName::Place | ActionKeyName::Delete | ActionKeyName::Pick => {
                 return self
                     .input(action)
                     .key_code()
@@ -373,61 +363,61 @@ impl GameConfig {
         }
     }
 
-    pub fn input(&self, action: ConfigAction) -> ConfigInput {
+    pub fn input(&self, action: ActionKeyName) -> ConfigInput {
         match action {
-            ConfigAction::Pause => ConfigInput::Key(self.key_bindings.pause),
-            ConfigAction::Inventory => ConfigInput::Key(self.key_bindings.inventory),
-            ConfigAction::Alternate => ConfigInput::Key(self.key_bindings.alternate),
-            ConfigAction::RotateOrRollback => {
+            ActionKeyName::Pause => ConfigInput::Key(self.key_bindings.pause),
+            ActionKeyName::Inventory => ConfigInput::Key(self.key_bindings.inventory),
+            ActionKeyName::Alternate => ConfigInput::Key(self.key_bindings.alternate),
+            ActionKeyName::RotateOrRollback => {
                 ConfigInput::Key(self.key_bindings.rotate_or_rollback)
             }
-            ConfigAction::Simulate => ConfigInput::Key(self.key_bindings.simulate),
-            ConfigAction::SimulationStep => ConfigInput::Key(self.key_bindings.simulation_step),
-            ConfigAction::SimulationFast => ConfigInput::Key(self.key_bindings.simulation_fast),
-            ConfigAction::SimulationRollback => {
+            ActionKeyName::Simulate => ConfigInput::Key(self.key_bindings.simulate),
+            ActionKeyName::SimulationStep => ConfigInput::Key(self.key_bindings.simulation_step),
+            ActionKeyName::SimulationFast => ConfigInput::Key(self.key_bindings.simulation_fast),
+            ActionKeyName::SimulationRollback => {
                 ConfigInput::Key(self.key_bindings.simulation_rollback)
             }
-            ConfigAction::Debug => ConfigInput::Key(self.key_bindings.debug),
-            ConfigAction::Forward => ConfigInput::Key(self.key_bindings.forward),
-            ConfigAction::Backward => ConfigInput::Key(self.key_bindings.backward),
-            ConfigAction::Left => ConfigInput::Key(self.key_bindings.left),
-            ConfigAction::Right => ConfigInput::Key(self.key_bindings.right),
-            ConfigAction::JumpOrFlyUp => ConfigInput::Key(self.key_bindings.jump_or_fly_up),
-            ConfigAction::FlyDown => ConfigInput::Key(self.key_bindings.fly_down),
-            ConfigAction::Place => self.key_bindings.place,
-            ConfigAction::Delete => self.key_bindings.delete,
-            ConfigAction::Pick => self.key_bindings.pick,
+            ActionKeyName::Debug => ConfigInput::Key(self.key_bindings.debug),
+            ActionKeyName::Forward => ConfigInput::Key(self.key_bindings.forward),
+            ActionKeyName::Backward => ConfigInput::Key(self.key_bindings.backward),
+            ActionKeyName::Left => ConfigInput::Key(self.key_bindings.left),
+            ActionKeyName::Right => ConfigInput::Key(self.key_bindings.right),
+            ActionKeyName::JumpOrFlyUp => ConfigInput::Key(self.key_bindings.jump_or_fly_up),
+            ActionKeyName::FlyDown => ConfigInput::Key(self.key_bindings.fly_down),
+            ActionKeyName::Place => self.key_bindings.place,
+            ActionKeyName::Delete => self.key_bindings.delete,
+            ActionKeyName::Pick => self.key_bindings.pick,
         }
     }
 
-    pub fn set_key(&mut self, action: ConfigAction, key: ConfigKey) {
+    pub fn set_key(&mut self, action: ActionKeyName, key: ConfigKey) {
         match action {
-            ConfigAction::Pause => self.key_bindings.pause = key,
-            ConfigAction::Inventory => self.key_bindings.inventory = key,
-            ConfigAction::Alternate => self.key_bindings.alternate = key,
-            ConfigAction::RotateOrRollback => self.key_bindings.rotate_or_rollback = key,
-            ConfigAction::Simulate => self.key_bindings.simulate = key,
-            ConfigAction::SimulationStep => self.key_bindings.simulation_step = key,
-            ConfigAction::SimulationFast => self.key_bindings.simulation_fast = key,
-            ConfigAction::SimulationRollback => self.key_bindings.simulation_rollback = key,
-            ConfigAction::Debug => self.key_bindings.debug = key,
-            ConfigAction::Forward => self.key_bindings.forward = key,
-            ConfigAction::Backward => self.key_bindings.backward = key,
-            ConfigAction::Left => self.key_bindings.left = key,
-            ConfigAction::Right => self.key_bindings.right = key,
-            ConfigAction::JumpOrFlyUp => self.key_bindings.jump_or_fly_up = key,
-            ConfigAction::FlyDown => self.key_bindings.fly_down = key,
-            ConfigAction::Place | ConfigAction::Delete | ConfigAction::Pick => {
+            ActionKeyName::Pause => self.key_bindings.pause = key,
+            ActionKeyName::Inventory => self.key_bindings.inventory = key,
+            ActionKeyName::Alternate => self.key_bindings.alternate = key,
+            ActionKeyName::RotateOrRollback => self.key_bindings.rotate_or_rollback = key,
+            ActionKeyName::Simulate => self.key_bindings.simulate = key,
+            ActionKeyName::SimulationStep => self.key_bindings.simulation_step = key,
+            ActionKeyName::SimulationFast => self.key_bindings.simulation_fast = key,
+            ActionKeyName::SimulationRollback => self.key_bindings.simulation_rollback = key,
+            ActionKeyName::Debug => self.key_bindings.debug = key,
+            ActionKeyName::Forward => self.key_bindings.forward = key,
+            ActionKeyName::Backward => self.key_bindings.backward = key,
+            ActionKeyName::Left => self.key_bindings.left = key,
+            ActionKeyName::Right => self.key_bindings.right = key,
+            ActionKeyName::JumpOrFlyUp => self.key_bindings.jump_or_fly_up = key,
+            ActionKeyName::FlyDown => self.key_bindings.fly_down = key,
+            ActionKeyName::Place | ActionKeyName::Delete | ActionKeyName::Pick => {
                 self.set_input(action, ConfigInput::Key(key));
             }
         }
     }
 
-    pub fn set_input(&mut self, action: ConfigAction, input: ConfigInput) {
+    pub fn set_input(&mut self, action: ActionKeyName, input: ConfigInput) {
         match action {
-            ConfigAction::Place => self.key_bindings.place = input,
-            ConfigAction::Delete => self.key_bindings.delete = input,
-            ConfigAction::Pick => self.key_bindings.pick = input,
+            ActionKeyName::Place => self.key_bindings.place = input,
+            ActionKeyName::Delete => self.key_bindings.delete = input,
+            ActionKeyName::Pick => self.key_bindings.pick = input,
             _ => {
                 if let ConfigInput::Key(key) = input {
                     self.set_key(action, key);

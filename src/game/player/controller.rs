@@ -11,7 +11,7 @@ use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use crate::game::state::{GameMode, GameSettings};
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::WorldBlocks;
-use crate::shared::config::{ConfigAction, GameConfig};
+use crate::shared::config::{ActionKeyName, GameConfig};
 
 pub const EYE_HEIGHT: f32 = 1.7;
 pub const PLAYER_RADIUS: f32 = 0.28;
@@ -107,16 +107,16 @@ pub fn camera_move(
     let forward = yaw_rotation * Vec3::NEG_Z;
     let right = yaw_rotation * Vec3::X;
 
-    if keys.pressed(config.key(ConfigAction::Forward).key_code()) {
+    if keys.pressed(config.key(ActionKeyName::Forward).key_code()) {
         direction += forward;
     }
-    if keys.pressed(config.key(ConfigAction::Backward).key_code()) {
+    if keys.pressed(config.key(ActionKeyName::Backward).key_code()) {
         direction -= forward;
     }
-    if keys.pressed(config.key(ConfigAction::Right).key_code()) {
+    if keys.pressed(config.key(ActionKeyName::Right).key_code()) {
         direction += right;
     }
-    if keys.pressed(config.key(ConfigAction::Left).key_code()) {
+    if keys.pressed(config.key(ActionKeyName::Left).key_code()) {
         direction -= right;
     }
 

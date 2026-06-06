@@ -18,7 +18,7 @@ pub fn inventory_slot_clicks(
     click.propagate(false);
 
     let pick_button = config
-        .input(ConfigAction::Pick)
+        .input(ActionKeyName::Pick)
         .mouse_button()
         .map(pointer_button)
         .unwrap_or(PointerButton::Middle);
