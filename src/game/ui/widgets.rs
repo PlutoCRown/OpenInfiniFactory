@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 
 use super::components::{
-    default_button_size, default_font_size, full_width_button, inset_border, localized_text,
-    menu_button, raised_border, slider_bundle, slider_fill, slider_knob, styled_button,
+    auto_width_button, default_button_size, default_font_size, full_width_button, inset_border,
+    localized_text, menu_button, raised_border, slider_bundle, slider_fill, slider_knob,
+    styled_button,
 };
 use super::types::{
     AreaKind, ConfirmButtonId, InventoryItem, InventorySlot, KeyBindingButton, MenuAction,
@@ -101,9 +102,12 @@ pub(super) fn spawn_confirm_dialog_button(
     button: ConfirmButtonId,
 ) {
     parent
-        .spawn((full_width_button(34.0), button))
+        .spawn((auto_width_button(34.0), button))
         .with_children(|button| {
-            button.spawn(label_text("", 15.0, Color::WHITE));
+            button.spawn((
+                label_text("", 15.0, Color::WHITE),
+                TextLayout::new_with_no_wrap(),
+            ));
         });
 }
 

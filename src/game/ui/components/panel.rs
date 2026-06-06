@@ -96,6 +96,10 @@ pub fn panel_bundle(width: f32) -> impl Bundle {
     panel_window_bundle(Val::Px(width), Val::Percent(100.0))
 }
 
+pub fn panel_bundle_auto(max_width_px: f32) -> impl Bundle {
+    panel_window_bundle(Val::Auto, Val::Px(max_width_px))
+}
+
 pub fn panel_bundle_responsive(width_percent: f32, max_width_px: f32) -> impl Bundle {
     panel_window_bundle(Val::Percent(width_percent), Val::Px(max_width_px))
 }

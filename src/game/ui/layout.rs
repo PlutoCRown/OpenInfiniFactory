@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::game::ui::access::bind_ui_scope;
 
 use super::components::{
-    absolute_text_bundle, default_button_size, flex_row, full_width_button, panel_bundle,
+    absolute_text_bundle, auto_width_button, default_button_size, flex_row_auto, panel_bundle_auto,
     panel_content, panel_title_bar, panel_title_label, raised_border, root_node, styled_button,
     text, BUTTON_BG, STATUS_TEXT,
 };
@@ -179,7 +179,7 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
 
 fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
     root.spawn((
-        panel_bundle(460.0),
+        panel_bundle_auto(560.0),
         GlobalZIndex(0),
         PanelVisibility::ConfirmDialog,
     ))
@@ -192,13 +192,15 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
                 text("", 15.0, STATUS_TEXT),
                 TextLayout::new_with_justify(Justify::Center),
                 Node {
+                    width: Val::Auto,
+                    max_width: Val::Px(520.0),
                     min_height: Val::Px(54.0),
-                    align_self: AlignSelf::Stretch,
+                    align_self: AlignSelf::Center,
                     ..default()
                 },
                 ConfirmMessageText,
             ));
-            panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
+            panel.spawn(flex_row_auto(34.0, 8.0)).with_children(|row| {
                 spawn_confirm_dialog_button(row, ConfirmButtonId::Confirm);
                 spawn_confirm_dialog_button(row, ConfirmButtonId::Extra);
                 spawn_confirm_dialog_button(row, ConfirmButtonId::Cancel);
@@ -208,38 +210,50 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
 }
 
 fn spawn_text_prompt(root: &mut ChildSpawnerCommands) {
-    root.spawn((panel_bundle(420.0), GlobalZIndex(30_000), TextPromptRoot))
-        .with_children(|panel| {
-            panel.spawn(panel_title_bar()).with_children(|title| {
-                title.spawn((panel_title_label("", 20.0), TextPromptText::Title));
-            });
-            panel.spawn(panel_content()).with_children(|content| {
-                content
-                    .spawn(styled_button(
-                        Node {
-                            width: Val::Percent(100.0),
-                            min_height: Val::Px(default_button_size(38.0)),
-                            padding: UiRect::horizontal(Val::Px(12.0)),
-                            border: UiRect::all(Val::Px(1.0)),
-                            align_items: AlignItems::Center,
-                            ..default()
-                        },
-                        raised_border(),
-                        BUTTON_BG,
-                    ))
-                    .with_children(|input| {
-                        input.spawn((text("", 16.0, Color::WHITE), TextPromptText::Value));
-                    });
-                content.spawn(flex_row(36.0, 8.0)).with_children(|row| {
-                    row.spawn((full_width_button(34.0), TextPromptButtonId::Save))
+    root.spawn((
+        panel_bundle_auto(420.0),
+        GlobalZIndex(30_000),
+        TextPromptRoot,
+    ))
+    .with_children(|panel| {
+        panel.spawn(panel_title_bar()).with_children(|title| {
+            title.spawn((panel_title_label("", 20.0), TextPromptText::Title));
+        });
+        panel.spawn(panel_content()).with_children(|content| {
+            content
+                .spawn(styled_button(
+                    Node {
+                        width: Val::Percent(100.0),
+                        min_height: Val::Px(default_button_size(38.0)),
+                        padding: UiRect::horizontal(Val::Px(12.0)),
+                        border: UiRect::all(Val::Px(1.0)),
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    raised_border(),
+                    BUTTON_BG,
+                ))
+                .with_children(|input| {
+                    input.spawn((text("", 16.0, Color::WHITE), TextPromptText::Value));
+                });
+            content
+                .spawn(flex_row_auto(34.0, 8.0))
+                .with_children(|row| {
+                    row.spawn((auto_width_button(34.0), TextPromptButtonId::Save))
                         .with_children(|button| {
-                            button.spawn(text("", 15.0, Color::WHITE));
+                            button.spawn((
+                                text("", 15.0, Color::WHITE),
+                                TextLayout::new_with_no_wrap(),
+                            ));
                         });
-                    row.spawn((full_width_button(34.0), TextPromptButtonId::Cancel))
+                    row.spawn((auto_width_button(34.0), TextPromptButtonId::Cancel))
                         .with_children(|button| {
-                            button.spawn(text("", 15.0, Color::WHITE));
+                            button.spawn((
+                                text("", 15.0, Color::WHITE),
+                                TextLayout::new_with_no_wrap(),
+                            ));
                         });
                 });
-            });
         });
+    });
 }

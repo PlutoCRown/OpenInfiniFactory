@@ -51,6 +51,19 @@ pub fn full_width_button(height: f32) -> impl Bundle {
     )
 }
 
+pub fn auto_width_button(height: f32) -> impl Bundle {
+    text_button(
+        Node {
+            width: Val::Auto,
+            height: Val::Px(default_button_size(height)),
+            flex_shrink: 0.0,
+            ..default()
+        },
+        raised_border(),
+        BUTTON_BG,
+    )
+}
+
 pub fn text_button(style: Node, border: impl Into<BorderColor>, background: Color) -> impl Bundle {
     let border = border.into();
     (
