@@ -5,7 +5,6 @@ use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
 use crate::game::state::UiPanelId;
-use crate::game::block_editing::BlockPanelTextKind;
 
 const INLINE_TEXT_MAX_LEN: usize = 24;
 
@@ -13,7 +12,7 @@ const INLINE_TEXT_MAX_LEN: usize = 24;
 pub struct InlineTextEditState {
     pub panel: Option<UiPanelId>,
     pub pos: Option<IVec3>,
-    pub field: Option<BlockPanelTextKind>,
+    pub field: Option<&'static str>,
     pub buffer: String,
 }
 
@@ -33,7 +32,7 @@ impl InlineTextEditState {
         &mut self,
         panel: UiPanelId,
         pos: IVec3,
-        field: BlockPanelTextKind,
+        field: &'static str,
         initial: String,
     ) {
         self.panel = Some(panel);

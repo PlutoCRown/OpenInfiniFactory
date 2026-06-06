@@ -20,7 +20,7 @@ use crate::shared::save::SaveState;
 
 use cameras::spawn_ui_camera;
 use player::controller::{camera_look, camera_move, spawn_player, sync_cursor_grab};
-use session::{on_exit_playing, prepare_playing_session, rebuild_playing_world};
+use session::{on_exit_playing, prepare_playing_session, rebuild_playing_world, SessionPlugin};
 use state::{
     BuilderMode, GameMode, GameSettings, PlacementState, PlayingUiState, SimulationState,
     SolutionState, StartMenuScreen,
@@ -91,6 +91,7 @@ impl Plugin for GamePlugin {
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(InputDispatchPlugin)
             .add_plugins(UiWidgetsPlugins)
+            .add_plugins(SessionPlugin)
             .add_plugins(GameUiPlugin)
             .add_plugins(PerfPlugin)
             .add_observer(slider_self_update)

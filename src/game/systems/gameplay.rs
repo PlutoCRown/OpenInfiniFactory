@@ -56,7 +56,7 @@ pub fn gameplay_input(
     let bindings = &config.key_bindings;
 
     let typing = pending_key_bind.0.is_some()
-        || text_prompt.kind.is_some()
+        || text_prompt.is_open()
         || inline_edit.is_active();
     if typing {
         mouse_wheel.clear();

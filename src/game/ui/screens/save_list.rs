@@ -9,9 +9,8 @@ use super::super::components::{
     BUTTON_BG,
 };
 use super::super::types::{
-    PanelText, PanelTextKind, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListPanel,
-    SaveListPrompt, SaveListPuzzleColumn, SaveListSolutionColumn, TextPromptAction, TextPromptRoot,
-    TextPromptText,
+    PanelVisibility, SaveListAction, SaveListCloseButton, SaveListPanel,
+    SaveListPrompt, SaveListPuzzleColumn, SaveListSolutionColumn, SaveListTitleText,
 };
 
 pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
@@ -25,7 +24,7 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         panel.spawn(panel_title_bar()).with_children(|title| {
             title.spawn((
                 panel_title_label(i18n.text("save.title.default"), 26.0),
-                PanelText(PanelTextKind::SaveListTitle),
+                SaveListTitleText,
             ));
             title
                 .spawn((
@@ -48,7 +47,6 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
             ));
         });
     });
-    spawn_text_prompt(root);
 }
 
 fn save_columns_row() -> impl Bundle {
@@ -131,45 +129,6 @@ fn spawn_save_row_button(parent: &mut ChildSpawnerCommands, action: SaveListActi
         ))
         .with_children(|button| {
             button.spawn(text("", 13.0, Color::WHITE));
-        });
-}
-
-fn spawn_text_prompt(root: &mut ChildSpawnerCommands) {
-    root.spawn((panel_bundle(420.0), GlobalZIndex(30_000), TextPromptRoot))
-        .with_children(|panel| {
-            panel.spawn(panel_title_bar()).with_children(|title| {
-                title.spawn((panel_title_label("", 20.0), TextPromptText::Title));
-            });
-            panel.spawn(panel_content()).with_children(|content| {
-                content
-                    .spawn(styled_button(
-                        Node {
-                            width: Val::Percent(100.0),
-                            min_height: Val::Px(default_button_size(38.0)),
-                            padding: UiRect::horizontal(Val::Px(12.0)),
-                            border: UiRect::all(Val::Px(1.0)),
-                            align_items: AlignItems::Center,
-                            ..default()
-                        },
-                        raised_border(),
-                        BUTTON_BG,
-                    ))
-                    .with_children(|input| {
-                        input.spawn((text("", 16.0, Color::WHITE), TextPromptText::Value));
-                    });
-                content.spawn(flex_row(36.0, 8.0)).with_children(|row| {
-                    spawn_prompt_button(row, TextPromptAction::Confirm);
-                    spawn_prompt_button(row, TextPromptAction::Cancel);
-                });
-            });
-        });
-}
-
-fn spawn_prompt_button(parent: &mut ChildSpawnerCommands, action: TextPromptAction) {
-    parent
-        .spawn((full_width_button(34.0), action))
-        .with_children(|button| {
-            button.spawn(text("", 15.0, Color::WHITE));
         });
 }
 

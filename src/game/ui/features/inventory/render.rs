@@ -1,3 +1,41 @@
+use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
+
+use crate::game::state::{BuilderMode, PlacementState};
+use crate::game::ui::components::{hover_border, inset_border};
+use crate::game::ui::types::{
+    CarriedItem, CarriedItemPreview, InventoryItems, InventorySlot, InventoryTooltip, SlotArea,
+    UiHoverState,
+};
+use crate::game::ui::widgets::{short_item_name, slot_color};
+use crate::game::world::rendering::BlockIconAssets;
+use crate::shared::i18n::I18n;
+
+use super::types::InventoryTitleText;
+
+fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
+    i18n.text(match mode {
+        BuilderMode::Edit => "mode.edit",
+        BuilderMode::Play => "mode.play",
+    })
+}
+
+pub fn update_inventory_title(
+    builder_mode: Res<BuilderMode>,
+    i18n: Res<I18n>,
+    mut titles: Query<&mut Text, With<InventoryTitleText>>,
+) {
+    if !builder_mode.is_changed() && !i18n.is_changed() {
+        return;
+    }
+    for mut text in &mut titles {
+        text.0 = i18n.fmt(
+            "inventory.title",
+            &[("mode", builder_mode_name(*builder_mode, &i18n))],
+        );
+    }
+}
+
 pub fn update_inventory_slots(
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
@@ -108,6 +146,66 @@ pub fn update_inventory_slots(
     for child in tooltip_children.iter() {
         if let Ok(mut text) = texts.p1().get_mut(child) {
             text.0 = i18n.text(item.name_key());
+        }
+    }
+}
+
+pub fn update_carried_item_ui(
+    carried: Res<CarriedItem>,
+    i18n: Res<I18n>,
+    block_icons: Option<Res<BlockIconAssets>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut preview: Query<(&mut Node, &mut BackgroundColor, &Children), With<CarriedItemPreview>>,
+    mut preview_images: Query<&mut ImageNode>,
+    mut preview_text: Query<&mut Text>,
+) {
+    let Ok((mut style, mut background, children)) = preview.single_mut() else {
+        return;
+    };
+
+    let Some(item) = carried.item() else {
+        style.display = Display::None;
+        for child in children.iter() {
+            if let Ok(mut image) = preview_images.get_mut(child) {
+                *image = ImageNode::default();
+            }
+            if let Ok(mut text) = preview_text.get_mut(child) {
+                text.0.clear();
+            }
+        }
+        return;
+    };
+
+    let Ok(window) = windows.single() else {
+        return;
+    };
+
+    let Some(cursor) = window.cursor_position() else {
+        style.display = Display::None;
+        return;
+    };
+
+    style.display = Display::Flex;
+    style.left = Val::Px(cursor.x + 4.0);
+    style.top = Val::Px(cursor.y + 4.0);
+    *background = slot_color(item).with_alpha(0.9).into();
+
+    let icon_handle = item
+        .block()
+        .and_then(|kind| block_icons.as_deref().and_then(|icons| icons.get(kind)));
+    for child in children.iter() {
+        if let Ok(mut image) = preview_images.get_mut(child) {
+            *image = icon_handle
+                .as_ref()
+                .map(|handle| ImageNode::new(handle.clone()))
+                .unwrap_or_default();
+        }
+        if let Ok(mut text) = preview_text.get_mut(child) {
+            text.0 = if icon_handle.is_some() {
+                String::new()
+            } else {
+                i18n.text(short_item_name(item))
+            };
         }
     }
 }

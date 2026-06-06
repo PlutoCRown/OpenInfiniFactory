@@ -5,19 +5,6 @@ fn builder_mode_name(mode: BuilderMode, i18n: &I18n) -> String {
     })
 }
 
-fn pause_action_visible(
-    save_state: &SaveState,
-    solution_state: &SolutionState,
-    action: MenuAction,
-) -> bool {
-    match action {
-        MenuAction::ToggleBuilderMode => solution_state.entry != WorldEntryMode::PlaySolution,
-        MenuAction::SaveAsNewPuzzle => save_state.current_kind == Some(SaveKind::Puzzle),
-        MenuAction::ResetSolution => save_state.current_kind == Some(SaveKind::Solution),
-        _ => true,
-    }
-}
-
 pub fn update_status_ui(
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
@@ -26,12 +13,9 @@ pub fn update_status_ui(
     save_state: Res<SaveState>,
     config: Res<GameConfig>,
     i18n: Res<I18n>,
-    mut texts: ParamSet<(
-        Query<(&StatusText, &mut Text)>,
-        Query<(&PanelText, &mut Text)>,
-    )>,
+    mut texts: Query<(&StatusText, &mut Text)>,
 ) {
-    for (status, mut text) in &mut texts.p0() {
+    for (status, mut text) in &mut texts {
         text.0 = status_text_value(
             status.0,
             &placement,
@@ -42,15 +26,6 @@ pub fn update_status_ui(
             &config,
             &i18n,
         );
-    }
-
-    for (panel_text, mut text) in &mut texts.p1() {
-        if panel_text.0 == PanelTextKind::InventoryTitle {
-            text.0 = i18n.fmt(
-                "inventory.title",
-                &[("mode", builder_mode_name(*builder_mode, &i18n))],
-            );
-        }
     }
 }
 

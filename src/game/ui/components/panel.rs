@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use super::super::types::{
-    LocalizedText, PanelCloseButton, PanelPosition, PanelText, PanelTitleBar, PanelWindow,
+    LocalizedText, PanelCloseButton, PanelPosition, PanelTitleBar, PanelWindow,
 };
 use super::button::{raised_border, HoverButton};
 use super::text::{default_font_size, text};
@@ -21,7 +21,7 @@ pub struct PanelOptions {
     pub title_key: &'static str,
     pub show_close: bool,
     pub title_size: f32,
-    pub title_marker: Option<PanelText>,
+    pub dynamic_title: bool,
 }
 
 impl PanelOptions {
@@ -31,7 +31,7 @@ impl PanelOptions {
             title_key,
             show_close: false,
             title_size: 26.0,
-            title_marker: None,
+            dynamic_title: false,
         }
     }
 
@@ -45,8 +45,8 @@ impl PanelOptions {
         self
     }
 
-    pub const fn title_marker(mut self, marker: PanelText) -> Self {
-        self.title_marker = Some(marker);
+    pub const fn dynamic_title(mut self) -> Self {
+        self.dynamic_title = true;
         self
     }
 }
@@ -58,6 +58,26 @@ pub fn spawn_panel(
     markers: impl Bundle,
     content: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
+    spawn_panel_with_title_marker(
+        root,
+        i18n,
+        options,
+        markers,
+        LocalizedText {
+            key: options.title_key,
+        },
+        content,
+    );
+}
+
+pub fn spawn_panel_with_title_marker(
+    root: &mut ChildSpawnerCommands,
+    i18n: &I18n,
+    options: PanelOptions,
+    markers: impl Bundle,
+    title_marker: impl Component,
+    content: impl FnOnce(&mut ChildSpawnerCommands),
+) {
     root.spawn((panel_bundle(options.width), GlobalZIndex(0), markers))
         .with_children(|panel| {
             panel.spawn(panel_title_bar()).with_children(|title| {
@@ -65,12 +85,10 @@ pub fn spawn_panel(
                     i18n.text(options.title_key),
                     options.title_size,
                 ));
-                if let Some(marker) = options.title_marker {
-                    title_text.insert(marker);
+                if options.dynamic_title {
+                    title_text.insert(crate::game::block_editing::BlockPanelTitle);
                 } else {
-                    title_text.insert(LocalizedText {
-                        key: options.title_key,
-                    });
+                    title_text.insert(title_marker);
                 }
                 if options.show_close {
                     title.spawn(panel_close_button()).with_children(|button| {

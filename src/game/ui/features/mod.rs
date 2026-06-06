@@ -6,11 +6,12 @@ pub mod settings;
 
 use bevy::prelude::*;
 
-use block_panels::{
-    inline_text_edit_input, update_active_block_panel, update_block_panel_dropdowns,
-};
+use block_panels::inline_text_edit_input;
 use save::text_prompt_input;
 use settings::settings_menu_actions;
+
+use crate::game::ui::core::confirm_dialog::dispatch_confirm_completion;
+use crate::game::ui::core::text_prompt::dispatch_text_prompt_completion;
 
 pub use block_panels::BlockPanelsPlugin;
 pub use inventory::InventoryPlugin;
@@ -35,6 +36,8 @@ impl Plugin for UiFeaturesPlugin {
             Update,
             (
                 text_prompt_input,
+                dispatch_text_prompt_completion,
+                dispatch_confirm_completion,
                 settings_menu_actions,
                 inline_text_edit_input,
             )
@@ -45,10 +48,10 @@ impl Plugin for UiFeaturesPlugin {
         .add_systems(
             Update,
             (
-                (update_active_block_panel, update_block_panel_dropdowns).chain(),
-                inventory::update_inventory_slots,
-                inventory::update_carried_item_ui,
+                block_panels::update_active_block_panel,
+                block_panels::update_block_panel_dropdowns,
             )
+                .chain()
                 .after(PerfScope::Animation)
                 .before(PerfScope::Ui),
         );

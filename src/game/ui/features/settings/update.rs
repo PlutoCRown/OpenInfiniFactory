@@ -1,3 +1,21 @@
+use bevy::prelude::*;
+use bevy::ui_widgets::{CoreSliderDragState, Slider, SliderRange, SliderValue};
+use bevy::window::PrimaryWindow;
+
+use crate::game::state::GameSettings;
+use crate::game::ui::components::{
+    hover_border, pressed_border, raised_border, BUTTON_BG, BUTTON_HOVER_BG,
+};
+use crate::game::ui::types::{KeyBindingButton, UiHoverState};
+use crate::shared::config::GameConfig;
+use crate::shared::i18n::I18n;
+
+use super::types::{
+    ActiveSettingsSlider, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
+    SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
+    SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind, SettingsValueText,
+};
+
 pub fn update_settings_text_ui(
     config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
@@ -126,15 +144,7 @@ pub fn update_settings_dropdowns_ui(
     triggers: Query<(&SettingsAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     for (label, mut text) in &mut texts.p0() {
-        text.0 = match label.0 {
-            super::types::SettingsDropdown::Language => i18n.language().native_name().to_string(),
-            super::types::SettingsDropdown::PlaceSelectionMode => {
-                i18n.text(config.place_selection_mode.label_key())
-            }
-            super::types::SettingsDropdown::DeleteSelectionMode => {
-                i18n.text(config.delete_selection_mode.label_key())
-            }
-        };
+        text.0 = label.0.trigger_label(&config, &i18n);
     }
 
     for (value, mut text) in &mut texts.p1() {
@@ -208,19 +218,12 @@ pub fn update_settings_tabs_ui(
     >,
 ) {
     for (entity, action, mut background, mut border) in &mut tab_buttons {
-        let selected = matches!(
-            (*action, *settings_tab),
-            (SettingsAction::TabGameplay, SettingsTab::Gameplay)
-                | (SettingsAction::TabKeyBindings, SettingsTab::KeyBindings)
-        );
+        let selected = action.tab_selected(*settings_tab);
         let hovered = hover.entity == Some(entity);
         if selected {
             *background = Color::srgb(0.56, 0.56, 0.56).into();
             *border = pressed_border();
-        } else if matches!(
-            *action,
-            SettingsAction::TabGameplay | SettingsAction::TabKeyBindings
-        ) {
+        } else if action.is_tab() {
             if hovered {
                 *background = BUTTON_HOVER_BG.into();
                 *border = hover_border();
@@ -228,14 +231,12 @@ pub fn update_settings_tabs_ui(
                 *background = BUTTON_BG.into();
                 *border = raised_border();
             }
+        } else if hovered {
+            *background = BUTTON_HOVER_BG.into();
+            *border = hover_border();
         } else {
-            if hovered {
-                *background = BUTTON_HOVER_BG.into();
-                *border = hover_border();
-            } else {
-                *background = BUTTON_BG.into();
-                *border = raised_border();
-            }
+            *background = BUTTON_BG.into();
+            *border = raised_border();
         }
     }
 }

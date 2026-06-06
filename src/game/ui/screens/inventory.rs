@@ -3,13 +3,14 @@ use bevy::prelude::*;
 use crate::shared::i18n::I18n;
 
 use super::super::components::{
-    default_button_size, default_font_size, localized_text, spawn_panel, text, transparent_node,
-    PanelOptions,
+    default_button_size, default_font_size, localized_text, spawn_panel_with_title_marker, text,
+    transparent_node, PanelOptions,
 };
 use super::super::types::{
-    CarriedItemPreview, GameplayHudVisibility, InGameHudStyle, InventoryTooltip, PanelText,
-    PanelTextKind, PanelVisibility, SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
+    CarriedItemPreview, GameplayHudVisibility, InGameHudStyle, InventoryTooltip, PanelVisibility,
+    SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
+use crate::game::ui::features::inventory::InventoryTitleText;
 use super::super::widgets::spawn_slot;
 
 pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
@@ -41,12 +42,12 @@ pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
 }
 
 pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
-    spawn_panel(
+    spawn_panel_with_title_marker(
         root,
         i18n,
-        PanelOptions::new(640.0, "inventory.title")
-            .title_marker(PanelText(PanelTextKind::InventoryTitle)),
+        PanelOptions::new(640.0, "inventory.title"),
         PanelVisibility::Inventory,
+        InventoryTitleText,
         |panel| {
             panel.spawn(inventory_grid_bundle()).with_children(|grid| {
                 for index in 0..BACKPACK_SLOTS {

@@ -11,7 +11,7 @@
 
 | 顺序 | 任务 | 难度 | 范围 | 分支建议 | 并行组 |
 | --- | --- | --- | --- | --- | --- |
-| S01 | 调研 Barrier 的 Reactive / Continue 模拟模式 | D1 | R1 | main | docs |
+| S01 | 调研 Bevy 的 Reactive / Continuous 模拟模式 | D1 | R1 | main | docs |
 | S02 | 按方块维度整理行为文档 | D2 | R1 | main | docs |
 | S03 | 修复确认返回主菜单弹窗宽度 | D1 | R1 | main | ui-a |
 | S04 | 修复菜单标题拖动比例问题 | D2 | R2 | main | ui-a |
@@ -265,18 +265,18 @@
 
 ## 模拟模型调研
 
-### 调研 Barrier 的 Reactive / Continue 模拟模式
+### 调研 Bevy 的 Reactive / Continuous 模拟模式
 
 - 标记：S01；难度 D1；范围 R1；可在 `main` 直接执行；纯调研文档，不阻塞其他任务。
 
-- 目标：调研 Barrier 的模拟模式，重点确认是否存在 Reactive 或 Continue 之类的回合式模型，以及是否适合迁移到当前游戏。
+- 目标：调研 Bevy 的模拟模式，重点确认是否存在 Reactive 或 Continuous 之类的回合式模型，以及是否适合迁移到当前游戏。
 - 要点：
-  - 确认 Barrier 中相关模式的真实名称和语义；当前猜测是 Reactive，而不是 Reality。
+  - 确认 Bevy 中相关模式的真实名称和语义；当前猜测是 Reactive，而不是 Reality。
   - 分析它如何处理回合制、持续运行、输入响应和状态更新。
   - 评估能否把整个场景改成回合 Reactive 模式。
   - 对比当前 `run_turn` 的阶段模型，列出需要调整的系统。
 - 验收：
-  - 输出一份调研报告，说明 Barrier 模型是否适合本项目。
+  - 输出一份调研报告，说明 Bevy 模型是否适合本项目。
   - 如果适合，给出迁移路径；如果不适合，说明原因和可借鉴部分。
 
 ## 动态模式与开关

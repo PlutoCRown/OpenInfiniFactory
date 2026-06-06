@@ -2,24 +2,22 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-pub use crate::game::block_editing::{
-    BlockPanelAction, OpenBlockPanelDropdown,
-};
+pub use crate::game::block_editing::{BlockPanelAction, OpenBlockPanelDropdown};
 pub use crate::game::ui::core::{
-    InlineTextEditState, PanelCloseButton, PanelDragState, PanelPosition, PanelTitleBar,
-    PanelVisibility, PanelWindow, UiActionLabel, UiHoverState, UiPanelBinding, UiRuntime,
+    ConfirmButtonId, ConfirmDialogState, InlineTextEditState, PanelCloseButton, PanelDragState,
+    PanelPosition, PanelTitleBar, PanelVisibility, PanelWindow, TextPromptRoot, TextPromptState,
+    UiActionLabel, UiHoverState, UiPanelBinding, UiRuntime,
 };
 pub use crate::game::ui::features::menu::types::MenuAction;
 pub use crate::game::ui::features::save::types::{
-    ConfirmDialogAction, ConfirmDialogKind, ConfirmDialogState, SaveListAction, SaveListCloseButton,
-    SaveListPanel, SaveListPrompt, SaveListPuzzleColumn, SaveListRenderState, SaveListSolutionColumn,
-    TextPromptAction, TextPromptKind, TextPromptRoot, TextPromptState, TextPromptText,
+    SaveListAction, SaveListCloseButton, SaveListPanel, SaveListPrompt, SaveListPuzzleColumn,
+    SaveListRenderState, SaveListSolutionColumn, SaveListTitleText,
 };
 pub use crate::game::ui::features::settings::types::{
-    ActiveSettingsSlider, OpenSettingsDropdown, PendingKeyBind, SettingsAction, SettingsControl,
-    SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList, SettingsDropdownRow,
-    SettingsField, SettingsItem, SettingsSliderFill, SettingsSliderKnob, SettingsTab,
-    SettingsText, SettingsTextKind, SettingsValueText, GAMEPLAY_SETTINGS,
+    OpenSettingsDropdown, PendingKeyBind, SettingsAction, SettingsControl, SettingsDropdown,
+    SettingsDropdownLabel, SettingsDropdownList, SettingsDropdownRow, SettingsField, SettingsItem,
+    SettingsSliderFill, SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind,
+    SettingsValueText, GAMEPLAY_SETTINGS,
 };
 
 impl UiActionLabel for BlockPanelAction {
@@ -68,17 +66,6 @@ pub struct ConverterInputRow;
 
 #[derive(Component, Clone, Copy)]
 pub struct KeyBindingButton(pub ActionKeyName);
-
-#[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub struct PanelText(pub PanelTextKind);
-
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub enum PanelTextKind {
-    InventoryTitle,
-    SaveListTitle,
-    ConfirmTitle,
-    ConfirmMessage,
-}
 
 #[derive(Component)]
 pub struct Crosshair;

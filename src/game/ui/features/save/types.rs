@@ -1,7 +1,5 @@
 use bevy::prelude::*;
 
-use crate::game::ui::core::action::UiActionLabel;
-
 #[derive(Component, Clone)]
 pub enum SaveListAction {
     NewPuzzle,
@@ -37,62 +35,5 @@ pub struct SaveListRenderState {
     pub solution_keys: Vec<String>,
 }
 
-#[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub enum TextPromptAction {
-    Confirm,
-    Cancel,
-}
-
 #[derive(Component)]
-pub struct TextPromptRoot;
-
-#[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub enum TextPromptText {
-    Title,
-    Value,
-}
-
-#[derive(Clone, Eq, PartialEq)]
-pub enum TextPromptKind {
-    NewPuzzle,
-    NewSolution { puzzle: String },
-    RenamePuzzle { name: String },
-    RenameSolution { name: String },
-    SaveAsNewPuzzle,
-}
-
-#[derive(Resource, Default)]
-pub struct TextPromptState {
-    pub kind: Option<TextPromptKind>,
-    pub value: String,
-}
-
-#[derive(Component, Clone, Copy)]
-pub enum ConfirmDialogAction {
-    Primary,
-    Secondary,
-    Cancel,
-}
-
-impl UiActionLabel for ConfirmDialogAction {
-    fn label_key(self) -> &'static str {
-        match self {
-            Self::Primary => "button.confirm",
-            Self::Secondary => "button.confirm",
-            Self::Cancel => "button.cancel",
-        }
-    }
-}
-
-#[derive(Clone, Eq, PartialEq)]
-pub enum ConfirmDialogKind {
-    DeleteSave { name: String },
-    ResetSolution,
-    ReturnToMain,
-    SaveSolutionBeforeEdit,
-}
-
-#[derive(Resource, Default)]
-pub struct ConfirmDialogState {
-    pub kind: Option<ConfirmDialogKind>,
-}
+pub struct SaveListTitleText;

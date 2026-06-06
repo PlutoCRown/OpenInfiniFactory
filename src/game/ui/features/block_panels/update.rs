@@ -5,12 +5,12 @@ use bevy::window::PrimaryWindow;
 use crate::game::block_editing::{
     BlockMaterialIcon, BlockMaterialIconSlot, BlockPanelAction, BlockPanelDropdown,
     BlockPanelDropdownLabel, BlockPanelDropdownList, BlockPanelText, BlockPanelTextKind,
-    OpenBlockPanelDropdown,
+    BlockPanelTitle, OpenBlockPanelDropdown,
 };
 use crate::game::ui::components::{default_font_size, menu_button};
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::InlineTextEditState;
-use crate::game::ui::types::{ConverterInputRow, LocalizedText};
+use crate::game::ui::types::ConverterInputRow;
 use crate::game::world::blocks::{BlockKind, MaterialKind};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockIconAssets;
@@ -60,7 +60,7 @@ pub fn update_active_block_panel(
     i18n: Res<I18n>,
     mut texts: ParamSet<(
         Query<(&BlockPanelText, &mut Text)>,
-        Query<&mut Text, With<LocalizedText>>,
+        Query<&mut Text, With<BlockPanelTitle>>,
     )>,
     mut converter_input_row: Query<&mut Node, With<ConverterInputRow>>,
 ) {
@@ -78,7 +78,7 @@ pub fn update_active_block_panel(
                 let settings = world.teleport_settings(pos);
                 text.0 = if inline_edit.is_active()
                     && inline_edit.pos == Some(pos)
-                    && inline_edit.field == Some(BlockPanelTextKind::TeleportName)
+                    && inline_edit.field == Some("teleport_name")
                 {
                     format!("{}_", inline_edit.buffer)
                 } else {
@@ -95,12 +95,7 @@ pub fn update_active_block_panel(
             _ => "labeler.title",
         };
         for mut text in &mut texts.p1() {
-            if text.0 == i18n.text("labeler.title")
-                || text.0 == i18n.text("stamper.title")
-                || text.0 == i18n.text("roller.title")
-            {
-                text.0 = i18n.text(key);
-            }
+            text.0 = i18n.text(key);
         }
     }
 
@@ -124,36 +119,14 @@ pub fn update_block_panel_dropdowns(
     let active_pos = ui_runtime.active_block_pos();
 
     for (label, mut text) in &mut dropdowns.labels {
-        text.0 = match label.0 {
-            BlockPanelDropdown::GeneratorMaterial => active_pos
-                .map(|pos| world.generator_settings(pos).material)
-                .map(|material| i18n.text(material.name_key()))
-                .unwrap_or_default(),
-            BlockPanelDropdown::GoalMaterial => active_pos
-                .map(|pos| world.goal_settings(pos).material)
-                .map(|material| i18n.text(material.name_key()))
-                .unwrap_or_default(),
-            BlockPanelDropdown::LabelerColor => active_pos
-                .map(|pos| world.labeler_settings(pos).color)
-                .map(|color| i18n.text(color.name_key()))
-                .unwrap_or_default(),
-            BlockPanelDropdown::ConverterInput => active_pos
-                .map(|pos| world.converter_settings(pos).input)
-                .map(|material| i18n.text(material.name_key()))
-                .unwrap_or_default(),
-            BlockPanelDropdown::ConverterOutput => active_pos
-                .map(|pos| world.converter_settings(pos).output)
-                .map(|material| i18n.text(material.name_key()))
-                .unwrap_or_default(),
-            BlockPanelDropdown::TeleportPair => active_pos
-                .and_then(|pos| world.teleport_settings(pos).pair)
-                .map(|pair| world.teleport_settings(pair).name)
-                .unwrap_or_else(|| i18n.text("teleport.none")),
-        };
+        text.0 = label.0.selected_label(active_pos, &world, &i18n);
     }
 
     if let Some(block_icons) = block_icons.as_deref() {
         for (slot, children) in &dropdowns.material_slots {
+            if !slot.0.uses_material_icon() {
+                continue;
+            }
             let material = selected_material(slot.0, active_pos, &world);
             update_material_children(
                 children,
@@ -208,7 +181,7 @@ pub fn update_block_panel_dropdowns(
     }
 
     for (entity, list, children) in &mut dropdowns.teleport_pair_list {
-        if list.0 != BlockPanelDropdown::TeleportPair {
+        if !list.0.is_dynamic() {
             continue;
         }
         if !rebuild_pair_options {
@@ -244,14 +217,7 @@ fn selected_material(
     active_pos: Option<IVec3>,
     world: &WorldBlocks,
 ) -> Option<MaterialKind> {
-    let pos = active_pos?;
-    match dropdown {
-        BlockPanelDropdown::GeneratorMaterial => Some(world.generator_settings(pos).material),
-        BlockPanelDropdown::GoalMaterial => Some(world.goal_settings(pos).material),
-        BlockPanelDropdown::ConverterInput => Some(world.converter_settings(pos).input),
-        BlockPanelDropdown::ConverterOutput => Some(world.converter_settings(pos).output),
-        BlockPanelDropdown::LabelerColor | BlockPanelDropdown::TeleportPair => None,
-    }
+    dropdown.selected_material(active_pos, world)
 }
 
 fn update_material_children(
@@ -272,34 +238,17 @@ fn update_material_children(
 
 fn block_dropdown_position(
     dropdown: BlockPanelDropdown,
-    triggers: &Query<
-        (&BlockPanelAction, &ComputedNode, &UiGlobalTransform),
-        With<Button>,
-    >,
+    triggers: &Query<(&BlockPanelAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
     list_size: Vec2,
     viewport: Vec2,
     scale: f32,
 ) -> Option<(f32, f32)> {
-    let target = block_dropdown_toggle_action(dropdown);
-    let trigger = target.and_then(|target| {
-        triggers
-            .iter()
-            .find(|(action, node, _)| **action == target && !node.is_empty())
-            .map(|(_, node, transform)| (node, transform))
-    })?;
+    let target = dropdown.toggle_action();
+    let trigger = triggers
+        .iter()
+        .find(|(action, node, _)| **action == target && !node.is_empty())
+        .map(|(_, node, transform)| (node, transform))?;
     dropdown_position_from_trigger(trigger.0, trigger.1, list_size, viewport, scale)
-}
-
-fn block_dropdown_toggle_action(dropdown: BlockPanelDropdown) -> Option<BlockPanelAction> {
-    match dropdown {
-        BlockPanelDropdown::GeneratorMaterial | BlockPanelDropdown::GoalMaterial => {
-            Some(BlockPanelAction::ToggleMaterialDropdown)
-        }
-        BlockPanelDropdown::LabelerColor => Some(BlockPanelAction::ToggleColorDropdown),
-        BlockPanelDropdown::ConverterInput => Some(BlockPanelAction::ToggleInputDropdown),
-        BlockPanelDropdown::ConverterOutput => Some(BlockPanelAction::ToggleOutputDropdown),
-        BlockPanelDropdown::TeleportPair => Some(BlockPanelAction::ToggleTeleportPairDropdown),
-    }
 }
 
 fn dropdown_position_from_trigger(

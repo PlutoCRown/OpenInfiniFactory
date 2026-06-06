@@ -3,20 +3,25 @@ use bevy::prelude::*;
 use crate::shared::i18n::I18n;
 
 use super::components::{
-    absolute_text_bundle, default_button_size, flex_row, localized_text, panel_bundle,
-    panel_content, panel_title_bar, panel_title_label, root_node, spawn_panel, text,
-    transparent_node, PanelOptions, STATUS_TEXT,
+    absolute_text_bundle, default_button_size, flex_row, full_width_button, localized_text,
+    panel_bundle, panel_content, panel_title_bar, panel_title_label, raised_border, root_node,
+    spawn_panel, styled_button, text, transparent_node, PanelOptions, STATUS_TEXT, BUTTON_BG,
+};
+use crate::game::block_editing::{BlockPanelAction, BlockPanelDropdown, BlockPanelText, BlockPanelTextKind};
+use crate::game::ui::core::confirm_dialog::{
+    ConfirmButtonId, ConfirmMessageText, ConfirmTitleText,
+};
+use crate::game::ui::core::text_prompt::{
+    TextPromptButtonId, TextPromptRoot, TextPromptText,
 };
 use super::screens::{
     spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_inventory_tooltip,
     spawn_main_menu, spawn_pause_panel, spawn_save_list, spawn_settings_panel,
 };
-use crate::game::block_editing::{BlockPanelAction, BlockPanelDropdown, BlockPanelText, BlockPanelTextKind};
 use crate::game::state::UiPanelId;
 use super::types::{
-    ConfirmDialogAction, ConverterInputRow, Crosshair, GameplayHudVisibility, InGameHudVisibility,
-    PanelText, PanelTextKind, PanelVisibility, PlayingUiRoot, StatusText, StatusTextKind,
-    UiPanelBinding, UiRoot,
+    ConverterInputRow, Crosshair, GameplayHudVisibility, InGameHudVisibility, PanelVisibility,
+    PlayingUiRoot, StatusText, StatusTextKind, UiPanelBinding, UiRoot,
 };
 use super::widgets::{
     spawn_block_panel_button, spawn_block_panel_dropdown, spawn_block_panel_dropdown_list,
@@ -28,6 +33,7 @@ pub fn setup_menu_ui(mut commands: Commands, i18n: Res<I18n>) {
     commands.spawn((root_node(), UiRoot)).with_children(|root| {
         spawn_settings_panel(root, &i18n);
         spawn_confirm_dialog(root);
+        spawn_text_prompt(root);
         spawn_modal_scrim(root);
         spawn_main_menu(root, &i18n);
         spawn_save_list(root, &i18n);
@@ -177,7 +183,7 @@ fn spawn_labeler_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     spawn_panel(
         root,
         i18n,
-        PanelOptions::new(420.0, "labeler.title").closable(),
+        PanelOptions::new(420.0, "labeler.title").closable().dynamic_title(),
         UiPanelBinding(UiPanelId::Labeler),
         |panel| {
             spawn_panel_row(panel, i18n, "panel.color", |row| {
@@ -348,7 +354,7 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
         panel.spawn(panel_title_bar()).with_children(|title| {
             title.spawn((
                 panel_title_label("", 24.0),
-                PanelText(PanelTextKind::ConfirmTitle),
+                ConfirmTitleText,
             ));
         });
         panel.spawn(panel_content()).with_children(|panel| {
@@ -360,13 +366,50 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
                     align_self: AlignSelf::Stretch,
                     ..default()
                 },
-                PanelText(PanelTextKind::ConfirmMessage),
+                ConfirmMessageText,
             ));
             panel.spawn(flex_row(40.0, 8.0)).with_children(|row| {
-                spawn_confirm_dialog_button(row, ConfirmDialogAction::Primary);
-                spawn_confirm_dialog_button(row, ConfirmDialogAction::Secondary);
-                spawn_confirm_dialog_button(row, ConfirmDialogAction::Cancel);
+                spawn_confirm_dialog_button(row, ConfirmButtonId::Confirm);
+                spawn_confirm_dialog_button(row, ConfirmButtonId::Extra);
+                spawn_confirm_dialog_button(row, ConfirmButtonId::Cancel);
             });
         });
     });
+}
+
+fn spawn_text_prompt(root: &mut ChildSpawnerCommands) {
+    root.spawn((panel_bundle(420.0), GlobalZIndex(30_000), TextPromptRoot))
+        .with_children(|panel| {
+            panel.spawn(panel_title_bar()).with_children(|title| {
+                title.spawn((panel_title_label("", 20.0), TextPromptText::Title));
+            });
+            panel.spawn(panel_content()).with_children(|content| {
+                content
+                    .spawn(styled_button(
+                        Node {
+                            width: Val::Percent(100.0),
+                            min_height: Val::Px(default_button_size(38.0)),
+                            padding: UiRect::horizontal(Val::Px(12.0)),
+                            border: UiRect::all(Val::Px(1.0)),
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                        raised_border(),
+                        BUTTON_BG,
+                    ))
+                    .with_children(|input| {
+                        input.spawn((text("", 16.0, Color::WHITE), TextPromptText::Value));
+                    });
+                content.spawn(flex_row(36.0, 8.0)).with_children(|row| {
+                    row.spawn((full_width_button(34.0), TextPromptButtonId::Save))
+                        .with_children(|button| {
+                            button.spawn(text("", 15.0, Color::WHITE));
+                        });
+                    row.spawn((full_width_button(34.0), TextPromptButtonId::Cancel))
+                        .with_children(|button| {
+                            button.spawn(text("", 15.0, Color::WHITE));
+                        });
+                });
+            });
+        });
 }

@@ -12,14 +12,18 @@ use bevy::prelude::*;
 pub use layout::{setup_menu_ui, setup_playing_ui_system};
 pub use systems::{
     apply_ui_font, load_ui_font, panel_close_clicked, panel_drag_ended, panel_drag_started,
-    panel_dragged, ui_hovered, ui_unhovered, update_confirm_dialog_ui, update_hud_visibility,
-    update_localized_ui, update_panel_visibility, update_save_list_ui, update_settings_dropdowns_ui,
-    update_settings_slider_drag_ui, update_settings_sliders_ui, update_settings_tabs_ui,
-    update_settings_text_ui, update_status_ui, update_text_prompt_ui, update_ui_layers,
+    panel_dragged, ui_hovered, ui_unhovered, update_hud_visibility, update_localized_ui,
+    update_panel_visibility, update_status_ui, update_ui_layers,
 };
 pub use types::*;
 
 use crate::game::systems::perf::PerfScope;
+use crate::game::ui::core::confirm_dialog::{
+    confirm_dialog_clicks, update_confirm_dialog_ui, PendingConfirmHandler,
+};
+use crate::game::ui::core::text_prompt::{
+    text_prompt_clicks, update_text_prompt_ui, PendingTextPromptHandler,
+};
 use components::{
     button_hovered, button_pressed, button_released, button_unhovered, update_scroll_containers,
 };
@@ -30,6 +34,10 @@ pub struct GameUiPlugin;
 impl Plugin for GameUiPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(UiRuntime::default())
+            .insert_resource(crate::game::ui::core::text_prompt::TextPromptState::default())
+            .insert_resource(crate::game::ui::core::confirm_dialog::ConfirmDialogState::default())
+            .insert_non_send_resource(PendingConfirmHandler::default())
+            .insert_non_send_resource(PendingTextPromptHandler::default())
             .insert_resource(CarriedItem::default())
             .insert_resource(PanelDragState::default())
             .insert_resource(UiHoverState::default())
@@ -44,17 +52,15 @@ impl Plugin for GameUiPlugin {
             .add_observer(button_released)
             .add_observer(ui_hovered)
             .add_observer(ui_unhovered)
+            .add_observer(confirm_dialog_clicks)
+            .add_observer(text_prompt_clicks)
             .add_systems(
                 Update,
                 (
                     update_localized_ui,
-                    update_settings_text_ui,
-                    (update_settings_sliders_ui, update_settings_slider_drag_ui).chain(),
-                    update_settings_dropdowns_ui,
-                    update_settings_tabs_ui,
-                    update_scroll_containers,
-                    update_confirm_dialog_ui,
                     update_text_prompt_ui,
+                    update_confirm_dialog_ui,
+                    update_scroll_containers,
                     apply_ui_font,
                 )
                     .after(PerfScope::Animation)
@@ -62,10 +68,8 @@ impl Plugin for GameUiPlugin {
             )
             .add_systems(
                 Update,
-                (
-                    (update_panel_visibility, update_ui_layers).chain(),
-                    update_save_list_ui,
-                )
+                (update_panel_visibility, update_ui_layers)
+                    .chain()
                     .after(PerfScope::Animation)
                     .before(PerfScope::Ui),
             )

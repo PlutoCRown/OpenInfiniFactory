@@ -215,6 +215,16 @@ pub enum SettingsDropdown {
     DeleteSelectionMode,
 }
 
+impl SettingsDropdown {
+    pub fn trigger_label(self, config: &crate::shared::config::GameConfig, i18n: &crate::shared::i18n::I18n) -> String {
+        match self {
+            Self::Language => i18n.language().native_name().to_string(),
+            Self::PlaceSelectionMode => i18n.text(config.place_selection_mode.label_key()),
+            Self::DeleteSelectionMode => i18n.text(config.delete_selection_mode.label_key()),
+        }
+    }
+}
+
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub enum SettingsAction {
     TabGameplay,
@@ -245,6 +255,20 @@ impl UiActionLabel for SettingsAction {
             | Self::SetLanguage(_)
             | Self::ToggleDropdown(_) => "",
         }
+    }
+}
+
+impl SettingsAction {
+    pub fn tab_selected(self, tab: SettingsTab) -> bool {
+        matches!(
+            (self, tab),
+            (Self::TabGameplay, SettingsTab::Gameplay)
+                | (Self::TabKeyBindings, SettingsTab::KeyBindings)
+        )
+    }
+
+    pub fn is_tab(self) -> bool {
+        matches!(self, Self::TabGameplay | Self::TabKeyBindings)
     }
 }
 

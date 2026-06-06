@@ -55,7 +55,7 @@ pub fn toggle_debug(
     mut debug: ResMut<DebugState>,
 ) {
     if pending_key_bind.0.is_some()
-        || text_prompt.kind.is_some()
+        || text_prompt.is_open()
         || !in_playing(*mode.get(), &playing_ui)
     {
         return;
@@ -81,7 +81,7 @@ pub fn toggle_factory_activity_debug(
     block_entities: Query<Entity, With<BlockEntity>>,
 ) {
     if pending_key_bind.0.is_some()
-        || text_prompt.kind.is_some()
+        || text_prompt.is_open()
         || !in_playing(*mode.get(), &playing_ui)
     {
         return;

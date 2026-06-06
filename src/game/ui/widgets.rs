@@ -5,13 +5,15 @@ use super::components::{
     default_button_size, default_font_size, full_width_button, inset_border, menu_button,
     raised_border, slider_bundle, slider_fill, slider_knob, styled_button,
 };
-use crate::game::block_editing::{BlockPanelAction, BlockPanelDropdown, BlockMaterialIcon, BlockMaterialIconSlot, BlockPanelDropdownLabel, BlockPanelDropdownList};
 use super::types::{
-    AreaKind, ConfirmDialogAction, InventoryItem,
-    InventorySlot, KeyBindingButton, MenuAction, SettingsAction, SettingsDropdown,
-    SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
-    SettingsSliderKnob, SettingsText, SettingsTextKind, SettingsValueText, SlotArea,
-    UiActionLabel,
+    AreaKind, ConfirmButtonId, InventoryItem, InventorySlot, KeyBindingButton, MenuAction,
+    SettingsAction, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList, SettingsField,
+    SettingsSliderFill, SettingsSliderKnob, SettingsText, SettingsTextKind, SettingsValueText,
+    SlotArea, UiActionLabel,
+};
+use crate::game::block_editing::{
+    BlockMaterialIcon, BlockMaterialIconSlot, BlockPanelAction, BlockPanelDropdown,
+    BlockPanelDropdownLabel, BlockPanelDropdownList,
 };
 use crate::game::world::blocks::MaterialKind;
 
@@ -93,10 +95,17 @@ pub(super) fn spawn_menu_button(
     font_size: f32,
     action: MenuAction,
 ) {
-    spawn_full_width_localized_button(parent, height, font_size, action);
+    parent
+        .spawn((full_width_button(height), action))
+        .with_children(|button| {
+            button.spawn(label_text("", font_size, Color::WHITE));
+        });
 }
 
-pub(super) fn spawn_block_panel_button(parent: &mut ChildSpawnerCommands, action: BlockPanelAction) {
+pub(super) fn spawn_block_panel_button(
+    parent: &mut ChildSpawnerCommands,
+    action: BlockPanelAction,
+) {
     spawn_localized_button(parent, 36.0, 14.0, action);
 }
 
@@ -275,16 +284,12 @@ pub(super) fn spawn_material_icon_dropdown_list<A>(
 
 pub(super) fn spawn_confirm_dialog_button(
     parent: &mut ChildSpawnerCommands,
-    action: ConfirmDialogAction,
+    button: ConfirmButtonId,
 ) {
-    let key = action.label_key();
     parent
-        .spawn((full_width_button(34.0), action))
+        .spawn((full_width_button(34.0), button))
         .with_children(|button| {
-            button.spawn((
-                label_text(key, 15.0, Color::WHITE),
-                super::types::LocalizedText { key },
-            ));
+            button.spawn(label_text("", 15.0, Color::WHITE));
         });
 }
 
@@ -487,26 +492,6 @@ where
 {
     let key = action.label_key();
     let mut entity = parent.spawn((menu_button(height), action));
-    entity.with_children(|button| {
-        button.spawn((
-            label_text(key, font_size, Color::WHITE),
-            super::types::LocalizedText { key },
-        ));
-    });
-    entity
-}
-
-fn spawn_full_width_localized_button<'a, A>(
-    parent: &'a mut ChildSpawnerCommands,
-    height: f32,
-    font_size: f32,
-    action: A,
-) -> EntityCommands<'a>
-where
-    A: Bundle + Copy + UiActionLabel,
-{
-    let key = action.label_key();
-    let mut entity = parent.spawn((full_width_button(height), action));
     entity.with_children(|button| {
         button.spawn((
             label_text(key, font_size, Color::WHITE),

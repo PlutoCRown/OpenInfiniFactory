@@ -34,7 +34,7 @@ pub fn update_panel_visibility(
     }
 
     for (action, mut style) in &mut nodes.p1() {
-        style.display = if pause_action_visible(&save_state, &solution_state, *action) {
+        style.display = if action.pause_menu_visible(&save_state, &solution_state) {
             Display::Flex
         } else {
             Display::None
@@ -182,9 +182,9 @@ fn panel_visible(
         PanelVisibility::PauseMenu => mode == GameMode::Playing && playing_ui.paused,
         PanelVisibility::Inventory => mode == GameMode::Playing && playing_ui.inventory_open,
         PanelVisibility::SettingsTab(tab) => ui_runtime.is_settings_open() && settings_tab == tab,
-        PanelVisibility::ConfirmDialog => confirm_dialog.kind.is_some(),
+        PanelVisibility::ConfirmDialog => confirm_dialog.is_open(),
         PanelVisibility::ModalScrim => {
-            ui_runtime.has_modal_panel() || confirm_dialog.kind.is_some()
+            ui_runtime.has_modal_panel() || confirm_dialog.is_open()
         }
     }
 }
@@ -240,12 +240,12 @@ pub fn update_ui_layers(
         .top_modal_layer()
         .map(panel_layer_z)
         .unwrap_or(PANEL_LAYER_BASE);
-    let confirm_z = if confirm_dialog.kind.is_some() {
+    let confirm_z = if confirm_dialog.is_open() {
         top_panel_z + CONFIRM_LAYER_STEP
     } else {
         PANEL_LAYER_BASE
     };
-    let scrim_z = if confirm_dialog.kind.is_some() {
+    let scrim_z = if confirm_dialog.is_open() {
         confirm_z + SCRIM_OFFSET
     } else {
         ui_runtime

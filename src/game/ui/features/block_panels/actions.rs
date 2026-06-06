@@ -2,12 +2,12 @@ use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
 use crate::game::block_editing::{
-    BlockPanelAction, BlockPanelTextKind, OpenBlockPanelDropdown,
+    BlockPanelAction, OpenBlockPanelDropdown,
 };
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::{primary_click, read_inline_text_input, InlineTextEditState};
-use crate::game::ui::core::world_menu::WorldMenuParams;
+use crate::game::session::PlayingWorldParams;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{despawn_world, rebuild_world_for_debug_state};
 
@@ -17,7 +17,7 @@ pub fn block_panel_actions(
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut inline_edit: ResMut<InlineTextEditState>,
     mut solution_state: ResMut<SolutionState>,
-    mut world_menu: WorldMenuParams,
+    mut world: PlayingWorldParams,
     actions: Query<&BlockPanelAction>,
 ) {
     if !primary_click(&mut click) {
@@ -26,7 +26,7 @@ pub fn block_panel_actions(
     let Some(pos) = ui_runtime.active_block_pos() else {
         return;
     };
-    let Some(block) = world_menu.world.system_blocks.get(&pos).copied() else {
+    let Some(block) = world.world.system_blocks.get(&pos).copied() else {
         ui_runtime.close_current();
         return;
     };
@@ -36,11 +36,11 @@ pub fn block_panel_actions(
     click.propagate(false);
 
     if action == BlockPanelAction::StartTeleportRename {
-        let settings = world_menu.world.teleport_settings(pos);
+        let settings = world.world.teleport_settings(pos);
         inline_edit.start(
             UiPanelId::Teleport,
             pos,
-            BlockPanelTextKind::TeleportName,
+            "teleport_name",
             settings.name,
         );
         return;
@@ -49,7 +49,7 @@ pub fn block_panel_actions(
     block.kind.handle_edit_action(
         pos,
         action,
-        &mut world_menu.world,
+        &mut world.world,
         &mut solution_state,
         &mut open_dropdown,
     );
@@ -57,21 +57,21 @@ pub fn block_panel_actions(
     if !action.mutates_world() {
         return;
     }
-    despawn_world(&mut world_menu.commands, &world_menu.block_entities);
-    world_menu.factory_structures.clear();
-    world_menu.movement_influence.clear();
-    world_menu.pusher_state.clear();
-    world_menu
+    despawn_world(&mut world.commands, &world.block_entities);
+    world.factory_structures.clear();
+    world.movement_influence.clear();
+    world.pusher_state.clear();
+    world
         .factory_structures
-        .ensure_current_world(&world_menu.world);
-    if let Some(render_assets) = world_menu.render_assets.as_deref() {
+        .ensure_current_world(&world.world);
+    if let Some(render_assets) = world.render_assets.as_deref() {
         rebuild_world_for_debug_state(
-            &mut world_menu.commands,
-            &mut world_menu.meshes,
-            &world_menu.world,
+            &mut world.commands,
+            &mut world.meshes,
+            &world.world,
             render_assets,
-            &world_menu.debug,
-            &mut world_menu.factory_structures,
+            &world.debug,
+            &mut world.factory_structures,
         );
     }
 }
@@ -96,17 +96,14 @@ pub fn inline_text_edit_input(
     let result = read_inline_text_input(&mut keyboard_input, &mut inline_edit.buffer);
 
     if result.confirm {
-        match field {
-            BlockPanelTextKind::TeleportName => {
-                let mut settings = world.teleport_settings(pos);
-                let trimmed = inline_edit.buffer.trim();
-                if !trimmed.is_empty() {
-                    settings.name = trimmed.chars().take(24).collect();
-                    world.set_teleport_settings(pos, settings);
-                    solution_state.dirty = true;
-                }
+        if field == "teleport_name" {
+            let mut settings = world.teleport_settings(pos);
+            let trimmed = inline_edit.buffer.trim();
+            if !trimmed.is_empty() {
+                settings.name = trimmed.chars().take(24).collect();
+                world.set_teleport_settings(pos, settings);
+                solution_state.dirty = true;
             }
-            BlockPanelTextKind::GeneratorPeriod => {}
         }
         inline_edit.clear();
     } else if result.cancel {

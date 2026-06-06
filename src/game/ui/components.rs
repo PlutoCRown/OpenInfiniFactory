@@ -13,7 +13,7 @@ pub use button::{
 pub use layout::{flex_row, root_node, transparent_node};
 pub use panel::{
     absolute_text_bundle, panel_bundle, panel_content, panel_title_bar, panel_title_button,
-    panel_title_label, spawn_panel, PanelOptions, STATUS_TEXT,
+    panel_title_label, spawn_panel, spawn_panel_with_title_marker, PanelOptions, STATUS_TEXT,
 };
 pub use scroll::{scroll_container, scroll_content, update_scroll_containers};
 pub use slider::{slider_bundle, slider_fill, slider_knob};
