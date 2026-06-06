@@ -2,7 +2,7 @@ use crate::game::state::UiPanelId;
 
 use super::{BlockDefinition, BlockKind, BlockTexture, MaterialKind};
 use super::traits::{BlockMeta, BlockUi};
-use crate::game::blocks::{rgb, ColorSpec};
+use crate::game::blocks::ColorSpec;
 
 #[derive(Clone, Copy)]
 pub enum BasicBlockLayer {

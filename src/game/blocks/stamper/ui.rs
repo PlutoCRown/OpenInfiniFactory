@@ -4,11 +4,10 @@ use bevy::window::PrimaryWindow;
 
 use super::StamperBlock;
 
-use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::widgets::{
     position_dropdown_from_trigger, spawn_text_dropdown_list, spawn_text_dropdown_toggle,
-    ui_transform_scale,
 };
+use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::{BlockEditContext, OpenBlockPanelDropdown};
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
@@ -16,7 +15,6 @@ use crate::game::blocks::{BlockKind, StampColor};
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::access::{i18n, UiMainThread};
-use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::components::{
     default_button_size, localized_text, spawn_panel_with_title_marker, transparent_node,
     PanelOptions,
@@ -24,6 +22,7 @@ use crate::game::ui::components::{
 use crate::game::ui::core::host::UiHost;
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
+use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{UiActionLabel, UiPanelBinding};
 use crate::game::world::grid::WorldBlocks;
 
@@ -66,11 +65,7 @@ pub fn spawn_panel(root: &mut ChildSpawnerCommands) {
         LabelerPanelTitle,
         |panel| {
             spawn_row(panel, "panel.color", |row| {
-                spawn_text_dropdown_toggle(
-                    row,
-                    LabelerAction::ToggleColor,
-                    LabelerColorLabel,
-                );
+                spawn_text_dropdown_toggle(row, LabelerAction::ToggleColor, LabelerColorLabel);
             });
         },
     );
@@ -80,20 +75,19 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
     spawn_text_dropdown_list(
         root,
         LabelerColorList,
-        StampColor::ALL.into_iter().map(|color| {
-            (i18n.t(color.name_key()), LabelerAction::SetColor(color))
-        }),
+        StampColor::ALL
+            .into_iter()
+            .map(|color| (i18n.t(color.name_key()), LabelerAction::SetColor(color))),
     );
 }
 
 pub fn register(app: &mut App) {
-    app.add_observer(on_click)
-        .add_systems(
-            Update,
-            (update_title, update_dropdowns)
-                .chain()
-                .in_set(BlockPanelSystems),
-        );
+    app.add_observer(on_click).add_systems(
+        Update,
+        (update_title, update_dropdowns)
+            .chain()
+            .in_set(BlockPanelSystems),
+    );
 }
 
 inventory::submit! {
@@ -114,9 +108,8 @@ pub fn dispatch_labeler_action(
 ) {
     let mut ctx = BlockEditContext::new(pos, &mut world.world, solution_state, open_dropdown);
     let mut settings = ctx.world.labeler_settings(pos);
-    let mut changed = false;
 
-    match action {
+    let changed = match action {
         LabelerAction::ToggleColor => {
             ctx.toggle_dropdown(UiPanelId::Labeler, COLOR_SLOT);
             return;
@@ -124,9 +117,9 @@ pub fn dispatch_labeler_action(
         LabelerAction::SetColor(color) => {
             settings.color = color;
             ctx.close_dropdown();
-            changed = true;
+            true
         }
-    }
+    };
 
     if changed {
         ctx.world.set_labeler_settings(pos, settings);
@@ -183,7 +176,13 @@ fn on_click(
     let Some(pos) = ui_runtime.active_block_pos() else {
         return;
     };
-    dispatch_labeler_action(action, pos, &mut world, &mut solution_state, &mut open_dropdown);
+    dispatch_labeler_action(
+        action,
+        pos,
+        &mut world,
+        &mut solution_state,
+        &mut open_dropdown,
+    );
 }
 
 fn update_title(
@@ -213,7 +212,6 @@ fn update_dropdowns(
     ui_runtime: Res<UiRuntime>,
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
-    ui_scale: Res<UiScale>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut labels: Query<(&LabelerColorLabel, &mut Text)>,
     mut lists: Query<(&LabelerColorList, &mut Node, &ComputedNode)>,
@@ -233,7 +231,6 @@ fn update_dropdowns(
     let viewport = window
         .map(|w| Vec2::new(w.width(), w.height()))
         .unwrap_or(Vec2::ZERO);
-    let scale = ui_transform_scale(window, ui_scale.0);
 
     for (_, mut style, list_node) in &mut lists {
         let open = open_dropdown.is_open(panel, COLOR_SLOT);
@@ -245,13 +242,9 @@ fn update_dropdowns(
             (*action == LabelerAction::ToggleColor && !node.is_empty()).then_some((node, transform))
         });
         if let Some((trigger_node, transform)) = trigger {
-            if let Some((left, top)) = position_dropdown_from_trigger(
-                trigger_node,
-                transform,
-                list_node.size(),
-                viewport,
-                scale,
-            ) {
+            if let Some((left, top)) =
+                position_dropdown_from_trigger(trigger_node, transform, list_node, viewport)
+            {
                 style.left = Val::Px(left);
                 style.top = Val::Px(top);
             }

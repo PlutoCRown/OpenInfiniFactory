@@ -6,7 +6,7 @@ use super::GeneratorBlock;
 
 use crate::game::block_editing::widgets::{
     position_dropdown_from_trigger, spawn_labeled_panel_button, spawn_material_icon_list,
-    spawn_material_icon_toggle, ui_transform_scale, update_material_icon,
+    spawn_material_icon_toggle, update_material_icon,
 };
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::{BlockEditContext, OpenBlockPanelDropdown};
@@ -189,16 +189,15 @@ fn dispatch_action(
 ) {
     let mut ctx = BlockEditContext::new(pos, &mut world.world, solution_state, open_dropdown);
     let mut settings = ctx.world.generator_settings(pos);
-    let mut changed = false;
 
-    match action {
+    let changed = match action {
         GeneratorAction::PeriodDown => {
             settings.period = settings.period.saturating_sub(1).max(1);
-            changed = true;
+            true
         }
         GeneratorAction::PeriodUp => {
             settings.period = (settings.period + 1).min(120);
-            changed = true;
+            true
         }
         GeneratorAction::ToggleMaterial => {
             ctx.toggle_dropdown(UiPanelId::Generator, MATERIAL_SLOT);
@@ -207,9 +206,9 @@ fn dispatch_action(
         GeneratorAction::SetMaterial(material) => {
             settings.material = material;
             ctx.close_dropdown();
-            changed = true;
+            true
         }
-    }
+    };
 
     if changed {
         ctx.world.set_generator_settings(pos, settings);
@@ -242,7 +241,6 @@ fn update_dropdowns(
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
-    ui_scale: Res<UiScale>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut material_slots: Query<(&GeneratorMaterialSlot, &Children)>,
     mut material_options: Query<(&GeneratorMaterialOption, &Children)>,
@@ -284,7 +282,6 @@ fn update_dropdowns(
     let viewport = window
         .map(|window| Vec2::new(window.width(), window.height()))
         .unwrap_or(Vec2::ZERO);
-    let scale = ui_transform_scale(window, ui_scale.0);
 
     for (list, mut style, list_node) in &mut lists {
         let _ = list;
@@ -301,9 +298,8 @@ fn update_dropdowns(
             if let Some((left, top)) = position_dropdown_from_trigger(
                 trigger_node,
                 transform,
-                list_node.size(),
+                list_node,
                 viewport,
-                scale,
             ) {
                 style.left = Val::Px(left);
                 style.top = Val::Px(top);

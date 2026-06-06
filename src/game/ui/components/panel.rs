@@ -44,11 +44,6 @@ impl PanelOptions {
         self.title_size = title_size;
         self
     }
-
-    pub const fn dynamic_title(mut self) -> Self {
-        self.dynamic_title = true;
-        self
-    }
 }
 
 pub fn spawn_panel(
@@ -98,11 +93,19 @@ pub fn spawn_panel_with_title_marker(
 }
 
 pub fn panel_bundle(width: f32) -> impl Bundle {
+    panel_window_bundle(Val::Px(width), Val::Percent(100.0))
+}
+
+pub fn panel_bundle_responsive(width_percent: f32, max_width_px: f32) -> impl Bundle {
+    panel_window_bundle(Val::Percent(width_percent), Val::Px(max_width_px))
+}
+
+fn panel_window_bundle(width: Val, max_width: Val) -> impl Bundle {
     (
         Node {
-            width: Val::Px(width),
+            width,
             height: Val::Auto,
-            max_width: Val::Percent(100.0),
+            max_width,
             max_height: Val::Percent(100.0),
             position_type: PositionType::Absolute,
             left: Val::Auto,
@@ -115,7 +118,10 @@ pub fn panel_bundle(width: f32) -> impl Bundle {
             display: Display::None,
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(12.0),
-            overflow: Overflow::scroll_y(),
+            overflow: Overflow {
+                x: OverflowAxis::Clip,
+                y: OverflowAxis::Scroll,
+            },
             ..default()
         },
         PanelWindow,

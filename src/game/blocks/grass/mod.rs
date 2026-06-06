@@ -1,6 +1,6 @@
 use crate::game::blocks::adapter::BlockImpl;
 use crate::game::blocks::basic::{BasicBlockDef, BasicBlockLayer};
-use crate::game::blocks::{BlockKind, BlockTexture, ColorSpec, MaterialKind, rgb};
+use crate::game::blocks::{BlockKind, BlockTexture, ColorSpec, rgb};
 pub struct Grass;
 
 impl BasicBlockDef for Grass {

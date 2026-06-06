@@ -1,7 +1,7 @@
 use super::TeleportExitBlock;
 
 use crate::game::blocks::traits::BlockMeta;
-use crate::game::blocks::{BlockDefinition, BlockKind, rgb, rgba};
+use crate::game::blocks::{BlockDefinition, BlockKind, rgb};
 use bevy::prelude::{IVec3};
 use crate::game::world::grid::{BlockSettings, TeleportSettings};
 

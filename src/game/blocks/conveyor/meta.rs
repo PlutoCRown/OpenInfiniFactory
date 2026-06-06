@@ -1,7 +1,7 @@
 use super::ConveyorBlock;
 
 use crate::game::blocks::traits::BlockMeta;
-use crate::game::blocks::{BlockDefinition, BlockKind, rgb, rgba};
+use crate::game::blocks::{BlockDefinition, BlockKind, rgb};
 
 impl BlockMeta for ConveyorBlock {
     fn id(&self) -> BlockKind {

@@ -31,7 +31,6 @@ impl UiInstanceId {
     pub const MENU: Self = Self(u64::MAX);
     pub const SAVE_LIST: Self = Self(u64::MAX - 1);
     pub const SETTINGS: Self = Self(u64::MAX - 2);
-    pub const BLOCK_PANEL: Self = Self(u64::MAX - 3);
     pub const INVENTORY: Self = Self(u64::MAX - 4);
 
     #[allow(dead_code)]

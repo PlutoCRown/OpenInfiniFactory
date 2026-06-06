@@ -1,7 +1,7 @@
 use super::DrillHeadBlock;
 
 use crate::game::blocks::traits::BlockMeta;
-use crate::game::blocks::{BlockDefinition, BlockKind, rgb, rgba};
+use crate::game::blocks::{BlockDefinition, BlockKind, rgb};
 
 impl BlockMeta for DrillHeadBlock {
     fn id(&self) -> BlockKind {

@@ -4,7 +4,7 @@ use bevy::window::PrimaryWindow;
 
 use crate::game::state::GameSettings;
 use crate::game::ui::components::{
-    hover_border, pressed_border, raised_border, BUTTON_BG, BUTTON_HOVER_BG,
+    hover_border, pressed_border, raised_border, ui_logical_bounds, BUTTON_BG, BUTTON_HOVER_BG,
 };
 use crate::game::ui::types::{KeyBindingButton, UiHoverState};
 use crate::shared::config::GameConfig;
@@ -127,7 +127,6 @@ pub fn update_settings_dropdowns_ui(
     config: Res<GameConfig>,
     settings: Res<GameSettings>,
     open_dropdown: Res<OpenSettingsDropdown>,
-    ui_scale: Res<UiScale>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut texts: ParamSet<(
         Query<
@@ -157,7 +156,6 @@ pub fn update_settings_dropdowns_ui(
     let viewport = window
         .map(|window| Vec2::new(window.width(), window.height()))
         .unwrap_or(Vec2::ZERO);
-    let scale = settings_ui_transform_scale(window, ui_scale.0);
     for (list, mut style, list_node) in &mut dropdown_lists {
         let open = open_dropdown.0 == Some(list.0);
         style.display = if open { Display::Flex } else { Display::None };
@@ -167,9 +165,8 @@ pub fn update_settings_dropdowns_ui(
         if let Some((left, top)) = dropdown_position(
             SettingsAction::ToggleDropdown(list.0),
             &triggers,
-            list_node.size(),
+            list_node,
             viewport,
-            scale,
         ) {
             style.left = Val::Px(left);
             style.top = Val::Px(top);
@@ -180,30 +177,27 @@ pub fn update_settings_dropdowns_ui(
 fn dropdown_position(
     target: SettingsAction,
     triggers: &Query<(&SettingsAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
-    list_size: Vec2,
+    list_node: &ComputedNode,
     viewport: Vec2,
-    scale: f32,
 ) -> Option<(f32, f32)> {
     let (_, trigger_node, transform) = triggers
         .iter()
         .find(|(action, node, _)| **action == target && !node.is_empty())?;
-    let trigger_size = trigger_node.size();
-    let center = (*transform * Vec2::ZERO) * scale;
-    let trigger_left = center.x - trigger_size.x * 0.5;
-    let trigger_top = center.y - trigger_size.y * 0.5;
-    let below = trigger_top + trigger_size.y + 4.0;
-    let above = trigger_top - list_size.y - 4.0;
+    let trigger = ui_logical_bounds(trigger_node, transform);
+    let list_size = list_node.size() * list_node.inverse_scale_factor();
+    let below = trigger.max.y + 4.0;
+    let above = trigger.min.y - list_size.y - 4.0;
     let top = if below + list_size.y <= viewport.y - 10.0 || above < 10.0 {
         below
     } else {
         above.max(10.0)
     };
-    let left = trigger_left.clamp(10.0, (viewport.x - list_size.x - 10.0).max(10.0));
+    let top = top.clamp(10.0, (viewport.y - list_size.y - 10.0).max(10.0));
+    let left = trigger
+        .min
+        .x
+        .clamp(10.0, (viewport.x - list_size.x - 10.0).max(10.0));
     Some((left, top))
-}
-
-fn settings_ui_transform_scale(window: Option<&Window>, ui_scale: f32) -> f32 {
-    window.map(Window::scale_factor).unwrap_or(1.0) / ui_scale.max(0.01)
 }
 
 pub fn update_settings_tabs_ui(

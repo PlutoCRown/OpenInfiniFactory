@@ -22,8 +22,9 @@ const FLOOR_TOP_Y: f32 = 1.0;
 const SPAWN_EYE_Y: f32 = FLOOR_TOP_Y + EYE_HEIGHT + 0.08;
 const PLAYER_SPEED: f32 = 5.5;
 const FLY_SPEED: f32 = 7.0;
-const JUMP_SPEED: f32 = 6.5;
 const GRAVITY: f32 = 18.0;
+/// Vertical travel (eye/camera position) needed to step onto the next 1-block tier.
+const ONE_BLOCK_JUMP_HEIGHT: f32 = 1.5;
 const DOUBLE_TAP_WINDOW: f32 = 0.28;
 const AABB_EPSILON: f32 = 0.001;
 
@@ -109,7 +110,7 @@ pub fn camera_move(
             camera.velocity_y = 0.0;
             camera.grounded = false;
         } else if camera.grounded {
-            camera.velocity_y = JUMP_SPEED;
+            camera.velocity_y = jump_speed(settings.gravity_scale);
             camera.grounded = false;
         }
         camera.last_space_press = now;
@@ -249,6 +250,12 @@ pub fn sync_cursor_grab(
 
 fn alt_pressed(keys: &ButtonInput<KeyCode>) -> bool {
     keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight)
+}
+
+/// Initial upward speed so apex height stays at one block for any gravity scale.
+/// Continuous physics: h = v² / (2g)  =>  v = sqrt(2 * g * h).
+fn jump_speed(gravity_scale: f32) -> f32 {
+    (2.0 * GRAVITY * gravity_scale * ONE_BLOCK_JUMP_HEIGHT).sqrt()
 }
 
 pub fn player_intersects_block(position: Vec3, block: IVec3) -> bool {

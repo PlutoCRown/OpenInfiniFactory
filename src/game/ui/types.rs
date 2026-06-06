@@ -55,9 +55,6 @@ pub struct InGameHudVisibility;
 #[derive(Component)]
 pub struct GameplayHudVisibility;
 
-#[derive(Component)]
-pub struct ConverterInputRow;
-
 #[derive(Component, Clone, Copy)]
 pub struct KeyBindingButton(pub ActionKeyName);
 

@@ -1,7 +1,7 @@
 use super::CounterRotatorBlock;
 
 use crate::game::blocks::traits::BlockMeta;
-use crate::game::blocks::{BlockDefinition, BlockKind, rgb, rgba};
+use crate::game::blocks::{BlockDefinition, BlockKind, rgb};
 
 impl BlockMeta for CounterRotatorBlock {
     fn id(&self) -> BlockKind {

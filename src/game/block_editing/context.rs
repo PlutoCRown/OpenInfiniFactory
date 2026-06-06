@@ -6,7 +6,6 @@ use crate::game::world::grid::WorldBlocks;
 use super::panel_state::OpenBlockPanelDropdown;
 
 pub struct BlockEditContext<'a> {
-    pub pos: IVec3,
     pub world: &'a mut WorldBlocks,
     solution_state: &'a mut SolutionState,
     open_dropdown: &'a mut OpenBlockPanelDropdown,
@@ -14,13 +13,12 @@ pub struct BlockEditContext<'a> {
 
 impl<'a> BlockEditContext<'a> {
     pub fn new(
-        pos: IVec3,
+        _pos: IVec3,
         world: &'a mut WorldBlocks,
         solution_state: &'a mut SolutionState,
         open_dropdown: &'a mut OpenBlockPanelDropdown,
     ) -> Self {
         Self {
-            pos,
             world,
             solution_state,
             open_dropdown,

@@ -1,7 +1,7 @@
 use super::GeneratorBlock;
 
 use crate::game::blocks::traits::BlockMeta;
-use crate::game::blocks::{BlockDefinition, BlockKind, rgb, rgba};
+use crate::game::blocks::{BlockDefinition, BlockKind, rgba};
 use bevy::prelude::{IVec3};
 use crate::game::world::grid::{BlockSettings, GeneratorSettings};
 

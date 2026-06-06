@@ -6,7 +6,6 @@ use super::TeleportEntranceBlock;
 
 use crate::game::block_editing::widgets::{
     position_dropdown_from_trigger, spawn_labeled_panel_button, spawn_text_dropdown_toggle,
-    ui_transform_scale,
 };
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::{BlockEditContext, OpenBlockPanelDropdown};
@@ -242,7 +241,6 @@ fn update_dropdowns(
     ui_runtime: Res<UiRuntime>,
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
-    ui_scale: Res<UiScale>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut labels: Query<(&TeleportPairLabel, &mut Text)>,
     mut lists: Query<(
@@ -252,7 +250,7 @@ fn update_dropdowns(
         &ComputedNode,
         Option<&Children>,
     )>,
-    mut pair_options: Query<Entity, With<TeleportPairOption>>,
+    pair_options: Query<Entity, With<TeleportPairOption>>,
     triggers: Query<(&TeleportAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
     mut pair_cache: Local<Option<(Option<IVec3>, u64, bool)>>,
 ) {
@@ -281,7 +279,6 @@ fn update_dropdowns(
     let viewport = window
         .map(|w| Vec2::new(w.width(), w.height()))
         .unwrap_or(Vec2::ZERO);
-    let scale = ui_transform_scale(window, ui_scale.0);
 
     for (entity, _, mut style, list_node, children) in &mut lists {
         style.display = if pair_open {
@@ -317,13 +314,9 @@ fn update_dropdowns(
             (*action == TeleportAction::TogglePair && !node.is_empty()).then_some((node, transform))
         });
         if let Some((trigger_node, transform)) = trigger {
-            if let Some((left, top)) = position_dropdown_from_trigger(
-                trigger_node,
-                transform,
-                list_node.size(),
-                viewport,
-                scale,
-            ) {
+            if let Some((left, top)) =
+                position_dropdown_from_trigger(trigger_node, transform, list_node, viewport)
+            {
                 style.left = Val::Px(left);
                 style.top = Val::Px(top);
             }

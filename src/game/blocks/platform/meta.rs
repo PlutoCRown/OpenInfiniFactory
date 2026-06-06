@@ -1,7 +1,7 @@
 use super::PlatformBlock;
 
 use crate::game::blocks::traits::BlockMeta;
-use crate::game::blocks::{BlockDefinition, BlockKind, BlockTexture, rgb, rgba};
+use crate::game::blocks::{BlockDefinition, BlockKind, BlockTexture, rgb};
 
 impl BlockMeta for PlatformBlock {
     fn id(&self) -> BlockKind {

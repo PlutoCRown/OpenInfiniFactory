@@ -6,7 +6,7 @@ use super::ConverterBlock;
 
 use crate::game::block_editing::widgets::{
     position_dropdown_from_trigger, spawn_material_icon_list, spawn_material_icon_toggle,
-    ui_transform_scale, update_material_icon,
+    update_material_icon,
 };
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::{BlockEditContext, OpenBlockPanelDropdown};
@@ -204,9 +204,8 @@ fn on_click(
         &mut open_dropdown,
     );
     let mut settings = ctx.world.converter_settings(pos);
-    let mut changed = false;
 
-    match action {
+    let changed = match action {
         ConverterAction::ToggleInput => {
             ctx.toggle_dropdown(UiPanelId::Converter, INPUT_SLOT);
             return;
@@ -219,14 +218,14 @@ fn on_click(
             settings.input = material;
             settings.mode = ConverterMode::SpecificInput;
             ctx.close_dropdown();
-            changed = true;
+            true
         }
         ConverterAction::SetOutput(material) => {
             settings.output = material;
             ctx.close_dropdown();
-            changed = true;
+            true
         }
-    }
+    };
 
     if changed {
         ctx.world.set_converter_settings(pos, settings);
@@ -250,7 +249,6 @@ fn update_dropdowns(
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
-    ui_scale: Res<UiScale>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut material_slots: Query<(&ConverterInputSlot, &Children)>,
     mut output_slots: Query<(&ConverterOutputSlot, &Children)>,
@@ -294,7 +292,6 @@ fn update_dropdowns(
     let viewport = window
         .map(|w| Vec2::new(w.width(), w.height()))
         .unwrap_or(Vec2::ZERO);
-    let scale = ui_transform_scale(window, ui_scale.0);
 
     update_material_list(
         &open_dropdown,
@@ -304,7 +301,6 @@ fn update_dropdowns(
         &mut list_queries.p0(),
         &triggers,
         viewport,
-        scale,
     );
     update_material_list(
         &open_dropdown,
@@ -314,7 +310,6 @@ fn update_dropdowns(
         &mut list_queries.p1(),
         &triggers,
         viewport,
-        scale,
     );
 }
 
@@ -326,7 +321,6 @@ fn update_material_list<L>(
     lists: &mut Query<(&L, &mut Node, &ComputedNode)>,
     triggers: &Query<(&ConverterAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
     viewport: Vec2,
-    scale: f32,
 ) where
     L: Component,
 {
@@ -340,13 +334,9 @@ fn update_material_list<L>(
             (*action == toggle && !node.is_empty()).then_some((node, transform))
         });
         if let Some((trigger_node, transform)) = trigger {
-            if let Some((left, top)) = position_dropdown_from_trigger(
-                trigger_node,
-                transform,
-                list_node.size(),
-                viewport,
-                scale,
-            ) {
+            if let Some((left, top)) =
+                position_dropdown_from_trigger(trigger_node, transform, list_node, viewport)
+            {
                 style.left = Val::Px(left);
                 style.top = Val::Px(top);
             }

@@ -1,7 +1,7 @@
 use super::DetectorBlock;
 
 use crate::game::blocks::traits::BlockMeta;
-use crate::game::blocks::{BlockDefinition, BlockKind, rgb, rgba};
+use crate::game::blocks::{BlockDefinition, BlockKind, rgb};
 
 impl BlockMeta for DetectorBlock {
     fn id(&self) -> BlockKind {

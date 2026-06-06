@@ -1,29 +1,27 @@
 use bevy::prelude::*;
 
-use crate::game::ui::access::{bind_ui_scope, i18n};
+use crate::game::ui::access::bind_ui_scope;
 
 use super::components::{
-    absolute_text_bundle, default_button_size, flex_row, full_width_button, localized_text,
-    panel_bundle, panel_content, panel_title_bar, panel_title_label, raised_border, root_node,
-    spawn_panel, styled_button, text, transparent_node, PanelOptions, STATUS_TEXT, BUTTON_BG,
-};
-use crate::game::blocks::panels::{spawn_all_overlays, spawn_all_panels};
-use crate::game::ui::core::confirm_dialog::{
-    ConfirmButtonId, ConfirmMessageText, ConfirmTitleText,
-};
-use crate::game::ui::core::host::{PlayingUiRootEntity, UiRootEntity};
-use crate::game::ui::core::text_prompt::{
-    TextPromptButtonId, TextPromptRoot, TextPromptText,
+    absolute_text_bundle, default_button_size, flex_row, full_width_button, panel_bundle,
+    panel_content, panel_title_bar, panel_title_label, raised_border, root_node, styled_button,
+    text, BUTTON_BG, STATUS_TEXT,
 };
 use super::screens::{
     spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_inventory_tooltip,
     spawn_main_menu, spawn_pause_panel, spawn_save_list,
 };
-use super::widgets::spawn_confirm_dialog_button;
 use super::types::{
-    Crosshair, GameplayHudVisibility, InGameHudVisibility, PanelVisibility,
-    PlayingUiRoot, StatusText, StatusTextKind, UiPanelBinding, UiRoot,
+    Crosshair, GameplayHudVisibility, InGameHudVisibility, PanelVisibility, PlayingUiRoot,
+    StatusText, StatusTextKind, UiRoot,
 };
+use super::widgets::spawn_confirm_dialog_button;
+use crate::game::blocks::panels::{spawn_all_overlays, spawn_all_panels};
+use crate::game::ui::core::confirm_dialog::{
+    ConfirmButtonId, ConfirmMessageText, ConfirmTitleText,
+};
+use crate::game::ui::core::host::{PlayingUiRootEntity, UiRootEntity};
+use crate::game::ui::core::text_prompt::{TextPromptButtonId, TextPromptRoot, TextPromptText};
 
 pub fn setup_menu_ui(world: &mut World) {
     bind_ui_scope(world);
@@ -63,20 +61,65 @@ pub fn setup_playing_ui_system(world: &mut World) {
     setup_playing_ui(&mut commands);
 }
 
-fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
+const CROSSHAIR_ARM: f32 = 12.0;
+const CROSSHAIR_THICKNESS: f32 = 2.0;
+
+fn spawn_crosshair(root: &mut ChildSpawnerCommands) {
+    let offset = (CROSSHAIR_ARM - CROSSHAIR_THICKNESS) * 0.5;
+
     root.spawn((
-        absolute_text_bundle(
-            "+",
-            30.0,
-            Color::WHITE,
-            Some(Val::Percent(50.0)),
-            None,
-            Some(Val::Percent(50.0)),
-            None,
-        ),
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            position_type: PositionType::Absolute,
+            display: Display::Flex,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
         Crosshair,
         InGameHudVisibility,
-    ));
+        Pickable {
+            should_block_lower: false,
+            is_hoverable: false,
+        },
+    ))
+    .with_children(|overlay| {
+        overlay
+            .spawn(Node {
+                width: Val::Px(CROSSHAIR_ARM),
+                height: Val::Px(CROSSHAIR_ARM),
+                ..default()
+            })
+            .with_children(|mark| {
+                mark.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        top: Val::Px(offset),
+                        width: Val::Px(CROSSHAIR_ARM),
+                        height: Val::Px(CROSSHAIR_THICKNESS),
+                        ..default()
+                    },
+                    BackgroundColor(Color::WHITE),
+                ));
+                mark.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(offset),
+                        top: Val::Px(0.0),
+                        width: Val::Px(CROSSHAIR_THICKNESS),
+                        height: Val::Px(CROSSHAIR_ARM),
+                        ..default()
+                    },
+                    BackgroundColor(Color::WHITE),
+                ));
+            });
+    });
+}
+
+fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
+    spawn_crosshair(root);
     root.spawn((
         absolute_text_bundle(
             "",
@@ -142,10 +185,7 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
     ))
     .with_children(|panel| {
         panel.spawn(panel_title_bar()).with_children(|title| {
-            title.spawn((
-                panel_title_label("", 24.0),
-                ConfirmTitleText,
-            ));
+            title.spawn((panel_title_label("", 24.0), ConfirmTitleText));
         });
         panel.spawn(panel_content()).with_children(|panel| {
             panel.spawn((

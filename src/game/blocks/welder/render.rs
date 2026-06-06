@@ -1,7 +1,7 @@
 use super::WelderBlock;
 
 use crate::game::blocks::traits::BlockRender;
-use crate::game::blocks::{BlockModel, BlockModelPart, RenderBehavior, WeldConnectorBehavior};
+use crate::game::blocks::{BlockModel, RenderBehavior, WeldConnectorBehavior};
 use crate::game::world::direction::{Facing};
 
 const MODEL: &[crate::game::blocks::BlockModelPart] = &[];

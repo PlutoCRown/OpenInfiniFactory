@@ -42,11 +42,10 @@ mod wire;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-pub use self::adapter::BlockImpl;
 pub use self::registry::{all_blocks, assert_registry_consistent, edit_blocks, PLAY_BLOCKS};
 use crate::game::state::UiPanelId;
 pub use crate::game::world::direction::Facing;
-use crate::game::world::grid::{BlockSettings, WorldBlocks};
+use crate::game::world::grid::BlockSettings;
 
 pub const BLOCK_SIZE: f32 = 1.0;
 pub const DEFAULT_GENERATOR_PERIOD: u64 = 3;
@@ -588,14 +587,6 @@ pub enum MaterialKind {
 
 impl MaterialKind {
     pub const ALL: [Self; 3] = [Self::Basic, Self::Iron, Self::Copper];
-
-    pub fn name_key(self) -> &'static str {
-        match self {
-            Self::Basic => "material.basic",
-            Self::Iron => "material.iron",
-            Self::Copper => "material.copper",
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]

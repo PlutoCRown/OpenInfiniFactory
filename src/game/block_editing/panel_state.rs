@@ -19,10 +19,4 @@ impl OpenBlockPanelDropdown {
     pub fn close(&mut self) {
         self.0 = None;
     }
-
-    pub fn close_panel(&mut self, panel: UiPanelId) {
-        if self.0.is_some_and(|(open, _)| open == panel) {
-            self.0 = None;
-        }
-    }
 }

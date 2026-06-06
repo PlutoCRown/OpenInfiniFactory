@@ -15,6 +15,12 @@ pub fn root_node() -> impl Bundle {
     })
 }
 
+/// Logical-pixel bounds in window space (same convention as Bevy's UI viewport widget).
+pub fn ui_logical_bounds(computed: &ComputedNode, transform: &UiGlobalTransform) -> Rect {
+    let inv = computed.inverse_scale_factor();
+    Rect::from_center_size(transform.translation.trunc() * inv, computed.size() * inv)
+}
+
 pub fn flex_row(height: f32, column_gap: f32) -> impl Bundle {
     transparent_node(Node {
         width: Val::Percent(100.0),

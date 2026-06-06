@@ -5,8 +5,8 @@ use bevy::window::PrimaryWindow;
 use super::GoalBlock;
 
 use crate::game::block_editing::widgets::{
-    position_dropdown_from_trigger, spawn_labeled_panel_button, spawn_material_icon_list,
-    spawn_material_icon_toggle, ui_transform_scale, update_material_icon,
+    position_dropdown_from_trigger, spawn_material_icon_list, spawn_material_icon_toggle,
+    update_material_icon,
 };
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::{BlockEditContext, OpenBlockPanelDropdown};
@@ -16,14 +16,14 @@ use crate::game::blocks::MaterialKind;
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::access::UiMainThread;
-use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::components::{
-    default_button_size, localized_text, spawn_panel as spawn_ui_panel, text, transparent_node,
+    default_button_size, localized_text, spawn_panel as spawn_ui_panel, transparent_node,
     PanelOptions,
 };
 use crate::game::ui::core::host::UiHost;
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
+use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{UiActionLabel, UiPanelBinding};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockIconAssets;
@@ -153,9 +153,8 @@ fn on_click(
         &mut open_dropdown,
     );
     let mut settings = ctx.world.goal_settings(pos);
-    let mut changed = false;
 
-    match action {
+    let changed = match action {
         GoalAction::ToggleMaterial => {
             ctx.toggle_dropdown(UiPanelId::Goal, MATERIAL_SLOT);
             return;
@@ -163,9 +162,9 @@ fn on_click(
         GoalAction::SetMaterial(material) => {
             settings.material = material;
             ctx.close_dropdown();
-            changed = true;
+            true
         }
-    }
+    };
 
     if changed {
         ctx.world.set_goal_settings(pos, settings);
@@ -180,7 +179,6 @@ fn update_dropdowns(
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
-    ui_scale: Res<UiScale>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut material_slots: Query<(&GoalMaterialSlot, &Children)>,
     mut material_options: Query<(&GoalMaterialOption, &Children)>,
@@ -205,7 +203,6 @@ fn update_dropdowns(
     let viewport = window
         .map(|w| Vec2::new(w.width(), w.height()))
         .unwrap_or(Vec2::ZERO);
-    let scale = ui_transform_scale(window, ui_scale.0);
 
     for (_, mut style, list_node) in &mut lists {
         let open = open_dropdown.is_open(panel, MATERIAL_SLOT);
@@ -217,13 +214,9 @@ fn update_dropdowns(
             (*action == GoalAction::ToggleMaterial && !node.is_empty()).then_some((node, transform))
         });
         if let Some((trigger_node, transform)) = trigger {
-            if let Some((left, top)) = position_dropdown_from_trigger(
-                trigger_node,
-                transform,
-                list_node.size(),
-                viewport,
-                scale,
-            ) {
+            if let Some((left, top)) =
+                position_dropdown_from_trigger(trigger_node, transform, list_node, viewport)
+            {
                 style.left = Val::Px(left);
                 style.top = Val::Px(top);
             }

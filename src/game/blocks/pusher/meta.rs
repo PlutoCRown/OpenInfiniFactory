@@ -1,7 +1,7 @@
 use super::PusherBlock;
 
 use crate::game::blocks::traits::BlockMeta;
-use crate::game::blocks::{BlockDefinition, BlockKind, rgb, rgba};
+use crate::game::blocks::{BlockDefinition, BlockKind, rgb};
 
 impl BlockMeta for PusherBlock {
     fn id(&self) -> BlockKind {

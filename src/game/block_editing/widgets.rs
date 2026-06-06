@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::game::blocks::{BlockKind, MaterialKind};
 use crate::game::ui::components::{
     default_button_size, default_font_size, localized_text, menu_button, styled_button,
+    ui_logical_bounds,
 };
 use crate::game::ui::types::UiActionLabel;
 use crate::game::world::rendering::BlockIconAssets;
@@ -201,27 +202,24 @@ pub fn update_material_icon(
 pub fn position_dropdown_from_trigger(
     trigger_node: &ComputedNode,
     transform: &UiGlobalTransform,
-    list_size: Vec2,
+    list_node: &ComputedNode,
     viewport: Vec2,
-    scale: f32,
 ) -> Option<(f32, f32)> {
-    let trigger_size = trigger_node.size();
-    let center = (*transform * Vec2::ZERO) * scale;
-    let trigger_left = center.x - trigger_size.x * 0.5;
-    let trigger_top = center.y - trigger_size.y * 0.5;
-    let below = trigger_top + trigger_size.y + 4.0;
-    let above = trigger_top - list_size.y - 4.0;
+    let trigger = ui_logical_bounds(trigger_node, transform);
+    let list_size = list_node.size() * list_node.inverse_scale_factor();
+    let below = trigger.max.y + 4.0;
+    let above = trigger.min.y - list_size.y - 4.0;
     let top = if below + list_size.y <= viewport.y - 10.0 || above < 10.0 {
         below
     } else {
         above.max(10.0)
     };
-    let left = trigger_left.clamp(10.0, (viewport.x - list_size.x - 10.0).max(10.0));
+    let top = top.clamp(10.0, (viewport.y - list_size.y - 10.0).max(10.0));
+    let left = trigger
+        .min
+        .x
+        .clamp(10.0, (viewport.x - list_size.x - 10.0).max(10.0));
     Some((left, top))
-}
-
-pub fn ui_transform_scale(window: Option<&Window>, ui_scale: f32) -> f32 {
-    window.map(Window::scale_factor).unwrap_or(1.0) / ui_scale.max(0.01)
 }
 
 fn material_icon_node() -> impl Bundle {

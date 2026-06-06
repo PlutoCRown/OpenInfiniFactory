@@ -11,6 +11,7 @@ use crate::shared::config::{ActionKeyName, GameConfig};
 use crate::shared::save::SaveState;
 
 use crate::game::ui::access::{i18n, I18nRevision, UiMainThread};
+use crate::game::ui::components::ui_logical_bounds;
 
 use super::types::{
     Crosshair, GameplayHudVisibility, InGameHudStyle, InGameHudVisibility, InlineTextEditState,

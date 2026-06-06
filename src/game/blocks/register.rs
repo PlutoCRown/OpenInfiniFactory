@@ -1,5 +1,4 @@
 use super::{Block, BlockKind, EditableBlock};
-use super::adapter::BlockImpl;
 
 pub struct BlockRegistration {
     pub kind: BlockKind,
@@ -38,5 +37,3 @@ macro_rules! register_block {
     (@play) => { false };
     (@play $play:expr) => { $play };
 }
-
-pub(crate) use register_block;

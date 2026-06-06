@@ -1,25 +1,19 @@
 use bevy::prelude::*;
 
 use crate::game::state::{GameMode, SolutionState, StartMenuScreen, WorldEntryMode};
-use crate::game::ui::components::{
-    full_width_button, hover_border, inset_border, pressed_border, raised_border, text,
-    BUTTON_BG, BUTTON_HOVER_BG,
-};
-use crate::game::ui::screens::{
-    spawn_save_management_row, spawn_save_select_row, SAVE_LIST_EDIT_COLUMN_WIDTH,
-    SAVE_LIST_PLAY_COLUMN_WIDTH,
-};
-use crate::game::ui::types::{
-    SaveListAction, SaveListCloseButton, SaveListPanel,
-    SaveListPrompt, SaveListPuzzleColumn, SaveListRenderState, SaveListSolutionColumn,
-    SaveListTitleText, UiHoverState,
-};
 use crate::game::ui::access::{i18n, UiMainThread};
+use crate::game::ui::components::{
+    full_width_button, hover_border, inset_border, pressed_border, raised_border, text, BUTTON_BG,
+    BUTTON_HOVER_BG,
+};
+use crate::game::ui::screens::{spawn_save_management_row, spawn_save_select_row};
+use crate::game::ui::types::{
+    SaveListAction, SaveListCloseButton, SaveListPrompt, SaveListPuzzleColumn, SaveListRenderState,
+    SaveListSolutionColumn, SaveListTitleText, UiHoverState,
+};
 use crate::shared::save::SaveState;
 
-use super::view::{
-    save_list_puzzle_rows, save_list_title, SaveListColumn, SaveListViewCtx,
-};
+use super::view::{save_list_puzzle_rows, save_list_title, SaveListColumn, SaveListViewCtx};
 
 pub fn update_save_list_ui(
     _ui_thread: UiMainThread,
@@ -42,14 +36,6 @@ pub fn update_save_list_ui(
     mut solution_columns: Query<
         (Entity, &mut Node, &Children),
         (With<SaveListSolutionColumn>, Without<SaveListPuzzleColumn>),
-    >,
-    mut panels: Query<
-        &mut Node,
-        (
-            With<SaveListPanel>,
-            Without<SaveListPuzzleColumn>,
-            Without<SaveListSolutionColumn>,
-        ),
     >,
     mut buttons: Query<
         (
@@ -83,7 +69,6 @@ pub fn update_save_list_ui(
     update_save_list_columns(
         &mut commands,
         &mut render_state,
-        &mut panels,
         &mut puzzle_columns,
         &mut solution_columns,
         &puzzle_rows,
@@ -140,14 +125,6 @@ pub fn update_save_list_ui(
 fn update_save_list_columns(
     commands: &mut Commands,
     render_state: &mut SaveListRenderState,
-    panels: &mut Query<
-        &mut Node,
-        (
-            With<SaveListPanel>,
-            Without<SaveListPuzzleColumn>,
-            Without<SaveListSolutionColumn>,
-        ),
-    >,
     puzzle_columns: &mut Query<
         (Entity, &mut Node, &Children),
         (With<SaveListPuzzleColumn>, Without<SaveListSolutionColumn>),
@@ -167,24 +144,9 @@ fn update_save_list_columns(
     } else {
         SaveListColumn::PuzzlePlay
     };
-    let puzzle_width = if edit_flow {
-        SAVE_LIST_EDIT_COLUMN_WIDTH
-    } else {
-        SAVE_LIST_PLAY_COLUMN_WIDTH
-    };
-    let solution_width = SAVE_LIST_EDIT_COLUMN_WIDTH;
-    let panel_width = if show_solutions {
-        puzzle_width + solution_width + 44.0
-    } else {
-        puzzle_width + 32.0
-    };
-    for mut panel in panels {
-        panel.width = Val::Px(panel_width);
-    }
 
     for (entity, mut node, children) in puzzle_columns {
         node.display = Display::Flex;
-        node.width = Val::Px(puzzle_width);
         if render_state.entry != Some(entry) || render_state.puzzle_keys != puzzle_rows {
             rebuild_column(commands, entity, children, puzzle_column, puzzle_rows);
         }
@@ -199,7 +161,6 @@ fn update_save_list_columns(
         } else {
             Display::None
         };
-        node.width = Val::Px(solution_width);
         if render_state.entry != Some(entry) || render_state.solution_keys != solution_rows {
             rebuild_column(
                 commands,

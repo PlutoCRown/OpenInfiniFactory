@@ -1,4 +1,3 @@
-use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
 
 use super::components::{
@@ -264,25 +263,6 @@ fn dropdown_list_node(width: f32) -> impl Bundle {
     )
 }
 
-fn icon_dropdown_list_node() -> impl Bundle {
-    (
-        Node {
-            width: Val::Px(192.0),
-            display: Display::None,
-            position_type: PositionType::Absolute,
-            left: Val::Px(0.0),
-            top: Val::Px(0.0),
-            flex_direction: FlexDirection::Row,
-            flex_wrap: FlexWrap::Wrap,
-            row_gap: Val::Px(4.0),
-            column_gap: Val::Px(4.0),
-            padding: UiRect::all(Val::Px(4.0)),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
-    )
-}
-
 fn spawn_dropdown_option<A>(parent: &mut ChildSpawnerCommands, label: String, action: A)
 where
     A: Component + Copy,
@@ -292,23 +272,6 @@ where
         .with_children(|button| {
             button.spawn(label_text(label, 13.0, Color::WHITE));
         });
-}
-
-fn spawn_localized_button<'a, A>(
-    parent: &'a mut ChildSpawnerCommands,
-    height: f32,
-    font_size: f32,
-    action: A,
-) -> EntityCommands<'a>
-where
-    A: Bundle + Copy + UiActionLabel,
-{
-    let key = action.label_key();
-    let mut entity = parent.spawn((menu_button(height), action));
-    entity.with_children(|button| {
-        button.spawn(localized_text(key, font_size, Color::WHITE));
-    });
-    entity
 }
 
 pub(super) fn slot_color(item: InventoryItem) -> Color {

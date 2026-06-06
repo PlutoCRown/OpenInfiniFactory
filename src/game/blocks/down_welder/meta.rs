@@ -1,7 +1,7 @@
 use super::DownWelderBlock;
 
 use crate::game::blocks::traits::BlockMeta;
-use crate::game::blocks::{BlockDefinition, BlockKind, rgb, rgba};
+use crate::game::blocks::{BlockDefinition, BlockKind, rgb};
 
 impl BlockMeta for DownWelderBlock {
     fn id(&self) -> BlockKind {

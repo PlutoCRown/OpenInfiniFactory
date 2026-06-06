@@ -217,8 +217,7 @@ fn display_for(visible: bool) -> Display {
 }
 
 fn panel_logical_top_left(computed: &ComputedNode, transform: &UiGlobalTransform) -> Vec2 {
-    let node_rect = Rect::from_center_size(transform.translation.trunc(), computed.size());
-    node_rect.min * computed.inverse_scale_factor()
+    ui_logical_bounds(computed, transform).min
 }
 
 fn reset_panel_centering(style: &mut Node) {
