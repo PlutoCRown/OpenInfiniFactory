@@ -9,6 +9,7 @@ use bevy::render::camera::TemporalJitter;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use crate::game::cameras::GameplayCamera;
+use crate::game::simulation::movement::PusherState;
 use crate::game::state::{GameMode, GameSettings, PlayingUiState};
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::WorldBlocks;
@@ -88,6 +89,7 @@ pub fn camera_move(
     playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
     world: Res<WorldBlocks>,
+    pusher_state: Res<PusherState>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
     if *mode.get() != GameMode::Playing || !playing_ui.active_play() || ui_runtime.blocks_gameplay()
@@ -142,7 +144,7 @@ pub fn camera_move(
             PLAYER_SPEED
         };
         let delta = horizontal * speed * time.delta_secs();
-        move_with_collision(&mut transform.translation, delta, &world);
+        move_with_collision(&mut transform.translation, delta, &world, &pusher_state);
     }
 
     if camera.flying {
@@ -159,10 +161,11 @@ pub fn camera_move(
                 &mut transform.translation,
                 Vec3::Y * vertical * FLY_SPEED * time.delta_secs(),
                 &world,
+                &pusher_state,
             );
             if vertical < 0.0
                 && (transform.translation.y == before_y
-                    || is_supported(transform.translation, &world))
+                    || is_supported(transform.translation, &world, &pusher_state))
             {
                 camera.flying = false;
                 camera.grounded = true;
@@ -173,15 +176,20 @@ pub fn camera_move(
         camera.velocity_y -= GRAVITY * settings.gravity_scale * time.delta_secs();
         let vertical_delta = Vec3::Y * camera.velocity_y * time.delta_secs();
         let before = transform.translation;
-        move_with_collision(&mut transform.translation, vertical_delta, &world);
+        move_with_collision(
+            &mut transform.translation,
+            vertical_delta,
+            &world,
+            &pusher_state,
+        );
 
         if transform.translation.y != before.y && camera.velocity_y > 0.0 {
             camera.grounded = false;
         } else if transform.translation.y == before.y && camera.velocity_y <= 0.0 {
             camera.velocity_y = 0.0;
-            camera.grounded = is_supported(transform.translation, &world);
+            camera.grounded = is_supported(transform.translation, &world, &pusher_state);
         } else {
-            camera.grounded = is_supported(transform.translation, &world);
+            camera.grounded = is_supported(transform.translation, &world, &pusher_state);
         }
     }
 
@@ -269,27 +277,62 @@ pub fn player_collision_box(position: Vec3) -> (Vec3, Vec3) {
     player_aabb(position)
 }
 
-fn move_with_collision(position: &mut Vec3, delta: Vec3, world: &WorldBlocks) {
+fn move_with_collision(
+    position: &mut Vec3,
+    delta: Vec3,
+    world: &WorldBlocks,
+    pusher_state: &PusherState,
+) {
     let mut next = *position;
     next.x += delta.x;
-    if can_move_to(next, collision_overlap_score(*position, world), world) {
+    if can_move_to(
+        next,
+        collision_overlap_score(*position, world, pusher_state),
+        world,
+        pusher_state,
+    ) {
         position.x = next.x;
     }
 
     next = *position;
     next.z += delta.z;
-    if can_move_to(next, collision_overlap_score(*position, world), world) {
+    if can_move_to(
+        next,
+        collision_overlap_score(*position, world, pusher_state),
+        world,
+        pusher_state,
+    ) {
         position.z = next.z;
     }
 
     next = *position;
     next.y += delta.y;
-    if can_move_to(next, collision_overlap_score(*position, world), world) {
+    if can_move_to(
+        next,
+        collision_overlap_score(*position, world, pusher_state),
+        world,
+        pusher_state,
+    ) {
         position.y = next.y;
     }
 }
 
-fn collides(position: Vec3, world: &WorldBlocks) -> bool {
+fn block_has_collision(
+    world: &WorldBlocks,
+    pusher_state: &PusherState,
+    pos: IVec3,
+) -> bool {
+    if pos.y < 0 {
+        return false;
+    }
+    world
+        .blocks
+        .get(&pos)
+        .is_some_and(|block| block.kind.has_collision())
+        || pusher_state.extended_head_positions(world).contains(&pos)
+}
+
+fn collides(position: Vec3, world: &WorldBlocks, pusher_state: &PusherState) -> bool {
     let (min, max) = player_aabb(position);
 
     let min_block = min.floor().as_ivec3();
@@ -298,12 +341,7 @@ fn collides(position: Vec3, world: &WorldBlocks) -> bool {
     for x in min_block.x..=max_block.x {
         for y in min_block.y..=max_block.y {
             for z in min_block.z..=max_block.z {
-                if y >= 0
-                    && world
-                        .blocks
-                        .get(&IVec3::new(x, y, z))
-                        .is_some_and(|block| block.kind.has_collision())
-                {
+                if block_has_collision(world, pusher_state, IVec3::new(x, y, z)) {
                     return true;
                 }
             }
@@ -313,15 +351,25 @@ fn collides(position: Vec3, world: &WorldBlocks) -> bool {
     false
 }
 
-fn can_move_to(next: Vec3, current_overlap: f32, world: &WorldBlocks) -> bool {
-    if !collides(next, world) {
+fn can_move_to(
+    next: Vec3,
+    current_overlap: f32,
+    world: &WorldBlocks,
+    pusher_state: &PusherState,
+) -> bool {
+    if !collides(next, world, pusher_state) {
         return true;
     }
 
-    current_overlap > 0.0 && collision_overlap_score(next, world) < current_overlap
+    current_overlap > 0.0
+        && collision_overlap_score(next, world, pusher_state) < current_overlap
 }
 
-fn collision_overlap_score(position: Vec3, world: &WorldBlocks) -> f32 {
+fn collision_overlap_score(
+    position: Vec3,
+    world: &WorldBlocks,
+    pusher_state: &PusherState,
+) -> f32 {
     let (min, max) = player_aabb(position);
     let min_block = min.floor().as_ivec3();
     let max_block = (max - Vec3::splat(AABB_EPSILON)).floor().as_ivec3();
@@ -331,12 +379,7 @@ fn collision_overlap_score(position: Vec3, world: &WorldBlocks) -> f32 {
         for y in min_block.y..=max_block.y {
             for z in min_block.z..=max_block.z {
                 let block_pos = IVec3::new(x, y, z);
-                if y < 0
-                    || !world
-                        .blocks
-                        .get(&block_pos)
-                        .is_some_and(|block| block.kind.has_collision())
-                {
+                if !block_has_collision(world, pusher_state, block_pos) {
                     continue;
                 }
 
@@ -351,7 +394,7 @@ fn collision_overlap_score(position: Vec3, world: &WorldBlocks) -> f32 {
     score
 }
 
-fn is_supported(position: Vec3, world: &WorldBlocks) -> bool {
+fn is_supported(position: Vec3, world: &WorldBlocks, pusher_state: &PusherState) -> bool {
     let (min, max) = player_aabb(position);
     let probe_y = min.y - 0.04;
     let min_x = min.x.floor() as i32;
@@ -366,7 +409,7 @@ fn is_supported(position: Vec3, world: &WorldBlocks) -> bool {
 
     for x in min_x..=max_x {
         for z in min_z..=max_z {
-            if world.blocks.contains_key(&IVec3::new(x, y, z)) {
+            if block_has_collision(world, pusher_state, IVec3::new(x, y, z)) {
                 return true;
             }
         }

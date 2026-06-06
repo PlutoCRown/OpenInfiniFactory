@@ -1,5 +1,5 @@
-pub mod panels;
 mod adapter;
+pub mod panels;
 #[macro_use]
 mod register;
 mod basic;
@@ -27,7 +27,7 @@ mod lifter;
 mod material;
 mod planks;
 mod platform;
-mod pusher;
+pub mod pusher;
 mod reverse_conveyor;
 mod roller;
 mod rotator;

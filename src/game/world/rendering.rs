@@ -7,17 +7,17 @@ use bevy::prelude::*;
 use bevy::render::render_resource::TextureFormat;
 use std::collections::{HashMap, HashSet};
 
+use crate::game::blocks::{
+    edit_blocks, BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
+    PLAY_BLOCKS,
+};
 use crate::game::simulation::factory_activity::{
     FactoryActivity, FactoryStructureState, StructureKind,
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
-    rotate_world_pos_y, AnimatedBlock, AnimatedPusher, AnimationEasing, AnimationTiming,
-    BlockAnimation, BlockAnimationKind, PusherAnimation, WeldSpark,
-};
-use crate::game::blocks::{
-    edit_blocks, BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
-    PLAY_BLOCKS,
+    rotate_world_pos_y, AnimatedBlock, AnimatedPusher, AnimatedPusherRod, AnimationEasing,
+    AnimationTiming, BlockAnimation, BlockAnimationKind, PusherAnimation, WeldSpark,
 };
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
@@ -922,9 +922,7 @@ fn spawn_block_model(
     } else if data.kind == BlockKind::Platform {
         commands.spawn((
             Mesh3d(assets.block_mesh(data.kind)),
-            MeshMaterial3d(
-                assets.model_material(crate::game::blocks::ModelMaterial::Platform),
-            ),
+            MeshMaterial3d(assets.model_material(crate::game::blocks::ModelMaterial::Platform)),
             transform,
         ))
     } else if let Some(scene_material) = assets.scene_material(data.kind) {
@@ -1042,9 +1040,7 @@ fn spawn_block_model(
                 }
             }
 
-            if data.kind == crate::game::blocks::BlockKind::Wire
-                && connected_offsets.is_empty()
-            {
+            if data.kind == crate::game::blocks::BlockKind::Wire && connected_offsets.is_empty() {
                 let mut child =
                     parent.spawn((Mesh3d(assets.wire_node_mesh()), MeshMaterial3d(material)));
                 if let Some((_, icon_layer)) = icon_render {
@@ -1133,36 +1129,62 @@ fn spawn_model_parts(
     pusher_animation: Option<PusherAnimation>,
     icon_layer: Option<&RenderLayers>,
 ) {
+    use crate::game::blocks::pusher::model::{
+        pusher_rod_center_z, pusher_rod_length, ROD_BASE_LENGTH,
+    };
+
     let parts = match data.kind.model() {
         BlockModel::Default => &[],
         BlockModel::Parts(parts) => parts,
         BlockModel::PartsOnly(parts) => parts,
     };
+    let is_pusher_model = matches!(data.kind, BlockKind::Pusher | BlockKind::Blocker);
 
     for part in parts {
+        let mut translation = model_vec3(part.translation);
+        let mut scale = model_vec3(part.scale);
+
+        if is_pusher_model {
+            if part.mesh == crate::game::blocks::ModelMesh::PusherHead {
+                if let Some(animation) = pusher_animation {
+                    translation += Vec3::NEG_Z * animation.to_extension;
+                }
+            } else if part.mesh == crate::game::blocks::ModelMesh::RodZ {
+                let extension = pusher_animation
+                    .map(|animation| animation.to_extension)
+                    .unwrap_or(0.0);
+                let length = pusher_rod_length(extension);
+                translation.z = pusher_rod_center_z(extension);
+                scale = Vec3::new(scale.x, scale.y, length / ROD_BASE_LENGTH);
+            }
+        }
+
         let mut child = parent.spawn((
             Mesh3d(assets.model_mesh(part.mesh)),
             MeshMaterial3d(assets.model_material(part.material)),
             Transform {
-                translation: model_vec3(part.translation),
+                translation,
                 rotation: Quat::from_rotation_y(part.yaw_radians),
-                scale: model_vec3(part.scale),
+                scale,
                 ..default()
             },
         ));
         if let Some(icon_layer) = icon_layer {
             child.insert((icon_layer.clone(), BlockIconRenderEntity));
         }
-        if matches!(
-            part.mesh,
-            crate::game::blocks::ModelMesh::PusherHead
-                | crate::game::blocks::ModelMesh::RodZ
-        ) {
-            if let Some(pusher_animation) = pusher_animation {
-                child.insert(AnimatedPusher::new(
-                    pusher_animation,
-                    model_vec3(part.translation),
-                ));
+        if part.mesh == crate::game::blocks::ModelMesh::PusherHead {
+            if let Some(animation) = pusher_animation.filter(|animation| {
+                animation.duration > 0.0 && animation.from_extension != animation.to_extension
+            }) {
+                child.insert(AnimatedPusher::new(animation, model_vec3(part.translation)));
+            }
+        } else if part.mesh == crate::game::blocks::ModelMesh::RodZ {
+            if is_pusher_model {
+                if let Some(animation) = pusher_animation.filter(|animation| {
+                    animation.duration > 0.0 && animation.from_extension != animation.to_extension
+                }) {
+                    child.insert(AnimatedPusherRod::new(animation, model_vec3(part.scale)));
+                }
             }
         }
     }

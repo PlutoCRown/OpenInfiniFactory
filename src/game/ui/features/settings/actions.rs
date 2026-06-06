@@ -7,9 +7,8 @@ use crate::game::ui::access::{i18n, ui, UiMainThread};
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
-use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
+use crate::game::ui::features::settings::confirm::{on_reset_defaults, reset_defaults_spec};
 use crate::shared::config::{input_from_buttons, open_config_folder, save_config, GameConfig};
-use crate::shared::i18n::resolve_language;
 
 use super::types::{
     ActiveSettingsSlider, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
@@ -97,8 +96,6 @@ pub fn emit_settings_actions(
 pub fn dispatch_settings_actions(
     _ui_thread: UiMainThread,
     mut actions: MessageReader<UiAction>,
-    mut settings: ResMut<GameSettings>,
-    mut ui_scale: ResMut<UiScale>,
     mut config: ResMut<GameConfig>,
     mut settings_tab: ResMut<SettingsTab>,
     mut open_dropdown: ResMut<OpenSettingsDropdown>,
@@ -152,17 +149,7 @@ pub fn dispatch_settings_actions(
                 pending_key_bind.0 = Some(action);
             }
             SettingsAction::ResetDefaults => {
-                *config = GameConfig::default();
-                settings.fov_degrees = config.fov_degrees;
-                settings.ui_scale = config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
-                settings.gravity_scale = config
-                    .gravity_scale
-                    .clamp(GRAVITY_SCALE_MIN, GRAVITY_SCALE_MAX);
-                ui_scale.0 = settings.ui_scale;
-                i18n.set_language(resolve_language(config.language));
-                open_dropdown.0 = None;
-                pending_key_bind.0 = None;
-                save_config(&config);
+                ui.open_confirm_then(reset_defaults_spec(), on_reset_defaults);
             }
             SettingsAction::OpenFolder => {
                 open_config_folder();

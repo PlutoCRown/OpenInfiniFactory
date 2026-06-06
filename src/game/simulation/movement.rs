@@ -84,6 +84,10 @@ impl PusherState {
             .collect()
     }
 
+    pub fn extended_head_positions(&self, world: &WorldBlocks) -> HashSet<IVec3> {
+        self.hard_head_occupancy(world)
+    }
+
     pub(super) fn hard_head_occupancy(&self, world: &WorldBlocks) -> HashSet<IVec3> {
         self.entries
             .iter()

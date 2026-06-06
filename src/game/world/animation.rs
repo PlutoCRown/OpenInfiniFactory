@@ -82,6 +82,15 @@ pub struct AnimatedPusher {
 }
 
 #[derive(Component)]
+pub struct AnimatedPusherRod {
+    xy_scale: Vec3,
+    elapsed: f32,
+    duration: f32,
+    from_extension: f32,
+    to_extension: f32,
+}
+
+#[derive(Component)]
 pub struct WeldSpark {
     velocity: Vec3,
     elapsed: f32,
@@ -98,6 +107,30 @@ impl AnimatedPusher {
             from_extension: animation.from_extension,
             to_extension: animation.to_extension,
         }
+    }
+}
+
+impl AnimatedPusherRod {
+    pub fn new(animation: PusherAnimation, xy_scale: Vec3) -> Self {
+        Self {
+            xy_scale,
+            elapsed: 0.0,
+            duration: animation.duration,
+            from_extension: animation.from_extension,
+            to_extension: animation.to_extension,
+        }
+    }
+
+    fn apply(&self, extension: f32, transform: &mut Transform) {
+        use crate::game::blocks::pusher::model::{pusher_rod_center_z, pusher_rod_length, ROD_BASE_LENGTH};
+
+        let length = pusher_rod_length(extension);
+        transform.translation.z = pusher_rod_center_z(extension);
+        transform.scale = Vec3::new(
+            self.xy_scale.x,
+            self.xy_scale.y,
+            length / ROD_BASE_LENGTH,
+        );
     }
 }
 
@@ -138,10 +171,21 @@ pub fn animate_blocks(
     time: Res<Time>,
     mut commands: Commands,
     mut blocks: Query<(Entity, &mut Transform, &mut AnimatedBlock)>,
-    mut pushers: Query<(Entity, &mut Transform, &mut AnimatedPusher), Without<AnimatedBlock>>,
+    mut pushers: Query<
+        (Entity, &mut Transform, &mut AnimatedPusher),
+        (Without<AnimatedBlock>, Without<AnimatedPusherRod>),
+    >,
+    mut pusher_rods: Query<
+        (Entity, &mut Transform, &mut AnimatedPusherRod),
+        (Without<AnimatedBlock>, Without<AnimatedPusher>),
+    >,
     mut sparks: Query<
         (Entity, &mut Transform, &mut WeldSpark),
-        (Without<AnimatedBlock>, Without<AnimatedPusher>),
+        (
+            Without<AnimatedBlock>,
+            Without<AnimatedPusher>,
+            Without<AnimatedPusherRod>,
+        ),
     >,
 ) {
     for (entity, mut transform, mut animation) in &mut blocks {
@@ -180,6 +224,18 @@ pub fn animate_blocks(
             transform.translation =
                 animation.base_translation + animation.direction * animation.to_extension;
             commands.entity(entity).remove::<AnimatedPusher>();
+        }
+    }
+
+    for (entity, mut transform, mut animation) in &mut pusher_rods {
+        animation.elapsed += time.delta_secs();
+        let t = (animation.elapsed / animation.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
+        let extension = animation.from_extension.lerp(animation.to_extension, t);
+        animation.apply(extension, &mut transform);
+
+        if t >= 1.0 {
+            animation.apply(animation.to_extension, &mut transform);
+            commands.entity(entity).remove::<AnimatedPusherRod>();
         }
     }
 
