@@ -50,6 +50,35 @@ impl FactoryStructureState {
         *self = Self::from_world(world);
     }
 
+    pub fn rebuild_near(&mut self, world: &WorldBlocks, changed: impl IntoIterator<Item = IVec3>) {
+        let changed: HashSet<IVec3> = changed.into_iter().collect();
+        if changed.is_empty() {
+            return;
+        }
+        if self.structure_by_pos.is_empty() {
+            self.rebuild_from_world(world);
+            return;
+        }
+
+        let neighborhood = neighborhood_around(&changed);
+        let touched_indices = self.structure_indices_in(&neighborhood);
+        let mut positions_to_rebuild = HashSet::new();
+        for index in &touched_indices {
+            if let Some(structure) = self.structures.get(*index) {
+                positions_to_rebuild.extend(structure.positions.iter().copied());
+            }
+        }
+        for pos in &changed {
+            if world.is_factory_at(*pos) {
+                positions_to_rebuild.insert(*pos);
+            }
+        }
+
+        self.remove_structures_at_indices(touched_indices);
+        self.append_connected_structures(world, positions_to_rebuild);
+        self.apply_inactive_propagation(world);
+    }
+
     pub fn clear(&mut self) {
         *self = Self::default();
     }
@@ -61,13 +90,26 @@ impl FactoryStructureState {
     }
 
     pub fn from_world(world: &WorldBlocks) -> Self {
-        let mut structures = Vec::new();
-        let mut structure_by_pos = HashMap::new();
-        let mut handled = HashSet::new();
-        let mut starts: Vec<IVec3> = world
+        let starts: Vec<IVec3> = world
             .blocks
             .iter()
             .filter_map(|(pos, block)| block.kind.is_factory().then_some(*pos))
+            .collect();
+        let mut state = Self::default();
+        state.append_connected_structures(world, starts);
+        state.apply_inactive_propagation(world);
+        state
+    }
+
+    fn append_connected_structures(
+        &mut self,
+        world: &WorldBlocks,
+        starts: impl IntoIterator<Item = IVec3>,
+    ) {
+        let mut handled: HashSet<IVec3> = self.structure_by_pos.keys().copied().collect();
+        let mut starts: Vec<IVec3> = starts
+            .into_iter()
+            .filter(|pos| world.is_factory_at(*pos) && !handled.contains(pos))
             .collect();
         starts.sort_by_key(|pos| (pos.x, pos.y, pos.z));
 
@@ -77,12 +119,12 @@ impl FactoryStructureState {
             }
 
             let positions = factory_structure(world, start);
-            let index = structures.len();
+            let index = self.structures.len();
             for pos in &positions {
                 handled.insert(*pos);
-                structure_by_pos.insert(*pos, index);
+                self.structure_by_pos.insert(*pos, index);
             }
-            structures.push(FactoryStructure {
+            self.structures.push(FactoryStructure {
                 kind: StructureKind::Factory,
                 positions,
                 activity: FactoryActivity::Active,
@@ -90,8 +132,11 @@ impl FactoryStructureState {
                 pushable: true,
             });
         }
+    }
 
-        let scene_anchored: Vec<bool> = structures
+    fn apply_inactive_propagation(&mut self, world: &WorldBlocks) {
+        let scene_anchored: Vec<bool> = self
+            .structures
             .iter()
             .map(|structure| touches_scene(world, &structure.positions))
             .collect();
@@ -105,10 +150,10 @@ impl FactoryStructureState {
         }
 
         while let Some(index) = queue.pop_front() {
-            for pos in &structures[index].positions {
+            for pos in &self.structures[index].positions {
                 for offset in signal_offsets() {
                     let neighbor = *pos + offset;
-                    let Some(neighbor_index) = structure_by_pos.get(&neighbor).copied() else {
+                    let Some(neighbor_index) = self.structure_by_pos.get(&neighbor).copied() else {
                         continue;
                     };
                     if is_blocked_factory_connection(world, *pos, neighbor)
@@ -124,7 +169,10 @@ impl FactoryStructureState {
             }
         }
 
-        for (index, structure) in structures.iter_mut().enumerate() {
+        for (index, structure) in self.structures.iter_mut().enumerate() {
+            structure.activity = FactoryActivity::Active;
+            structure.freedom = StructureFreedom::All;
+            structure.pushable = true;
             if inactive[index] {
                 structure.activity = FactoryActivity::Inactive;
                 if scene_anchored[index] {
@@ -133,10 +181,35 @@ impl FactoryStructureState {
                 }
             }
         }
+    }
 
-        Self {
-            structures,
-            structure_by_pos,
+    fn structure_indices_in(&self, positions: &HashSet<IVec3>) -> HashSet<usize> {
+        positions
+            .iter()
+            .filter_map(|pos| self.structure_by_pos.get(pos).copied())
+            .collect()
+    }
+
+    fn remove_structures_at_indices(&mut self, mut indices: HashSet<usize>) {
+        if indices.is_empty() {
+            return;
+        }
+
+        let mut ordered: Vec<usize> = indices.drain().collect();
+        ordered.sort_unstable_by(|left, right| right.cmp(left));
+        for index in ordered {
+            if index >= self.structures.len() {
+                continue;
+            }
+            for pos in &self.structures[index].positions {
+                self.structure_by_pos.remove(pos);
+            }
+            self.structures.swap_remove(index);
+            if index < self.structures.len() {
+                for pos in &self.structures[index].positions {
+                    self.structure_by_pos.insert(*pos, index);
+                }
+            }
         }
     }
 
@@ -168,11 +241,7 @@ impl FactoryStructureState {
         (!structure.contains(&pusher_pos)).then_some(structure)
     }
 
-    pub fn falling_structure_at(
-        &self,
-        pos: IVec3,
-        offset: IVec3,
-    ) -> Option<HashSet<IVec3>> {
+    pub fn falling_structure_at(&self, pos: IVec3, offset: IVec3) -> Option<HashSet<IVec3>> {
         let structure = self.structure(pos)?;
         if structure.activity != FactoryActivity::Active || !structure.freedom.can_translate(offset)
         {
@@ -245,7 +314,6 @@ impl FactoryStructureState {
             .get(&pos)
             .and_then(|index| self.structures.get(*index))
     }
-
 }
 
 fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
@@ -312,8 +380,9 @@ fn is_blocked_pusher_edge(
     let Some(pusher_pos) = pusher_pos else {
         return false;
     };
-    pusher_front_neighbor(world, pusher_pos)
-        .is_some_and(|front| (from == pusher_pos && to == front) || (from == front && to == pusher_pos))
+    pusher_front_neighbor(world, pusher_pos).is_some_and(|front| {
+        (from == pusher_pos && to == front) || (from == front && to == pusher_pos)
+    })
 }
 
 fn is_blocked_factory_connection(world: &WorldBlocks, from: IVec3, to: IVec3) -> bool {
@@ -340,11 +409,107 @@ fn pusher_front_neighbor(world: &WorldBlocks, pos: IVec3) -> Option<IVec3> {
 
 fn touches_scene(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
     structure.iter().any(|pos| {
-        signal_offsets()
-            .into_iter()
-            .any(|offset| {
-                let neighbor = *pos + offset;
-                world.is_scene_at(neighbor) && !is_blocked_factory_connection(world, *pos, neighbor)
-            })
+        signal_offsets().into_iter().any(|offset| {
+            let neighbor = *pos + offset;
+            world.is_scene_at(neighbor) && !is_blocked_factory_connection(world, *pos, neighbor)
+        })
     })
+}
+
+fn neighborhood_around(changed: &HashSet<IVec3>) -> HashSet<IVec3> {
+    let mut neighborhood = HashSet::new();
+    for pos in changed {
+        neighborhood.insert(*pos);
+        for offset in signal_offsets() {
+            neighborhood.insert(*pos + offset);
+        }
+    }
+    neighborhood
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::game::blocks::{BlockData, BlockKind};
+    use crate::game::world::direction::Facing;
+
+    fn platform(pos: IVec3) -> BlockData {
+        BlockData {
+            kind: BlockKind::Platform,
+            facing: Facing::North,
+        }
+    }
+
+    fn insert_platforms(world: &mut WorldBlocks, positions: &[IVec3]) {
+        for &pos in positions {
+            world.insert(pos, platform(pos));
+        }
+    }
+
+    fn normalized(
+        state: &FactoryStructureState,
+    ) -> Vec<(FactoryActivity, StructureFreedom, bool, HashSet<IVec3>)> {
+        let mut structures = state
+            .structures
+            .iter()
+            .map(|structure| {
+                (
+                    structure.activity,
+                    structure.freedom,
+                    structure.pushable,
+                    structure.positions.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        structures.sort_by_key(|(_, _, _, positions)| {
+            positions
+                .iter()
+                .map(|pos| (pos.x, pos.y, pos.z))
+                .min()
+                .unwrap_or((0, 0, 0))
+        });
+        structures
+    }
+
+    #[test]
+    fn rebuild_near_matches_full_rebuild_after_placing_block() {
+        let mut world = WorldBlocks::default();
+        insert_platforms(&mut world, &[IVec3::ZERO, IVec3::X, IVec3::NEG_X]);
+
+        let expected = FactoryStructureState::from_world(&world);
+        let mut incremental = FactoryStructureState::default();
+        incremental.rebuild_near(&world, [IVec3::ZERO]);
+        incremental.rebuild_near(&world, [IVec3::X]);
+        incremental.rebuild_near(&world, [IVec3::NEG_X]);
+
+        assert_eq!(normalized(&incremental), normalized(&expected));
+    }
+
+    #[test]
+    fn rebuild_near_splits_connected_structure_after_delete() {
+        let mut world = WorldBlocks::default();
+        insert_platforms(&mut world, &[IVec3::NEG_X, IVec3::ZERO, IVec3::X]);
+
+        let mut state = FactoryStructureState::from_world(&world);
+        world.remove(&IVec3::ZERO);
+        state.rebuild_near(&world, [IVec3::ZERO]);
+
+        let expected = FactoryStructureState::from_world(&world);
+        assert_eq!(normalized(&state), normalized(&expected));
+        assert_eq!(state.structures.len(), 2);
+    }
+
+    #[test]
+    fn rebuild_near_merges_adjacent_structures_after_bridge() {
+        let mut world = WorldBlocks::default();
+        insert_platforms(&mut world, &[IVec3::NEG_X, IVec3::X]);
+
+        let mut state = FactoryStructureState::from_world(&world);
+        world.insert(IVec3::ZERO, platform(IVec3::ZERO));
+        state.rebuild_near(&world, [IVec3::ZERO]);
+
+        let expected = FactoryStructureState::from_world(&world);
+        assert_eq!(normalized(&state), normalized(&expected));
+        assert_eq!(state.structures.len(), 1);
+    }
 }

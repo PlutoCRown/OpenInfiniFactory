@@ -2,6 +2,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
+use crate::game::blocks::{BlockData, BlockKind};
 use crate::game::player::controller::{player_intersects_block, FlyCamera};
 use crate::game::simulation::factory_activity::{
     FactoryStructureState, StructureFreedom, StructureKind,
@@ -14,13 +15,12 @@ use crate::game::state::{
     UiPanelId,
 };
 use crate::game::systems::debug::DebugState;
+use crate::game::ui::UiHost;
 use crate::game::ui::{
     AreaKind, CarriedItem, InlineTextEditState, InventoryItems, PendingKeyBind, TextPromptState,
     UiRuntime, HOTBAR_SLOTS,
 };
-use crate::game::ui::UiHost;
 use crate::game::world::animation::BlockAnimation;
-use crate::game::blocks::{BlockData, BlockKind};
 use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
 use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
@@ -59,9 +59,7 @@ pub fn gameplay_input(
 ) {
     let bindings = &config.key_bindings;
 
-    let typing = pending_key_bind.0.is_some()
-        || text_prompt.is_open()
-        || inline_edit.is_active();
+    let typing = pending_key_bind.0.is_some() || text_prompt.is_open() || inline_edit.is_active();
     if typing {
         mouse_wheel.clear();
         return;
@@ -200,12 +198,7 @@ pub fn placement_input(
     let force_place = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     if mouse_buttons.just_pressed(place_button)
         && !force_place
-        && open_target_block_ui(
-            current_target_pos,
-            &world,
-            *builder_mode,
-            &mut ui_runtime,
-        )
+        && open_target_block_ui(current_target_pos, &world, *builder_mode, &mut ui_runtime)
     {
         placement.edit_gesture = None;
         placement.selection.clear();
@@ -630,7 +623,11 @@ fn move_selection(
         );
     }
     world.replace_material_welds(updated_welds);
-    factory_structures.rebuild_from_world(world);
+    let mut changed = selected_positions.clone();
+    for pos in &selected_positions {
+        changed.insert(*pos + offset);
+    }
+    factory_structures.rebuild_near(world, changed);
     if debug.factory_activity {
         despawn_block_entities(commands, block_entities);
         rebuild_world_for_debug_state(
@@ -681,7 +678,7 @@ fn alternate_block_at(
     }
     block.kind = kind;
     refresh_edit_generated_markers(world);
-    factory_structures.rebuild_from_world(world);
+    factory_structures.rebuild_near(world, [pos]);
     despawn_block_entities(commands, block_entities);
     rebuild_world_for_debug_state(
         commands,
@@ -717,7 +714,7 @@ fn rotate_block_at(
     let updated = *block;
 
     refresh_edit_generated_markers(world);
-    factory_structures.rebuild_from_world(world);
+    factory_structures.rebuild_near(world, [pos]);
     let mut animations = std::collections::HashMap::new();
     animations.insert(
         pos,
@@ -864,15 +861,15 @@ fn commit_edit_gesture(
                 gesture.start,
                 current_place_at.unwrap_or(gesture.start),
             );
-            for pos in positions {
-                if can_place_block_at(pos, block, builder_mode, world, player) {
-                    world.insert(pos, block);
+            for pos in &positions {
+                if can_place_block_at(*pos, block, builder_mode, world, player) {
+                    world.insert(*pos, block);
                     changed = true;
                 }
             }
             if changed {
                 refresh_edit_generated_markers(world);
-                factory_structures.rebuild_from_world(world);
+                factory_structures.rebuild_near(world, positions.iter().copied());
                 despawn_block_entities(commands, block_entities);
                 rebuild_world_for_debug_state(
                     commands,
@@ -890,13 +887,13 @@ fn commit_edit_gesture(
                 gesture.start,
                 current_delete_at.unwrap_or(gesture.start),
             );
-            for pos in positions {
-                let removed = delete_block_at(pos, builder_mode, world);
+            for pos in &positions {
+                let removed = delete_block_at(*pos, builder_mode, world);
                 if removed {
                     changed = true;
                     if let Some((entity, _)) = block_entities
                         .iter()
-                        .find(|(_, block_entity)| block_entity.pos == pos)
+                        .find(|(_, block_entity)| block_entity.pos == *pos)
                     {
                         commands.entity(entity).despawn();
                     }
@@ -904,7 +901,7 @@ fn commit_edit_gesture(
             }
             if changed {
                 refresh_edit_generated_markers(world);
-                factory_structures.rebuild_from_world(world);
+                factory_structures.rebuild_near(world, positions.iter().copied());
                 despawn_block_entities(commands, block_entities);
                 rebuild_world_for_debug_state(
                     commands,
@@ -1076,7 +1073,8 @@ pub fn update_hover(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     factory_structures.ensure_current_world(&world);
-    if *mode.get() != GameMode::Playing || !playing_ui.active_play() || ui_runtime.blocks_gameplay() {
+    if *mode.get() != GameMode::Playing || !playing_ui.active_play() || ui_runtime.blocks_gameplay()
+    {
         placement.target = None;
         placement.edit_gesture = None;
         hover_bounds.bounds = None;
