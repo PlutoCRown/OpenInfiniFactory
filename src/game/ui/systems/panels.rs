@@ -13,7 +13,7 @@ pub fn update_panel_visibility(
         Query<(&MenuAction, &mut Node), With<Button>>,
         Query<(&UiPanelBinding, &mut Node)>,
         Query<
-            (&Node, &mut Visibility, &mut PanelPosition),
+            (&mut Node, &mut Visibility, &mut PanelPosition),
             (With<PanelWindow>, Without<TextPromptRoot>),
         >,
     )>,
@@ -49,15 +49,16 @@ pub fn update_panel_visibility(
         style.display = display_for(active_panel == Some(binding.0));
     }
 
-    for (style, mut visibility, mut position) in &mut nodes.p3() {
+    for (mut style, mut visibility, mut position) in &mut nodes.p3() {
         if style.display == Display::None {
-            position.centered = false;
             position.dragged = false;
+            reset_panel_centering(&mut style);
             *visibility = Visibility::Hidden;
-        } else if position.centered || position.dragged {
+        } else if position.dragged {
             *visibility = Visibility::Visible;
         } else {
-            *visibility = Visibility::Hidden;
+            reset_panel_centering(&mut style);
+            *visibility = Visibility::Visible;
         }
     }
 }
@@ -90,7 +91,15 @@ pub fn panel_close_clicked(
 pub fn panel_drag_started(
     mut drag_start: On<Pointer<DragStart>>,
     title_bars: Query<&ChildOf, With<PanelTitleBar>>,
-    panels: Query<&Node, With<PanelWindow>>,
+    mut panels: Query<
+        (
+            &mut Node,
+            &ComputedNode,
+            &UiGlobalTransform,
+            &mut PanelPosition,
+        ),
+        With<PanelWindow>,
+    >,
     mut drag: ResMut<PanelDragState>,
 ) {
     if drag_start.event.button != PointerButton::Primary {
@@ -100,20 +109,26 @@ pub fn panel_drag_started(
         return;
     };
     let panel_entity = panel.parent();
-    let Ok(style) = panels.get(panel_entity) else {
+    let Ok((mut style, computed, transform, mut position)) = panels.get_mut(panel_entity) else {
         return;
     };
     drag_start.propagate(false);
+    let top_left = panel_logical_top_left(computed, transform);
+    // Margin-auto centering does not populate `Node.left/top`; pin the laid-out position
+    // before switching to pointer-driven coordinates so the panel does not jump.
+    style.left = Val::Px(top_left.x);
+    style.top = Val::Px(top_left.y);
+    style.right = Val::Auto;
+    style.bottom = Val::Auto;
+    style.margin = UiRect::ZERO;
+    position.dragged = true;
     drag.panel = Some(panel_entity);
-    drag.cursor = drag_start.pointer_location.position;
-    drag.panel_pos = panel_position(style);
+    drag.grab_offset = drag_start.pointer_location.position - top_left;
 }
 
 pub fn panel_dragged(
     mut drag_event: On<Pointer<Drag>>,
     title_bars: Query<(), With<PanelTitleBar>>,
-    windows: Query<&Window, With<PrimaryWindow>>,
-    ui_scale: Res<UiScale>,
     mut drag: ResMut<PanelDragState>,
     mut panels: Query<(&mut Node, &mut PanelPosition), With<PanelWindow>>,
 ) {
@@ -130,8 +145,7 @@ pub fn panel_dragged(
         return;
     };
     drag_event.propagate(false);
-    let next = drag.panel_pos
-        + screen_to_ui_delta(drag_event.event.distance, windows.single().ok(), ui_scale.0);
+    let next = drag_event.pointer_location.position - drag.grab_offset;
     style.left = Val::Px(next.x.max(10.0));
     style.top = Val::Px(next.y.max(10.0));
     style.right = Val::Auto;
@@ -198,57 +212,17 @@ fn display_for(visible: bool) -> Display {
     }
 }
 
-fn panel_position(style: &Node) -> Vec2 {
-    Vec2::new(px_or(style.left, 10.0), px_or(style.top, 10.0))
+fn panel_logical_top_left(computed: &ComputedNode, transform: &UiGlobalTransform) -> Vec2 {
+    let node_rect = Rect::from_center_size(transform.translation.trunc(), computed.size());
+    node_rect.min * computed.inverse_scale_factor()
 }
 
-fn px_or(value: Val, fallback: f32) -> f32 {
-    match value {
-        Val::Px(value) => value,
-        _ => fallback,
-    }
-}
-
-fn screen_to_ui_delta(delta: Vec2, window: Option<&Window>, ui_scale: f32) -> Vec2 {
-    let scale = window.map(Window::scale_factor).unwrap_or(1.0) / ui_scale.max(0.01);
-    delta * scale
-}
-
-pub fn center_new_panels(
-    windows: Query<&Window, With<PrimaryWindow>>,
-    mut panels: Query<
-        (
-            &mut Node,
-            &ComputedNode,
-            &mut PanelPosition,
-            &mut Visibility,
-        ),
-        With<PanelWindow>,
-    >,
-) {
-    let Ok(window) = windows.single() else {
-        return;
-    };
-    let viewport = Vec2::new(window.width(), window.height());
-
-    for (mut style, node, mut position, mut visibility) in &mut panels {
-        if style.display == Display::None || position.dragged {
-            continue;
-        }
-        let size = node.size();
-        if size.x <= 0.0 || size.y <= 0.0 {
-            continue;
-        }
-        let left = ((viewport.x - size.x) * 0.5).max(10.0);
-        let top = ((viewport.y - size.y) * 0.5).max(10.0);
-        style.left = Val::Px(left);
-        style.top = Val::Px(top);
-        style.right = Val::Auto;
-        style.bottom = Val::Auto;
-        style.margin = UiRect::ZERO;
-        position.centered = true;
-        *visibility = Visibility::Visible;
-    }
+fn reset_panel_centering(style: &mut Node) {
+    style.left = Val::Auto;
+    style.right = Val::Auto;
+    style.top = Val::Auto;
+    style.bottom = Val::Auto;
+    style.margin = UiRect::all(Val::Auto);
 }
 
 pub fn update_ui_layers(

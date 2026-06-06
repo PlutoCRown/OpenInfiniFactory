@@ -108,7 +108,6 @@ pub struct PanelWindow;
 #[derive(Component, Default)]
 pub struct PanelPosition {
     pub dragged: bool,
-    pub centered: bool,
 }
 
 #[derive(Component)]
@@ -120,15 +119,14 @@ pub struct PanelCloseButton;
 #[derive(Resource, Default)]
 pub struct PanelDragState {
     pub panel: Option<Entity>,
-    pub cursor: Vec2,
-    pub panel_pos: Vec2,
+    /// Pointer position minus panel top-left when the drag started (logical px).
+    pub grab_offset: Vec2,
 }
 
 impl PanelDragState {
     pub fn clear(&mut self) {
         self.panel = None;
-        self.cursor = Vec2::ZERO;
-        self.panel_pos = Vec2::ZERO;
+        self.grab_offset = Vec2::ZERO;
     }
 }
 
