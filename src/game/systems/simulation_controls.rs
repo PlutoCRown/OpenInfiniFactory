@@ -1,3 +1,4 @@
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::game::simulation::factory_activity::FactoryStructureState;
@@ -5,7 +6,7 @@ use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::runtime::PendingGeneratedMaterials;
 use crate::game::simulation::structures::MovementInfluenceCache;
-use crate::game::state::{BuilderMode, GameMode, SimulationState};
+use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::WorldBlocks;
@@ -14,30 +15,40 @@ use crate::game::world::rendering::{
 };
 use crate::shared::config::{ActionKeyName, GameConfig};
 
+#[derive(SystemParam)]
+pub(crate) struct SimulationControlDeps<'w> {
+    builder_mode: Res<'w, BuilderMode>,
+    mode: Res<'w, State<GameMode>>,
+    playing_ui: Res<'w, PlayingUiState>,
+    ui_runtime: Res<'w, UiRuntime>,
+    simulation: ResMut<'w, SimulationState>,
+    pending_generated: ResMut<'w, PendingGeneratedMaterials>,
+    factory_structures: ResMut<'w, FactoryStructureState>,
+    movement_influence: ResMut<'w, MovementInfluenceCache>,
+    pusher_state: ResMut<'w, PusherState>,
+    world: ResMut<'w, WorldBlocks>,
+    render_assets: Option<Res<'w, WorldRenderAssets>>,
+    debug: Res<'w, DebugState>,
+}
+
 pub fn simulation_controls(
     keys: Res<ButtonInput<KeyCode>>,
     config: Res<GameConfig>,
     mut commands: Commands,
-    builder_mode: Res<BuilderMode>,
-    mode: Res<GameMode>,
-    ui_runtime: Res<UiRuntime>,
-    mut simulation: ResMut<SimulationState>,
-    mut pending_generated: ResMut<PendingGeneratedMaterials>,
-    mut factory_structures: ResMut<FactoryStructureState>,
-    mut movement_influence: ResMut<MovementInfluenceCache>,
-    mut pusher_state: ResMut<PusherState>,
-    mut world: ResMut<WorldBlocks>,
     block_entities: Query<Entity, With<BlockEntity>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    render_assets: Res<WorldRenderAssets>,
-    debug: Res<DebugState>,
+    mut deps: SimulationControlDeps,
 ) {
-    if *builder_mode != BuilderMode::Play
-        || *mode != GameMode::Playing
-        || ui_runtime.blocks_gameplay()
+    if *deps.builder_mode != BuilderMode::Play
+        || *deps.mode.get() != GameMode::Playing
+        || !deps.playing_ui.active_play()
+        || deps.ui_runtime.blocks_gameplay()
     {
         return;
     }
+    let Some(render_assets) = deps.render_assets.as_ref() else {
+        return;
+    };
 
     let simulate_key = config.key(ActionKeyName::Simulate).key_code();
     let fast_key = config.key(ActionKeyName::SimulationFast).key_code();
@@ -45,55 +56,55 @@ pub fn simulation_controls(
     let step_key = config.key(ActionKeyName::SimulationStep).key_code();
 
     if keys.just_pressed(simulate_key) {
-        if !simulation.is_active() {
+        if !deps.simulation.is_active() {
             start_simulation_state(
-                &mut simulation,
-                &world,
-                &mut factory_structures,
-                &mut pusher_state,
+                &mut deps.simulation,
+                &deps.world,
+                &mut deps.factory_structures,
+                &mut deps.pusher_state,
             );
         }
-        simulation.running = true;
+        deps.simulation.running = true;
     }
 
     if keys.just_pressed(step_key) {
-        if !simulation.is_active() {
+        if !deps.simulation.is_active() {
             return;
         }
-        if simulation.running {
-            simulation.running = false;
-            simulation.speed = 1.0;
+        if deps.simulation.running {
+            deps.simulation.running = false;
+            deps.simulation.speed = 1.0;
         } else {
-            simulation.step_requested = true;
+            deps.simulation.step_requested = true;
         }
     }
 
-    simulation.speed = if simulation.running && keys.pressed(fast_key) {
+    deps.simulation.speed = if deps.simulation.running && keys.pressed(fast_key) {
         4.0
     } else {
         1.0
     };
 
-    if keys.just_pressed(rollback_key) && simulation.is_active() {
-        let factory_snapshot = rollback_simulation(&mut simulation, &mut world);
-        refresh_static_generated_markers(&mut world);
-        pending_generated.clear();
-        factory_structures.clear();
-        movement_influence.clear();
-        pusher_state.clear();
+    if keys.just_pressed(rollback_key) && deps.simulation.is_active() {
+        let factory_snapshot = rollback_simulation(&mut deps.simulation, &mut deps.world);
+        refresh_static_generated_markers(&mut deps.world);
+        deps.pending_generated.clear();
+        deps.factory_structures.clear();
+        deps.movement_influence.clear();
+        deps.pusher_state.clear();
         if let Some(snapshot) = factory_snapshot {
-            *factory_structures = snapshot;
+            *deps.factory_structures = snapshot;
         } else {
-            factory_structures.rebuild_from_world(&world);
+            deps.factory_structures.rebuild_from_world(&deps.world);
         }
         despawn_world(&mut commands, &block_entities);
         rebuild_world_for_debug_state(
             &mut commands,
             &mut meshes,
-            &world,
-            &render_assets,
-            &debug,
-            &factory_structures,
+            &deps.world,
+            render_assets,
+            &deps.debug,
+            &deps.factory_structures,
         );
     }
 }

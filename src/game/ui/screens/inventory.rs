@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 
-use crate::game::state::GameMode;
 use crate::shared::i18n::I18n;
 
 use super::super::components::{
@@ -47,7 +46,7 @@ pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         i18n,
         PanelOptions::new(640.0, "inventory.title")
             .title_marker(PanelText(PanelTextKind::InventoryTitle)),
-        PanelVisibility::GameMode(GameMode::Inventory),
+        PanelVisibility::Inventory,
         |panel| {
             panel.spawn(inventory_grid_bundle()).with_children(|grid| {
                 for index in 0..BACKPACK_SLOTS {

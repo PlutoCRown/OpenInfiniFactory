@@ -6,9 +6,10 @@ pub fn inventory_slot_clicks(
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mut solution_state: ResMut<SolutionState>,
-    mode: Res<GameMode>,
+    mode: Res<State<GameMode>>,
+    playing_ui: Res<PlayingUiState>,
 ) {
-    if *mode != GameMode::Inventory {
+    if *mode.get() != GameMode::Playing || !playing_ui.inventory_open {
         return;
     }
     let Ok(slot) = slots.get(click.entity) else {

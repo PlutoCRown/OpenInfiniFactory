@@ -14,8 +14,8 @@ use super::screens::{
 use super::types::{
     BlockEditAction, BlockPanelDropdown, BlockPanelText, BlockPanelTextKind, ConfirmDialogAction,
     ConverterInputRow, Crosshair, GameplayHudVisibility, InGameHudVisibility, PanelText,
-    PanelTextKind, PanelVisibility, StatusText, StatusTextKind, TeleportAction, UiPanelBinding,
-    UiPanelId,
+    PanelTextKind, PanelVisibility, PlayingUiRoot, StatusText, StatusTextKind, TeleportAction,
+    UiPanelBinding, UiPanelId, UiRoot,
 };
 use super::widgets::{
     spawn_block_edit_button, spawn_block_panel_dropdown, spawn_block_panel_dropdown_list,
@@ -24,26 +24,37 @@ use super::widgets::{
 };
 use crate::game::world::blocks::{MaterialKind, StampColor};
 
-pub fn setup_ui(mut commands: Commands, i18n: Res<I18n>) {
-    commands.spawn(root_node()).with_children(|root| {
-        spawn_status_overlays(root);
-        spawn_hotbar(root);
-        spawn_inventory_panel(root, &i18n);
-        spawn_generator_panel(root, &i18n);
-        spawn_goal_panel(root, &i18n);
-        spawn_labeler_panel(root, &i18n);
-        spawn_converter_panel(root, &i18n);
-        spawn_teleport_panel(root, &i18n);
-        spawn_pause_panel(root, &i18n);
+pub fn setup_menu_ui(mut commands: Commands, i18n: Res<I18n>) {
+    commands.spawn((root_node(), UiRoot)).with_children(|root| {
         spawn_settings_panel(root, &i18n);
         spawn_confirm_dialog(root);
         spawn_modal_scrim(root);
         spawn_main_menu(root, &i18n);
         spawn_save_list(root, &i18n);
-        spawn_carried_label(root);
-        spawn_inventory_tooltip(root);
-        spawn_block_dropdown_layers(root, &i18n);
     });
+}
+
+pub fn setup_playing_ui(commands: &mut Commands, i18n: &I18n) {
+    commands
+        .spawn((root_node(), PlayingUiRoot))
+        .with_children(|root| {
+            spawn_status_overlays(root);
+            spawn_hotbar(root);
+            spawn_inventory_panel(root, i18n);
+            spawn_generator_panel(root, i18n);
+            spawn_goal_panel(root, i18n);
+            spawn_labeler_panel(root, i18n);
+            spawn_converter_panel(root, i18n);
+            spawn_teleport_panel(root, i18n);
+            spawn_pause_panel(root, i18n);
+            spawn_carried_label(root);
+            spawn_inventory_tooltip(root);
+            spawn_block_dropdown_layers(root, i18n);
+        });
+}
+
+pub fn setup_playing_ui_system(mut commands: Commands, i18n: Res<I18n>) {
+    setup_playing_ui(&mut commands, &i18n);
 }
 
 fn spawn_modal_scrim(root: &mut ChildSpawnerCommands) {

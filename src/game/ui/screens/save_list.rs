@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game::state::GameMode;
+use crate::game::state::StartMenuScreen;
 use crate::shared::i18n::I18n;
 
 use super::super::components::{
@@ -18,7 +18,7 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, i18n: &I18n) {
     root.spawn((
         panel_bundle(900.0),
         GlobalZIndex(0),
-        PanelVisibility::GameMode(GameMode::SaveListMain),
+        PanelVisibility::StartMenuScreen(StartMenuScreen::SaveList),
         SaveListPanel,
     ))
     .with_children(|panel| {

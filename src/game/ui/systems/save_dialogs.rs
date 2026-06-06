@@ -4,7 +4,8 @@ use crate::game::ui::screens::{
 };
 
 pub fn update_save_list_ui(
-    mode: Res<GameMode>,
+    mode: Res<State<GameMode>>,
+    start_menu_screen: Res<StartMenuScreen>,
     save_state: Res<SaveState>,
     solution_state: Res<SolutionState>,
     i18n: Res<I18n>,
@@ -53,7 +54,7 @@ pub fn update_save_list_ui(
         .collect::<Vec<_>>();
     let show_solutions = play_flow && save_state.selected_puzzle.is_some();
 
-    update_save_list_title(&mode, &solution_state, &i18n, &mut texts);
+    update_save_list_title(&mode, &start_menu_screen, &solution_state, &i18n, &mut texts);
     update_save_list_columns(
         &mut commands,
         &mut render_state,
@@ -94,7 +95,8 @@ fn save_list_puzzle_rows(save_state: &SaveState, edit_flow: bool) -> Vec<String>
 }
 
 fn update_save_list_title(
-    mode: &GameMode,
+    mode: &State<GameMode>,
+    start_menu_screen: &StartMenuScreen,
     solution_state: &SolutionState,
     i18n: &I18n,
     texts: &mut ParamSet<(
@@ -105,11 +107,13 @@ fn update_save_list_title(
 ) {
     for (panel_text, mut text) in &mut texts.p0() {
         if panel_text.0 == PanelTextKind::SaveListTitle {
-            text.0 = match *mode {
-                GameMode::SaveListMain => match solution_state.save_list_entry {
-                    WorldEntryMode::EditPuzzle => i18n.text("save.title.edit_puzzle"),
-                    WorldEntryMode::PlaySolution => i18n.text("save.title.play_solution"),
-                },
+            text.0 = match (mode.get(), start_menu_screen) {
+                (GameMode::StartMenu, StartMenuScreen::SaveList) => {
+                    match solution_state.save_list_entry {
+                        WorldEntryMode::EditPuzzle => i18n.text("save.title.edit_puzzle"),
+                        WorldEntryMode::PlaySolution => i18n.text("save.title.play_solution"),
+                    }
+                }
                 _ => i18n.text("save.title.default"),
             };
         }

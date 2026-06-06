@@ -10,7 +10,7 @@ use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structures::material_structure;
 use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, GameSettings, PlacementState,
-    SelectionAxis, SelectionBounds, SelectionDrag, SimulationState, SolutionState,
+    PlayingUiState, SelectionAxis, SelectionBounds, SelectionDrag, SimulationState, SolutionState,
     TeleportRenameState,
 };
 use crate::game::systems::debug::DebugState;
@@ -34,6 +34,9 @@ pub struct PlacementQueries<'w, 's> {
     block_entities: Query<'w, 's, (Entity, &'static BlockEntity)>,
     edit_previews: Query<'w, 's, Entity, With<EditPreview>>,
     player: Query<'w, 's, &'static Transform, With<FlyCamera>>,
+    render_assets: Option<Res<'w, WorldRenderAssets>>,
+    debug: Res<'w, DebugState>,
+    factory_structures: ResMut<'w, FactoryStructureState>,
 }
 
 pub fn gameplay_input(
@@ -42,7 +45,8 @@ pub fn gameplay_input(
     config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
     text_prompt: Res<TextPromptState>,
-    mut mode: ResMut<GameMode>,
+    mode: Res<State<GameMode>>,
+    mut playing_ui: ResMut<PlayingUiState>,
     mut placement: ResMut<PlacementState>,
     teleport_rename: Res<TeleportRenameState>,
     mut carried: ResMut<CarriedItem>,
@@ -59,10 +63,7 @@ pub fn gameplay_input(
         return;
     }
 
-    if !matches!(
-        *mode,
-        GameMode::Playing | GameMode::Inventory | GameMode::Paused
-    ) {
+    if *mode.get() != GameMode::Playing {
         mouse_wheel.clear();
         return;
     }
@@ -70,36 +71,29 @@ pub fn gameplay_input(
     if keys.just_pressed(bindings.pause.key_code()) {
         if ui_runtime.blocks_gameplay() {
             ui_runtime.close_current();
+        } else if playing_ui.inventory_open {
+            playing_ui.inventory_open = false;
+            carried.clear();
         } else {
-            *mode = match *mode {
-                GameMode::Playing => {
-                    simulation.running = false;
-                    simulation.step_requested = false;
-                    simulation.speed = 1.0;
-                    GameMode::Paused
-                }
-                GameMode::Inventory => {
-                    carried.clear();
-                    GameMode::Playing
-                }
-                GameMode::Paused => GameMode::Playing,
-                other => other,
-            };
+            playing_ui.paused = !playing_ui.paused;
+            if playing_ui.paused {
+                simulation.running = false;
+                simulation.step_requested = false;
+                simulation.speed = 1.0;
+            }
         }
     }
 
-    if ui_runtime.blocks_gameplay() || *mode != GameMode::Playing {
+    if ui_runtime.blocks_gameplay() || !playing_ui.active_play() {
         mouse_wheel.clear();
         return;
     }
 
     if keys.just_pressed(bindings.inventory.key_code()) {
-        *mode = if *mode == GameMode::Inventory {
+        playing_ui.inventory_open = !playing_ui.inventory_open;
+        if !playing_ui.inventory_open {
             carried.clear();
-            GameMode::Playing
-        } else {
-            GameMode::Inventory
-        };
+        }
     }
 
     for (key, index) in [
@@ -143,22 +137,32 @@ pub fn placement_input(
     mut inventory: ResMut<InventoryItems>,
     config: Res<GameConfig>,
     builder_mode: Res<BuilderMode>,
-    mut mode: ResMut<GameMode>,
+    mode: Res<State<GameMode>>,
+    playing_ui: Res<PlayingUiState>,
     simulation: Res<SimulationState>,
     mut placement: ResMut<PlacementState>,
     mut ui_runtime: ResMut<UiRuntime>,
-    render_assets: Res<WorldRenderAssets>,
-    debug: Res<DebugState>,
-    mut factory_structures: ResMut<FactoryStructureState>,
     queries: PlacementQueries,
 ) {
-    factory_structures.ensure_current_world(&world);
     let PlacementQueries {
         mut meshes,
         block_entities,
         edit_previews,
         player,
+        render_assets,
+        debug,
+        mut factory_structures,
     } = queries;
+
+    if *mode.get() != GameMode::Playing || !playing_ui.active_play() {
+        placement.edit_gesture = None;
+        despawn_edit_previews(&mut commands, &edit_previews);
+        return;
+    }
+    let Some(render_assets) = render_assets.as_ref() else {
+        return;
+    };
+    factory_structures.ensure_current_world(&world);
     let place_button = config
         .input(crate::shared::config::ActionKeyName::Place)
         .mouse_button()
@@ -171,12 +175,6 @@ pub fn placement_input(
         .input(crate::shared::config::ActionKeyName::Pick)
         .mouse_button()
         .unwrap_or(MouseButton::Middle);
-
-    if *mode != GameMode::Playing {
-        placement.edit_gesture = None;
-        despawn_edit_previews(&mut commands, &edit_previews);
-        return;
-    }
 
     if ui_runtime.blocks_gameplay() || simulation.is_active() {
         placement.edit_gesture = None;
@@ -199,7 +197,6 @@ pub fn placement_input(
             &world,
             *builder_mode,
             &mut ui_runtime,
-            &mut mode,
         )
     {
         placement.edit_gesture = None;
@@ -409,7 +406,6 @@ fn open_target_block_ui(
     world: &WorldBlocks,
     builder_mode: BuilderMode,
     ui_runtime: &mut UiRuntime,
-    mode: &mut GameMode,
 ) -> bool {
     if builder_mode != BuilderMode::Edit {
         return false;
@@ -427,7 +423,6 @@ fn open_target_block_ui(
     };
 
     ui_runtime.open_block(panel, pos);
-    *mode = GameMode::Playing;
     true
 }
 
@@ -1039,7 +1034,8 @@ pub fn apply_fov(
 
 pub fn update_hover(
     mut placement: ResMut<PlacementState>,
-    mode: Res<GameMode>,
+    mode: Res<State<GameMode>>,
+    playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
     debug: Res<DebugState>,
     inventory: Res<InventoryItems>,
@@ -1072,7 +1068,7 @@ pub fn update_hover(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     factory_structures.ensure_current_world(&world);
-    if *mode != GameMode::Playing || ui_runtime.blocks_gameplay() {
+    if *mode.get() != GameMode::Playing || !playing_ui.active_play() || ui_runtime.blocks_gameplay() {
         placement.target = None;
         placement.edit_gesture = None;
         hover_bounds.bounds = None;

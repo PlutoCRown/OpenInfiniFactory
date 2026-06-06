@@ -1,12 +1,11 @@
-use std::time::{Duration, Instant};
-
+use crate::game::systems::perf::PerfStats;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
 use crate::game::player::controller::{player_collision_box, FlyCamera};
 use crate::game::simulation::factory_activity::FactoryStructureState;
 use crate::game::simulation::runtime::SimulationStepStats;
-use crate::game::state::{BuilderMode, GameMode, SimulationState};
+use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
 use crate::game::ui::{PendingKeyBind, TextPromptState};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
@@ -25,169 +24,6 @@ pub struct DebugPanel;
 
 #[derive(Component)]
 pub struct DebugText;
-
-#[derive(Resource)]
-pub struct PerfStats {
-    frame_started: Instant,
-    last_main_finished: Option<Instant>,
-    mark: Instant,
-    frame_ms: SmoothedMs,
-    main_ms: SmoothedMs,
-    input_ms: SmoothedMs,
-    menu_ms: SmoothedMs,
-    simulation_ms: SmoothedMs,
-    view_ms: SmoothedMs,
-    animation_ms: SmoothedMs,
-    ui_ms: SmoothedMs,
-    debug_ms: SmoothedMs,
-    pre_update_ms: SmoothedMs,
-    update_tail_ms: SmoothedMs,
-    post_update_ui_ms: SmoothedMs,
-    post_update_transform_ms: SmoothedMs,
-    post_update_visibility_ms: SmoothedMs,
-    last_ms: SmoothedMs,
-    main_other_ms: SmoothedMs,
-    render_other_ms: SmoothedMs,
-    render_gap_ms: SmoothedMs,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, SystemSet)]
-pub enum PerfMark {
-    Input,
-    PreUpdate,
-    Menus,
-    Simulation,
-    View,
-    Animation,
-    Ui,
-    Debug,
-    PostUpdateStart,
-    PostUpdateUi,
-    PostUpdateTransform,
-    PostUpdateVisibility,
-    Last,
-}
-
-impl Default for PerfStats {
-    fn default() -> Self {
-        let now = Instant::now();
-        Self {
-            frame_started: now,
-            last_main_finished: None,
-            mark: now,
-            frame_ms: SmoothedMs::default(),
-            main_ms: SmoothedMs::default(),
-            input_ms: SmoothedMs::default(),
-            menu_ms: SmoothedMs::default(),
-            simulation_ms: SmoothedMs::default(),
-            view_ms: SmoothedMs::default(),
-            animation_ms: SmoothedMs::default(),
-            ui_ms: SmoothedMs::default(),
-            debug_ms: SmoothedMs::default(),
-            pre_update_ms: SmoothedMs::default(),
-            update_tail_ms: SmoothedMs::default(),
-            post_update_ui_ms: SmoothedMs::default(),
-            post_update_transform_ms: SmoothedMs::default(),
-            post_update_visibility_ms: SmoothedMs::default(),
-            last_ms: SmoothedMs::default(),
-            main_other_ms: SmoothedMs::default(),
-            render_other_ms: SmoothedMs::default(),
-            render_gap_ms: SmoothedMs::default(),
-        }
-    }
-}
-
-#[derive(Default)]
-struct SmoothedMs {
-    value: f64,
-    initialized: bool,
-}
-
-impl SmoothedMs {
-    fn sample(&mut self, duration: Duration) {
-        let ms = duration.as_secs_f64() * 1000.0;
-        self.sample_ms(ms);
-    }
-
-    fn sample_ms(&mut self, ms: f64) {
-        if self.initialized {
-            self.value = self.value * 0.86 + ms * 0.14;
-        } else {
-            self.value = ms;
-            self.initialized = true;
-        }
-    }
-}
-
-pub fn begin_perf_frame(mut perf: ResMut<PerfStats>) {
-    let now = Instant::now();
-    let frame_duration = now.saturating_duration_since(perf.frame_started);
-    perf.frame_ms.sample(frame_duration);
-    if let Some(last_main_finished) = perf.last_main_finished {
-        perf.render_gap_ms
-            .sample(now.saturating_duration_since(last_main_finished));
-    }
-    perf.frame_started = now;
-    perf.mark = now;
-}
-
-pub fn mark_perf(mut perf: ResMut<PerfStats>, mark: PerfMark) {
-    let elapsed = perf.mark_elapsed();
-    match mark {
-        PerfMark::Input => perf.input_ms.sample(elapsed),
-        PerfMark::PreUpdate => perf.pre_update_ms.sample(elapsed),
-        PerfMark::Menus => perf.menu_ms.sample(elapsed),
-        PerfMark::Simulation => perf.simulation_ms.sample(elapsed),
-        PerfMark::View => perf.view_ms.sample(elapsed),
-        PerfMark::Animation => perf.animation_ms.sample(elapsed),
-        PerfMark::Ui => perf.ui_ms.sample(elapsed),
-        PerfMark::Debug => perf.debug_ms.sample(elapsed),
-        PerfMark::PostUpdateStart => perf.update_tail_ms.sample(elapsed),
-        PerfMark::PostUpdateUi => perf.post_update_ui_ms.sample(elapsed),
-        PerfMark::PostUpdateTransform => perf.post_update_transform_ms.sample(elapsed),
-        PerfMark::PostUpdateVisibility => perf.post_update_visibility_ms.sample(elapsed),
-        PerfMark::Last => perf.last_ms.sample(elapsed),
-    }
-}
-
-pub fn finish_perf_frame(mut perf: ResMut<PerfStats>) {
-    let main_ms = Instant::now()
-        .saturating_duration_since(perf.frame_started)
-        .as_secs_f64()
-        * 1000.0;
-    let render_other_ms = (perf.frame_ms.value - main_ms).max(0.0);
-    let measured_main_ms = perf.input_ms.value
-        + perf.menu_ms.value
-        + perf.simulation_ms.value
-        + perf.view_ms.value
-        + perf.animation_ms.value
-        + perf.ui_ms.value
-        + perf.debug_ms.value
-        + perf.pre_update_ms.value
-        + perf.update_tail_ms.value
-        + perf.post_update_ui_ms.value
-        + perf.post_update_transform_ms.value
-        + perf.post_update_visibility_ms.value
-        + perf.last_ms.value;
-    let main_other_ms = (main_ms - measured_main_ms).max(0.0);
-    perf.main_ms.sample_ms(main_ms);
-    perf.main_other_ms.sample_ms(main_other_ms);
-    perf.render_other_ms.sample_ms(render_other_ms);
-    perf.last_main_finished = Some(Instant::now());
-}
-
-impl PerfStats {
-    fn mark_elapsed(&mut self) -> Duration {
-        let now = Instant::now();
-        let elapsed = now.saturating_duration_since(self.mark);
-        self.mark = now;
-        elapsed
-    }
-}
-
-fn micros(ms: f64) -> f64 {
-    ms * 1000.0
-}
 
 pub fn setup_debug_ui(mut commands: Commands) {
     commands.spawn((
@@ -214,10 +50,14 @@ pub fn toggle_debug(
     config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
     text_prompt: Res<TextPromptState>,
-    mode: Res<GameMode>,
+    mode: Res<State<GameMode>>,
+    playing_ui: Res<PlayingUiState>,
     mut debug: ResMut<DebugState>,
 ) {
-    if pending_key_bind.0.is_some() || text_prompt.kind.is_some() || !gameplay_mode(*mode) {
+    if pending_key_bind.0.is_some()
+        || text_prompt.kind.is_some()
+        || !in_playing(*mode.get(), &playing_ui)
+    {
         return;
     }
 
@@ -230,18 +70,25 @@ pub fn toggle_factory_activity_debug(
     keys: Res<ButtonInput<KeyCode>>,
     pending_key_bind: Res<PendingKeyBind>,
     text_prompt: Res<TextPromptState>,
-    mode: Res<GameMode>,
+    mode: Res<State<GameMode>>,
+    playing_ui: Res<PlayingUiState>,
     mut debug: ResMut<DebugState>,
     mut factory_structures: ResMut<FactoryStructureState>,
     mut commands: Commands,
     world: Res<WorldBlocks>,
     mut meshes: ResMut<Assets<Mesh>>,
-    render_assets: Res<WorldRenderAssets>,
+    render_assets: Option<Res<WorldRenderAssets>>,
     block_entities: Query<Entity, With<BlockEntity>>,
 ) {
-    if pending_key_bind.0.is_some() || text_prompt.kind.is_some() || !gameplay_mode(*mode) {
+    if pending_key_bind.0.is_some()
+        || text_prompt.kind.is_some()
+        || !in_playing(*mode.get(), &playing_ui)
+    {
         return;
     }
+    let Some(render_assets) = render_assets.as_ref() else {
+        return;
+    };
 
     if keys.just_pressed(KeyCode::KeyP) {
         debug.factory_activity = !debug.factory_activity;
@@ -258,11 +105,8 @@ pub fn toggle_factory_activity_debug(
     }
 }
 
-fn gameplay_mode(mode: GameMode) -> bool {
-    matches!(
-        mode,
-        GameMode::Playing | GameMode::Inventory | GameMode::Paused
-    )
+fn in_playing(_mode: GameMode, _playing_ui: &PlayingUiState) -> bool {
+    true
 }
 
 pub fn update_debug_ui(
@@ -323,29 +167,17 @@ pub fn update_debug_ui(
         String::new()
     };
 
-    let render_remainder_ms = (perf.render_other_ms.value - perf.render_gap_ms.value).max(0.0);
+    let render_remainder_ms = (perf.render_other_ms() - perf.render_gap_ms()).max(0.0);
 
     text.0 = format!(
-        "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n  PreUpdate/Input Plumbing: {:>8.2} us\n  Input: {:>8.2} us\n  Menus: {:>8.2} us\n  Sim Systems: {:>8.2} us\n  View: {:>8.2} us\n  Anim: {:>8.2} us\n  UI: {:>8.2} us\n  Debug UI: {:>8.2} us\n  Update Tail: {:>8.2} us\n  PostUpdate/UI Layout: {:>8.2} us\n  PostUpdate/Transform: {:>8.2} us\n  PostUpdate/Visibility: {:>8.2} us\n  Last: {:>8.2} us\n  Schedule/Untracked: {:>8.2} us\nRender/Engine: {:>5.2} ms\n  Frame Gap: {:>5.2} ms\n  Timing Remainder: {:>5.2} ms{}\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
+        "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n{}\n  Schedule/Untracked: {:>8.2} us\nRender/Engine: {:>5.2} ms\n  Frame Gap: {:>5.2} ms\n  Timing Remainder: {:>5.2} ms{}\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
         fps,
-        perf.frame_ms.value,
-        perf.main_ms.value,
-        micros(perf.pre_update_ms.value),
-        micros(perf.input_ms.value),
-        micros(perf.menu_ms.value),
-        micros(perf.simulation_ms.value),
-        micros(perf.view_ms.value),
-        micros(perf.animation_ms.value),
-        micros(perf.ui_ms.value),
-        micros(perf.debug_ms.value),
-        micros(perf.update_tail_ms.value),
-        micros(perf.post_update_ui_ms.value),
-        micros(perf.post_update_transform_ms.value),
-        micros(perf.post_update_visibility_ms.value),
-        micros(perf.last_ms.value),
-        micros(perf.main_other_ms.value),
-        perf.render_other_ms.value,
-        perf.render_gap_ms.value,
+        perf.frame_ms(),
+        perf.main_ms(),
+        perf.format_scope_section(),
+        perf.main_other_ms() * 1000.0,
+        perf.render_other_ms(),
+        perf.render_gap_ms(),
         render_remainder_ms,
         sim_turn_text,
         world.blocks.len(),

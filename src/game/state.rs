@@ -121,13 +121,34 @@ impl SelectionAxis {
     }
 }
 
-#[derive(Resource, Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(States, Debug, Clone, Copy, Default, Eq, PartialEq, Hash)]
 pub enum GameMode {
-    MainMenu,
-    SaveListMain,
+    #[default]
+    StartMenu,
     Playing,
-    Inventory,
-    Paused,
+}
+
+#[derive(Resource, Debug, Clone, Copy, Default, Eq, PartialEq)]
+pub enum StartMenuScreen {
+    #[default]
+    Main,
+    SaveList,
+}
+
+#[derive(Resource, Default, Debug, Clone, Copy)]
+pub struct PlayingUiState {
+    pub paused: bool,
+    pub inventory_open: bool,
+}
+
+impl PlayingUiState {
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    pub fn active_play(&self) -> bool {
+        !self.paused && !self.inventory_open
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

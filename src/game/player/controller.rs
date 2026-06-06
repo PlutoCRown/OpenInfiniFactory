@@ -8,9 +8,11 @@ use bevy::prelude::*;
 use bevy::render::camera::TemporalJitter;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
-use crate::game::state::{GameMode, GameSettings};
+use crate::game::cameras::GameplayCamera;
+use crate::game::state::{GameMode, GameSettings, PlayingUiState};
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::WorldBlocks;
+use crate::game::world::rendering::GameplayScene;
 use crate::shared::config::{ActionKeyName, GameConfig};
 
 pub const EYE_HEIGHT: f32 = 1.7;
@@ -37,34 +39,43 @@ pub struct FlyCamera {
 }
 
 pub fn spawn_player(mut commands: Commands) {
-    commands.spawn((
-        Camera3d::default(),
-        Camera::default(),
-        Msaa::Off,
-        Tonemapping::SomewhatBoringDisplayTransform,
-        DebandDither::Enabled,
-        Transform::from_xyz(0.5, SPAWN_EYE_Y + 1.2, 10.5)
-            .looking_at(Vec3::new(0.5, 0.8, 0.5), Vec3::Y),
-        ScreenSpaceAmbientOcclusion {
-            quality_level: ScreenSpaceAmbientOcclusionQualityLevel::Medium,
-            ..default()
-        },
-        TemporalAntiAliasing::default(),
-        TemporalJitter::default(),
-        DepthPrepass,
-        NormalPrepass,
-        MotionVectorPrepass,
-        ShadowFilteringMethod::Temporal,
-        FlyCamera {
-            yaw: std::f32::consts::PI,
-            pitch: -0.15,
-            velocity_y: 0.0,
-            grounded: false,
-            flying: false,
-            last_space_press: -10.0,
-            sensitivity: 0.0025,
-        },
-    ));
+    commands
+        .spawn((
+            Camera3d::default(),
+            Camera {
+                order: 0,
+                clear_color: ClearColorConfig::Default,
+                ..default()
+            },
+            Transform::from_xyz(0.5, SPAWN_EYE_Y + 1.2, 10.5)
+                .looking_at(Vec3::new(0.5, 0.8, 0.5), Vec3::Y),
+            FlyCamera {
+                yaw: std::f32::consts::PI,
+                pitch: -0.15,
+                velocity_y: 0.0,
+                grounded: false,
+                flying: false,
+                last_space_press: -10.0,
+                sensitivity: 0.0025,
+            },
+            GameplayCamera,
+            GameplayScene,
+        ))
+        .insert((
+            Msaa::Off,
+            Tonemapping::SomewhatBoringDisplayTransform,
+            DebandDither::Enabled,
+            ScreenSpaceAmbientOcclusion {
+                quality_level: ScreenSpaceAmbientOcclusionQualityLevel::Medium,
+                ..default()
+            },
+            TemporalAntiAliasing::default(),
+            TemporalJitter::default(),
+            DepthPrepass,
+            NormalPrepass,
+            MotionVectorPrepass,
+            ShadowFilteringMethod::Temporal,
+        ));
 }
 
 pub fn camera_move(
@@ -72,12 +83,14 @@ pub fn camera_move(
     keys: Res<ButtonInput<KeyCode>>,
     config: Res<GameConfig>,
     settings: Res<GameSettings>,
-    mode: Res<GameMode>,
+    mode: Res<State<GameMode>>,
+    playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
     world: Res<WorldBlocks>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
-    if *mode != GameMode::Playing || ui_runtime.blocks_gameplay() {
+    if *mode.get() != GameMode::Playing || !playing_ui.active_play() || ui_runtime.blocks_gameplay()
+    {
         return;
     }
 
@@ -180,7 +193,8 @@ pub fn camera_move(
 
 pub fn camera_look(
     keys: Res<ButtonInput<KeyCode>>,
-    mode: Res<GameMode>,
+    mode: Res<State<GameMode>>,
+    playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
     mut mouse_motion: MessageReader<MouseMotion>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
@@ -189,7 +203,11 @@ pub fn camera_look(
         return;
     };
 
-    if *mode != GameMode::Playing || ui_runtime.blocks_gameplay() || alt_pressed(&keys) {
+    if *mode.get() != GameMode::Playing
+        || !playing_ui.active_play()
+        || ui_runtime.blocks_gameplay()
+        || alt_pressed(&keys)
+    {
         mouse_motion.clear();
         return;
     }
@@ -207,7 +225,8 @@ pub fn camera_look(
 
 pub fn sync_cursor_grab(
     keys: Res<ButtonInput<KeyCode>>,
-    mode: Res<GameMode>,
+    mode: Res<State<GameMode>>,
+    playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
     mut windows: Query<&mut CursorOptions, With<PrimaryWindow>>,
 ) {
@@ -215,7 +234,11 @@ pub fn sync_cursor_grab(
         return;
     };
 
-    if *mode == GameMode::Playing && !ui_runtime.blocks_gameplay() && !alt_pressed(&keys) {
+    if *mode.get() == GameMode::Playing
+        && playing_ui.active_play()
+        && !ui_runtime.blocks_gameplay()
+        && !alt_pressed(&keys)
+    {
         cursor.grab_mode = CursorGrabMode::Locked;
         cursor.visible = false;
     } else {

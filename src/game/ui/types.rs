@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub use crate::game::state::UiPanelId;
-use crate::game::state::{BuilderMode, GameMode, WorldEntryMode};
+use crate::game::state::{BuilderMode, StartMenuScreen, WorldEntryMode};
 use crate::game::world::blocks::{edit_blocks, BlockKind, MaterialKind, StampColor, PLAY_BLOCKS};
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ActionKeyName, ConfigSelectionMode};
@@ -26,7 +26,8 @@ const PLAY_HOTBAR_BLOCKS: [BlockKind; HOTBAR_SLOTS] = [
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UiPanelContext {
-    ReturnTo(GameMode),
+    SettingsFromStartMenu,
+    SettingsFromPause,
     Block { pos: IVec3 },
 }
 
@@ -138,11 +139,19 @@ pub struct UiHoverState {
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub enum PanelVisibility {
-    GameMode(GameMode),
+    StartMenuScreen(StartMenuScreen),
+    PauseMenu,
+    Inventory,
     SettingsTab(SettingsTab),
     ConfirmDialog,
     ModalScrim,
 }
+
+#[derive(Component)]
+pub struct UiRoot;
+
+#[derive(Component)]
+pub struct PlayingUiRoot;
 
 #[derive(Component)]
 pub struct InGameHudStyle;

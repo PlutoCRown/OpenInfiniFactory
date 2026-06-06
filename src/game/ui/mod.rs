@@ -8,7 +8,7 @@ mod widgets;
 use bevy::prelude::*;
 
 pub use crate::game::state::UiPanelId;
-pub use layout::setup_ui;
+pub use layout::{setup_menu_ui, setup_playing_ui_system};
 pub use systems::{
     apply_ui_font, center_new_panels, inventory_slot_clicks, load_ui_font, panel_close_clicked,
     panel_drag_ended, panel_drag_started, panel_dragged, ui_hovered, ui_unhovered,
@@ -25,15 +25,14 @@ pub use types::{
     MenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown, PanelDragState, PendingKeyBind,
     SaveListAction, SaveListRenderState, SettingsAction, SettingsSliderTrigger, SettingsTab,
     TeleportAction, TextPromptAction, TextPromptKind, TextPromptState, UiHoverState,
-    UiPanelContext, UiRuntime, HOTBAR_SLOTS,
+    UiPanelContext, UiRuntime, PlayingUiRoot, HOTBAR_SLOTS,
 };
 
 use crate::game::systems::menus::{
     block_edit_actions, confirm_dialog_actions, settings_action_clicked, settings_menu_actions,
     teleport_menu_actions, teleport_rename_input, text_prompt_actions, text_prompt_input,
 };
-use crate::game::systems::debug::PerfMark;
-use crate::game::player;
+use crate::game::systems::perf::PerfScope;
 use components::{
     button_hovered, button_pressed, button_released, button_unhovered, update_scroll_containers,
 };
@@ -78,28 +77,39 @@ impl Plugin for GameUiPlugin {
                     settings_menu_actions,
                 )
                     .chain()
-                    .after(PerfMark::Input)
-                    .before(PerfMark::Menus),
+                    .after(PerfScope::Input)
+                    .before(PerfScope::Menus),
             )
             .add_systems(
                 Update,
                 (
-                    update_status_ui,
                     update_localized_ui,
                     update_settings_text_ui,
                     (update_settings_sliders_ui, update_settings_slider_drag_ui).chain(),
                     update_settings_dropdowns_ui,
-                    update_block_panel_dropdowns_ui,
                     update_settings_tabs_ui,
                     update_scroll_containers,
+                    update_confirm_dialog_ui,
+                    update_text_prompt_ui,
+                    apply_ui_font,
                 )
-                    .after(PerfMark::Animation)
-                    .before(PerfMark::Ui),
+                    .after(PerfScope::Animation)
+                    .before(PerfScope::Ui),
             )
             .add_systems(
                 Update,
                 (
                     (update_panel_visibility, center_new_panels, update_ui_layers).chain(),
+                    update_save_list_ui,
+                )
+                    .after(PerfScope::Animation)
+                    .before(PerfScope::Ui),
+            )
+            .add_systems(
+                Update,
+                (
+                    update_status_ui,
+                    update_block_panel_dropdowns_ui,
                     update_hud_visibility,
                     update_generator_ui,
                     update_labeler_ui,
@@ -107,14 +117,9 @@ impl Plugin for GameUiPlugin {
                     update_teleport_ui,
                     update_inventory_slots,
                     update_carried_item_ui,
-                    update_save_list_ui,
-                    update_confirm_dialog_ui,
-                    update_text_prompt_ui,
-                    apply_ui_font,
-                    player::controller::sync_cursor_grab,
                 )
-                    .after(PerfMark::Animation)
-                    .before(PerfMark::Ui),
+                    .after(PerfScope::Animation)
+                    .before(PerfScope::Ui),
             );
     }
 }

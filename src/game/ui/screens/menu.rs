@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game::state::GameMode;
+use crate::game::state::StartMenuScreen;
 use crate::shared::i18n::I18n;
 
 use super::super::components::{spawn_panel, PanelOptions};
@@ -80,7 +80,7 @@ pub fn spawn_main_menu(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         root,
         i18n,
         PanelOptions::new(420.0, "main.title").title_size(30.0),
-        PanelVisibility::GameMode(GameMode::MainMenu),
+        PanelVisibility::StartMenuScreen(StartMenuScreen::Main),
         MAIN_MENU_ITEMS,
     );
 }
@@ -90,7 +90,7 @@ pub fn spawn_pause_panel(root: &mut ChildSpawnerCommands, i18n: &I18n) {
         root,
         i18n,
         PanelOptions::new(420.0, "state.paused").title_size(30.0),
-        PanelVisibility::GameMode(GameMode::Paused),
+        PanelVisibility::PauseMenu,
         PAUSE_MENU_ITEMS,
     );
 }

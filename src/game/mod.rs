@@ -1,40 +1,39 @@
+pub mod cameras;
 pub mod player;
+pub mod session;
 pub mod simulation;
 pub mod state;
 pub mod systems;
 pub mod ui;
 pub mod world;
 
-use bevy::camera::visibility::VisibilitySystems;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::input_focus::InputDispatchPlugin;
 use bevy::light::{DirectionalLightShadowMap, GlobalAmbientLight};
 use bevy::prelude::*;
-use bevy::transform::TransformSystems;
-use bevy::ui::UiSystems;
 use bevy::ui_widgets::{slider_self_update, UiWidgetsPlugins};
 
 use crate::shared::config::load_config;
 use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::save::SaveState;
 
-use player::controller::{camera_look, camera_move, spawn_player};
+use cameras::spawn_ui_camera;
+use player::controller::{camera_look, camera_move, spawn_player, sync_cursor_grab};
+use session::{on_exit_playing, prepare_playing_session, rebuild_playing_world};
 use state::{
-    BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
-    TeleportRenameState,
+    BuilderMode, GameMode, GameSettings, PlacementState, PlayingUiState, SimulationState,
+    SolutionState, StartMenuScreen, TeleportRenameState,
 };
 use systems::gameplay::{
     apply_fov, draw_hover_structure_bounds, gameplay_input, placement_input, update_hover,
 };
 use systems::menus::{menu_actions, save_list_actions};
+use systems::perf::{PerfPlugin, PerfScope};
 use systems::simulation_controls::simulation_controls;
-use systems::debug::{PerfMark, PerfStats};
 use ui::{GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
-use world::rendering::{
-    retire_block_icon_renderers, setup_block_icons, setup_scene, HoverStructureBounds,
-};
+use world::rendering::{retire_block_icon_renderers, HoverStructureBounds};
 
 pub struct GamePlugin;
 
@@ -72,7 +71,9 @@ impl Plugin for GamePlugin {
             .insert_resource(PlacementState::default())
             .insert_resource(TeleportRenameState::default())
             .insert_resource(InventoryItems::default())
-            .insert_resource(GameMode::MainMenu)
+            .init_state::<GameMode>()
+            .insert_resource(StartMenuScreen::default())
+            .insert_resource(PlayingUiState::default())
             .insert_resource(BuilderMode::default())
             .insert_resource(SimulationState::default())
             .insert_resource(SolutionState::default())
@@ -88,85 +89,75 @@ impl Plugin for GamePlugin {
             .insert_resource(i18n)
             .insert_resource(SaveState::default())
             .insert_resource(systems::debug::DebugState::default())
-            .insert_resource(systems::debug::PerfStats::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(InputDispatchPlugin)
             .add_plugins(UiWidgetsPlugins)
             .add_plugins(GameUiPlugin)
+            .add_plugins(PerfPlugin)
             .add_observer(slider_self_update)
             .add_observer(menu_actions)
             .add_observer(save_list_actions)
             .add_systems(
                 Startup,
                 (
-                    setup_scene,
-                    setup_block_icons,
-                    spawn_player,
+                    spawn_ui_camera,
                     refresh_saves_on_startup,
                     ui::load_ui_font,
-                    ui::setup_ui,
-                    systems::debug::setup_debug_ui,
+                    ui::setup_menu_ui,
                 )
                     .chain(),
             )
-            .add_systems(First, systems::debug::begin_perf_frame)
             .add_systems(
-                PreUpdate,
-                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::PreUpdate))
-                    .in_set(PerfMark::PreUpdate)
-                    .after(UiSystems::Focus),
+                OnEnter(GameMode::Playing),
+                (
+                    prepare_playing_session,
+                    cameras::configure_ui_camera_for_playing,
+                    world::rendering::setup_scene,
+                    world::rendering::setup_block_icons,
+                    spawn_player,
+                    ui::setup_playing_ui_system,
+                    systems::debug::setup_debug_ui,
+                    rebuild_playing_world,
+                )
+                    .chain(),
+            )
+            .add_systems(
+                OnExit(GameMode::Playing),
+                (on_exit_playing, cameras::configure_ui_camera_for_start_menu).chain(),
             )
             .add_systems(
                 Update,
-                (camera_move, camera_look, gameplay_input, placement_input)
+                (camera_move, camera_look, sync_cursor_grab)
                     .chain()
-                    .before(PerfMark::Input),
+                    .before(PerfScope::Input),
+            )
+            .add_systems(Update, gameplay_input.before(PerfScope::Input))
+            .add_systems(
+                Update,
+                placement_input
+                    .after(gameplay_input)
+                    .before(PerfScope::Input),
             )
             .add_systems(
                 Update,
-                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Input))
-                    .in_set(PerfMark::Input),
+                simulation_controls
+                    .after(PerfScope::Menus)
+                    .before(simulation::runtime::tick_simulation),
             )
             .add_systems(
                 Update,
-                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Menus))
-                    .in_set(PerfMark::Menus),
-            )
-            .add_systems(
-                Update,
-                (simulation_controls, simulation::runtime::tick_simulation)
-                    .chain()
-                    .after(PerfMark::Menus)
-                    .before(PerfMark::Simulation),
-            )
-            .add_systems(
-                Update,
-                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Simulation))
-                    .in_set(PerfMark::Simulation),
+                simulation::runtime::tick_simulation
+                    .after(simulation_controls)
+                    .before(PerfScope::Simulation),
             )
             .add_systems(
                 Update,
                 (apply_fov, update_hover, draw_hover_structure_bounds)
                     .chain()
-                    .after(PerfMark::Simulation)
-                    .before(PerfMark::View),
+                    .after(PerfScope::Simulation)
+                    .before(PerfScope::View),
             )
-            .add_systems(
-                Update,
-                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::View))
-                    .in_set(PerfMark::View),
-            )
-            .add_systems(Update, animate_blocks.after(PerfMark::View))
-            .add_systems(
-                Update,
-                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Animation))
-                    .in_set(PerfMark::Animation),
-            )
-            .add_systems(
-                Update,
-                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Ui))
-                    .in_set(PerfMark::Ui),
-            )
+            .add_systems(Update, animate_blocks.after(PerfScope::View))
             .add_systems(Update, retire_block_icon_renderers)
             .add_systems(
                 Update,
@@ -177,55 +168,9 @@ impl Plugin for GamePlugin {
                     systems::debug::draw_player_collider,
                 )
                     .chain()
-                    .after(PerfMark::Ui)
-                    .before(PerfMark::Debug),
-            )
-            .add_systems(
-                Update,
-                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Debug))
-                    .in_set(PerfMark::Debug),
-            )
-            .add_systems(
-                PostUpdate,
-                (|perf: ResMut<PerfStats>| {
-                    systems::debug::mark_perf(perf, PerfMark::PostUpdateStart)
-                })
-                    .in_set(PerfMark::PostUpdateStart)
-                    .before(UiSystems::Prepare),
-            )
-            .add_systems(
-                PostUpdate,
-                (|perf: ResMut<PerfStats>| {
-                    systems::debug::mark_perf(perf, PerfMark::PostUpdateUi)
-                })
-                    .in_set(PerfMark::PostUpdateUi)
-                    .after(UiSystems::Layout)
-                    .before(TransformSystems::Propagate),
-            )
-            .add_systems(
-                PostUpdate,
-                (|perf: ResMut<PerfStats>| {
-                    systems::debug::mark_perf(perf, PerfMark::PostUpdateTransform)
-                })
-                    .in_set(PerfMark::PostUpdateTransform)
-                    .after(TransformSystems::Propagate)
-                    .before(VisibilitySystems::UpdateFrusta),
-            )
-            .add_systems(
-                PostUpdate,
-                (|perf: ResMut<PerfStats>| {
-                    systems::debug::mark_perf(perf, PerfMark::PostUpdateVisibility)
-                })
-                    .in_set(PerfMark::PostUpdateVisibility)
-                    .after(VisibilitySystems::MarkNewlyHiddenEntitiesInvisible),
-            )
-            .add_systems(
-                Last,
-                (|perf: ResMut<PerfStats>| systems::debug::mark_perf(perf, PerfMark::Last))
-                    .in_set(PerfMark::Last)
-                    .before(systems::debug::finish_perf_frame),
-            )
-            .add_systems(Last, systems::debug::finish_perf_frame);
+                    .after(PerfScope::Ui)
+                    .before(PerfScope::Debug),
+            );
     }
 }
 

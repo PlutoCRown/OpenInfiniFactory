@@ -32,6 +32,9 @@ pub struct BlockEntity {
     pub pos: IVec3,
 }
 
+#[derive(Component)]
+pub struct GameplayScene;
+
 #[derive(Resource, Default)]
 pub struct BlockIconAssets {
     icons: HashMap<BlockKind, Handle<Image>>,
@@ -96,6 +99,7 @@ pub fn setup_scene(
             ..default()
         },
         Transform::from_xyz(3.5, 5.5, 4.5),
+        GameplayScene,
     ));
 
     commands.spawn((
@@ -113,6 +117,7 @@ pub fn setup_scene(
             overlap_proportion: 0.16,
         }
         .build(),
+        GameplayScene,
     ));
 
     let render_assets = WorldRenderAssets::new(&mut meshes, &mut materials, &mut images);
@@ -131,6 +136,7 @@ pub fn setup_scene(
         MeshMaterial3d(marker_material),
         Visibility::Hidden,
         HoverMarker,
+        GameplayScene,
     ));
 
     let preview_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
@@ -147,7 +153,33 @@ pub fn setup_scene(
         MeshMaterial3d(preview_material),
         Visibility::Hidden,
         PlacementPreview,
+        GameplayScene,
     ));
+}
+
+pub fn rebuild_world_on_enter(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    world: &WorldBlocks,
+    render_assets: &WorldRenderAssets,
+    debug: &DebugState,
+    factory_structures: &mut FactoryStructureState,
+) {
+    factory_structures.ensure_current_world(world);
+    rebuild_world_for_debug_state(
+        commands,
+        meshes,
+        world,
+        render_assets,
+        debug,
+        factory_structures,
+    );
+}
+
+pub fn teardown_playing_scene(commands: &mut Commands) {
+    commands.remove_resource::<WorldRenderAssets>();
+    commands.remove_resource::<BlockIconAssets>();
+    commands.remove_resource::<BlockIconRenderState>();
 }
 
 pub fn setup_block_icons(

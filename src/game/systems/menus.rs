@@ -11,8 +11,8 @@ use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::state::{
-    BuilderMode, GameMode, GameSettings, PlacementState, SimulationState, SolutionState,
-    TeleportRenameState, WorldEntryMode,
+    BuilderMode, GameMode, GameSettings, PlacementState, PlayingUiState, SimulationState,
+    SolutionState, StartMenuScreen, TeleportRenameState, WorldEntryMode,
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{
@@ -39,7 +39,7 @@ pub struct WorldMenuParams<'w, 's> {
     pub commands: Commands<'w, 's>,
     pub meshes: ResMut<'w, Assets<Mesh>>,
     pub world: ResMut<'w, WorldBlocks>,
-    pub render_assets: Res<'w, WorldRenderAssets>,
+    pub render_assets: Option<Res<'w, WorldRenderAssets>>,
     pub debug: Res<'w, DebugState>,
     pub factory_structures: ResMut<'w, FactoryStructureState>,
     pub movement_influence: ResMut<'w, MovementInfluenceCache>,
@@ -54,7 +54,10 @@ pub fn menu_actions(
     mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
-    mut mode: ResMut<GameMode>,
+    mode: Res<State<GameMode>>,
+    mut playing_ui: ResMut<PlayingUiState>,
+    mut start_menu_screen: ResMut<StartMenuScreen>,
+    mut next_state: ResMut<NextState<GameMode>>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
     mut ui_runtime: ResMut<UiRuntime>,
@@ -71,30 +74,27 @@ pub fn menu_actions(
     };
     click.propagate(false);
 
-    match (*mode, action) {
-        (GameMode::MainMenu, MenuAction::EditPuzzle) => {
+    match (*mode.get(), action) {
+        (GameMode::StartMenu, MenuAction::EditPuzzle) => {
             save_state.refresh();
             save_state.select_puzzle(None, None);
             solution_state.save_list_entry = WorldEntryMode::EditPuzzle;
-            *mode = GameMode::SaveListMain;
+            *start_menu_screen = StartMenuScreen::SaveList;
         }
-        (GameMode::MainMenu, MenuAction::Play) => {
+        (GameMode::StartMenu, MenuAction::Play) => {
             save_state.refresh();
             save_state.select_puzzle(None, None);
             solution_state.save_list_entry = WorldEntryMode::PlaySolution;
-            *mode = GameMode::SaveListMain;
+            *start_menu_screen = StartMenuScreen::SaveList;
         }
-        (GameMode::MainMenu, MenuAction::OpenSettings) => {
-            ui_runtime.open(
-                UiPanelId::Settings,
-                UiPanelContext::ReturnTo(GameMode::MainMenu),
-            );
+        (GameMode::StartMenu, MenuAction::OpenSettings) => {
+            ui_runtime.open(UiPanelId::Settings, UiPanelContext::SettingsFromStartMenu);
         }
-        (GameMode::MainMenu, MenuAction::Quit) => {
+        (GameMode::StartMenu, MenuAction::Quit) => {
             std::process::exit(0);
         }
-        (GameMode::Paused, MenuAction::Resume) => *mode = GameMode::Playing,
-        (GameMode::Paused, MenuAction::ToggleBuilderMode) => {
+        (GameMode::Playing, MenuAction::Resume) => playing_ui.paused = false,
+        (GameMode::Playing, MenuAction::ToggleBuilderMode) if playing_ui.paused => {
             if solution_state.entry == WorldEntryMode::PlaySolution {
                 return;
             }
@@ -125,9 +125,9 @@ pub fn menu_actions(
             *inventory = InventoryItems::for_mode(*builder_mode);
             carried.clear();
             placement.selected = 0;
-            *mode = GameMode::Playing;
+            playing_ui.paused = false;
         }
-        (GameMode::Paused, MenuAction::SaveWorld) => {
+        (GameMode::Playing, MenuAction::SaveWorld) if playing_ui.paused => {
             save_current_world(
                 &world_menu.world,
                 &inventory,
@@ -136,23 +136,20 @@ pub fn menu_actions(
                 &simulation,
             );
         }
-        (GameMode::Paused, MenuAction::SaveAsNewPuzzle) => {
+        (GameMode::Playing, MenuAction::SaveAsNewPuzzle) if playing_ui.paused => {
             open_text_prompt(&mut text_prompt, TextPromptKind::SaveAsNewPuzzle, "puzzle");
         }
-        (GameMode::Paused, MenuAction::ResetSolution) => {
+        (GameMode::Playing, MenuAction::ResetSolution) if playing_ui.paused => {
             confirm_dialog.kind = Some(ConfirmDialogKind::ResetSolution);
         }
-        (GameMode::Paused, MenuAction::OpenSettings) => {
-            ui_runtime.open(
-                UiPanelId::Settings,
-                UiPanelContext::ReturnTo(GameMode::Paused),
-            );
+        (GameMode::Playing, MenuAction::OpenSettings) if playing_ui.paused => {
+            ui_runtime.open(UiPanelId::Settings, UiPanelContext::SettingsFromPause);
         }
-        (GameMode::Paused, MenuAction::BackToMainMenu) => {
+        (GameMode::Playing, MenuAction::BackToMainMenu) if playing_ui.paused => {
             if solution_state.dirty {
                 confirm_dialog.kind = Some(ConfirmDialogKind::ReturnToMain);
             } else {
-                clear_loaded_world(
+                return_to_main_menu(
                     &mut world_menu.world,
                     &mut placement,
                     &mut save_state,
@@ -160,14 +157,15 @@ pub fn menu_actions(
                     &mut simulation,
                     &mut world_menu.commands,
                     &mut world_menu.meshes,
+                    world_menu.render_assets.as_deref(),
                     &world_menu.block_entities,
-                    &world_menu.render_assets,
                     &world_menu.debug,
                     &mut world_menu.factory_structures,
                     &mut world_menu.movement_influence,
                     &mut world_menu.pusher_state,
+                    &mut next_state,
+                    &mut start_menu_screen,
                 );
-                *mode = GameMode::MainMenu;
             }
         }
         _ => {}
@@ -176,7 +174,9 @@ pub fn menu_actions(
 
 pub fn save_list_actions(
     mut click: On<Pointer<Click>>,
-    mut mode: ResMut<GameMode>,
+    mode: Res<State<GameMode>>,
+    mut start_menu_screen: ResMut<StartMenuScreen>,
+    mut next_state: ResMut<NextState<GameMode>>,
     mut builder_mode: ResMut<BuilderMode>,
     mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
@@ -189,7 +189,10 @@ pub fn save_list_actions(
     mut text_prompt: ResMut<TextPromptState>,
     actions: Query<&SaveListAction>,
 ) {
-    if !primary_click(&mut click) || *mode != GameMode::SaveListMain {
+    if !primary_click(&mut click)
+        || *mode.get() != GameMode::StartMenu
+        || *start_menu_screen != StartMenuScreen::SaveList
+    {
         return;
     }
     let Ok(action) = actions.get(click.entity).cloned() else {
@@ -238,12 +241,13 @@ pub fn save_list_actions(
                     &mut world_menu.commands,
                     &mut world_menu.meshes,
                     &world_menu.block_entities,
-                    &world_menu.render_assets,
+                    world_menu.render_assets.as_deref(),
                     &world_menu.debug,
                     &mut world_menu.factory_structures,
                     &mut world_menu.movement_influence,
                     &mut world_menu.pusher_state,
-                    &mut mode,
+                    *mode.get(),
+                    &mut next_state,
                 );
             } else {
                 let Some(choice) = save_state
@@ -284,12 +288,13 @@ pub fn save_list_actions(
                 &mut world_menu.commands,
                 &mut world_menu.meshes,
                 &world_menu.block_entities,
-                &world_menu.render_assets,
+                world_menu.render_assets.as_deref(),
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
                 &mut world_menu.pusher_state,
-                &mut mode,
+                *mode.get(),
+                &mut next_state,
             );
         }
         SaveListAction::RenamePuzzle(name) => {
@@ -338,7 +343,7 @@ pub fn save_list_actions(
             }
         }
         SaveListAction::Back => {
-            *mode = GameMode::MainMenu;
+            *start_menu_screen = StartMenuScreen::Main;
         }
     }
 }
@@ -350,7 +355,9 @@ pub fn confirm_dialog_actions(
     mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
-    mut mode: ResMut<GameMode>,
+    mut playing_ui: ResMut<PlayingUiState>,
+    mut next_state: ResMut<NextState<GameMode>>,
+    mut start_menu_screen: ResMut<StartMenuScreen>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
     mut world_menu: WorldMenuParams,
@@ -384,14 +391,14 @@ pub fn confirm_dialog_actions(
                 &mut world_menu.commands,
                 &mut world_menu.meshes,
                 &world_menu.block_entities,
-                &world_menu.render_assets,
+                world_menu.render_assets.as_deref(),
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
                 &mut world_menu.pusher_state,
                 &solution_state,
             );
-            *mode = GameMode::Paused;
+            playing_ui.paused = true;
         }
         (ConfirmDialogKind::ReturnToMain, ConfirmDialogAction::Primary) => {
             save_current_world(
@@ -409,13 +416,14 @@ pub fn confirm_dialog_actions(
                 &mut simulation,
                 &mut world_menu.commands,
                 &mut world_menu.meshes,
+                world_menu.render_assets.as_deref(),
                 &world_menu.block_entities,
-                &world_menu.render_assets,
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
                 &mut world_menu.pusher_state,
-                &mut mode,
+                &mut next_state,
+                &mut start_menu_screen,
             );
         }
         (ConfirmDialogKind::ReturnToMain, ConfirmDialogAction::Secondary) => {
@@ -427,13 +435,14 @@ pub fn confirm_dialog_actions(
                 &mut simulation,
                 &mut world_menu.commands,
                 &mut world_menu.meshes,
+                world_menu.render_assets.as_deref(),
                 &world_menu.block_entities,
-                &world_menu.render_assets,
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
                 &mut world_menu.pusher_state,
-                &mut mode,
+                &mut next_state,
+                &mut start_menu_screen,
             );
         }
         (ConfirmDialogKind::SaveSolutionBeforeEdit, ConfirmDialogAction::Primary) => {
@@ -450,13 +459,13 @@ pub fn confirm_dialog_actions(
                 &mut inventory,
                 &mut carried,
                 &mut placement,
-                &mut mode,
+                &mut playing_ui,
                 &mut save_state,
                 &mut solution_state,
                 &mut world_menu.commands,
                 &mut world_menu.meshes,
                 &world_menu.block_entities,
-                &world_menu.render_assets,
+                world_menu.render_assets.as_deref(),
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
@@ -470,13 +479,13 @@ pub fn confirm_dialog_actions(
                 &mut inventory,
                 &mut carried,
                 &mut placement,
-                &mut mode,
+                &mut playing_ui,
                 &mut save_state,
                 &mut solution_state,
                 &mut world_menu.commands,
                 &mut world_menu.meshes,
                 &world_menu.block_entities,
-                &world_menu.render_assets,
+                world_menu.render_assets.as_deref(),
                 &world_menu.debug,
                 &mut world_menu.factory_structures,
                 &mut world_menu.movement_influence,
@@ -492,7 +501,8 @@ pub fn confirm_dialog_actions(
 pub fn text_prompt_actions(
     mut click: On<Pointer<Click>>,
     mut prompt: ResMut<TextPromptState>,
-    mut mode: ResMut<GameMode>,
+    mode: Res<State<GameMode>>,
+    mut next_state: ResMut<NextState<GameMode>>,
     mut builder_mode: ResMut<BuilderMode>,
     mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
@@ -513,7 +523,8 @@ pub fn text_prompt_actions(
     match action {
         TextPromptAction::Confirm => confirm_text_prompt(
             &mut prompt,
-            &mut mode,
+            *mode.get(),
+            &mut next_state,
             &mut builder_mode,
             &mut inventory,
             &mut carried,
@@ -532,7 +543,8 @@ pub fn text_prompt_actions(
 
 pub fn text_prompt_input(
     mut prompt: ResMut<TextPromptState>,
-    mut mode: ResMut<GameMode>,
+    mode: Res<State<GameMode>>,
+    mut next_state: ResMut<NextState<GameMode>>,
     mut builder_mode: ResMut<BuilderMode>,
     mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
@@ -564,7 +576,8 @@ pub fn text_prompt_input(
     if confirm {
         confirm_text_prompt(
             &mut prompt,
-            &mut mode,
+            *mode.get(),
+            &mut next_state,
             &mut builder_mode,
             &mut inventory,
             &mut carried,
@@ -587,7 +600,8 @@ fn open_text_prompt(prompt: &mut TextPromptState, kind: TextPromptKind, value: &
 
 fn confirm_text_prompt(
     prompt: &mut TextPromptState,
-    mode: &mut GameMode,
+    current_mode: GameMode,
+    next_state: &mut NextState<GameMode>,
     builder_mode: &mut BuilderMode,
     inventory: &mut InventoryItems,
     carried: &mut CarriedItem,
@@ -629,7 +643,8 @@ fn confirm_text_prompt(
                 open_loaded_world_from_menu(
                     &name,
                     WorldEntryMode::EditPuzzle,
-                    mode,
+                    current_mode,
+                    next_state,
                     builder_mode,
                     inventory,
                     carried,
@@ -655,7 +670,8 @@ fn confirm_text_prompt(
                 open_loaded_world_from_menu(
                     &name,
                     WorldEntryMode::PlaySolution,
-                    mode,
+                    current_mode,
+                    next_state,
                     builder_mode,
                     inventory,
                     carried,
@@ -696,7 +712,8 @@ fn confirm_text_prompt(
 fn open_loaded_world_from_menu(
     name: &str,
     entry: WorldEntryMode,
-    mode: &mut GameMode,
+    current_mode: GameMode,
+    next_state: &mut NextState<GameMode>,
     builder_mode: &mut BuilderMode,
     inventory: &mut InventoryItems,
     carried: &mut CarriedItem,
@@ -720,12 +737,13 @@ fn open_loaded_world_from_menu(
         &mut world_menu.commands,
         &mut world_menu.meshes,
         &world_menu.block_entities,
-        &world_menu.render_assets,
+        world_menu.render_assets.as_deref(),
         &world_menu.debug,
         &mut world_menu.factory_structures,
         &mut world_menu.movement_influence,
         &mut world_menu.pusher_state,
-        mode,
+        current_mode,
+        next_state,
     );
 }
 
@@ -772,13 +790,13 @@ fn switch_to_edit_mode_and_rebuild(
     inventory: &mut InventoryItems,
     carried: &mut CarriedItem,
     placement: &mut PlacementState,
-    mode: &mut GameMode,
+    playing_ui: &mut PlayingUiState,
     save_state: &mut SaveState,
     solution_state: &mut SolutionState,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     block_entities: &Query<Entity, With<BlockEntity>>,
-    render_assets: &WorldRenderAssets,
+    render_assets: Option<&WorldRenderAssets>,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     movement_influence: &mut MovementInfluenceCache,
@@ -790,23 +808,25 @@ fn switch_to_edit_mode_and_rebuild(
         inventory,
         carried,
         placement,
-        mode,
+        playing_ui,
         save_state,
         solution_state,
     );
-    despawn_world(commands, block_entities);
-    factory_structures.clear();
-    movement_influence.clear();
-    pusher_state.clear();
-    factory_structures.ensure_current_world(world);
-    rebuild_world_for_debug_state(
-        commands,
-        meshes,
-        world,
-        render_assets,
-        debug,
-        factory_structures,
-    );
+    if let Some(render_assets) = render_assets {
+        despawn_world(commands, block_entities);
+        factory_structures.clear();
+        movement_influence.clear();
+        pusher_state.clear();
+        factory_structures.ensure_current_world(world);
+        rebuild_world_for_debug_state(
+            commands,
+            meshes,
+            world,
+            render_assets,
+            debug,
+            factory_structures,
+        );
+    }
 }
 
 fn reset_current_solution(
@@ -815,7 +835,7 @@ fn reset_current_solution(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     block_entities: &Query<Entity, With<BlockEntity>>,
-    render_assets: &WorldRenderAssets,
+    render_assets: Option<&WorldRenderAssets>,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     movement_influence: &mut MovementInfluenceCache,
@@ -835,15 +855,17 @@ fn reset_current_solution(
         movement_influence.clear();
         pusher_state.clear();
         factory_structures.ensure_current_world(world);
-        despawn_world(commands, block_entities);
-        rebuild_world_for_debug_state(
-            commands,
-            meshes,
-            world,
-            render_assets,
-            debug,
-            factory_structures,
-        );
+        if let Some(render_assets) = render_assets {
+            despawn_world(commands, block_entities);
+            rebuild_world_for_debug_state(
+                commands,
+                meshes,
+                world,
+                render_assets,
+                debug,
+                factory_structures,
+            );
+        }
     }
 }
 
@@ -855,13 +877,14 @@ fn return_to_main_menu(
     simulation: &mut SimulationState,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
+    render_assets: Option<&WorldRenderAssets>,
     block_entities: &Query<Entity, With<BlockEntity>>,
-    render_assets: &WorldRenderAssets,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
-    mode: &mut GameMode,
+    next_state: &mut NextState<GameMode>,
+    start_menu_screen: &mut StartMenuScreen,
 ) {
     clear_loaded_world(
         world,
@@ -871,14 +894,15 @@ fn return_to_main_menu(
         simulation,
         commands,
         meshes,
-        block_entities,
         render_assets,
+        block_entities,
         debug,
         factory_structures,
         movement_influence,
         pusher_state,
     );
-    *mode = GameMode::MainMenu;
+    *start_menu_screen = StartMenuScreen::Main;
+    next_state.set(GameMode::StartMenu);
 }
 
 fn open_loaded_world(
@@ -895,12 +919,13 @@ fn open_loaded_world(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     block_entities: &Query<Entity, With<BlockEntity>>,
-    render_assets: &WorldRenderAssets,
+    render_assets: Option<&WorldRenderAssets>,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
-    mode: &mut GameMode,
+    current_mode: GameMode,
+    next_state: &mut NextState<GameMode>,
 ) {
     let Some(loaded) = load_world(world, name) else {
         return;
@@ -945,16 +970,23 @@ fn open_loaded_world(
     movement_influence.clear();
     pusher_state.clear();
     factory_structures.ensure_current_world(world);
-    despawn_world(commands, block_entities);
-    rebuild_world_for_debug_state(
-        commands,
-        meshes,
-        world,
-        render_assets,
-        debug,
-        factory_structures,
-    );
-    *mode = GameMode::Playing;
+
+    match current_mode {
+        GameMode::StartMenu => next_state.set(GameMode::Playing),
+        GameMode::Playing => {
+            if let Some(render_assets) = render_assets {
+                despawn_world(commands, block_entities);
+                rebuild_world_for_debug_state(
+                    commands,
+                    meshes,
+                    world,
+                    render_assets,
+                    debug,
+                    factory_structures,
+                );
+            }
+        }
+    }
 }
 
 fn clear_loaded_world(
@@ -965,8 +997,8 @@ fn clear_loaded_world(
     simulation: &mut SimulationState,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
+    render_assets: Option<&WorldRenderAssets>,
     block_entities: &Query<Entity, With<BlockEntity>>,
-    render_assets: &WorldRenderAssets,
     debug: &DebugState,
     factory_structures: &mut FactoryStructureState,
     movement_influence: &mut MovementInfluenceCache,
@@ -990,15 +1022,17 @@ fn clear_loaded_world(
     movement_influence.clear();
     pusher_state.clear();
     factory_structures.ensure_current_world(world);
-    despawn_world(commands, block_entities);
-    rebuild_world_for_debug_state(
-        commands,
-        meshes,
-        world,
-        render_assets,
-        debug,
-        factory_structures,
-    );
+    if let Some(render_assets) = render_assets {
+        despawn_world(commands, block_entities);
+        rebuild_world_for_debug_state(
+            commands,
+            meshes,
+            world,
+            render_assets,
+            debug,
+            factory_structures,
+        );
+    }
 }
 
 fn switch_to_edit_mode(
@@ -1007,7 +1041,7 @@ fn switch_to_edit_mode(
     inventory: &mut InventoryItems,
     carried: &mut CarriedItem,
     placement: &mut PlacementState,
-    mode: &mut GameMode,
+    playing_ui: &mut PlayingUiState,
     save_state: &mut SaveState,
     solution_state: &mut SolutionState,
 ) {
@@ -1021,7 +1055,7 @@ fn switch_to_edit_mode(
     placement.selected = 0;
     save_state.current_kind = Some(SaveKind::Puzzle);
     solution_state.puzzle_snapshot = None;
-    *mode = GameMode::Paused;
+    playing_ui.paused = true;
 }
 
 pub fn settings_menu_actions(
@@ -1084,7 +1118,6 @@ pub fn settings_menu_actions(
 
 pub fn settings_action_clicked(
     mut click: On<Pointer<Click>>,
-    mut mode: ResMut<GameMode>,
     mut settings: ResMut<GameSettings>,
     mut ui_scale: ResMut<UiScale>,
     mut config: ResMut<GameConfig>,
@@ -1161,21 +1194,9 @@ pub fn settings_action_clicked(
         SettingsAction::Back => {
             open_dropdown.0 = None;
             pending_key_bind.0 = None;
-            let return_mode = settings_return_mode(&ui_runtime, *mode);
             ui_runtime.close_active();
-            *mode = return_mode;
         }
     }
-}
-
-fn settings_return_mode(ui_runtime: &UiRuntime, fallback: GameMode) -> GameMode {
-    ui_runtime
-        .active()
-        .and_then(|session| match session.context {
-            UiPanelContext::ReturnTo(mode) => Some(mode),
-            _ => None,
-        })
-        .unwrap_or(fallback)
 }
 
 fn update_settings_sliders_from_input(
@@ -1288,14 +1309,16 @@ pub fn block_edit_actions(
     world_menu
         .factory_structures
         .ensure_current_world(&world_menu.world);
-    rebuild_world_for_debug_state(
-        &mut world_menu.commands,
-        &mut world_menu.meshes,
-        &world_menu.world,
-        &world_menu.render_assets,
-        &world_menu.debug,
-        &mut world_menu.factory_structures,
-    );
+    if let Some(render_assets) = world_menu.render_assets.as_deref() {
+        rebuild_world_for_debug_state(
+            &mut world_menu.commands,
+            &mut world_menu.meshes,
+            &world_menu.world,
+            render_assets,
+            &world_menu.debug,
+            &mut world_menu.factory_structures,
+        );
+    }
 }
 
 fn block_edit_action_mutates_world(action: BlockEditAction) -> bool {

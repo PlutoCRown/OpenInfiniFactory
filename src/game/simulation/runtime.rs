@@ -215,12 +215,15 @@ pub fn tick_simulation(
     mut meshes: ResMut<Assets<Mesh>>,
     block_entities: Query<Entity, With<BlockEntity>>,
     pending_previews: Query<Entity, With<PendingGeneratedPreview>>,
-    render_assets: Res<WorldRenderAssets>,
+    render_assets: Option<Res<WorldRenderAssets>>,
     debug: Res<DebugState>,
     mut factory_structures: ResMut<FactoryStructureState>,
     mut movement_influence: ResMut<MovementInfluenceCache>,
     mut pusher_state: ResMut<PusherState>,
 ) {
+    let Some(render_assets) = render_assets.as_ref() else {
+        return;
+    };
     if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
         prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
         refresh_pending_generated_previews(

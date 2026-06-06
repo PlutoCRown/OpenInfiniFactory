@@ -1,5 +1,7 @@
 pub fn update_panel_visibility(
-    mode: Res<GameMode>,
+    mode: Res<State<GameMode>>,
+    start_menu_screen: Res<StartMenuScreen>,
+    playing_ui: Res<PlayingUiState>,
     save_state: Res<SaveState>,
     solution_state: Res<SolutionState>,
     settings_tab: Res<SettingsTab>,
@@ -18,10 +20,13 @@ pub fn update_panel_visibility(
     confirm_dialog: Res<ConfirmDialogState>,
 ) {
     let active_panel = ui_runtime.active_panel();
+    let mode = mode.get();
     for (visibility, mut style) in &mut nodes.p0() {
         style.display = display_for(panel_visible(
             *visibility,
             *mode,
+            *start_menu_screen,
+            &playing_ui,
             *settings_tab,
             &ui_runtime,
             &confirm_dialog,
@@ -59,7 +64,6 @@ pub fn update_panel_visibility(
 
 pub fn panel_close_clicked(
     mut click: On<Pointer<Click>>,
-    mut mode: ResMut<GameMode>,
     mut ui_runtime: ResMut<UiRuntime>,
     mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut open_settings_dropdown: ResMut<OpenSettingsDropdown>,
@@ -79,11 +83,7 @@ pub fn panel_close_clicked(
     }
     open_block_dropdown.0 = None;
     teleport_rename.editing = None;
-    let return_mode = panel_close_return_mode(&ui_runtime);
     ui_runtime.close_active();
-    if let Some(return_mode) = return_mode {
-        *mode = return_mode;
-    }
     drag.clear();
 }
 
@@ -152,13 +152,27 @@ pub fn panel_drag_ended(
     drag.clear();
 }
 
-fn panel_close_return_mode(ui_runtime: &UiRuntime) -> Option<GameMode> {
-    ui_runtime
-        .active()
-        .and_then(|session| match session.context {
-            UiPanelContext::ReturnTo(mode) => Some(mode),
-            _ => None,
-        })
+fn panel_visible(
+    visibility: PanelVisibility,
+    mode: GameMode,
+    start_menu_screen: StartMenuScreen,
+    playing_ui: &PlayingUiState,
+    settings_tab: SettingsTab,
+    ui_runtime: &UiRuntime,
+    confirm_dialog: &ConfirmDialogState,
+) -> bool {
+    match visibility {
+        PanelVisibility::StartMenuScreen(screen) => {
+            mode == GameMode::StartMenu && start_menu_screen == screen
+        }
+        PanelVisibility::PauseMenu => mode == GameMode::Playing && playing_ui.paused,
+        PanelVisibility::Inventory => mode == GameMode::Playing && playing_ui.inventory_open,
+        PanelVisibility::SettingsTab(tab) => ui_runtime.is_settings_open() && settings_tab == tab,
+        PanelVisibility::ConfirmDialog => confirm_dialog.kind.is_some(),
+        PanelVisibility::ModalScrim => {
+            ui_runtime.has_modal_panel() || confirm_dialog.kind.is_some()
+        }
+    }
 }
 
 fn active_block_has_panel(
@@ -174,23 +188,6 @@ fn active_block_has_panel(
         .get(&pos)
         .and_then(|block| block.kind.ui_panel())
         == active_panel
-}
-
-fn panel_visible(
-    visibility: PanelVisibility,
-    mode: GameMode,
-    settings_tab: SettingsTab,
-    ui_runtime: &UiRuntime,
-    confirm_dialog: &ConfirmDialogState,
-) -> bool {
-    match visibility {
-        PanelVisibility::GameMode(target_mode) => mode == target_mode,
-        PanelVisibility::SettingsTab(tab) => ui_runtime.is_settings_open() && settings_tab == tab,
-        PanelVisibility::ConfirmDialog => confirm_dialog.kind.is_some(),
-        PanelVisibility::ModalScrim => {
-            ui_runtime.has_modal_panel() || confirm_dialog.kind.is_some()
-        }
-    }
 }
 
 fn display_for(visible: bool) -> Display {
