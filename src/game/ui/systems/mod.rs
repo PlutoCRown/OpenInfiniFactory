@@ -14,11 +14,11 @@ use crate::game::ui::access::{i18n, I18nRevision, UiMainThread};
 use crate::game::ui::components::ui_logical_bounds;
 
 use super::types::{
-    Crosshair, GameplayHudVisibility, InGameHudStyle, InGameHudVisibility, InlineTextEditState,
-    InventoryItems, LocalizedText, MenuAction, OpenBlockPanelDropdown, OpenSettingsDropdown,
-    PanelCloseButton, PanelDragState, PanelPosition, PanelTitleBar, PanelVisibility, PanelWindow,
-    PendingKeyBind, SettingsTab, StatusText, StatusTextKind, TextPromptRoot, UiHost, UiHoverState,
-    UiPanelBinding, UiRuntime,
+    CarriedItem, Crosshair, GameplayHudVisibility, InGameHudStyle, InGameHudVisibility,
+    InlineTextEditState, InventoryItems, LocalizedText, MenuAction, OpenBlockPanelDropdown,
+    OpenSettingsDropdown, PanelCloseButton, PanelDragState, PanelPosition, PanelTitleBar,
+    PanelVisibility, PanelWindow, PendingKeyBind, SettingsTab, StatusText, StatusTextKind,
+    TextPromptRoot, UiHost, UiHoverState, UiPanelBinding, UiRuntime,
 };
 include!("font.rs");
 include!("status.rs");

@@ -55,6 +55,43 @@ pub fn close_active_closable_panel(
     )
 }
 
+/// Closes the topmost in-game overlay: block panel → inventory → pause menu.
+pub fn dismiss_playing_overlay(
+    playing_ui: &mut PlayingUiState,
+    carried: &mut CarriedItem,
+    ui_runtime: &mut UiRuntime,
+    ui_host: &mut UiHost,
+    open_block_dropdown: &mut OpenBlockPanelDropdown,
+    open_settings_dropdown: &mut OpenSettingsDropdown,
+    pending_key_bind: &mut PendingKeyBind,
+    inline_edit: &mut InlineTextEditState,
+    drag: &mut PanelDragState,
+    commands: &mut Commands,
+) -> bool {
+    if close_active_closable_panel(
+        ui_runtime,
+        ui_host,
+        open_block_dropdown,
+        open_settings_dropdown,
+        pending_key_bind,
+        inline_edit,
+        drag,
+        commands,
+    ) {
+        return true;
+    }
+    if playing_ui.inventory_open {
+        playing_ui.inventory_open = false;
+        carried.clear();
+        return true;
+    }
+    if playing_ui.paused {
+        playing_ui.paused = false;
+        return true;
+    }
+    false
+}
+
 pub fn update_panel_visibility(
     mode: Res<State<GameMode>>,
     start_menu_screen: Res<StartMenuScreen>,

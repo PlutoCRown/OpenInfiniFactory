@@ -10,7 +10,7 @@ pub struct SliderFill;
 #[derive(Component)]
 pub struct SliderKnob;
 
-pub fn slider_bundle(action: impl Component + Copy) -> impl Bundle {
+pub fn slider_bundle(action: impl Component + Copy, initial_value: f32) -> impl Bundle {
     (
         styled_button(
             Node {
@@ -27,16 +27,16 @@ pub fn slider_bundle(action: impl Component + Copy) -> impl Bundle {
         Slider {
             track_click: TrackClick::Snap,
         },
-        SliderValue(0.0),
+        SliderValue(initial_value.clamp(0.0, 100.0)),
         SliderRange::new(0.0, 100.0),
         action,
     )
 }
 
-pub fn slider_fill() -> impl Bundle {
+pub fn slider_fill(percent: f32) -> impl Bundle {
     (
         Node {
-            width: Val::Percent(50.0),
+            width: Val::Percent(percent.clamp(0.0, 100.0)),
             height: Val::Percent(100.0),
             ..default()
         },
@@ -46,11 +46,11 @@ pub fn slider_fill() -> impl Bundle {
     )
 }
 
-pub fn slider_knob() -> impl Bundle {
+pub fn slider_knob(percent: f32) -> impl Bundle {
     (
         Node {
             position_type: PositionType::Absolute,
-            left: Val::Percent(50.0),
+            left: Val::Percent(percent.clamp(0.0, 100.0)),
             top: Val::Px(3.0),
             bottom: Val::Px(3.0),
             width: Val::Px(6.0),

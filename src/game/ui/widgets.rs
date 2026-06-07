@@ -1,9 +1,11 @@
 use bevy::prelude::*;
 
+use crate::game::state::GameSettings;
+
 use super::components::{
     auto_width_button, default_button_size, default_font_size, full_width_button, inset_border,
     localized_text, menu_button, raised_border, slider_bundle, slider_fill, slider_knob,
-    styled_button,
+    styled_button, text_button, BUTTON_BG,
 };
 use super::types::{
     AreaKind, ConfirmButtonId, InventoryItem, InventorySlot, KeyBindingButton, MenuAction,
@@ -134,30 +136,14 @@ pub(super) fn spawn_settings_tab(parent: &mut ChildSpawnerCommands, action: Sett
     let key = action.label_key();
     parent
         .spawn((
-            styled_button(
+            text_button(
                 Node {
                     min_width: Val::Px(default_button_size(150.0)),
                     height: Val::Px(default_button_size(38.0)),
-                    padding: UiRect::horizontal(Val::Px(18.0)),
-                    border: UiRect {
-                        left: Val::Px(1.0),
-                        right: Val::Px(1.0),
-                        top: Val::Px(1.0),
-                        bottom: Val::Px(3.0),
-                    },
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
                     ..default()
                 },
                 raised_border(),
-                Color::srgb(0.255, 0.251, 0.251),
-            ),
-            BoxShadow::new(
-                Color::srgba(0.0, 0.0, 0.0, 0.45),
-                Val::Px(0.0),
-                Val::Px(0.0),
-                Val::Px(0.0),
-                Val::Px(3.0),
+                BUTTON_BG,
             ),
             action,
         ))
@@ -166,12 +152,17 @@ pub(super) fn spawn_settings_tab(parent: &mut ChildSpawnerCommands, action: Sett
         });
 }
 
-pub(super) fn spawn_settings_slider(parent: &mut ChildSpawnerCommands, field: SettingsField) {
+pub(super) fn spawn_settings_slider(
+    parent: &mut ChildSpawnerCommands,
+    field: SettingsField,
+    settings: &GameSettings,
+) {
+    let percent = field.percent(settings);
     parent
-        .spawn(slider_bundle(SettingsAction::Field(field)))
+        .spawn(slider_bundle(SettingsAction::Field(field), percent))
         .with_children(|track| {
-            track.spawn((slider_fill(), SettingsSliderFill(field)));
-            track.spawn((slider_knob(), SettingsSliderKnob(field)));
+            track.spawn((slider_fill(percent), SettingsSliderFill(field)));
+            track.spawn((slider_knob(percent), SettingsSliderKnob(field)));
         });
 }
 
@@ -187,6 +178,8 @@ pub(super) fn spawn_settings_slider_value(parent: &mut ChildSpawnerCommands, fie
         SettingsValueText(field),
     ));
 }
+
+const DROPDOWN_CHEVRON_COLOR: Color = Color::srgb(0.72, 0.80, 0.84);
 
 pub(super) fn spawn_settings_dropdown(
     parent: &mut ChildSpawnerCommands,
@@ -204,29 +197,86 @@ pub(super) fn spawn_settings_dropdown(
         .with_children(|container| {
             container
                 .spawn((
-                    styled_button(
+                    text_button(
                         Node {
                             width: Val::Percent(100.0),
                             height: Val::Px(default_button_size(36.0)),
-                            padding: UiRect::horizontal(Val::Px(12.0)),
-                            border: UiRect::all(Val::Px(1.0)),
-                            align_items: AlignItems::Center,
-                            justify_content: JustifyContent::SpaceBetween,
                             ..default()
                         },
-                        Color::srgb(0.38, 0.39, 0.40),
-                        Color::srgba(0.18, 0.20, 0.22, 0.96),
+                        raised_border(),
+                        BUTTON_BG,
                     ),
                     SettingsAction::ToggleDropdown(dropdown),
                 ))
                 .with_children(|button| {
-                    button.spawn((
-                        label_text("", 14.0, Color::WHITE),
-                        SettingsDropdownLabel(dropdown),
-                    ));
-                    button.spawn(label_text("v", 12.0, Color::srgb(0.72, 0.80, 0.84)));
+                    button
+                        .spawn(plain_node(Node {
+                            width: Val::Percent(100.0),
+                            display: Display::Flex,
+                            flex_direction: FlexDirection::Row,
+                            align_items: AlignItems::Center,
+                            justify_content: JustifyContent::SpaceBetween,
+                            column_gap: Val::Px(10.0),
+                            ..default()
+                        }))
+                        .with_children(|row| {
+                            row.spawn((
+                                label_text("", 14.0, Color::WHITE),
+                                SettingsDropdownLabel(dropdown),
+                                Node {
+                                    flex_grow: 1.0,
+                                    flex_shrink: 1.0,
+                                    min_width: Val::Px(0.0),
+                                    overflow: Overflow::clip(),
+                                    ..default()
+                                },
+                            ));
+                            spawn_dropdown_chevron(row);
+                        });
                 });
         });
+}
+
+fn spawn_dropdown_chevron(parent: &mut ChildSpawnerCommands) {
+    parent
+        .spawn(plain_node(Node {
+            width: Val::Px(12.0),
+            height: Val::Px(8.0),
+            flex_shrink: 0.0,
+            position_type: PositionType::Relative,
+            ..default()
+        }))
+        .with_children(|chevron| {
+            chevron.spawn((
+                dropdown_chevron_line(Val::Px(0.0), Val::Px(1.0), 45.0),
+                Pickable::IGNORE,
+            ));
+            chevron.spawn((
+                dropdown_chevron_line(Val::Auto, Val::Px(1.0), -45.0),
+                Pickable::IGNORE,
+            ));
+        });
+}
+
+fn dropdown_chevron_line(anchor: Val, top: Val, degrees: f32) -> impl Bundle {
+    let mut node = Node {
+        position_type: PositionType::Absolute,
+        top,
+        width: Val::Px(7.0),
+        height: Val::Px(2.0),
+        ..default()
+    };
+    if matches!(anchor, Val::Auto) {
+        node.right = Val::Px(0.0);
+    } else {
+        node.left = anchor;
+    }
+
+    (
+        node,
+        BackgroundColor(DROPDOWN_CHEVRON_COLOR),
+        UiTransform::from_rotation(Rot2::degrees(degrees)),
+    )
 }
 
 pub(super) fn spawn_settings_dropdown_list(

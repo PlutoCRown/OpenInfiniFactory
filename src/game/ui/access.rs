@@ -14,7 +14,7 @@ use bevy::prelude::*;
 /// 声明于使用 `i18n` / `ui` 的系统中，保证其在主线程执行（与 `bind_ui_scope` 同线程）。
 pub type UiMainThread = NonSendMarker;
 
-use crate::game::state::UiPanelId;
+use crate::game::state::{GameSettings, UiPanelId};
 use crate::game::ui::core::confirm_dialog::{ConfirmProps, ConfirmResult};
 use crate::game::ui::core::host::{UiHost, UiHostCommands, UiInstanceId};
 use crate::game::ui::core::runtime::{UiPanelContext, UiRuntime};
@@ -126,7 +126,19 @@ impl UiAccess {
         root: Option<Entity>,
         context: UiPanelContext,
     ) -> UiInstanceId {
-        with_ui(|host| host.mount_settings(commands, root, context))
+        with_world(|world| {
+            let settings = {
+                let settings = world.resource::<GameSettings>();
+                GameSettings {
+                    fov_degrees: settings.fov_degrees,
+                    ui_scale: settings.ui_scale,
+                    gravity_scale: settings.gravity_scale,
+                }
+            };
+            let mut state = SystemState::<UiHostCommands>::new(world);
+            let mut params = state.get_mut(world);
+            params.mount_settings(commands, root, context, &settings)
+        })
     }
 
     pub fn unmount_panel(self, panel: UiPanelId, commands: &mut Commands) {

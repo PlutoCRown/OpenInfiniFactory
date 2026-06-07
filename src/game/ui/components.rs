@@ -1,4 +1,5 @@
 mod button;
+mod icon;
 mod layout;
 mod panel;
 mod scroll;
@@ -8,8 +9,9 @@ mod text;
 pub use button::{
     auto_width_button, button_hovered, button_pressed, button_released, button_unhovered,
     full_width_button, hover_border, inset_border, menu_button, pressed_border, raised_border,
-    styled_button, BUTTON_BG, BUTTON_HOVER_BG,
+    styled_button, text_button, BUTTON_BG, BUTTON_HOVER_BG,
 };
+pub use icon::spawn_close_icon;
 pub use layout::{flex_row, flex_row_auto, root_node, transparent_node, ui_logical_bounds};
 pub use panel::{
     absolute_text_bundle, compact_raised_panel, inventory_tray_bundle, inventory_tray_row_bundle,

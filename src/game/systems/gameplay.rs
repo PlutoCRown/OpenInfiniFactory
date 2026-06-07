@@ -16,7 +16,7 @@ use crate::game::state::{
     PlayingUiState, SelectionAxis, SelectionBounds, SelectionDrag, SimulationState, SolutionState,
 };
 use crate::game::systems::debug::DebugState;
-use crate::game::ui::close_active_closable_panel;
+use crate::game::ui::dismiss_playing_overlay;
 use crate::game::ui::UiHost;
 use crate::game::ui::{
     AreaKind, CarriedItem, InlineTextEditState, InventoryItems, OpenBlockPanelDropdown,
@@ -47,8 +47,15 @@ pub(crate) struct PanelCloseDeps<'w> {
 }
 
 impl PanelCloseDeps<'_> {
-    fn close_closable(&mut self, commands: &mut Commands) -> bool {
-        close_active_closable_panel(
+    fn dismiss_overlay(
+        &mut self,
+        playing_ui: &mut PlayingUiState,
+        carried: &mut CarriedItem,
+        commands: &mut Commands,
+    ) -> bool {
+        dismiss_playing_overlay(
+            playing_ui,
+            carried,
             &mut self.ui_runtime,
             &mut self.ui_host,
             &mut self.open_block_dropdown,
@@ -101,11 +108,8 @@ pub fn gameplay_input(
     }
 
     if keys.just_pressed(bindings.pause.key_code()) {
-        if panel_close.close_closable(&mut commands) {
-            // Panel closed.
-        } else if playing_ui.inventory_open {
-            playing_ui.inventory_open = false;
-            carried.clear();
+        if panel_close.dismiss_overlay(&mut playing_ui, &mut carried, &mut commands) {
+            // Overlay dismissed.
         } else {
             playing_ui.paused = !playing_ui.paused;
             if playing_ui.paused {
@@ -117,13 +121,10 @@ pub fn gameplay_input(
     }
 
     if keys.just_pressed(bindings.inventory.key_code()) {
-        if panel_close.close_closable(&mut commands) {
-            // Panel closed.
+        if panel_close.dismiss_overlay(&mut playing_ui, &mut carried, &mut commands) {
+            // Overlay dismissed.
         } else {
-            playing_ui.inventory_open = !playing_ui.inventory_open;
-            if !playing_ui.inventory_open {
-                carried.clear();
-            }
+            playing_ui.inventory_open = true;
         }
     }
 

@@ -78,12 +78,12 @@ pub fn update_settings_sliders_ui(
     }
 
     for (fill, mut style) in &mut slider_fills {
-        let percent = live_slider_percent(fill.0, &settings, &active_slider, &slider_values);
+        let percent = live_slider_percent(fill.0, &settings, &slider_values);
         style.width = Val::Percent(percent);
     }
 
     for (knob, mut style) in &mut slider_knobs {
-        let percent = live_slider_percent(knob.0, &settings, &active_slider, &slider_values);
+        let percent = live_slider_percent(knob.0, &settings, &slider_values);
         style.left = Val::Percent(percent);
     }
 }
@@ -240,7 +240,6 @@ pub fn update_settings_tabs_ui(
 fn live_slider_percent(
     field: SettingsField,
     settings: &GameSettings,
-    active_slider: &ActiveSettingsSlider,
     slider_values: &Query<
         (Entity, &SettingsAction, &SliderValue, &CoreSliderDragState),
         With<Slider>,
@@ -249,9 +248,8 @@ fn live_slider_percent(
     slider_values
         .iter()
         .find_map(|(_, action, value, drag_state)| {
-            ((drag_state.dragging || active_slider.0 == Some(field))
-                && *action == SettingsAction::Field(field))
-            .then_some(value.0.clamp(0.0, 100.0))
+            (drag_state.dragging && *action == SettingsAction::Field(field))
+                .then_some(value.0.clamp(0.0, 100.0))
         })
         .unwrap_or_else(|| field.percent(settings))
 }

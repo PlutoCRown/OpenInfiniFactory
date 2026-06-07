@@ -4,7 +4,8 @@ use super::super::types::{
     LocalizedText, PanelCloseButton, PanelPosition, PanelTitleBar, PanelWindow,
 };
 use super::button::{raised_border, HoverButton};
-use super::text::{default_font_size, text};
+use super::icon::spawn_close_icon;
+use super::text::default_font_size;
 use crate::game::ui::access::i18n;
 
 pub const PANEL_BG: Color = Color::srgb(0.192, 0.188, 0.192);
@@ -83,9 +84,7 @@ pub fn spawn_panel_with_title_marker(
                     title_text.insert(title_marker);
                 }
                 if options.show_close {
-                    title.spawn(panel_close_button()).with_children(|button| {
-                        button.spawn(text("x", 12.0, Color::WHITE));
-                    });
+                    title.spawn(panel_close_button()).with_children(spawn_close_icon);
                 }
             });
             panel.spawn(panel_content()).with_children(content);

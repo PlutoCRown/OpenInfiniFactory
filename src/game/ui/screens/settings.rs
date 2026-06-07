@@ -10,14 +10,14 @@ use super::super::types::{
     PanelVisibility, SettingsAction, SettingsControl, SettingsDropdown, SettingsDropdownRow,
     SettingsItem, SettingsTab, UiPanelBinding, GAMEPLAY_SETTINGS,
 };
-use crate::game::state::UiPanelId;
-use crate::game::ui::access::i18n;
 use super::super::widgets::{
     spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_dropdown_list,
     spawn_settings_slider, spawn_settings_slider_value, spawn_settings_tab,
 };
+use crate::game::state::{GameSettings, UiPanelId};
+use crate::game::ui::access::i18n;
 
-pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands) {
+pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands, settings: &GameSettings) {
     spawn_panel(
         root,
         PanelOptions::new(840.0, "settings.title")
@@ -26,7 +26,7 @@ pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands) {
         UiPanelBinding(UiPanelId::Settings),
         |panel| {
             spawn_settings_tabs(panel);
-            spawn_gameplay_settings(panel);
+            spawn_gameplay_settings(panel, settings);
             spawn_key_bindings(panel);
         },
     );
@@ -89,6 +89,7 @@ fn spawn_settings_slider_row(
     panel: &mut ChildSpawnerCommands,
     label_key: &'static str,
     item: SettingsItem,
+    settings: &GameSettings,
 ) {
     panel
         .spawn(settings_row_node())
@@ -102,7 +103,7 @@ fn spawn_settings_slider_row(
             }))
             .with_children(|controls| {
                 if let SettingsControl::Slider { field, .. } = item.control {
-                    spawn_settings_slider(controls, field);
+                    spawn_settings_slider(controls, field, settings);
                 }
             });
             if let SettingsControl::Slider { field, .. } = item.control {
@@ -133,10 +134,14 @@ fn spawn_settings_label(row: &mut ChildSpawnerCommands, label_key: &'static str)
     ));
 }
 
-fn spawn_settings_item(panel: &mut ChildSpawnerCommands, item: SettingsItem) {
+fn spawn_settings_item(
+    panel: &mut ChildSpawnerCommands,
+    item: SettingsItem,
+    settings: &GameSettings,
+) {
     match item.control {
         SettingsControl::Slider { .. } => {
-            spawn_settings_slider_row(panel, item.label_key, item)
+            spawn_settings_slider_row(panel, item.label_key, item, settings)
         }
         SettingsControl::Dropdown(dropdown) => {
             spawn_settings_dropdown_row(panel, item.label_key, dropdown)
@@ -144,7 +149,7 @@ fn spawn_settings_item(panel: &mut ChildSpawnerCommands, item: SettingsItem) {
     }
 }
 
-fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands) {
+fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
     panel
         .spawn(scroll_container(500.0))
         .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
@@ -161,7 +166,7 @@ fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands) {
                 ))
                 .with_children(|content| {
                     for item in GAMEPLAY_SETTINGS {
-                        spawn_settings_item(content, *item);
+                        spawn_settings_item(content, *item, settings);
                     }
                     content.spawn(transparent_node(Node {
                         width: Val::Percent(100.0),
@@ -181,11 +186,7 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands) {
             container
                 .spawn((key_bindings_columns_bundle(), scroll_content()))
                 .with_children(|columns| {
-                    spawn_key_group(
-                        columns,
-                        "settings.group.general",
-                        &ActionKeyName::GENERAL,
-                    );
+                    spawn_key_group(columns, "settings.group.general", &ActionKeyName::GENERAL);
                     spawn_key_group(
                         columns,
                         "settings.group.simulation",

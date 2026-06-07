@@ -5,12 +5,12 @@ use crate::game::ui::access::i18n;
 
 use super::super::components::{
     default_button_size, flex_row, full_width_button, panel_bundle_responsive, panel_content,
-    panel_title_bar, panel_title_button, panel_title_label, raised_border, styled_button, text,
-    transparent_node, BUTTON_BG,
+    panel_title_bar, panel_title_button, panel_title_label, raised_border, spawn_close_icon,
+    styled_button, text, transparent_node, BUTTON_BG,
 };
 use super::super::types::{
-    PanelVisibility, SaveListAction, SaveListCloseButton, SaveListPanel,
-    SaveListPrompt, SaveListPuzzleColumn, SaveListSolutionColumn, SaveListTitleText,
+    PanelVisibility, SaveListAction, SaveListCloseButton, SaveListPanel, SaveListPrompt,
+    SaveListPuzzleColumn, SaveListSolutionColumn, SaveListTitleText,
 };
 
 pub const SAVE_LIST_PANEL_WIDTH_PERCENT: f32 = 92.0;
@@ -36,9 +36,7 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands) {
                     SaveListAction::Back,
                     SaveListCloseButton,
                 ))
-                .with_children(|button| {
-                    button.spawn(text("x", 12.0, Color::WHITE));
-                });
+                .with_children(spawn_close_icon);
         });
         panel.spawn(panel_content()).with_children(|panel| {
             panel.spawn(save_columns_row()).with_children(|columns| {
@@ -103,8 +101,16 @@ pub fn spawn_save_management_row(
 ) {
     parent.spawn(flex_row(32.0, 6.0)).with_children(|row| {
         spawn_save_row_button(row, load, SaveRowButtonLayout::Flex);
-        spawn_save_row_button(row, rename, SaveRowButtonLayout::Fixed(SAVE_LIST_ACTION_BUTTON_WIDTH));
-        spawn_save_row_button(row, delete, SaveRowButtonLayout::Fixed(SAVE_LIST_ACTION_BUTTON_WIDTH));
+        spawn_save_row_button(
+            row,
+            rename,
+            SaveRowButtonLayout::Fixed(SAVE_LIST_ACTION_BUTTON_WIDTH),
+        );
+        spawn_save_row_button(
+            row,
+            delete,
+            SaveRowButtonLayout::Fixed(SAVE_LIST_ACTION_BUTTON_WIDTH),
+        );
     });
 }
 

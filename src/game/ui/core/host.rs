@@ -2,6 +2,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 
+use crate::game::state::{GameSettings, UiPanelId};
 use crate::game::ui::core::confirm_dialog::{
     ConfirmDialogState, ConfirmProps, ConfirmResult, PendingConfirmHandler,
 };
@@ -14,7 +15,6 @@ use crate::game::ui::features::save::types::SaveListAction;
 use crate::game::ui::features::settings::types::SettingsAction;
 use crate::game::ui::screens::spawn_settings_panel;
 use crate::game::ui::types::InventorySlot;
-use crate::game::state::UiPanelId;
 #[derive(Resource, Clone, Copy)]
 pub struct UiRootEntity(pub Entity);
 
@@ -63,7 +63,9 @@ pub enum UiActionKind {
         button: PointerButton,
     },
     ConfirmDialog(super::confirm_dialog::ConfirmButtonId),
-    TextPromptSubmit { value: String },
+    TextPromptSubmit {
+        value: String,
+    },
     TextPromptCancel,
     PanelClose,
 }
@@ -72,7 +74,10 @@ pub enum UiActionKind {
 enum MountedView {
     Confirm,
     TextPrompt,
-    Panel { panel: UiPanelId, entity: Option<Entity> },
+    Panel {
+        panel: UiPanelId,
+        entity: Option<Entity>,
+    },
 }
 
 #[derive(Resource, Default)]
@@ -107,9 +112,10 @@ impl UiHostCommands<'_> {
         commands: &mut Commands,
         root: Option<Entity>,
         context: UiPanelContext,
+        settings: &GameSettings,
     ) -> UiInstanceId {
         self.host
-            .mount_settings(commands, root, &mut self.runtime, context)
+            .mount_settings(commands, root, &mut self.runtime, context, settings)
     }
 
     pub fn unmount_panel(&mut self, panel: UiPanelId, commands: &mut Commands) {
@@ -148,9 +154,10 @@ impl UiHostCommands<'_> {
 
 impl UiHost {
     pub fn active_confirm_instance(&self) -> Option<UiInstanceId> {
-        self.stack.iter().rev().find_map(|(instance, view)| {
-            matches!(view, MountedView::Confirm).then_some(*instance)
-        })
+        self.stack
+            .iter()
+            .rev()
+            .find_map(|(instance, view)| matches!(view, MountedView::Confirm).then_some(*instance))
     }
 
     pub fn active_text_prompt_instance(&self) -> Option<UiInstanceId> {
@@ -225,6 +232,7 @@ impl UiHost {
         root: Option<Entity>,
         runtime: &mut UiRuntime,
         context: UiPanelContext,
+        settings: &GameSettings,
     ) -> UiInstanceId {
         let id = self.next_id();
         self.unmount_panel(UiPanelId::Settings, runtime, Some(commands));
@@ -232,20 +240,21 @@ impl UiHost {
         let entity = root.map(|root| {
             let mut container = None;
             commands.entity(root).with_children(|root| {
-                let spawned = root.spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        height: Val::Percent(100.0),
-                        position_type: PositionType::Absolute,
-                        ..default()
-                    },
-                    BackgroundColor(Color::NONE),
-                    UiHostMountRoot,
-                ))
-                .with_children(|container| {
-                    spawn_settings_panel(container);
-                })
-                .id();
+                let spawned = root
+                    .spawn((
+                        Node {
+                            width: Val::Percent(100.0),
+                            height: Val::Percent(100.0),
+                            position_type: PositionType::Absolute,
+                            ..default()
+                        },
+                        BackgroundColor(Color::NONE),
+                        UiHostMountRoot,
+                    ))
+                    .with_children(|container| {
+                        spawn_settings_panel(container, settings);
+                    })
+                    .id();
                 container = Some(spawned);
             });
             container.unwrap_or(root)
@@ -292,11 +301,7 @@ impl UiHost {
         pending: &mut PendingConfirmHandler,
         on_complete: impl FnOnce(ConfirmResult, &mut World) + Send + 'static,
     ) -> UiInstanceId {
-        let id = self.mount(
-            ViewSpec::Confirm(props),
-            confirm_dialog,
-            text_prompt,
-        );
+        let id = self.mount(ViewSpec::Confirm(props), confirm_dialog, text_prompt);
         pending.handler = Some(Box::new(on_complete));
         id
     }
@@ -309,11 +314,7 @@ impl UiHost {
         pending: &mut PendingTextPromptHandler,
         on_complete: impl FnOnce(TextPromptResult, &mut World) + Send + 'static,
     ) -> UiInstanceId {
-        let id = self.mount(
-            ViewSpec::TextPrompt(props),
-            confirm_dialog,
-            text_prompt,
-        );
+        let id = self.mount(ViewSpec::TextPrompt(props), confirm_dialog, text_prompt);
         pending.handler = Some(Box::new(on_complete));
         id
     }
@@ -325,8 +326,9 @@ impl UiHost {
     }
 
     fn push_modal(&mut self, id: UiInstanceId, view: MountedView) {
-        self.stack
-            .retain(|(_, mounted)| !matches!(mounted, MountedView::Confirm | MountedView::TextPrompt));
+        self.stack.retain(|(_, mounted)| {
+            !matches!(mounted, MountedView::Confirm | MountedView::TextPrompt)
+        });
         self.stack.push((id, view));
     }
 

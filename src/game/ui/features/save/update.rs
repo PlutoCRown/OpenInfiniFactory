@@ -95,19 +95,19 @@ pub fn update_save_list_ui(
         let view = action.button_view(&ctx);
         let hovered = view.enabled && hover.entity == Some(entity);
 
-        *background = if hovered {
-            BUTTON_HOVER_BG.into()
-        } else if view.enabled && view.selected {
+        *background = if view.enabled && view.selected {
             Color::srgba(0.22, 0.35, 0.32, 0.96).into()
+        } else if hovered {
+            BUTTON_HOVER_BG.into()
         } else if view.enabled {
             BUTTON_BG.into()
         } else {
             Color::srgba(0.12, 0.12, 0.13, 0.82).into()
         };
-        *border = if hovered {
-            hover_border()
-        } else if view.selected {
+        *border = if view.selected {
             pressed_border()
+        } else if hovered {
+            hover_border()
         } else if view.enabled {
             raised_border()
         } else {

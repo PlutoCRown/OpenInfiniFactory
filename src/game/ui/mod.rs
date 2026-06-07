@@ -14,10 +14,9 @@ use bevy::prelude::*;
 pub use access::{bind_ui_scope, i18n, ui, I18nRevision, UiAccessScope};
 pub use layout::{setup_menu_ui, setup_playing_ui_system};
 pub use systems::{
-    apply_ui_font, close_active_closable_panel, load_ui_font, panel_close_clicked,
-    panel_drag_ended, panel_drag_started, panel_dragged, ui_hovered, ui_unhovered,
-    update_hud_visibility, update_localized_ui, update_panel_visibility, update_status_ui,
-    update_ui_layers,
+    apply_ui_font, dismiss_playing_overlay, load_ui_font, panel_close_clicked, panel_drag_ended,
+    panel_drag_started, panel_dragged, ui_hovered, ui_unhovered, update_hud_visibility,
+    update_localized_ui, update_panel_visibility, update_status_ui, update_ui_layers,
 };
 pub use types::*;
 
