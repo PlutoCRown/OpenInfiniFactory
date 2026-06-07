@@ -1,41 +1,49 @@
 use bevy::prelude::*;
 
 use super::super::components::{
-    default_button_size, default_font_size, localized_text, spawn_panel_with_title_marker, text,
-    transparent_node, PanelOptions,
+    compact_raised_panel, default_button_size, default_font_size, inventory_tray_bundle,
+    inventory_tray_row_bundle, localized_text, spawn_panel_with_title_marker, text, PanelOptions,
 };
 use super::super::types::{
     CarriedItemPreview, GameplayHudVisibility, InGameHudStyle, InventoryTooltip, PanelVisibility,
     SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
 };
-use crate::game::ui::features::inventory::InventoryTitleText;
 use super::super::widgets::spawn_slot;
+use crate::game::ui::features::inventory::InventoryTitleText;
 
 pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
     root.spawn((
         Node {
-            width: Val::Px(default_button_size(540.0)),
-            height: Val::Px(default_button_size(58.0)),
             position_type: PositionType::Absolute,
-            left: Val::Percent(50.0),
-            bottom: Val::Px(22.0),
-            margin: UiRect {
-                left: Val::Px(-default_button_size(270.0)),
-                ..default()
-            },
+            left: Val::Px(0.0),
+            right: Val::Px(0.0),
+            bottom: Val::Px(0.0),
+            width: Val::Percent(100.0),
             display: Display::Flex,
             justify_content: JustifyContent::Center,
-            column_gap: Val::Px(4.0),
+            align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(Color::srgba(0.04, 0.04, 0.04, 0.38)),
+        Pickable::IGNORE,
         InGameHudStyle,
         GameplayHudVisibility,
     ))
-    .with_children(|bar| {
-        for index in 0..HOTBAR_SLOTS {
-            spawn_slot(bar, SlotArea::Hotbar, index);
-        }
+    .with_children(|anchor| {
+        anchor
+            .spawn(compact_raised_panel(Node {
+                border: UiRect::all(Val::Px(3.0)),
+                padding: UiRect::all(Val::Px(3.0)),
+                ..default()
+            }))
+            .with_children(|outer| {
+                outer
+                    .spawn(inventory_tray_row_bundle())
+                    .with_children(|bar| {
+                        for index in 0..HOTBAR_SLOTS {
+                            spawn_slot(bar, SlotArea::Hotbar, index);
+                        }
+                    });
+            });
     });
 }
 
@@ -46,7 +54,7 @@ pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands) {
         PanelVisibility::Inventory,
         InventoryTitleText,
         |panel| {
-            panel.spawn(inventory_grid_bundle()).with_children(|grid| {
+            panel.spawn(inventory_tray_bundle()).with_children(|grid| {
                 for index in 0..BACKPACK_SLOTS {
                     spawn_slot(grid, SlotArea::Backpack, index);
                 }
@@ -141,17 +149,4 @@ pub fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
             TextLayout::new_with_justify(Justify::Center),
         ));
     });
-}
-
-fn inventory_grid_bundle() -> impl Bundle {
-    transparent_node(Node {
-        display: Display::Flex,
-        flex_direction: FlexDirection::Row,
-        flex_wrap: FlexWrap::Wrap,
-        row_gap: Val::Px(4.0),
-        column_gap: Val::Px(4.0),
-        width: Val::Percent(100.0),
-        min_height: Val::Px(default_button_size(58.0)),
-        ..default()
-    })
 }

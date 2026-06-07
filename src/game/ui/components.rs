@@ -12,9 +12,9 @@ pub use button::{
 };
 pub use layout::{flex_row, flex_row_auto, root_node, transparent_node, ui_logical_bounds};
 pub use panel::{
-    absolute_text_bundle, panel_bundle, panel_bundle_auto, panel_bundle_responsive, panel_content,
-    panel_title_bar, panel_title_button, panel_title_label, spawn_panel,
-    spawn_panel_with_title_marker, PanelOptions, STATUS_TEXT,
+    absolute_text_bundle, compact_raised_panel, inventory_tray_bundle, inventory_tray_row_bundle,
+    panel_bundle_auto, panel_bundle_responsive, panel_content, panel_title_bar, panel_title_button,
+    panel_title_label, spawn_panel, spawn_panel_with_title_marker, PanelOptions, STATUS_TEXT,
 };
 pub use scroll::{scroll_container, scroll_content, update_scroll_containers};
 pub use slider::{slider_bundle, slider_fill, slider_knob};

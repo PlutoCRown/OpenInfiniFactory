@@ -151,7 +151,7 @@ pub fn setup_scene(
 
     let face_mesh = meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(0.49)));
     let face_material = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.72, 0.92, 1.0, 0.72),
+        base_color: Color::srgba(0.72, 0.92, 1.0, 0.10),
         emissive: LinearRgba::from(Color::srgb(0.35, 0.72, 1.0)),
         alpha_mode: AlphaMode::Blend,
         unlit: true,

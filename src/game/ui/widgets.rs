@@ -28,18 +28,15 @@ fn plain_node(style: Node) -> impl Bundle {
 }
 
 pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, index: usize) {
+    const SLOT_BORDER: f32 = 3.0;
+
     parent
         .spawn((
             styled_button(
                 Node {
                     width: Val::Px(default_button_size(54.0)),
                     height: Val::Px(default_button_size(54.0)),
-                    border: UiRect {
-                        left: Val::Px(4.0),
-                        right: Val::Px(4.0),
-                        top: Val::Px(5.0),
-                        bottom: Val::Px(5.0),
-                    },
+                    border: UiRect::all(Val::Px(SLOT_BORDER)),
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
                     ..default()

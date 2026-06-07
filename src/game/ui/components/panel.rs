@@ -92,6 +92,77 @@ pub fn spawn_panel_with_title_marker(
         });
 }
 
+pub fn panel_raised_border() -> BorderColor {
+    BorderColor {
+        top: PANEL_LIGHT_EDGE,
+        left: PANEL_LIGHT_EDGE,
+        right: PANEL_DARK_EDGE,
+        bottom: PANEL_DARK_EDGE,
+    }
+}
+
+pub fn panel_inset_border() -> BorderColor {
+    BorderColor {
+        top: PANEL_DARK_EDGE,
+        left: PANEL_DARK_EDGE,
+        right: PANEL_LIGHT_EDGE,
+        bottom: PANEL_LIGHT_EDGE,
+    }
+}
+
+pub const PANEL_INSET_BG: Color = Color::srgb(0.14, 0.137, 0.141);
+pub const INVENTORY_TRAY_PADDING: f32 = 8.0;
+pub const INVENTORY_SLOT_GAP: f32 = 6.0;
+const INVENTORY_TRAY_BORDER: f32 = 3.0;
+
+pub fn inventory_tray_row_bundle() -> impl Bundle {
+    (
+        Node {
+            display: Display::Flex,
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(INVENTORY_SLOT_GAP),
+            padding: UiRect::all(Val::Px(INVENTORY_TRAY_PADDING)),
+            border: UiRect::all(Val::Px(INVENTORY_TRAY_BORDER)),
+            ..default()
+        },
+        BackgroundColor(PANEL_INSET_BG),
+        panel_inset_border(),
+    )
+}
+
+pub fn inventory_tray_bundle() -> impl Bundle {
+    (
+        Node {
+            width: Val::Percent(100.0),
+            display: Display::Flex,
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::Wrap,
+            row_gap: Val::Px(INVENTORY_SLOT_GAP),
+            column_gap: Val::Px(INVENTORY_SLOT_GAP),
+            padding: UiRect::all(Val::Px(INVENTORY_TRAY_PADDING)),
+            border: UiRect::all(Val::Px(INVENTORY_TRAY_BORDER)),
+            ..default()
+        },
+        BackgroundColor(PANEL_INSET_BG),
+        panel_inset_border(),
+    )
+}
+
+pub fn compact_raised_panel(style: Node) -> impl Bundle {
+    (
+        style,
+        BackgroundColor(PANEL_BG),
+        panel_raised_border(),
+        BoxShadow::new(
+            PANEL_SHADOW,
+            Val::Px(0.0),
+            Val::Px(0.0),
+            Val::Px(0.0),
+            Val::Px(3.0),
+        ),
+    )
+}
+
 pub fn panel_bundle(width: f32) -> impl Bundle {
     panel_window_bundle(Val::Px(width), Val::Percent(100.0))
 }
@@ -132,12 +203,7 @@ fn panel_window_bundle(width: Val, max_width: Val) -> impl Bundle {
         PanelPosition::default(),
         Visibility::Hidden,
         BackgroundColor(PANEL_BG),
-        BorderColor {
-            top: PANEL_LIGHT_EDGE,
-            left: PANEL_LIGHT_EDGE,
-            right: PANEL_DARK_EDGE,
-            bottom: PANEL_DARK_EDGE,
-        },
+        panel_raised_border(),
         BoxShadow::new(
             PANEL_SHADOW,
             Val::Px(0.0),

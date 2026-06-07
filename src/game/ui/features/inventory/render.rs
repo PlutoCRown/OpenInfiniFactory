@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::game::state::{BuilderMode, PlacementState};
+use crate::game::ui::access::{i18n, I18nRevision, UiMainThread};
 use crate::game::ui::components::{hover_border, inset_border};
 use crate::game::ui::types::{
     CarriedItem, CarriedItemPreview, InventoryItems, InventorySlot, InventoryTooltip, SlotArea,
@@ -9,7 +10,6 @@ use crate::game::ui::types::{
 };
 use crate::game::ui::widgets::{short_item_name, slot_color};
 use crate::game::world::rendering::BlockIconAssets;
-use crate::game::ui::access::{i18n, I18nRevision, UiMainThread};
 
 use super::types::InventoryTitleText;
 
@@ -202,11 +202,7 @@ pub fn update_carried_item_ui(
                 .unwrap_or_default();
         }
         if let Ok(mut text) = preview_text.get_mut(child) {
-            text.0 = if icon_handle.is_some() {
-                String::new()
-            } else {
-                i18n.t(short_item_name(item))
-            };
+            text.0.clear();
         }
     }
 }

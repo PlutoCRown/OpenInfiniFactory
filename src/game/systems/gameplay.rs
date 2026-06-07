@@ -95,16 +95,16 @@ pub fn gameplay_input(
         }
     }
 
-    if ui_runtime.blocks_gameplay() || !playing_ui.active_play() {
-        mouse_wheel.clear();
-        return;
-    }
-
     if keys.just_pressed(bindings.inventory.key_code()) {
         playing_ui.inventory_open = !playing_ui.inventory_open;
         if !playing_ui.inventory_open {
             carried.clear();
         }
+    }
+
+    if ui_runtime.blocks_gameplay() || !playing_ui.active_play() {
+        mouse_wheel.clear();
+        return;
     }
 
     for (key, index) in [
