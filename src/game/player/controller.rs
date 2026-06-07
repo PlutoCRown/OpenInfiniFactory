@@ -6,9 +6,10 @@ use bevy::light::ShadowFilteringMethod;
 use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
 use bevy::prelude::*;
 use bevy::render::camera::TemporalJitter;
+use bevy::render::view::Hdr;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
-use crate::game::cameras::GameplayCamera;
+use crate::game::cameras::{GameplayCamera, MENU_CLEAR};
 use crate::game::simulation::movement::PusherState;
 use crate::game::state::{GameMode, GameSettings, PlayingUiState};
 use crate::game::ui::UiRuntime;
@@ -46,7 +47,7 @@ pub fn spawn_player(mut commands: Commands) {
             Camera3d::default(),
             Camera {
                 order: 0,
-                clear_color: ClearColorConfig::Default,
+                clear_color: ClearColorConfig::Custom(MENU_CLEAR),
                 ..default()
             },
             Transform::from_xyz(0.5, SPAWN_EYE_Y + 1.2, 10.5)
@@ -60,10 +61,12 @@ pub fn spawn_player(mut commands: Commands) {
                 last_space_press: -10.0,
                 sensitivity: 0.0025,
             },
+            IsDefaultUiCamera,
             GameplayCamera,
             GameplayScene,
         ))
         .insert((
+            Hdr,
             Msaa::Off,
             Tonemapping::SomewhatBoringDisplayTransform,
             DebandDither::Enabled,
