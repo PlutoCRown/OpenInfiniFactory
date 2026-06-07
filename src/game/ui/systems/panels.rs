@@ -1,3 +1,60 @@
+pub fn dismiss_active_panel(
+    ui_runtime: &mut UiRuntime,
+    ui_host: &mut UiHost,
+    open_block_dropdown: &mut OpenBlockPanelDropdown,
+    open_settings_dropdown: &mut OpenSettingsDropdown,
+    pending_key_bind: &mut PendingKeyBind,
+    inline_edit: &mut InlineTextEditState,
+    drag: &mut PanelDragState,
+    commands: &mut Commands,
+) -> bool {
+    let Some(panel) = ui_runtime.active_panel() else {
+        return false;
+    };
+
+    if ui_runtime.is_settings_open() {
+        open_settings_dropdown.0 = None;
+        pending_key_bind.0 = None;
+    }
+    open_block_dropdown.0 = None;
+    inline_edit.clear();
+    if panel == UiPanelId::Settings {
+        ui_host.unmount_panel(UiPanelId::Settings, ui_runtime, Some(commands));
+    } else {
+        ui_runtime.close_active();
+    }
+    drag.clear();
+    true
+}
+
+pub fn close_active_closable_panel(
+    ui_runtime: &mut UiRuntime,
+    ui_host: &mut UiHost,
+    open_block_dropdown: &mut OpenBlockPanelDropdown,
+    open_settings_dropdown: &mut OpenSettingsDropdown,
+    pending_key_bind: &mut PendingKeyBind,
+    inline_edit: &mut InlineTextEditState,
+    drag: &mut PanelDragState,
+    commands: &mut Commands,
+) -> bool {
+    if !ui_runtime
+        .active_panel()
+        .is_some_and(UiPanelId::is_closable)
+    {
+        return false;
+    }
+    dismiss_active_panel(
+        ui_runtime,
+        ui_host,
+        open_block_dropdown,
+        open_settings_dropdown,
+        pending_key_bind,
+        inline_edit,
+        drag,
+        commands,
+    )
+}
+
 pub fn update_panel_visibility(
     mode: Res<State<GameMode>>,
     start_menu_screen: Res<StartMenuScreen>,
@@ -79,20 +136,16 @@ pub fn panel_close_clicked(
         return;
     }
     click.propagate(false);
-
-    let active_panel = ui_runtime.active_panel();
-    if ui_runtime.is_settings_open() {
-        open_settings_dropdown.0 = None;
-        pending_key_bind.0 = None;
-    }
-    open_block_dropdown.0 = None;
-    inline_edit.clear();
-    if let Some(UiPanelId::Settings) = active_panel {
-        ui_host.unmount_panel(UiPanelId::Settings, &mut ui_runtime, Some(&mut commands));
-    } else {
-        ui_runtime.close_active();
-    }
-    drag.clear();
+    dismiss_active_panel(
+        &mut ui_runtime,
+        &mut ui_host,
+        &mut open_block_dropdown,
+        &mut open_settings_dropdown,
+        &mut pending_key_bind,
+        &mut inline_edit,
+        &mut drag,
+        &mut commands,
+    );
 }
 
 pub fn panel_drag_started(

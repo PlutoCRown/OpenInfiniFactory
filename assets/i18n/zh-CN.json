@@ -223,6 +223,7 @@
   "teleport.none": "无",
   "teleport.pair": "配对：{pair}",
   "teleport.title": "传送口",
+  "teleport.prompt.rename": "重命名传送口",
   "tab.gameplay": "游戏",
   "tab.key_bindings": "按键绑定",
   "button.rename": "改名",

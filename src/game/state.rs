@@ -161,6 +161,18 @@ impl UiPanelId {
         self == Self::Settings
     }
 
+    pub fn is_closable(self) -> bool {
+        matches!(
+            self,
+            Self::Settings
+                | Self::Generator
+                | Self::Goal
+                | Self::Labeler
+                | Self::Converter
+                | Self::Teleport
+        )
+    }
+
     pub fn is_blocking_gameplay(self) -> bool {
         true
     }

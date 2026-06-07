@@ -5,6 +5,7 @@ pub struct TeleportEntranceBlock;
 pub static BLOCK: BlockImpl<TeleportEntranceBlock> = BlockImpl(TeleportEntranceBlock);
 
 mod meta;
+mod prompt;
 mod render;
 mod ui;
 

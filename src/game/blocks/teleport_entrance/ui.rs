@@ -2,6 +2,7 @@ use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
+use super::prompt::open_teleport_rename_prompt;
 use super::TeleportEntranceBlock;
 
 use crate::game::block_editing::widgets::{
@@ -21,14 +22,15 @@ use crate::game::ui::components::{
 };
 use crate::game::ui::core::host::UiHost;
 use crate::game::ui::core::runtime::UiRuntime;
-use crate::game::ui::core::text_input::{
-    primary_click, read_inline_text_input, InlineTextEditState,
-};
+use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{UiActionLabel, UiPanelBinding};
 use crate::game::world::grid::WorldBlocks;
 
 const PAIR_SLOT: u8 = 0;
+
+#[derive(Resource, Default)]
+struct PendingTeleportRename(Option<IVec3>);
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TeleportAction {
@@ -98,12 +100,18 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
 }
 
 pub fn register(app: &mut App) {
-    app.add_observer(on_click).add_systems(
-        Update,
-        (update_panel, update_dropdowns, inline_rename_input)
-            .chain()
-            .in_set(BlockPanelSystems),
-    );
+    app.init_resource::<PendingTeleportRename>()
+        .add_observer(on_click)
+        .add_systems(
+            Update,
+            (
+                update_panel,
+                update_dropdowns,
+                process_teleport_rename_prompt,
+            )
+                .chain()
+                .in_set(BlockPanelSystems),
+        );
 }
 
 inventory::submit! {
@@ -119,15 +127,13 @@ pub fn dispatch_teleport_action(
     action: TeleportAction,
     pos: IVec3,
     _ui_runtime: &UiRuntime,
-    inline_edit: &mut InlineTextEditState,
     world: &mut PlayingWorldParams,
     solution_state: &mut SolutionState,
     open_dropdown: &mut OpenBlockPanelDropdown,
 ) {
     match action {
         TeleportAction::StartRename => {
-            let settings = world.world.teleport_settings(pos);
-            inline_edit.start(UiPanelId::Teleport, pos, "teleport_name", settings.name);
+            debug_assert!(false, "rename is handled via text prompt");
         }
         TeleportAction::TogglePair => {
             let mut ctx =
@@ -176,7 +182,7 @@ fn on_click(
     ui_host: Res<UiHost>,
     ui_runtime: Res<UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
-    mut inline_edit: ResMut<InlineTextEditState>,
+    mut pending_rename: ResMut<PendingTeleportRename>,
     mut solution_state: ResMut<SolutionState>,
     mut world: PlayingWorldParams,
     actions: Query<&TeleportAction>,
@@ -194,20 +200,36 @@ fn on_click(
     let Some(pos) = ui_runtime.active_block_pos() else {
         return;
     };
+    if action == TeleportAction::StartRename {
+        pending_rename.0 = Some(pos);
+        return;
+    }
     dispatch_teleport_action(
         action,
         pos,
         &ui_runtime,
-        &mut inline_edit,
         &mut world,
         &mut solution_state,
         &mut open_dropdown,
     );
 }
 
+fn process_teleport_rename_prompt(
+    _ui_thread: UiMainThread,
+    mut pending_rename: ResMut<PendingTeleportRename>,
+    world: Res<WorldBlocks>,
+) {
+    let Some(pos) = pending_rename.0.take() else {
+        return;
+    };
+    if !world.system_blocks.contains_key(&pos) {
+        return;
+    }
+    open_teleport_rename_prompt(pos, world.teleport_settings(pos).name);
+}
+
 fn update_panel(
     ui_runtime: Res<UiRuntime>,
-    inline_edit: Res<InlineTextEditState>,
     world: Res<WorldBlocks>,
     mut name_text: Query<&mut Text, With<TeleportNameText>>,
 ) {
@@ -219,14 +241,7 @@ fn update_panel(
     };
     let settings = world.teleport_settings(pos);
     for mut text in &mut name_text {
-        text.0 = if inline_edit.is_active()
-            && inline_edit.pos == Some(pos)
-            && inline_edit.field == Some("teleport_name")
-        {
-            format!("{}_", inline_edit.buffer)
-        } else {
-            settings.name.clone()
-        };
+        text.0 = settings.name.clone();
     }
 }
 
@@ -318,38 +333,6 @@ fn update_dropdowns(
                 style.top = Val::Px(top);
             }
         }
-    }
-}
-
-fn inline_rename_input(
-    ui_runtime: Res<UiRuntime>,
-    mut inline_edit: ResMut<InlineTextEditState>,
-    mut world: ResMut<WorldBlocks>,
-    mut solution_state: ResMut<SolutionState>,
-    mut keyboard_input: MessageReader<bevy::input::keyboard::KeyboardInput>,
-) {
-    if !inline_edit.is_active() || inline_edit.panel != Some(UiPanelId::Teleport) {
-        return;
-    }
-    if ui_runtime.active_panel() != Some(UiPanelId::Teleport) {
-        inline_edit.clear();
-        return;
-    }
-
-    let pos = inline_edit.pos.expect("active inline edit has pos");
-    let result = read_inline_text_input(&mut keyboard_input, &mut inline_edit.buffer);
-
-    if result.confirm {
-        let mut settings = world.teleport_settings(pos);
-        let trimmed = inline_edit.buffer.trim();
-        if !trimmed.is_empty() {
-            settings.name = trimmed.chars().take(24).collect();
-            world.set_teleport_settings(pos, settings);
-            solution_state.dirty = true;
-        }
-        inline_edit.clear();
-    } else if result.cancel {
-        inline_edit.clear();
     }
 }
 

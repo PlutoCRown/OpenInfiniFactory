@@ -223,6 +223,7 @@
   "teleport.none": "None",
   "teleport.pair": "Pair: {pair}",
   "teleport.title": "Teleport",
+  "teleport.prompt.rename": "Rename teleport",
   "tab.gameplay": "Gameplay",
   "tab.key_bindings": "Key Bindings",
   "button.rename": "Rename",

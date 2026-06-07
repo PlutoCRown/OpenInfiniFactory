@@ -14,13 +14,13 @@ use crate::game::simulation::structures::material_structure;
 use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, GameSettings, PlacementState,
     PlayingUiState, SelectionAxis, SelectionBounds, SelectionDrag, SimulationState, SolutionState,
-    UiPanelId,
 };
 use crate::game::systems::debug::DebugState;
+use crate::game::ui::close_active_closable_panel;
 use crate::game::ui::UiHost;
 use crate::game::ui::{
-    AreaKind, CarriedItem, InlineTextEditState, InventoryItems, PendingKeyBind, TextPromptState,
-    UiRuntime, HOTBAR_SLOTS,
+    AreaKind, CarriedItem, InlineTextEditState, InventoryItems, OpenBlockPanelDropdown,
+    OpenSettingsDropdown, PanelDragState, PendingKeyBind, TextPromptState, UiRuntime, HOTBAR_SLOTS,
 };
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::{
@@ -34,6 +34,32 @@ use crate::game::world::rendering::{
     HoverStructureBounds, WorldRenderAssets,
 };
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
+
+#[derive(SystemParam)]
+pub(crate) struct PanelCloseDeps<'w> {
+    ui_runtime: ResMut<'w, UiRuntime>,
+    ui_host: ResMut<'w, UiHost>,
+    open_block_dropdown: ResMut<'w, OpenBlockPanelDropdown>,
+    open_settings_dropdown: ResMut<'w, OpenSettingsDropdown>,
+    pending_key_bind: ResMut<'w, PendingKeyBind>,
+    inline_edit: ResMut<'w, InlineTextEditState>,
+    drag: ResMut<'w, PanelDragState>,
+}
+
+impl PanelCloseDeps<'_> {
+    fn close_closable(&mut self, commands: &mut Commands) -> bool {
+        close_active_closable_panel(
+            &mut self.ui_runtime,
+            &mut self.ui_host,
+            &mut self.open_block_dropdown,
+            &mut self.open_settings_dropdown,
+            &mut self.pending_key_bind,
+            &mut self.inline_edit,
+            &mut self.drag,
+            commands,
+        )
+    }
+}
 
 #[derive(SystemParam)]
 pub struct PlacementQueries<'w, 's> {
@@ -50,21 +76,20 @@ pub fn gameplay_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut mouse_wheel: MessageReader<MouseWheel>,
     config: Res<GameConfig>,
-    pending_key_bind: Res<PendingKeyBind>,
     text_prompt: Res<TextPromptState>,
     mode: Res<State<GameMode>>,
     mut playing_ui: ResMut<PlayingUiState>,
     mut placement: ResMut<PlacementState>,
-    inline_edit: Res<InlineTextEditState>,
     mut carried: ResMut<CarriedItem>,
-    mut ui_runtime: ResMut<UiRuntime>,
-    mut ui_host: ResMut<UiHost>,
+    mut panel_close: PanelCloseDeps,
     mut simulation: ResMut<SimulationState>,
     mut commands: Commands,
 ) {
     let bindings = &config.key_bindings;
 
-    let typing = pending_key_bind.0.is_some() || text_prompt.is_open() || inline_edit.is_active();
+    let typing = panel_close.pending_key_bind.0.is_some()
+        || text_prompt.is_open()
+        || panel_close.inline_edit.is_active();
     if typing {
         mouse_wheel.clear();
         return;
@@ -76,12 +101,8 @@ pub fn gameplay_input(
     }
 
     if keys.just_pressed(bindings.pause.key_code()) {
-        if ui_runtime.blocks_gameplay() {
-            if ui_runtime.active_panel() == Some(UiPanelId::Settings) {
-                ui_host.unmount_panel(UiPanelId::Settings, &mut ui_runtime, Some(&mut commands));
-            } else {
-                ui_runtime.close_current();
-            }
+        if panel_close.close_closable(&mut commands) {
+            // Panel closed.
         } else if playing_ui.inventory_open {
             playing_ui.inventory_open = false;
             carried.clear();
@@ -96,13 +117,17 @@ pub fn gameplay_input(
     }
 
     if keys.just_pressed(bindings.inventory.key_code()) {
-        playing_ui.inventory_open = !playing_ui.inventory_open;
-        if !playing_ui.inventory_open {
-            carried.clear();
+        if panel_close.close_closable(&mut commands) {
+            // Panel closed.
+        } else {
+            playing_ui.inventory_open = !playing_ui.inventory_open;
+            if !playing_ui.inventory_open {
+                carried.clear();
+            }
         }
     }
 
-    if ui_runtime.blocks_gameplay() || !playing_ui.active_play() {
+    if panel_close.ui_runtime.blocks_gameplay() || !playing_ui.active_play() {
         mouse_wheel.clear();
         return;
     }
