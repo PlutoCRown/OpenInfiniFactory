@@ -1014,17 +1014,6 @@ fn spawn_block_model(
 
         let render_behavior = data.kind.render_behavior(data.facing);
 
-        if render_behavior.goal_topper {
-            let mut child = parent.spawn((
-                Mesh3d(assets.goal_top.clone()),
-                MeshMaterial3d(assets.goal_top_material.clone()),
-                Transform::from_xyz(0.0, 0.55, 0.0),
-            ));
-            if let Some((_, icon_layer)) = icon_render {
-                child.insert((icon_layer.clone(), BlockIconRenderEntity));
-            }
-        }
-
         if let Some(weld_connector) = render_behavior.weld_connector {
             let offsets = match weld_connector {
                 WeldConnectorBehavior::AllSides => signal_offsets().to_vec(),
@@ -1099,18 +1088,20 @@ fn spawn_block_model(
             }
         }
 
-        if show_generator_preview && data.kind == BlockKind::Generator {
-            spawn_generator_material_preview(
-                parent,
-                assets,
-                world.generator_settings(pos).material,
-                icon_render,
-            );
+        if show_generator_preview {
+            let material = match data.kind {
+                BlockKind::Generator => Some(world.generator_settings(pos).material),
+                BlockKind::Goal => Some(world.goal_settings(pos).material),
+                _ => None,
+            };
+            if let Some(material) = material {
+                spawn_selected_material_preview(parent, assets, material, icon_render);
+            }
         }
     });
 }
 
-fn spawn_generator_material_preview(
+fn spawn_selected_material_preview(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
     material: crate::game::blocks::MaterialKind,

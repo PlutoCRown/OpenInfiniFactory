@@ -15,7 +15,6 @@ pub struct WorldRenderAssets {
     pub(crate) block: Handle<Mesh>,
     node: Handle<Mesh>,
     wire_node: Handle<Mesh>,
-    pub(crate) goal_top: Handle<Mesh>,
     pub(crate) face_mark: Handle<Mesh>,
     pub(crate) weld_spark: Handle<Mesh>,
     connector_x: Handle<Mesh>,
@@ -48,7 +47,6 @@ pub struct WorldRenderAssets {
     model_preview_materials: HashMap<ModelMaterial, Handle<StandardMaterial>>,
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
     pub(crate) active_wire_material: Handle<StandardMaterial>,
-    pub(crate) goal_top_material: Handle<StandardMaterial>,
     pub(crate) weld_connector_material: Handle<StandardMaterial>,
     delete_preview_material: Handle<StandardMaterial>,
     selection_preview_material: Handle<StandardMaterial>,
@@ -203,10 +201,6 @@ impl WorldRenderAssets {
                 emissive_material(0.72, 0.58, 1.0, 0.12, 0.08, 0.24),
             ),
             (
-                ModelMaterial::Goal,
-                emissive_material(0.55, 1.0, 0.36, 0.05, 0.22, 0.04),
-            ),
-            (
                 ModelMaterial::TeleportIn,
                 emissive_material(0.18, 0.62, 1.0, 0.02, 0.10, 0.34),
             ),
@@ -241,7 +235,6 @@ impl WorldRenderAssets {
                 BLOCK_SIZE * 0.304,
                 BLOCK_SIZE * 0.304,
             )),
-            goal_top: meshes.add(Cuboid::new(0.62, 0.08, 0.62)),
             face_mark: meshes.add(Cuboid::new(0.72, 0.012, 0.72)),
             weld_spark: meshes.add(Cuboid::new(0.24, 0.24, 0.24)),
             connector_x: meshes.add(Cuboid::new(0.55, 0.10, 0.10)),
@@ -280,11 +273,6 @@ impl WorldRenderAssets {
             active_wire_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.08, 0.04),
                 emissive: Color::srgb(0.34, 0.02, 0.01).into(),
-                ..default()
-            }),
-            goal_top_material: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.75, 1.0, 0.55),
-                emissive: Color::srgb(0.12, 0.28, 0.08).into(),
                 ..default()
             }),
             weld_connector_material: materials.add(StandardMaterial {

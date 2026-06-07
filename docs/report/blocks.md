@@ -43,7 +43,7 @@
 | `material_labeler()` | 给材料面打标。 |
 | `weld_behavior()` | 作为焊接节点参与材料焊接。 |
 | `signal_behavior()` | 作为电线、探测器或耗电设备参与信号网络。 |
-| `render_behavior()` | 提供特殊渲染信息，例如连接线、目标顶盖。 |
+| `render_behavior()` | 提供特殊渲染信息，例如连接线。 |
 | `alternate()` | Alternate 键切换到替换方块。 |
 
 ## SceneBlock
@@ -98,7 +98,7 @@
 | 方块 | 中文名 | 可四向旋转 | 编辑模式可放置 | 实现 Trait | 覆写行为方法 |
 | --- | --- | --- | --- | --- | --- |
 | Generator | 生成器 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` | `material_source()`, `default_settings()` |
-| Goal | 目标块 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` | `render_behavior()` |
+| Goal | 目标块 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` | `default_settings()` |
 | Stamper | 印花器 | ✅ | ✅ | `Block`, `SystemBlock`, `EditableBlock` | `is_directional()`, `material_labeler()`, `default_settings()` |
 | Roller | 滚刷器 | ✅ | ✅ | `Block`, `SystemBlock`, `EditableBlock` | `is_directional()`, `material_labeler()`, `default_settings()` |
 | Converter | 转换器 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` | `default_settings()` |

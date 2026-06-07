@@ -272,7 +272,6 @@ pub enum SignalBehavior {
 
 #[derive(Clone, Copy, Default)]
 pub struct RenderBehavior {
-    pub goal_topper: bool,
     pub weld_connector: Option<WeldConnectorBehavior>,
     pub wire_connector: Option<WireConnectorBehavior>,
 }
@@ -336,7 +335,6 @@ pub enum ModelMaterial {
     Laser,
     System,
     SystemAccent,
-    Goal,
     TeleportIn,
     TeleportOut,
 }
