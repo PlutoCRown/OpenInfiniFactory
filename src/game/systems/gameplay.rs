@@ -3,7 +3,9 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
 use crate::game::blocks::{BlockData, BlockKind};
-use crate::game::player::controller::{player_intersects_block, FlyCamera};
+use crate::game::player::controller::{
+    player_intersects_block, teleport_player_preserve_offset, FlyCamera,
+};
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structure_state::{
     query_factory_structure, StructureFreedom, StructureKind, StructureState,
@@ -38,7 +40,7 @@ pub struct PlacementQueries<'w, 's> {
     meshes: ResMut<'w, Assets<Mesh>>,
     block_entities: Query<'w, 's, (Entity, &'static BlockEntity)>,
     edit_previews: Query<'w, 's, Entity, With<EditPreview>>,
-    player: Query<'w, 's, &'static Transform, With<FlyCamera>>,
+    player: Query<'w, 's, (&'static mut FlyCamera, &'static mut Transform), With<FlyCamera>>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
     debug: Res<'w, DebugState>,
     structure_state: ResMut<'w, StructureState>,
@@ -157,7 +159,7 @@ pub fn placement_input(
         mut meshes,
         block_entities,
         edit_previews,
-        player,
+        mut player,
         render_assets,
         debug,
         mut structure_state,
@@ -312,6 +314,15 @@ pub fn placement_input(
         }
     }
 
+    if mouse_buttons.just_pressed(delete_button)
+        && *builder_mode == BuilderMode::Play
+        && try_player_teleport(current_target_pos, &world, &mut player)
+    {
+        placement.edit_gesture = None;
+        despawn_edit_previews(&mut commands, &edit_previews);
+        return;
+    }
+
     if mouse_buttons.just_pressed(delete_button) {
         match placement.edit_gesture.as_mut() {
             Some(gesture) if matches!(gesture.kind, EditGestureKind::Place { .. }) => {
@@ -370,6 +381,11 @@ pub fn placement_input(
             || matches!(gesture.kind, EditGestureKind::Delete) && released_delete
     });
 
+    let player_pos = player
+        .single()
+        .ok()
+        .map(|(_, transform)| transform.translation);
+
     if should_finish {
         if let Some(gesture) = placement.edit_gesture.take() {
             if !gesture.canceled {
@@ -380,7 +396,7 @@ pub fn placement_input(
                     &config,
                     &mut world,
                     *builder_mode,
-                    &player,
+                    player_pos,
                     &mut commands,
                     &mut meshes,
                     &render_assets,
@@ -404,7 +420,7 @@ pub fn placement_input(
                 &config,
                 &world,
                 *builder_mode,
-                &player,
+                player_pos,
                 &mut commands,
                 &mut meshes,
                 &render_assets,
@@ -428,6 +444,33 @@ fn selected_place_block(
 
 fn selected_area(inventory: &InventoryItems, placement: &PlacementState) -> Option<AreaKind> {
     inventory.hotbar[placement.selected].and_then(|item| item.area())
+}
+
+fn try_player_teleport(
+    target: Option<IVec3>,
+    world: &WorldBlocks,
+    player: &mut Query<(&mut FlyCamera, &mut Transform), With<FlyCamera>>,
+) -> bool {
+    let Some(pos) = target else {
+        return false;
+    };
+    let Some(block) = world.system_blocks.get(&pos) else {
+        return false;
+    };
+    if !matches!(
+        block.kind,
+        BlockKind::TeleportEntrance | BlockKind::TeleportExit
+    ) {
+        return false;
+    }
+    let Some(partner) = world.teleport_partner(pos) else {
+        return false;
+    };
+    let Ok((mut camera, mut transform)) = player.single_mut() else {
+        return false;
+    };
+    teleport_player_preserve_offset(pos, partner, &mut transform, &mut camera);
+    true
 }
 
 fn open_target_block_ui(
@@ -828,21 +871,13 @@ fn can_place_block_at(
     block: BlockData,
     builder_mode: BuilderMode,
     world: &WorldBlocks,
-    player: &Query<&Transform, With<FlyCamera>>,
+    player_pos: Option<Vec3>,
 ) -> bool {
     if place_at.y < 0 {
         return false;
     }
 
-    if block.kind.is_system_layer() {
-        if world
-            .system_blocks
-            .get(&place_at)
-            .is_some_and(|block| !block.kind.is_generated_marker())
-        {
-            return false;
-        }
-    } else if !world.can_place_platform_at(place_at) {
+    if !world.can_place_block_kind_at(place_at, block.kind) {
         return false;
     }
 
@@ -850,8 +885,8 @@ fn can_place_block_at(
         return false;
     }
 
-    if let Ok(player_transform) = player.single() {
-        if player_intersects_block(player_transform.translation, place_at) {
+    if let Some(position) = player_pos {
+        if player_intersects_block(position, place_at) {
             return false;
         }
     }
@@ -866,7 +901,7 @@ fn commit_edit_gesture(
     config: &GameConfig,
     world: &mut WorldBlocks,
     builder_mode: BuilderMode,
-    player: &Query<&Transform, With<FlyCamera>>,
+    player_pos: Option<Vec3>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
@@ -883,7 +918,7 @@ fn commit_edit_gesture(
                 current_place_at.unwrap_or(gesture.start),
             );
             for pos in &positions {
-                if can_place_block_at(*pos, block, builder_mode, world, player) {
+                if can_place_block_at(*pos, block, builder_mode, world, player_pos) {
                     world.insert(*pos, block);
                     changed = true;
                 }
@@ -943,7 +978,7 @@ fn spawn_gesture_previews(
     config: &GameConfig,
     world: &WorldBlocks,
     builder_mode: BuilderMode,
-    player: &Query<&Transform, With<FlyCamera>>,
+    player_pos: Option<Vec3>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
@@ -957,7 +992,7 @@ fn spawn_gesture_previews(
             );
             let positions: Vec<IVec3> = positions
                 .into_iter()
-                .filter(|pos| can_place_block_at(*pos, block, builder_mode, world, player))
+                .filter(|pos| can_place_block_at(*pos, block, builder_mode, world, player_pos))
                 .collect();
             let preview_world = preview_world(world, &positions, block);
             for pos in positions {
@@ -1195,12 +1230,17 @@ pub fn update_hover(
         ) {
             if let Some(render_assets) = preview_deps.render_assets.as_ref() {
                 let place_at = target.pos + target.normal;
+                let player_pos = preview_deps
+                    .player
+                    .single()
+                    .ok()
+                    .map(|transform| transform.translation);
                 if can_place_block_at(
                     place_at,
                     block,
                     *preview_deps.builder_mode,
                     &world,
-                    &preview_deps.player,
+                    player_pos,
                 ) {
                     let preview_world = preview_world(&world, &[place_at], block);
                     spawn_block_preview(

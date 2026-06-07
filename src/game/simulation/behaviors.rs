@@ -9,9 +9,9 @@ use crate::game::world::grid::{
     ConverterMode, MaterialFace, MaterialFaceMark, MaterialFaceMarkSource, WorldBlocks,
 };
 
-use super::structure_state::StructureState;
 use super::runtime::PendingGeneratedMaterials;
 use super::signal_offsets;
+use super::structure_state::StructureState;
 use super::structures::{execute_structure_moves, material_structure, MovementMark, StructureMove};
 
 pub(super) fn run_material_behavior_phase(
@@ -210,10 +210,7 @@ fn run_material_conversion_phase(world: &mut WorldBlocks) {
     }
 }
 
-fn run_material_teleport_phase(
-    world: &mut WorldBlocks,
-    structure_state: &mut StructureState,
-) {
+fn run_material_teleport_phase(world: &mut WorldBlocks, structure_state: &mut StructureState) {
     let entrances: Vec<IVec3> = world
         .system_blocks
         .iter()
@@ -225,7 +222,7 @@ fn run_material_teleport_phase(
         if handled.contains(&entrance) || !world.is_material_at(entrance) {
             continue;
         }
-        let Some(exit) = world.teleport_settings(entrance).pair else {
+        let Some(exit) = world.teleport_partner(entrance) else {
             continue;
         };
         if !world

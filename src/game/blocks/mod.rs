@@ -142,6 +142,7 @@ pub enum BlockClass {
     Factory,
     Material,
     System,
+    Virtual,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -468,7 +469,7 @@ impl BlockDefinition {
             short_name_key,
             color,
             slot_color,
-            BlockClass::System,
+            BlockClass::Virtual,
             None,
         )
     }
@@ -566,7 +567,8 @@ impl BlockLayer {
             Self::Scene(_) => BlockClass::Scene,
             Self::Material(_) => BlockClass::Material,
             Self::Factory(_) => BlockClass::Factory,
-            Self::System(_) | Self::Virtual(_) => BlockClass::System,
+            Self::System(_) => BlockClass::System,
+            Self::Virtual(_) => BlockClass::Virtual,
         }
     }
 }
@@ -754,8 +756,12 @@ impl BlockKind {
         matches!(self.layer(), BlockLayer::Virtual(_))
     }
 
+    pub fn is_system_block(self) -> bool {
+        matches!(self.layer(), BlockLayer::System(_))
+    }
+
     pub fn is_system_layer(self) -> bool {
-        matches!(self.layer(), BlockLayer::System(_) | BlockLayer::Virtual(_))
+        self.is_system_block() || self.is_generated_marker()
     }
 
     pub fn accepts_material(self) -> bool {

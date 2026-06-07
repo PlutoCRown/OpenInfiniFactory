@@ -14,8 +14,20 @@
 | `SceneBlock` | 场景/地形方块。保存到 puzzle 层，不参与材料模拟重力。 |
 | `MaterialBlock` | 材料方块。参与材料结构、重力、焊接、标签、转换、传送等模拟逻辑。 |
 | `FactoryBlock` | 工厂方块。保存到 solution factory 层，通常由玩家在游玩模式放置，参与工厂结构重力。 |
-| `SystemBlock` | 系统层方块。存储在 `WorldBlocks::system_blocks`，可以和普通 `blocks` 层同格叠放。 |
+| `SystemBlock` | 可编辑的系统层方块。存储在 `WorldBlocks::system_blocks`，不可与工厂/场景方块同格，可与材料方块同格。 |
+| `VirtualBlock` | 模拟生成的虚拟 marker 方块。存储在 `WorldBlocks::system_blocks`，由工厂方块派生，可与材料方块同格。 |
 | `EditableBlock` | 可在编辑模式直接放置的系统层方块。 |
+
+### 同格叠放规则
+
+| 层 A | 层 B | 是否可同格 |
+| --- | --- | --- |
+| SystemBlock | MaterialBlock | ✅ |
+| SystemBlock | FactoryBlock / SceneBlock | ❌ |
+| VirtualBlock | MaterialBlock | ✅ |
+| VirtualBlock | SystemBlock | ❌ |
+| VirtualBlock | FactoryBlock / SceneBlock | ✅（marker 在相邻格或同格时由生成逻辑决定） |
+| FactoryBlock / SceneBlock / MaterialBlock | 同层另一方块 | ❌ |
 
 `Block` trait 上还有一组行为方法。它们不是独立 trait，但实际承担了“能力 trait”的职责：
 
@@ -81,7 +93,7 @@
 
 模拟期重力效果：❌
 
-系统层方块保存在 `WorldBlocks::system_blocks` 中，可以和普通 `blocks` 层的材料/工厂/场景方块同格存在。生成器、转换器、传送方块、焊点等都依赖这个双层结构。
+可编辑系统层方块保存在 `WorldBlocks::system_blocks` 中。不可与工厂/场景方块同格，可与材料方块同格。
 
 | 方块 | 中文名 | 可四向旋转 | 编辑模式可放置 | 实现 Trait | 覆写行为方法 |
 | --- | --- | --- | --- | --- | --- |
@@ -92,9 +104,18 @@
 | Converter | 转换器 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` | `default_settings()` |
 | Teleport Entrance | 传送入口块 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` | `default_settings()` |
 | Teleport Exit | 传送出口块 | ❌ | ✅ | `Block`, `SystemBlock`, `EditableBlock` | `default_settings()` |
-| Weld Point | 焊接点 | ❌ | ❌ | `Block`, `SystemBlock` | `render_behavior()`, `weld_behavior()` |
-| Blocker Head | 阻拦头 | ❌ | ❌ | `Block`, `SystemBlock` | 无 |
-| Drill Head | 钻头头 | ❌ | ❌ | `Block`, `SystemBlock` | `material_destroyer()` |
+
+## VirtualBlock
+
+模拟期重力效果：❌
+
+虚拟 marker 方块由工厂方块在运行时生成，保存在 `WorldBlocks::system_blocks` 中。不可与其他 system/virtual 条目同格，可与材料方块同格。
+
+| 方块 | 中文名 | 可四向旋转 | 编辑模式可放置 | 实现 Trait | 覆写行为方法 |
+| --- | --- | --- | --- | --- | --- |
+| Weld Point | 焊接点 | ❌ | ❌ | `Block`, `VirtualBlock` | `render_behavior()`, `weld_behavior()` |
+| Blocker Head | 阻拦头 | ❌ | ❌ | `Block`, `VirtualBlock` | 无 |
+| Drill Head | 钻头头 | ❌ | ❌ | `Block`, `VirtualBlock` | `material_destroyer()` |
 
 ## 结构观察
 

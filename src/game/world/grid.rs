@@ -313,8 +313,96 @@ impl WorldBlocks {
         }
     }
 
+    pub fn teleport_partner(&self, pos: IVec3) -> Option<IVec3> {
+        if let Some(pair) = self.teleport_settings(pos).pair {
+            if self
+                .system_blocks
+                .get(&pair)
+                .is_some_and(|block| self.teleport_kinds_match(pos, pair, block.kind))
+            {
+                return Some(pair);
+            }
+        }
+        for (other_pos, settings) in &self.block_settings {
+            if *other_pos == pos {
+                continue;
+            }
+            let BlockSettings::Teleport(settings) = settings else {
+                continue;
+            };
+            if settings.pair != Some(pos) {
+                continue;
+            }
+            let Some(block) = self.system_blocks.get(other_pos) else {
+                continue;
+            };
+            if self.teleport_kinds_match(pos, *other_pos, block.kind) {
+                return Some(*other_pos);
+            }
+        }
+        None
+    }
+
+    pub fn set_teleport_pair(&mut self, pos: IVec3, partner: Option<IVec3>) {
+        let Some(block) = self.system_blocks.get(&pos).copied() else {
+            return;
+        };
+        if !matches!(
+            block.kind,
+            BlockKind::TeleportEntrance | BlockKind::TeleportExit
+        ) {
+            return;
+        }
+
+        if let Some(old) = self.teleport_settings(pos).pair {
+            if partner != Some(old) {
+                let mut old_settings = self.teleport_settings(old);
+                if old_settings.pair == Some(pos) {
+                    old_settings.pair = None;
+                    self.set_teleport_settings(old, old_settings);
+                }
+            }
+        }
+
+        if let Some(partner_pos) = partner {
+            let Some(partner_block) = self.system_blocks.get(&partner_pos).copied() else {
+                return;
+            };
+            if !self.teleport_kinds_match(pos, partner_pos, partner_block.kind) {
+                return;
+            }
+
+            if let Some(previous) = self.teleport_settings(partner_pos).pair {
+                if previous != pos {
+                    let mut previous_settings = self.teleport_settings(previous);
+                    previous_settings.pair = None;
+                    self.set_teleport_settings(previous, previous_settings);
+                }
+            }
+
+            let mut partner_settings = self.teleport_settings(partner_pos);
+            partner_settings.pair = Some(pos);
+            self.set_teleport_settings(partner_pos, partner_settings);
+        }
+
+        let mut settings = self.teleport_settings(pos);
+        settings.pair = partner;
+        self.set_teleport_settings(pos, settings);
+    }
+
     pub fn set_teleport_settings(&mut self, pos: IVec3, settings: TeleportSettings) {
         self.set_block_settings(pos, BlockSettings::Teleport(settings));
+    }
+
+    fn teleport_kinds_match(&self, pos: IVec3, other: IVec3, other_kind: BlockKind) -> bool {
+        let Some(block) = self.system_blocks.get(&pos) else {
+            return false;
+        };
+        matches!(
+            (block.kind, other_kind),
+            (BlockKind::TeleportEntrance, BlockKind::TeleportExit)
+                | (BlockKind::TeleportExit, BlockKind::TeleportEntrance)
+        ) && pos != other
     }
 
     fn next_teleport_name(&self, kind: BlockKind) -> String {
@@ -408,6 +496,55 @@ impl WorldBlocks {
 
     pub fn can_place_platform_at(&self, pos: IVec3) -> bool {
         !self.is_platform_occupied(pos)
+    }
+
+    pub fn has_system_block_at(&self, pos: IVec3) -> bool {
+        self.system_blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.is_system_block())
+    }
+
+    pub fn blocks_factory_or_scene_at(&self, pos: IVec3) -> bool {
+        self.blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.is_factory() || block.kind.is_scene())
+    }
+
+    pub fn can_place_blocks_layer_at(&self, pos: IVec3, kind: BlockKind) -> bool {
+        if pos.y < 0 {
+            return false;
+        }
+        if self.is_platform_occupied(pos) {
+            return false;
+        }
+        if kind.is_material() {
+            return true;
+        }
+        if kind.is_factory() || kind.is_scene() {
+            return !self.has_system_block_at(pos);
+        }
+        false
+    }
+
+    pub fn can_place_system_block_at(&self, pos: IVec3) -> bool {
+        if pos.y < 0 || self.has_system_block_at(pos) {
+            return false;
+        }
+        !self.blocks_factory_or_scene_at(pos)
+    }
+
+    pub fn can_place_virtual_block_at(&self, pos: IVec3) -> bool {
+        !self.system_blocks.contains_key(&pos)
+    }
+
+    pub fn can_place_block_kind_at(&self, pos: IVec3, kind: BlockKind) -> bool {
+        if kind.is_system_block() {
+            self.can_place_system_block_at(pos)
+        } else if kind.is_generated_marker() {
+            self.can_place_virtual_block_at(pos)
+        } else {
+            self.can_place_blocks_layer_at(pos, kind)
+        }
     }
 
     pub fn can_move_into(&self, pos: IVec3) -> bool {
@@ -680,5 +817,42 @@ fn axis_vec(axis: usize) -> IVec3 {
         0 => IVec3::X,
         1 => IVec3::Y,
         _ => IVec3::Z,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const POS: IVec3 = IVec3::new(1, 0, 2);
+
+    #[test]
+    fn factory_cannot_overlap_system_block() {
+        let mut world = WorldBlocks::default();
+        world.insert(
+            POS,
+            BlockData {
+                kind: BlockKind::Generator,
+                facing: Facing::North,
+            },
+        );
+
+        assert!(!world.can_place_block_kind_at(POS, BlockKind::Platform));
+        assert!(world.can_place_block_kind_at(POS, BlockKind::Material));
+        assert!(world.can_place_platform_at(POS));
+    }
+
+    #[test]
+    fn system_block_cannot_overlap_factory() {
+        let mut world = WorldBlocks::default();
+        world.insert(
+            POS,
+            BlockData {
+                kind: BlockKind::Platform,
+                facing: Facing::North,
+            },
+        );
+
+        assert!(!world.can_place_block_kind_at(POS, BlockKind::Goal));
     }
 }

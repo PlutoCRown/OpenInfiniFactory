@@ -137,9 +137,7 @@ pub fn dispatch_teleport_action(
         TeleportAction::SetPair(pair) => {
             let mut ctx =
                 BlockEditContext::new(pos, &mut world.world, solution_state, open_dropdown);
-            let mut settings = ctx.world.teleport_settings(pos);
-            settings.pair = pair;
-            ctx.world.set_teleport_settings(pos, settings);
+            ctx.world.set_teleport_pair(pos, pair);
             ctx.close_dropdown();
             ctx.mark_dirty();
             refresh_world_after_edit(world);
@@ -259,8 +257,7 @@ fn update_dropdowns(
 
     if let Some(pos) = active_pos {
         let label = world
-            .teleport_settings(pos)
-            .pair
+            .teleport_partner(pos)
             .map(|pair| world.teleport_settings(pair).name)
             .unwrap_or_else(|| i18n.t("teleport.none"));
         for (_, mut text) in &mut labels {

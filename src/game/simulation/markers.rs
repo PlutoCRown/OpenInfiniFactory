@@ -67,9 +67,9 @@ fn place_generated_marker(world: &mut WorldBlocks, origin: IVec3, marker: Marker
 
     let pos = origin + offset;
     let can_place = if platform_collision {
-        world.can_place_platform_at(pos)
+        world.can_place_blocks_layer_at(pos, BlockKind::Platform)
     } else {
-        !world.system_blocks.contains_key(&pos)
+        world.can_place_virtual_block_at(pos)
     };
     if can_place {
         world.insert(pos, BlockData { kind, facing });

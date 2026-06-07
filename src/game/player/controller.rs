@@ -12,7 +12,7 @@ use crate::game::cameras::GameplayCamera;
 use crate::game::simulation::movement::PusherState;
 use crate::game::state::{GameMode, GameSettings, PlayingUiState};
 use crate::game::ui::UiRuntime;
-use crate::game::world::grid::WorldBlocks;
+use crate::game::world::grid::{grid_to_world, WorldBlocks};
 use crate::game::world::rendering::GameplayScene;
 use crate::shared::config::{ActionKeyName, GameConfig};
 
@@ -266,6 +266,17 @@ fn jump_speed(gravity_scale: f32) -> f32 {
     (2.0 * GRAVITY * gravity_scale * ONE_BLOCK_JUMP_HEIGHT).sqrt()
 }
 
+pub fn teleport_player_preserve_offset(
+    source: IVec3,
+    partner: IVec3,
+    transform: &mut Transform,
+    camera: &mut FlyCamera,
+) {
+    let offset = transform.translation - grid_to_world(source);
+    transform.translation = grid_to_world(partner) + offset;
+    camera.velocity_y = 0.0;
+}
+
 pub fn player_intersects_block(position: Vec3, block: IVec3) -> bool {
     let (player_min, player_max) = player_aabb(position);
     let block_min = block.as_vec3();
@@ -317,11 +328,7 @@ fn move_with_collision(
     }
 }
 
-fn block_has_collision(
-    world: &WorldBlocks,
-    pusher_state: &PusherState,
-    pos: IVec3,
-) -> bool {
+fn block_has_collision(world: &WorldBlocks, pusher_state: &PusherState, pos: IVec3) -> bool {
     if pos.y < 0 {
         return false;
     }
@@ -361,15 +368,10 @@ fn can_move_to(
         return true;
     }
 
-    current_overlap > 0.0
-        && collision_overlap_score(next, world, pusher_state) < current_overlap
+    current_overlap > 0.0 && collision_overlap_score(next, world, pusher_state) < current_overlap
 }
 
-fn collision_overlap_score(
-    position: Vec3,
-    world: &WorldBlocks,
-    pusher_state: &PusherState,
-) -> f32 {
+fn collision_overlap_score(position: Vec3, world: &WorldBlocks, pusher_state: &PusherState) -> f32 {
     let (min, max) = player_aabb(position);
     let min_block = min.floor().as_ivec3();
     let max_block = (max - Vec3::splat(AABB_EPSILON)).floor().as_ivec3();
