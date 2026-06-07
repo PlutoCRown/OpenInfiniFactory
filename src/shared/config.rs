@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use crate::shared::i18n::Language;
-use crate::shared::save::SAVE_DIR;
+use crate::shared::save::saves_directory;
 
 pub const CONFIG_FILE: &str = "config.ron";
 
@@ -461,7 +461,8 @@ pub fn load_config() -> GameConfig {
 }
 
 pub fn save_config(config: &GameConfig) {
-    if let Err(error) = fs::create_dir_all(SAVE_DIR) {
+    let dir = saves_directory();
+    if let Err(error) = fs::create_dir_all(dir) {
         warn!("Failed to create config directory: {error}");
         return;
     }
@@ -477,18 +478,19 @@ pub fn save_config(config: &GameConfig) {
 }
 
 pub fn open_config_folder() {
-    if let Err(error) = fs::create_dir_all(SAVE_DIR) {
+    let dir = saves_directory();
+    if let Err(error) = fs::create_dir_all(dir) {
         warn!("Failed to create config directory: {error}");
         return;
     }
 
-    if let Err(error) = Command::new("open").arg(SAVE_DIR).spawn() {
+    if let Err(error) = Command::new("open").arg(dir).spawn() {
         warn!("Failed to open config folder: {error}");
     }
 }
 
 pub fn config_path() -> PathBuf {
-    PathBuf::from(SAVE_DIR).join(CONFIG_FILE)
+    saves_directory().join(CONFIG_FILE)
 }
 
 pub fn key_from_input(keys: &ButtonInput<KeyCode>) -> Option<ConfigKey> {

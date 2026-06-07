@@ -17,6 +17,7 @@ pub use dispatch::{
     exit_to_main_menu_in_world, load_world, reset_solution_in_world, save_current_world,
     save_world_as_new_puzzle_in_world, switch_to_edit_mode_in_world,
 };
+pub use messages::LoadWorld;
 pub use world_access::PlayingWorldParams;
 
 use bevy::prelude::*;
@@ -35,7 +36,7 @@ use crate::game::world::rendering::{
 
 use load::{handle_create_new_puzzle, handle_create_new_solution, handle_load_world};
 use messages::{
-    CreateNewPuzzle, CreateNewSolution, ExitToMainMenu, LoadWorld, ResetSolution, SaveCurrentWorld,
+    CreateNewPuzzle, CreateNewSolution, ExitToMainMenu, ResetSolution, SaveCurrentWorld,
     SaveWorldAsNewPuzzle, SwitchToEditMode,
 };
 use navigation::handle_exit_to_main_menu;

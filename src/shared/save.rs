@@ -3,6 +3,7 @@ use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use crate::game::blocks::{BlockData, PersistentLayer};
 use crate::game::world::grid::{BlockSettings, WorldBlocks};
@@ -400,7 +401,8 @@ impl SaveFile {
 }
 
 fn write_save(name: &str, save: &SaveFile) -> bool {
-    if let Err(error) = fs::create_dir_all(SAVE_DIR) {
+    let dir = saves_directory().to_path_buf();
+    if let Err(error) = fs::create_dir_all(&dir) {
         warn!("Failed to create save directory: {error}");
         return false;
     }
@@ -522,7 +524,8 @@ impl SavedBlockSettings {
 }
 
 pub fn list_saves() -> Vec<String> {
-    let Ok(entries) = fs::read_dir(SAVE_DIR) else {
+    let dir = saves_directory();
+    let Ok(entries) = fs::read_dir(dir) else {
         return Vec::new();
     };
 
@@ -570,8 +573,37 @@ pub fn next_named_save(existing: &[String], base: &str) -> String {
     unreachable!()
 }
 
+/// Resolved save directory. Prefers `./saves` under cwd, then walks up from the
+/// executable (covers `cargo run` launching from `target/debug/`).
+pub fn saves_directory() -> &'static Path {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let cwd_dir = PathBuf::from(SAVE_DIR);
+        if cwd_dir.is_dir() {
+            return cwd_dir
+                .canonicalize()
+                .unwrap_or(cwd_dir);
+        }
+
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(exe_dir) = exe.parent() {
+                for ancestor in exe_dir.ancestors().take(6) {
+                    let candidate = ancestor.join(SAVE_DIR);
+                    if candidate.is_dir() {
+                        return candidate
+                            .canonicalize()
+                            .unwrap_or(candidate);
+                    }
+                }
+            }
+        }
+
+        cwd_dir
+    })
+}
+
 fn save_path(name: &str) -> PathBuf {
-    Path::new(SAVE_DIR).join(format!("{}.ron", sanitize_save_name(name)))
+    saves_directory().join(format!("{}.ron", sanitize_save_name(name)))
 }
 
 fn save_name_from_path(path: &Path) -> Option<String> {

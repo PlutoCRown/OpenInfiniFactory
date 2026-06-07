@@ -2,7 +2,7 @@ use bevy::input::keyboard::KeyboardInput;
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
-use crate::game::session;
+use crate::game::session::LoadWorld;
 use crate::game::state::{GameMode, SolutionState, StartMenuScreen, WorldEntryMode};
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
 use crate::game::ui::core::text_input::{primary_click, push_text_input};
@@ -49,7 +49,7 @@ pub fn dispatch_save_list_actions(
     mut start_menu_screen: ResMut<StartMenuScreen>,
     mut save_state: ResMut<SaveState>,
     solution_state: Res<SolutionState>,
-    mut commands: Commands,
+    mut load_requests: MessageWriter<LoadWorld>,
 ) {
     for action in actions.read() {
         if action.instance != UiInstanceId::SAVE_LIST {
@@ -63,7 +63,7 @@ pub fn dispatch_save_list_actions(
             &mut start_menu_screen,
             &mut save_state,
             &solution_state,
-            &mut commands,
+            &mut load_requests,
         );
     }
 }
@@ -73,7 +73,7 @@ fn dispatch_save_list_action(
     start_menu_screen: &mut StartMenuScreen,
     save_state: &mut SaveState,
     solution_state: &SolutionState,
-    commands: &mut Commands,
+    load_requests: &mut MessageWriter<LoadWorld>,
 ) {
     match action {
         SaveListAction::NewPuzzle => {
@@ -96,7 +96,10 @@ fn dispatch_save_list_action(
                 if !save_state.puzzles().iter().any(|entry| entry.name == *name) {
                     return;
                 }
-                session::load_world(commands, name.clone(), WorldEntryMode::EditPuzzle);
+                load_requests.write(LoadWorld {
+                    name: name.clone(),
+                    entry: WorldEntryMode::EditPuzzle,
+                });
             } else {
                 let Some(choice) = save_state
                     .puzzle_choices()
@@ -122,7 +125,10 @@ fn dispatch_save_list_action(
             {
                 return;
             }
-            session::load_world(commands, name.clone(), WorldEntryMode::PlaySolution);
+            load_requests.write(LoadWorld {
+                name: name.clone(),
+                entry: WorldEntryMode::PlaySolution,
+            });
         }
         SaveListAction::RenamePuzzle(name) => {
             if solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
