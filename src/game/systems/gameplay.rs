@@ -29,9 +29,10 @@ use crate::game::world::grid::{
 use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
     block_face_highlight_transform, despawn_edit_previews, rebuild_world_for_debug_state,
-    rebuild_world_with_animations, spawn_block_preview, spawn_block_with_animation,
-    spawn_edit_preview, AimFaceHighlight, BlockEntity, EditPreview, EditPreviewKind, HoverMarker,
-    HoverStructureBounds, WorldRenderAssets,
+    rebuild_world_with_animations, rebuild_world_with_animations_for_debug_state,
+    spawn_block_preview, spawn_block_with_animation, spawn_edit_preview, AimFaceHighlight,
+    BlockEntity, EditPreview, EditPreviewKind, HoverMarker, HoverStructureBounds,
+    WorldRenderAssets,
 };
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
@@ -698,17 +699,13 @@ fn move_selection(
         }
     }
 
+    let mut animations = std::collections::HashMap::new();
     for (pos, block) in selected {
         let target = pos + offset;
         world.insert(target, block);
-        spawn_block_with_animation(
-            commands,
-            meshes,
-            render_assets,
-            world,
+        animations.insert(
             target,
-            block,
-            Some(BlockAnimation {
+            BlockAnimation {
                 from_pos: pos,
                 to_pos: target,
                 from_facing: block.facing,
@@ -716,20 +713,35 @@ fn move_selection(
                 kind: crate::game::world::animation::BlockAnimationKind::Move,
                 duration: None,
                 progress: None,
-            }),
+            },
         );
     }
     world.replace_material_welds(updated_welds);
     if debug.factory_activity {
         despawn_block_entities(commands, block_entities);
-        rebuild_world_for_debug_state(
+        rebuild_world_with_animations_for_debug_state(
             commands,
             meshes,
             world,
             render_assets,
+            &animations,
             debug,
             structure_state,
         );
+    } else {
+        for (target, animation) in animations {
+            let block = world.blocks[&target];
+            spawn_block_with_animation(
+                commands,
+                meshes,
+                render_assets,
+                world,
+                target,
+                block,
+                Some(animation),
+                None,
+            );
+        }
     }
     true
 }
@@ -821,16 +833,17 @@ fn rotate_block_at(
 
     despawn_block_entities(commands, block_entities);
     if debug.factory_activity {
-        rebuild_world_for_debug_state(
+        rebuild_world_with_animations_for_debug_state(
             commands,
             meshes,
             world,
             render_assets,
+            &animations,
             debug,
             structure_state,
         );
     } else {
-        rebuild_world_with_animations(commands, meshes, world, render_assets, &animations);
+        rebuild_world_with_animations(commands, meshes, world, render_assets, &animations, None);
     }
     true
 }

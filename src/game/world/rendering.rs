@@ -40,6 +40,9 @@ pub struct BlockEntity {
 }
 
 #[derive(Component)]
+struct FactoryDebugOverlay;
+
+#[derive(Component)]
 pub struct GameplayScene;
 
 #[derive(Resource, Default)]
@@ -358,6 +361,7 @@ fn spawn_block_icon_model(
         false,
         true,
         Some((origin - Vec3::splat(0.5), icon_layer)),
+        None,
     );
 }
 
@@ -366,35 +370,13 @@ pub fn rebuild_world(
     meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
+    factory_debug: Option<&StructureState>,
 ) {
     for (pos, data) in &world.blocks {
-        spawn_block(commands, meshes, assets, world, *pos, *data);
+        spawn_block(commands, meshes, assets, world, *pos, *data, factory_debug);
     }
     for (pos, data) in &world.system_blocks {
-        spawn_block(commands, meshes, assets, world, *pos, *data);
-    }
-}
-
-pub fn rebuild_world_with_factory_activity_debug(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    world: &WorldBlocks,
-    assets: &WorldRenderAssets,
-    structure_state: &StructureState,
-) {
-    for (pos, data) in &world.blocks {
-        if data.kind.is_factory() {
-            let material = match structure_state.activity_at(*pos) {
-                Some(FactoryActivity::Inactive) => assets.inactive_factory_debug_material(),
-                _ => assets.active_factory_debug_material(),
-            };
-            spawn_debug_factory_block(commands, assets, *pos, material);
-        } else {
-            spawn_block(commands, meshes, assets, world, *pos, *data);
-        }
-    }
-    for (pos, data) in &world.system_blocks {
-        spawn_block(commands, meshes, assets, world, *pos, *data);
+        spawn_block(commands, meshes, assets, world, *pos, *data, factory_debug);
     }
 }
 
@@ -406,11 +388,32 @@ pub fn rebuild_world_for_debug_state(
     debug: &DebugState,
     structure_state: &StructureState,
 ) {
-    if debug.factory_activity {
-        rebuild_world_with_factory_activity_debug(commands, meshes, world, assets, structure_state);
-    } else {
-        rebuild_world(commands, meshes, world, assets);
-    }
+    rebuild_world(
+        commands,
+        meshes,
+        world,
+        assets,
+        debug.factory_activity.then_some(structure_state),
+    );
+}
+
+pub fn rebuild_world_with_animations_for_debug_state(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    world: &WorldBlocks,
+    assets: &WorldRenderAssets,
+    animations: &HashMap<IVec3, BlockAnimation>,
+    debug: &DebugState,
+    structure_state: &StructureState,
+) {
+    rebuild_world_with_animations(
+        commands,
+        meshes,
+        world,
+        assets,
+        animations,
+        debug.factory_activity.then_some(structure_state),
+    );
 }
 
 pub fn despawn_world(commands: &mut Commands, block_entities: &Query<Entity, With<BlockEntity>>) {
@@ -419,17 +422,32 @@ pub fn despawn_world(commands: &mut Commands, block_entities: &Query<Entity, Wit
     }
 }
 
-fn spawn_debug_factory_block(
-    commands: &mut Commands,
+fn factory_debug_overlay_material(
     assets: &WorldRenderAssets,
+    structure_state: &StructureState,
     pos: IVec3,
+    kind: BlockKind,
+) -> Option<Handle<StandardMaterial>> {
+    if !kind.is_factory() {
+        return None;
+    }
+    Some(match structure_state.activity_at(pos) {
+        Some(FactoryActivity::Inactive) => assets.inactive_factory_debug_material(),
+        _ => assets.active_factory_debug_material(),
+    })
+}
+
+fn spawn_factory_debug_overlay(
+    parent: &mut ChildSpawnerCommands,
+    assets: &WorldRenderAssets,
     material: Handle<StandardMaterial>,
 ) {
-    commands.spawn((
+    parent.spawn((
         Mesh3d(assets.block.clone()),
         MeshMaterial3d(material),
-        Transform::from_translation(grid_to_world(pos)),
-        BlockEntity { pos },
+        Transform::from_scale(Vec3::splat(1.03)),
+        FactoryDebugOverlay,
+        Pickable::IGNORE,
     ));
 }
 
@@ -552,6 +570,7 @@ pub fn spawn_block_preview(
         false,
         true,
         None,
+        None,
     );
 }
 
@@ -562,8 +581,18 @@ pub fn spawn_block(
     world: &WorldBlocks,
     pos: IVec3,
     data: BlockData,
+    factory_debug: Option<&StructureState>,
 ) {
-    spawn_block_with_animation(commands, meshes, assets, world, pos, data, None);
+    spawn_block_with_animation(
+        commands,
+        meshes,
+        assets,
+        world,
+        pos,
+        data,
+        None,
+        factory_debug,
+    );
 }
 
 pub fn spawn_block_with_animation(
@@ -574,6 +603,7 @@ pub fn spawn_block_with_animation(
     pos: IVec3,
     data: BlockData,
     animation: Option<BlockAnimation>,
+    factory_debug: Option<&StructureState>,
 ) {
     spawn_block_with_timed_animation(
         commands,
@@ -584,6 +614,7 @@ pub fn spawn_block_with_animation(
         data,
         animation,
         AnimationTiming::edit(),
+        factory_debug,
     );
 }
 
@@ -596,6 +627,7 @@ pub fn spawn_block_with_timed_animation(
     data: BlockData,
     animation: Option<BlockAnimation>,
     timing: AnimationTiming,
+    factory_debug: Option<&StructureState>,
 ) {
     spawn_block_model(
         commands,
@@ -613,6 +645,7 @@ pub fn spawn_block_with_timed_animation(
         false,
         true,
         None,
+        factory_debug,
     );
 }
 
@@ -642,6 +675,7 @@ pub fn spawn_pending_generated_block(
         true,
         false,
         None,
+        None,
     );
 }
 
@@ -651,6 +685,7 @@ pub fn rebuild_world_with_animations(
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     animations: &HashMap<IVec3, BlockAnimation>,
+    factory_debug: Option<&StructureState>,
 ) {
     rebuild_world_with_timed_animations(
         commands,
@@ -659,6 +694,7 @@ pub fn rebuild_world_with_animations(
         assets,
         animations,
         AnimationTiming::edit(),
+        factory_debug,
     );
 }
 
@@ -669,6 +705,7 @@ pub fn rebuild_world_with_timed_animations(
     assets: &WorldRenderAssets,
     animations: &HashMap<IVec3, BlockAnimation>,
     timing: AnimationTiming,
+    factory_debug: Option<&StructureState>,
 ) {
     for (pos, data) in &world.blocks {
         spawn_block_model(
@@ -687,6 +724,7 @@ pub fn rebuild_world_with_timed_animations(
             false,
             true,
             None,
+            factory_debug,
         );
     }
     for (pos, data) in &world.system_blocks {
@@ -706,6 +744,7 @@ pub fn rebuild_world_with_timed_animations(
             false,
             true,
             None,
+            None,
         );
     }
 }
@@ -719,6 +758,7 @@ pub fn rebuild_world_with_runtime_animations(
     pusher_animations: &HashMap<IVec3, PusherAnimation>,
     timing: AnimationTiming,
     powered_wires: &HashSet<IVec3>,
+    factory_debug: Option<&StructureState>,
 ) {
     for (pos, data) in &world.blocks {
         let material = block_render_material(assets, *data, powered_wires.contains(pos));
@@ -738,6 +778,7 @@ pub fn rebuild_world_with_runtime_animations(
             false,
             false,
             None,
+            factory_debug,
         );
     }
     for (pos, data) in &world.system_blocks {
@@ -757,6 +798,7 @@ pub fn rebuild_world_with_runtime_animations(
             false,
             false,
             None,
+            None,
         );
     }
 }
@@ -773,20 +815,17 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
     structure_state: &StructureState,
     powered_wires: &HashSet<IVec3>,
 ) {
-    if debug.factory_activity {
-        rebuild_world_with_factory_activity_debug(commands, meshes, world, assets, structure_state);
-    } else {
-        rebuild_world_with_runtime_animations(
-            commands,
-            meshes,
-            world,
-            assets,
-            animations,
-            pusher_animations,
-            timing,
-            powered_wires,
-        );
-    }
+    rebuild_world_with_runtime_animations(
+        commands,
+        meshes,
+        world,
+        assets,
+        animations,
+        pusher_animations,
+        timing,
+        powered_wires,
+        debug.factory_activity.then_some(structure_state),
+    );
 }
 
 fn block_render_material(
@@ -1014,7 +1053,11 @@ fn spawn_block_model(
     pending_generated_preview: bool,
     show_generator_preview: bool,
     icon_render: Option<(Vec3, &RenderLayers)>,
+    factory_debug: Option<&StructureState>,
 ) {
+    let debug_overlay = factory_debug.and_then(|structure_state| {
+        factory_debug_overlay_material(assets, structure_state, pos, data.kind)
+    });
     let mut transform = Transform::from_translation(grid_to_world(pos));
     if let Some(animation) = animation {
         let progress = animation.progress.unwrap_or(0.0).clamp(0.0, 1.0);
@@ -1207,6 +1250,10 @@ fn spawn_block_model(
                 world.goal_settings(pos).material
             };
             spawn_selected_material_preview(parent, assets, material, icon_render);
+        }
+
+        if let Some(material) = debug_overlay {
+            spawn_factory_debug_overlay(parent, assets, material);
         }
     });
 }

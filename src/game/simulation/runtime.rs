@@ -12,8 +12,9 @@ use crate::game::world::animation::{
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_pending_generated_previews, despawn_world,
-    rebuild_world_with_runtime_animations_for_debug_state, spawn_pending_generated_block,
-    spawn_weld_sparks, spawn_acceptance_sparks, BlockEntity, PendingGeneratedPreview, WorldRenderAssets,
+    rebuild_world_with_runtime_animations_for_debug_state, spawn_acceptance_sparks,
+    spawn_pending_generated_block, spawn_weld_sparks, BlockEntity, PendingGeneratedPreview,
+    WorldRenderAssets,
 };
 
 use super::behaviors::{
@@ -64,7 +65,9 @@ impl PendingGeneratedMaterials {
     }
 
     pub(super) fn mark_acceptance_spark(&mut self, pos: IVec3, ready_turn: u64) {
-        self.pending_acceptance_sparks.entry(pos).or_insert(ready_turn);
+        self.pending_acceptance_sparks
+            .entry(pos)
+            .or_insert(ready_turn);
     }
 
     pub(crate) fn pending_destroy_turn(&self, pos: IVec3) -> Option<u64> {
@@ -152,7 +155,7 @@ pub fn run_turn(
     run_powered_marker_phase(world, &powered_devices);
     sample.marker_before_move_ms = mark_elapsed_ms(&mut mark);
 
-    let device_movement_plan =
+    let (device_movement_plan, bare_pusher_animations) =
         mark_structure_movement_phase(world, &powered_devices, structure_state, pusher_state);
     movement_plan = merge_structure_movement_plan(
         movement_plan,
@@ -172,6 +175,7 @@ pub fn run_turn(
     merge_generated_animations(&mut animations, generated_animations);
     let mut pusher_animations = pusher_animations
         .into_iter()
+        .chain(bare_pusher_animations)
         .map(|(pos, mut animation)| {
             animation.duration = animation_duration;
             (pos, animation)

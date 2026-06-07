@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 
-use crate::game::world::animation::PusherAnimation;
 use crate::game::blocks::{BlockKind, MovementRule};
+use crate::game::world::animation::PusherAnimation;
 use crate::game::world::grid::WorldBlocks;
 
 use super::structure_state::StructureState;
@@ -100,7 +100,6 @@ impl PusherState {
             })
             .collect()
     }
-
 }
 
 pub fn blocker_animations(
@@ -136,7 +135,7 @@ pub(super) fn mark_structure_movement_phase(
     powered_devices: &HashSet<IVec3>,
     structures: &StructureState,
     pusher_state: &mut PusherState,
-) -> Vec<StructureMove> {
+) -> (Vec<StructureMove>, HashMap<IVec3, PusherAnimation>) {
     let movers: Vec<(IVec3, BlockKind, MovementRule)> = world
         .blocks
         .iter()
@@ -148,17 +147,14 @@ pub(super) fn mark_structure_movement_phase(
         })
         .collect();
     let mut moves = Vec::new();
+    let mut bare_pusher_animations = HashMap::new();
 
     for (pos, kind, mover) in movers {
         match mover {
             MovementRule::Translate { source, offset } => {
-                if let Some(movement) = mark_conveyor_movement(
-                    world,
-                    structures,
-                    pos,
-                    source,
-                    offset,
-                ) {
+                if let Some(movement) =
+                    mark_conveyor_movement(world, structures, pos, source, offset)
+                {
                     moves.push(movement.with_source(pos));
                 }
             }
@@ -168,9 +164,7 @@ pub(super) fn mark_structure_movement_phase(
                 }
             }
             MovementRule::Rotate { clockwise } => {
-                if let Some(movement) =
-                    mark_rotate_material_structure(structures, pos, clockwise)
-                {
+                if let Some(movement) = mark_rotate_material_structure(structures, pos, clockwise) {
                     moves.push(movement.with_source(pos));
                 }
             }
@@ -189,6 +183,7 @@ pub(super) fn mark_structure_movement_phase(
                         source,
                         offset,
                         desired_extended,
+                        &mut bare_pusher_animations,
                     ) {
                         moves.push(movement);
                     }
@@ -207,7 +202,7 @@ pub(super) fn mark_structure_movement_phase(
             }
         }
     }
-    moves
+    (moves, bare_pusher_animations)
 }
 
 fn mark_conveyor_movement(
@@ -252,6 +247,7 @@ fn mark_pusher_movement(
     source: IVec3,
     offset: IVec3,
     desired_extended: bool,
+    bare_pusher_animations: &mut HashMap<IVec3, PusherAnimation>,
 ) -> Option<StructureMove> {
     let entry = pusher_state
         .entries
@@ -286,19 +282,40 @@ fn mark_pusher_movement(
         None
     };
 
-    if movement.is_some() || desired_extended || !entry.bound_front {
-        entry.extended = desired_extended;
+    let state_changed = movement.is_some() || desired_extended || !entry.bound_front;
+    if !state_changed {
+        return None;
     }
+    entry.extended = desired_extended;
+
+    let (from_extension, to_extension) = if desired_extended {
+        (0.0, 1.0)
+    } else {
+        (1.0, 0.0)
+    };
     let animation = if desired_extended {
         PusherAnimationKind::Extend
     } else {
         PusherAnimationKind::Retract
     };
-    movement.map(|movement| {
-        movement
-            .with_pusher_actor(pos, MovementMark::Push, animation)
-            .with_source(pos)
-    })
+
+    if let Some(movement) = movement {
+        return Some(
+            movement
+                .with_pusher_actor(pos, MovementMark::Push, animation)
+                .with_source(pos),
+        );
+    }
+
+    bare_pusher_animations.insert(
+        pos,
+        PusherAnimation {
+            duration: 0.0,
+            from_extension,
+            to_extension,
+        },
+    );
+    None
 }
 
 trait StructureMoveActorExt {

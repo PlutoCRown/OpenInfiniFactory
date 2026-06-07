@@ -20,6 +20,7 @@ pub const DEFAULT_KEY_BINDINGS: KeyBindings = KeyBindings {
     simulation_fast: ConfigKey::KeyF,
     simulation_rollback: ConfigKey::KeyR,
     debug: ConfigKey::Slash,
+    debug_structure: ConfigKey::KeyP,
     forward: ConfigKey::KeyW,
     backward: ConfigKey::KeyS,
     left: ConfigKey::KeyA,
@@ -76,6 +77,10 @@ fn default_key_bindings() -> KeyBindings {
     DEFAULT_CONFIG.key_bindings
 }
 
+fn default_debug_structure_key() -> ConfigKey {
+    ConfigKey::KeyP
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Reflect, Serialize, Deserialize)]
 pub enum ConfigSelectionMode {
     #[default]
@@ -111,6 +116,8 @@ pub struct KeyBindings {
     pub simulation_fast: ConfigKey,
     pub simulation_rollback: ConfigKey,
     pub debug: ConfigKey,
+    #[serde(default = "default_debug_structure_key")]
+    pub debug_structure: ConfigKey,
     pub forward: ConfigKey,
     pub backward: ConfigKey,
     pub left: ConfigKey,
@@ -145,8 +152,10 @@ pub enum ActionKeyName {
     SimulationFast,
     /// 回滚模拟
     SimulationRollback,
-    /// 调试模式
+    /// 调试面板
     Debug,
+    /// 调试结构
+    DebugStructure,
     /// 向前移动
     Forward,
     /// 向后移动
@@ -167,12 +176,13 @@ pub enum ActionKeyName {
 }
 
 impl ActionKeyName {
-    pub const GENERAL: [ActionKeyName; 14] = [
+    pub const GENERAL: [ActionKeyName; 15] = [
         ActionKeyName::Pause,
         ActionKeyName::Inventory,
         ActionKeyName::Alternate,
         ActionKeyName::RotateOrRollback,
         ActionKeyName::Debug,
+        ActionKeyName::DebugStructure,
         ActionKeyName::Forward,
         ActionKeyName::Backward,
         ActionKeyName::Left,
@@ -202,6 +212,7 @@ impl ActionKeyName {
             ActionKeyName::SimulationFast => "action.simulation_fast",
             ActionKeyName::SimulationRollback => "action.simulation_rollback",
             ActionKeyName::Debug => "action.debug",
+            ActionKeyName::DebugStructure => "action.debug_structure",
             ActionKeyName::Forward => "action.forward",
             ActionKeyName::Backward => "action.backward",
             ActionKeyName::Left => "action.left",
@@ -263,6 +274,7 @@ pub enum ConfigKey {
     KeyE,
     KeyF,
     KeyI,
+    KeyP,
     KeyR,
     KeyS,
     KeyW,
@@ -291,6 +303,7 @@ impl ConfigKey {
             ConfigKey::KeyE => KeyCode::KeyE,
             ConfigKey::KeyF => KeyCode::KeyF,
             ConfigKey::KeyI => KeyCode::KeyI,
+            ConfigKey::KeyP => KeyCode::KeyP,
             ConfigKey::KeyR => KeyCode::KeyR,
             ConfigKey::KeyS => KeyCode::KeyS,
             ConfigKey::KeyW => KeyCode::KeyW,
@@ -319,6 +332,7 @@ impl ConfigKey {
             ConfigKey::KeyE => "E",
             ConfigKey::KeyF => "F",
             ConfigKey::KeyI => "I",
+            ConfigKey::KeyP => "P",
             ConfigKey::KeyR => "R",
             ConfigKey::KeyS => "S",
             ConfigKey::KeyW => "W",
@@ -347,6 +361,7 @@ impl GameConfig {
             ActionKeyName::SimulationFast => self.key_bindings.simulation_fast,
             ActionKeyName::SimulationRollback => self.key_bindings.simulation_rollback,
             ActionKeyName::Debug => self.key_bindings.debug,
+            ActionKeyName::DebugStructure => self.key_bindings.debug_structure,
             ActionKeyName::Forward => self.key_bindings.forward,
             ActionKeyName::Backward => self.key_bindings.backward,
             ActionKeyName::Left => self.key_bindings.left,
@@ -378,6 +393,7 @@ impl GameConfig {
                 ConfigInput::Key(self.key_bindings.simulation_rollback)
             }
             ActionKeyName::Debug => ConfigInput::Key(self.key_bindings.debug),
+            ActionKeyName::DebugStructure => ConfigInput::Key(self.key_bindings.debug_structure),
             ActionKeyName::Forward => ConfigInput::Key(self.key_bindings.forward),
             ActionKeyName::Backward => ConfigInput::Key(self.key_bindings.backward),
             ActionKeyName::Left => ConfigInput::Key(self.key_bindings.left),
@@ -401,6 +417,7 @@ impl GameConfig {
             ActionKeyName::SimulationFast => self.key_bindings.simulation_fast = key,
             ActionKeyName::SimulationRollback => self.key_bindings.simulation_rollback = key,
             ActionKeyName::Debug => self.key_bindings.debug = key,
+            ActionKeyName::DebugStructure => self.key_bindings.debug_structure = key,
             ActionKeyName::Forward => self.key_bindings.forward = key,
             ActionKeyName::Backward => self.key_bindings.backward = key,
             ActionKeyName::Left => self.key_bindings.left = key,
@@ -487,6 +504,7 @@ pub fn key_from_input(keys: &ButtonInput<KeyCode>) -> Option<ConfigKey> {
         ConfigKey::KeyE,
         ConfigKey::KeyF,
         ConfigKey::KeyI,
+        ConfigKey::KeyP,
         ConfigKey::KeyR,
         ConfigKey::KeyS,
         ConfigKey::KeyW,
@@ -533,6 +551,7 @@ fn key_from_input_code(key_code: KeyCode) -> Option<ConfigKey> {
         ConfigKey::KeyE,
         ConfigKey::KeyF,
         ConfigKey::KeyI,
+        ConfigKey::KeyP,
         ConfigKey::KeyR,
         ConfigKey::KeyS,
         ConfigKey::KeyW,

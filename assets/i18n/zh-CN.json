@@ -2,6 +2,7 @@
   "action.alternate": "切换方块",
   "action.backward": "向后移动",
   "action.debug": "调试面板",
+  "action.debug_structure": "调试结构",
   "action.fly_down": "向下飞行",
   "action.forward": "向前移动",
   "action.inventory": "背包",

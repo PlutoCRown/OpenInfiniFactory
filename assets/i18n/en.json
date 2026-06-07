@@ -2,6 +2,7 @@
   "action.alternate": "Alternate Block",
   "action.backward": "Move Backward",
   "action.debug": "Debug Overlay",
+  "action.debug_structure": "Debug Structures",
   "action.fly_down": "Fly Down",
   "action.forward": "Move Forward",
   "action.inventory": "Inventory",

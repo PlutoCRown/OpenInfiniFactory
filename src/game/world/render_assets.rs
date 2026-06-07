@@ -302,12 +302,14 @@ impl WorldRenderAssets {
                 ..default()
             }),
             active_factory_debug_material: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.12, 0.90, 0.22),
+                base_color: Color::srgba(0.12, 0.90, 0.22, 0.38),
+                alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 ..default()
             }),
             inactive_factory_debug_material: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.95, 0.12, 0.08),
+                base_color: Color::srgba(0.95, 0.12, 0.08, 0.38),
+                alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 ..default()
             }),

@@ -83,6 +83,7 @@ pub fn toggle_debug(
 
 pub fn toggle_factory_activity_debug(
     keys: Res<ButtonInput<KeyCode>>,
+    config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
     text_prompt: Res<TextPromptState>,
     mode: Res<State<GameMode>>,
@@ -106,7 +107,7 @@ pub fn toggle_factory_activity_debug(
         return;
     };
 
-    if keys.just_pressed(KeyCode::KeyP) {
+    if keys.just_pressed(config.key(ActionKeyName::DebugStructure).key_code()) {
         debug.factory_activity = !debug.factory_activity;
         if debug.factory_activity {
             if structure_state.is_empty() {
