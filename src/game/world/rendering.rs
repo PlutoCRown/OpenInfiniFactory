@@ -1003,6 +1003,11 @@ fn spawn_block_model(
         transform.translation += origin;
     }
 
+    let shell_scale = data.kind.material_shell_scale();
+    if shell_scale != 1.0 {
+        transform.scale *= shell_scale;
+    }
+
     let is_preview = edit_preview.is_some();
     let mut entity = if data.kind == crate::game::blocks::BlockKind::Wire
         || matches!(data.kind.model(), BlockModel::PartsOnly(_))
@@ -1157,15 +1162,13 @@ fn spawn_block_model(
             }
         }
 
-        if show_generator_preview {
-            let material = match data.kind {
-                BlockKind::Generator => Some(world.generator_settings(pos).material),
-                BlockKind::Goal => Some(world.goal_settings(pos).material),
-                _ => None,
+        if show_generator_preview && data.kind.shows_material_preview() {
+            let material = if data.kind == BlockKind::Generator {
+                world.generator_settings(pos).material
+            } else {
+                world.goal_settings(pos).material
             };
-            if let Some(material) = material {
-                spawn_selected_material_preview(parent, assets, material, icon_render);
-            }
+            spawn_selected_material_preview(parent, assets, material, icon_render);
         }
     });
 }

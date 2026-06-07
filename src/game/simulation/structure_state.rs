@@ -43,10 +43,17 @@ pub struct Structure {
     gravity_support: Vec<GravitySupportContact>,
 }
 
+#[derive(Clone, Debug)]
+pub struct AcceptorStructure {
+    pub positions: HashSet<IVec3>,
+    pub count: u32,
+}
+
 #[derive(Resource, Default, Clone)]
 pub struct StructureState {
     structures: Vec<Structure>,
     structure_by_pos: HashMap<IVec3, usize>,
+    acceptor_structures: Vec<AcceptorStructure>,
 }
 
 impl StructureState {
@@ -58,12 +65,23 @@ impl StructureState {
         self.structure_by_pos.is_empty()
     }
 
-    /// Build factory structures (connectivity + activity) and material structures (welds).
+    /// Build factory structures (connectivity + activity), acceptor structures, and material structures (welds).
     pub fn rebuild_for_simulation(&mut self, world: &WorldBlocks) {
         *self = Self::default();
         self.append_factory_structures(world);
         self.apply_factory_inactive_propagation(world);
+        self.append_acceptor_structures(world);
         self.append_material_structures(world);
+    }
+
+    pub fn acceptor_structures(&self) -> &[AcceptorStructure] {
+        &self.acceptor_structures
+    }
+
+    pub fn increment_acceptor_count(&mut self, index: usize) {
+        if let Some(structure) = self.acceptor_structures.get_mut(index) {
+            structure.count = structure.count.saturating_add(1);
+        }
     }
 
     /// Debug-only factory connectivity for edit-mode visualization.
@@ -101,6 +119,28 @@ impl StructureState {
             .filter_map(|(pos, block)| block.kind.is_factory().then_some(*pos))
             .collect();
         self.append_connected_factory_structures(world, starts);
+    }
+
+    fn append_acceptor_structures(&mut self, world: &WorldBlocks) {
+        let mut handled = HashSet::new();
+        let mut starts: Vec<IVec3> = world
+            .system_blocks
+            .iter()
+            .filter_map(|(pos, block)| (block.kind == BlockKind::Goal).then_some(*pos))
+            .collect();
+        starts.sort_by_key(|pos| (pos.x, pos.y, pos.z));
+
+        for start in starts {
+            if handled.contains(&start) {
+                continue;
+            }
+            let positions = acceptor_structure(world, start);
+            handled.extend(positions.iter().copied());
+            self.acceptor_structures.push(AcceptorStructure {
+                positions,
+                count: 0,
+            });
+        }
     }
 
     fn append_material_structures(&mut self, world: &WorldBlocks) {
@@ -434,6 +474,31 @@ impl StructureState {
     }
 }
 
+pub fn acceptor_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
+    let mut structure = HashSet::new();
+    let mut queue = VecDeque::from([start]);
+    structure.insert(start);
+
+    while let Some(pos) = queue.pop_front() {
+        for offset in signal_offsets() {
+            let neighbor = pos + offset;
+            if structure.contains(&neighbor) {
+                continue;
+            }
+            if world
+                .system_blocks
+                .get(&neighbor)
+                .is_some_and(|block| block.kind == BlockKind::Goal)
+            {
+                structure.insert(neighbor);
+                queue.push_back(neighbor);
+            }
+        }
+    }
+
+    structure
+}
+
 pub fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     let mut structure = HashSet::new();
     let mut queue = VecDeque::from([start]);
@@ -613,6 +678,43 @@ mod tests {
         assert_eq!(state.structures.len(), 2);
         assert_eq!(state.kind_at(IVec3::ZERO), Some(StructureKind::Factory));
         assert_eq!(state.kind_at(IVec3::X), Some(StructureKind::Material));
+    }
+
+    #[test]
+    fn rebuild_for_simulation_groups_connected_acceptors() {
+        let mut world = WorldBlocks::default();
+        world.insert(
+            IVec3::ZERO,
+            BlockData {
+                kind: BlockKind::Goal,
+                facing: Facing::North,
+            },
+        );
+        world.insert(
+            IVec3::X,
+            BlockData {
+                kind: BlockKind::Goal,
+                facing: Facing::North,
+            },
+        );
+        world.insert(
+            IVec3::new(0, 2, 0),
+            BlockData {
+                kind: BlockKind::Goal,
+                facing: Facing::North,
+            },
+        );
+
+        let state = StructureState::rebuild_for_simulation_standalone(&world);
+        assert_eq!(state.acceptor_structures().len(), 2);
+        assert!(state
+            .acceptor_structures()
+            .iter()
+            .any(|structure| structure.positions.len() == 2));
+        assert!(state
+            .acceptor_structures()
+            .iter()
+            .any(|structure| structure.positions.len() == 1));
     }
 
     #[test]

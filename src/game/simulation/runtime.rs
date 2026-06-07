@@ -3,12 +3,12 @@ use std::time::Instant;
 
 use bevy::prelude::*;
 
+use crate::game::blocks::BlockData;
 use crate::game::state::{BuilderMode, SimulationState};
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     AnimationTiming, BlockAnimation, BlockAnimationKind, SIMULATION_TURN_SECONDS,
 };
-use crate::game::blocks::BlockData;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_pending_generated_previews, despawn_world,
@@ -17,13 +17,14 @@ use crate::game::world::rendering::{
 };
 
 use super::behaviors::{
-    material_source_generation, run_material_behavior_phase, run_weld_behavior_phase,
+    material_source_generation, run_material_behavior_phase, run_material_teleport_phase,
+    run_weld_behavior_phase,
 };
-use super::structure_state::StructureState;
 use super::gravity::mark_gravity_phase;
 use super::markers::{run_powered_marker_phase, run_static_marker_phase};
 use super::movement::{blocker_animations, mark_structure_movement_phase, PusherState};
 pub use super::signals::SignalNetworkCache;
+use super::structure_state::StructureState;
 use super::structures::{
     execute_structure_moves_with_pushers, merge_structure_movement_plan, MovementInfluenceCache,
 };
@@ -58,6 +59,14 @@ impl PendingGeneratedMaterials {
 
     pub(super) fn mark_destroyed(&mut self, pos: IVec3, ready_turn: u64) {
         self.pending_destroyed.entry(pos).or_insert(ready_turn);
+    }
+
+    pub(crate) fn pending_destroy_turn(&self, pos: IVec3) -> Option<u64> {
+        self.pending_destroyed.get(&pos).copied()
+    }
+
+    pub(crate) fn has_pending_destruction(&self) -> bool {
+        !self.pending_destroyed.is_empty()
     }
 }
 
@@ -110,6 +119,7 @@ pub fn run_turn(
     let generated_animations = place_ready_generated_materials(world, pending_generated, turn);
     run_static_marker_phase(world);
     let weld_sparks = run_weld_behavior_phase(world);
+    run_material_teleport_phase(world, structure_state);
     structure_state.refresh_material_structures(world);
     sample.prep_ms = mark_elapsed_ms(&mut mark);
 

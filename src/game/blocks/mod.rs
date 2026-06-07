@@ -766,6 +766,18 @@ impl BlockKind {
         matches!(self, BlockKind::Goal)
     }
 
+    pub fn shows_material_preview(self) -> bool {
+        matches!(self, BlockKind::Generator | BlockKind::Goal)
+    }
+
+    pub fn material_shell_scale(self) -> f32 {
+        if self.shows_material_preview() {
+            1.08
+        } else {
+            1.0
+        }
+    }
+
     pub fn is_editable(self) -> bool {
         registry::is_editable(self)
     }

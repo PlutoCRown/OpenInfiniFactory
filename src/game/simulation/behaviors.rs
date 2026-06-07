@@ -21,18 +21,27 @@ pub(super) fn run_material_behavior_phase(
     pending_destroyed: &mut PendingGeneratedMaterials,
     ready_turn: u64,
 ) -> Vec<IVec3> {
-    run_material_acceptance_phase(world);
-    let drill_sparks =
+    let mut sparks =
         run_material_destroy_phase(world, powered_devices, pending_destroyed, ready_turn);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
-    run_material_teleport_phase(world, structure_state);
-    run_material_acceptance_phase(world);
-    drill_sparks
+    sparks.extend(run_material_acceptance_phase(
+        world,
+        structure_state,
+        pending_destroyed,
+        ready_turn,
+    ));
+    sparks
+}
+
+pub(super) fn run_material_teleport_phase(
+    world: &mut WorldBlocks,
+    structure_state: &mut StructureState,
+) {
+    run_material_teleport_phase_impl(world, structure_state);
 }
 
 pub(super) fn run_weld_behavior_phase(world: &mut WorldBlocks) -> Vec<IVec3> {
-    run_material_acceptance_phase(world);
     run_weld_phase(world)
 }
 
@@ -134,12 +143,6 @@ fn run_weld_phase(world: &mut WorldBlocks) -> Vec<IVec3> {
     sparks
 }
 
-fn remove_material_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>) {
-    for pos in structure {
-        world.remove(pos);
-    }
-}
-
 fn run_material_label_phase(world: &mut WorldBlocks) {
     let labelers: Vec<(IVec3, MaterialLabeler)> = world
         .system_blocks
@@ -210,7 +213,7 @@ fn run_material_conversion_phase(world: &mut WorldBlocks) {
     }
 }
 
-fn run_material_teleport_phase(world: &mut WorldBlocks, structure_state: &mut StructureState) {
+fn run_material_teleport_phase_impl(world: &mut WorldBlocks, structure_state: &mut StructureState) {
     let entrances: Vec<IVec3> = world
         .system_blocks
         .iter()
@@ -328,20 +331,173 @@ fn fire_laser(world: &mut WorldBlocks, pos: IVec3, direction: IVec3, range: i32)
     }
 }
 
-fn run_material_acceptance_phase(world: &mut WorldBlocks) {
-    let accepted: Vec<IVec3> = world
-        .blocks
-        .iter()
-        .filter_map(|(pos, block)| {
-            let material = block.kind.material_kind()?;
-            (world.accepts_material_kind_at(*pos, material)).then_some(*pos)
-        })
-        .collect();
+fn run_material_acceptance_phase(
+    world: &mut WorldBlocks,
+    structure_state: &mut StructureState,
+    pending_destroyed: &mut PendingGeneratedMaterials,
+    ready_turn: u64,
+) -> Vec<IVec3> {
+    let mut sparks = Vec::new();
+    let acceptor_count = structure_state.acceptor_structures().len();
+    for index in 0..acceptor_count {
+        let Some(acceptor) = structure_state.acceptor_structures().get(index) else {
+            continue;
+        };
+        let acceptor_positions = &acceptor.positions;
+        let mut matched_material = HashSet::new();
+        let mut sample_material_pos = None;
 
-    for pos in accepted {
-        if world.is_material_at(pos) {
-            let structure = material_structure(world, pos);
-            remove_material_structure(world, &structure);
+        for pos in acceptor_positions {
+            let Some(block) = world.blocks.get(pos) else {
+                break;
+            };
+            let Some(material) = block.kind.material_kind() else {
+                break;
+            };
+            if !world.accepts_material_kind_at(*pos, material) {
+                break;
+            }
+            matched_material.insert(*pos);
+            sample_material_pos = Some(*pos);
         }
+
+        if matched_material.len() != acceptor_positions.len() {
+            continue;
+        }
+        let Some(sample_pos) = sample_material_pos else {
+            continue;
+        };
+        let welded_material = material_structure(world, sample_pos);
+        if welded_material != matched_material {
+            continue;
+        }
+
+        for pos in &welded_material {
+            pending_destroyed.mark_destroyed(*pos, ready_turn);
+            sparks.push(*pos);
+        }
+        structure_state.increment_acceptor_count(index);
+    }
+    sparks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::game::blocks::{BlockData, BlockKind, MaterialKind};
+    use crate::game::world::direction::Facing;
+    use crate::game::world::grid::{GoalSettings, WorldBlocks};
+
+    fn place_goal(world: &mut WorldBlocks, pos: IVec3, material: MaterialKind) {
+        world.insert(
+            pos,
+            BlockData {
+                kind: BlockKind::Goal,
+                facing: Facing::North,
+            },
+        );
+        world.set_goal_settings(pos, GoalSettings { material });
+    }
+
+    fn place_material(world: &mut WorldBlocks, pos: IVec3, material: MaterialKind) {
+        let kind = BlockKind::material_block_kind(material).unwrap();
+        world.insert(
+            pos,
+            BlockData {
+                kind,
+                facing: Facing::North,
+            },
+        );
+    }
+
+    fn acceptor_state(world: &WorldBlocks) -> StructureState {
+        let mut state = StructureState::default();
+        state.rebuild_for_simulation(world);
+        state
+    }
+
+    #[test]
+    fn acceptance_marks_matching_material_for_next_turn_removal() {
+        let mut world = WorldBlocks::default();
+        place_goal(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        place_material(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        let mut state = acceptor_state(&world);
+        let mut pending = PendingGeneratedMaterials::default();
+
+        let sparks = run_material_acceptance_phase(&mut world, &mut state, &mut pending, 2);
+
+        assert!(world.is_material_at(IVec3::ZERO));
+        assert_eq!(pending.pending_destroy_turn(IVec3::ZERO), Some(2));
+        assert_eq!(state.acceptor_structures()[0].count, 1);
+        assert_eq!(sparks, vec![IVec3::ZERO]);
+    }
+
+    #[test]
+    fn acceptance_ignores_wrong_material() {
+        let mut world = WorldBlocks::default();
+        place_goal(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        place_material(&mut world, IVec3::ZERO, MaterialKind::Iron);
+        let mut state = acceptor_state(&world);
+        let mut pending = PendingGeneratedMaterials::default();
+
+        run_material_acceptance_phase(&mut world, &mut state, &mut pending, 2);
+
+        assert!(world.is_material_at(IVec3::ZERO));
+        assert!(!pending.has_pending_destruction());
+        assert_eq!(state.acceptor_structures()[0].count, 0);
+    }
+
+    #[test]
+    fn acceptance_requires_entire_connected_acceptor_structure() {
+        let mut world = WorldBlocks::default();
+        place_goal(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        place_goal(&mut world, IVec3::X, MaterialKind::Basic);
+        place_material(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        let mut state = acceptor_state(&world);
+        let mut pending = PendingGeneratedMaterials::default();
+
+        run_material_acceptance_phase(&mut world, &mut state, &mut pending, 2);
+
+        assert!(world.is_material_at(IVec3::ZERO));
+        assert!(!pending.has_pending_destruction());
+        assert_eq!(state.acceptor_structures()[0].count, 0);
+    }
+
+    #[test]
+    fn acceptance_requires_material_structure_without_extra_blocks() {
+        let mut world = WorldBlocks::default();
+        place_goal(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        place_material(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        place_material(&mut world, IVec3::X, MaterialKind::Basic);
+        world.weld_materials(IVec3::ZERO, IVec3::X);
+        let mut state = acceptor_state(&world);
+        let mut pending = PendingGeneratedMaterials::default();
+
+        run_material_acceptance_phase(&mut world, &mut state, &mut pending, 2);
+
+        assert!(world.is_material_at(IVec3::ZERO));
+        assert!(world.is_material_at(IVec3::X));
+        assert!(!pending.has_pending_destruction());
+        assert_eq!(state.acceptor_structures()[0].count, 0);
+    }
+
+    #[test]
+    fn acceptance_marks_entire_welded_structure_for_next_turn_removal() {
+        let mut world = WorldBlocks::default();
+        place_goal(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        place_goal(&mut world, IVec3::X, MaterialKind::Basic);
+        place_material(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        place_material(&mut world, IVec3::X, MaterialKind::Basic);
+        world.weld_materials(IVec3::ZERO, IVec3::X);
+        let mut state = acceptor_state(&world);
+        let mut pending = PendingGeneratedMaterials::default();
+
+        run_material_acceptance_phase(&mut world, &mut state, &mut pending, 2);
+
+        assert!(world.is_material_at(IVec3::ZERO));
+        assert!(world.is_material_at(IVec3::X));
+        assert_eq!(pending.pending_destroy_turn(IVec3::ZERO), Some(2));
+        assert_eq!(pending.pending_destroy_turn(IVec3::X), Some(2));
+        assert_eq!(state.acceptor_structures()[0].count, 1);
     }
 }
