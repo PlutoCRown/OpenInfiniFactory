@@ -134,6 +134,10 @@ impl Plugin for GamePlugin {
             .add_systems(Update, gameplay_input.before(PerfScope::Input))
             .add_systems(
                 Update,
+                update_hover.after(gameplay_input).before(placement_input),
+            )
+            .add_systems(
+                Update,
                 placement_input
                     .after(gameplay_input)
                     .before(PerfScope::Input),
@@ -152,7 +156,7 @@ impl Plugin for GamePlugin {
             )
             .add_systems(
                 Update,
-                (apply_fov, update_hover, draw_hover_structure_bounds)
+                (apply_fov, draw_hover_structure_bounds)
                     .chain()
                     .after(PerfScope::Simulation)
                     .before(PerfScope::View),

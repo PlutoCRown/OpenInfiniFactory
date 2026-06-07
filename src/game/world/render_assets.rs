@@ -45,6 +45,7 @@ pub struct WorldRenderAssets {
     scene_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     face_mark_materials: HashMap<StampColor, Handle<StandardMaterial>>,
     model_materials: HashMap<ModelMaterial, Handle<StandardMaterial>>,
+    model_preview_materials: HashMap<ModelMaterial, Handle<StandardMaterial>>,
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
     pub(crate) active_wire_material: Handle<StandardMaterial>,
     pub(crate) goal_top_material: Handle<StandardMaterial>,
@@ -216,7 +217,17 @@ impl WorldRenderAssets {
         ]
         .into_iter()
         .map(|(kind, material)| (kind, materials.add(material)))
-        .collect();
+        .collect::<HashMap<_, _>>();
+        let model_preview_materials = model_materials
+            .iter()
+            .map(|(kind, handle)| {
+                let source = materials
+                    .get(handle)
+                    .expect("model material exists")
+                    .clone();
+                (*kind, materials.add(preview_model_material(source)))
+            })
+            .collect();
 
         Self {
             block: meshes.add(Cuboid::new(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)),
@@ -260,6 +271,7 @@ impl WorldRenderAssets {
             scene_materials: scene_block_materials,
             face_mark_materials,
             model_materials,
+            model_preview_materials,
             wire_connector_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.88, 0.30),
                 emissive: Color::srgb(0.20, 0.12, 0.02).into(),
@@ -404,6 +416,16 @@ impl WorldRenderAssets {
             .expect("every model material exists")
             .clone()
     }
+
+    pub(crate) fn model_preview_material(
+        &self,
+        material: ModelMaterial,
+    ) -> Handle<StandardMaterial> {
+        self.model_preview_materials
+            .get(&material)
+            .expect("every model material has a preview material")
+            .clone()
+    }
 }
 
 fn block_material(kind: BlockKind) -> StandardMaterial {
@@ -438,6 +460,14 @@ fn preview_block_material(kind: BlockKind, texture: Option<Handle<Image>>) -> St
         perceptual_roughness: 0.94,
         reflectance: 0.08,
         ..default()
+    }
+}
+
+fn preview_model_material(material: StandardMaterial) -> StandardMaterial {
+    StandardMaterial {
+        base_color: material.base_color.with_alpha(0.46),
+        alpha_mode: AlphaMode::Blend,
+        ..material
     }
 }
 

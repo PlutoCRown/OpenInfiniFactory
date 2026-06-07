@@ -4,10 +4,10 @@ use bevy::prelude::*;
 
 use crate::game::blocks::{BlockData, BlockKind};
 use crate::game::player::controller::{player_intersects_block, FlyCamera};
+use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structure_state::{
     query_factory_structure, StructureFreedom, StructureKind, StructureState,
 };
-use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structures::material_structure;
 use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, GameSettings, PlacementState,
@@ -21,12 +21,15 @@ use crate::game::ui::{
     UiRuntime, HOTBAR_SLOTS,
 };
 use crate::game::world::animation::BlockAnimation;
-use crate::game::world::grid::{grid_to_world, raycast_blocks, MaterialWeld, WorldBlocks};
+use crate::game::world::grid::{
+    grid_to_world, raycast_blocks, raycast_edit_drag_grid, MaterialWeld, TargetHit, WorldBlocks,
+};
 use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
-    despawn_edit_previews, rebuild_world_for_debug_state, rebuild_world_with_animations,
-    spawn_block_preview, spawn_block_with_animation, spawn_edit_preview, BlockEntity, EditPreview,
-    EditPreviewKind, HoverMarker, HoverStructureBounds, PlacementPreview, WorldRenderAssets,
+    block_face_highlight_transform, despawn_edit_previews, rebuild_world_for_debug_state,
+    rebuild_world_with_animations, spawn_block_preview, spawn_block_with_animation,
+    spawn_edit_preview, AimFaceHighlight, BlockEntity, EditPreview, EditPreviewKind, HoverMarker,
+    HoverStructureBounds, WorldRenderAssets,
 };
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
@@ -191,7 +194,21 @@ pub fn placement_input(
         placement.selection.clear();
     }
 
-    let current_place_at = placement.target.map(|target| target.pos + target.normal);
+    let edit_selection_mode = placement
+        .edit_gesture
+        .as_ref()
+        .map(|gesture| match gesture.kind {
+            EditGestureKind::Place { .. } => config.place_selection_mode,
+            EditGestureKind::Delete => config.delete_selection_mode,
+        });
+
+    let current_place_at = placement.target.map(|target| {
+        if edit_selection_mode.is_some_and(|mode| mode != ConfigSelectionMode::Point) {
+            target.pos
+        } else {
+            target.pos + target.normal
+        }
+    });
     let current_delete_at = placement.target.map(|target| target.pos);
     let current_target_pos = placement.target.map(|target| target.pos);
     let force_place = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
@@ -302,10 +319,15 @@ pub fn placement_input(
             }
             None => {
                 if let Some(start) = current_delete_at {
+                    let plane_normal = placement
+                        .target
+                        .and_then(|target| (target.normal != IVec3::ZERO).then_some(target.normal))
+                        .unwrap_or(IVec3::Y);
                     placement.edit_gesture = Some(EditGesture {
                         kind: EditGestureKind::Delete,
                         start,
                         canceled: false,
+                        plane_normal,
                     });
                 }
             }
@@ -322,10 +344,17 @@ pub fn placement_input(
                 if let Some(start) = current_place_at {
                     if let Some(block) = selected_place_block(&inventory, *builder_mode, &placement)
                     {
+                        let plane_normal = placement
+                            .target
+                            .and_then(|target| {
+                                (target.normal != IVec3::ZERO).then_some(target.normal)
+                            })
+                            .unwrap_or(IVec3::Y);
                         placement.edit_gesture = Some(EditGesture {
                             kind: EditGestureKind::Place { block },
                             start,
                             canceled: false,
+                            plane_normal,
                         });
                     }
                 }
@@ -1027,52 +1056,68 @@ pub fn apply_fov(
     }
 }
 
+#[derive(SystemParam)]
+pub(crate) struct HoverPreviewDeps<'w, 's> {
+    commands: Commands<'w, 's>,
+    meshes: ResMut<'w, Assets<Mesh>>,
+    render_assets: Option<Res<'w, WorldRenderAssets>>,
+    inventory: Res<'w, InventoryItems>,
+    builder_mode: Res<'w, BuilderMode>,
+    player: Query<'w, 's, &'static Transform, With<FlyCamera>>,
+    edit_previews: Query<'w, 's, Entity, With<EditPreview>>,
+}
+
 pub fn update_hover(
     mut placement: ResMut<PlacementState>,
+    config: Res<GameConfig>,
     mode: Res<State<GameMode>>,
     playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
     debug: Res<DebugState>,
-    inventory: Res<InventoryItems>,
-    builder_mode: Res<BuilderMode>,
-    camera: Query<&Transform, (With<FlyCamera>, Without<HoverMarker>)>,
+    camera: Query<
+        &Transform,
+        (
+            With<FlyCamera>,
+            Without<HoverMarker>,
+            Without<AimFaceHighlight>,
+        ),
+    >,
     world: Res<WorldBlocks>,
     structure_state: Res<StructureState>,
     mut hover_bounds: ResMut<HoverStructureBounds>,
-    player: Query<&Transform, With<FlyCamera>>,
     mut marker: Query<
         (
             &mut Transform,
             &mut Visibility,
             &MeshMaterial3d<StandardMaterial>,
         ),
-        (With<HoverMarker>, Without<FlyCamera>),
-    >,
-    mut preview: Query<
         (
-            &mut Transform,
-            &mut Visibility,
-            &MeshMaterial3d<StandardMaterial>,
-        ),
-        (
-            With<PlacementPreview>,
-            Without<HoverMarker>,
+            With<HoverMarker>,
             Without<FlyCamera>,
+            Without<AimFaceHighlight>,
         ),
     >,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut aim_face: Query<
+        (&mut Transform, &mut Visibility),
+        (
+            With<AimFaceHighlight>,
+            Without<FlyCamera>,
+            Without<HoverMarker>,
+        ),
+    >,
+    mut preview_deps: HoverPreviewDeps,
 ) {
     if *mode.get() != GameMode::Playing || !playing_ui.active_play() || ui_runtime.blocks_gameplay()
     {
         placement.target = None;
-        placement.edit_gesture = None;
         hover_bounds.bounds = None;
         if let Ok((_, mut visibility, _)) = marker.single_mut() {
             *visibility = Visibility::Hidden;
         }
-        if let Ok((_, mut visibility, _)) = preview.single_mut() {
+        if let Ok((_, mut visibility)) = aim_face.single_mut() {
             *visibility = Visibility::Hidden;
         }
+        despawn_edit_previews(&mut preview_deps.commands, &preview_deps.edit_previews);
         return;
     }
 
@@ -1080,37 +1125,96 @@ pub fn update_hover(
         return;
     };
 
-    placement.target = raycast_blocks(
-        camera_transform.translation,
-        *camera_transform.forward(),
-        &world,
-    );
+    let origin = camera_transform.translation;
+    let dir = *camera_transform.forward();
+
+    if let Some(gesture) = placement.edit_gesture.as_mut() {
+        if !gesture.canceled {
+            let selection_mode = match gesture.kind {
+                EditGestureKind::Place { .. } => config.place_selection_mode,
+                EditGestureKind::Delete => config.delete_selection_mode,
+            };
+            if selection_mode != ConfigSelectionMode::Point {
+                if let Some(cell) = raycast_edit_drag_grid(
+                    origin,
+                    dir,
+                    gesture.start,
+                    selection_mode,
+                    dir,
+                    gesture.plane_normal,
+                ) {
+                    placement.target = Some(TargetHit {
+                        pos: cell,
+                        normal: IVec3::ZERO,
+                    });
+                }
+            } else {
+                placement.target = raycast_blocks(origin, dir, &world);
+            }
+        } else {
+            placement.target = raycast_blocks(origin, dir, &world);
+        }
+    } else {
+        placement.target = raycast_blocks(origin, dir, &world);
+    }
 
     let Ok((_, mut marker_visibility, _)) = marker.single_mut() else {
         return;
     };
     *marker_visibility = Visibility::Hidden;
 
+    let Ok((mut face_transform, mut face_visibility)) = aim_face.single_mut() else {
+        return;
+    };
+    if let Some(target) = placement.target {
+        *face_transform = block_face_highlight_transform(target.pos, target.normal);
+        *face_visibility = Visibility::Visible;
+    } else {
+        *face_visibility = Visibility::Hidden;
+    }
+
     if placement.edit_gesture.is_none() {
         hover_bounds.bounds = placement.target.and_then(|target| {
-            hover_structure_bounds(
-                &world,
-                &structure_state,
-                debug.factory_activity,
-                target.pos,
-            )
+            hover_structure_bounds(&world, &structure_state, debug.factory_activity, target.pos)
         });
     } else {
         hover_bounds.bounds = None;
     }
 
-    let Ok((_, mut preview_visibility, _)) = preview.single_mut() else {
-        return;
-    };
-
-    let _ = (inventory, builder_mode, player);
-    let _ = &mut materials;
-    *preview_visibility = Visibility::Hidden;
+    if placement.edit_gesture.is_none() {
+        despawn_edit_previews(&mut preview_deps.commands, &preview_deps.edit_previews);
+        if let (Some(target), Some(block)) = (
+            placement
+                .target
+                .filter(|target| target.normal != IVec3::ZERO),
+            selected_place_block(
+                &preview_deps.inventory,
+                *preview_deps.builder_mode,
+                &placement,
+            ),
+        ) {
+            if let Some(render_assets) = preview_deps.render_assets.as_ref() {
+                let place_at = target.pos + target.normal;
+                if can_place_block_at(
+                    place_at,
+                    block,
+                    *preview_deps.builder_mode,
+                    &world,
+                    &preview_deps.player,
+                ) {
+                    let preview_world = preview_world(&world, &[place_at], block);
+                    spawn_block_preview(
+                        &mut preview_deps.commands,
+                        &mut preview_deps.meshes,
+                        render_assets,
+                        &preview_world,
+                        place_at,
+                        block,
+                    );
+                }
+            }
+        }
+    }
 }
 
 fn hover_structure_bounds(

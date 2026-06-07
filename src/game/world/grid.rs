@@ -460,6 +460,106 @@ pub struct TargetHit {
     pub normal: IVec3,
 }
 
+pub fn raycast_infinite_plane(
+    origin: Vec3,
+    dir: Vec3,
+    plane_point: Vec3,
+    plane_normal: Vec3,
+) -> Option<Vec3> {
+    let normal = plane_normal.normalize_or_zero();
+    if normal == Vec3::ZERO {
+        return None;
+    }
+    let denom = dir.dot(normal);
+    if denom.abs() < 1e-6 {
+        return None;
+    }
+    let t = (plane_point - origin).dot(normal) / denom;
+    if t < 0.0 || t > REACH {
+        return None;
+    }
+    Some(origin + dir * t)
+}
+
+pub fn world_to_grid(pos: Vec3) -> IVec3 {
+    pos.floor().as_ivec3()
+}
+
+pub fn raycast_edit_drag_grid(
+    origin: Vec3,
+    dir: Vec3,
+    start: IVec3,
+    mode: crate::shared::config::ConfigSelectionMode,
+    camera_dir: Vec3,
+    plane_normal: IVec3,
+) -> Option<IVec3> {
+    use crate::shared::config::ConfigSelectionMode;
+
+    if mode == ConfigSelectionMode::Point {
+        return None;
+    }
+
+    let plane_point = grid_to_world(start);
+    let plane_normal_vec = match mode {
+        ConfigSelectionMode::Plane => plane_normal.as_vec3(),
+        ConfigSelectionMode::Line => -camera_dir.normalize_or_zero(),
+        ConfigSelectionMode::Point => unreachable!(),
+    };
+    if plane_normal_vec == Vec3::ZERO {
+        return None;
+    }
+
+    let Some(hit) = raycast_infinite_plane(origin, dir, plane_point, plane_normal_vec) else {
+        return None;
+    };
+
+    Some(match mode {
+        ConfigSelectionMode::Plane => snap_plane_on_normal(hit, start, plane_normal),
+        ConfigSelectionMode::Line => {
+            let raw = world_to_grid(hit);
+            let delta = raw - start;
+            if delta == IVec3::ZERO {
+                start
+            } else {
+                snap_line_on_plane(hit, start, strongest_axis_vec(delta))
+            }
+        }
+        ConfigSelectionMode::Point => unreachable!(),
+    })
+}
+
+fn snap_plane_on_normal(hit: Vec3, start: IVec3, normal: IVec3) -> IVec3 {
+    let grid = world_to_grid(hit);
+    if normal.x.abs() != 0 {
+        IVec3::new(start.x, grid.y, grid.z)
+    } else if normal.y.abs() != 0 {
+        IVec3::new(grid.x, start.y, grid.z)
+    } else {
+        IVec3::new(grid.x, grid.y, start.z)
+    }
+}
+
+fn strongest_axis_vec(delta: IVec3) -> IVec3 {
+    if delta.x.abs() >= delta.y.abs() && delta.x.abs() >= delta.z.abs() {
+        IVec3::X
+    } else if delta.y.abs() >= delta.z.abs() {
+        IVec3::Y
+    } else {
+        IVec3::Z
+    }
+}
+
+fn snap_line_on_plane(hit: Vec3, start: IVec3, axis: IVec3) -> IVec3 {
+    let grid = world_to_grid(hit);
+    if axis.x != 0 {
+        IVec3::new(grid.x, start.y, start.z)
+    } else if axis.y != 0 {
+        IVec3::new(start.x, grid.y, start.z)
+    } else {
+        IVec3::new(start.x, start.y, grid.z)
+    }
+}
+
 pub fn seed_demo_world(world: &mut WorldBlocks) {
     for x in -FLOOR_RADIUS..=FLOOR_RADIUS {
         for z in -FLOOR_RADIUS..=FLOOR_RADIUS {

@@ -30,6 +30,7 @@ pub struct EditGesture {
     pub kind: EditGestureKind,
     pub start: IVec3,
     pub canceled: bool,
+    pub plane_normal: IVec3,
 }
 
 #[derive(Clone)]
@@ -185,8 +186,7 @@ pub struct SimulationState {
     pub turn: u64,
     pub accumulator: f32,
     pub start_snapshot: Option<crate::game::world::grid::WorldBlocks>,
-    pub start_structures:
-        Option<crate::game::simulation::structure_state::StructureState>,
+    pub start_structures: Option<crate::game::simulation::structure_state::StructureState>,
 }
 
 impl Default for SimulationState {

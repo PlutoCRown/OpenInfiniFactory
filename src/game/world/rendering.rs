@@ -11,9 +11,7 @@ use crate::game::blocks::{
     edit_blocks, BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
     PLAY_BLOCKS,
 };
-use crate::game::simulation::structure_state::{
-    FactoryActivity, StructureState, StructureKind,
-};
+use crate::game::simulation::structure_state::{FactoryActivity, StructureKind, StructureState};
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     rotate_world_pos_y, AnimatedBlock, AnimatedPusher, AnimatedPusherRod, AnimationEasing,
@@ -26,6 +24,15 @@ const ICON_TEXTURE_SIZE: u32 = 256;
 const ICON_RENDER_LAYER: usize = 3;
 const ICON_SPACING: f32 = 4.0;
 const ICON_RENDER_FRAMES: u8 = 3;
+
+pub fn block_face_highlight_transform(block_pos: IVec3, normal: IVec3) -> Transform {
+    let normal = normal.as_vec3().normalize();
+    Transform {
+        translation: grid_to_world(block_pos) + normal * 0.501,
+        rotation: Quat::from_rotation_arc(Vec3::Y, normal),
+        scale: Vec3::ONE,
+    }
+}
 
 #[derive(Component)]
 pub struct BlockEntity {
@@ -62,6 +69,9 @@ pub struct BlockIconRenderState {
 
 #[derive(Component)]
 pub struct HoverMarker;
+
+#[derive(Component)]
+pub struct AimFaceHighlight;
 
 #[derive(Resource, Default, Clone, Copy)]
 pub struct HoverStructureBounds {
@@ -136,6 +146,24 @@ pub fn setup_scene(
         MeshMaterial3d(marker_material),
         Visibility::Hidden,
         HoverMarker,
+        GameplayScene,
+    ));
+
+    let face_mesh = meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(0.49)));
+    let face_material = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.72, 0.92, 1.0, 0.72),
+        emissive: LinearRgba::from(Color::srgb(0.35, 0.72, 1.0)),
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        cull_mode: None,
+        ..default()
+    });
+
+    commands.spawn((
+        Mesh3d(face_mesh),
+        MeshMaterial3d(face_material),
+        Visibility::Hidden,
+        AimFaceHighlight,
         GameplayScene,
     ));
 
@@ -379,13 +407,7 @@ pub fn rebuild_world_for_debug_state(
     structure_state: &StructureState,
 ) {
     if debug.factory_activity {
-        rebuild_world_with_factory_activity_debug(
-            commands,
-            meshes,
-            world,
-            assets,
-            structure_state,
-        );
+        rebuild_world_with_factory_activity_debug(commands, meshes, world, assets, structure_state);
     } else {
         rebuild_world(commands, meshes, world, assets);
     }
@@ -714,13 +736,7 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
     powered_wires: &HashSet<IVec3>,
 ) {
     if debug.factory_activity {
-        rebuild_world_with_factory_activity_debug(
-            commands,
-            meshes,
-            world,
-            assets,
-            structure_state,
-        );
+        rebuild_world_with_factory_activity_debug(commands, meshes, world, assets, structure_state);
     } else {
         rebuild_world_with_runtime_animations(
             commands,
@@ -918,6 +934,7 @@ fn spawn_block_model(
         transform.translation += origin;
     }
 
+    let is_preview = edit_preview.is_some();
     let mut entity = if data.kind == crate::game::blocks::BlockKind::Wire
         || matches!(data.kind.model(), BlockModel::PartsOnly(_))
     {
@@ -925,7 +942,11 @@ fn spawn_block_model(
     } else if data.kind == BlockKind::Platform {
         commands.spawn((
             Mesh3d(assets.block_mesh(data.kind)),
-            MeshMaterial3d(assets.model_material(crate::game::blocks::ModelMaterial::Platform)),
+            MeshMaterial3d(if is_preview {
+                assets.model_preview_material(crate::game::blocks::ModelMaterial::Platform)
+            } else {
+                assets.model_material(crate::game::blocks::ModelMaterial::Platform)
+            }),
             transform,
         ))
     } else if let Some(scene_material) = assets.scene_material(data.kind) {
@@ -934,7 +955,15 @@ fn spawn_block_model(
         } else {
             meshes.add(scene_block_mesh(pos))
         };
-        commands.spawn((Mesh3d(mesh), MeshMaterial3d(scene_material), transform))
+        commands.spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(if is_preview {
+                material.clone()
+            } else {
+                scene_material
+            }),
+            transform,
+        ))
     } else {
         commands.spawn((
             Mesh3d(assets.block_mesh(data.kind)),
@@ -979,6 +1008,7 @@ fn spawn_block_model(
                 data,
                 pusher_animation,
                 icon_render.map(|(_, layer)| layer),
+                is_preview,
             );
         });
 
@@ -1131,6 +1161,7 @@ fn spawn_model_parts(
     data: BlockData,
     pusher_animation: Option<PusherAnimation>,
     icon_layer: Option<&RenderLayers>,
+    preview: bool,
 ) {
     use crate::game::blocks::pusher::model::{
         pusher_rod_center_z, pusher_rod_length, ROD_BASE_LENGTH,
@@ -1164,7 +1195,11 @@ fn spawn_model_parts(
 
         let mut child = parent.spawn((
             Mesh3d(assets.model_mesh(part.mesh)),
-            MeshMaterial3d(assets.model_material(part.material)),
+            MeshMaterial3d(if preview {
+                assets.model_preview_material(part.material)
+            } else {
+                assets.model_material(part.material)
+            }),
             Transform {
                 translation,
                 rotation: Quat::from_rotation_y(part.yaw_radians),
