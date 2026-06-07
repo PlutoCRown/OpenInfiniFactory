@@ -25,12 +25,7 @@ pub(super) fn run_material_behavior_phase(
         run_material_destroy_phase(world, powered_devices, pending_destroyed, ready_turn);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
-    sparks.extend(run_material_acceptance_phase(
-        world,
-        structure_state,
-        pending_destroyed,
-        ready_turn,
-    ));
+    run_material_acceptance_phase(world, structure_state, pending_destroyed, ready_turn);
     sparks
 }
 
@@ -336,8 +331,7 @@ fn run_material_acceptance_phase(
     structure_state: &mut StructureState,
     pending_destroyed: &mut PendingGeneratedMaterials,
     ready_turn: u64,
-) -> Vec<IVec3> {
-    let mut sparks = Vec::new();
+) {
     let acceptor_count = structure_state.acceptor_structures().len();
     for index in 0..acceptor_count {
         let Some(acceptor) = structure_state.acceptor_structures().get(index) else {
@@ -374,11 +368,10 @@ fn run_material_acceptance_phase(
 
         for pos in &welded_material {
             pending_destroyed.mark_destroyed(*pos, ready_turn);
-            sparks.push(*pos);
+            pending_destroyed.mark_acceptance_spark(*pos, ready_turn);
         }
         structure_state.increment_acceptor_count(index);
     }
-    sparks
 }
 
 #[cfg(test)]
@@ -424,12 +417,12 @@ mod tests {
         let mut state = acceptor_state(&world);
         let mut pending = PendingGeneratedMaterials::default();
 
-        let sparks = run_material_acceptance_phase(&mut world, &mut state, &mut pending, 2);
+        run_material_acceptance_phase(&mut world, &mut state, &mut pending, 2);
 
         assert!(world.is_material_at(IVec3::ZERO));
         assert_eq!(pending.pending_destroy_turn(IVec3::ZERO), Some(2));
+        assert_eq!(pending.pending_acceptance_spark_turn(IVec3::ZERO), Some(2));
         assert_eq!(state.acceptor_structures()[0].count, 1);
-        assert_eq!(sparks, vec![IVec3::ZERO]);
     }
 
     #[test]

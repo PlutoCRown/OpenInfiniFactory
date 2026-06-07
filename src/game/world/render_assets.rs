@@ -48,6 +48,7 @@ pub struct WorldRenderAssets {
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
     pub(crate) active_wire_material: Handle<StandardMaterial>,
     pub(crate) weld_connector_material: Handle<StandardMaterial>,
+    pub(crate) acceptance_spark_material: Handle<StandardMaterial>,
     delete_preview_material: Handle<StandardMaterial>,
     selection_preview_material: Handle<StandardMaterial>,
     active_factory_debug_material: Handle<StandardMaterial>,
@@ -277,6 +278,13 @@ impl WorldRenderAssets {
             }),
             weld_connector_material: materials.add(StandardMaterial {
                 base_color: Color::srgba(1.0, 0.22, 0.10, 0.72),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            }),
+            acceptance_spark_material: materials.add(StandardMaterial {
+                base_color: Color::srgba(0.45, 1.0, 0.38, 0.82),
+                emissive: Color::srgb(0.10, 0.34, 0.08).into(),
                 alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 ..default()

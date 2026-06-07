@@ -13,7 +13,7 @@ use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_pending_generated_previews, despawn_world,
     rebuild_world_with_runtime_animations_for_debug_state, spawn_pending_generated_block,
-    spawn_weld_sparks, BlockEntity, PendingGeneratedPreview, WorldRenderAssets,
+    spawn_weld_sparks, spawn_acceptance_sparks, BlockEntity, PendingGeneratedPreview, WorldRenderAssets,
 };
 
 use super::behaviors::{
@@ -49,20 +49,30 @@ pub struct SimulationStepStats {
 pub struct PendingGeneratedMaterials {
     pending: HashMap<IVec3, PendingGeneratedMaterial>,
     pending_destroyed: HashMap<IVec3, u64>,
+    pending_acceptance_sparks: HashMap<IVec3, u64>,
 }
 
 impl PendingGeneratedMaterials {
     pub fn clear(&mut self) {
         self.pending.clear();
         self.pending_destroyed.clear();
+        self.pending_acceptance_sparks.clear();
     }
 
     pub(super) fn mark_destroyed(&mut self, pos: IVec3, ready_turn: u64) {
         self.pending_destroyed.entry(pos).or_insert(ready_turn);
     }
 
+    pub(super) fn mark_acceptance_spark(&mut self, pos: IVec3, ready_turn: u64) {
+        self.pending_acceptance_sparks.entry(pos).or_insert(ready_turn);
+    }
+
     pub(crate) fn pending_destroy_turn(&self, pos: IVec3) -> Option<u64> {
         self.pending_destroyed.get(&pos).copied()
+    }
+
+    pub(crate) fn pending_acceptance_spark_turn(&self, pos: IVec3) -> Option<u64> {
+        self.pending_acceptance_sparks.get(&pos).copied()
     }
 
     pub(crate) fn has_pending_destruction(&self) -> bool {
@@ -115,7 +125,7 @@ pub fn run_turn(
     let mut sample = SimulationStepStats::default();
 
     world.clear_generated_markers();
-    remove_ready_destroyed_materials(world, pending_generated, turn);
+    let acceptance_sparks = remove_ready_destroyed_materials(world, pending_generated, turn);
     let generated_animations = place_ready_generated_materials(world, pending_generated, turn);
     run_static_marker_phase(world);
     let weld_sparks = run_weld_behavior_phase(world);
@@ -208,6 +218,7 @@ pub fn run_turn(
     );
     spawn_weld_sparks(commands, render_assets, &weld_sparks);
     spawn_weld_sparks(commands, render_assets, &drill_sparks);
+    spawn_acceptance_sparks(commands, render_assets, &acceptance_sparks);
     sample.render_rebuild_ms = mark_elapsed_ms(&mut mark);
     sample.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
     sample.has_sample = true;
@@ -377,18 +388,27 @@ fn remove_ready_destroyed_materials(
     world: &mut WorldBlocks,
     pending_generated: &mut PendingGeneratedMaterials,
     turn: u64,
-) {
+) -> Vec<IVec3> {
     let ready: Vec<IVec3> = pending_generated
         .pending_destroyed
         .iter()
         .filter_map(|(pos, ready_turn)| (*ready_turn <= turn).then_some(*pos))
         .collect();
+    let mut acceptance_sparks = Vec::new();
     for pos in ready {
         pending_generated.pending_destroyed.remove(&pos);
+        if pending_generated
+            .pending_acceptance_sparks
+            .remove(&pos)
+            .is_some()
+        {
+            acceptance_sparks.push(pos);
+        }
         if world.is_material_at(pos) {
             world.remove(&pos);
         }
     }
+    acceptance_sparks
 }
 
 fn merge_generated_animations(

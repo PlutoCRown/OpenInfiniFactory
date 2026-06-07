@@ -449,7 +449,7 @@ pub fn despawn_pending_generated_previews(
 }
 
 pub fn spawn_weld_sparks(commands: &mut Commands, assets: &WorldRenderAssets, positions: &[IVec3]) {
-    let velocities = [
+    const VELOCITIES: [Vec3; 6] = [
         Vec3::new(1.60, 2.70, 0.42),
         Vec3::new(-1.44, 2.46, 0.76),
         Vec3::new(0.50, 2.86, -1.50),
@@ -460,7 +460,7 @@ pub fn spawn_weld_sparks(commands: &mut Commands, assets: &WorldRenderAssets, po
 
     for pos in positions {
         let origin = grid_to_world(*pos);
-        for (index, velocity) in velocities.into_iter().enumerate() {
+        for (index, velocity) in VELOCITIES.into_iter().enumerate() {
             let offset = Vec3::new(
                 (index as f32 * 1.37).sin() * 0.20,
                 0.04,
@@ -471,6 +471,44 @@ pub fn spawn_weld_sparks(commands: &mut Commands, assets: &WorldRenderAssets, po
                 MeshMaterial3d(assets.weld_connector_material.clone()),
                 Transform::from_translation(origin + offset),
                 WeldSpark::new(velocity, 0.28),
+            ));
+        }
+    }
+}
+
+pub fn spawn_acceptance_sparks(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    positions: &[IVec3],
+) {
+    const VELOCITIES: [Vec3; 12] = [
+        Vec3::new(3.20, 5.40, 0.84),
+        Vec3::new(-2.88, 4.92, 1.52),
+        Vec3::new(1.00, 5.72, -3.00),
+        Vec3::new(-1.32, 4.56, -2.52),
+        Vec3::new(2.36, 3.84, 2.68),
+        Vec3::new(-2.52, 4.20, -0.68),
+        Vec3::new(2.84, 4.68, 1.18),
+        Vec3::new(-1.08, 5.10, 2.44),
+        Vec3::new(0.72, 3.36, -2.86),
+        Vec3::new(-2.10, 5.52, 0.96),
+        Vec3::new(1.94, 4.44, -1.74),
+        Vec3::new(-0.84, 3.72, 2.96),
+    ];
+
+    for pos in positions {
+        let origin = grid_to_world(*pos);
+        for (index, velocity) in VELOCITIES.into_iter().enumerate() {
+            let offset = Vec3::new(
+                (index as f32 * 1.37).sin() * 0.40,
+                0.08,
+                (index as f32 * 2.11).cos() * 0.40,
+            );
+            commands.spawn((
+                Mesh3d(assets.weld_spark.clone()),
+                MeshMaterial3d(assets.acceptance_spark_material.clone()),
+                Transform::from_translation(origin + offset),
+                WeldSpark::new(velocity, 0.56),
             ));
         }
     }
