@@ -1,5 +1,5 @@
+use bevy::platform::time::Instant;
 use std::collections::{HashMap, HashSet};
-use std::time::Instant;
 
 use bevy::prelude::*;
 

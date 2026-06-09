@@ -1,18 +1,15 @@
 use bevy::prelude::*;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 
 use crate::game::blocks::{BlockData, PersistentLayer};
+use crate::shared::persistent_storage::{self, SAVE_PREFIX};
 use crate::game::world::grid::{BlockSettings, WorldBlocks};
 use crate::game::{
     state::BuilderMode,
     ui::{HotbarItems, InventoryItems},
 };
 
-pub const SAVE_DIR: &str = "saves";
 #[derive(Resource, Default)]
 pub struct SaveState {
     pub current: Option<String>,
@@ -201,21 +198,14 @@ pub fn save_solution_with_puzzle(
 }
 
 pub fn load_world(world: &mut WorldBlocks, name: &str) -> Option<LoadedSave> {
-    let Ok(contents) = fs::read_to_string(save_path(name)) else {
-        return None;
-    };
-    let Ok(save) = ron::from_str::<SaveFile>(&contents) else {
-        return None;
-    };
-
+    let save = read_save(name)?;
     let loaded = save.into_loaded();
     *world = loaded.world.clone();
     Some(loaded)
 }
 
 pub fn save_kind(name: &str) -> Option<SaveKind> {
-    let contents = fs::read_to_string(save_path(name)).ok()?;
-    let save = ron::from_str::<SaveFile>(&contents).ok()?;
+    let save = read_save(name)?;
     Some(match save.kind {
         SaveFileKind::Solution => SaveKind::Solution,
         SaveFileKind::Puzzle | SaveFileKind::Legacy => SaveKind::Puzzle,
@@ -223,13 +213,7 @@ pub fn save_kind(name: &str) -> Option<SaveKind> {
 }
 
 pub fn delete_save(name: &str) -> bool {
-    match fs::remove_file(save_path(name)) {
-        Ok(()) => true,
-        Err(error) => {
-            warn!("Failed to delete save {name}: {error}");
-            false
-        }
-    }
+    persistent_storage::remove(&save_storage_key(name))
 }
 
 pub fn rename_save(old_name: &str, new_name: &str) -> bool {
@@ -237,19 +221,18 @@ pub fn rename_save(old_name: &str, new_name: &str) -> bool {
     if new_name.is_empty() || old_name == new_name {
         return false;
     }
-    let old_path = save_path(old_name);
-    let new_path = save_path(&new_name);
-    if new_path.exists() {
+    if persistent_storage::exists(&save_storage_key(&new_name)) {
         warn!("Cannot rename save {old_name} to {new_name}: target already exists");
         return false;
     }
-    match fs::rename(old_path, new_path) {
-        Ok(()) => true,
-        Err(error) => {
-            warn!("Failed to rename save {old_name} to {new_name}: {error}");
-            false
-        }
+    let Some(contents) = persistent_storage::read(&save_storage_key(old_name)) else {
+        warn!("Cannot rename save {old_name}: source missing");
+        return false;
+    };
+    if !persistent_storage::write(&save_storage_key(&new_name), &contents) {
+        return false;
     }
+    persistent_storage::remove(&save_storage_key(old_name))
 }
 
 fn solution_matches_puzzle(solution: &str, puzzle: &str) -> bool {
@@ -401,21 +384,8 @@ impl SaveFile {
 }
 
 fn write_save(name: &str, save: &SaveFile) -> bool {
-    let dir = saves_directory().to_path_buf();
-    if let Err(error) = fs::create_dir_all(&dir) {
-        warn!("Failed to create save directory: {error}");
-        return false;
-    }
-
-    let path = save_path(name);
     match ron::ser::to_string_pretty(save, PrettyConfig::default()) {
-        Ok(serialized) => {
-            if let Err(error) = fs::write(path, serialized) {
-                warn!("Failed to save world: {error}");
-                return false;
-            }
-            true
-        }
+        Ok(serialized) => persistent_storage::write(&save_storage_key(name), &serialized),
         Err(error) => {
             warn!("Failed to serialize world: {error}");
             false
@@ -424,8 +394,12 @@ fn write_save(name: &str, save: &SaveFile) -> bool {
 }
 
 fn read_save(name: &str) -> Option<SaveFile> {
-    let contents = fs::read_to_string(save_path(name)).ok()?;
+    let contents = persistent_storage::read(&save_storage_key(name))?;
     ron::from_str::<SaveFile>(&contents).ok()
+}
+
+fn save_storage_key(name: &str) -> String {
+    persistent_storage::save_storage_key(&sanitize_save_name(name))
 }
 
 fn capture_puzzle_layer(world: &WorldBlocks, inventory: &InventoryItems) -> WorldLayer {
@@ -524,17 +498,7 @@ impl SavedBlockSettings {
 }
 
 pub fn list_saves() -> Vec<String> {
-    let dir = saves_directory();
-    let Ok(entries) = fs::read_dir(dir) else {
-        return Vec::new();
-    };
-
-    let mut saves: Vec<String> = entries
-        .filter_map(Result::ok)
-        .filter_map(|entry| save_name_from_path(&entry.path()))
-        .collect();
-    saves.sort();
-    saves
+    persistent_storage::list_under_prefix(SAVE_PREFIX)
 }
 
 pub fn list_save_entries() -> Vec<SaveEntry> {
@@ -571,44 +535,6 @@ pub fn next_named_save(existing: &[String], base: &str) -> String {
         }
     }
     unreachable!()
-}
-
-/// Resolved save directory. Prefers `./saves` under cwd, then walks up from the
-/// executable (covers `cargo run` launching from `target/debug/`).
-pub fn saves_directory() -> &'static Path {
-    static DIR: OnceLock<PathBuf> = OnceLock::new();
-    DIR.get_or_init(|| {
-        let cwd_dir = PathBuf::from(SAVE_DIR);
-        if cwd_dir.is_dir() {
-            return cwd_dir
-                .canonicalize()
-                .unwrap_or(cwd_dir);
-        }
-
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(exe_dir) = exe.parent() {
-                for ancestor in exe_dir.ancestors().take(6) {
-                    let candidate = ancestor.join(SAVE_DIR);
-                    if candidate.is_dir() {
-                        return candidate
-                            .canonicalize()
-                            .unwrap_or(candidate);
-                    }
-                }
-            }
-        }
-
-        cwd_dir
-    })
-}
-
-fn save_path(name: &str) -> PathBuf {
-    saves_directory().join(format!("{}.ron", sanitize_save_name(name)))
-}
-
-fn save_name_from_path(path: &Path) -> Option<String> {
-    let is_ron = path.extension().and_then(|ext| ext.to_str()) == Some("ron");
-    is_ron.then(|| path.file_stem()?.to_str().map(ToOwned::to_owned))?
 }
 
 fn sanitize_save_name(name: &str) -> String {

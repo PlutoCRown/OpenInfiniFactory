@@ -1,6 +1,7 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use bevy::camera::visibility::VisibilitySystems;
+use bevy::platform::time::Instant;
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 use bevy::ui::UiSystems;
@@ -166,7 +167,8 @@ fn micros(ms: f64) -> f64 {
 pub fn begin_perf_frame(mut perf: ResMut<PerfStats>) {
     let now = Instant::now();
     let frame_started = perf.frame_started;
-    perf.frame_ms.sample(now.saturating_duration_since(frame_started));
+    perf.frame_ms
+        .sample(now.saturating_duration_since(frame_started));
     if let Some(last_main_finished) = perf.last_main_finished {
         perf.render_gap_ms
             .sample(now.saturating_duration_since(last_main_finished));

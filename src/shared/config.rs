@@ -1,14 +1,9 @@
 use bevy::prelude::*;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
-use std::process::Command;
 
 use crate::shared::i18n::Language;
-use crate::shared::save::saves_directory;
-
-pub const CONFIG_FILE: &str = "config.ron";
+use crate::shared::persistent_storage;
 
 pub const DEFAULT_KEY_BINDINGS: KeyBindings = KeyBindings {
     pause: ConfigKey::Escape,
@@ -449,7 +444,8 @@ fn key_from_code(key_code: KeyCode) -> ConfigKey {
 }
 
 pub fn load_config() -> GameConfig {
-    let Ok(contents) = fs::read_to_string(config_path()) else {
+    let key = persistent_storage::config_key();
+    let Some(contents) = persistent_storage::read(key) else {
         let config = GameConfig::default();
         save_config(&config);
         return config;
@@ -461,24 +457,26 @@ pub fn load_config() -> GameConfig {
 }
 
 pub fn save_config(config: &GameConfig) {
-    let dir = saves_directory();
-    if let Err(error) = fs::create_dir_all(dir) {
-        warn!("Failed to create config directory: {error}");
-        return;
-    }
-
+    let key = persistent_storage::config_key();
     match ron::ser::to_string_pretty(config, PrettyConfig::default()) {
         Ok(serialized) => {
-            if let Err(error) = fs::write(config_path(), serialized) {
-                warn!("Failed to write config: {error}");
+            if !persistent_storage::write(key, &serialized) {
+                warn!("Failed to write config");
             }
         }
         Err(error) => warn!("Failed to serialize config: {error}"),
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+pub fn open_config_folder() {}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub fn open_config_folder() {
-    let dir = saves_directory();
+    use std::fs;
+    use std::process::Command;
+
+    let dir = crate::shared::platform::saves_directory();
     if let Err(error) = fs::create_dir_all(dir) {
         warn!("Failed to create config directory: {error}");
         return;
@@ -487,10 +485,6 @@ pub fn open_config_folder() {
     if let Err(error) = Command::new("open").arg(dir).spawn() {
         warn!("Failed to open config folder: {error}");
     }
-}
-
-pub fn config_path() -> PathBuf {
-    saves_directory().join(CONFIG_FILE)
 }
 
 pub fn key_from_input(keys: &ButtonInput<KeyCode>) -> Option<ConfigKey> {
