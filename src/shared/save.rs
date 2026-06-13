@@ -74,12 +74,12 @@ pub enum SaveKind {
 
 #[derive(Serialize, Deserialize)]
 struct SaveFile {
-    #[serde(default)]
     kind: SaveFileKind,
     #[serde(default)]
     puzzle_id: Option<String>,
     #[serde(default)]
     factory_blocks: Vec<SavedBlock>,
+    #[serde(default)]
     blocks: Vec<SavedBlock>,
     #[serde(default)]
     system_blocks: Vec<SavedBlock>,
@@ -87,14 +87,10 @@ struct SaveFile {
     block_settings: Vec<SavedBlockSettings>,
     #[serde(default)]
     hotbar: Option<HotbarItems>,
-    #[serde(default)]
-    puzzle: Option<WorldLayer>,
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 enum SaveFileKind {
-    #[default]
-    Legacy,
     Puzzle,
     Solution,
 }
@@ -147,7 +143,7 @@ pub fn save_solution(
 
 pub fn load_world(world: &mut WorldBlocks, name: &str) -> Option<LoadedSave> {
     let save = read_save(name)?;
-    let loaded = save.into_loaded(name)?;
+    let loaded = save.into_loaded()?;
     *world = loaded.world.clone();
     Some(loaded)
 }
@@ -156,7 +152,7 @@ pub fn save_kind(name: &str) -> Option<SaveKind> {
     let save = read_save(name)?;
     Some(match save.kind {
         SaveFileKind::Solution => SaveKind::Solution,
-        SaveFileKind::Puzzle | SaveFileKind::Legacy => SaveKind::Puzzle,
+        SaveFileKind::Puzzle => SaveKind::Puzzle,
     })
 }
 
@@ -165,21 +161,7 @@ pub fn puzzle_id_for_solution(name: &str) -> Option<String> {
     if !matches!(save.kind, SaveFileKind::Solution) {
         return None;
     }
-    save.stored_puzzle_id()
-        .or_else(|| legacy_puzzle_id_from_embedded(&save))
-}
-
-fn legacy_puzzle_id_from_embedded(save: &SaveFile) -> Option<String> {
-    let embedded = save.embedded_puzzle_layer()?;
-    let signature = puzzle_layer_signature(&embedded);
-    list_saves()
-        .into_iter()
-        .filter(|name| save_kind(name) == Some(SaveKind::Puzzle))
-        .find(|name| {
-            read_save(name)
-                .map(|puzzle_save| puzzle_layer_signature(&puzzle_save.puzzle_layer()) == signature)
-                .unwrap_or(false)
-        })
+    save.puzzle_id.clone().filter(|id| !id.is_empty())
 }
 
 pub fn has_solutions_for_puzzle(puzzle_id: &str) -> bool {
@@ -266,7 +248,6 @@ impl SaveFile {
             system_blocks: puzzle.system_blocks,
             block_settings: puzzle.block_settings,
             hotbar: puzzle.hotbar,
-            puzzle: None,
         }
     }
 
@@ -283,25 +264,17 @@ impl SaveFile {
             system_blocks: Vec::new(),
             block_settings: Vec::new(),
             hotbar: Some(inventory.hotbar),
-            puzzle: None,
         }
     }
 
-    fn into_loaded(self, _name: &str) -> Option<LoadedSave> {
+    fn into_loaded(self) -> Option<LoadedSave> {
         match self.kind {
             SaveFileKind::Solution => {
-                let puzzle_id = self.resolved_puzzle_id()?;
+                let puzzle_id = self.puzzle_id.filter(|id| !id.is_empty())?;
                 let hotbar = self
                     .hotbar
                     .or_else(|| Some(InventoryItems::for_mode(BuilderMode::Play).hotbar));
-                let embedded_puzzle = self.embedded_puzzle_layer();
-                let puzzle_world = load_puzzle_world(&puzzle_id).or_else(|| {
-                    embedded_puzzle.as_ref().map(|layer| {
-                        let mut world = WorldBlocks::default();
-                        apply_layer(&mut world, layer.clone());
-                        world
-                    })
-                })?;
+                let mut puzzle_world = load_puzzle_world(&puzzle_id)?;
                 let mut world = puzzle_world.clone();
                 apply_factory_blocks(&mut world, self.factory_blocks);
                 Some(LoadedSave {
@@ -311,112 +284,45 @@ impl SaveFile {
                     hotbar,
                 })
             }
-            SaveFileKind::Puzzle | SaveFileKind::Legacy => {
-                let puzzle = self.puzzle_layer();
-                let hotbar = self.hotbar.or(puzzle.hotbar);
+            SaveFileKind::Puzzle => {
+                let puzzle = WorldLayer {
+                    blocks: self.blocks,
+                    system_blocks: self.system_blocks,
+                    block_settings: self.block_settings,
+                    hotbar: self.hotbar,
+                };
+                let hotbar = puzzle
+                    .hotbar
+                    .or_else(|| Some(InventoryItems::for_mode(BuilderMode::Edit).hotbar));
                 let mut world = WorldBlocks::default();
                 apply_layer(&mut world, puzzle);
                 Some(LoadedSave {
                     world,
                     puzzle_snapshot: None,
                     puzzle_id: None,
-                    hotbar: hotbar
-                        .or_else(|| Some(InventoryItems::for_mode(BuilderMode::Edit).hotbar)),
+                    hotbar,
                 })
             }
         }
-    }
-
-    fn resolved_puzzle_id(&self) -> Option<String> {
-        self.stored_puzzle_id()
-            .or_else(|| legacy_puzzle_id_from_embedded(self))
-    }
-
-    fn stored_puzzle_id(&self) -> Option<String> {
-        self.puzzle_id.clone().filter(|id| !id.is_empty())
-    }
-
-    fn puzzle_layer(&self) -> WorldLayer {
-        if let Some(puzzle) = self.puzzle.clone() {
-            return puzzle;
-        }
-        WorldLayer {
-            blocks: self
-                .blocks
-                .iter()
-                .filter(|saved| saved.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle))
-                .cloned()
-                .collect(),
-            system_blocks: self
-                .system_blocks
-                .iter()
-                .filter(|saved| saved.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle))
-                .cloned()
-                .collect(),
-            block_settings: self
-                .block_settings
-                .iter()
-                .filter(|saved| self.legacy_system_block_is_persistent(saved.pos()))
-                .cloned()
-                .collect(),
-            hotbar: self.hotbar,
-        }
-    }
-
-    fn embedded_puzzle_layer(&self) -> Option<WorldLayer> {
-        self.puzzle.clone().or_else(|| {
-            let layer = self.puzzle_layer();
-            if layer.blocks.is_empty()
-                && layer.system_blocks.is_empty()
-                && layer.block_settings.is_empty()
-            {
-                None
-            } else {
-                Some(layer)
-            }
-        })
-    }
-
-    fn legacy_system_block_is_persistent(&self, pos: IVec3) -> bool {
-        self.system_blocks.iter().any(|block| {
-            block.pos() == pos
-                && block.data.kind.persistent_layer() == Some(PersistentLayer::Puzzle)
-        })
     }
 }
 
 fn load_puzzle_world(puzzle_id: &str) -> Option<WorldBlocks> {
     let save = read_save(puzzle_id)?;
-    if !matches!(save.kind, SaveFileKind::Puzzle | SaveFileKind::Legacy) {
+    if !matches!(save.kind, SaveFileKind::Puzzle) {
         return None;
     }
     let mut world = WorldBlocks::default();
-    apply_layer(&mut world, save.puzzle_layer());
+    apply_layer(
+        &mut world,
+        WorldLayer {
+            blocks: save.blocks,
+            system_blocks: save.system_blocks,
+            block_settings: save.block_settings,
+            hotbar: save.hotbar,
+        },
+    );
     Some(world)
-}
-
-fn puzzle_layer_signature(layer: &WorldLayer) -> Vec<String> {
-    let mut parts: Vec<String> = Vec::new();
-    for saved in &layer.blocks {
-        parts.push(format!(
-            "b:{},{},{}:{:?}:{:?}",
-            saved.x, saved.y, saved.z, saved.data.kind, saved.data.facing
-        ));
-    }
-    for saved in &layer.system_blocks {
-        parts.push(format!(
-            "s:{},{},{}:{:?}:{:?}",
-            saved.x, saved.y, saved.z, saved.data.kind, saved.data.facing
-        ));
-    }
-    for saved in &layer.block_settings {
-        parts.push(format!(
-            "bs:{},{},{}:{:?}",
-            saved.x, saved.y, saved.z, saved.settings
-        ));
-    }
-    parts.sort();
-    parts
 }
 
 fn write_save(name: &str, save: &SaveFile) -> bool {
@@ -686,7 +592,7 @@ mod tests {
 
         let inventory = InventoryItems::for_mode(BuilderMode::Edit);
         let loaded = SaveFile::puzzle(capture_puzzle_layer(&world, &inventory))
-            .into_loaded("puzzle")
+            .into_loaded()
             .unwrap();
         let round_trip = loaded.world;
 
@@ -741,7 +647,7 @@ mod tests {
             &WorldBlocks::default(),
             &puzzle_inventory,
         ))
-        .into_loaded("puzzle")
+        .into_loaded()
         .unwrap();
         assert_eq!(puzzle_loaded.hotbar, Some(puzzle_inventory.hotbar));
 
@@ -754,7 +660,6 @@ mod tests {
         assert_eq!(solution_file.puzzle_id.as_deref(), Some("puzzle"));
         assert!(solution_file.blocks.is_empty());
         assert!(solution_file.system_blocks.is_empty());
-        assert!(solution_file.puzzle.is_none());
     }
 
     #[test]

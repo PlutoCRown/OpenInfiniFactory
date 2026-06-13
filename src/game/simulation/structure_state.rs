@@ -296,15 +296,15 @@ impl StructureState {
         offset: IVec3,
     ) -> Option<HashSet<IVec3>> {
         let target = self.structure(target_pos)?;
-        if target.kind != StructureKind::Factory
-            || !target.pushable
-            || !target.freedom.can_translate(offset)
-        {
+        if target.kind != StructureKind::Factory {
             return None;
         }
         let structure =
             connected_subset_with_blocked_edge(world, target, target_pos, Some(pusher_pos));
-        (!structure.contains(&pusher_pos)).then_some(structure)
+        if structure.contains(&pusher_pos) || !factory_subset_pushable(world, &structure, offset) {
+            return None;
+        }
+        Some(structure)
     }
 
     pub fn falling_structure_at(
@@ -646,6 +646,12 @@ fn touches_scene(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
     })
 }
 
+fn factory_subset_pushable(world: &WorldBlocks, subset: &HashSet<IVec3>, offset: IVec3) -> bool {
+    !subset.is_empty()
+        && !touches_scene(world, subset)
+        && StructureFreedom::All.can_translate(offset)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -733,6 +739,68 @@ mod tests {
         let index = state.structure_index_at(IVec3::Y).unwrap();
         state.record_gravity_support(index, &world);
         assert!(state.gravity_support_valid(index, &world));
+    }
+
+    #[test]
+    fn pusher_target_structure_allows_front_subset_when_whole_structure_is_scene_anchored() {
+        let mut world = WorldBlocks::default();
+        world.insert(
+            IVec3::ZERO,
+            BlockData {
+                kind: BlockKind::Stone,
+                facing: Facing::North,
+            },
+        );
+        world.insert(IVec3::Y, platform(IVec3::Y));
+        world.insert(
+            IVec3::new(0, 2, 0),
+            BlockData {
+                kind: BlockKind::Pusher,
+                facing: Facing::East,
+            },
+        );
+        world.insert(IVec3::new(1, 2, 0), platform(IVec3::new(1, 2, 0)));
+
+        let state = StructureState::rebuild_for_simulation_standalone(&world);
+        assert!(!state.structure(IVec3::Y).unwrap().pushable);
+
+        let subset = state.pusher_target_structure(
+            &world,
+            IVec3::new(0, 2, 0),
+            IVec3::new(1, 2, 0),
+            IVec3::X,
+        );
+        assert_eq!(subset, Some(HashSet::from([IVec3::new(1, 2, 0)])));
+    }
+
+    #[test]
+    fn pusher_target_structure_rejects_scene_anchored_subset() {
+        let mut world = WorldBlocks::default();
+        world.insert(
+            IVec3::new(1, 0, 0),
+            BlockData {
+                kind: BlockKind::Stone,
+                facing: Facing::North,
+            },
+        );
+        world.insert(IVec3::new(1, 1, 0), platform(IVec3::new(1, 1, 0)));
+        world.insert(
+            IVec3::new(2, 1, 0),
+            BlockData {
+                kind: BlockKind::Pusher,
+                facing: Facing::West,
+            },
+        );
+
+        let state = StructureState::rebuild_for_simulation_standalone(&world);
+        assert!(state
+            .pusher_target_structure(
+                &world,
+                IVec3::new(2, 1, 0),
+                IVec3::new(1, 1, 0),
+                IVec3::NEG_X,
+            )
+            .is_none());
     }
 }
 

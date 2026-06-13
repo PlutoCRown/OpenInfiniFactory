@@ -8,6 +8,21 @@ version = "0.1.0"
 edition = "2021"
 default-run = "open_infinifactory"
 
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "open_infinifactory"
+path = "src/main.rs"
+
+[[bin]]
+name = "oif-debug-http"
+path = "src/bin/oif-debug-http.rs"
+
+[[bin]]
+name = "export_fixture"
+path = "src/bin/export_fixture.rs"
+
 [dependencies]
 bevy = { version = "0.18.1", features = ["experimental_bevy_ui_widgets"] }
 inventory = "0.3"
@@ -37,7 +52,3 @@ runtime_libs = "target/android-libs"
 label = "OpenInfiniFactory"
 theme = "@android:style/Theme.NoTitleBar.Fullscreen"
 debuggable = false
-
-[[bin]]
-name = "oif-debug-http"
-path = "src/bin/oif-debug-http.rs"
