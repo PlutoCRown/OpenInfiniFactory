@@ -141,6 +141,22 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
             StatusText(StatusTextKind::TargetBlock),
         ));
     });
+    root.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            right: Val::Px(18.0),
+            top: Val::Px(18.0),
+            max_width: Val::Px(440.0),
+            ..default()
+        },
+        InGameHudVisibility,
+    ))
+    .with_children(|panel| {
+        panel.spawn((
+            text("", 14.0, STATUS_TEXT),
+            StatusText(StatusTextKind::TargetMovement),
+        ));
+    });
 }
 
 fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {

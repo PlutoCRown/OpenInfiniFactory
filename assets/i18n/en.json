@@ -221,6 +221,8 @@
   "stamp_color.yellow": "Yellow",
   "status.hotbar": "Mode: {mode}   Selected: {selected}   Inventory   Pause",
   "status.world_mode": "World: {world}   Mode: {mode}",
+  "status.target_movement.title": "Next Turn",
+  "status.target_movement.none": "No movement",
   "status.simulation_overlay": "{state}\nTurn: {turns}\n{controls}",
   "status.simulation": "Mode: {mode}\nTurns: {turns}\nSim: {state} x{speed}",
   "teleport.name": "Name: {name}",

@@ -291,6 +291,9 @@ fn conveyor_candidate_at_target(
     target: IVec3,
     offset: IVec3,
 ) -> Option<MovementCandidate> {
+    if !conveyor_workface_occupied(ctx.turn, target) {
+        return None;
+    }
     let primary = mark_structure_translate(ctx, pos, target, offset, MovementMark::Conveyor);
     if let Some(ref movement) = primary {
         if can_translate_structure(ctx.turn, movement.structure(), offset, ctx.turn_structures) {
@@ -301,6 +304,10 @@ fn conveyor_candidate_at_target(
         }
     }
     conveyor_self_fallback(ctx, pos, offset, primary)
+}
+
+fn conveyor_workface_occupied(world: &WorldBlocks, target: IVec3) -> bool {
+    world.blocks.contains_key(&target)
 }
 
 fn conveyor_self_fallback(

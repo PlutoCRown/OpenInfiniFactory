@@ -11,7 +11,8 @@ use super::movement::{
     collect_conveyor_candidate, collect_lift_candidate, collect_powered_translate_candidate,
     collect_pusher_candidate, collect_rotate_candidate, pusher_head_position, PusherState,
 };
-use super::structure_state::StructureState;
+use super::runtime::SignalNetworkCache;
+use super::structure_state::{material_structure, query_factory_structure, StructureState};
 use super::structures::{
     can_rotate_structure, expanded_move_structure, move_structure, rotate_facing_internal,
     rotate_pos_y, rotate_structure, MovementCandidate, MovementInfluenceCache, MovementMark,
@@ -486,6 +487,131 @@ pub fn preview_movement_plan(
     )
 }
 
+pub fn target_structure_movement_lines(
+    target_pos: IVec3,
+    turn: &WorldBlocks,
+    turn_structures: &StructureState,
+    solution: &WorldBlocks,
+    solution_structures: &StructureState,
+    factory_registry: &FactoryBlockRegistry,
+    signal_cache: &mut SignalNetworkCache,
+    pusher_state: &PusherState,
+    movement_influence: &MovementInfluenceCache,
+) -> Option<Vec<String>> {
+    let structure = aimed_structure_at(target_pos, turn, turn_structures)?;
+    signal_cache.ensure_fresh(turn);
+    let powered = signal_cache.powered_device_positions(turn);
+    let mut preview_structures = turn_structures.clone();
+    let mut preview_influence = movement_influence.clone();
+    let plan = preview_movement_plan(
+        turn,
+        solution,
+        &mut preview_structures,
+        solution_structures,
+        factory_registry,
+        &powered,
+        pusher_state,
+        &mut preview_influence,
+    );
+    Some(collect_matching_movement_lines(&plan, &structure))
+}
+
+fn aimed_structure_at(
+    pos: IVec3,
+    world: &WorldBlocks,
+    structure_state: &StructureState,
+) -> Option<HashSet<IVec3>> {
+    let block = world.blocks.get(&pos)?;
+    if block.kind.is_scene() {
+        return None;
+    }
+    if block.kind.is_material() {
+        return Some(
+            structure_state
+                .pushable_structure_at(pos, IVec3::ZERO)
+                .unwrap_or_else(|| material_structure(world, pos)),
+        );
+    }
+    if block.kind.is_factory() {
+        return structure_state
+            .movable_structure_at(pos)
+            .or_else(|| query_factory_structure(world, pos));
+    }
+    None
+}
+
+fn collect_matching_movement_lines(plan: &MovementPlan, structure: &HashSet<IVec3>) -> Vec<String> {
+    let mut lines = Vec::new();
+    for phase in &plan.phases {
+        for candidate in &phase.candidates {
+            if movement_matches_structure(&candidate.primary, structure) {
+                lines.push(format_movement_line(phase.phase, &candidate.primary));
+            }
+            for fallback in &candidate.fallbacks {
+                if movement_matches_structure(fallback, structure) {
+                    lines.push(format_movement_line(phase.phase, fallback));
+                }
+            }
+        }
+    }
+    lines
+}
+
+fn movement_matches_structure(movement: &StructureMove, structure: &HashSet<IVec3>) -> bool {
+    match movement {
+        StructureMove::Translate {
+            structure: positions,
+            ..
+        }
+        | StructureMove::Rotate {
+            structure: positions,
+            ..
+        } => positions == structure,
+    }
+}
+
+fn format_movement_line(phase: StructureMovePhaseKind, movement: &StructureMove) -> String {
+    let phase = phase_kind_label(phase);
+    match movement {
+        StructureMove::Translate {
+            offset,
+            mark,
+            source,
+            ..
+        } => {
+            let kind = mark_label(*mark);
+            format!(
+                "[{phase}] {kind} <- {source}  d({dx}, {dy}, {dz})",
+                source = format_source(*source),
+                dx = offset.x,
+                dy = offset.y,
+                dz = offset.z,
+            )
+        }
+        StructureMove::Rotate {
+            pivot,
+            clockwise,
+            source,
+            ..
+        } => {
+            let direction = if *clockwise { "CW" } else { "CCW" };
+            format!(
+                "[{phase}] Rotate @ ({px}, {py}, {pz}) {direction} <- {source}",
+                px = pivot.x,
+                py = pivot.y,
+                pz = pivot.z,
+                source = format_source(*source),
+            )
+        }
+    }
+}
+
+fn format_source(source: Option<IVec3>) -> String {
+    source
+        .map(|pos| format!("({}, {}, {})", pos.x, pos.y, pos.z))
+        .unwrap_or_else(|| "—".to_string())
+}
+
 pub(crate) fn preview_candidate_executable(
     movement: &StructureMove,
     turn: &WorldBlocks,
@@ -890,6 +1016,43 @@ mod tests {
 
         assert!(realtime.is_material_at(material_pos));
         assert!(!realtime.is_material_at(blocked));
+    }
+
+    #[test]
+    fn reverse_conveyor_does_not_self_push_when_workface_is_empty() {
+        let conveyor_pos = IVec3::new(0, 2, 0);
+        let mut world = WorldBlocks::default();
+        world.insert(conveyor_pos, reverse_conveyor(Facing::North));
+
+        let solution = world.clone();
+        let solution_structures = rebuild_structures(&solution);
+        let mut turn_structures = solution_structures.clone();
+        let pusher_state = PusherState::default();
+        let mut movement_influence = MovementInfluenceCache::default();
+        let factory_registry = frozen_registry(&world);
+
+        let plan = collect_movement_plan(
+            &world,
+            &solution,
+            &mut turn_structures,
+            &solution_structures,
+            &factory_registry,
+            &HashSet::new(),
+            &pusher_state,
+            &mut movement_influence,
+        );
+
+        let conveyor_moves: Vec<_> = plan
+            .phases
+            .iter()
+            .filter(|phase| phase.phase == StructureMovePhaseKind::Conveyor)
+            .flat_map(|phase| phase.candidates.iter())
+            .flat_map(|candidate| {
+                std::iter::once(&candidate.primary).chain(candidate.fallbacks.iter())
+            })
+            .filter(|movement| movement.structure().contains(&conveyor_pos))
+            .collect();
+        assert!(conveyor_moves.is_empty());
     }
 
     #[test]

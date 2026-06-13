@@ -221,6 +221,8 @@
   "stamp_color.yellow": "黄色",
   "status.hotbar": "模式：{mode}   已选：{selected}   背包   暂停",
   "status.world_mode": "世界：{world}   模式：{mode}",
+  "status.target_movement.title": "下一回合",
+  "status.target_movement.none": "无移动",
   "status.simulation_overlay": "{state}\n回合：{turns}\n{controls}",
   "status.simulation": "模式：{mode}\n回合：{turns}\n模拟：{state} x{speed}",
   "teleport.name": "名称：{name}",

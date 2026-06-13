@@ -68,6 +68,7 @@ pub struct StatusText(pub StatusTextKind);
 pub enum StatusTextKind {
     Summary,
     TargetBlock,
+    TargetMovement,
 }
 
 #[derive(Component)]
