@@ -90,6 +90,17 @@ impl SelectionBounds {
         }
         positions
     }
+
+    pub fn from_positions(positions: &[IVec3]) -> Option<Self> {
+        let first = *positions.first()?;
+        let mut min = first;
+        let mut max = first;
+        for pos in positions.iter().copied().skip(1) {
+            min = IVec3::new(min.x.min(pos.x), min.y.min(pos.y), min.z.min(pos.z));
+            max = IVec3::new(max.x.max(pos.x), max.y.max(pos.y), max.z.max(pos.z));
+        }
+        Some(Self { min, max })
+    }
 }
 
 #[derive(Clone, Copy)]

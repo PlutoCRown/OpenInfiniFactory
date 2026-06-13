@@ -14,20 +14,30 @@ use super::signal_offsets;
 use super::structure_state::StructureState;
 use super::structures::material_structure;
 
+pub struct LaserBeam {
+    pub pos: IVec3,
+    pub direction: IVec3,
+    pub range: i32,
+}
+
+pub(super) struct MaterialBehaviorEffects {
+    pub sparks: Vec<IVec3>,
+    pub laser_beams: Vec<LaserBeam>,
+}
+
 pub(super) fn run_material_behavior_phase(
     world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
     structure_state: &mut StructureState,
     pending_destroyed: &mut PendingGeneratedMaterials,
     ready_turn: u64,
-) -> Vec<IVec3> {
-    let mut sparks =
-        run_material_destroy_phase(world, powered_devices, pending_destroyed, ready_turn);
+) -> MaterialBehaviorEffects {
+    let effects = run_material_destroy_phase(world, powered_devices, pending_destroyed, ready_turn);
     mark_material_teleport_phase(world, pending_destroyed, ready_turn);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
     run_material_acceptance_phase(world, structure_state, pending_destroyed, ready_turn);
-    sparks
+    effects
 }
 
 pub(super) fn mark_material_teleport_phase(
@@ -328,7 +338,7 @@ fn run_material_destroy_phase(
     powered_devices: &HashSet<IVec3>,
     pending_destroyed: &mut PendingGeneratedMaterials,
     ready_turn: u64,
-) -> Vec<IVec3> {
+) -> MaterialBehaviorEffects {
     let destroyers: Vec<(IVec3, MaterialDestroyer)> = world
         .blocks
         .iter()
@@ -341,6 +351,7 @@ fn run_material_destroy_phase(
         .collect();
 
     let mut sparks = Vec::new();
+    let mut laser_beams = Vec::new();
     for (pos, destroyer) in destroyers {
         match destroyer {
             MaterialDestroyer::Drill { target } => mark_material_destroy(
@@ -363,12 +374,20 @@ fn run_material_destroy_phase(
             }
             MaterialDestroyer::Laser { direction, range } => {
                 if powered_devices.contains(&pos) {
+                    laser_beams.push(LaserBeam {
+                        pos,
+                        direction,
+                        range,
+                    });
                     fire_laser(world, pos, direction, range);
                 }
             }
         }
     }
-    sparks
+    MaterialBehaviorEffects {
+        sparks,
+        laser_beams,
+    }
 }
 
 fn mark_material_destroy(

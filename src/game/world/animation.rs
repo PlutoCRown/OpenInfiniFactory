@@ -91,6 +91,40 @@ pub struct AnimatedPusherRod {
 }
 
 #[derive(Component)]
+pub struct LaserBeamBurst {
+    origin: Vec3,
+    direction: Vec3,
+    full_length: f32,
+    axis_scale: f32,
+    elapsed: f32,
+    duration: f32,
+}
+
+impl LaserBeamBurst {
+    pub fn new(
+        origin: Vec3,
+        direction: Vec3,
+        full_length: f32,
+        axis_scale: f32,
+        duration: f32,
+    ) -> Self {
+        Self {
+            origin,
+            direction,
+            full_length,
+            axis_scale,
+            elapsed: 0.0,
+            duration,
+        }
+    }
+
+    fn apply(&self, thickness: f32, transform: &mut Transform) {
+        transform.translation = self.origin + self.direction * (self.full_length * 0.5);
+        transform.scale = Vec3::new(thickness, thickness, self.axis_scale);
+    }
+}
+
+#[derive(Component)]
 pub struct WeldSpark {
     velocity: Vec3,
     elapsed: f32,
@@ -122,15 +156,13 @@ impl AnimatedPusherRod {
     }
 
     fn apply(&self, extension: f32, transform: &mut Transform) {
-        use crate::game::blocks::pusher::model::{pusher_rod_center_z, pusher_rod_length, ROD_BASE_LENGTH};
+        use crate::game::blocks::pusher::model::{
+            pusher_rod_center_z, pusher_rod_length, ROD_BASE_LENGTH,
+        };
 
         let length = pusher_rod_length(extension);
         transform.translation.z = pusher_rod_center_z(extension);
-        transform.scale = Vec3::new(
-            self.xy_scale.x,
-            self.xy_scale.y,
-            length / ROD_BASE_LENGTH,
-        );
+        transform.scale = Vec3::new(self.xy_scale.x, self.xy_scale.y, length / ROD_BASE_LENGTH);
     }
 }
 
@@ -185,6 +217,16 @@ pub fn animate_blocks(
             Without<AnimatedBlock>,
             Without<AnimatedPusher>,
             Without<AnimatedPusherRod>,
+            Without<LaserBeamBurst>,
+        ),
+    >,
+    mut laser_beams: Query<
+        (Entity, &mut Transform, &mut LaserBeamBurst),
+        (
+            Without<AnimatedBlock>,
+            Without<AnimatedPusher>,
+            Without<AnimatedPusherRod>,
+            Without<WeldSpark>,
         ),
     >,
 ) {
@@ -244,6 +286,17 @@ pub fn animate_blocks(
         let t = (spark.elapsed / spark.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
         transform.translation += spark.velocity * time.delta_secs();
         transform.scale = Vec3::splat((1.0 - t).max(0.0));
+
+        if t >= 1.0 {
+            commands.entity(entity).despawn();
+        }
+    }
+
+    for (entity, mut transform, mut beam) in &mut laser_beams {
+        beam.elapsed += time.delta_secs();
+        let t = (beam.elapsed / beam.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
+        let thickness = (1.0 - t).max(0.0);
+        beam.apply(thickness, &mut transform);
 
         if t >= 1.0 {
             commands.entity(entity).despawn();

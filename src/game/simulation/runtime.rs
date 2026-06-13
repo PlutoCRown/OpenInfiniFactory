@@ -13,10 +13,11 @@ use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_pending_generated_previews, despawn_world,
     rebuild_world_with_runtime_animations_for_debug_state, spawn_acceptance_sparks,
-    spawn_pending_generated_block, spawn_weld_sparks, BlockEntity, PendingGeneratedPreview,
-    WorldRenderAssets,
+    spawn_laser_beams, spawn_pending_generated_block, spawn_weld_sparks, BlockEntity,
+    PendingGeneratedPreview, WorldRenderAssets,
 };
 
+pub use super::behaviors::LaserBeam;
 use super::behaviors::{
     material_source_generation, run_material_behavior_phase, run_ready_material_teleports,
     run_weld_behavior_phase,
@@ -210,7 +211,7 @@ pub fn run_turn(
     run_powered_marker_phase(world, &powered_devices);
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
-    let drill_sparks = run_material_behavior_phase(
+    let behavior_effects = run_material_behavior_phase(
         world,
         &powered_devices,
         structure_state,
@@ -239,7 +240,13 @@ pub fn run_turn(
         &render_powered_wires,
     );
     spawn_weld_sparks(commands, render_assets, &weld_sparks);
-    spawn_weld_sparks(commands, render_assets, &drill_sparks);
+    spawn_weld_sparks(commands, render_assets, &behavior_effects.sparks);
+    spawn_laser_beams(
+        commands,
+        render_assets,
+        &behavior_effects.laser_beams,
+        animation_duration * 0.5,
+    );
     spawn_acceptance_sparks(commands, render_assets, &acceptance_sparks);
     sample.render_rebuild_ms = mark_elapsed_ms(&mut mark);
     sample.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;

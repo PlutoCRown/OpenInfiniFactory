@@ -30,9 +30,9 @@ use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
     block_face_highlight_transform, despawn_edit_previews, rebuild_world_for_debug_state,
     rebuild_world_with_animations, rebuild_world_with_animations_for_debug_state,
-    spawn_block_preview, spawn_block_with_animation, spawn_edit_preview, AimFaceHighlight,
-    BlockEntity, EditPreview, EditPreviewKind, HoverMarker, HoverStructureBounds,
-    WorldRenderAssets,
+    spawn_block_preview, spawn_block_with_animation, spawn_delete_bounds_preview,
+    spawn_edit_preview, AimFaceHighlight, BlockEntity, EditPreview, EditPreviewKind, HoverMarker,
+    HoverStructureBounds, WorldRenderAssets,
 };
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
@@ -1044,10 +1044,12 @@ fn spawn_gesture_previews(
                 gesture.start,
                 current_delete_at.unwrap_or(gesture.start),
             );
-            for pos in positions {
-                if can_delete_at(pos, builder_mode, world) {
-                    spawn_edit_preview(commands, render_assets, pos, EditPreviewKind::Delete);
-                }
+            let deletable: Vec<IVec3> = positions
+                .into_iter()
+                .filter(|pos| can_delete_at(*pos, builder_mode, world))
+                .collect();
+            if let Some(bounds) = SelectionBounds::from_positions(&deletable) {
+                spawn_delete_bounds_preview(commands, render_assets, bounds.min, bounds.max);
             }
         }
     }

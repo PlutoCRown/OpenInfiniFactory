@@ -11,11 +11,13 @@ use crate::game::blocks::{
     edit_blocks, BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
     PLAY_BLOCKS,
 };
+use crate::game::simulation::runtime::LaserBeam;
 use crate::game::simulation::structure_state::{FactoryActivity, StructureKind, StructureState};
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     rotate_world_pos_y, AnimatedBlock, AnimatedPusher, AnimatedPusherRod, AnimationEasing,
-    AnimationTiming, BlockAnimation, BlockAnimationKind, PusherAnimation, WeldSpark,
+    AnimationTiming, BlockAnimation, BlockAnimationKind, LaserBeamBurst, PusherAnimation,
+    WeldSpark,
 };
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
@@ -466,6 +468,33 @@ pub fn despawn_pending_generated_previews(
     }
 }
 
+const CONNECTOR_BEAM_LENGTH: f32 = 0.55;
+
+pub fn spawn_laser_beams(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    beams: &[LaserBeam],
+    duration: f32,
+) {
+    for beam in beams {
+        let direction = beam.direction.as_vec3();
+        let full_length = beam.range as f32;
+        let origin = grid_to_world(beam.pos) + direction * 0.5;
+        let axis_scale = full_length / CONNECTOR_BEAM_LENGTH;
+        let rotation = Quat::from_rotation_arc(Vec3::Z, direction);
+        let transform = Transform::from_translation(origin + direction * (full_length * 0.5))
+            .with_rotation(rotation)
+            .with_scale(Vec3::new(1.0, 1.0, axis_scale));
+
+        commands.spawn((
+            Mesh3d(assets.connector_mesh(beam.direction)),
+            MeshMaterial3d(assets.weld_connector_material.clone()),
+            transform,
+            LaserBeamBurst::new(origin, direction, full_length, axis_scale, duration),
+        ));
+    }
+}
+
 pub fn spawn_weld_sparks(commands: &mut Commands, assets: &WorldRenderAssets, positions: &[IVec3]) {
     const VELOCITIES: [Vec3; 6] = [
         Vec3::new(1.60, 2.70, 0.42),
@@ -542,6 +571,22 @@ pub fn spawn_edit_preview(
         Mesh3d(assets.block.clone()),
         MeshMaterial3d(assets.edit_preview_material(kind)),
         Transform::from_translation(grid_to_world(pos)).with_scale(Vec3::splat(1.03)),
+        EditPreview,
+    ));
+}
+
+pub fn spawn_delete_bounds_preview(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    min: IVec3,
+    max: IVec3,
+) {
+    let center = (grid_to_world(min) + grid_to_world(max)) * 0.5;
+    let size = (max - min + IVec3::ONE).as_vec3() * 1.1;
+    commands.spawn((
+        Mesh3d(assets.block.clone()),
+        MeshMaterial3d(assets.edit_preview_material(EditPreviewKind::Delete)),
+        Transform::from_translation(center).with_scale(size),
         EditPreview,
     ));
 }
