@@ -1,6 +1,6 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::game::blocks::BlockData;
 use crate::game::simulation::core::prepare_upcoming_generation;
@@ -172,6 +172,7 @@ pub(crate) struct SimulationTurnDeps<'w> {
 #[derive(Default)]
 pub struct SimulationPresentationState {
     pub committed_world: WorldBlocks,
+    pub last_render_powered_wires: HashSet<IVec3>,
 }
 
 pub fn apply_sim_snapshot(
@@ -203,6 +204,7 @@ pub fn poll_simulation_worker(
     if *builder_mode != BuilderMode::Play {
         return;
     }
+    turn_cache.ingest_worker_results(worker.drain_results());
     worker.configure(
         simulation.turn,
         simulation.running,
@@ -210,7 +212,6 @@ pub fn poll_simulation_worker(
         simulation.speed,
         simulation.is_active(),
     );
-    turn_cache.ingest_worker_results(worker.drain_results());
 }
 
 pub fn prefetch_simulation_turn(
@@ -280,9 +281,9 @@ pub fn tick_simulation(
     };
 
     if simulation.step_requested {
-        simulation.step_requested = false;
-        simulation.accumulator = 0.0;
         if let Some(cached) = deps.turn_cache.take_pending(simulation.turn + 1) {
+            simulation.step_requested = false;
+            simulation.accumulator = 0.0;
             simulation.turn += 1;
             present_turn(
                 cached,
@@ -395,6 +396,7 @@ fn present_turn(
         &before,
         world,
         &cached.output,
+        &presentation.last_render_powered_wires,
         animation_duration,
         commands,
         meshes,
@@ -404,6 +406,7 @@ fn present_turn(
         structure_state,
         sim_stats,
     );
+    presentation.last_render_powered_wires = cached.output.render_powered_wires.clone();
     presentation.committed_world = world.clone();
 }
 

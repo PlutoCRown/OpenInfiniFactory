@@ -136,6 +136,23 @@ pub fn collect_sim_refresh_positions(
     refresh
 }
 
+pub fn collect_wire_power_refresh_positions(
+    after: &WorldBlocks,
+    current: &HashSet<IVec3>,
+    previous: &HashSet<IVec3>,
+) -> HashSet<IVec3> {
+    let mut refresh = HashSet::new();
+    for &pos in current {
+        refresh.insert(pos);
+    }
+    for &pos in previous {
+        if block_data_at(after, pos).is_some_and(|block| block.kind == BlockKind::Wire) {
+            refresh.insert(pos);
+        }
+    }
+    refresh
+}
+
 pub fn refresh_positions(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -255,6 +272,7 @@ pub fn apply_turn_output_incremental(
     before: &WorldBlocks,
     after: &WorldBlocks,
     output: &TurnOutput,
+    previous_powered_wires: &HashSet<IVec3>,
     animation_duration: f32,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -279,7 +297,12 @@ pub fn apply_turn_output_incremental(
         &output.pusher_animations,
         timing,
     );
-    let refresh = collect_sim_refresh_positions(before, after, output);
+    let mut refresh = collect_sim_refresh_positions(before, after, output);
+    refresh.extend(collect_wire_power_refresh_positions(
+        after,
+        &output.render_powered_wires,
+        previous_powered_wires,
+    ));
     refresh_positions(
         commands,
         meshes,

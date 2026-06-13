@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use std::collections::HashSet;
 
 use crate::game::systems::debug::DebugState;
 use crate::game::world::grid::WorldBlocks;
@@ -12,6 +13,7 @@ pub fn apply_turn_output(
     before: &WorldBlocks,
     after: &WorldBlocks,
     output: &TurnOutput,
+    previous_powered_wires: &HashSet<IVec3>,
     animation_duration: f32,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -25,6 +27,7 @@ pub fn apply_turn_output(
         before,
         after,
         output,
+        previous_powered_wires,
         animation_duration,
         commands,
         meshes,
