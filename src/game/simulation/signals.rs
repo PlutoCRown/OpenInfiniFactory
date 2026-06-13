@@ -145,7 +145,7 @@ fn detector_is_active(world: &WorldBlocks, pos: IVec3) -> bool {
         return false;
     };
 
-    world.is_material_at(pos + detection_pos)
+    world.is_detectable_by_detector_at(pos + detection_pos)
 }
 
 fn carries_signal_at(world: &WorldBlocks, pos: IVec3) -> bool {
@@ -155,4 +155,59 @@ fn carries_signal_at(world: &WorldBlocks, pos: IVec3) -> bool {
             Some(SignalBehavior::Wire)
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::game::blocks::{BlockData, BlockKind};
+    use crate::game::world::direction::Facing;
+
+    fn place_factory(world: &mut WorldBlocks, pos: IVec3, kind: BlockKind) {
+        world.insert(
+            pos,
+            BlockData {
+                kind,
+                facing: Facing::North,
+            },
+        );
+    }
+
+    fn wired_detector(world: &mut WorldBlocks, detector: IVec3, wire: IVec3) {
+        world.insert(
+            detector,
+            BlockData {
+                kind: BlockKind::Detector,
+                facing: Facing::East,
+            },
+        );
+        place_factory(world, wire, BlockKind::Wire);
+    }
+
+    #[test]
+    fn detector_detects_material_and_platform_only_among_factory_blocks() {
+        let mut world = WorldBlocks::default();
+        let detector = IVec3::ZERO;
+        let target = IVec3::X;
+        let wire = IVec3::NEG_X;
+        wired_detector(&mut world, detector, wire);
+        let mut cache = SignalNetworkCache::default();
+
+        place_factory(&mut world, target, BlockKind::Platform);
+        cache.refresh(&world);
+        assert!(cache.powered_components(&world).contains(&0));
+
+        place_factory(&mut world, target, BlockKind::Conveyor);
+        cache.refresh(&world);
+        assert!(cache.powered_components(&world).is_empty());
+
+        world.remove(&target);
+        place_factory(
+            &mut world,
+            target,
+            BlockKind::material_block_kind(crate::game::blocks::MaterialKind::Basic).unwrap(),
+        );
+        cache.refresh(&world);
+        assert!(cache.powered_components(&world).contains(&0));
+    }
 }

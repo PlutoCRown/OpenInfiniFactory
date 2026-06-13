@@ -573,6 +573,12 @@ impl WorldBlocks {
             .is_some_and(|block| block.kind.is_factory())
     }
 
+    pub fn is_detectable_by_detector_at(&self, pos: IVec3) -> bool {
+        self.blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.is_detectable_by_detector())
+    }
+
     pub fn is_scene_at(&self, pos: IVec3) -> bool {
         self.blocks
             .get(&pos)

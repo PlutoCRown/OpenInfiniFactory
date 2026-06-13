@@ -742,6 +742,10 @@ impl BlockKind {
         matches!(self.layer(), BlockLayer::Factory(_))
     }
 
+    pub fn is_detectable_by_detector(self) -> bool {
+        self.is_material() || matches!(self, BlockKind::Platform)
+    }
+
     pub fn is_scene(self) -> bool {
         matches!(self.layer(), BlockLayer::Scene(_))
     }
