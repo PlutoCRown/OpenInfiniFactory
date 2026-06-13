@@ -1,8 +1,13 @@
 use bevy::prelude::*;
 
-use crate::game::session;
+use crate::game::session::{
+    exit_to_main_menu_in_world, puzzle_save_needs_confirm, reset_solution_in_world,
+    save_current_world_in_world, switch_to_edit_mode_in_world,
+};
+use crate::game::ui::features::save::open_save_puzzle_confirm_before_exit;
 use crate::game::ui::access::i18n;
 use crate::game::ui::core::confirm_dialog::{ConfirmExtraButton, ConfirmProps, ConfirmResult};
+use crate::shared::save::SaveState;
 
 pub const EXTRA_DISCARD: u32 = 0;
 
@@ -44,22 +49,29 @@ pub fn save_before_edit_spec() -> ConfirmProps {
 
 pub fn on_reset_solution(result: ConfirmResult, world: &mut World) {
     if matches!(result, ConfirmResult::Confirmed) {
-        session::reset_solution_in_world(world);
+        reset_solution_in_world(world);
     }
 }
 
 pub fn on_return_to_main(result: ConfirmResult, world: &mut World) {
     match result {
-        ConfirmResult::Confirmed => session::exit_to_main_menu_in_world(world, true),
-        ConfirmResult::Extra(EXTRA_DISCARD) => session::exit_to_main_menu_in_world(world, false),
+        ConfirmResult::Confirmed => {
+            if puzzle_save_needs_confirm(world.resource::<SaveState>()) {
+                open_save_puzzle_confirm_before_exit();
+            } else {
+                save_current_world_in_world(world);
+                exit_to_main_menu_in_world(world, false);
+            }
+        }
+        ConfirmResult::Extra(EXTRA_DISCARD) => exit_to_main_menu_in_world(world, false),
         ConfirmResult::Cancelled | ConfirmResult::Extra(_) => {}
     }
 }
 
 pub fn on_save_before_edit(result: ConfirmResult, world: &mut World) {
     match result {
-        ConfirmResult::Confirmed => session::switch_to_edit_mode_in_world(world, true),
-        ConfirmResult::Extra(EXTRA_DISCARD) => session::switch_to_edit_mode_in_world(world, false),
+        ConfirmResult::Confirmed => switch_to_edit_mode_in_world(world, true),
+        ConfirmResult::Extra(EXTRA_DISCARD) => switch_to_edit_mode_in_world(world, false),
         ConfirmResult::Cancelled | ConfirmResult::Extra(_) => {}
     }
 }

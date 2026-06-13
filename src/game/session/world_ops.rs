@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
-use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::movement::PusherState;
+use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::state::{
     BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
@@ -15,9 +15,23 @@ use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
 };
 use crate::shared::save::{
-    load_world, next_named_save, reset_solution_world, save_solution_with_puzzle, save_world, SaveKind,
-    SaveState,
+    has_solutions_for_puzzle, invalidate_solutions_for_puzzle, load_world, next_named_save,
+    reset_solution_world, save_puzzle, save_solution, SaveKind, SaveState,
 };
+
+pub enum SaveCurrentWorldResult {
+    Saved,
+    NeedsPuzzleConfirm,
+    Failed,
+}
+
+pub fn puzzle_save_needs_confirm(save_state: &SaveState) -> bool {
+    save_state.current_kind == Some(SaveKind::Puzzle)
+        && save_state
+            .current
+            .as_deref()
+            .is_some_and(has_solutions_for_puzzle)
+}
 
 pub fn save_current_world(
     world: &WorldBlocks,
@@ -25,7 +39,49 @@ pub fn save_current_world(
     save_state: &mut SaveState,
     solution_state: &mut SolutionState,
     simulation: &SimulationState,
-) {
+) -> SaveCurrentWorldResult {
+    if puzzle_save_needs_confirm(save_state) {
+        return SaveCurrentWorldResult::NeedsPuzzleConfirm;
+    }
+    if commit_save_current_world(
+        world,
+        inventory,
+        save_state,
+        solution_state,
+        simulation,
+        false,
+    ) {
+        SaveCurrentWorldResult::Saved
+    } else {
+        SaveCurrentWorldResult::Failed
+    }
+}
+
+pub fn save_current_world_invalidate_solutions(
+    world: &WorldBlocks,
+    inventory: &InventoryItems,
+    save_state: &mut SaveState,
+    solution_state: &mut SolutionState,
+    simulation: &SimulationState,
+) -> bool {
+    commit_save_current_world(
+        world,
+        inventory,
+        save_state,
+        solution_state,
+        simulation,
+        true,
+    )
+}
+
+fn commit_save_current_world(
+    world: &WorldBlocks,
+    inventory: &InventoryItems,
+    save_state: &mut SaveState,
+    solution_state: &mut SolutionState,
+    simulation: &SimulationState,
+    invalidate_solutions: bool,
+) -> bool {
     let world = simulation.authoring_world(world);
     let kind = save_state.current_kind.unwrap_or(SaveKind::Puzzle);
     let name = save_state.current.clone().unwrap_or_else(|| {
@@ -39,13 +95,21 @@ pub fn save_current_world(
         )
     });
     let saved = match kind {
-        SaveKind::Puzzle => save_world(world, &name, SaveKind::Puzzle, inventory),
-        SaveKind::Solution => {
-            if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
-                save_solution_with_puzzle(world, &name, puzzle_snapshot, inventory)
-            } else {
-                save_world(world, &name, SaveKind::Solution, inventory)
+        SaveKind::Puzzle => {
+            if invalidate_solutions {
+                invalidate_solutions_for_puzzle(&name);
             }
+            save_puzzle(world, &name, inventory)
+        }
+        SaveKind::Solution => {
+            let Some(puzzle_id) = solution_state
+                .puzzle_id
+                .clone()
+                .or_else(|| save_state.current.clone())
+            else {
+                return false;
+            };
+            save_solution(world, &name, &puzzle_id, inventory)
         }
     };
     if saved {
@@ -54,6 +118,7 @@ pub fn save_current_world(
         solution_state.dirty = false;
         save_state.refresh();
     }
+    saved
 }
 
 pub fn switch_to_edit_mode_and_rebuild(
@@ -226,13 +291,14 @@ pub fn load_world_into_session(
         WorldEntryMode::EditPuzzle => SaveKind::Puzzle,
         WorldEntryMode::PlaySolution => SaveKind::Solution,
     });
-    save_state.select_puzzle(None, None);
+    save_state.select_puzzle(None);
 
     solution_state.entry = entry;
     solution_state.dirty = false;
+    solution_state.puzzle_id = loaded.puzzle_id;
     solution_state.puzzle_snapshot = match entry {
         WorldEntryMode::EditPuzzle => None,
-        WorldEntryMode::PlaySolution => loaded.puzzle_snapshot.or_else(|| Some(loaded.world)),
+        WorldEntryMode::PlaySolution => loaded.puzzle_snapshot,
     };
 
     refresh_static_generated_markers(world);
@@ -283,8 +349,9 @@ pub fn clear_loaded_world(
     world.clear();
     save_state.current = None;
     save_state.current_kind = None;
-    save_state.select_puzzle(None, None);
+    save_state.select_puzzle(None);
     solution_state.puzzle_snapshot = None;
+    solution_state.puzzle_id = None;
     solution_state.dirty = false;
     solution_state.entry = WorldEntryMode::EditPuzzle;
     structure_state.clear();
@@ -323,5 +390,6 @@ fn switch_to_edit_mode(
     placement.selected = 0;
     save_state.current_kind = Some(SaveKind::Puzzle);
     solution_state.puzzle_snapshot = None;
+    solution_state.puzzle_id = None;
     playing_ui.paused = true;
 }

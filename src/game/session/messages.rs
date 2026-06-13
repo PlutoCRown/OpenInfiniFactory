@@ -6,6 +6,9 @@ use crate::game::state::WorldEntryMode;
 pub struct SaveCurrentWorld;
 
 #[derive(Clone, Message)]
+pub struct SaveCurrentWorldInvalidateSolutions;
+
+#[derive(Clone, Message)]
 pub struct SaveWorldAsNewPuzzle {
     pub name: String,
 }

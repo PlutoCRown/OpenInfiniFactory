@@ -14,11 +14,14 @@ pub use dispatch::{
 };
 pub use dispatch::{
     create_new_puzzle_in_world, create_new_solution_in_world, exit_to_main_menu,
-    exit_to_main_menu_in_world, load_world, reset_solution_in_world, save_current_world,
+    exit_to_main_menu_in_world, load_world, puzzle_save_needs_confirm, reset_solution_in_world,
+    save_current_world, save_current_world_in_world, save_current_world_invalidate_in_world,
+    save_current_world_invalidate_resources, save_current_world_resources,
     save_world_as_new_puzzle_in_world, switch_to_edit_mode_in_world,
 };
 pub use messages::LoadWorld;
 pub use world_access::PlayingWorldParams;
+pub use world_ops::SaveCurrentWorldResult;
 
 use bevy::prelude::*;
 
@@ -37,10 +40,13 @@ use crate::game::world::rendering::{
 use load::{handle_create_new_puzzle, handle_create_new_solution, handle_load_world};
 use messages::{
     CreateNewPuzzle, CreateNewSolution, ExitToMainMenu, ResetSolution, SaveCurrentWorld,
-    SaveWorldAsNewPuzzle, SwitchToEditMode,
+    SaveCurrentWorldInvalidateSolutions, SaveWorldAsNewPuzzle, SwitchToEditMode,
 };
 use navigation::handle_exit_to_main_menu;
-use save::{handle_save_current_world, handle_save_world_as_new_puzzle};
+use save::{
+    handle_save_current_world, handle_save_current_world_invalidate_solutions,
+    handle_save_world_as_new_puzzle,
+};
 use solution::{handle_reset_solution, handle_switch_to_edit_mode};
 
 pub struct SessionPlugin;
@@ -48,6 +54,7 @@ pub struct SessionPlugin;
 impl Plugin for SessionPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<SaveCurrentWorld>()
+            .add_message::<SaveCurrentWorldInvalidateSolutions>()
             .add_message::<SaveWorldAsNewPuzzle>()
             .add_message::<ExitToMainMenu>()
             .add_message::<ResetSolution>()
@@ -59,6 +66,7 @@ impl Plugin for SessionPlugin {
                 Update,
                 (
                     handle_save_current_world,
+                    handle_save_current_world_invalidate_solutions,
                     handle_save_world_as_new_puzzle,
                     handle_exit_to_main_menu,
                     handle_reset_solution,

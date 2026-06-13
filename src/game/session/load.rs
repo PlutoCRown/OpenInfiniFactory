@@ -5,7 +5,7 @@ use crate::game::state::{
 };
 use crate::game::ui::{CarriedItem, InventoryItems};
 use crate::game::world::grid::seed_demo_world;
-use crate::shared::save::{load_world, save_solution_with_puzzle, save_world, SaveKind, SaveState};
+use crate::shared::save::{load_world, save_puzzle, save_solution, SaveState};
 
 use super::messages::{CreateNewPuzzle, CreateNewSolution, LoadWorld};
 use super::world_access::PlayingWorldParams;
@@ -67,7 +67,7 @@ pub fn handle_create_new_puzzle(
         world.world.clear();
         seed_demo_world(&mut world.world);
         *inventory = InventoryItems::for_mode(BuilderMode::Edit);
-        if save_world(&world.world, &request.name, SaveKind::Puzzle, &inventory) {
+        if save_puzzle(&world.world, &request.name, &inventory) {
             save_state.refresh();
             load_world_into_session(
                 &request.name,
@@ -112,15 +112,12 @@ pub fn handle_create_new_solution(
         let Some(loaded) = load_world(&mut world.world, &request.puzzle) else {
             continue;
         };
-        let puzzle_snapshot = loaded
-            .puzzle_snapshot
-            .unwrap_or_else(|| world.world.clone());
-        *world.world = puzzle_snapshot.clone();
+        *world.world = loaded.world;
         *inventory = InventoryItems::for_mode(BuilderMode::Play);
-        if save_solution_with_puzzle(
+        if save_solution(
             &world.world,
             &request.name,
-            &puzzle_snapshot,
+            &request.puzzle,
             &inventory,
         ) {
             save_state.refresh();

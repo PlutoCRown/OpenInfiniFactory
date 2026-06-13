@@ -4,9 +4,7 @@ use crate::game::state::{GameMode, StartMenuScreen, WorldEntryMode};
 use crate::game::ui::access::i18n;
 use crate::shared::save::SaveState;
 
-use super::types::{
-    SaveListAction,
-};
+use super::types::SaveListAction;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SaveListColumn {
@@ -110,13 +108,7 @@ impl SaveListAction {
             ..
         } = ctx;
         match self {
-            Self::LoadPuzzle(name) => {
-                save_state
-                    .puzzle_choices()
-                    .iter()
-                    .any(|choice| &choice.name == name)
-                    || save_state.puzzles().iter().any(|entry| &entry.name == name)
-            }
+            Self::LoadPuzzle(name) => save_state.puzzles().iter().any(|entry| &entry.name == name),
             Self::LoadSolution(name)
             | Self::RenameSolution(name)
             | Self::DeleteSolution(name) => {
@@ -145,21 +137,12 @@ impl SaveListAction {
     }
 }
 
-
-pub fn save_list_puzzle_rows(save_state: &SaveState, edit_flow: bool) -> Vec<String> {
-    if edit_flow {
-        save_state
-            .puzzles()
-            .into_iter()
-            .map(|entry| entry.name.clone())
-            .collect()
-    } else {
-        save_state
-            .puzzle_choices()
-            .into_iter()
-            .map(|choice| choice.name)
-            .collect()
-    }
+pub fn save_list_puzzle_rows(save_state: &SaveState) -> Vec<String> {
+    save_state
+        .puzzles()
+        .into_iter()
+        .map(|entry| entry.name.clone())
+        .collect()
 }
 
 pub fn save_list_title(

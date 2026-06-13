@@ -50,7 +50,7 @@ pub fn update_save_list_ui(
 ) {
     let play_flow = solution_state.save_list_entry == WorldEntryMode::PlaySolution;
     let edit_flow = solution_state.save_list_entry == WorldEntryMode::EditPuzzle;
-    let puzzle_rows = save_list_puzzle_rows(&save_state, edit_flow);
+    let puzzle_rows = save_list_puzzle_rows(&save_state);
     let solution_rows = save_state
         .selected_puzzle_solutions()
         .iter()

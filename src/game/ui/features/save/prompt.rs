@@ -80,8 +80,7 @@ pub fn open_rename_puzzle_prompt(old_name: String) {
                 save_state.current = Some(name.clone());
             }
             if save_state.selected_puzzle.as_deref() == Some(old_name.as_str()) {
-                let kind = save_state.selected_puzzle_kind;
-                save_state.select_puzzle(Some(name.clone()), kind);
+                save_state.select_puzzle(Some(name.clone()));
             }
             save_state.refresh();
         }
@@ -103,8 +102,7 @@ pub fn open_rename_solution_prompt(old_name: String) {
                 save_state.current = Some(name.clone());
             }
             if save_state.selected_puzzle.as_deref() == Some(old_name.as_str()) {
-                let kind = save_state.selected_puzzle_kind;
-                save_state.select_puzzle(Some(name.clone()), kind);
+                save_state.select_puzzle(Some(name.clone()));
             }
             save_state.refresh();
         }

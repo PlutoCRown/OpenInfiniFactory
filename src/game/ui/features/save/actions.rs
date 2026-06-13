@@ -100,15 +100,8 @@ fn dispatch_save_list_action(
                     name: name.clone(),
                     entry: WorldEntryMode::EditPuzzle,
                 });
-            } else {
-                let Some(choice) = save_state
-                    .puzzle_choices()
-                    .into_iter()
-                    .find(|choice| choice.name == *name)
-                else {
-                    return;
-                };
-                save_state.select_puzzle(Some(choice.name), Some(choice.source));
+            } else if save_state.puzzles().iter().any(|entry| entry.name == *name) {
+                save_state.select_puzzle(Some(name));
             }
         }
         SaveListAction::LoadSolution(name) => {

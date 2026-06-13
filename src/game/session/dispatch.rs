@@ -4,11 +4,21 @@
 use bevy::prelude::*;
 
 use crate::game::state::WorldEntryMode;
+use crate::game::state::{SimulationState, SolutionState};
+use crate::game::ui::InventoryItems;
+use crate::game::world::grid::WorldBlocks;
+use crate::shared::save::SaveState;
 
 use super::messages::{
-    CreateNewPuzzle, CreateNewSolution, ExitToMainMenu, LoadWorld, ResetSolution, SaveCurrentWorld,
-    SaveWorldAsNewPuzzle, SwitchToEditMode,
+    CreateNewPuzzle, CreateNewSolution, ExitToMainMenu, LoadWorld, ResetSolution,
+    SaveCurrentWorld, SaveCurrentWorldInvalidateSolutions, SaveWorldAsNewPuzzle, SwitchToEditMode,
 };
+use super::world_ops::{
+    save_current_world as save_current_world_impl, save_current_world_invalidate_solutions,
+    SaveCurrentWorldResult,
+};
+
+pub use super::world_ops::puzzle_save_needs_confirm;
 
 pub fn save_current_world(commands: &mut Commands) {
     commands.queue(|world: &mut World| {
@@ -102,4 +112,40 @@ pub fn create_new_puzzle_in_world(world: &mut World, name: String) {
 
 pub fn create_new_solution_in_world(world: &mut World, name: String, puzzle: String) {
     world.write_message(CreateNewSolution { name, puzzle });
+}
+
+pub fn save_current_world_resources(
+    world: &WorldBlocks,
+    inventory: &InventoryItems,
+    save_state: &mut SaveState,
+    solution_state: &mut SolutionState,
+    simulation: &SimulationState,
+) -> SaveCurrentWorldResult {
+    save_current_world_impl(
+        world,
+        inventory,
+        save_state,
+        solution_state,
+        simulation,
+    )
+}
+
+pub fn save_current_world_invalidate_resources(
+    world: &WorldBlocks,
+    inventory: &InventoryItems,
+    save_state: &mut SaveState,
+    solution_state: &mut SolutionState,
+    simulation: &SimulationState,
+) -> bool {
+    save_current_world_invalidate_solutions(
+        world,
+        inventory,
+        save_state,
+        solution_state,
+        simulation,
+    )
+}
+
+pub fn save_current_world_invalidate_in_world(world: &mut World) {
+    world.write_message(SaveCurrentWorldInvalidateSolutions);
 }

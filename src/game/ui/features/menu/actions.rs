@@ -11,7 +11,9 @@ use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost, UiRootEntity};
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiInstanceId};
 use crate::game::ui::core::runtime::UiPanelContext;
 use crate::game::ui::core::text_input::primary_click;
+use crate::game::ui::features::save::open_save_puzzle_confirm;
 use crate::game::ui::features::save::open_save_as_new_puzzle_prompt;
+use crate::game::session::{puzzle_save_needs_confirm, save_current_world_resources};
 use crate::game::ui::types::{CarriedItem, InventoryItems};
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::save::{next_named_save, SaveKind, SaveState};
@@ -107,13 +109,13 @@ fn dispatch_menu_action(
     match (*mode.get(), action) {
         (GameMode::StartMenu, MenuAction::EditPuzzle) => {
             save_state.refresh();
-            save_state.select_puzzle(None, None);
+            save_state.select_puzzle(None);
             solution_state.save_list_entry = WorldEntryMode::EditPuzzle;
             *start_menu_screen = StartMenuScreen::SaveList;
         }
         (GameMode::StartMenu, MenuAction::Play) => {
             save_state.refresh();
-            save_state.select_puzzle(None, None);
+            save_state.select_puzzle(None);
             solution_state.save_list_entry = WorldEntryMode::PlaySolution;
             *start_menu_screen = StartMenuScreen::SaveList;
         }
@@ -140,6 +142,7 @@ fn dispatch_menu_action(
                     simulation.start_snapshot = None;
                     simulation.start_structures = None;
                     solution_state.puzzle_snapshot = Some(world.clone());
+                    solution_state.puzzle_id = save_state.current.clone();
                     save_state.current = Some(next_named_save(
                         &save_state
                             .entries
@@ -162,7 +165,17 @@ fn dispatch_menu_action(
             playing_ui.paused = false;
         }
         (GameMode::Playing, MenuAction::SaveWorld) if playing_ui.paused => {
-            session::save_current_world(commands);
+            if puzzle_save_needs_confirm(save_state) {
+                open_save_puzzle_confirm();
+            } else {
+                let _ = save_current_world_resources(
+                    world,
+                    inventory,
+                    save_state,
+                    solution_state,
+                    simulation,
+                );
+            }
         }
         (GameMode::Playing, MenuAction::SaveAsNewPuzzle) if playing_ui.paused => {
             open_save_as_new_puzzle_prompt();
