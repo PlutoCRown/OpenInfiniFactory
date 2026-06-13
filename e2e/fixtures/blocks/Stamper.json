@@ -1,0 +1,22 @@
+{
+  "name": "block_stamper",
+  "setup": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Stamper",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Stamper",
+      "layer": "system"
+    }
+  ]
+}

@@ -165,6 +165,19 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
     root.spawn((
         absolute_text_bundle(
             "",
+            15.0,
+            Color::srgb(0.82, 0.92, 1.0),
+            Some(Val::Px(18.0)),
+            None,
+            Some(Val::Px(156.0)),
+            None,
+        ),
+        StatusText(StatusTextKind::TargetBlock),
+        InGameHudVisibility,
+    ));
+    root.spawn((
+        absolute_text_bundle(
+            "",
             16.0,
             STATUS_TEXT,
             None,

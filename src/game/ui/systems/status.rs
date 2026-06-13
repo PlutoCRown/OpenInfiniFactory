@@ -8,6 +8,7 @@ fn builder_mode_name(mode: BuilderMode) -> String {
 pub fn update_status_ui(
     _ui_thread: UiMainThread,
     placement: Res<PlacementState>,
+    world: Res<WorldBlocks>,
     inventory: Res<InventoryItems>,
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
@@ -19,6 +20,7 @@ pub fn update_status_ui(
         text.0 = status_text_value(
             status.0,
             &placement,
+            &world,
             &inventory,
             *builder_mode,
             &simulation,
@@ -31,6 +33,7 @@ pub fn update_status_ui(
 fn status_text_value(
     kind: StatusTextKind,
     placement: &PlacementState,
+    world: &WorldBlocks,
     inventory: &InventoryItems,
     builder_mode: BuilderMode,
     simulation: &SimulationState,
@@ -38,6 +41,7 @@ fn status_text_value(
     config: &GameConfig,
 ) -> String {
     match kind {
+        StatusTextKind::TargetBlock => target_status_line(placement, world),
         StatusTextKind::Hotbar => {
             let selected_item = inventory.hotbar[placement.selected];
             let selected = selected_item

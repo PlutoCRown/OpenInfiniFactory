@@ -1,0 +1,22 @@
+{
+  "name": "block_dirt",
+  "setup": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Dirt",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Dirt",
+      "layer": "scene"
+    }
+  ]
+}

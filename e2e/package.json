@@ -1,0 +1,10 @@
+{
+  "name": "open-infinifactory-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate-fixtures": "bun run scripts/generate-fixtures.ts",
+    "test": "bun test src",
+    "test:blocks": "bun test src/blocks.test.ts"
+  }
+}

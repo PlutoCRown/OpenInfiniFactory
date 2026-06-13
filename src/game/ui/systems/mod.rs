@@ -2,6 +2,7 @@ use bevy::picking::pointer::PointerButton;
 use bevy::picking::prelude::{Click, Drag, DragEnd, DragStart, Out, Over, Pointer};
 use bevy::prelude::*;
 
+use crate::game::debug::target_status_line;
 use crate::game::state::{
     BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
     StartMenuScreen, UiPanelId,

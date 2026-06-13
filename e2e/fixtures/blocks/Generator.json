@@ -1,0 +1,22 @@
+{
+  "name": "block_generator",
+  "setup": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Generator",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Generator",
+      "layer": "system"
+    }
+  ]
+}

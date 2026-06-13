@@ -1235,9 +1235,16 @@ fn spawn_block_model(
             }
         }
 
-        if render_behavior.wire_connector.is_some() {
+        if let Some(wire_connector) = render_behavior.wire_connector {
+            let blocked_offset = match wire_connector {
+                WireConnectorBehavior::Device { blocked_offset } => Some(blocked_offset),
+                WireConnectorBehavior::Wire => None,
+            };
             let mut connected_offsets = Vec::new();
             for offset in signal_offsets() {
+                if blocked_offset == Some(offset) {
+                    continue;
+                }
                 let neighbor = pos + offset;
                 if world
                     .blocks

@@ -504,6 +504,12 @@ impl WorldBlocks {
             .is_some_and(|block| block.kind.is_system_block())
     }
 
+    pub fn has_generated_marker_at(&self, pos: IVec3) -> bool {
+        self.system_blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.is_generated_marker())
+    }
+
     pub fn blocks_factory_or_scene_at(&self, pos: IVec3) -> bool {
         self.blocks
             .get(&pos)
@@ -521,7 +527,7 @@ impl WorldBlocks {
             return true;
         }
         if kind.is_factory() || kind.is_scene() {
-            return !self.has_system_block_at(pos);
+            return !self.has_system_block_at(pos) && !self.has_generated_marker_at(pos);
         }
         false
     }
@@ -870,5 +876,20 @@ mod tests {
         );
 
         assert!(!world.can_place_block_kind_at(POS, BlockKind::Goal));
+    }
+
+    #[test]
+    fn factory_cannot_overlap_generated_marker() {
+        let mut world = WorldBlocks::default();
+        world.insert(
+            POS,
+            BlockData {
+                kind: BlockKind::DrillHead,
+                facing: Facing::North,
+            },
+        );
+
+        assert!(!world.can_place_block_kind_at(POS, BlockKind::Wire));
+        assert!(world.can_place_block_kind_at(POS, BlockKind::Material));
     }
 }

@@ -14,6 +14,7 @@ use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
 };
 use crate::shared::config::{ActionKeyName, GameConfig};
+use crate::sim_core::TurnCache;
 
 #[derive(SystemParam)]
 pub(crate) struct SimulationControlDeps<'w> {
@@ -27,6 +28,7 @@ pub(crate) struct SimulationControlDeps<'w> {
     movement_influence: ResMut<'w, MovementInfluenceCache>,
     pusher_state: ResMut<'w, PusherState>,
     world: ResMut<'w, WorldBlocks>,
+    turn_cache: ResMut<'w, TurnCache>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
     debug: Res<'w, DebugState>,
 }
@@ -56,15 +58,13 @@ pub fn simulation_controls(
     let step_key = config.key(ActionKeyName::SimulationStep).key_code();
 
     if keys.just_pressed(simulate_key) {
-        if !deps.simulation.is_active() {
-            start_simulation_state(
-                &mut deps.simulation,
-                &deps.world,
-                &mut deps.structure_state,
-                &mut deps.pusher_state,
-            );
-        }
-        deps.simulation.running = true;
+        start_simulation_if_needed(
+            &mut deps.simulation,
+            &deps.world,
+            &mut deps.structure_state,
+            &mut deps.pusher_state,
+        );
+        request_continuous_run(&mut deps.simulation);
     }
 
     if keys.just_pressed(step_key) {
@@ -92,6 +92,7 @@ pub fn simulation_controls(
         deps.structure_state.clear();
         deps.movement_influence.clear();
         deps.pusher_state.clear();
+        deps.turn_cache.reset_to_turn(0);
         if let Some(snapshot) = factory_snapshot {
             *deps.structure_state = snapshot;
         } else {
@@ -119,6 +120,31 @@ fn start_simulation_state(
     *pusher_state = PusherState::rebuild_from_world(world);
     structure_state.rebuild_for_simulation(world);
     simulation.start_structures = Some(structure_state.clone());
+}
+
+pub fn start_simulation_if_needed(
+    simulation: &mut SimulationState,
+    world: &WorldBlocks,
+    structure_state: &mut StructureState,
+    pusher_state: &mut PusherState,
+) {
+    if !simulation.is_active() {
+        start_simulation_state(simulation, world, structure_state, pusher_state);
+    }
+}
+
+pub fn request_continuous_run(simulation: &mut SimulationState) {
+    simulation.running = true;
+}
+
+pub fn request_one_turn(simulation: &mut SimulationState) -> Result<(), &'static str> {
+    if !simulation.is_active() {
+        return Err("simulation is not active");
+    }
+    simulation.running = false;
+    simulation.speed = 1.0;
+    simulation.step_requested = true;
+    Ok(())
 }
 fn rollback_simulation(
     simulation: &mut SimulationState,

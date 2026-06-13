@@ -69,6 +69,7 @@ pub enum StatusTextKind {
     Hotbar,
     CurrentSave,
     Simulation,
+    TargetBlock,
     SimulationOverlay,
 }
 

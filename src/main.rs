@@ -1,17 +1,15 @@
-mod game;
-mod shared;
-mod tools;
+use open_infinifactory::game::GamePlugin;
+use open_infinifactory::shared::launch::LaunchOptions;
+use open_infinifactory::shared::platform;
 
 #[cfg(target_arch = "wasm32")]
 use bevy::asset::AssetMetaCheck;
 use bevy::prelude::*;
 
-use game::GamePlugin;
-use shared::platform;
-
 #[bevy_main]
 fn main() {
     App::new()
+        .insert_resource(LaunchOptions::from_args())
         .add_plugins(
             DefaultPlugins
                 .set(AssetPlugin {

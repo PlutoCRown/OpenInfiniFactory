@@ -1,0 +1,22 @@
+{
+  "name": "block_planks",
+  "setup": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Planks",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Planks",
+      "layer": "scene"
+    }
+  ]
+}

@@ -1,7 +1,12 @@
+[workspace]
+members = [".", "crates/oif-sim-core"]
+resolver = "2"
+
 [package]
 name = "open_infinifactory"
 version = "0.1.0"
 edition = "2021"
+default-run = "open_infinifactory"
 
 [dependencies]
 bevy = { version = "0.18.1", features = ["experimental_bevy_ui_widgets"] }
@@ -13,6 +18,9 @@ serde_json = "1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3", features = ["Storage", "Window"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tiny_http = "0.12"
 
 [features]
 default = []
@@ -29,3 +37,7 @@ runtime_libs = "target/android-libs"
 label = "OpenInfiniFactory"
 theme = "@android:style/Theme.NoTitleBar.Fullscreen"
 debuggable = false
+
+[[bin]]
+name = "oif-debug-http"
+path = "src/bin/oif-debug-http.rs"

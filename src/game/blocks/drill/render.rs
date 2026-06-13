@@ -1,8 +1,7 @@
 use super::DrillBlock;
 
 use crate::game::blocks::traits::BlockRender;
-use crate::game::blocks::{BlockModel, BlockModelPart, ModelMaterial, ModelMesh, RenderBehavior, WireConnectorBehavior};
-use crate::game::world::direction::{Facing};
+use crate::game::blocks::{BlockModel, BlockModelPart, ModelMaterial, ModelMesh};
 
 const MODEL: &[BlockModelPart] = &[
     BlockModelPart::new(
@@ -18,15 +17,6 @@ const MODEL: &[BlockModelPart] = &[
 ];
 
 impl BlockRender for DrillBlock {
-    fn render_behavior(&self, facing: Facing) -> RenderBehavior {
-        RenderBehavior {
-            wire_connector: Some(WireConnectorBehavior::Device {
-                blocked_offset: facing.forward_ivec3(),
-            }),
-            ..Default::default()
-        }
-    }
-
     fn model(&self) -> BlockModel {
         BlockModel::PartsOnly(MODEL)
     }

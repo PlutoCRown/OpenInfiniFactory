@@ -1,0 +1,22 @@
+{
+  "name": "block_converter",
+  "setup": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Converter",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Converter",
+      "layer": "system"
+    }
+  ]
+}

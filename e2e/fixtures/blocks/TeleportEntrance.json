@@ -1,0 +1,22 @@
+{
+  "name": "block_teleportentrance",
+  "setup": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "TeleportEntrance",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "TeleportEntrance",
+      "layer": "system"
+    }
+  ]
+}

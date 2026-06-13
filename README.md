@@ -2,11 +2,63 @@
 
 A small Bevy prototype for a 3D block puzzle factory game.
 
-## Run
+## Architecture
+
+Two independent Bevy runtimes share the same simulation logic:
+
+| Runtime | Entry | Bevy scope |
+|---------|-------|------------|
+| Game client | `cargo run` | Window, UI, 3D scene, full plugins |
+| Headless sim | `cargo run --bin oif-debug-http` | ECS resources only (`SimCorePlugin`), no window or rendering |
+
+HTTP debug can attach to either runtime (`--debug-http` in the game, or the headless binary). E2E tests drive the headless ECS App.
+
+See `docs/report/architecture.md` for layer breakdown.
+
+## Run (game client)
 
 ```bash
 cargo run
 ```
+
+With embedded debug HTTP (default port 8765):
+
+```bash
+cargo run -- --debug-http
+cargo run -- --debug-http=9000
+```
+
+Load a save on startup:
+
+```bash
+cargo run -- --load-save=world
+```
+
+## Run (headless sim + HTTP)
+
+Build and start the headless ECS server (no window):
+
+```bash
+cargo build --bin oif-debug-http
+cargo run --bin oif-debug-http
+```
+
+Options:
+
+```bash
+cargo run --bin oif-debug-http -- --debug-http=8765
+cargo run --bin oif-debug-http -- --load-save=world
+cargo run --bin oif-debug-http -- --load-fixture=blocks/Conveyor.json
+```
+
+## E2E tests
+
+```bash
+cargo build --bin oif-debug-http
+cd e2e && bun run generate-fixtures && bun test
+```
+
+Details: `e2e/README.md`.
 
 ## Web
 

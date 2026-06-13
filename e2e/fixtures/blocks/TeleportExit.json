@@ -1,0 +1,22 @@
+{
+  "name": "block_teleportexit",
+  "setup": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "TeleportExit",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "TeleportExit",
+      "layer": "system"
+    }
+  ]
+}

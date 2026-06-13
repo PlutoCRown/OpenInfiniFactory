@@ -1,6 +1,8 @@
+pub mod bevy_bridge;
 pub mod block_editing;
 pub mod blocks;
 pub mod cameras;
+pub mod debug;
 pub mod player;
 pub mod session;
 pub mod simulation;
@@ -17,9 +19,12 @@ use bevy::ui_widgets::{slider_self_update, UiWidgetsPlugins};
 
 use crate::shared::config::load_config;
 use crate::shared::i18n::{resolve_language, I18n};
+use crate::shared::launch::LaunchOptions;
 use crate::shared::save::SaveState;
+use crate::sim_core::TurnCache;
 
 use cameras::spawn_ui_camera;
+use debug::DebugToolsPlugin;
 use player::controller::{camera_look, camera_move, spawn_player, sync_cursor_grab};
 use session::{on_exit_playing, prepare_playing_session, rebuild_playing_world, SessionPlugin};
 use state::{
@@ -83,6 +88,7 @@ impl Plugin for GamePlugin {
             .insert_resource(simulation::structure_state::StructureState::default())
             .insert_resource(simulation::movement::PusherState::default())
             .insert_resource(simulation::structures::MovementInfluenceCache::default())
+            .insert_resource(TurnCache::default())
             .insert_resource(settings)
             .insert_resource(UiScale(config.ui_scale))
             .insert_resource(config)
@@ -95,6 +101,7 @@ impl Plugin for GamePlugin {
             .add_plugins(SessionPlugin)
             .add_plugins(GameUiPlugin)
             .add_plugins(PerfPlugin)
+            .add_plugins(DebugToolsPlugin)
             .add_observer(slider_self_update)
             .add_systems(
                 Startup,
@@ -150,8 +157,14 @@ impl Plugin for GamePlugin {
             )
             .add_systems(
                 Update,
-                simulation::runtime::tick_simulation
+                simulation::runtime::prefetch_simulation_turn
                     .after(simulation_controls)
+                    .before(simulation::runtime::tick_simulation),
+            )
+            .add_systems(
+                Update,
+                simulation::runtime::tick_simulation
+                    .after(simulation::runtime::prefetch_simulation_turn)
                     .before(PerfScope::Simulation),
             )
             .add_systems(
@@ -175,6 +188,15 @@ impl Plugin for GamePlugin {
                     .after(PerfScope::Ui)
                     .before(PerfScope::Debug),
             );
+
+        #[cfg(not(target_arch = "wasm32"))]
+        if app
+            .world()
+            .get_resource::<LaunchOptions>()
+            .is_some_and(LaunchOptions::debug_http_enabled)
+        {
+            app.add_systems(Update, debug::poll_debug_http.before(simulation_controls));
+        }
     }
 }
 

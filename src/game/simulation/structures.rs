@@ -84,20 +84,20 @@ pub(super) enum StructureMove {
     },
 }
 
-#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(super) enum MovementMark {
     Conveyor,
     Push,
     Vertical,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(super) struct PusherActor {
     pub(super) pos: IVec3,
     pub(super) animation: PusherAnimationKind,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(super) enum PusherAnimationKind {
     Extend,
     Retract,
