@@ -45,6 +45,14 @@ pub enum FixtureStep {
         #[serde(default)]
         layer: Option<String>,
     },
+    AssertBlockAbsent {
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+    AssertExtendedDeviceCount {
+        count: usize,
+    },
     Run {
         #[serde(default = "default_turns")]
         turns: u64,
@@ -138,6 +146,23 @@ pub fn run_fixture_step(core: &mut SimCoreWorld<'_>, step: &FixtureStep) -> Resu
                         "expected layer `{layer}` at ({x}, {y}, {z}), got `{actual_layer}`"
                     ));
                 }
+            }
+            Ok(())
+        }
+        FixtureStep::AssertBlockAbsent { x, y, z } => {
+            let pos = IVec3::new(*x, *y, *z);
+            if block_at(core.world_blocks(), pos).is_some() {
+                return Err(format!(
+                    "expected no block at ({x}, {y}, {z}), got {:?}",
+                    block_at(core.world_blocks(), pos).map(|block| block.kind)
+                ));
+            }
+            Ok(())
+        }
+        FixtureStep::AssertExtendedDeviceCount { count } => {
+            let actual = core.pusher_state().extended_device_positions().len();
+            if actual != *count {
+                return Err(format!("expected {count} extended devices, got {actual}"));
             }
             Ok(())
         }

@@ -16,7 +16,7 @@ pub fn block_json(world: &WorldBlocks, pos: IVec3) -> Value {
         })
     } else if let Some(block) = world.system_blocks.get(&pos) {
         json!({
-            "layer": "system",
+            "layer": block_layer(block.kind),
             "kind": format!("{:?}", block.kind),
             "facing": format!("{:?}", block.facing),
         })
@@ -59,10 +59,7 @@ pub fn cursor_target_json(placement: &PlacementState, world: &WorldBlocks) -> Va
     }
 }
 
-pub fn simulation_status_json(
-    simulation: &SimulationState,
-    builder_mode: BuilderMode,
-) -> Value {
+pub fn simulation_status_json(simulation: &SimulationState, builder_mode: BuilderMode) -> Value {
     json!({
         "builder_mode": match builder_mode {
             BuilderMode::Edit => "Edit",

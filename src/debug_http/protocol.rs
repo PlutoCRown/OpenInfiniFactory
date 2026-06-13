@@ -7,6 +7,7 @@ pub enum DebugHttpCommand {
         y: Option<i32>,
         z: Option<i32>,
     },
+    GetExtendedDevices,
     GetStatus,
     Run,
     RunOneTurn,
@@ -52,6 +53,9 @@ pub fn parse_http_request(request: &tiny_http::Request) -> DebugHttpCommand {
             y: params.get("y").and_then(|v| v.parse().ok()),
             z: params.get("z").and_then(|v| v.parse().ok()),
         },
+        ("GET", "/getextendeddevices") | ("GET", "/extendeddevices") => {
+            DebugHttpCommand::GetExtendedDevices
+        }
         ("GET", "/status") => DebugHttpCommand::GetStatus,
         ("GET", "/blockkinds") | ("GET", "/blocks") => DebugHttpCommand::BlockKinds,
         ("GET", "/logs") => DebugHttpCommand::GetLogs {
@@ -113,6 +117,7 @@ pub fn help_json() -> String {
         "ok": true,
         "endpoints": [
             {"method": "GET", "path": "/getPosBlock?x=&y=&z=", "desc": "block at coordinate"},
+            {"method": "GET", "path": "/getExtendedDevices", "desc": "extended pusher/blocker positions"},
             {"method": "GET", "path": "/status", "desc": "simulation snapshot"},
             {"method": "GET", "path": "/blockKinds", "desc": "all registered block kinds"},
             {"method": "POST", "path": "/world/reset", "desc": "clear session world"},

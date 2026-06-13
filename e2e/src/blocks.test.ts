@@ -39,10 +39,28 @@ describe("debug HTTP simulation core", () => {
       "sim/wire_detector_power.json",
       "sim/opposing_pushers_shared_head.json",
       "sim/conveyor_blocked_by_pusher_head.json",
+      "sim/four_converging_blockers_shared_head.json",
     ]) {
       const body = await client.post(`/runFixture?path=${path}`);
       expect(body.ok, JSON.stringify(body)).toBe(true);
     }
+  });
+
+  test("four converging blockers expose only one extended device via HTTP", async () => {
+    const client = new DebugClient(PORT);
+    await client.post("/world/reset");
+    await client.post("/loadFixture?path=sim/four_converging_blockers_shared_head.json");
+    await client.post("/beginSimulation");
+    await client.post("/runOneTurn");
+    const extended = await client.get("/getExtendedDevices");
+    expect(extended.ok).toBe(true);
+    expect(extended.count).toBe(1);
+    expect(extended.devices).toHaveLength(1);
+    expect(extended.devices[0].head).toEqual({ x: 0, y: 1, z: 0 });
+    const center = await client.get("/getPosBlock?x=0&y=1&z=0");
+    expect(center.ok).toBe(true);
+    expect(center.block?.kind).toBe("BlockerHead");
+    expect(center.block?.layer).toBe("virtual");
   });
 
   test("runN advances turn counter", async () => {

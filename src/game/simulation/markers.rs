@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 use crate::game::blocks::{BlockData, BlockKind, MarkerBehavior};
+use crate::game::simulation::movement::PusherState;
 use crate::game::world::grid::WorldBlocks;
 
 pub fn refresh_static_generated_markers(world: &mut WorldBlocks) {
@@ -30,7 +31,11 @@ pub(super) fn run_static_marker_phase(world: &mut WorldBlocks) {
     refresh_static_generated_markers(world);
 }
 
-pub(super) fn run_powered_marker_phase(world: &mut WorldBlocks, powered_devices: &HashSet<IVec3>) {
+pub(super) fn run_powered_marker_phase(
+    world: &mut WorldBlocks,
+    powered_devices: &HashSet<IVec3>,
+    pusher_state: &PusherState,
+) {
     let markers: Vec<(IVec3, MarkerBehavior)> = world
         .blocks
         .iter()
@@ -46,9 +51,10 @@ pub(super) fn run_powered_marker_phase(world: &mut WorldBlocks, powered_devices:
         if !matches!(marker, MarkerBehavior::BlockerHead { .. }) {
             continue;
         }
-        if !powered_devices.contains(&pos) {
-            place_generated_marker(world, pos, marker);
+        if powered_devices.contains(&pos) || !pusher_state.is_device_extended(pos) {
+            continue;
         }
+        place_generated_marker(world, pos, marker);
     }
 }
 

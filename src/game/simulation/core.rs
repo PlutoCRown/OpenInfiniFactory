@@ -8,7 +8,7 @@ use crate::game::world::grid::WorldBlocks;
 
 use super::behaviors::{material_source_generation, run_material_behavior_phase, LaserBeam};
 use super::markers::{run_powered_marker_phase, run_static_marker_phase};
-use super::movement::{blocker_animations, PusherState};
+use super::movement::PusherState;
 use super::movement_plan::{collect_movement_plan, execute_movement_plan};
 use super::runtime::{PendingGeneratedMaterials, SignalNetworkCache, SimulationStepStats};
 use super::structures::MovementInfluenceCache;
@@ -89,12 +89,9 @@ pub fn simulate_turn(
             (pos, animation)
         })
         .collect::<HashMap<_, _>>();
-    for (pos, animation) in blocker_animations(&worlds.turn, &powered_devices) {
-        pusher_animations.entry(pos).or_insert(animation);
-    }
 
     run_static_marker_phase(&mut worlds.turn);
-    run_powered_marker_phase(&mut worlds.turn, &powered_devices);
+    run_powered_marker_phase(&mut worlds.turn, &powered_devices, pusher_state);
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
     let behavior_effects = run_material_behavior_phase(

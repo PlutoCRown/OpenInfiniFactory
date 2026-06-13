@@ -7,13 +7,13 @@ use crate::game::world::grid::WorldBlocks;
 use super::gravity::mark_gravity_phase;
 use super::movement::{
     collect_conveyor_candidate, collect_lift_candidate, collect_powered_translate_candidate,
-    collect_pusher_candidate, collect_rotate_candidate, PusherState,
+    collect_pusher_candidate, collect_rotate_candidate, pusher_head_position, PusherState,
 };
 use super::structure_state::StructureState;
 use super::structures::{
-    can_rotate_structure, expanded_move_structure, move_structure, rotate_structure,
-    rotate_facing_internal, rotate_pos_y, MovementCandidate, MovementInfluenceCache,
-    MovementMark, PusherAnimationKind, StructureMove, StructureMovePhaseKind,
+    can_rotate_structure, expanded_move_structure, move_structure, rotate_facing_internal,
+    rotate_pos_y, rotate_structure, MovementCandidate, MovementInfluenceCache, MovementMark,
+    PusherAnimationKind, StructureMove, StructureMovePhaseKind,
 };
 
 #[derive(Clone)]
@@ -67,7 +67,8 @@ pub fn collect_movement_plan(
                 crate::game::blocks::MovementRule::PoweredTranslate { source, offset } => {
                     if matches!(
                         kind,
-                        crate::game::blocks::BlockKind::Pusher | crate::game::blocks::BlockKind::Blocker
+                        crate::game::blocks::BlockKind::Pusher
+                            | crate::game::blocks::BlockKind::Blocker
                     ) {
                         let desired_extended = if kind == crate::game::blocks::BlockKind::Pusher {
                             powered_devices.contains(&pos)
@@ -102,9 +103,7 @@ pub fn collect_movement_plan(
                     }
                 }
                 crate::game::blocks::MovementRule::Translate { source, offset } => {
-                    if let Some(candidate) =
-                        collect_conveyor_candidate(&ctx, pos, source, offset)
-                    {
+                    if let Some(candidate) = collect_conveyor_candidate(&ctx, pos, source, offset) {
                         conveyor.push(candidate);
                     }
                 }
@@ -132,16 +131,24 @@ pub fn collect_movement_plan(
         phase: StructureMovePhaseKind::Fixed,
         candidates: Vec::new(),
     });
-    plan.phases.push(sorted_phase(StructureMovePhaseKind::Rotate, rotate));
-    plan.phases.push(sorted_phase(StructureMovePhaseKind::Push, push));
-    plan.phases.push(sorted_phase(StructureMovePhaseKind::Lift, lift));
-    plan.phases.push(sorted_phase(StructureMovePhaseKind::Gravity, gravity));
-    plan.phases.push(sorted_phase(StructureMovePhaseKind::Conveyor, conveyor));
+    plan.phases
+        .push(sorted_phase(StructureMovePhaseKind::Rotate, rotate));
+    plan.phases
+        .push(sorted_phase(StructureMovePhaseKind::Push, push));
+    plan.phases
+        .push(sorted_phase(StructureMovePhaseKind::Lift, lift));
+    plan.phases
+        .push(sorted_phase(StructureMovePhaseKind::Gravity, gravity));
+    plan.phases
+        .push(sorted_phase(StructureMovePhaseKind::Conveyor, conveyor));
     plan.bare_pusher_animations = bare_pusher_animations;
     plan
 }
 
-fn sorted_phase(phase: StructureMovePhaseKind, mut candidates: Vec<MovementCandidate>) -> MovementPhasePlan {
+fn sorted_phase(
+    phase: StructureMovePhaseKind,
+    mut candidates: Vec<MovementCandidate>,
+) -> MovementPhasePlan {
     candidates.sort_by_key(|candidate| source_sort_key(&candidate.primary));
     MovementPhasePlan { phase, candidates }
 }
@@ -162,33 +169,25 @@ pub fn execute_movement_plan(
 ) -> MovementExecutionOutput {
     let mut moved = HashSet::new();
     let mut animations = HashMap::new();
-    let mut pusher_animations = plan.bare_pusher_animations.clone();
+    let mut pusher_animations = HashMap::new();
 
     for phase in &plan.phases {
-        if phase.phase == StructureMovePhaseKind::Push {
-            for (&pos, animation) in &plan.bare_pusher_animations {
-                if phase
-                    .candidates
-                    .iter()
-                    .any(|candidate| candidate.primary.pusher_actor() == Some(pos))
-                {
-                    continue;
-                }
-                pusher_animations.entry(pos).or_insert(*animation);
-            }
-        }
+        let mut occupied_heads = if phase.phase == StructureMovePhaseKind::Push {
+            pusher_state.hard_head_occupancy(realtime)
+        } else {
+            HashSet::new()
+        };
+        let hard_heads = occupied_heads.clone();
 
-        let hard_heads = pusher_state.hard_head_occupancy(realtime);
         for candidate in &phase.candidates {
-            for movement in
-                std::iter::once(&candidate.primary).chain(candidate.fallbacks.iter())
-            {
+            for movement in std::iter::once(&candidate.primary).chain(candidate.fallbacks.iter()) {
                 if try_execute_move(
                     realtime,
                     turn_structures,
                     pusher_state,
                     movement_influence,
                     &hard_heads,
+                    &mut occupied_heads,
                     movement,
                     &mut moved,
                     &mut animations,
@@ -200,10 +199,33 @@ pub fn execute_movement_plan(
         }
 
         if phase.phase == StructureMovePhaseKind::Push {
-            for (&pos, animation) in &plan.bare_pusher_animations {
-                if pusher_animations.contains_key(&pos) {
-                    apply_pusher_extension_from_animation(pusher_state, realtime, pos, animation);
+            let mut bare_pushers: Vec<_> = plan.bare_pusher_animations.iter().collect();
+            bare_pushers.sort_by_key(|(pos, _)| (pos.x, pos.y, pos.z));
+            for (&pos, animation) in bare_pushers {
+                if phase
+                    .candidates
+                    .iter()
+                    .any(|candidate| candidate.primary.pusher_actor() == Some(pos))
+                {
+                    continue;
                 }
+                if pusher_animations.contains_key(&pos) {
+                    continue;
+                }
+                let Some(head) = pusher_head_position(realtime, pos) else {
+                    continue;
+                };
+                if animation.to_extension <= animation.from_extension {
+                    pusher_animations.insert(pos, *animation);
+                    apply_pusher_extension_from_animation(pusher_state, realtime, pos, animation);
+                    continue;
+                }
+                if occupied_heads.contains(&head) {
+                    continue;
+                }
+                occupied_heads.insert(head);
+                pusher_animations.insert(pos, *animation);
+                apply_pusher_extension_from_animation(pusher_state, realtime, pos, animation);
             }
         }
     }
@@ -234,6 +256,7 @@ fn try_execute_move(
     pusher_state: &mut PusherState,
     movement_influence: &mut MovementInfluenceCache,
     hard_heads: &HashSet<IVec3>,
+    occupied_heads: &mut HashSet<IVec3>,
     movement: &StructureMove,
     moved: &mut HashSet<IVec3>,
     animations: &mut HashMap<IVec3, BlockAnimation>,
@@ -260,11 +283,20 @@ fn try_execute_move(
                 return false;
             };
             if super::structures::hard_pusher_head_blocks_move_public(
-                &expanded,
-                *offset,
-                hard_heads,
+                &expanded, *offset, hard_heads,
             ) {
                 return false;
+            }
+            if let Some(actor) = actor {
+                let extending = matches!(actor.animation, PusherAnimationKind::Extend);
+                if extending {
+                    let Some(head) = pusher_head_position(realtime, actor.pos) else {
+                        return false;
+                    };
+                    if occupied_heads.contains(&head) {
+                        return false;
+                    }
+                }
             }
             for pos in &expanded {
                 if let Some(block) = realtime.blocks.get(pos) {
@@ -283,6 +315,18 @@ fn try_execute_move(
                 }
             }
             if let Some(actor) = actor {
+                let extending = matches!(actor.animation, PusherAnimationKind::Extend);
+                if extending {
+                    let Some(head) = pusher_head_position(realtime, actor.pos) else {
+                        return false;
+                    };
+                    if occupied_heads.contains(&head) {
+                        return false;
+                    }
+                    occupied_heads.insert(head);
+                } else if let Some(head) = pusher_head_position(realtime, actor.pos) {
+                    occupied_heads.remove(&head);
+                }
                 let (from_extension, to_extension) = match actor.animation {
                     PusherAnimationKind::Extend => (0.0, 1.0),
                     PusherAnimationKind::Retract => (1.0, 0.0),
@@ -295,8 +339,7 @@ fn try_execute_move(
                         to_extension,
                     },
                 );
-                let extended = matches!(actor.animation, PusherAnimationKind::Extend);
-                pusher_state.set_extended(actor.pos, realtime, extended);
+                pusher_state.set_extended(actor.pos, realtime, extending);
             }
             let before = expanded.clone();
             moved.extend(expanded.iter().copied());
@@ -413,6 +456,62 @@ mod tests {
         let mut state = StructureState::default();
         state.rebuild_for_simulation(world);
         state
+    }
+
+    #[test]
+    fn four_converging_bare_pushers_only_one_occupies_shared_head_cell() {
+        let center = IVec3::new(1, 1, 0);
+        let north = IVec3::new(1, 1, -1);
+        let south = IVec3::new(1, 1, 1);
+        let east = IVec3::new(2, 1, 0);
+        let west = IVec3::new(0, 1, 0);
+        let mut world = WorldBlocks::default();
+        for pos in [north, south, east, west, center] {
+            world.insert(pos + IVec3::NEG_Y, stone(pos + IVec3::NEG_Y));
+        }
+        world.insert(north, pusher(Facing::South));
+        world.insert(south, pusher(Facing::North));
+        world.insert(east, pusher(Facing::West));
+        world.insert(west, pusher(Facing::East));
+
+        let solution = world.clone();
+        let solution_structures = rebuild_structures(&solution);
+        let mut turn_structures = solution_structures.clone();
+        let mut pusher_state = PusherState::default();
+        let mut movement_influence = MovementInfluenceCache::default();
+        let powered = HashSet::from([north, south, east, west]);
+
+        let plan = collect_movement_plan(
+            &world,
+            &solution,
+            &mut turn_structures,
+            &solution_structures,
+            &powered,
+            &pusher_state,
+            &mut movement_influence,
+        );
+        assert_eq!(plan.bare_pusher_animations.len(), 4);
+        assert!(plan.phases[2].candidates.is_empty());
+
+        let mut realtime = world.clone();
+        let output = execute_movement_plan(
+            &plan,
+            &mut realtime,
+            &mut turn_structures,
+            &mut pusher_state,
+            &mut movement_influence,
+        );
+
+        let heads = pusher_state.hard_head_occupancy(&realtime);
+        assert_eq!(heads, HashSet::from([center]));
+        assert_eq!(
+            output
+                .pusher_animations
+                .values()
+                .filter(|animation| animation.to_extension > animation.from_extension)
+                .count(),
+            1
+        );
     }
 
     #[test]

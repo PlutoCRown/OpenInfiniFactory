@@ -68,6 +68,17 @@ impl PusherState {
             .unwrap_or(false)
     }
 
+    pub fn is_device_extended(&self, pos: IVec3) -> bool {
+        self.is_extended(pos)
+    }
+
+    pub fn extended_device_positions(&self) -> Vec<IVec3> {
+        self.entries
+            .iter()
+            .filter_map(|(pos, entry)| entry.extended.then_some(*pos))
+            .collect()
+    }
+
     fn is_bound_front(&self, pos: IVec3, world: &WorldBlocks) -> bool {
         self.entries
             .get(&pos)
@@ -122,12 +133,16 @@ impl PusherState {
                 if !entry.extended {
                     return None;
                 }
-                let block = world.blocks.get(pos)?;
-                matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker)
-                    .then_some(*pos + block.facing.forward_ivec3())
+                pusher_head_position(world, *pos)
             })
             .collect()
     }
+}
+
+pub fn pusher_head_position(world: &WorldBlocks, pusher_pos: IVec3) -> Option<IVec3> {
+    let block = world.blocks.get(&pusher_pos)?;
+    matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker)
+        .then_some(pusher_pos + block.facing.forward_ivec3())
 }
 
 fn forward(world: &WorldBlocks, pos: IVec3) -> IVec3 {
@@ -136,34 +151,6 @@ fn forward(world: &WorldBlocks, pos: IVec3) -> IVec3 {
         .get(&pos)
         .map(|block| block.facing.forward_ivec3())
         .unwrap_or(IVec3::ZERO)
-}
-
-pub fn blocker_animations(
-    world: &WorldBlocks,
-    powered_devices: &HashSet<IVec3>,
-) -> HashMap<IVec3, PusherAnimation> {
-    world
-        .blocks
-        .iter()
-        .filter_map(|(pos, block)| {
-            (block.kind == BlockKind::Blocker).then_some((
-                *pos,
-                PusherAnimation {
-                    duration: 0.0,
-                    from_extension: if powered_devices.contains(pos) {
-                        1.0
-                    } else {
-                        0.0
-                    },
-                    to_extension: if powered_devices.contains(pos) {
-                        0.0
-                    } else {
-                        1.0
-                    },
-                },
-            ))
-        })
-        .collect()
 }
 
 pub(super) fn sorted_factory_movers(world: &WorldBlocks) -> Vec<(IVec3, BlockKind, MovementRule)> {
@@ -211,13 +198,7 @@ pub(super) fn collect_pusher_candidate(
     let movement = if desired_extended {
         mark_structure_translate(ctx, pos, pos + source, offset, MovementMark::Push)
     } else if pusher_state.is_bound_front(pos, ctx.turn) {
-        mark_structure_translate(
-            ctx,
-            pos,
-            pos + source + offset,
-            -offset,
-            MovementMark::Push,
-        )
+        mark_structure_translate(ctx, pos, pos + source + offset, -offset, MovementMark::Push)
     } else {
         None
     };
@@ -280,12 +261,7 @@ pub(super) fn collect_conveyor_candidate(
 ) -> Option<MovementCandidate> {
     let target = pos + source;
     let primary = mark_structure_translate(ctx, pos, target, offset, MovementMark::Conveyor)?;
-    if can_translate_structure(
-        ctx.turn,
-        primary.structure(),
-        offset,
-        ctx.turn_structures,
-    ) {
+    if can_translate_structure(ctx.turn, primary.structure(), offset, ctx.turn_structures) {
         return Some(MovementCandidate {
             primary: primary.with_source(pos),
             fallbacks: Vec::new(),
@@ -298,8 +274,12 @@ pub(super) fn collect_conveyor_candidate(
     }
     Some(MovementCandidate {
         primary: primary.with_source(pos),
-        fallbacks: vec![StructureMove::translate_marked(structure, -offset, MovementMark::Conveyor)
-            .with_source(pos)],
+        fallbacks: vec![StructureMove::translate_marked(
+            structure,
+            -offset,
+            MovementMark::Conveyor,
+        )
+        .with_source(pos)],
     })
 }
 

@@ -35,6 +35,10 @@ impl<'w> SimCoreWorld<'w> {
         self.world.resource_mut()
     }
 
+    pub fn pusher_state(&self) -> &PusherState {
+        self.world.resource()
+    }
+
     pub fn is_active(&self) -> bool {
         self.control().is_active()
     }

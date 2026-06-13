@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::game::simulation::movement::pusher_head_position;
 use crate::game::world::animation::SIMULATION_TURN_SECONDS;
 use crate::sim_core::{SimulationControl, SimulationDebugLog};
 
@@ -28,6 +29,25 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
                 json_error("headless mode requires ?x=&y=&z= for /getPosBlock")
             }
         }
+        DebugHttpCommand::GetExtendedDevices => state.with_core(|core, _| {
+            let world = core.world_blocks();
+            let devices: Vec<_> = core
+                .pusher_state()
+                .extended_device_positions()
+                .into_iter()
+                .map(|pos| {
+                    serde_json::json!({
+                        "pos": pos_json(pos),
+                        "head": pusher_head_position(world, pos)
+                            .map(|head| pos_json(head)),
+                    })
+                })
+                .collect();
+            json_ok(serde_json::json!({
+                "count": devices.len(),
+                "devices": devices,
+            }))
+        }),
         DebugHttpCommand::GetStatus => {
             let control = state.app.world().resource::<SimulationControl>();
             json_ok(serde_json::json!({

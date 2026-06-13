@@ -1,5 +1,5 @@
 {
-  "name": "opposing_pushers_shared_head",
+  "name": "four_converging_blockers_shared_head",
   "setup": [
     {
       "x": 0,
@@ -16,7 +16,7 @@
       "facing": "North"
     },
     {
-      "x": 2,
+      "x": -1,
       "y": 0,
       "z": 0,
       "kind": "Stone",
@@ -30,73 +30,38 @@
       "facing": "North"
     },
     {
-      "x": 1,
-      "y": 0,
-      "z": -1,
-      "kind": "Stone",
-      "facing": "North"
-    },
-    {
-      "x": 2,
-      "y": 0,
-      "z": -1,
-      "kind": "Stone",
-      "facing": "North"
-    },
-    {
-      "x": 1,
-      "y": 1,
-      "z": 0,
-      "kind": "Platform",
-      "facing": "North"
-    },
-    {
       "x": 0,
-      "y": 1,
-      "z": 0,
-      "kind": "Pusher",
-      "facing": "East"
+      "y": 0,
+      "z": 1,
+      "kind": "Stone",
+      "facing": "North"
     },
     {
-      "x": 2,
+      "x": 1,
       "y": 1,
       "z": 0,
-      "kind": "Pusher",
+      "kind": "Blocker",
       "facing": "West"
     },
     {
-      "x": 1,
-      "y": 2,
-      "z": 0,
-      "kind": "DownDetector",
-      "facing": "North"
-    },
-    {
-      "x": 1,
-      "y": 2,
-      "z": -1,
-      "kind": "Wire",
-      "facing": "North"
-    },
-    {
-      "x": 1,
+      "x": -1,
       "y": 1,
-      "z": -1,
-      "kind": "Wire",
-      "facing": "North"
+      "z": 0,
+      "kind": "Blocker",
+      "facing": "East"
     },
     {
       "x": 0,
       "y": 1,
       "z": -1,
-      "kind": "Wire",
-      "facing": "North"
+      "kind": "Blocker",
+      "facing": "South"
     },
     {
-      "x": 2,
+      "x": 0,
       "y": 1,
-      "z": -1,
-      "kind": "Wire",
+      "z": 1,
+      "kind": "Blocker",
       "facing": "North"
     }
   ],
@@ -111,6 +76,14 @@
     {
       "op": "assertExtendedDeviceCount",
       "count": 1
+    },
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 1,
+      "z": 0,
+      "kind": "BlockerHead",
+      "layer": "virtual"
     }
   ]
 }

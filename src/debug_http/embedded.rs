@@ -253,6 +253,7 @@ fn handle_embedded_debug_command(
             r#"{"ok":true}"#.into()
         }
         DebugHttpCommand::RunN { .. }
+        | DebugHttpCommand::GetExtendedDevices
         | DebugHttpCommand::BlockKinds
         | DebugHttpCommand::WorldReset
         | DebugHttpCommand::BeginSimulation
