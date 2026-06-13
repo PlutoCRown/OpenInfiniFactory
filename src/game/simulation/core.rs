@@ -3,7 +3,11 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 
-use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAnimation};
+use crate::game::world::animation::{
+    BlockAnimation, BlockAnimationKind, PusherAnimation, SIMULATION_TURN_SECONDS,
+};
+use crate::game::world::block_instance::{BlockInstanceId, MaterialBlockRegistry};
+use crate::game::world::factory_registry::FactoryBlockId;
 use crate::game::world::grid::WorldBlocks;
 
 use super::behaviors::{material_source_generation, run_material_behavior_phase, LaserBeam};
@@ -17,8 +21,8 @@ use super::SimulationWorlds;
 #[derive(Clone)]
 pub struct TurnOutput {
     pub turn: u64,
-    pub animations: HashMap<IVec3, BlockAnimation>,
-    pub pusher_animations: HashMap<IVec3, PusherAnimation>,
+    pub animations: HashMap<BlockInstanceId, BlockAnimation>,
+    pub pusher_animations: HashMap<FactoryBlockId, PusherAnimation>,
     pub render_powered_wires: HashSet<IVec3>,
     pub weld_sparks: Vec<IVec3>,
     pub behavior_sparks: Vec<IVec3>,
@@ -32,7 +36,6 @@ pub fn simulate_turn(
     pending_generated: &mut PendingGeneratedMaterials,
     signal_cache: &mut SignalNetworkCache,
     turn: u64,
-    animation_duration: f32,
     pusher_state: &mut PusherState,
     movement_influence: &mut MovementInfluenceCache,
     mut sim_log: Option<&mut crate::sim_core::SimulationDebugLog>,
@@ -47,8 +50,12 @@ pub fn simulate_turn(
     }
 
     worlds.turn.clear_generated_markers();
-    let generated_animations =
-        place_ready_generated_materials(&mut worlds.turn, pending_generated, turn);
+    let generated_animations = place_ready_generated_materials(
+        &mut worlds.turn,
+        pending_generated,
+        &mut worlds.material_registry,
+        turn,
+    );
     sample.prep_ms = mark_elapsed_ms(&mut mark);
 
     signal_cache.refresh(&worlds.turn);
@@ -75,6 +82,7 @@ pub fn simulate_turn(
         &mut realtime,
         &mut worlds.turn_structures,
         &mut worlds.factory_registry,
+        &mut worlds.material_registry,
         pusher_state,
         movement_influence,
     );
@@ -89,9 +97,9 @@ pub fn simulate_turn(
     let pusher_animations = movement_output
         .pusher_animations
         .into_iter()
-        .map(|(pos, mut animation)| {
-            animation.duration = animation_duration;
-            (pos, animation)
+        .map(|(id, mut animation)| {
+            animation.duration = SIMULATION_TURN_SECONDS;
+            (id, animation)
         })
         .collect::<HashMap<_, _>>();
 
@@ -151,8 +159,9 @@ pub fn prepare_upcoming_generation(
 fn place_ready_generated_materials(
     world: &mut WorldBlocks,
     pending_generated: &mut PendingGeneratedMaterials,
+    material_registry: &mut MaterialBlockRegistry,
     turn: u64,
-) -> HashMap<IVec3, BlockAnimation> {
+) -> HashMap<BlockInstanceId, BlockAnimation> {
     let ready = pending_generated.ready_pending_positions(turn);
     let mut animations = HashMap::new();
     for pos in ready {
@@ -161,8 +170,12 @@ fn place_ready_generated_materials(
         };
         if world.can_place_platform_at(pos) {
             world.insert(pos, block);
+            material_registry.on_material_inserted(pos);
+            let id = material_registry
+                .turn_id_at(pos)
+                .expect("material registry missing newly inserted material");
             animations.insert(
-                pos,
+                BlockInstanceId::Material(id),
                 BlockAnimation {
                     from_pos: pos,
                     to_pos: pos,
@@ -179,16 +192,11 @@ fn place_ready_generated_materials(
 }
 
 fn merge_generated_animations(
-    animations: &mut HashMap<IVec3, BlockAnimation>,
-    generated_animations: HashMap<IVec3, BlockAnimation>,
+    animations: &mut HashMap<BlockInstanceId, BlockAnimation>,
+    generated_animations: HashMap<BlockInstanceId, BlockAnimation>,
 ) {
-    for (generated_pos, generated_animation) in generated_animations {
-        let moved_target = animations.iter().find_map(|(target, animation)| {
-            (animation.from_pos == generated_pos).then_some(*target)
-        });
-        if moved_target.is_none() {
-            animations.insert(generated_pos, generated_animation);
-        }
+    for (generated_id, generated_animation) in generated_animations {
+        animations.entry(generated_id).or_insert(generated_animation);
     }
 }
 

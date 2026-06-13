@@ -9,6 +9,7 @@ use crate::game::simulation::runtime::{
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::simulation::SimulationWorlds;
+use crate::game::world::block_instance::MaterialBlockRegistry;
 use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 
@@ -116,6 +117,8 @@ impl<'w> SimCoreWorld<'w> {
                 let mut factory_registry = world.resource_mut::<FactoryBlockRegistry>();
                 *factory_registry = FactoryBlockRegistry::rebuild_from_world(&world_blocks);
                 factory_registry.freeze_solution();
+                *world.resource_mut::<MaterialBlockRegistry>() =
+                    MaterialBlockRegistry::rebuild_from_world(&world_blocks);
             });
     }
 
@@ -146,6 +149,7 @@ impl<'w> SimCoreWorld<'w> {
                 world.resource_mut::<MovementInfluenceCache>().clear();
                 world.resource_mut::<PusherState>().clear();
                 world.resource_mut::<FactoryBlockRegistry>().clear();
+                world.resource_mut::<MaterialBlockRegistry>().clear();
                 let factory_snapshot = control.start_structures.take();
                 if let Some(snapshot) = control.start_snapshot.take() {
                     *world.resource_mut::<WorldBlocks>() = snapshot;
@@ -178,7 +182,7 @@ impl<'w> SimCoreWorld<'w> {
 
     pub fn simulate_next_turn(
         &mut self,
-        animation_duration: f32,
+        _animation_duration: f32,
         sim_log: Option<&mut SimulationDebugLog>,
         stats: Option<&mut SimulationStepStats>,
     ) -> TurnOutput {
@@ -190,6 +194,7 @@ impl<'w> SimCoreWorld<'w> {
             ResMut<'static, SignalNetworkCache>,
             ResMut<'static, StructureState>,
             ResMut<'static, FactoryBlockRegistry>,
+            ResMut<'static, MaterialBlockRegistry>,
             ResMut<'static, MovementInfluenceCache>,
             ResMut<'static, PusherState>,
         )>::new(self.world);
@@ -200,6 +205,7 @@ impl<'w> SimCoreWorld<'w> {
             mut signal_cache,
             mut structure_state,
             mut factory_registry,
+            mut material_registry,
             mut movement_influence,
             mut pusher_state,
         ) = state.get_mut(self.world);
@@ -217,13 +223,13 @@ impl<'w> SimCoreWorld<'w> {
             world_blocks.clone(),
             structure_state.clone(),
             factory_registry.clone(),
+            material_registry.clone(),
         );
         let output = simulate_turn(
             &mut worlds,
             &mut pending_generated,
             &mut signal_cache,
             next_turn,
-            animation_duration,
             &mut pusher_state,
             &mut movement_influence,
             sim_log,
@@ -232,6 +238,7 @@ impl<'w> SimCoreWorld<'w> {
         *world_blocks = worlds.turn;
         *structure_state = worlds.turn_structures;
         *factory_registry = worlds.factory_registry;
+        *material_registry = worlds.material_registry;
         control.turn = next_turn;
         output
     }

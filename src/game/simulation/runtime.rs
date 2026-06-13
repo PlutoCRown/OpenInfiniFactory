@@ -9,13 +9,14 @@ use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     AnimationTiming, BlockAnimation, BlockAnimationKind, SIMULATION_TURN_SECONDS,
 };
+use crate::game::world::block_instance::MaterialBlockRegistry;
 use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_pending_generated_previews, spawn_pending_generated_block, PendingGeneratedPreview,
-    WorldRenderAssets,
+    despawn_pending_generated_previews, spawn_pending_generated_block, BlockEntity,
+    PendingGeneratedPreview, WorldRenderAssets,
 };
-use crate::scene::{apply_turn_output, BlockEntityIndex};
+use crate::scene::{apply_turn_output, apply_turn_output_resync, snap_visuals_to_world, BlockEntityTracker};
 use crate::sim_core::{CachedTurn, SimSnapshot, SimulationWorker, TurnCache};
 
 use super::movement::PusherState;
@@ -109,6 +110,7 @@ impl Default for SimulationStepStats {
 pub struct SimulationPresentationState {
     pub committed_world: WorldBlocks,
     pub last_render_powered_wires: HashSet<IVec3>,
+    pub snap_visuals: bool,
 }
 
 pub fn apply_sim_snapshot(
@@ -118,6 +120,7 @@ pub fn apply_sim_snapshot(
     signal_cache: &mut SignalNetworkCache,
     structure_state: &mut StructureState,
     factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
 ) {
@@ -126,6 +129,7 @@ pub fn apply_sim_snapshot(
     *signal_cache = snapshot.signal_cache.clone();
     *structure_state = snapshot.structure_state.clone();
     *factory_registry = snapshot.factory_registry.clone();
+    *material_registry = snapshot.material_registry.clone();
     *movement_influence = snapshot.movement_influence.clone();
     *pusher_state = snapshot.pusher_state.clone();
 }
@@ -163,18 +167,19 @@ pub fn prefetch_simulation_turn(
 }
 
 #[derive(SystemParam)]
-pub struct SimulationTickDeps<'w> {
+pub struct SimulationTickDeps<'w, 's> {
     world: ResMut<'w, WorldBlocks>,
     pending_generated: ResMut<'w, PendingGeneratedMaterials>,
     signal_cache: ResMut<'w, SignalNetworkCache>,
     structure_state: ResMut<'w, StructureState>,
     factory_registry: ResMut<'w, FactoryBlockRegistry>,
+    material_registry: ResMut<'w, MaterialBlockRegistry>,
     movement_influence: ResMut<'w, MovementInfluenceCache>,
     pusher_state: ResMut<'w, PusherState>,
     turn_cache: ResMut<'w, TurnCache>,
     sim_stats: ResMut<'w, SimulationStepStats>,
     presentation: ResMut<'w, SimulationPresentationState>,
-    block_index: ResMut<'w, BlockEntityIndex>,
+    block_entities: Query<'w, 's, (Entity, &'static BlockEntity)>,
     meshes: ResMut<'w, Assets<Mesh>>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
     debug: Res<'w, DebugState>,
@@ -191,6 +196,22 @@ pub fn tick_simulation(
     let Some(render_assets) = deps.render_assets.as_ref() else {
         return;
     };
+
+    if deps.presentation.snap_visuals {
+        snap_visuals_to_world(
+            &deps.world,
+            &mut commands,
+            &mut deps.meshes,
+            &deps.block_entities,
+            render_assets,
+            &deps.debug,
+            &deps.structure_state,
+            &deps.factory_registry,
+            &deps.material_registry,
+        );
+        deps.presentation.snap_visuals = false;
+    }
+
     if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
         prepare_upcoming_generation(
             &deps.world,
@@ -210,35 +231,41 @@ pub fn tick_simulation(
         return;
     }
 
-    let animation_duration_for = |running: bool, speed: f32| {
-        if running {
-            SIMULATION_TURN_SECONDS / speed.max(0.001)
-        } else {
-            SIMULATION_TURN_SECONDS
-        }
-    };
+    let presentation_duration = presentation_duration_for(simulation.running, simulation.speed);
 
     if simulation.step_requested {
         if let Some(cached) = deps.turn_cache.take_pending(simulation.turn + 1) {
             simulation.step_requested = false;
             simulation.accumulator = 0.0;
             simulation.turn += 1;
-            present_cached_turn(
-                cached,
-                animation_duration_for(simulation.running, simulation.speed),
+            let before_world = deps.presentation.committed_world.clone();
+            let before_wires = deps.presentation.last_render_powered_wires.clone();
+            commit_sim_turn_batch(
+                std::slice::from_ref(&cached),
                 &mut deps.presentation,
                 &mut deps.world,
                 &mut deps.pending_generated,
                 &mut deps.signal_cache,
                 &mut deps.structure_state,
                 &mut deps.factory_registry,
+                &mut deps.material_registry,
                 &mut deps.movement_influence,
                 &mut deps.pusher_state,
+            );
+            present_sim_turn_batch(
+                std::slice::from_ref(&cached),
+                &before_world,
+                &before_wires,
+                presentation_duration,
+                &deps.world,
                 &mut commands,
                 &mut deps.meshes,
-                &mut deps.block_index,
+                &deps.block_entities,
                 render_assets,
                 &deps.debug,
+                &deps.structure_state,
+                &deps.factory_registry,
+                &deps.material_registry,
                 &mut deps.sim_stats,
             );
         }
@@ -261,28 +288,44 @@ pub fn tick_simulation(
     }
 
     simulation.accumulator += time.delta_secs() * simulation.speed / SIMULATION_TURN_SECONDS;
+    let mut turn_batch = Vec::new();
     while simulation.accumulator >= 1.0 {
         let Some(cached) = deps.turn_cache.take_pending(simulation.turn + 1) else {
             break;
         };
         simulation.turn += 1;
         simulation.accumulator -= 1.0;
-        present_cached_turn(
-            cached,
-            animation_duration_for(simulation.running, simulation.speed),
+        turn_batch.push(cached);
+    }
+    if !turn_batch.is_empty() {
+        let before_world = deps.presentation.committed_world.clone();
+        let before_wires = deps.presentation.last_render_powered_wires.clone();
+        commit_sim_turn_batch(
+            &turn_batch,
             &mut deps.presentation,
             &mut deps.world,
             &mut deps.pending_generated,
             &mut deps.signal_cache,
             &mut deps.structure_state,
             &mut deps.factory_registry,
+            &mut deps.material_registry,
             &mut deps.movement_influence,
             &mut deps.pusher_state,
+        );
+        present_sim_turn_batch(
+            &turn_batch,
+            &before_world,
+            &before_wires,
+            presentation_duration,
+            &deps.world,
             &mut commands,
             &mut deps.meshes,
-            &mut deps.block_index,
+            &deps.block_entities,
             render_assets,
             &deps.debug,
+            &deps.structure_state,
+            &deps.factory_registry,
+            &deps.material_registry,
             &mut deps.sim_stats,
         );
     }
@@ -304,52 +347,194 @@ pub fn tick_simulation(
     );
 }
 
-pub fn present_cached_turn(
-    cached: CachedTurn,
-    animation_duration: f32,
+fn presentation_duration_for(running: bool, speed: f32) -> f32 {
+    if running {
+        SIMULATION_TURN_SECONDS / speed.max(0.001)
+    } else {
+        SIMULATION_TURN_SECONDS
+    }
+}
+
+pub fn commit_sim_turn_batch(
+    batch: &[CachedTurn],
     presentation: &mut SimulationPresentationState,
     world: &mut WorldBlocks,
     pending_generated: &mut PendingGeneratedMaterials,
     signal_cache: &mut SignalNetworkCache,
     structure_state: &mut StructureState,
     factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
+    movement_influence: &mut MovementInfluenceCache,
+    pusher_state: &mut PusherState,
+) {
+    for cached in batch {
+        apply_sim_snapshot(
+            &cached.after,
+            world,
+            pending_generated,
+            signal_cache,
+            structure_state,
+            factory_registry,
+            material_registry,
+            movement_influence,
+            pusher_state,
+        );
+        presentation.committed_world = world.clone();
+        presentation.last_render_powered_wires = cached.output.render_powered_wires.clone();
+    }
+}
+
+pub fn present_sim_turn_batch(
+    batch: &[CachedTurn],
+    before_world: &WorldBlocks,
+    before_wires: &HashSet<IVec3>,
+    presentation_duration: f32,
+    after_world: &WorldBlocks,
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    blocks: &Query<(Entity, &BlockEntity)>,
+    render_assets: &WorldRenderAssets,
+    debug: &DebugState,
+    structure_state: &StructureState,
+    factory_registry: &FactoryBlockRegistry,
+    material_registry: &MaterialBlockRegistry,
+    sim_stats: &mut SimulationStepStats,
+) {
+    if batch.is_empty() {
+        return;
+    }
+    let Some(last) = batch.last() else {
+        return;
+    };
+    *sim_stats = last.output.stats.clone();
+    if batch.len() == 1 {
+        let mut tracker = BlockEntityTracker::capture(blocks);
+        apply_turn_output(
+            before_world,
+            after_world,
+            &last.output,
+            before_wires,
+            presentation_duration,
+            commands,
+            meshes,
+            &mut tracker,
+            render_assets,
+            debug,
+            structure_state,
+            factory_registry,
+            material_registry,
+            sim_stats,
+        );
+    } else {
+        apply_turn_output_resync(
+            after_world,
+            &last.output,
+            presentation_duration,
+            commands,
+            meshes,
+            blocks,
+            render_assets,
+            debug,
+            structure_state,
+            factory_registry,
+            material_registry,
+            sim_stats,
+        );
+    }
+}
+
+pub fn present_turn_batch(
+    batch: Vec<CachedTurn>,
+    presentation_duration: f32,
+    presentation: &mut SimulationPresentationState,
+    world: &mut WorldBlocks,
+    pending_generated: &mut PendingGeneratedMaterials,
+    signal_cache: &mut SignalNetworkCache,
+    structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    block_index: &mut BlockEntityIndex,
+    blocks: &Query<(Entity, &BlockEntity)>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     sim_stats: &mut SimulationStepStats,
 ) {
-    let before = presentation.committed_world.clone();
-    apply_sim_snapshot(
-        &cached.after,
+    if batch.is_empty() {
+        return;
+    }
+    let before_world = presentation.committed_world.clone();
+    let before_wires = presentation.last_render_powered_wires.clone();
+    commit_sim_turn_batch(
+        &batch,
+        presentation,
         world,
         pending_generated,
         signal_cache,
         structure_state,
         factory_registry,
+        material_registry,
         movement_influence,
         pusher_state,
     );
-    *sim_stats = cached.output.stats.clone();
-    apply_turn_output(
-        &before,
+    present_sim_turn_batch(
+        &batch,
+        &before_world,
+        &before_wires,
+        presentation_duration,
         world,
-        &cached.output,
-        &presentation.last_render_powered_wires,
-        animation_duration,
         commands,
         meshes,
-        block_index,
+        blocks,
         render_assets,
         debug,
         structure_state,
+        factory_registry,
+        material_registry,
         sim_stats,
     );
-    presentation.last_render_powered_wires = cached.output.render_powered_wires.clone();
-    presentation.committed_world = world.clone();
+}
+
+pub fn present_cached_turn(
+    cached: CachedTurn,
+    presentation_duration: f32,
+    presentation: &mut SimulationPresentationState,
+    world: &mut WorldBlocks,
+    pending_generated: &mut PendingGeneratedMaterials,
+    signal_cache: &mut SignalNetworkCache,
+    structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
+    movement_influence: &mut MovementInfluenceCache,
+    pusher_state: &mut PusherState,
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    blocks: &Query<(Entity, &BlockEntity)>,
+    render_assets: &WorldRenderAssets,
+    debug: &DebugState,
+    sim_stats: &mut SimulationStepStats,
+) {
+    present_turn_batch(
+        vec![cached],
+        presentation_duration,
+        presentation,
+        world,
+        pending_generated,
+        signal_cache,
+        structure_state,
+        factory_registry,
+        material_registry,
+        movement_influence,
+        pusher_state,
+        commands,
+        meshes,
+        blocks,
+        render_assets,
+        debug,
+        sim_stats,
+    );
 }
 
 fn refresh_pending_generated_previews(

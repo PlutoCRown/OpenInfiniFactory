@@ -10,6 +10,7 @@ use crate::game::state::{
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{CarriedItem, InventoryItems};
+use crate::game::world::block_instance::MaterialBlockRegistry;
 use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
@@ -133,11 +134,12 @@ pub fn switch_to_edit_mode_and_rebuild(
     solution_state: &mut SolutionState,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    block_entities: &Query<Entity, With<BlockEntity>>,
+    block_entities: &Query<(Entity, &BlockEntity)>,
     render_assets: Option<&WorldRenderAssets>,
     debug: &DebugState,
     structure_state: &mut StructureState,
     factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
 ) {
@@ -157,6 +159,7 @@ pub fn switch_to_edit_mode_and_rebuild(
         movement_influence.clear();
         pusher_state.clear();
         *factory_registry = FactoryBlockRegistry::rebuild_from_world(world);
+        *material_registry = MaterialBlockRegistry::rebuild_from_world(world);
         rebuild_world_for_debug_state(
             commands,
             meshes,
@@ -164,6 +167,8 @@ pub fn switch_to_edit_mode_and_rebuild(
             render_assets,
             debug,
             structure_state,
+            factory_registry,
+            material_registry,
         );
     }
 }
@@ -173,11 +178,12 @@ pub fn reset_current_solution(
     simulation: &mut SimulationState,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    block_entities: &Query<Entity, With<BlockEntity>>,
+    block_entities: &Query<(Entity, &BlockEntity)>,
     render_assets: Option<&WorldRenderAssets>,
     debug: &DebugState,
     structure_state: &mut StructureState,
     factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     solution_state: &SolutionState,
@@ -195,6 +201,7 @@ pub fn reset_current_solution(
         movement_influence.clear();
         pusher_state.clear();
         *factory_registry = FactoryBlockRegistry::rebuild_from_world(world);
+        *material_registry = MaterialBlockRegistry::rebuild_from_world(world);
         if let Some(render_assets) = render_assets {
             despawn_world(commands, block_entities);
             rebuild_world_for_debug_state(
@@ -204,6 +211,8 @@ pub fn reset_current_solution(
                 render_assets,
                 debug,
                 structure_state,
+                factory_registry,
+                material_registry,
             );
         }
     }
@@ -218,10 +227,11 @@ pub fn exit_to_main_menu(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     render_assets: Option<&WorldRenderAssets>,
-    block_entities: &Query<Entity, With<BlockEntity>>,
+    block_entities: &Query<(Entity, &BlockEntity)>,
     debug: &DebugState,
     structure_state: &mut StructureState,
     factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     next_state: &mut NextState<GameMode>,
@@ -240,6 +250,7 @@ pub fn exit_to_main_menu(
         debug,
         structure_state,
         factory_registry,
+        material_registry,
         movement_influence,
         pusher_state,
     );
@@ -260,11 +271,12 @@ pub fn load_world_into_session(
     simulation: &mut SimulationState,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    block_entities: &Query<Entity, With<BlockEntity>>,
+    block_entities: &Query<(Entity, &BlockEntity)>,
     render_assets: Option<&WorldRenderAssets>,
     debug: &DebugState,
     structure_state: &mut StructureState,
     factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     current_mode: GameMode,
@@ -314,6 +326,7 @@ pub fn load_world_into_session(
     movement_influence.clear();
     pusher_state.clear();
     *factory_registry = FactoryBlockRegistry::rebuild_from_world(world);
+    *material_registry = MaterialBlockRegistry::rebuild_from_world(world);
 
     match current_mode {
         GameMode::StartMenu => next_state.set(GameMode::Playing),
@@ -327,6 +340,8 @@ pub fn load_world_into_session(
                     render_assets,
                     debug,
                     structure_state,
+                    factory_registry,
+                    material_registry,
                 );
             }
         }
@@ -342,10 +357,11 @@ pub fn clear_loaded_world(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     render_assets: Option<&WorldRenderAssets>,
-    block_entities: &Query<Entity, With<BlockEntity>>,
+    block_entities: &Query<(Entity, &BlockEntity)>,
     debug: &DebugState,
     structure_state: &mut StructureState,
     factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
 ) {
@@ -368,6 +384,7 @@ pub fn clear_loaded_world(
     movement_influence.clear();
     pusher_state.clear();
     factory_registry.clear();
+    material_registry.clear();
     if let Some(render_assets) = render_assets {
         despawn_world(commands, block_entities);
         rebuild_world_for_debug_state(
@@ -377,6 +394,8 @@ pub fn clear_loaded_world(
             render_assets,
             debug,
             structure_state,
+            factory_registry,
+            material_registry,
         );
     }
 }

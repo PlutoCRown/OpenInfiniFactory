@@ -1,8 +1,8 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use std::sync::{mpsc, Mutex};
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread::{self, JoinHandle};
-use std::sync::{mpsc, Mutex};
 
 use crate::debug_http::embedded_session::{build_runtime_snapshot, simulation_control_adapter};
 use crate::debug_http::introspection::{
@@ -10,32 +10,35 @@ use crate::debug_http::introspection::{
     get_power_network_json, get_power_networks_json, get_powered_devices_json, get_region_json,
     get_structure_at_json, preview_movement_plan_json,
 };
-use crate::debug_http::protocol::{help_json, json_error, json_ok, DebugHttpCommand, DebugHttpRequest};
+use crate::debug_http::protocol::{
+    help_json, json_error, json_ok, DebugHttpCommand, DebugHttpRequest,
+};
 use crate::debug_http::snapshot::{block_json, cursor_target_json, simulation_status_json};
 use crate::debug_http::world_layer::{
     parse_world_layer_option, resolve_world_blocks, world_layer_label, DebugWorldLayer,
 };
 use crate::game::simulation::core::simulate_turn;
-use crate::game::simulation::runtime::present_cached_turn;
-use crate::game::simulation::SimulationWorlds;
-use crate::game::world::factory_registry::{FactoryBlockId, FactoryBlockRegistry};
-use crate::game::world::animation::SIMULATION_TURN_SECONDS;
-use crate::sim_core::{CachedTurn, SimSnapshot};
 use crate::game::simulation::movement::{pusher_head_position, PusherState};
+use crate::game::simulation::runtime::present_cached_turn;
 use crate::game::simulation::runtime::{
-    PendingGeneratedMaterials, SignalNetworkCache, SimulationPresentationState,
-    SimulationStepStats,
+    PendingGeneratedMaterials, SignalNetworkCache, SimulationPresentationState, SimulationStepStats,
 };
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;
+use crate::game::simulation::SimulationWorlds;
 use crate::game::state::{BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState};
 use crate::game::systems::debug::DebugState;
-use crate::game::systems::simulation_controls::{request_continuous_run, start_simulation_if_needed};
+use crate::game::systems::simulation_controls::{
+    request_continuous_run, start_simulation_if_needed,
+};
 use crate::game::ui::UiRuntime;
+use crate::game::world::animation::SIMULATION_TURN_SECONDS;
+use crate::game::world::block_instance::MaterialBlockRegistry;
+use crate::game::world::factory_registry::{FactoryBlockId, FactoryBlockRegistry};
 use crate::game::world::grid::WorldBlocks;
-use crate::game::world::rendering::WorldRenderAssets;
-use crate::scene::BlockEntityIndex;
+use crate::game::world::rendering::{BlockEntity, WorldRenderAssets};
 use crate::shared::launch::LaunchOptions;
+use crate::sim_core::{CachedTurn, SimSnapshot};
 use crate::sim_core::{SimulationDebugLog, SimulationWorker, TurnCache};
 
 #[derive(Resource)]
@@ -53,12 +56,13 @@ pub struct EmbeddedSimDeps<'w, 's> {
     simulation: ResMut<'w, SimulationState>,
     structure_state: ResMut<'w, StructureState>,
     factory_registry: ResMut<'w, FactoryBlockRegistry>,
+    material_registry: ResMut<'w, MaterialBlockRegistry>,
     pusher_state: ResMut<'w, PusherState>,
     pending_generated: ResMut<'w, PendingGeneratedMaterials>,
     signal_cache: ResMut<'w, SignalNetworkCache>,
     movement_influence: ResMut<'w, MovementInfluenceCache>,
     presentation: ResMut<'w, SimulationPresentationState>,
-    block_index: ResMut<'w, BlockEntityIndex>,
+    block_entities: Query<'w, 's, (Entity, &'static BlockEntity)>,
     meshes: ResMut<'w, Assets<Mesh>>,
     debug: Res<'w, DebugState>,
     sim_stats: ResMut<'w, SimulationStepStats>,
@@ -143,6 +147,7 @@ impl<'w, 's> EmbeddedSimDeps<'w, 's> {
             &self.world,
             &mut self.structure_state,
             &mut self.factory_registry,
+            &mut self.material_registry,
             &mut self.pusher_state,
         );
         self.presentation.committed_world = self.world.clone();
@@ -186,6 +191,7 @@ impl<'w, 's> EmbeddedSimDeps<'w, 's> {
             &self.world,
             &self.structure_state,
             &self.factory_registry,
+            &self.material_registry,
             &self.pending_generated,
             &self.signal_cache,
             &self.movement_influence,
@@ -200,13 +206,13 @@ impl<'w, 's> EmbeddedSimDeps<'w, 's> {
                 snapshot.world.clone(),
                 snapshot.structure_state.clone(),
                 snapshot.factory_registry.clone(),
+                snapshot.material_registry.clone(),
             );
             let output = simulate_turn(
                 &mut worlds,
                 &mut snapshot.pending_generated,
                 &mut snapshot.signal_cache,
                 next_turn,
-                SIMULATION_TURN_SECONDS,
                 &mut snapshot.pusher_state,
                 &mut snapshot.movement_influence,
                 Some(sim_log),
@@ -215,6 +221,7 @@ impl<'w, 's> EmbeddedSimDeps<'w, 's> {
             snapshot.world = worlds.turn;
             snapshot.structure_state = worlds.turn_structures;
             snapshot.factory_registry = worlds.factory_registry;
+            snapshot.material_registry = worlds.material_registry;
             self.simulation.turn = next_turn;
             let cached = CachedTurn {
                 output,
@@ -229,11 +236,12 @@ impl<'w, 's> EmbeddedSimDeps<'w, 's> {
                 &mut self.signal_cache,
                 &mut self.structure_state,
                 &mut self.factory_registry,
+                &mut self.material_registry,
                 &mut self.movement_influence,
                 &mut self.pusher_state,
                 &mut self.commands,
                 &mut self.meshes,
-                &mut self.block_index,
+                &self.block_entities,
                 render_assets,
                 &self.debug,
                 &mut self.sim_stats,
@@ -279,7 +287,10 @@ pub fn poll_debug_http(
     }
 }
 
-fn embedded_http_sim_ready(builder_mode: BuilderMode, render_ready: bool) -> Result<(), &'static str> {
+fn embedded_http_sim_ready(
+    builder_mode: BuilderMode,
+    render_ready: bool,
+) -> Result<(), &'static str> {
     if builder_mode != BuilderMode::Play {
         return Err("switch to Play mode first");
     }
@@ -362,6 +373,7 @@ fn handle_embedded_debug_command(
                 &sim_deps.world,
                 &mut sim_deps.structure_state,
                 &mut sim_deps.factory_registry,
+                &mut sim_deps.material_registry,
                 &mut sim_deps.pusher_state,
             );
             request_continuous_run(&mut sim_deps.simulation);
@@ -462,7 +474,10 @@ fn handle_embedded_debug_command(
         }
         DebugHttpCommand::GetPowerNetworks => {
             sim_deps.signal_cache.ensure_fresh(&sim_deps.world);
-            json_ok(get_power_networks_json(&sim_deps.world, &mut sim_deps.signal_cache))
+            json_ok(get_power_networks_json(
+                &sim_deps.world,
+                &mut sim_deps.signal_cache,
+            ))
         }
         DebugHttpCommand::GetPowerNetwork { id } => {
             let Some(id) = id else {
@@ -538,7 +553,11 @@ fn handle_embedded_debug_command(
             let Some(id) = id else {
                 return json_error("getFactoryPos requires ?id=");
             };
-            match get_factory_pos_json(FactoryBlockId::from_u32(id), &sim_deps.factory_registry, layer) {
+            match get_factory_pos_json(
+                FactoryBlockId::from_u32(id),
+                &sim_deps.factory_registry,
+                layer,
+            ) {
                 Ok(data) => json_ok(data),
                 Err(error) => json_error(&error),
             }
@@ -593,8 +612,8 @@ fn handle_embedded_debug_command(
 
 #[cfg(test)]
 mod tests {
-    use crate::debug_http::embedded_session::build_runtime_snapshot;
     use super::*;
+    use crate::debug_http::embedded_session::build_runtime_snapshot;
 
     #[test]
     fn build_runtime_snapshot_requires_active_simulation() {
@@ -610,6 +629,7 @@ mod tests {
             &world,
             &structures,
             &FactoryBlockRegistry::default(),
+            &MaterialBlockRegistry::default(),
             &pending,
             &signal,
             &influence,

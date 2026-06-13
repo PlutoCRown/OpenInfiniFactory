@@ -1,7 +1,7 @@
-mod entity_index;
+mod block_entities;
 mod incremental;
 mod turn_visuals;
 
-pub use entity_index::BlockEntityIndex;
+pub use block_entities::BlockEntityTracker;
 pub use incremental::{block_data_at, refresh_edit_changes};
-pub use turn_visuals::{apply_turn_output, sync_block_entity_index};
+pub use turn_visuals::{apply_turn_output, apply_turn_output_resync, snap_visuals_to_world};

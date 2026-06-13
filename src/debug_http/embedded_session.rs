@@ -7,6 +7,7 @@ use crate::game::simulation::runtime::{
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::state::SimulationState;
+use crate::game::world::block_instance::MaterialBlockRegistry;
 use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 use crate::sim_core::{SimSnapshot, SimulationControl};
@@ -28,6 +29,7 @@ pub fn build_runtime_snapshot(
     world: &WorldBlocks,
     structure_state: &StructureState,
     factory_registry: &FactoryBlockRegistry,
+    material_registry: &MaterialBlockRegistry,
     pending_generated: &PendingGeneratedMaterials,
     signal_cache: &SignalNetworkCache,
     movement_influence: &MovementInfluenceCache,
@@ -47,6 +49,7 @@ pub fn build_runtime_snapshot(
         world: world.clone(),
         structure_state: structure_state.clone(),
         factory_registry: factory_registry.clone(),
+        material_registry: material_registry.clone(),
         pending_generated: pending_generated.clone(),
         signal_cache: signal_cache.clone(),
         movement_influence: movement_influence.clone(),

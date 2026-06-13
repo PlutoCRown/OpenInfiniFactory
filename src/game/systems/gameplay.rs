@@ -7,6 +7,7 @@ use crate::game::player::controller::{
     player_intersects_block, teleport_player_preserve_offset, FlyCamera,
 };
 use crate::game::simulation::markers::refresh_static_generated_markers;
+use crate::game::simulation::runtime::SimulationPresentationState;
 use crate::game::simulation::structure_state::{
     query_factory_structure, StructureFreedom, StructureKind, StructureState,
 };
@@ -23,11 +24,12 @@ use crate::game::ui::{
     OpenSettingsDropdown, PanelDragState, PendingKeyBind, TextPromptState, UiRuntime, HOTBAR_SLOTS,
 };
 use crate::game::world::animation::BlockAnimation;
+use crate::game::world::block_instance::{BlockInstanceId, MaterialBlockRegistry};
+use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::{
     grid_to_world, raycast_blocks, raycast_edit_drag_grid, MaterialWeld, TargetHit, WorldBlocks,
 };
 use crate::game::world::rendering::StructureBounds;
-use crate::scene::{refresh_edit_changes, BlockEntityIndex};
 use crate::game::world::rendering::{
     block_face_highlight_transform, despawn_edit_previews, rebuild_world_for_debug_state,
     rebuild_world_with_animations, rebuild_world_with_animations_for_debug_state,
@@ -35,6 +37,7 @@ use crate::game::world::rendering::{
     spawn_edit_preview, AimFaceHighlight, BlockEntity, EditPreview, EditPreviewKind, HoverMarker,
     HoverStructureBounds, WorldRenderAssets,
 };
+use crate::scene::refresh_edit_changes;
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
 #[derive(SystemParam)]
@@ -79,7 +82,8 @@ pub struct PlacementQueries<'w, 's> {
     render_assets: Option<Res<'w, WorldRenderAssets>>,
     debug: Res<'w, DebugState>,
     structure_state: ResMut<'w, StructureState>,
-    block_index: ResMut<'w, BlockEntityIndex>,
+    factory_registry: ResMut<'w, FactoryBlockRegistry>,
+    material_registry: ResMut<'w, MaterialBlockRegistry>,
 }
 
 pub fn gameplay_input(
@@ -93,6 +97,7 @@ pub fn gameplay_input(
     mut carried: ResMut<CarriedItem>,
     mut panel_close: PanelCloseDeps,
     mut simulation: ResMut<SimulationState>,
+    mut presentation: ResMut<SimulationPresentationState>,
     mut commands: Commands,
 ) {
     let bindings = &config.key_bindings;
@@ -119,6 +124,7 @@ pub fn gameplay_input(
                 simulation.running = false;
                 simulation.step_requested = false;
                 simulation.speed = 1.0;
+                presentation.snap_visuals = true;
             }
         }
     }
@@ -192,7 +198,8 @@ pub fn placement_input(
         render_assets,
         debug,
         mut structure_state,
-        mut block_index,
+        mut factory_registry,
+        mut material_registry,
     } = queries;
 
     if *mode.get() != GameMode::Playing || !playing_ui.active_play() {
@@ -267,6 +274,8 @@ pub fn placement_input(
             &render_assets,
             &debug,
             &mut structure_state,
+            &mut factory_registry,
+            &mut material_registry,
         ) {
             solution_state.dirty = true;
         }
@@ -300,6 +309,8 @@ pub fn placement_input(
                 &render_assets,
                 &debug,
                 &mut structure_state,
+                &mut factory_registry,
+                &mut material_registry,
             ) {
                 solution_state.dirty = true;
             }
@@ -329,6 +340,8 @@ pub fn placement_input(
                 &render_assets,
                 &debug,
                 &mut structure_state,
+                &mut factory_registry,
+                &mut material_registry,
             ) {
                 solution_state.dirty = true;
             } else if selected_place_block(&inventory, *builder_mode, &placement)
@@ -429,10 +442,12 @@ pub fn placement_input(
                     player_pos,
                     &mut commands,
                     &mut meshes,
+                    &block_entities,
                     &render_assets,
                     &debug,
                     &mut structure_state,
-                    &mut block_index,
+                    &mut factory_registry,
+                    &mut material_registry,
                 ) {
                     solution_state.dirty = true;
                 }
@@ -567,6 +582,8 @@ fn handle_selection_area_input(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
 ) -> bool {
     let mut changed = false;
     if let Some(drag) = placement.selection.drag.as_mut() {
@@ -590,6 +607,8 @@ fn handle_selection_area_input(
                         render_assets,
                         debug,
                         structure_state,
+                        factory_registry,
+                        material_registry,
                         bounds,
                         drag.offset,
                     ) {
@@ -664,6 +683,8 @@ fn move_selection(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
     bounds: SelectionBounds,
     offset: IVec3,
 ) -> bool {
@@ -720,6 +741,8 @@ fn move_selection(
         );
     }
     world.replace_material_welds(updated_welds);
+    *factory_registry = FactoryBlockRegistry::rebuild_from_world(world);
+    *material_registry = MaterialBlockRegistry::rebuild_from_world(world);
     if debug.factory_activity {
         despawn_block_entities(commands, block_entities);
         rebuild_world_with_animations_for_debug_state(
@@ -730,10 +753,14 @@ fn move_selection(
             &animations,
             debug,
             structure_state,
+            factory_registry,
+            material_registry,
         );
     } else {
         for (target, animation) in animations {
             let block = world.blocks[&target];
+            let block_id =
+                BlockInstanceId::resolve(world, factory_registry, material_registry, target);
             spawn_block_with_animation(
                 commands,
                 meshes,
@@ -743,6 +770,7 @@ fn move_selection(
                 block,
                 Some(animation),
                 None,
+                block_id,
             );
         }
     }
@@ -768,6 +796,8 @@ fn alternate_block_at(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
 ) -> bool {
     let Some(block) = world.blocks.get_mut(&pos) else {
         return false;
@@ -793,6 +823,8 @@ fn alternate_block_at(
         render_assets,
         debug,
         structure_state,
+        factory_registry,
+        material_registry,
     );
     true
 }
@@ -807,6 +839,8 @@ fn rotate_block_at(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
 ) -> bool {
     let Some(block) = world.blocks.get_mut(&pos) else {
         return false;
@@ -835,6 +869,8 @@ fn rotate_block_at(
     );
 
     despawn_block_entities(commands, block_entities);
+    *factory_registry = FactoryBlockRegistry::rebuild_from_world(world);
+    *material_registry = MaterialBlockRegistry::rebuild_from_world(world);
     if debug.factory_activity {
         rebuild_world_with_animations_for_debug_state(
             commands,
@@ -844,9 +880,20 @@ fn rotate_block_at(
             &animations,
             debug,
             structure_state,
+            factory_registry,
+            material_registry,
         );
     } else {
-        rebuild_world_with_animations(commands, meshes, world, render_assets, &animations, None);
+        rebuild_world_with_animations(
+            commands,
+            meshes,
+            world,
+            render_assets,
+            &animations,
+            None,
+            factory_registry,
+            material_registry,
+        );
     }
     true
 }
@@ -946,10 +993,12 @@ fn commit_edit_gesture(
     player_pos: Option<Vec3>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
+    block_entities: &Query<(Entity, &BlockEntity)>,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &mut StructureState,
-    block_index: &mut BlockEntityIndex,
+    factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
 ) -> bool {
     let mut changed_positions = std::collections::HashSet::new();
     match gesture.kind {
@@ -983,14 +1032,18 @@ fn commit_edit_gesture(
         return false;
     }
     refresh_edit_generated_markers(world);
+    *factory_registry = FactoryBlockRegistry::rebuild_from_world(world);
+    *material_registry = MaterialBlockRegistry::rebuild_from_world(world);
     refresh_edit_changes(
         commands,
         meshes,
-        block_index,
+        block_entities,
         world,
         render_assets,
         debug,
         structure_state,
+        factory_registry,
+        material_registry,
         &changed_positions,
     );
     true

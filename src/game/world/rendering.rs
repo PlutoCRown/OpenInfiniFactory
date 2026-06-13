@@ -19,6 +19,8 @@ use crate::game::world::animation::{
     AnimationTiming, BlockAnimation, BlockAnimationKind, LaserBeamBurst, PusherAnimation,
     WeldSpark,
 };
+use crate::game::world::block_instance::{BlockInstanceId, MaterialBlockRegistry};
+use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
 
@@ -38,6 +40,7 @@ pub fn block_face_highlight_transform(block_pos: IVec3, normal: IVec3) -> Transf
 
 #[derive(Component)]
 pub struct BlockEntity {
+    pub id: crate::game::world::block_instance::BlockInstanceId,
     pub pos: IVec3,
 }
 
@@ -197,6 +200,8 @@ pub fn rebuild_world_on_enter(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
 ) {
     structure_state.clear();
     if debug.factory_activity {
@@ -209,6 +214,8 @@ pub fn rebuild_world_on_enter(
         render_assets,
         debug,
         structure_state,
+        factory_registry,
+        material_registry,
     );
 }
 
@@ -364,6 +371,7 @@ fn spawn_block_icon_model(
         true,
         Some((origin - Vec3::splat(0.5), icon_layer)),
         None,
+        None,
     );
 }
 
@@ -373,12 +381,42 @@ pub fn rebuild_world(
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     factory_debug: Option<&StructureState>,
+    factory_registry: &FactoryBlockRegistry,
+    material_registry: &MaterialBlockRegistry,
 ) {
     for (pos, data) in &world.blocks {
-        spawn_block(commands, meshes, assets, world, *pos, *data, factory_debug);
+        let block_id = BlockInstanceId::resolve(world, factory_registry, material_registry, *pos);
+        spawn_block(
+            commands,
+            meshes,
+            assets,
+            world,
+            *pos,
+            *data,
+            factory_debug,
+            block_id,
+        );
     }
     for (pos, data) in &world.system_blocks {
-        spawn_block(commands, meshes, assets, world, *pos, *data, factory_debug);
+        spawn_block_model(
+            commands,
+            meshes,
+            assets,
+            world,
+            *pos,
+            *data,
+            assets.block_material(data.kind),
+            None,
+            None,
+            None,
+            AnimationTiming::edit(),
+            false,
+            false,
+            true,
+            None,
+            factory_debug,
+            None,
+        );
     }
 }
 
@@ -389,13 +427,19 @@ pub fn rebuild_world_for_debug_state(
     assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
 ) {
+    *factory_registry = FactoryBlockRegistry::rebuild_from_world(world);
+    *material_registry = MaterialBlockRegistry::rebuild_from_world(world);
     rebuild_world(
         commands,
         meshes,
         world,
         assets,
         debug.factory_activity.then_some(structure_state),
+        factory_registry,
+        material_registry,
     );
 }
 
@@ -407,7 +451,11 @@ pub fn rebuild_world_with_animations_for_debug_state(
     animations: &HashMap<IVec3, BlockAnimation>,
     debug: &DebugState,
     structure_state: &StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
 ) {
+    *factory_registry = FactoryBlockRegistry::rebuild_from_world(world);
+    *material_registry = MaterialBlockRegistry::rebuild_from_world(world);
     rebuild_world_with_animations(
         commands,
         meshes,
@@ -415,11 +463,13 @@ pub fn rebuild_world_with_animations_for_debug_state(
         assets,
         animations,
         debug.factory_activity.then_some(structure_state),
+        factory_registry,
+        material_registry,
     );
 }
 
-pub fn despawn_world(commands: &mut Commands, block_entities: &Query<Entity, With<BlockEntity>>) {
-    for entity in block_entities {
+pub fn despawn_world(commands: &mut Commands, blocks: &Query<(Entity, &BlockEntity)>) {
+    for (entity, _) in blocks.iter() {
         commands.entity(entity).despawn();
     }
 }
@@ -617,6 +667,7 @@ pub fn spawn_block_preview(
         true,
         None,
         None,
+        None,
     );
 }
 
@@ -628,7 +679,8 @@ pub fn spawn_block(
     pos: IVec3,
     data: BlockData,
     factory_debug: Option<&StructureState>,
-) {
+    block_id: Option<BlockInstanceId>,
+) -> Entity {
     spawn_block_with_animation(
         commands,
         meshes,
@@ -638,7 +690,8 @@ pub fn spawn_block(
         data,
         None,
         factory_debug,
-    );
+        block_id,
+    )
 }
 
 pub fn spawn_block_with_animation(
@@ -650,6 +703,7 @@ pub fn spawn_block_with_animation(
     data: BlockData,
     animation: Option<BlockAnimation>,
     factory_debug: Option<&StructureState>,
+    block_id: Option<BlockInstanceId>,
 ) -> Entity {
     spawn_block_with_timed_animation(
         commands,
@@ -662,6 +716,7 @@ pub fn spawn_block_with_animation(
         AnimationTiming::edit(),
         factory_debug,
         false,
+        block_id,
     )
 }
 
@@ -676,6 +731,7 @@ pub fn spawn_block_with_timed_animation(
     timing: AnimationTiming,
     factory_debug: Option<&StructureState>,
     powered_wire: bool,
+    block_id: Option<BlockInstanceId>,
 ) -> Entity {
     spawn_block_model(
         commands,
@@ -689,11 +745,12 @@ pub fn spawn_block_with_timed_animation(
         animation,
         None,
         timing,
-        true,
+        block_id.is_some(),
         false,
         true,
         None,
         factory_debug,
+        block_id,
     )
 }
 
@@ -724,6 +781,7 @@ pub fn spawn_pending_generated_block(
         false,
         None,
         None,
+        None,
     );
 }
 
@@ -734,6 +792,8 @@ pub fn rebuild_world_with_animations(
     assets: &WorldRenderAssets,
     animations: &HashMap<IVec3, BlockAnimation>,
     factory_debug: Option<&StructureState>,
+    factory_registry: &FactoryBlockRegistry,
+    material_registry: &MaterialBlockRegistry,
 ) {
     rebuild_world_with_timed_animations(
         commands,
@@ -743,6 +803,8 @@ pub fn rebuild_world_with_animations(
         animations,
         AnimationTiming::edit(),
         factory_debug,
+        factory_registry,
+        material_registry,
     );
 }
 
@@ -754,8 +816,11 @@ pub fn rebuild_world_with_timed_animations(
     animations: &HashMap<IVec3, BlockAnimation>,
     timing: AnimationTiming,
     factory_debug: Option<&StructureState>,
+    factory_registry: &FactoryBlockRegistry,
+    material_registry: &MaterialBlockRegistry,
 ) {
     for (pos, data) in &world.blocks {
+        let block_id = BlockInstanceId::resolve(world, factory_registry, material_registry, *pos);
         spawn_block_model(
             commands,
             meshes,
@@ -768,11 +833,12 @@ pub fn rebuild_world_with_timed_animations(
             animations.get(pos).copied(),
             None,
             timing,
-            true,
+            block_id.is_some(),
             false,
             true,
             None,
             factory_debug,
+            block_id,
         );
     }
     for (pos, data) in &world.system_blocks {
@@ -788,9 +854,10 @@ pub fn rebuild_world_with_timed_animations(
             None,
             None,
             timing,
-            true,
+            false,
             false,
             true,
+            None,
             None,
             None,
         );
@@ -827,6 +894,7 @@ pub fn rebuild_world_with_runtime_animations(
             false,
             None,
             factory_debug,
+            None,
         );
     }
     for (pos, data) in &world.system_blocks {
@@ -845,6 +913,7 @@ pub fn rebuild_world_with_runtime_animations(
             true,
             false,
             false,
+            None,
             None,
             None,
         );
@@ -1092,6 +1161,7 @@ pub(crate) fn spawn_world_block_entity(
     world: &WorldBlocks,
     pos: IVec3,
     data: BlockData,
+    block_id: crate::game::world::block_instance::BlockInstanceId,
     animation: Option<BlockAnimation>,
     pusher_animation: Option<PusherAnimation>,
     timing: AnimationTiming,
@@ -1115,6 +1185,7 @@ pub(crate) fn spawn_world_block_entity(
         true,
         None,
         factory_debug,
+        Some(block_id),
     )
 }
 
@@ -1135,6 +1206,7 @@ fn spawn_block_model(
     show_generator_preview: bool,
     icon_render: Option<(Vec3, &RenderLayers)>,
     factory_debug: Option<&StructureState>,
+    block_id: Option<crate::game::world::block_instance::BlockInstanceId>,
 ) -> Entity {
     let debug_overlay = factory_debug.and_then(|structure_state| {
         factory_debug_overlay_material(assets, structure_state, pos, data.kind)
@@ -1217,7 +1289,9 @@ fn spawn_block_model(
     }
 
     if with_block_entity {
-        entity.insert(BlockEntity { pos });
+        if let Some(id) = block_id {
+            entity.insert(BlockEntity { id, pos });
+        }
     }
 
     if pending_generated_preview {

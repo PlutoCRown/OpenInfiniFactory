@@ -4,7 +4,6 @@ use std::thread::{self, JoinHandle};
 
 use crate::game::simulation::core::simulate_turn;
 use crate::game::simulation::SimulationWorlds;
-use crate::game::world::animation::SIMULATION_TURN_SECONDS;
 use crate::sim_core::SimulationDebugLog;
 
 use super::snapshot::{CachedTurn, SimSnapshot};
@@ -107,7 +106,7 @@ fn worker_main(command_rx: Receiver<WorkerCommand>, result_tx: Sender<CachedTurn
                 display_turn,
                 running,
                 step_requested,
-                speed,
+                speed: _,
                 active,
             } => {
                 if !active {
@@ -120,24 +119,19 @@ fn worker_main(command_rx: Receiver<WorkerCommand>, result_tx: Sender<CachedTurn
                 let target = display_turn + depth;
                 while simulated_through < target {
                     let next_turn = simulated_through + 1;
-                    let animation_duration = if running {
-                        SIMULATION_TURN_SECONDS / speed.max(0.001)
-                    } else {
-                        SIMULATION_TURN_SECONDS
-                    };
                     let mut worlds = SimulationWorlds::from_snapshot_parts(
                         snapshot.solution.clone(),
                         snapshot.solution_structures.clone(),
                         snapshot.world.clone(),
                         snapshot.structure_state.clone(),
                         snapshot.factory_registry.clone(),
+                        snapshot.material_registry.clone(),
                     );
                     let output = simulate_turn(
                         &mut worlds,
                         &mut snapshot.pending_generated,
                         &mut snapshot.signal_cache,
                         next_turn,
-                        animation_duration,
                         &mut snapshot.pusher_state,
                         &mut snapshot.movement_influence,
                         None,
@@ -146,6 +140,7 @@ fn worker_main(command_rx: Receiver<WorkerCommand>, result_tx: Sender<CachedTurn
                     snapshot.world = worlds.turn;
                     snapshot.structure_state = worlds.turn_structures;
                     snapshot.factory_registry = worlds.factory_registry;
+                    snapshot.material_registry = worlds.material_registry;
                     simulated_through = next_turn;
                     let after = snapshot.clone();
                     if result_tx.send(CachedTurn { output, after }).is_err() {

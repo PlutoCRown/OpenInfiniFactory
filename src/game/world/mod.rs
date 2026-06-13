@@ -1,4 +1,5 @@
 pub mod animation;
+pub mod block_instance;
 pub mod direction;
 pub mod factory_registry;
 pub mod grid;

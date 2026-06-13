@@ -1,5 +1,6 @@
 use crate::game::systems::perf::PerfStats;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::game::player::controller::{player_collision_box, FlyCamera};
@@ -7,6 +8,8 @@ use crate::game::simulation::runtime::SimulationStepStats;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
 use crate::game::ui::{PendingKeyBind, TextPromptState};
+use crate::game::world::block_instance::MaterialBlockRegistry;
+use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
@@ -30,6 +33,19 @@ pub struct DebugPanel;
 
 #[derive(Component)]
 pub struct DebugText;
+
+#[derive(SystemParam)]
+pub struct FactoryActivityDebugDeps<'w, 's> {
+    pub commands: Commands<'w, 's>,
+    pub world: Res<'w, WorldBlocks>,
+    pub meshes: ResMut<'w, Assets<Mesh>>,
+    pub render_assets: Option<Res<'w, WorldRenderAssets>>,
+    pub block_entities: Query<'w, 's, (Entity, &'static BlockEntity)>,
+    pub structure_state: ResMut<'w, StructureState>,
+    pub factory_registry: ResMut<'w, FactoryBlockRegistry>,
+    pub material_registry: ResMut<'w, MaterialBlockRegistry>,
+    pub simulation: Res<'w, SimulationState>,
+}
 
 pub fn load_debug_font(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
     let font = Font::try_from_bytes(bevy::text::DEFAULT_FONT_DATA.to_vec())
@@ -89,13 +105,7 @@ pub fn toggle_factory_activity_debug(
     mode: Res<State<GameMode>>,
     playing_ui: Res<PlayingUiState>,
     mut debug: ResMut<DebugState>,
-    mut structure_state: ResMut<StructureState>,
-    simulation: Res<SimulationState>,
-    mut commands: Commands,
-    world: Res<WorldBlocks>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    render_assets: Option<Res<WorldRenderAssets>>,
-    block_entities: Query<Entity, With<BlockEntity>>,
+    mut deps: FactoryActivityDebugDeps,
 ) {
     if pending_key_bind.0.is_some()
         || text_prompt.is_open()
@@ -103,27 +113,29 @@ pub fn toggle_factory_activity_debug(
     {
         return;
     }
-    let Some(render_assets) = render_assets.as_ref() else {
+    let Some(render_assets) = deps.render_assets.as_ref() else {
         return;
     };
 
     if keys.just_pressed(config.key(ActionKeyName::DebugStructure).key_code()) {
         debug.factory_activity = !debug.factory_activity;
         if debug.factory_activity {
-            if structure_state.is_empty() {
-                structure_state.rebuild_factory_for_debug(&world);
+            if deps.structure_state.is_empty() {
+                deps.structure_state.rebuild_factory_for_debug(&deps.world);
             }
-        } else if structure_state.is_empty() || !simulation.is_active() {
-            structure_state.clear();
+        } else if deps.structure_state.is_empty() || !deps.simulation.is_active() {
+            deps.structure_state.clear();
         }
-        despawn_world(&mut commands, &block_entities);
+        despawn_world(&mut deps.commands, &deps.block_entities);
         rebuild_world_for_debug_state(
-            &mut commands,
-            &mut meshes,
-            &world,
-            &render_assets,
+            &mut deps.commands,
+            &mut deps.meshes,
+            &deps.world,
+            render_assets,
             &debug,
-            &structure_state,
+            &deps.structure_state,
+            &mut deps.factory_registry,
+            &mut deps.material_registry,
         );
     }
 }

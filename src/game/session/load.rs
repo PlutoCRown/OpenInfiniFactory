@@ -43,6 +43,7 @@ pub fn handle_load_world(
             &world.debug,
             &mut world.structure_state,
             &mut world.factory_registry,
+            &mut world.material_registry,
             &mut world.movement_influence,
             &mut world.pusher_state,
             *mode.get(),
@@ -88,6 +89,7 @@ pub fn handle_create_new_puzzle(
                 &world.debug,
                 &mut world.structure_state,
                 &mut world.factory_registry,
+                &mut world.material_registry,
                 &mut world.movement_influence,
                 &mut world.pusher_state,
                 *mode.get(),
@@ -116,12 +118,7 @@ pub fn handle_create_new_solution(
         };
         *world.world = loaded.world;
         *inventory = InventoryItems::for_mode(BuilderMode::Play);
-        if save_solution(
-            &world.world,
-            &request.name,
-            &request.puzzle,
-            &inventory,
-        ) {
+        if save_solution(&world.world, &request.name, &request.puzzle, &inventory) {
             save_state.refresh();
             load_world_into_session(
                 &request.name,
@@ -141,6 +138,7 @@ pub fn handle_create_new_solution(
                 &world.debug,
                 &mut world.structure_state,
                 &mut world.factory_registry,
+                &mut world.material_registry,
                 &mut world.movement_influence,
                 &mut world.pusher_state,
                 *mode.get(),

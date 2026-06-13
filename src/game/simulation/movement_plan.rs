@@ -3,7 +3,8 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
 use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAnimation};
-use crate::game::world::factory_registry::FactoryBlockRegistry;
+use crate::game::world::block_instance::{BlockInstanceId, MaterialBlockRegistry};
+use crate::game::world::factory_registry::{FactoryBlockId, FactoryBlockRegistry};
 use crate::game::world::grid::WorldBlocks;
 
 use super::gravity::mark_gravity_phase;
@@ -32,8 +33,8 @@ pub struct MovementPlan {
 }
 
 pub struct MovementExecutionOutput {
-    pub animations: HashMap<IVec3, BlockAnimation>,
-    pub pusher_animations: HashMap<IVec3, PusherAnimation>,
+    pub animations: HashMap<BlockInstanceId, BlockAnimation>,
+    pub pusher_animations: HashMap<FactoryBlockId, PusherAnimation>,
 }
 
 pub fn collect_movement_plan(
@@ -214,6 +215,7 @@ pub fn execute_movement_plan(
     realtime: &mut WorldBlocks,
     turn_structures: &mut StructureState,
     factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
     pusher_state: &mut PusherState,
     movement_influence: &mut MovementInfluenceCache,
 ) -> MovementExecutionOutput {
@@ -235,6 +237,7 @@ pub fn execute_movement_plan(
                     realtime,
                     turn_structures,
                     factory_registry,
+                    material_registry,
                     pusher_state,
                     movement_influence,
                     &hard_heads,
@@ -260,14 +263,22 @@ pub fn execute_movement_plan(
                 {
                     continue;
                 }
-                if pusher_animations.contains_key(&pos) {
+                if factory_registry
+                    .turn_id_at(pos)
+                    .is_some_and(|id| pusher_animations.contains_key(&id))
+                {
                     continue;
                 }
                 let Some(head) = pusher_head_position(realtime, pos) else {
                     continue;
                 };
                 if animation.to_extension <= animation.from_extension {
-                    pusher_animations.insert(pos, *animation);
+                    pusher_animations.insert(
+                        factory_registry
+                            .turn_id_at(pos)
+                            .expect("bare retract pusher missing factory id"),
+                        *animation,
+                    );
                     apply_pusher_extension_from_animation(pusher_state, realtime, pos, animation);
                     continue;
                 }
@@ -275,14 +286,21 @@ pub fn execute_movement_plan(
                     continue;
                 }
                 occupied_heads.insert(head);
-                pusher_animations.insert(pos, *animation);
+                pusher_animations.insert(
+                    factory_registry
+                        .turn_id_at(pos)
+                        .expect("bare extend pusher missing factory id"),
+                    *animation,
+                );
                 apply_pusher_extension_from_animation(pusher_state, realtime, pos, animation);
             }
         }
     }
 
     for (pos, animation) in pusher_state.sustained_animations() {
-        pusher_animations.entry(pos).or_insert(animation);
+        if let Some(id) = factory_registry.turn_id_at(pos) {
+            pusher_animations.entry(id).or_insert(animation);
+        }
     }
 
     MovementExecutionOutput {
@@ -301,18 +319,34 @@ fn apply_pusher_extension_from_animation(
     pusher_state.set_extended(pos, world, extended);
 }
 
+fn record_block_animation(
+    animations: &mut HashMap<BlockInstanceId, BlockAnimation>,
+    realtime: &WorldBlocks,
+    factory_registry: &FactoryBlockRegistry,
+    material_registry: &MaterialBlockRegistry,
+    pos: IVec3,
+    animation: BlockAnimation,
+) {
+    let Some(id) = BlockInstanceId::resolve(realtime, factory_registry, material_registry, pos)
+    else {
+        return;
+    };
+    animations.insert(id, animation);
+}
+
 fn try_execute_move(
     realtime: &mut WorldBlocks,
     turn_structures: &mut StructureState,
     factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
     pusher_state: &mut PusherState,
     movement_influence: &mut MovementInfluenceCache,
     hard_heads: &HashSet<IVec3>,
     occupied_heads: &mut HashSet<IVec3>,
     movement: &StructureMove,
     moved: &mut HashSet<IVec3>,
-    animations: &mut HashMap<IVec3, BlockAnimation>,
-    pusher_animations: &mut HashMap<IVec3, PusherAnimation>,
+    animations: &mut HashMap<BlockInstanceId, BlockAnimation>,
+    pusher_animations: &mut HashMap<FactoryBlockId, PusherAnimation>,
 ) -> bool {
     match movement {
         StructureMove::Translate {
@@ -368,8 +402,12 @@ fn try_execute_move(
             }
             for pos in &expanded {
                 if let Some(block) = realtime.blocks.get(pos) {
-                    animations.insert(
-                        *pos + offset,
+                    record_block_animation(
+                        animations,
+                        realtime,
+                        factory_registry,
+                        material_registry,
+                        *pos,
                         BlockAnimation {
                             from_pos: *pos,
                             to_pos: *pos + offset,
@@ -399,8 +437,11 @@ fn try_execute_move(
                     PusherAnimationKind::Extend => (0.0, 1.0),
                     PusherAnimationKind::Retract => (1.0, 0.0),
                 };
+                let Some(pusher_id) = factory_registry.turn_id_at(actor.pos) else {
+                    return false;
+                };
                 pusher_animations.insert(
-                    actor.pos,
+                    pusher_id,
                     PusherAnimation {
                         duration: 0.0,
                         from_extension,
@@ -414,6 +455,7 @@ fn try_execute_move(
             move_structure(realtime, &expanded, *offset);
             turn_structures.move_positions(&expanded, *offset);
             factory_registry.translate_turn(&before, *offset);
+            material_registry.translate_turn(&before, *offset);
             pusher_state.translate_device_entries(&before, *offset);
             let target: HashSet<IVec3> = expanded.iter().map(|pos| *pos + offset).collect();
             movement_influence.record_successful_translate(&before, &target);
@@ -435,8 +477,12 @@ fn try_execute_move(
             for pos in structure {
                 if let Some(block) = realtime.blocks.get(pos) {
                     let target = rotate_pos_y(*pos, *pivot, *clockwise);
-                    animations.insert(
-                        target,
+                    record_block_animation(
+                        animations,
+                        realtime,
+                        factory_registry,
+                        material_registry,
+                        *pos,
                         BlockAnimation {
                             from_pos: *pos,
                             to_pos: target,
@@ -461,6 +507,7 @@ fn try_execute_move(
                 .collect();
             turn_structures.replace_structure_positions(structure, targets.clone());
             factory_registry.rotate_turn(structure, *pivot, *clockwise);
+            material_registry.rotate_turn(structure, *pivot, *clockwise);
             pusher_state.rotate_device_entries(structure, *pivot, *clockwise);
             if let Some(source) = source {
                 movement_influence.record_successful_rotate(&before, &targets, *source);
@@ -886,6 +933,10 @@ mod tests {
         registry
     }
 
+    fn material_registry(world: &WorldBlocks) -> MaterialBlockRegistry {
+        MaterialBlockRegistry::rebuild_from_world(world)
+    }
+
     #[test]
     fn four_converging_bare_pushers_only_one_occupies_shared_head_cell() {
         let center = IVec3::new(1, 1, 0);
@@ -909,6 +960,7 @@ mod tests {
         let mut movement_influence = MovementInfluenceCache::default();
         let powered = HashSet::from([north, south, east, west]);
         let mut factory_registry = frozen_registry(&world);
+        let mut material_registry = material_registry(&world);
 
         let plan = collect_movement_plan(
             &world,
@@ -929,6 +981,7 @@ mod tests {
             &mut realtime,
             &mut turn_structures,
             &mut factory_registry,
+            &mut material_registry,
             &mut pusher_state,
             &mut movement_influence,
         );
@@ -965,6 +1018,7 @@ mod tests {
         let mut movement_influence = MovementInfluenceCache::default();
         let powered = HashSet::from([left, right]);
         let mut factory_registry = frozen_registry(&world);
+        let mut material_registry = material_registry(&world);
 
         let plan = collect_movement_plan(
             &world,
@@ -982,6 +1036,7 @@ mod tests {
             &mut realtime,
             &mut turn_structures,
             &mut factory_registry,
+            &mut material_registry,
             &mut pusher_state,
             &mut movement_influence,
         );
@@ -1011,6 +1066,7 @@ mod tests {
         pusher_state.set_extended(pusher_pos, &world, true);
         let mut movement_influence = MovementInfluenceCache::default();
         let mut factory_registry = frozen_registry(&world);
+        let mut material_registry = material_registry(&world);
 
         let plan = collect_movement_plan(
             &world,
@@ -1028,6 +1084,7 @@ mod tests {
             &mut realtime,
             &mut turn_structures,
             &mut factory_registry,
+            &mut material_registry,
             &mut pusher_state,
             &mut movement_influence,
         );
@@ -1089,6 +1146,7 @@ mod tests {
         let mut pusher_state = PusherState::default();
         let mut movement_influence = MovementInfluenceCache::default();
         let mut factory_registry = frozen_registry(&world);
+        let mut material_registry = material_registry(&world);
 
         let mut realtime = world.clone();
         for (expected, unexpected) in [
@@ -1111,6 +1169,7 @@ mod tests {
                 &mut realtime,
                 &mut turn_structures,
                 &mut factory_registry,
+                &mut material_registry,
                 &mut pusher_state,
                 &mut movement_influence,
             );
@@ -1139,6 +1198,7 @@ mod tests {
         let mut pusher_state = PusherState::default();
         let mut movement_influence = MovementInfluenceCache::default();
         let mut factory_registry = frozen_registry(&world);
+        let mut material_registry = material_registry(&world);
 
         let plan = collect_movement_plan(
             &world,
@@ -1156,6 +1216,7 @@ mod tests {
             &mut realtime,
             &mut turn_structures,
             &mut factory_registry,
+            &mut material_registry,
             &mut pusher_state,
             &mut movement_influence,
         );
@@ -1229,7 +1290,6 @@ mod tests {
                 &mut pending,
                 &mut signal_cache,
                 turn,
-                0.0,
                 &mut pusher_state,
                 &mut movement_influence,
                 None,
@@ -1295,7 +1355,6 @@ mod tests {
                 &mut pending,
                 &mut signal_cache,
                 turn,
-                0.0,
                 &mut pusher_state,
                 &mut movement_influence,
                 None,
@@ -1391,7 +1450,6 @@ mod tests {
                 &mut pending,
                 &mut signal_cache,
                 turn,
-                0.0,
                 &mut pusher_state,
                 &mut movement_influence,
                 None,
@@ -1416,7 +1474,6 @@ mod tests {
             &mut pending,
             &mut signal_cache,
             3,
-            0.0,
             &mut pusher_state,
             &mut movement_influence,
             None,

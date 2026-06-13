@@ -6,6 +6,19 @@ use crate::game::world::grid::WorldBlocks;
 
 use super::signal_offsets;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct StructureId(u32);
+
+impl StructureId {
+    pub fn from_u32(value: u32) -> Self {
+        Self(value)
+    }
+
+    pub fn as_u32(self) -> u32 {
+        self.0
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FactoryActivity {
     Active,
@@ -35,6 +48,7 @@ pub type GravitySupportContact = (IVec3, IVec3);
 
 #[derive(Clone)]
 pub struct Structure {
+    pub id: StructureId,
     pub kind: StructureKind,
     pub positions: HashSet<IVec3>,
     pub activity: FactoryActivity,
@@ -54,6 +68,7 @@ pub struct StructureState {
     structures: Vec<Structure>,
     structure_by_pos: HashMap<IVec3, usize>,
     acceptor_structures: Vec<AcceptorStructure>,
+    next_structure_id: u32,
 }
 
 impl StructureState {
@@ -166,7 +181,9 @@ impl StructureState {
                 handled.insert(*pos);
                 self.structure_by_pos.insert(*pos, index);
             }
+            let id = self.alloc_structure_id();
             self.structures.push(Structure {
+                id,
                 kind: StructureKind::Material,
                 positions,
                 activity: FactoryActivity::Active,
@@ -200,7 +217,9 @@ impl StructureState {
                 handled.insert(*pos);
                 self.structure_by_pos.insert(*pos, index);
             }
+            let id = self.alloc_structure_id();
             self.structures.push(Structure {
+                id,
                 kind: StructureKind::Factory,
                 positions,
                 activity: FactoryActivity::Active,
@@ -270,6 +289,16 @@ impl StructureState {
                 }
             }
         }
+    }
+
+    pub fn structure_id_at(&self, pos: IVec3) -> Option<StructureId> {
+        self.structure(pos).map(|structure| structure.id)
+    }
+
+    fn alloc_structure_id(&mut self) -> StructureId {
+        let id = StructureId(self.next_structure_id);
+        self.next_structure_id += 1;
+        id
     }
 
     pub fn activity_at(&self, pos: IVec3) -> Option<FactoryActivity> {

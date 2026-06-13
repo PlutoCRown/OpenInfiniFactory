@@ -32,6 +32,8 @@ use crate::game::systems::debug::DebugState;
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost};
 use crate::game::ui::{PlayingUiRoot, UiRuntime};
+use crate::game::world::block_instance::MaterialBlockRegistry;
+use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     teardown_playing_scene, BlockIconRenderRoot, GameplayScene, WorldRenderAssets,
@@ -97,6 +99,8 @@ pub fn rebuild_playing_world(
     render_assets: Res<WorldRenderAssets>,
     debug: Res<DebugState>,
     mut structure_state: ResMut<StructureState>,
+    mut factory_registry: ResMut<FactoryBlockRegistry>,
+    mut material_registry: ResMut<MaterialBlockRegistry>,
 ) {
     crate::game::world::rendering::rebuild_world_on_enter(
         &mut commands,
@@ -105,6 +109,8 @@ pub fn rebuild_playing_world(
         &render_assets,
         &debug,
         &mut structure_state,
+        &mut factory_registry,
+        &mut material_registry,
     );
 }
 

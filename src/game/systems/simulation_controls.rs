@@ -9,6 +9,7 @@ use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::UiRuntime;
+use crate::game::world::block_instance::MaterialBlockRegistry;
 use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
@@ -28,6 +29,7 @@ pub struct SimulationControlDeps<'w> {
     signal_cache: Res<'w, SignalNetworkCache>,
     structure_state: ResMut<'w, StructureState>,
     factory_registry: ResMut<'w, FactoryBlockRegistry>,
+    material_registry: ResMut<'w, MaterialBlockRegistry>,
     movement_influence: ResMut<'w, MovementInfluenceCache>,
     pusher_state: ResMut<'w, PusherState>,
     world: ResMut<'w, WorldBlocks>,
@@ -42,7 +44,7 @@ pub fn simulation_controls(
     keys: Res<ButtonInput<KeyCode>>,
     config: Res<GameConfig>,
     mut commands: Commands,
-    block_entities: Query<Entity, With<BlockEntity>>,
+    block_entities: Query<(Entity, &BlockEntity)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut deps: SimulationControlDeps,
 ) {
@@ -68,6 +70,7 @@ pub fn simulation_controls(
             &deps.world,
             &mut deps.structure_state,
             &mut deps.factory_registry,
+            &mut deps.material_registry,
             &mut deps.pusher_state,
         );
         deps.presentation.committed_world = deps.world.clone();
@@ -94,6 +97,7 @@ pub fn simulation_controls(
         if deps.simulation.running {
             deps.simulation.running = false;
             deps.simulation.speed = 1.0;
+            deps.presentation.snap_visuals = true;
         } else {
             deps.simulation.step_requested = true;
         }
@@ -113,6 +117,7 @@ pub fn simulation_controls(
         deps.movement_influence.clear();
         deps.pusher_state.clear();
         *deps.factory_registry = FactoryBlockRegistry::rebuild_from_world(&deps.world);
+        *deps.material_registry = MaterialBlockRegistry::rebuild_from_world(&deps.world);
         deps.turn_cache.reset_to_turn(0);
         deps.presentation.committed_world = deps.world.clone();
         deps.presentation.last_render_powered_wires.clear();
@@ -141,6 +146,8 @@ pub fn simulation_controls(
             render_assets,
             &deps.debug,
             &deps.structure_state,
+            &mut deps.factory_registry,
+            &mut deps.material_registry,
         );
     }
 }
@@ -150,6 +157,7 @@ fn start_simulation_state(
     world: &WorldBlocks,
     structure_state: &mut StructureState,
     factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
     pusher_state: &mut PusherState,
 ) {
     simulation.start_snapshot = Some(world.clone());
@@ -158,6 +166,7 @@ fn start_simulation_state(
     simulation.start_structures = Some(structure_state.clone());
     *factory_registry = FactoryBlockRegistry::rebuild_from_world(world);
     factory_registry.freeze_solution();
+    *material_registry = MaterialBlockRegistry::rebuild_from_world(world);
 }
 
 pub fn start_simulation_if_needed(
@@ -165,6 +174,7 @@ pub fn start_simulation_if_needed(
     world: &WorldBlocks,
     structure_state: &mut StructureState,
     factory_registry: &mut FactoryBlockRegistry,
+    material_registry: &mut MaterialBlockRegistry,
     pusher_state: &mut PusherState,
 ) {
     if !simulation.is_active() {
@@ -173,6 +183,7 @@ pub fn start_simulation_if_needed(
             world,
             structure_state,
             factory_registry,
+            material_registry,
             pusher_state,
         );
     }
