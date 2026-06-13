@@ -2,8 +2,7 @@ use bevy::prelude::*;
 
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::runtime::{
-    PendingGeneratedMaterials, SignalNetworkCache, SimulationPresentationState,
-    SimulationStepStats,
+    PendingGeneratedMaterials, SignalNetworkCache,
 };
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;

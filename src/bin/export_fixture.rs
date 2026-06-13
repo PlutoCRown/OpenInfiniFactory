@@ -63,6 +63,7 @@ fn run() -> Result<(), String> {
     let mut normalize = true;
     let mut include_steps = false;
     let mut run_turns = 2u64;
+    let mut auto_bounds = false;
 
     let mut index = 1;
     while index < args.len() {
@@ -93,6 +94,9 @@ fn run() -> Result<(), String> {
                     .parse()
                     .map_err(|error| format!("invalid turns: {error}"))?;
             }
+            "--auto-bounds" => {
+                auto_bounds = true;
+            }
             "--help" | "-h" => {
                 print_help();
                 return Ok(());
@@ -103,21 +107,25 @@ fn run() -> Result<(), String> {
     }
 
     let save = save.ok_or("--save or --solution is required")?;
-    let min = min.ok_or("--min x,y,z is required")?;
-    let max = max.ok_or("--max x,y,z is required")?;
     let out = out.ok_or("--out path is required")?;
+
+    let mut world = WorldBlocks::default();
+    load_world(&mut world, &save).ok_or_else(|| format!("failed to load save `{save}`"))?;
+
+    let (min_corner, max_corner) = if auto_bounds {
+        world_bounds(&world)
+    } else {
+        let min = min.ok_or("--min x,y,z is required (or use --auto-bounds)")?;
+        let max = max.ok_or("--max x,y,z is required (or use --auto-bounds)")?;
+        normalize_bounds(min, max)
+    };
     let name = name.unwrap_or_else(|| {
         out.file_stem()
             .and_then(|stem| stem.to_str())
             .unwrap_or("exported_fixture")
             .to_string()
     });
-
-    let (min_corner, max_corner) = normalize_bounds(min, max);
     let origin = if normalize { min_corner } else { IVec3::ZERO };
-
-    let mut world = WorldBlocks::default();
-    load_world(&mut world, &save).ok_or_else(|| format!("failed to load save `{save}`"))?;
 
     let mut setup = collect_blocks(&world, min_corner, max_corner, origin);
     setup.sort_by(|left, right| {
@@ -211,6 +219,24 @@ fn normalize_bounds(min: IVec3, max: IVec3) -> (IVec3, IVec3) {
     )
 }
 
+fn world_bounds(world: &WorldBlocks) -> (IVec3, IVec3) {
+    let mut min = IVec3::splat(i32::MAX);
+    let mut max = IVec3::splat(i32::MIN);
+    for pos in world
+        .blocks
+        .keys()
+        .chain(world.system_blocks.keys())
+        .copied()
+    {
+        min = min.min(pos);
+        max = max.max(pos);
+    }
+    if min.x == i32::MAX {
+        return (IVec3::ZERO, IVec3::ZERO);
+    }
+    (min, max)
+}
+
 fn in_bounds(pos: IVec3, min: IVec3, max: IVec3) -> bool {
     pos.x >= min.x
         && pos.x <= max.x
@@ -266,6 +292,7 @@ Options:
   --save NAME           Alias of --solution
   --name NAME           Fixture name (default: output file stem)
   --no-normalize        Keep world coordinates instead of shifting min corner to origin
+  --auto-bounds         Derive min/max from all blocks in the save
   --with-run-steps      Add beginSimulation + run steps to fixture
   --turns N             Turns for --with-run-steps (default: 2)
 "#

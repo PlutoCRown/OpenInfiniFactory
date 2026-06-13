@@ -71,10 +71,6 @@ pub(super) fn run_material_teleports(world: &mut WorldBlocks) {
     }
 }
 
-pub(super) fn run_weld_behavior_phase(world: &mut WorldBlocks) -> Vec<IVec3> {
-    run_weld_phase(world)
-}
-
 #[derive(Clone, Copy)]
 pub(super) struct GeneratedMaterial {
     pub pos: IVec3,

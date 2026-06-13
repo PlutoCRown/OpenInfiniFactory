@@ -274,7 +274,7 @@ impl SaveFile {
                 let hotbar = self
                     .hotbar
                     .or_else(|| Some(InventoryItems::for_mode(BuilderMode::Play).hotbar));
-                let mut puzzle_world = load_puzzle_world(&puzzle_id)?;
+                let puzzle_world = load_puzzle_world(&puzzle_id)?;
                 let mut world = puzzle_world.clone();
                 apply_factory_blocks(&mut world, self.factory_blocks);
                 Some(LoadedSave {
@@ -392,8 +392,9 @@ fn capture_factory_blocks(world: &WorldBlocks) -> Vec<SavedBlock> {
         .blocks
         .iter()
         .filter_map(|(pos, data)| {
-            (data.kind.persistent_layer() == Some(PersistentLayer::SolutionFactory))
-                .then_some(saved_block(*pos, *data))
+            (data.kind.persistent_layer() == Some(PersistentLayer::SolutionFactory)
+                || data.kind.is_material())
+            .then_some(saved_block(*pos, *data))
         })
         .collect()
 }
@@ -412,7 +413,9 @@ fn apply_layer(world: &mut WorldBlocks, layer: WorldLayer) {
 
 fn apply_factory_blocks(world: &mut WorldBlocks, factory_blocks: Vec<SavedBlock>) {
     for saved in factory_blocks {
-        if saved.data.kind.persistent_layer() == Some(PersistentLayer::SolutionFactory) {
+        if saved.data.kind.persistent_layer() == Some(PersistentLayer::SolutionFactory)
+            || saved.data.kind.is_material()
+        {
             world.insert(saved.pos(), saved.data);
         }
     }

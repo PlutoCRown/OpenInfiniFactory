@@ -916,6 +916,7 @@ mod tests {
 }
 
 impl StructureState {
+    #[cfg(test)]
     fn rebuild_for_simulation_standalone(world: &WorldBlocks) -> Self {
         let mut state = Self::default();
         state.rebuild_for_simulation(world);

@@ -210,7 +210,7 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
                 .zip(max_x)
                 .zip(max_y)
                 .zip(max_z)
-                .map(|((((((a, b), c), d), e), f))| (a, b, c, d, e, f))
+                .map(|(((((a, b), c), d), e), f)| (a, b, c, d, e, f))
             else {
                 return json_error("getRegion requires min_x/y/z and max_x/y/z");
             };

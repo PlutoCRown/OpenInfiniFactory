@@ -475,7 +475,7 @@ pub fn preview_movement_plan(
     )
 }
 
-pub fn preview_candidate_executable(
+pub(crate) fn preview_candidate_executable(
     movement: &StructureMove,
     turn: &WorldBlocks,
     turn_structures: &StructureState,
@@ -525,9 +525,8 @@ pub fn phase_kind_label(phase: StructureMovePhaseKind) -> &'static str {
     }
 }
 
-pub fn mark_label(mark: MovementMark) -> &'static str {
+pub(crate) fn mark_label(mark: MovementMark) -> &'static str {
     match mark {
-        MovementMark::Fixed => "Fixed",
         MovementMark::Conveyor => "Conveyor",
         MovementMark::Push => "Push",
         MovementMark::Vertical => "Gravity",

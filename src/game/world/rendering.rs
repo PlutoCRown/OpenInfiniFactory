@@ -62,10 +62,10 @@ impl BlockIconAssets {
 pub(crate) struct BlockIconRenderEntity;
 
 #[derive(Component)]
-pub(crate) struct BlockIconRenderRoot;
+pub struct BlockIconRenderRoot;
 
 #[derive(Component)]
-pub(crate) struct BlockIconRenderCamera;
+pub struct BlockIconRenderCamera;
 
 #[derive(Resource)]
 pub struct BlockIconRenderState {

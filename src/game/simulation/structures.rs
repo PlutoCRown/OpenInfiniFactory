@@ -1,9 +1,7 @@
 use bevy::prelude::*;
-use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::game::blocks::{BlockData, MovementRule};
-use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAnimation};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks};
 
@@ -69,7 +67,7 @@ pub(super) fn gravity_moves(
 }
 
 #[derive(Clone)]
-pub(super) enum StructureMove {
+pub enum StructureMove {
     Translate {
         structure: HashSet<IVec3>,
         offset: IVec3,
@@ -86,15 +84,14 @@ pub(super) enum StructureMove {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(super) enum MovementMark {
-    Fixed,
+pub enum MovementMark {
     Conveyor,
     Push,
     Vertical,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct PusherActor {
+pub struct PusherActor {
     pub(super) pos: IVec3,
     pub(super) animation: PusherAnimationKind,
 }
@@ -122,7 +119,7 @@ pub struct MovementCandidate {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct StructureKey(Vec<IVec3>);
+pub(super) struct StructureKey(Vec<IVec3>);
 
 #[derive(Resource, Default, Clone)]
 pub struct MovementInfluenceCache {
@@ -195,18 +192,6 @@ impl MovementInfluenceCache {
         }
     }
 
-    fn record_executed(&mut self, executed: Vec<ExecutedMovement>) {
-        for movement in executed {
-            self.migrate_structure_key(&movement.before, &movement.after);
-            if movement.kind == ExecutedMovementKind::Rotate {
-                self.rotator_ignore
-                    .entry(movement.after.clone())
-                    .or_default()
-                    .insert(movement.source);
-            }
-        }
-    }
-
     fn migrate_structure_key(&mut self, before: &StructureKey, after: &StructureKey) {
         if before == after {
             return;
@@ -223,21 +208,6 @@ impl MovementInfluenceCache {
                 .or_default()
                 .extend(conveyors);
         }
-    }
-
-    pub(super) fn begin_turn_marking(
-        &mut self,
-        active_rotators: &HashMap<StructureKey, HashSet<IVec3>>,
-        active_conveyors: &HashMap<StructureKey, HashSet<IVec3>>,
-    ) {
-        self.retain_for_turn(active_rotators, active_conveyors);
-    }
-
-    pub(super) fn finish_turn_marking(
-        &mut self,
-        active_conveyors: &HashMap<StructureKey, HashSet<IVec3>>,
-    ) {
-        self.commit_conveyor_marking(active_conveyors);
     }
 
     pub(super) fn ignores_rotator_movement(&self, movement: &StructureMove) -> bool {
@@ -398,20 +368,6 @@ impl StructureKey {
     }
 }
 
-struct ExecutedMovement {
-    before: StructureKey,
-    after: StructureKey,
-    source: IVec3,
-    kind: ExecutedMovementKind,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ExecutedMovementKind {
-    Rotate,
-    Conveyor,
-    Other,
-}
-
 impl StructureMove {
     pub(super) fn translate_marked(
         structure: HashSet<IVec3>,
@@ -478,210 +434,6 @@ impl StructureMove {
             Self::Translate { structure, .. } | Self::Rotate { structure, .. } => structure,
         }
     }
-
-    pub(super) fn overlaps_structure(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Translate { structure: a, .. }, Self::Translate { structure: b, .. })
-            | (Self::Translate { structure: a, .. }, Self::Rotate { structure: b, .. })
-            | (Self::Rotate { structure: a, .. }, Self::Translate { structure: b, .. })
-            | (Self::Rotate { structure: a, .. }, Self::Rotate { structure: b, .. }) => {
-                a.iter().any(|pos| b.contains(pos))
-            }
-        }
-    }
-
-    fn expanded_for_plan(self, world: &WorldBlocks, structures: &StructureState) -> Self {
-        match self {
-            Self::Translate {
-                structure,
-                offset,
-                actor,
-                mark,
-                source,
-            } => {
-                let mode = movement_expansion_mode(mark, source);
-                let structure =
-                    expanded_move_structure(world, &structure, offset, structures, mode)
-                        .unwrap_or(structure);
-                Self::Translate {
-                    structure,
-                    offset,
-                    actor,
-                    mark,
-                    source,
-                }
-            }
-            movement => movement,
-        }
-    }
-}
-
-pub(super) fn merge_structure_movement_plan(
-    mut planned_moves: Vec<StructureMove>,
-    device_moves: Vec<StructureMove>,
-    world: &WorldBlocks,
-    structures: &StructureState,
-    influence_cache: &mut MovementInfluenceCache,
-) -> Vec<StructureMove> {
-    planned_moves = expand_structure_movement_plan(planned_moves, world, structures);
-    let mut device_moves = expand_structure_movement_plan(device_moves, world, structures);
-    let (active_rotators, active_conveyors) = active_sources_by_kind(&device_moves);
-    influence_cache.retain_for_turn(&active_rotators, &active_conveyors);
-    device_moves.retain(|movement| !influence_cache.ignores_rotator(movement));
-    device_moves.sort_by(|a, b| compare_movement_priority(a, b, influence_cache));
-
-    for movement in device_moves {
-        let blocked_by_higher_priority = planned_moves.iter().any(|existing| {
-            existing.overlaps_structure(&movement)
-                && movement_beats(existing, &movement, influence_cache)
-        });
-        if blocked_by_higher_priority {
-            continue;
-        }
-
-        planned_moves.retain(|existing| {
-            !(existing.overlaps_structure(&movement)
-                && movement_beats(&movement, existing, influence_cache))
-        });
-        planned_moves.push(movement);
-    }
-    influence_cache.commit_conveyor_marking(&active_conveyors);
-    planned_moves
-}
-
-fn active_sources_by_kind(
-    moves: &[StructureMove],
-) -> (
-    HashMap<StructureKey, HashSet<IVec3>>,
-    HashMap<StructureKey, HashSet<IVec3>>,
-) {
-    let mut rotators: HashMap<StructureKey, HashSet<IVec3>> = HashMap::new();
-    let mut conveyors: HashMap<StructureKey, HashSet<IVec3>> = HashMap::new();
-    for movement in moves {
-        let Some(source) = movement.source() else {
-            continue;
-        };
-        let key = StructureKey::from_structure(movement.structure());
-        match movement {
-            StructureMove::Rotate { .. } => {
-                rotators.entry(key).or_default().insert(source);
-            }
-            StructureMove::Translate {
-                mark: MovementMark::Conveyor,
-                ..
-            } => {
-                conveyors.entry(key).or_default().insert(source);
-            }
-            _ => {}
-        }
-    }
-    (rotators, conveyors)
-}
-
-fn movement_beats(
-    challenger: &StructureMove,
-    existing: &StructureMove,
-    influence_cache: &MovementInfluenceCache,
-) -> bool {
-    compare_movement_priority(challenger, existing, influence_cache) != Ordering::Greater
-}
-
-fn compare_movement_priority(
-    a: &StructureMove,
-    b: &StructureMove,
-    influence_cache: &MovementInfluenceCache,
-) -> Ordering {
-    movement_priority_key(a, influence_cache).cmp(&movement_priority_key(b, influence_cache))
-}
-
-fn movement_priority_key(
-    movement: &StructureMove,
-    influence_cache: &MovementInfluenceCache,
-) -> (u32, u8, ConveyorSourcePriority) {
-    (
-        influence_cache.conveyor_stale_penalty(movement),
-        movement_kind_priority(movement),
-        conveyor_source_priority(movement),
-    )
-}
-
-fn movement_kind_priority(movement: &StructureMove) -> u8 {
-    match movement {
-        StructureMove::Translate {
-            mark: MovementMark::Vertical,
-            ..
-        } => 0,
-        StructureMove::Rotate { .. } => 1,
-        StructureMove::Translate {
-            mark: MovementMark::Push,
-            ..
-        } => 2,
-        StructureMove::Translate {
-            mark: MovementMark::Conveyor,
-            ..
-        } => 3,
-        StructureMove::Translate {
-            mark: MovementMark::Fixed,
-            ..
-        } => 4,
-    }
-}
-
-#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
-struct ConveyorSourcePriority {
-    positive_x: i32,
-    negative_x: i32,
-    positive_y: i32,
-    negative_y: i32,
-    positive_z: i32,
-    negative_z: i32,
-}
-
-fn conveyor_source_priority(movement: &StructureMove) -> ConveyorSourcePriority {
-    let Some(source) = movement.source() else {
-        return ConveyorSourcePriority::neutral();
-    };
-    if !matches!(
-        movement,
-        StructureMove::Translate {
-            mark: MovementMark::Conveyor,
-            ..
-        }
-    ) {
-        return ConveyorSourcePriority::neutral();
-    }
-    ConveyorSourcePriority {
-        positive_x: -source.x,
-        negative_x: source.x,
-        positive_y: -source.y,
-        negative_y: source.y,
-        positive_z: -source.z,
-        negative_z: source.z,
-    }
-}
-
-impl ConveyorSourcePriority {
-    fn neutral() -> Self {
-        Self {
-            positive_x: 0,
-            negative_x: 0,
-            positive_y: 0,
-            negative_y: 0,
-            positive_z: 0,
-            negative_z: 0,
-        }
-    }
-}
-
-fn expand_structure_movement_plan(
-    moves: Vec<StructureMove>,
-    world: &WorldBlocks,
-    structures: &StructureState,
-) -> Vec<StructureMove> {
-    moves
-        .into_iter()
-        .map(|movement| movement.expanded_for_plan(world, structures))
-        .collect()
 }
 
 fn structure_supported_by_lifter(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
@@ -691,152 +443,6 @@ fn structure_supported_by_lifter(world: &WorldBlocks, structure: &HashSet<IVec3>
             Some(MovementRule::Lift { range }) if structure.contains(&(*pos + IVec3::Y * (range + 1)))
         )
     })
-}
-
-pub(super) fn execute_structure_moves(
-    world: &mut WorldBlocks,
-    moves: Vec<StructureMove>,
-    structures: &mut StructureState,
-) -> HashMap<IVec3, BlockAnimation> {
-    let mut influence_cache = MovementInfluenceCache::default();
-    execute_structure_moves_with_pushers(world, moves, structures, &mut influence_cache).0
-}
-
-pub(super) fn execute_structure_moves_with_pushers(
-    world: &mut WorldBlocks,
-    moves: Vec<StructureMove>,
-    structures: &mut StructureState,
-    influence_cache: &mut MovementInfluenceCache,
-) -> (
-    HashMap<IVec3, BlockAnimation>,
-    HashMap<IVec3, PusherAnimation>,
-) {
-    let mut moved = HashSet::new();
-    let mut animations = HashMap::new();
-    let mut pusher_animations = HashMap::new();
-    let mut executed = Vec::new();
-    for movement in moves {
-        match movement {
-            StructureMove::Translate {
-                structure,
-                offset,
-                actor,
-                mark,
-                source,
-            } => {
-                if structure.iter().any(|pos| moved.contains(pos)) {
-                    continue;
-                }
-                if let Some(structure) = expanded_move_structure(
-                    world,
-                    &structure,
-                    offset,
-                    structures,
-                    movement_expansion_mode(mark, source),
-                ) {
-                    let before_key = StructureKey::from_structure(&structure);
-                    for pos in &structure {
-                        if let Some(block) = world.blocks.get(pos) {
-                            animations.insert(
-                                *pos + offset,
-                                BlockAnimation {
-                                    from_pos: *pos,
-                                    to_pos: *pos + offset,
-                                    from_facing: block.facing,
-                                    to_facing: block.facing,
-                                    kind: BlockAnimationKind::Move,
-                                    duration: None,
-                                    progress: None,
-                                },
-                            );
-                        }
-                    }
-                    if let Some(actor) = actor {
-                        let (from_extension, to_extension) = match actor.animation {
-                            PusherAnimationKind::Extend => (0.0, 1.0),
-                            PusherAnimationKind::Retract => (1.0, 0.0),
-                        };
-                        pusher_animations.insert(
-                            actor.pos,
-                            PusherAnimation {
-                                duration: 0.0,
-                                from_extension,
-                                to_extension,
-                            },
-                        );
-                    }
-                    moved.extend(structure.iter().copied());
-                    move_structure(world, &structure, offset);
-                    structures.move_positions(&structure, offset);
-                    let target_structure: HashSet<IVec3> =
-                        structure.into_iter().map(|pos| pos + offset).collect();
-                    if let Some(source) = source {
-                        let kind = if mark == MovementMark::Conveyor {
-                            ExecutedMovementKind::Conveyor
-                        } else {
-                            ExecutedMovementKind::Other
-                        };
-                        executed.push(ExecutedMovement {
-                            before: before_key,
-                            after: StructureKey::from_structure(&target_structure),
-                            source,
-                            kind,
-                        });
-                    }
-                    moved.extend(target_structure);
-                }
-            }
-            StructureMove::Rotate {
-                structure,
-                pivot,
-                clockwise,
-                source,
-            } => {
-                if structure.iter().any(|pos| moved.contains(pos)) {
-                    continue;
-                }
-                if can_rotate_structure(world, &structure, pivot, clockwise) {
-                    let before_key = StructureKey::from_structure(&structure);
-                    let targets: Vec<IVec3> = structure
-                        .iter()
-                        .map(|pos| rotate_pos_y(*pos, pivot, clockwise))
-                        .collect();
-                    for pos in &structure {
-                        if let Some(block) = world.blocks.get(pos) {
-                            let target = rotate_pos_y(*pos, pivot, clockwise);
-                            animations.insert(
-                                target,
-                                BlockAnimation {
-                                    from_pos: *pos,
-                                    to_pos: target,
-                                    from_facing: block.facing,
-                                    to_facing: rotate_facing(block.facing, clockwise),
-                                    kind: BlockAnimationKind::Rotate { pivot, clockwise },
-                                    duration: None,
-                                    progress: None,
-                                },
-                            );
-                        }
-                    }
-                    moved.extend(structure.iter().copied());
-                    rotate_structure(world, &structure, pivot, clockwise);
-                    let target_structure: HashSet<IVec3> = targets.iter().copied().collect();
-                    structures.replace_structure_positions(&structure, target_structure.clone());
-                    if let Some(source) = source {
-                        executed.push(ExecutedMovement {
-                            before: before_key,
-                            after: StructureKey::from_structure(&target_structure),
-                            source,
-                            kind: ExecutedMovementKind::Rotate,
-                        });
-                    }
-                    moved.extend(target_structure);
-                }
-            }
-        }
-    }
-    influence_cache.record_executed(executed);
-    (animations, pusher_animations)
 }
 
 fn can_move_gravity_structure(

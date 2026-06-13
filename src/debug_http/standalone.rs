@@ -25,7 +25,7 @@ impl HeadlessDebugState {
     ) -> R {
         self.app.world_mut().resource_scope(
             |world, mut sim_log: Mut<SimulationDebugLog>| {
-                let mut core = SimCoreWorld::new(world);
+                let core = SimCoreWorld::new(world);
                 f(core, &mut sim_log)
             },
         )

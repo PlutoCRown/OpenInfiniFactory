@@ -8,7 +8,7 @@ type ConfirmHandler = Box<dyn FnOnce(ConfirmResult, &mut World) + Send>;
 
 /// Stored as a [`NonSend`] resource because [`ConfirmHandler`] is not [`Sync`].
 #[derive(Default)]
-pub(crate) struct PendingConfirmHandler {
+pub struct PendingConfirmHandler {
     pub handler: Option<ConfirmHandler>,
 }
 

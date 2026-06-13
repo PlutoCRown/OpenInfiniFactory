@@ -15,7 +15,7 @@ use crate::game::world::rendering::{
     WorldRenderAssets,
 };
 use crate::scene::{apply_turn_output, BlockEntityIndex};
-use crate::sim_core::{CachedTurn, SimSnapshot, SimulationDebugLog, SimulationWorker, TurnCache};
+use crate::sim_core::{CachedTurn, SimSnapshot, SimulationWorker, TurnCache};
 
 use super::movement::PusherState;
 use super::structure_state::StructureState;
@@ -104,14 +104,6 @@ impl Default for SimulationStepStats {
     }
 }
 
-#[derive(SystemParam)]
-pub(crate) struct SimulationTurnDeps<'w> {
-    structure_state: ResMut<'w, StructureState>,
-    movement_influence: ResMut<'w, MovementInfluenceCache>,
-    pusher_state: ResMut<'w, PusherState>,
-    sim_log: ResMut<'w, SimulationDebugLog>,
-}
-
 #[derive(Default)]
 pub struct SimulationPresentationState {
     pub committed_world: WorldBlocks,
@@ -164,12 +156,11 @@ pub fn prefetch_simulation_turn(
     _pending_generated: ResMut<PendingGeneratedMaterials>,
     _signal_cache: ResMut<SignalNetworkCache>,
     _turn_cache: ResMut<TurnCache>,
-    _turn_deps: SimulationTurnDeps,
 ) {
 }
 
 #[derive(SystemParam)]
-pub(crate) struct SimulationTickDeps<'w> {
+pub struct SimulationTickDeps<'w> {
     world: ResMut<'w, WorldBlocks>,
     pending_generated: ResMut<'w, PendingGeneratedMaterials>,
     signal_cache: ResMut<'w, SignalNetworkCache>,

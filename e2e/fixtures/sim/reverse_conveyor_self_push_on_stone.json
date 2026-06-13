@@ -1,5 +1,23 @@
 {
   "name": "reverse_conveyor_self_push_on_stone",
+  "source": {
+    "save": "e2e_solution_reverse_conveyor_self_push_on_stone",
+    "min": [
+      0,
+      0,
+      0
+    ],
+    "max": [
+      0,
+      2,
+      0
+    ],
+    "origin": [
+      0,
+      0,
+      0
+    ]
+  },
   "setup": [
     {
       "x": 0,
@@ -14,47 +32,6 @@
       "z": 0,
       "kind": "ReverseConveyor",
       "facing": "North"
-    }
-  ],
-  "steps": [
-    {
-      "op": "beginSimulation"
-    },
-    {
-      "op": "run",
-      "turns": 1
-    },
-    {
-      "op": "assertBlock",
-      "x": 0,
-      "y": 1,
-      "z": 0,
-      "kind": "ReverseConveyor",
-      "layer": "factory"
-    },
-    {
-      "op": "run",
-      "turns": 1
-    },
-    {
-      "op": "assertBlock",
-      "x": 0,
-      "y": 1,
-      "z": -1,
-      "kind": "ReverseConveyor",
-      "layer": "factory"
-    },
-    {
-      "op": "run",
-      "turns": 1
-    },
-    {
-      "op": "assertBlock",
-      "x": 0,
-      "y": 0,
-      "z": -1,
-      "kind": "ReverseConveyor",
-      "layer": "factory"
     }
   ]
 }

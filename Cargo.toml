@@ -23,6 +23,10 @@ path = "src/bin/oif-debug-http.rs"
 name = "export_fixture"
 path = "src/bin/export_fixture.rs"
 
+[[bin]]
+name = "import_fixture"
+path = "src/bin/import_fixture.rs"
+
 [dependencies]
 bevy = { version = "0.18.1", features = ["experimental_bevy_ui_widgets"] }
 inventory = "0.3"

@@ -81,7 +81,7 @@ pub fn simulate_turn(
 
     let mut animations = movement_output.animations;
     merge_generated_animations(&mut animations, generated_animations);
-    let mut pusher_animations = movement_output
+    let pusher_animations = movement_output
         .pusher_animations
         .into_iter()
         .map(|(pos, mut animation)| {

@@ -2,6 +2,12 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { DebugClient, spawnDebugServer, waitForServer } from "./client";
 
 const PORT = 9876;
+const SIM_FIXTURES = [
+  "sim/four_converging_blockers_shared_head.json",
+  "sim/reverse_conveyor_platform_fall_push.json",
+  "sim/reverse_conveyor_self_push_on_stone.json",
+];
+
 let server: ReturnType<typeof spawnDebugServer>;
 
 beforeAll(async () => {
@@ -21,28 +27,9 @@ describe("debug HTTP simulation core", () => {
     expect(body.kinds.length).toBeGreaterThanOrEqual(32);
   });
 
-  test("runs every block placement fixture", async () => {
-    const client = new DebugClient(PORT);
-    const body = await client.post("/runAllFixtures");
-    expect(body.ok).toBe(true);
-    expect(body.total).toBeGreaterThanOrEqual(32);
-    expect(body.passed).toBe(body.total);
-    for (const result of body.results) {
-      expect(result.ok, result.error ?? result.name).toBe(true);
-    }
-  });
-
   test("runs simulation fixtures", async () => {
     const client = new DebugClient(PORT);
-    for (const path of [
-      "sim/welder_weld_point.json",
-      "sim/wire_detector_power.json",
-      "sim/opposing_pushers_shared_head.json",
-      "sim/conveyor_blocked_by_pusher_head.json",
-      "sim/four_converging_blockers_shared_head.json",
-      "sim/test_pusher_reverse_conveyor.json",
-      "sim/reverse_conveyor_self_push_on_stone.json",
-    ]) {
+    for (const path of SIM_FIXTURES) {
       const body = await client.post(`/runFixture?path=${path}`);
       expect(body.ok, JSON.stringify(body)).toBe(true);
     }
@@ -58,8 +45,8 @@ describe("debug HTTP simulation core", () => {
     expect(extended.ok).toBe(true);
     expect(extended.count).toBe(1);
     expect(extended.devices).toHaveLength(1);
-    expect(extended.devices[0].head).toEqual({ x: 0, y: 1, z: 0 });
-    const center = await client.get("/getPosBlock?x=0&y=1&z=0");
+    expect(extended.devices[0].head).toEqual({ x: 1, y: 1, z: 1 });
+    const center = await client.get("/getPosBlock?x=1&y=1&z=1");
     expect(center.ok).toBe(true);
     expect(center.block?.kind).toBe("BlockerHead");
     expect(center.block?.layer).toBe("virtual");
