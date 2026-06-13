@@ -259,28 +259,59 @@ pub(super) fn collect_conveyor_candidate(
     source: IVec3,
     offset: IVec3,
 ) -> Option<MovementCandidate> {
-    let target = pos + source;
-    let primary = mark_structure_translate(ctx, pos, target, offset, MovementMark::Conveyor)?;
-    if can_translate_structure(ctx.turn, primary.structure(), offset, ctx.turn_structures) {
-        return Some(MovementCandidate {
-            primary: primary.with_source(pos),
-            fallbacks: Vec::new(),
-        });
+    for target in conveyor_translate_targets(ctx.turn, pos, source) {
+        if let Some(candidate) = conveyor_candidate_at_target(ctx, pos, target, offset) {
+            return Some(candidate);
+        }
     }
+    None
+}
 
+fn conveyor_translate_targets(_world: &WorldBlocks, pos: IVec3, source: IVec3) -> Vec<IVec3> {
+    vec![pos + source]
+}
+
+fn conveyor_candidate_at_target(
+    ctx: &MovementMarkContext<'_>,
+    pos: IVec3,
+    target: IVec3,
+    offset: IVec3,
+) -> Option<MovementCandidate> {
+    let primary = mark_structure_translate(ctx, pos, target, offset, MovementMark::Conveyor);
+    if let Some(ref movement) = primary {
+        if can_translate_structure(ctx.turn, movement.structure(), offset, ctx.turn_structures) {
+            return Some(MovementCandidate {
+                primary: movement.clone().with_source(pos),
+                fallbacks: Vec::new(),
+            });
+        }
+    }
+    conveyor_self_fallback(ctx, pos, offset, primary)
+}
+
+fn conveyor_self_fallback(
+    ctx: &MovementMarkContext<'_>,
+    pos: IVec3,
+    offset: IVec3,
+    primary: Option<StructureMove>,
+) -> Option<MovementCandidate> {
     let structure = ctx.turn_structures.active_structure_at(pos, -offset)?;
     if !can_translate_structure(ctx.turn, &structure, -offset, ctx.turn_structures) {
         return None;
     }
-    Some(MovementCandidate {
-        primary: primary.with_source(pos),
-        fallbacks: vec![StructureMove::translate_marked(
-            structure,
-            -offset,
-            MovementMark::Conveyor,
-        )
-        .with_source(pos)],
-    })
+    let self_move = StructureMove::translate_marked(structure, -offset, MovementMark::Conveyor)
+        .with_source(pos);
+    if let Some(primary) = primary {
+        Some(MovementCandidate {
+            primary: primary.with_source(pos),
+            fallbacks: vec![self_move],
+        })
+    } else {
+        Some(MovementCandidate {
+            primary: self_move,
+            fallbacks: Vec::new(),
+        })
+    }
 }
 
 pub(super) fn collect_lift_candidate(
@@ -339,7 +370,7 @@ fn mark_structure_translate(
             .get(&actor)
             .is_some_and(|block| matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker))
     {
-        ctx.solution_structures.pusher_target_structure(
+        ctx.turn_structures.pusher_target_structure(
             ctx.solution,
             ctx.turn,
             actor,

@@ -5,6 +5,10 @@ use crate::game::world::animation::SIMULATION_TURN_SECONDS;
 use crate::sim_core::{SimulationControl, SimulationDebugLog};
 
 use super::fixture::{apply_fixture_setup, load_fixture_file, run_fixture_dir, run_fixture_file};
+use super::introspection::{
+    get_factory_block_state_json, get_power_network_json, get_power_networks_json,
+    get_powered_devices_json, get_region_json, get_structure_at_json, preview_movement_plan_json,
+};
 use super::protocol::{help_json, json_error, json_ok, DebugHttpCommand};
 use super::snapshot::{block_json, pos_json, session_status_json};
 use super::standalone::HeadlessDebugState;
@@ -192,6 +196,105 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
                 .clear();
             r#"{"ok":true}"#.into()
         }
+        DebugHttpCommand::GetRegion {
+            min_x,
+            min_y,
+            min_z,
+            max_x,
+            max_y,
+            max_z,
+        } => {
+            let Some((min_x, min_y, min_z, max_x, max_y, max_z)) = min_x
+                .zip(min_y)
+                .zip(min_z)
+                .zip(max_x)
+                .zip(max_y)
+                .zip(max_z)
+                .map(|((((((a, b), c), d), e), f))| (a, b, c, d, e, f))
+            else {
+                return json_error("getRegion requires min_x/y/z and max_x/y/z");
+            };
+            state.with_core(|core, _| {
+                let mut params = std::collections::HashMap::new();
+                params.insert("min_x".into(), min_x.to_string());
+                params.insert("min_y".into(), min_y.to_string());
+                params.insert("min_z".into(), min_z.to_string());
+                params.insert("max_x".into(), max_x.to_string());
+                params.insert("max_y".into(), max_y.to_string());
+                params.insert("max_z".into(), max_z.to_string());
+                match get_region_json(core.world_blocks(), &params) {
+                    Ok(data) => json_ok(data),
+                    Err(error) => json_error(&error),
+                }
+            })
+        }
+        DebugHttpCommand::GetPowerNetworks => state.with_core(|mut core, _| {
+            core.world_scope(|world, signal_cache| {
+                json_ok(get_power_networks_json(world, signal_cache))
+            })
+        }),
+        DebugHttpCommand::GetPowerNetwork { id } => {
+            let Some(id) = id else {
+                return json_error("getPowerNetwork requires ?id=");
+            };
+            state.with_core(|mut core, _| {
+                core.world_scope(|world, signal_cache| {
+                    match get_power_network_json(world, signal_cache, id) {
+                        Ok(data) => json_ok(data),
+                        Err(error) => json_error(&error),
+                    }
+                })
+            })
+        }
+        DebugHttpCommand::GetPoweredDevices => state.with_core(|mut core, _| {
+            core.world_scope(|world, signal_cache| {
+                json_ok(get_powered_devices_json(world, signal_cache))
+            })
+        }),
+        DebugHttpCommand::GetFactoryBlockState { x, y, z } => {
+            let Some((x, y, z)) = x.zip(y).zip(z).map(|((a, b), c)| (a, b, c)) else {
+                return json_error("getFactoryBlockState requires ?x=&y=&z=");
+            };
+            state.with_core(|mut core, _| {
+                core.introspection_scope(|ctx| {
+                    match get_factory_block_state_json(
+                        IVec3::new(x, y, z),
+                        ctx.world,
+                        ctx.turn_structures,
+                        &ctx.solution_structures,
+                        ctx.control,
+                        ctx.signal_cache,
+                    ) {
+                        Ok(data) => json_ok(data),
+                        Err(error) => json_error(&error),
+                    }
+                })
+            })
+        }
+        DebugHttpCommand::GetStructureAt { x, y, z } => {
+            let Some((x, y, z)) = x.zip(y).zip(z).map(|((a, b), c)| (a, b, c)) else {
+                return json_error("getStructureAt requires ?x=&y=&z=");
+            };
+            state.with_core(|core, _| {
+                let structures = core.world().resource::<crate::game::simulation::structure_state::StructureState>();
+                match get_structure_at_json(IVec3::new(x, y, z), structures) {
+                    Ok(data) => json_ok(data),
+                    Err(error) => json_error(&error),
+                }
+            })
+        }
+        DebugHttpCommand::PreviewMovementPlan => state.with_core(|mut core, _| {
+            core.introspection_scope(|ctx| {
+                json_ok(preview_movement_plan_json(
+                    ctx.world,
+                    ctx.turn_structures,
+                    ctx.control,
+                    ctx.signal_cache,
+                    ctx.pusher_state,
+                    ctx.movement_influence,
+                ))
+            })
+        }),
     }
 }
 

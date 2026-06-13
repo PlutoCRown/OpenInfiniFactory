@@ -228,7 +228,7 @@ impl Default for SimulationState {
 
 impl SimulationState {
     pub fn is_active(&self) -> bool {
-        self.running || self.turn > 0
+        self.start_snapshot.is_some() || self.running || self.turn > 0
     }
 
     pub fn authoring_world<'a>(

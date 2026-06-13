@@ -35,8 +35,9 @@
 | 2 | Rotate | 旋转器 |
 | 3 | Push | 活塞 / 阻拦器 / 通电平移 |
 | 4 | Lift | 抬升器 |
-| 5 | Gravity | 材料与工厂重力 |
-| 6 | Conveyor | 传送带（含反向 fallback 候选） |
+| 5 | Conveyor | 传送带运输（推下方结构） |
+| 6 | Gravity | 材料与工厂重力 |
+| 7 | Conveyor | 反向传送带反推自身（fallback，本回合已因重力移动则跳过） |
 
 执行在 **realtime** 上逐 phase、逐 candidate 尝试 primary → fallbacks；成功则写 realtime 并更新 `PusherState.extended`（extend/retract 在 Push execute 成功时）。
 

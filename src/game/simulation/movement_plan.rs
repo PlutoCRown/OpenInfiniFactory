@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
 use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAnimation};
@@ -45,7 +46,6 @@ pub fn collect_movement_plan(
     let mut rotate = Vec::new();
     let mut push = Vec::new();
     let mut lift = Vec::new();
-    let mut conveyor = Vec::new();
     let mut bare_pusher_animations = HashMap::new();
 
     {
@@ -102,19 +102,28 @@ pub fn collect_movement_plan(
                         lift.push(candidate);
                     }
                 }
-                crate::game::blocks::MovementRule::Translate { source, offset } => {
-                    if let Some(candidate) = collect_conveyor_candidate(&ctx, pos, source, offset) {
-                        conveyor.push(candidate);
-                    }
-                }
+                crate::game::blocks::MovementRule::Translate { .. } => {}
             }
         }
     }
 
-    movement_influence.begin_turn_from_candidates(&rotate, &conveyor);
-    rotate.retain(|candidate| !movement_influence.ignores_rotator_movement(&candidate.primary));
-    conveyor.sort_by(|a, b| movement_influence.compare_conveyor_candidates(a, b));
-    movement_influence.finish_turn_from_candidates(&conveyor);
+    let mut conveyor = Vec::new();
+    {
+        let ctx = super::movement::MovementMarkContext {
+            turn,
+            solution,
+            turn_structures,
+            solution_structures,
+        };
+        for (pos, _kind, rule) in super::movement::sorted_factory_movers(turn) {
+            let crate::game::blocks::MovementRule::Translate { source, offset } = rule else {
+                continue;
+            };
+            if let Some(candidate) = collect_conveyor_candidate(&ctx, pos, source, offset) {
+                conveyor.push(candidate);
+            }
+        }
+    }
 
     let actuating = pusher_state.actuating_devices(turn, powered_devices);
     let hard_heads = pusher_state.hard_head_occupancy(turn);
@@ -124,7 +133,14 @@ pub fn collect_movement_plan(
             primary: movement,
             fallbacks: Vec::new(),
         })
-        .collect();
+        .collect::<Vec<_>>();
+
+    movement_influence.begin_turn_from_candidates(&rotate, &conveyor);
+    rotate.retain(|candidate| !movement_influence.ignores_rotator_movement(&candidate.primary));
+    conveyor.sort_by(|a, b| movement_influence.compare_conveyor_candidates(a, b));
+    movement_influence.finish_turn_from_candidates(&conveyor);
+
+    let (conveyor_transport, conveyor_self) = split_conveyor_candidates(conveyor);
 
     let mut plan = MovementPlan::default();
     plan.phases.push(MovementPhasePlan {
@@ -137,12 +153,40 @@ pub fn collect_movement_plan(
         .push(sorted_phase(StructureMovePhaseKind::Push, push));
     plan.phases
         .push(sorted_phase(StructureMovePhaseKind::Lift, lift));
+    plan.phases.push(sorted_phase(
+        StructureMovePhaseKind::Conveyor,
+        conveyor_transport,
+    ));
     plan.phases
         .push(sorted_phase(StructureMovePhaseKind::Gravity, gravity));
-    plan.phases
-        .push(sorted_phase(StructureMovePhaseKind::Conveyor, conveyor));
+    plan.phases.push(sorted_phase(
+        StructureMovePhaseKind::Conveyor,
+        conveyor_self,
+    ));
     plan.bare_pusher_animations = bare_pusher_animations;
     plan
+}
+
+fn split_conveyor_candidates(
+    conveyor: Vec<MovementCandidate>,
+) -> (Vec<MovementCandidate>, Vec<MovementCandidate>) {
+    let mut transport = Vec::new();
+    let mut self_moves = Vec::new();
+    for candidate in conveyor {
+        if candidate.fallbacks.is_empty() {
+            self_moves.push(candidate);
+        } else {
+            transport.push(MovementCandidate {
+                primary: candidate.primary,
+                fallbacks: Vec::new(),
+            });
+            self_moves.push(MovementCandidate {
+                primary: candidate.fallbacks[0].clone(),
+                fallbacks: Vec::new(),
+            });
+        }
+    }
+    (transport, self_moves)
 }
 
 fn sorted_phase(
@@ -411,6 +455,221 @@ fn blocks_gravity_pusher_head(
     super::structures::hard_pusher_head_blocked_below_public(world, structure, hard_heads)
 }
 
+pub fn preview_movement_plan(
+    turn: &WorldBlocks,
+    solution: &WorldBlocks,
+    turn_structures: &mut StructureState,
+    solution_structures: &StructureState,
+    powered_devices: &HashSet<IVec3>,
+    pusher_state: &PusherState,
+    movement_influence: &mut MovementInfluenceCache,
+) -> MovementPlan {
+    collect_movement_plan(
+        turn,
+        solution,
+        turn_structures,
+        solution_structures,
+        powered_devices,
+        pusher_state,
+        movement_influence,
+    )
+}
+
+pub fn preview_candidate_executable(
+    movement: &StructureMove,
+    turn: &WorldBlocks,
+    turn_structures: &StructureState,
+    hard_heads: &HashSet<IVec3>,
+) -> (bool, &'static str) {
+    match movement {
+        StructureMove::Translate {
+            structure,
+            offset,
+            mark,
+            source,
+            ..
+        } => {
+            if blocks_gravity_pusher_head(turn, structure, hard_heads, *offset) {
+                return (false, "blocked_by_pusher_head");
+            }
+            let mode = super::structures::movement_expansion_mode_public(*mark, *source);
+            if expanded_move_structure(turn, structure, *offset, turn_structures, mode).is_some() {
+                (true, "ok")
+            } else {
+                (false, "cannot_translate")
+            }
+        }
+        StructureMove::Rotate {
+            structure,
+            pivot,
+            clockwise,
+            ..
+        } => {
+            if can_rotate_structure(turn, structure, *pivot, *clockwise) {
+                (true, "ok")
+            } else {
+                (false, "cannot_rotate")
+            }
+        }
+    }
+}
+
+pub fn phase_kind_label(phase: StructureMovePhaseKind) -> &'static str {
+    match phase {
+        StructureMovePhaseKind::Fixed => "Fixed",
+        StructureMovePhaseKind::Rotate => "Rotate",
+        StructureMovePhaseKind::Push => "Push",
+        StructureMovePhaseKind::Lift => "Lift",
+        StructureMovePhaseKind::Gravity => "Gravity",
+        StructureMovePhaseKind::Conveyor => "Conveyor",
+    }
+}
+
+pub fn mark_label(mark: MovementMark) -> &'static str {
+    match mark {
+        MovementMark::Fixed => "Fixed",
+        MovementMark::Conveyor => "Conveyor",
+        MovementMark::Push => "Push",
+        MovementMark::Vertical => "Gravity",
+    }
+}
+
+fn offset_json(offset: IVec3) -> Value {
+    json!({ "x": offset.x, "y": offset.y, "z": offset.z })
+}
+
+fn positions_json(positions: &HashSet<IVec3>) -> Value {
+    let mut list: Vec<_> = positions
+        .iter()
+        .map(|pos| json!({ "x": pos.x, "y": pos.y, "z": pos.z }))
+        .collect();
+    list.sort_by_key(|pos| {
+        (
+            pos["x"].as_i64().unwrap_or(0),
+            pos["y"].as_i64().unwrap_or(0),
+            pos["z"].as_i64().unwrap_or(0),
+        )
+    });
+    Value::Array(list)
+}
+
+fn movement_preview_json(
+    movement: &StructureMove,
+    turn: &WorldBlocks,
+    turn_structures: &StructureState,
+    hard_heads: &HashSet<IVec3>,
+) -> Value {
+    let (executable, reason) =
+        preview_candidate_executable(movement, turn, turn_structures, hard_heads);
+    match movement {
+        StructureMove::Translate {
+            structure,
+            offset,
+            mark,
+            source,
+            actor,
+        } => json!({
+            "kind": "Translate",
+            "mark": mark_label(*mark),
+            "offset": offset_json(*offset),
+            "source": source.map(|pos| json!({ "x": pos.x, "y": pos.y, "z": pos.z })),
+            "pusher_actor": actor.as_ref().map(|actor| json!({ "x": actor.pos.x, "y": actor.pos.y, "z": actor.pos.z })),
+            "member_count": structure.len(),
+            "members": positions_json(structure),
+            "executable": executable,
+            "reason": reason,
+        }),
+        StructureMove::Rotate {
+            structure,
+            pivot,
+            clockwise,
+            source,
+        } => json!({
+            "kind": "Rotate",
+            "mark": "Rotate",
+            "pivot": json!({ "x": pivot.x, "y": pivot.y, "z": pivot.z }),
+            "clockwise": clockwise,
+            "source": source.map(|pos| json!({ "x": pos.x, "y": pos.y, "z": pos.z })),
+            "member_count": structure.len(),
+            "members": positions_json(structure),
+            "executable": executable,
+            "reason": reason,
+        }),
+    }
+}
+
+pub fn movement_plan_debug_json(
+    turn: &WorldBlocks,
+    turn_structures: &StructureState,
+    solution: &WorldBlocks,
+    solution_structures: &StructureState,
+    signal_cache: &mut super::runtime::SignalNetworkCache,
+    pusher_state: &PusherState,
+    movement_influence: &mut MovementInfluenceCache,
+    turn_number: u64,
+) -> Value {
+    let mut turn_structures = turn_structures.clone();
+    signal_cache.ensure_fresh(turn);
+    let powered = signal_cache.powered_device_positions(turn);
+    let hard_heads = pusher_state.extended_head_positions(turn);
+    let plan = preview_movement_plan(
+        turn,
+        solution,
+        &mut turn_structures,
+        solution_structures,
+        &powered,
+        pusher_state,
+        movement_influence,
+    );
+    let phases: Vec<_> = plan
+        .phases
+        .iter()
+        .map(|phase| {
+            let candidates: Vec<_> = phase
+                .candidates
+                .iter()
+                .map(|candidate| {
+                    json!({
+                        "primary": movement_preview_json(
+                            &candidate.primary,
+                            turn,
+                            &turn_structures,
+                            &hard_heads,
+                        ),
+                        "fallbacks": candidate.fallbacks.iter().map(|movement| {
+                            movement_preview_json(movement, turn, &turn_structures, &hard_heads)
+                        }).collect::<Vec<_>>(),
+                    })
+                })
+                .collect();
+            json!({
+                "phase": phase_kind_label(phase.phase),
+                "candidate_count": candidates.len(),
+                "candidates": candidates,
+            })
+        })
+        .collect();
+    let bare_pushers: Vec<_> = plan
+        .bare_pusher_animations
+        .iter()
+        .map(|(pos, animation)| {
+            json!({
+                "pos": { "x": pos.x, "y": pos.y, "z": pos.z },
+                "from_extension": animation.from_extension,
+                "to_extension": animation.to_extension,
+            })
+        })
+        .collect();
+    json!({
+        "turn": turn_number,
+        "powered_device_count": powered.len(),
+        "powered_devices": powered.iter().map(|pos| json!({ "x": pos.x, "y": pos.y, "z": pos.z })).collect::<Vec<_>>(),
+        "extended_pusher_heads": hard_heads.iter().map(|pos| json!({ "x": pos.x, "y": pos.y, "z": pos.z })).collect::<Vec<_>>(),
+        "bare_pusher_animations": bare_pushers,
+        "phases": phases,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -441,6 +700,13 @@ mod tests {
     fn conveyor(facing: Facing) -> BlockData {
         BlockData {
             kind: BlockKind::Conveyor,
+            facing,
+        }
+    }
+
+    fn reverse_conveyor(facing: Facing) -> BlockData {
+        BlockData {
+            kind: BlockKind::ReverseConveyor,
             facing,
         }
     }
@@ -597,5 +863,96 @@ mod tests {
 
         assert!(realtime.is_material_at(material_pos));
         assert!(!realtime.is_material_at(blocked));
+    }
+
+    #[test]
+    fn north_reverse_conveyor_on_stone_pushes_itself() {
+        let start = IVec3::new(0, 2, 0);
+        let after_gravity = IVec3::new(0, 1, 0);
+        let after_self_push = IVec3::new(0, 1, -1);
+        let after_second_gravity = IVec3::new(0, 0, -1);
+        let mut world = WorldBlocks::default();
+        world.insert(IVec3::ZERO, stone(IVec3::ZERO));
+        world.insert(start, reverse_conveyor(Facing::North));
+
+        let solution = world.clone();
+        let solution_structures = rebuild_structures(&solution);
+        let mut turn_structures = solution_structures.clone();
+        let mut pusher_state = PusherState::default();
+        let mut movement_influence = MovementInfluenceCache::default();
+
+        let mut realtime = world.clone();
+        for (expected, unexpected) in [
+            (after_gravity, start),
+            (after_self_push, after_gravity),
+            (after_second_gravity, after_self_push),
+        ] {
+            let plan = collect_movement_plan(
+                &realtime,
+                &solution,
+                &mut turn_structures,
+                &solution_structures,
+                &HashSet::new(),
+                &pusher_state,
+                &mut movement_influence,
+            );
+            execute_movement_plan(
+                &plan,
+                &mut realtime,
+                &mut turn_structures,
+                &mut pusher_state,
+                &mut movement_influence,
+            );
+
+            assert!(realtime
+                .blocks
+                .get(&expected)
+                .is_some_and(|block| block.kind == BlockKind::ReverseConveyor));
+            assert!(!realtime.blocks.contains_key(&unexpected));
+        }
+    }
+
+    #[test]
+    fn south_reverse_conveyor_moves_platform_from_below_back() {
+        let conveyor_pos = IVec3::new(0, 4, 1);
+        let platform_pos = IVec3::new(0, 3, 1);
+        let target = IVec3::new(0, 3, 0);
+        let mut world = WorldBlocks::default();
+        world.insert(IVec3::ZERO, stone(IVec3::ZERO));
+        world.insert(platform_pos, platform());
+        world.insert(conveyor_pos, reverse_conveyor(Facing::South));
+
+        let solution = world.clone();
+        let solution_structures = rebuild_structures(&solution);
+        let mut turn_structures = solution_structures.clone();
+        let mut pusher_state = PusherState::default();
+        let mut movement_influence = MovementInfluenceCache::default();
+
+        let plan = collect_movement_plan(
+            &world,
+            &solution,
+            &mut turn_structures,
+            &solution_structures,
+            &HashSet::new(),
+            &pusher_state,
+            &mut movement_influence,
+        );
+        let mut realtime = world.clone();
+        execute_movement_plan(
+            &plan,
+            &mut realtime,
+            &mut turn_structures,
+            &mut pusher_state,
+            &mut movement_influence,
+        );
+
+        assert!(realtime
+            .blocks
+            .get(&target)
+            .is_some_and(|block| block.kind == BlockKind::Platform));
+        assert!(!realtime
+            .blocks
+            .get(&platform_pos)
+            .is_some_and(|block| block.kind == BlockKind::Platform));
     }
 }

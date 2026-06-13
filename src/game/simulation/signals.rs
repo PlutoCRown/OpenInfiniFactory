@@ -134,6 +134,52 @@ impl SignalNetworkCache {
             .filter_map(|(pos, component)| powered_components.contains(component).then_some(*pos))
             .collect()
     }
+
+    pub fn ensure_fresh(&mut self, world: &WorldBlocks) {
+        self.refresh(world);
+    }
+
+    pub fn wire_network_id(&self, pos: IVec3) -> Option<usize> {
+        self.wire_components.get(&pos).copied()
+    }
+
+    pub fn device_network_ids(&self, pos: IVec3) -> Option<&[usize]> {
+        self.device_components.get(&pos).map(Vec::as_slice)
+    }
+
+    pub fn network_count(&self) -> usize {
+        self.component_detectors.len()
+    }
+
+    pub fn network_detectors(&self, network_id: usize) -> Option<&[IVec3]> {
+        self.component_detectors.get(network_id).map(Vec::as_slice)
+    }
+
+    pub fn network_wires(&self, network_id: usize) -> Vec<IVec3> {
+        self.wire_components
+            .iter()
+            .filter_map(|(pos, component)| (*component == network_id).then_some(*pos))
+            .collect()
+    }
+
+    pub fn network_is_powered(&self, world: &WorldBlocks, network_id: usize) -> bool {
+        self.network_detectors(network_id)
+            .is_some_and(|detectors| detectors.iter().any(|pos| detector_is_active(world, *pos)))
+    }
+
+    pub fn powered_device_positions(&self, world: &WorldBlocks) -> HashSet<IVec3> {
+        let powered = self.powered_components(world);
+        self.powered_devices(&powered)
+    }
+
+    pub fn devices_on_network(&self, network_id: usize) -> Vec<IVec3> {
+        self.device_components
+            .iter()
+            .filter_map(|(pos, components)| {
+                components.contains(&network_id).then_some(*pos)
+            })
+            .collect()
+    }
 }
 
 fn detector_is_active(world: &WorldBlocks, pos: IVec3) -> bool {
@@ -146,6 +192,10 @@ fn detector_is_active(world: &WorldBlocks, pos: IVec3) -> bool {
     };
 
     world.is_detectable_by_detector_at(pos + detection_pos)
+}
+
+pub fn detector_is_active_public(world: &WorldBlocks, pos: IVec3) -> bool {
+    detector_is_active(world, pos)
 }
 
 fn carries_signal_at(world: &WorldBlocks, pos: IVec3) -> bool {

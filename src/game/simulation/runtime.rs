@@ -22,6 +22,7 @@ use super::structure_state::StructureState;
 use super::structures::MovementInfluenceCache;
 
 pub use super::behaviors::LaserBeam;
+pub use super::signals::detector_is_active_public;
 pub use super::signals::SignalNetworkCache;
 
 #[derive(Resource, Clone)]
@@ -227,7 +228,7 @@ pub fn tick_simulation(
             simulation.step_requested = false;
             simulation.accumulator = 0.0;
             simulation.turn += 1;
-            present_turn(
+            present_cached_turn(
                 cached,
                 animation_duration_for(simulation.running, simulation.speed),
                 &mut deps.presentation,
@@ -270,7 +271,7 @@ pub fn tick_simulation(
         };
         simulation.turn += 1;
         simulation.accumulator -= 1.0;
-        present_turn(
+        present_cached_turn(
             cached,
             animation_duration_for(simulation.running, simulation.speed),
             &mut deps.presentation,
@@ -306,7 +307,7 @@ pub fn tick_simulation(
     );
 }
 
-fn present_turn(
+pub fn present_cached_turn(
     cached: CachedTurn,
     animation_duration: f32,
     presentation: &mut SimulationPresentationState,

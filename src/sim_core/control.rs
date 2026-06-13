@@ -14,6 +14,6 @@ pub struct SimulationControl {
 
 impl SimulationControl {
     pub fn is_active(&self) -> bool {
-        self.running || self.turn > 0
+        self.start_snapshot.is_some() || self.running || self.turn > 0
     }
 }

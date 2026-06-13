@@ -1,0 +1,60 @@
+{
+  "name": "reverse_conveyor_self_push_on_stone",
+  "setup": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 0,
+      "y": 2,
+      "z": 0,
+      "kind": "ReverseConveyor",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "beginSimulation"
+    },
+    {
+      "op": "run",
+      "turns": 1
+    },
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 1,
+      "z": 0,
+      "kind": "ReverseConveyor",
+      "layer": "factory"
+    },
+    {
+      "op": "run",
+      "turns": 1
+    },
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 1,
+      "z": -1,
+      "kind": "ReverseConveyor",
+      "layer": "factory"
+    },
+    {
+      "op": "run",
+      "turns": 1
+    },
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 0,
+      "z": -1,
+      "kind": "ReverseConveyor",
+      "layer": "factory"
+    }
+  ]
+}

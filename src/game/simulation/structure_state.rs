@@ -290,7 +290,7 @@ impl StructureState {
 
     pub fn pusher_target_structure(
         &self,
-        solution: &WorldBlocks,
+        _solution: &WorldBlocks,
         turn: &WorldBlocks,
         pusher_pos: IVec3,
         target_pos: IVec3,
@@ -301,7 +301,7 @@ impl StructureState {
             return None;
         }
         let structure =
-            connected_subset_with_blocked_edge(solution, target, target_pos, Some(pusher_pos));
+            connected_subset_with_blocked_edge(turn, target, target_pos, Some(pusher_pos));
         if structure.contains(&pusher_pos) || !factory_subset_pushable(turn, &structure, offset) {
             return None;
         }
@@ -442,6 +442,18 @@ impl StructureState {
 
     pub fn kind_at(&self, pos: IVec3) -> Option<StructureKind> {
         Some(self.structure(pos)?.kind)
+    }
+
+    pub fn pushable_at(&self, pos: IVec3) -> Option<bool> {
+        Some(self.structure(pos)?.pushable)
+    }
+
+    pub fn member_count_at(&self, pos: IVec3) -> Option<usize> {
+        Some(self.structure(pos)?.positions.len())
+    }
+
+    pub fn positions_at(&self, pos: IVec3) -> Option<HashSet<IVec3>> {
+        Some(self.structure(pos)?.positions.clone())
     }
 
     pub fn structure_contains(&self, pos: IVec3, candidate: IVec3) -> bool {

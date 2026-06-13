@@ -12,6 +12,10 @@ pub struct LaunchOptions {
 impl LaunchOptions {
     pub fn from_args() -> Self {
         let mut options = Self::default();
+        #[cfg(debug_assertions)]
+        {
+            options.debug_http_port = Some(DEFAULT_DEBUG_HTTP_PORT);
+        }
         let mut args = std::env::args().skip(1).peekable();
 
         while let Some(arg) = args.next() {
@@ -19,6 +23,9 @@ impl LaunchOptions {
                 "--help" | "-h" => {
                     print_launch_help();
                     std::process::exit(0);
+                }
+                "--no-debug-http" => {
+                    options.debug_http_port = None;
                 }
                 "--debug-http" => {
                     options.debug_http_port = Some(DEFAULT_DEBUG_HTTP_PORT);
@@ -89,6 +96,7 @@ Usage:
   open_infinifactory [OPTIONS]
 
 Options:
+  --no-debug-http           Disable in-game debug HTTP (debug builds enable it by default)
   --debug-http              Start local debug HTTP on 127.0.0.1:{DEFAULT_DEBUG_HTTP_PORT} (in-game)
   --debug-http=PORT         Start local debug HTTP on 127.0.0.1:PORT
   --debug-http-port PORT    Same as --debug-http=PORT

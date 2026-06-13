@@ -1,6 +1,8 @@
 pub mod embedded;
+pub mod embedded_session;
 pub mod fixture;
 pub mod headless;
+pub mod introspection;
 pub mod protocol;
 pub mod snapshot;
 pub mod world_ops;

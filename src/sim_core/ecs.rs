@@ -14,6 +14,16 @@ use crate::game::world::grid::WorldBlocks;
 use super::control::SimulationControl;
 use super::SimulationDebugLog;
 
+pub struct IntrospectionContext<'a> {
+    pub world: &'a WorldBlocks,
+    pub turn_structures: &'a StructureState,
+    pub solution_structures: StructureState,
+    pub control: &'a SimulationControl,
+    pub signal_cache: &'a mut SignalNetworkCache,
+    pub pusher_state: &'a PusherState,
+    pub movement_influence: &'a mut MovementInfluenceCache,
+}
+
 pub struct SimCoreWorld<'w> {
     world: &'w mut World,
 }
@@ -37,6 +47,48 @@ impl<'w> SimCoreWorld<'w> {
 
     pub fn pusher_state(&self) -> &PusherState {
         self.world.resource()
+    }
+
+    pub fn world(&self) -> &World {
+        self.world
+    }
+
+    pub fn world_scope<R>(
+        &mut self,
+        f: impl FnOnce(&WorldBlocks, &mut SignalNetworkCache) -> R,
+    ) -> R {
+        self.world.resource_scope(|world, mut signal_cache: Mut<SignalNetworkCache>| {
+            let blocks = world.resource::<WorldBlocks>();
+            f(blocks, &mut signal_cache)
+        })
+    }
+
+    pub fn introspection_scope<R>(&mut self, f: impl FnOnce(IntrospectionContext<'_>) -> R) -> R {
+        self.world.resource_scope(
+            |world, mut signal_cache: Mut<SignalNetworkCache>| {
+                world.resource_scope(
+                    |world, mut movement_influence: Mut<MovementInfluenceCache>| {
+                        let control = world.resource::<SimulationControl>();
+                        let blocks = world.resource::<WorldBlocks>();
+                        let turn_structures = world.resource::<StructureState>();
+                        let pusher_state = world.resource::<PusherState>();
+                        let solution_structures = control
+                            .start_structures
+                            .clone()
+                            .unwrap_or_else(|| turn_structures.clone());
+                        f(IntrospectionContext {
+                            world: blocks,
+                            turn_structures,
+                            solution_structures,
+                            control,
+                            signal_cache: &mut signal_cache,
+                            pusher_state,
+                            movement_influence: &mut movement_influence,
+                        })
+                    },
+                )
+            },
+        )
     }
 
     pub fn is_active(&self) -> bool {

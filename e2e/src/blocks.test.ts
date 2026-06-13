@@ -40,6 +40,8 @@ describe("debug HTTP simulation core", () => {
       "sim/opposing_pushers_shared_head.json",
       "sim/conveyor_blocked_by_pusher_head.json",
       "sim/four_converging_blockers_shared_head.json",
+      "sim/test_pusher_reverse_conveyor.json",
+      "sim/reverse_conveyor_self_push_on_stone.json",
     ]) {
       const body = await client.post(`/runFixture?path=${path}`);
       expect(body.ok, JSON.stringify(body)).toBe(true);

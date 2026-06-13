@@ -3,9 +3,30 @@
 const fs = require("fs");
 const path = require("path");
 
-const ROOT = process.argv[2] ? path.resolve(process.argv[2]) : process.cwd();
 const DEFAULT_LIMIT = 20;
-const limit = Number(process.argv[3] ?? DEFAULT_LIMIT);
+
+function parseArgs(argv) {
+  let repoRoot = process.cwd();
+  let limit = DEFAULT_LIMIT;
+
+  for (const arg of argv) {
+    if (/^\d+$/.test(arg)) {
+      limit = Number(arg);
+      continue;
+    }
+    repoRoot = path.resolve(arg);
+  }
+
+  return { repoRoot, limit };
+}
+
+const { repoRoot: ROOT, limit } = parseArgs(process.argv.slice(2));
+const SRC_ROOT = path.join(ROOT, "src");
+
+if (!fs.existsSync(SRC_ROOT)) {
+  console.error(`src directory not found: ${SRC_ROOT}`);
+  process.exit(1);
+}
 
 function walk(dir, files = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -84,7 +105,7 @@ function stripLineComment(line) {
   return commentIndex === -1 ? line : line.slice(0, commentIndex);
 }
 
-const rows = walk(ROOT)
+const rows = walk(SRC_ROOT)
   .map((file) => {
     const contents = fs.readFileSync(file, "utf8");
     return {
@@ -98,7 +119,7 @@ const rows = walk(ROOT)
 const shown = rows.slice(0, Number.isFinite(limit) ? limit : DEFAULT_LIMIT);
 const width = Math.max(...shown.map((row) => row.file.length), "file".length);
 
-console.log(`Scanned ${rows.length} Rust files under ${ROOT}`);
+console.log(`Scanned ${rows.length} Rust files under ${path.relative(ROOT, SRC_ROOT) || "src"}/`);
 console.log(
   `${"lines".padStart(6)}  ${"fns".padStart(3)}  ${"max_fn".padStart(6)}  ${"file".padEnd(width)}  longest_fn`
 );

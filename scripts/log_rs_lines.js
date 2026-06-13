@@ -31,12 +31,18 @@ function countLines(contents) {
     : contents.split("\n").length;
 }
 
+function isSrcRustFile(file) {
+  return file.startsWith("src/") && file.endsWith(".rs");
+}
+
 function trackedRustFiles() {
-  return gitLines(["ls-files", "*.rs"]);
+  return gitLines(["ls-files", "*.rs"]).filter(isSrcRustFile);
 }
 
 function untrackedRustFiles() {
-  return gitLines(["ls-files", "--others", "--exclude-standard", "*.rs"]);
+  return gitLines(["ls-files", "--others", "--exclude-standard", "*.rs"]).filter(
+    isSrcRustFile,
+  );
 }
 
 function headRustLines(files) {
