@@ -2,8 +2,8 @@ use bevy::prelude::*;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAnimation};
 use crate::game::blocks::{BlockData, MovementRule};
+use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAnimation};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks};
 
@@ -41,6 +41,12 @@ pub(super) fn gravity_moves(
         {
             continue;
         }
+        if structure
+            .iter()
+            .any(|pos| world.anchors_material_at_teleport_entrance(*pos))
+        {
+            continue;
+        }
         if structure_supported_by_lifter(world, &structure) {
             structures.clear_gravity_support(index);
             continue;
@@ -48,12 +54,7 @@ pub(super) fn gravity_moves(
         if structures.gravity_support_valid(index, world) {
             continue;
         }
-        if can_move_gravity_structure(
-            world,
-            &structure,
-            structures,
-            hard_pusher_head_occupancy,
-        ) {
+        if can_move_gravity_structure(world, &structure, structures, hard_pusher_head_occupancy) {
             structures.clear_gravity_support(index);
             moves.push(StructureMove::translate_marked(
                 structure,
@@ -239,11 +240,7 @@ impl StructureMove {
         }
     }
 
-    fn expanded_for_plan(
-        self,
-        world: &WorldBlocks,
-        structures: &StructureState,
-    ) -> Self {
+    fn expanded_for_plan(self, world: &WorldBlocks, structures: &StructureState) -> Self {
         match self {
             Self::Translate {
                 structure,
@@ -253,14 +250,9 @@ impl StructureMove {
                 source,
             } => {
                 let mode = movement_expansion_mode(mark, source);
-                let structure = expanded_move_structure(
-                    world,
-                    &structure,
-                    offset,
-                    structures,
-                    mode,
-                )
-                .unwrap_or(structure);
+                let structure =
+                    expanded_move_structure(world, &structure, offset, structures, mode)
+                        .unwrap_or(structure);
                 Self::Translate {
                     structure,
                     offset,
@@ -340,7 +332,9 @@ fn movement_priority_key(
     influence_cache: &MovementInfluenceCache,
 ) -> (u32, u8, ConveyorSourcePriority) {
     (
-        movement.source().map_or(u32::MAX, |_| influence_cache.count(movement)),
+        movement
+            .source()
+            .map_or(u32::MAX, |_| influence_cache.count(movement)),
         movement_kind_priority(movement),
         conveyor_source_priority(movement),
     )
@@ -603,8 +597,7 @@ fn hard_pusher_head_blocked_below(
         };
         if !matches!(
             block.kind,
-            crate::game::blocks::BlockKind::Pusher
-                | crate::game::blocks::BlockKind::Blocker
+            crate::game::blocks::BlockKind::Pusher | crate::game::blocks::BlockKind::Blocker
         ) {
             return false;
         }
@@ -652,8 +645,7 @@ fn expanded_move_structure(
         }
 
         let pushed = pushable_structure_at(world, structures, target, offset)?;
-        if mode == MovementExpansionMode::Gravity && structure_supported_by_lifter(world, &pushed)
-        {
+        if mode == MovementExpansionMode::Gravity && structure_supported_by_lifter(world, &pushed) {
             return None;
         }
         for pushed_pos in pushed {
@@ -663,7 +655,13 @@ fn expanded_move_structure(
         }
     }
 
-    can_move_structure_without_push(world, &expanded, offset).then_some(expanded)
+    can_move_structure_without_push(world, &expanded, offset)
+        .then_some(expanded)
+        .filter(|expanded| {
+            !expanded
+                .iter()
+                .any(|pos| world.anchors_material_at_teleport_entrance(*pos))
+        })
 }
 
 pub(super) fn can_translate_structure(
@@ -804,17 +802,13 @@ fn moved_welds(
         .material_welds
         .iter()
         .filter_map(|weld| {
-            let a = if structure.contains(&weld.a) {
-                transform(weld.a)
-            } else {
-                weld.a
-            };
-            let b = if structure.contains(&weld.b) {
-                transform(weld.b)
-            } else {
-                weld.b
-            };
-            (a != b).then_some(MaterialWeld::new(a, b))
+            let a_in = structure.contains(&weld.a);
+            let b_in = structure.contains(&weld.b);
+            match (a_in, b_in) {
+                (false, false) => Some(*weld),
+                (true, true) => Some(MaterialWeld::new(transform(weld.a), transform(weld.b))),
+                _ => None,
+            }
         })
         .collect()
 }

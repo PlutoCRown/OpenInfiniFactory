@@ -557,6 +557,16 @@ impl WorldBlocks {
             .is_some_and(|block| block.kind.is_material())
     }
 
+    pub fn is_teleport_entrance_at(&self, pos: IVec3) -> bool {
+        self.system_blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind == BlockKind::TeleportEntrance)
+    }
+
+    pub fn anchors_material_at_teleport_entrance(&self, pos: IVec3) -> bool {
+        self.is_material_at(pos) && self.is_teleport_entrance_at(pos)
+    }
+
     pub fn is_factory_at(&self, pos: IVec3) -> bool {
         self.blocks
             .get(&pos)

@@ -12,7 +12,7 @@ use crate::game::world::grid::{
 use super::runtime::PendingGeneratedMaterials;
 use super::signal_offsets;
 use super::structure_state::StructureState;
-use super::structures::{execute_structure_moves, material_structure, MovementMark, StructureMove};
+use super::structures::material_structure;
 
 pub(super) fn run_material_behavior_phase(
     world: &mut WorldBlocks,
@@ -23,17 +23,27 @@ pub(super) fn run_material_behavior_phase(
 ) -> Vec<IVec3> {
     let mut sparks =
         run_material_destroy_phase(world, powered_devices, pending_destroyed, ready_turn);
+    mark_material_teleport_phase(world, pending_destroyed, ready_turn);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
     run_material_acceptance_phase(world, structure_state, pending_destroyed, ready_turn);
     sparks
 }
 
-pub(super) fn run_material_teleport_phase(
-    world: &mut WorldBlocks,
-    structure_state: &mut StructureState,
+pub(super) fn mark_material_teleport_phase(
+    world: &WorldBlocks,
+    pending: &mut PendingGeneratedMaterials,
+    ready_turn: u64,
 ) {
-    run_material_teleport_phase_impl(world, structure_state);
+    mark_material_teleport_phase_impl(world, pending, ready_turn);
+}
+
+pub(super) fn run_ready_material_teleports(
+    world: &mut WorldBlocks,
+    pending: &mut PendingGeneratedMaterials,
+    turn: u64,
+) {
+    run_ready_material_teleports_impl(world, pending, turn);
 }
 
 pub(super) fn run_weld_behavior_phase(world: &mut WorldBlocks) -> Vec<IVec3> {
@@ -208,16 +218,58 @@ fn run_material_conversion_phase(world: &mut WorldBlocks) {
     }
 }
 
-fn run_material_teleport_phase_impl(world: &mut WorldBlocks, structure_state: &mut StructureState) {
+fn detach_material_block(world: &mut WorldBlocks, pos: IVec3) {
+    world.material_welds.retain(|weld| !weld.contains(pos));
+}
+
+fn teleport_entrance_material(world: &mut WorldBlocks, entrance: IVec3, exit: IVec3) -> bool {
+    if !world.anchors_material_at_teleport_entrance(entrance) {
+        return false;
+    }
+    if world.is_material_at(exit) || !world.can_move_into(exit) {
+        return false;
+    }
+
+    detach_material_block(world, entrance);
+
+    let updated_marks = world
+        .material_face_marks
+        .iter()
+        .map(|(face, mark)| {
+            let face = if face.pos == entrance {
+                MaterialFace {
+                    pos: exit,
+                    normal: face.normal,
+                }
+            } else {
+                *face
+            };
+            (face, *mark)
+        })
+        .collect();
+
+    let Some(block) = world.remove(&entrance) else {
+        return false;
+    };
+    world.insert(exit, block);
+    world.replace_material_face_marks(updated_marks);
+    true
+}
+
+fn mark_material_teleport_phase_impl(
+    world: &WorldBlocks,
+    pending: &mut PendingGeneratedMaterials,
+    ready_turn: u64,
+) {
     let entrances: Vec<IVec3> = world
         .system_blocks
         .iter()
         .filter_map(|(pos, block)| (block.kind == BlockKind::TeleportEntrance).then_some(*pos))
         .collect();
-    let mut handled = HashSet::new();
 
     for entrance in entrances {
-        if handled.contains(&entrance) || !world.is_material_at(entrance) {
+        if !world.anchors_material_at_teleport_entrance(entrance) {
+            pending.remove_pending_teleport(entrance);
             continue;
         }
         let Some(exit) = world.teleport_partner(entrance) else {
@@ -230,22 +282,44 @@ fn run_material_teleport_phase_impl(world: &mut WorldBlocks, structure_state: &m
         {
             continue;
         }
+        pending.mark_teleport(entrance, ready_turn);
+    }
+}
 
-        let structure = structure_state
-            .pushable_structure_at(entrance, IVec3::ZERO)
-            .unwrap_or_else(|| material_structure(world, entrance));
-        let offset = exit - entrance;
-        handled.extend(structure.iter().copied());
-        handled.extend(structure.iter().map(|pos| *pos + offset));
-        let _ = execute_structure_moves(
-            world,
-            vec![StructureMove::translate_marked(
-                structure,
-                offset,
-                MovementMark::Push,
-            )],
-            structure_state,
-        );
+fn run_ready_material_teleports_impl(
+    world: &mut WorldBlocks,
+    pending: &mut PendingGeneratedMaterials,
+    turn: u64,
+) {
+    let ready = pending.ready_teleport_entrances(turn);
+    let mut handled = HashSet::new();
+
+    for entrance in ready {
+        if handled.contains(&entrance) {
+            continue;
+        }
+        if !world.anchors_material_at_teleport_entrance(entrance) {
+            pending.remove_pending_teleport(entrance);
+            continue;
+        }
+        let Some(exit) = world.teleport_partner(entrance) else {
+            pending.remove_pending_teleport(entrance);
+            continue;
+        };
+        if !world
+            .system_blocks
+            .get(&exit)
+            .is_some_and(|block| block.kind == BlockKind::TeleportExit)
+        {
+            pending.remove_pending_teleport(entrance);
+            continue;
+        }
+        if !teleport_entrance_material(world, entrance, exit) {
+            continue;
+        }
+        pending.remove_pending_teleport(entrance);
+        handled.insert(entrance);
+        handled.insert(exit);
     }
 }
 
@@ -378,6 +452,7 @@ fn run_material_acceptance_phase(
 mod tests {
     use super::*;
     use crate::game::blocks::{BlockData, BlockKind, MaterialKind};
+    use crate::game::simulation::structures::material_structure;
     use crate::game::world::direction::Facing;
     use crate::game::world::grid::{GoalSettings, WorldBlocks};
 
@@ -407,6 +482,217 @@ mod tests {
         let mut state = StructureState::default();
         state.rebuild_for_simulation(world);
         state
+    }
+
+    fn place_teleport_pair(world: &mut WorldBlocks, entrance: IVec3, exit: IVec3) {
+        world.insert(
+            entrance,
+            BlockData {
+                kind: BlockKind::TeleportEntrance,
+                facing: Facing::North,
+            },
+        );
+        world.insert(
+            exit,
+            BlockData {
+                kind: BlockKind::TeleportExit,
+                facing: Facing::North,
+            },
+        );
+        world.set_teleport_pair(entrance, Some(exit));
+    }
+
+    fn mark_and_run_teleport(
+        world: &mut WorldBlocks,
+        pending: &mut PendingGeneratedMaterials,
+        ready_turn: u64,
+    ) {
+        mark_material_teleport_phase(world, pending, ready_turn);
+        run_ready_material_teleports(world, pending, ready_turn);
+    }
+
+    #[test]
+    fn teleport_waits_until_ready_turn() {
+        let mut world = WorldBlocks::default();
+        let entrance = IVec3::new(1, 0, 0);
+        let exit = IVec3::new(5, 0, 0);
+        place_teleport_pair(&mut world, entrance, exit);
+        place_material(&mut world, entrance, MaterialKind::Basic);
+        let mut pending = PendingGeneratedMaterials::default();
+
+        mark_material_teleport_phase(&mut world, &mut pending, 2);
+        run_ready_material_teleports(&mut world, &mut pending, 1);
+
+        assert!(world.is_material_at(entrance));
+        assert!(!world.is_material_at(exit));
+
+        run_ready_material_teleports(&mut world, &mut pending, 2);
+
+        assert!(!world.is_material_at(entrance));
+        assert!(world.is_material_at(exit));
+    }
+
+    #[test]
+    fn teleport_moves_only_entrance_block_from_welded_structure() {
+        let mut world = WorldBlocks::default();
+        let entrance = IVec3::new(1, 0, 0);
+        let exit = IVec3::new(5, 0, 0);
+        place_teleport_pair(&mut world, entrance, exit);
+        place_material(&mut world, entrance, MaterialKind::Basic);
+        place_material(&mut world, entrance + IVec3::X, MaterialKind::Basic);
+        world.weld_materials(entrance, entrance + IVec3::X);
+        let mut pending = PendingGeneratedMaterials::default();
+
+        mark_and_run_teleport(&mut world, &mut pending, 2);
+
+        assert!(!world.is_material_at(entrance));
+        assert!(world.is_material_at(exit));
+        assert!(world.is_material_at(entrance + IVec3::X));
+        assert!(!world
+            .material_welds
+            .contains(&crate::game::world::grid::MaterialWeld::new(
+                exit,
+                entrance + IVec3::X
+            )));
+    }
+
+    #[test]
+    fn teleport_waits_when_exit_is_occupied() {
+        let mut world = WorldBlocks::default();
+        let entrance = IVec3::new(1, 0, 0);
+        let exit = IVec3::new(5, 0, 0);
+        place_teleport_pair(&mut world, entrance, exit);
+        place_material(&mut world, entrance, MaterialKind::Basic);
+        place_material(&mut world, exit, MaterialKind::Iron);
+        let mut pending = PendingGeneratedMaterials::default();
+
+        mark_and_run_teleport(&mut world, &mut pending, 2);
+
+        assert!(world.is_material_at(entrance));
+        assert!(world.is_material_at(exit));
+        assert_eq!(
+            world
+                .blocks
+                .get(&exit)
+                .and_then(|block| block.kind.material_kind()),
+            Some(MaterialKind::Iron)
+        );
+    }
+
+    #[test]
+    fn teleport_can_run_three_times_when_exit_clears_between() {
+        let mut world = WorldBlocks::default();
+        let entrance = IVec3::new(1, 0, 0);
+        let exit = IVec3::new(5, 0, 0);
+        place_teleport_pair(&mut world, entrance, exit);
+        let mut pending = PendingGeneratedMaterials::default();
+
+        for expected in [
+            MaterialKind::Basic,
+            MaterialKind::Iron,
+            MaterialKind::Copper,
+        ] {
+            place_material(&mut world, entrance, expected);
+            mark_and_run_teleport(&mut world, &mut pending, 2);
+            assert!(!world.is_material_at(entrance));
+            assert_eq!(
+                world
+                    .blocks
+                    .get(&exit)
+                    .and_then(|block| block.kind.material_kind()),
+                Some(expected)
+            );
+            world.remove(&exit);
+        }
+    }
+
+    #[test]
+    fn teleport_retries_after_exit_clears() {
+        let mut world = WorldBlocks::default();
+        let entrance = IVec3::new(1, 0, 0);
+        let exit = IVec3::new(5, 0, 0);
+        place_teleport_pair(&mut world, entrance, exit);
+        place_material(&mut world, entrance, MaterialKind::Basic);
+        place_material(&mut world, exit, MaterialKind::Iron);
+        let mut pending = PendingGeneratedMaterials::default();
+
+        mark_and_run_teleport(&mut world, &mut pending, 2);
+        assert!(world.is_material_at(entrance));
+
+        world.remove(&exit);
+        run_ready_material_teleports(&mut world, &mut pending, 2);
+
+        assert!(!world.is_material_at(entrance));
+        assert_eq!(
+            world
+                .blocks
+                .get(&exit)
+                .and_then(|block| block.kind.material_kind()),
+            Some(MaterialKind::Basic)
+        );
+    }
+
+    #[test]
+    fn anchored_entrance_material_is_not_pushed_with_welded_neighbor() {
+        use crate::game::simulation::structures::can_translate_structure;
+
+        let mut world = WorldBlocks::default();
+        let entrance = IVec3::new(1, 0, 0);
+        let neighbor = IVec3::new(0, 0, 0);
+        place_teleport_pair(&mut world, entrance, IVec3::new(5, 0, 0));
+        place_material(&mut world, entrance, MaterialKind::Basic);
+        place_material(&mut world, neighbor, MaterialKind::Basic);
+        world.weld_materials(entrance, neighbor);
+        let state = acceptor_state(&world);
+        let structure = material_structure(&world, neighbor);
+
+        assert!(!can_translate_structure(
+            &world,
+            &structure,
+            IVec3::X,
+            &state
+        ));
+    }
+
+    #[test]
+    fn teleport_detaches_before_moving_to_exit() {
+        let mut world = WorldBlocks::default();
+        let entrance = IVec3::new(1, 0, 0);
+        let exit = IVec3::new(5, 0, 0);
+        place_teleport_pair(&mut world, entrance, exit);
+        place_material(&mut world, entrance, MaterialKind::Basic);
+        place_material(&mut world, entrance + IVec3::X, MaterialKind::Basic);
+        world.weld_materials(entrance, entrance + IVec3::X);
+        let mut pending = PendingGeneratedMaterials::default();
+
+        mark_and_run_teleport(&mut world, &mut pending, 2);
+
+        assert!(!world.is_material_at(entrance));
+        assert!(world.is_material_at(exit));
+        assert!(world.is_material_at(entrance + IVec3::X));
+        assert!(!world
+            .material_welds
+            .contains(&crate::game::world::grid::MaterialWeld::new(
+                exit,
+                entrance + IVec3::X
+            )));
+    }
+
+    #[test]
+    fn teleport_does_not_move_unwelded_neighbor_on_entrance() {
+        let mut world = WorldBlocks::default();
+        let entrance = IVec3::new(1, 0, 0);
+        let exit = IVec3::new(5, 0, 0);
+        place_teleport_pair(&mut world, entrance, exit);
+        place_material(&mut world, entrance, MaterialKind::Basic);
+        place_material(&mut world, entrance + IVec3::Y, MaterialKind::Basic);
+        let mut pending = PendingGeneratedMaterials::default();
+
+        mark_and_run_teleport(&mut world, &mut pending, 2);
+
+        assert!(!world.is_material_at(entrance));
+        assert!(world.is_material_at(exit));
+        assert!(world.is_material_at(entrance + IVec3::Y));
     }
 
     #[test]

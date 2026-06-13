@@ -18,7 +18,7 @@ use crate::game::world::rendering::{
 };
 
 use super::behaviors::{
-    material_source_generation, run_material_behavior_phase, run_material_teleport_phase,
+    material_source_generation, run_material_behavior_phase, run_ready_material_teleports,
     run_weld_behavior_phase,
 };
 use super::gravity::mark_gravity_phase;
@@ -51,6 +51,7 @@ pub struct PendingGeneratedMaterials {
     pending: HashMap<IVec3, PendingGeneratedMaterial>,
     pending_destroyed: HashMap<IVec3, u64>,
     pending_acceptance_sparks: HashMap<IVec3, u64>,
+    pending_teleports: HashMap<IVec3, u64>,
 }
 
 impl PendingGeneratedMaterials {
@@ -58,10 +59,26 @@ impl PendingGeneratedMaterials {
         self.pending.clear();
         self.pending_destroyed.clear();
         self.pending_acceptance_sparks.clear();
+        self.pending_teleports.clear();
     }
 
     pub(super) fn mark_destroyed(&mut self, pos: IVec3, ready_turn: u64) {
         self.pending_destroyed.entry(pos).or_insert(ready_turn);
+    }
+
+    pub(super) fn mark_teleport(&mut self, entrance: IVec3, ready_turn: u64) {
+        self.pending_teleports.entry(entrance).or_insert(ready_turn);
+    }
+
+    pub(super) fn remove_pending_teleport(&mut self, entrance: IVec3) {
+        self.pending_teleports.remove(&entrance);
+    }
+
+    pub(super) fn ready_teleport_entrances(&self, turn: u64) -> Vec<IVec3> {
+        self.pending_teleports
+            .iter()
+            .filter_map(|(entrance, ready_turn)| (*ready_turn <= turn).then_some(*entrance))
+            .collect()
     }
 
     pub(super) fn mark_acceptance_spark(&mut self, pos: IVec3, ready_turn: u64) {
@@ -129,10 +146,10 @@ pub fn run_turn(
 
     world.clear_generated_markers();
     let acceptance_sparks = remove_ready_destroyed_materials(world, pending_generated, turn);
+    run_ready_material_teleports(world, pending_generated, turn);
     let generated_animations = place_ready_generated_materials(world, pending_generated, turn);
     run_static_marker_phase(world);
     let weld_sparks = run_weld_behavior_phase(world);
-    run_material_teleport_phase(world, structure_state);
     structure_state.refresh_material_structures(world);
     sample.prep_ms = mark_elapsed_ms(&mut mark);
 
@@ -200,6 +217,7 @@ pub fn run_turn(
         pending_generated,
         turn + 1,
     );
+    structure_state.refresh_material_structures(world);
 
     prepare_upcoming_generation(world, pending_generated, turn + 1);
     sample.behavior_ms = mark_elapsed_ms(&mut mark);

@@ -771,8 +771,8 @@ impl BlockKind {
     }
 
     pub fn material_shell_scale(self) -> f32 {
-        if self.shows_material_preview() {
-            1.08
+        if self.is_system_block() && self.persistent_layer() == Some(PersistentLayer::Puzzle) {
+            1.05
         } else {
             1.0
         }
