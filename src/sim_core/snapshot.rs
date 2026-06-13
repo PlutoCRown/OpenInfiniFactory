@@ -8,10 +8,12 @@ use super::TurnOutput;
 
 #[derive(Clone)]
 pub struct SimSnapshot {
+    pub solution: WorldBlocks,
+    pub solution_structures: StructureState,
     pub world: WorldBlocks,
+    pub structure_state: StructureState,
     pub pending_generated: PendingGeneratedMaterials,
     pub signal_cache: SignalNetworkCache,
-    pub structure_state: StructureState,
     pub movement_influence: MovementInfluenceCache,
     pub pusher_state: PusherState,
 }
@@ -23,19 +25,22 @@ pub struct CachedTurn {
 }
 
 impl SimSnapshot {
-    pub fn from_world(
+    pub fn at_simulation_start(
         world: &WorldBlocks,
         pending_generated: &PendingGeneratedMaterials,
         signal_cache: &SignalNetworkCache,
-        structure_state: &StructureState,
         movement_influence: &MovementInfluenceCache,
         pusher_state: &PusherState,
     ) -> Self {
+        let mut structure_state = StructureState::default();
+        structure_state.rebuild_for_simulation(world);
         Self {
+            solution: world.clone(),
+            solution_structures: structure_state.clone(),
             world: world.clone(),
+            structure_state,
             pending_generated: pending_generated.clone(),
             signal_cache: signal_cache.clone(),
-            structure_state: structure_state.clone(),
             movement_influence: movement_influence.clone(),
             pusher_state: pusher_state.clone(),
         }

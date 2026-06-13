@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
 use crate::game::simulation::core::simulate_turn;
+use crate::game::simulation::SimulationWorlds;
 use crate::game::world::animation::SIMULATION_TURN_SECONDS;
 use crate::sim_core::SimulationDebugLog;
 
@@ -81,8 +82,7 @@ impl Drop for SimulationWorker {
 }
 
 fn worker_main(command_rx: Receiver<WorkerCommand>, result_tx: Sender<CachedTurn>) {
-    let mut snapshot = SimSnapshot::from_world(
-        &Default::default(),
+    let mut snapshot = SimSnapshot::at_simulation_start(
         &Default::default(),
         &Default::default(),
         &Default::default(),
@@ -125,18 +125,25 @@ fn worker_main(command_rx: Receiver<WorkerCommand>, result_tx: Sender<CachedTurn
                     } else {
                         SIMULATION_TURN_SECONDS
                     };
+                    let mut worlds = SimulationWorlds::from_snapshot_parts(
+                        snapshot.solution.clone(),
+                        snapshot.solution_structures.clone(),
+                        snapshot.world.clone(),
+                        snapshot.structure_state.clone(),
+                    );
                     let output = simulate_turn(
-                        &mut snapshot.world,
+                        &mut worlds,
                         &mut snapshot.pending_generated,
                         &mut snapshot.signal_cache,
                         next_turn,
                         animation_duration,
-                        &mut snapshot.structure_state,
-                        &mut snapshot.movement_influence,
                         &mut snapshot.pusher_state,
+                        &mut snapshot.movement_influence,
                         None,
                         None,
                     );
+                    snapshot.world = worlds.turn;
+                    snapshot.structure_state = worlds.turn_structures;
                     simulated_through = next_turn;
                     let after = snapshot.clone();
                     if result_tx.send(CachedTurn { output, after }).is_err() {

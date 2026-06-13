@@ -6,19 +6,13 @@ use bevy::prelude::*;
 use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAnimation};
 use crate::game::world::grid::WorldBlocks;
 
-use super::behaviors::{
-    material_source_generation, run_material_behavior_phase, run_ready_material_teleports,
-    run_weld_behavior_phase, LaserBeam,
-};
-use super::gravity::mark_gravity_phase;
+use super::behaviors::{material_source_generation, run_material_behavior_phase, LaserBeam};
 use super::markers::{run_powered_marker_phase, run_static_marker_phase};
-use super::movement::{blocker_animations, mark_structure_movement_phase, PusherState};
+use super::movement::{blocker_animations, PusherState};
+use super::movement_plan::{collect_movement_plan, execute_movement_plan};
 use super::runtime::{PendingGeneratedMaterials, SignalNetworkCache, SimulationStepStats};
-use super::structure_state::StructureState;
-use super::structures::{
-    execute_structure_moves_with_pushers, merge_structure_movement_plan, MovementInfluenceCache,
-    StructureMove,
-};
+use super::structures::MovementInfluenceCache;
+use super::SimulationWorlds;
 
 #[derive(Clone)]
 pub struct TurnOutput {
@@ -34,14 +28,13 @@ pub struct TurnOutput {
 }
 
 pub fn simulate_turn(
-    world: &mut WorldBlocks,
+    worlds: &mut SimulationWorlds,
     pending_generated: &mut PendingGeneratedMaterials,
     signal_cache: &mut SignalNetworkCache,
     turn: u64,
     animation_duration: f32,
-    structure_state: &mut StructureState,
-    movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
+    movement_influence: &mut MovementInfluenceCache,
     mut sim_log: Option<&mut crate::sim_core::SimulationDebugLog>,
     stats: Option<&mut SimulationStepStats>,
 ) -> TurnOutput {
@@ -53,123 +46,70 @@ pub fn simulate_turn(
         sim_log.log(turn, "turn begin");
     }
 
-    world.clear_generated_markers();
-    let acceptance_sparks = remove_ready_destroyed_materials(world, pending_generated, turn);
-    run_ready_material_teleports(world, pending_generated, turn);
-    let generated_animations = place_ready_generated_materials(world, pending_generated, turn);
-    run_static_marker_phase(world);
-    let weld_sparks = run_weld_behavior_phase(world);
-    structure_state.refresh_material_structures(world);
+    worlds.turn.clear_generated_markers();
+    let generated_animations =
+        place_ready_generated_materials(&mut worlds.turn, pending_generated, turn);
     sample.prep_ms = mark_elapsed_ms(&mut mark);
 
-    signal_cache.refresh(world);
-    let powered_components = signal_cache.powered_components(world);
+    signal_cache.refresh(&worlds.turn);
+    let powered_components = signal_cache.powered_components(&worlds.turn);
     let powered_devices = signal_cache.powered_devices(&powered_components);
     let render_powered_wires = signal_cache.powered_wires(&powered_components);
     sample.signal_ms = mark_elapsed_ms(&mut mark);
-    if let Some(sim_log) = sim_log.as_mut() {
-        sim_log.log(
-            turn,
-            format!(
-                "signals: {} powered networks, {} powered devices",
-                powered_components.len(),
-                powered_devices.len()
-            ),
-        );
-        for pos in powered_devices.iter().copied().collect::<Vec<_>>() {
-            if let Some(block) = world.blocks.get(&pos) {
-                sim_log.log(
-                    turn,
-                    format!(
-                        "  powered device at ({}, {}, {}) {:?}",
-                        pos.x, pos.y, pos.z, block.kind
-                    ),
-                );
-            }
-        }
-    }
 
-    let actuating_devices = pusher_state.actuating_devices(world, &powered_devices);
-    if let Some(sim_log) = sim_log.as_mut() {
-        for pos in actuating_devices.iter().copied().collect::<Vec<_>>() {
-            sim_log.log(
-                turn,
-                format!("  actuating pusher/blocker at ({}, {}, {})", pos.x, pos.y, pos.z),
-            );
-        }
-    }
-    let hard_pusher_head_occupancy = pusher_state.hard_head_occupancy(world);
-    let mut movement_plan = mark_gravity_phase(
-        world,
-        structure_state,
-        &actuating_devices,
-        &hard_pusher_head_occupancy,
-    );
-    sample.gravity_ms = mark_elapsed_ms(&mut mark);
-    if let Some(sim_log) = sim_log.as_mut() {
-        log_movement_plan(turn, sim_log, world, "gravity", &movement_plan);
-    }
-
-    run_powered_marker_phase(world, &powered_devices);
-    sample.marker_before_move_ms = mark_elapsed_ms(&mut mark);
-
-    let (device_movement_plan, bare_pusher_animations) =
-        mark_structure_movement_phase(world, &powered_devices, structure_state, pusher_state);
-    if let Some(sim_log) = sim_log.as_mut() {
-        log_movement_plan(turn, sim_log, world, "devices", &device_movement_plan);
-    }
-    movement_plan = merge_structure_movement_plan(
-        movement_plan,
-        device_movement_plan,
-        world,
-        structure_state,
+    let movement_plan = collect_movement_plan(
+        &worlds.turn,
+        &worlds.solution,
+        &mut worlds.turn_structures,
+        &worlds.solution_structures,
+        &powered_devices,
+        pusher_state,
         movement_influence,
     );
-    if let Some(sim_log) = sim_log.as_mut() {
-        log_movement_plan(turn, sim_log, world, "merged", &movement_plan);
-    }
     sample.movement_mark_ms = mark_elapsed_ms(&mut mark);
 
-    let (mut animations, pusher_animations) = execute_structure_moves_with_pushers(
-        world,
-        movement_plan,
-        structure_state,
+    let mut realtime = worlds.turn.clone();
+    let movement_output = execute_movement_plan(
+        &movement_plan,
+        &mut realtime,
+        &mut worlds.turn_structures,
+        pusher_state,
         movement_influence,
     );
+    worlds.turn = realtime;
+    sample.movement_execute_ms = mark_elapsed_ms(&mut mark);
+
+    let mut animations = movement_output.animations;
     merge_generated_animations(&mut animations, generated_animations);
-    let mut pusher_animations = pusher_animations
+    let mut pusher_animations = movement_output
+        .pusher_animations
         .into_iter()
-        .chain(bare_pusher_animations)
         .map(|(pos, mut animation)| {
             animation.duration = animation_duration;
             (pos, animation)
         })
         .collect::<HashMap<_, _>>();
-    for (pos, animation) in pusher_state.sustained_animations() {
+    for (pos, animation) in blocker_animations(&worlds.turn, &powered_devices) {
         pusher_animations.entry(pos).or_insert(animation);
     }
-    for (pos, animation) in blocker_animations(world, &powered_devices) {
-        pusher_animations.entry(pos).or_insert(animation);
-    }
-    sample.movement_execute_ms = mark_elapsed_ms(&mut mark);
 
-    run_static_marker_phase(world);
-    run_powered_marker_phase(world, &powered_devices);
+    run_static_marker_phase(&mut worlds.turn);
+    run_powered_marker_phase(&mut worlds.turn, &powered_devices);
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
     let behavior_effects = run_material_behavior_phase(
-        world,
+        &mut worlds.turn,
         &powered_devices,
-        structure_state,
-        pending_generated,
-        turn + 1,
+        &mut worlds.turn_structures,
     );
-    structure_state.refresh_material_structures(world);
+    worlds
+        .turn_structures
+        .refresh_material_structures(&worlds.turn);
 
-    prepare_upcoming_generation(world, pending_generated, turn + 1);
+    prepare_upcoming_generation(&worlds.turn, pending_generated, turn + 1);
     sample.behavior_ms = mark_elapsed_ms(&mut mark);
 
-    signal_cache.refresh(world);
+    signal_cache.refresh(&worlds.turn);
     sample.signal_refresh_ms = mark_elapsed_ms(&mut mark);
     sample.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
     sample.has_sample = true;
@@ -186,10 +126,10 @@ pub fn simulate_turn(
         animations,
         pusher_animations,
         render_powered_wires,
-        weld_sparks,
+        weld_sparks: behavior_effects.weld_sparks,
         behavior_sparks: behavior_effects.sparks,
         laser_beams: behavior_effects.laser_beams,
-        acceptance_sparks,
+        acceptance_sparks: behavior_effects.acceptance_sparks,
         stats: sample,
     }
 }
@@ -236,25 +176,6 @@ fn place_ready_generated_materials(
     animations
 }
 
-fn remove_ready_destroyed_materials(
-    world: &mut WorldBlocks,
-    pending_generated: &mut PendingGeneratedMaterials,
-    turn: u64,
-) -> Vec<IVec3> {
-    let ready = pending_generated.ready_destroyed_positions(turn);
-    let mut acceptance_sparks = Vec::new();
-    for pos in ready {
-        pending_generated.remove_destroyed(pos);
-        if pending_generated.take_acceptance_spark(pos).is_some() {
-            acceptance_sparks.push(pos);
-        }
-        if world.is_material_at(pos) {
-            world.remove(&pos);
-        }
-    }
-    acceptance_sparks
-}
-
 fn merge_generated_animations(
     animations: &mut HashMap<IVec3, BlockAnimation>,
     generated_animations: HashMap<IVec3, BlockAnimation>,
@@ -274,67 +195,4 @@ fn mark_elapsed_ms(mark: &mut Instant) -> f64 {
     let elapsed = now.saturating_duration_since(*mark).as_secs_f64() * 1000.0;
     *mark = now;
     elapsed
-}
-
-fn log_movement_plan(
-    turn: u64,
-    sim_log: &mut crate::sim_core::SimulationDebugLog,
-    world: &WorldBlocks,
-    label: &str,
-    moves: &[StructureMove],
-) {
-    if moves.is_empty() {
-        return;
-    }
-    sim_log.log(turn, format!("{label}: {} movement(s)", moves.len()));
-    for movement in moves {
-        match movement {
-            StructureMove::Translate {
-                structure,
-                offset,
-                actor,
-                mark,
-                source,
-            } => {
-                sim_log.log(
-                    turn,
-                    format!(
-                        "  translate {} cell(s) by ({}, {}, {}) mark={mark:?} source={source:?} actor={actor:?}",
-                        structure.len(),
-                        offset.x,
-                        offset.y,
-                        offset.z,
-                    ),
-                );
-                for pos in structure.iter().take(8) {
-                    let kind = world
-                        .blocks
-                        .get(pos)
-                        .map(|block| format!("{:?}", block.kind))
-                        .unwrap_or_else(|| "?".into());
-                    sim_log.log(turn, format!("    at ({}, {}, {}) {kind}", pos.x, pos.y, pos.z));
-                }
-                if structure.len() > 8 {
-                    sim_log.log(turn, format!("    ... {} more", structure.len() - 8));
-                }
-            }
-            StructureMove::Rotate {
-                structure,
-                pivot,
-                clockwise,
-                source,
-            } => {
-                sim_log.log(
-                    turn,
-                    format!(
-                        "  rotate {} cell(s) pivot=({}, {}, {}) clockwise={clockwise} source={source:?}",
-                        structure.len(),
-                        pivot.x,
-                        pivot.y,
-                        pivot.z,
-                    ),
-                );
-            }
-        }
-    }
 }

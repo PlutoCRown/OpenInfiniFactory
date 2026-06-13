@@ -3,10 +3,13 @@ pub mod core;
 mod gravity;
 pub mod markers;
 pub mod movement;
+mod movement_plan;
 pub mod runtime;
 mod signals;
 pub mod structure_state;
 pub mod structures;
+mod worlds;
+pub use worlds::SimulationWorlds;
 
 use bevy::prelude::*;
 

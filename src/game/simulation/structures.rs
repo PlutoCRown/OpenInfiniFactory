@@ -68,6 +68,7 @@ pub(super) fn gravity_moves(
     moves
 }
 
+#[derive(Clone)]
 pub(super) enum StructureMove {
     Translate {
         structure: HashSet<IVec3>,
@@ -86,6 +87,7 @@ pub(super) enum StructureMove {
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(super) enum MovementMark {
+    Fixed,
     Conveyor,
     Push,
     Vertical,
@@ -103,56 +105,289 @@ pub(super) enum PusherAnimationKind {
     Retract,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StructureMovePhaseKind {
+    Fixed,
+    Rotate,
+    Push,
+    Lift,
+    Gravity,
+    Conveyor,
+}
+
+#[derive(Clone)]
+pub struct MovementCandidate {
+    pub primary: StructureMove,
+    pub fallbacks: Vec<StructureMove>,
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct StructureKey(Vec<IVec3>);
 
 #[derive(Resource, Default, Clone)]
 pub struct MovementInfluenceCache {
-    counts: HashMap<StructureKey, HashMap<IVec3, u32>>,
+    /// Rotators that already rotated this structure; their marks are skipped until contact ends.
+    rotator_ignore: HashMap<StructureKey, HashSet<IVec3>>,
+    /// Conveyors that marked this structure recently; still-active ones get lower mark priority.
+    conveyor_history: HashMap<StructureKey, HashSet<IVec3>>,
 }
 
 impl MovementInfluenceCache {
     pub fn clear(&mut self) {
-        self.counts.clear();
+        self.rotator_ignore.clear();
+        self.conveyor_history.clear();
     }
 
-    fn count(&self, movement: &StructureMove) -> u32 {
+    fn ignores_rotator(&self, movement: &StructureMove) -> bool {
+        let StructureMove::Rotate {
+            structure,
+            source: Some(source),
+            ..
+        } = movement
+        else {
+            return false;
+        };
+        self.rotator_ignore
+            .get(&StructureKey::from_structure(structure))
+            .is_some_and(|sources| sources.contains(source))
+    }
+
+    fn conveyor_stale_penalty(&self, movement: &StructureMove) -> u32 {
         let Some(source) = movement.source() else {
             return 0;
         };
-        self.counts
-            .get(&StructureKey::from_structure(movement.structure()))
-            .and_then(|sources| sources.get(&source).copied())
-            .unwrap_or(0)
+        let StructureMove::Translate {
+            mark: MovementMark::Conveyor,
+            structure,
+            ..
+        } = movement
+        else {
+            return 0;
+        };
+        u32::from(
+            self.conveyor_history
+                .get(&StructureKey::from_structure(structure))
+                .is_some_and(|sources| sources.contains(&source)),
+        )
     }
 
-    fn retain_active_sources(&mut self, active_sources: &HashMap<StructureKey, HashSet<IVec3>>) {
-        self.counts.retain(|structure, sources| {
-            let Some(active) = active_sources.get(structure) else {
-                return false;
-            };
-            sources.retain(|source, _| active.contains(source));
-            !sources.is_empty()
-        });
+    fn retain_for_turn(
+        &mut self,
+        active_rotators: &HashMap<StructureKey, HashSet<IVec3>>,
+        active_conveyors: &HashMap<StructureKey, HashSet<IVec3>>,
+    ) {
+        retain_history_sources(&mut self.rotator_ignore, active_rotators);
+        retain_history_sources(&mut self.conveyor_history, active_conveyors);
+    }
+
+    fn commit_conveyor_marking(
+        &mut self,
+        active_conveyors: &HashMap<StructureKey, HashSet<IVec3>>,
+    ) {
+        for (key, sources) in active_conveyors {
+            if sources.is_empty() {
+                continue;
+            }
+            self.conveyor_history
+                .entry(key.clone())
+                .or_default()
+                .extend(sources.iter().copied());
+        }
     }
 
     fn record_executed(&mut self, executed: Vec<ExecutedMovement>) {
         for movement in executed {
-            let mut counts = self.counts.remove(&movement.before).unwrap_or_default();
-            if movement.before != movement.after {
-                let moved_counts = counts;
-                counts = self.counts.remove(&movement.after).unwrap_or_default();
-                for (source, count) in moved_counts {
-                    counts
-                        .entry(source)
-                        .and_modify(|current| *current = (*current).max(count))
-                        .or_insert(count);
-                }
+            self.migrate_structure_key(&movement.before, &movement.after);
+            if movement.kind == ExecutedMovementKind::Rotate {
+                self.rotator_ignore
+                    .entry(movement.after.clone())
+                    .or_default()
+                    .insert(movement.source);
             }
-            *counts.entry(movement.source).or_insert(0) += 1;
-            self.counts.insert(movement.after, counts);
         }
     }
+
+    fn migrate_structure_key(&mut self, before: &StructureKey, after: &StructureKey) {
+        if before == after {
+            return;
+        }
+        if let Some(rotators) = self.rotator_ignore.remove(before) {
+            self.rotator_ignore
+                .entry(after.clone())
+                .or_default()
+                .extend(rotators);
+        }
+        if let Some(conveyors) = self.conveyor_history.remove(before) {
+            self.conveyor_history
+                .entry(after.clone())
+                .or_default()
+                .extend(conveyors);
+        }
+    }
+
+    pub(super) fn begin_turn_marking(
+        &mut self,
+        active_rotators: &HashMap<StructureKey, HashSet<IVec3>>,
+        active_conveyors: &HashMap<StructureKey, HashSet<IVec3>>,
+    ) {
+        self.retain_for_turn(active_rotators, active_conveyors);
+    }
+
+    pub(super) fn finish_turn_marking(
+        &mut self,
+        active_conveyors: &HashMap<StructureKey, HashSet<IVec3>>,
+    ) {
+        self.commit_conveyor_marking(active_conveyors);
+    }
+
+    pub(super) fn ignores_rotator_movement(&self, movement: &StructureMove) -> bool {
+        self.ignores_rotator(movement)
+    }
+
+    pub(super) fn conveyor_stale_penalty_for(&self, movement: &StructureMove) -> u32 {
+        self.conveyor_stale_penalty(movement)
+    }
+
+    pub(super) fn record_structure_migrated(
+        &mut self,
+        before: &StructureKey,
+        after: &StructureKey,
+    ) {
+        self.migrate_structure_key(before, after);
+    }
+
+    pub(super) fn record_rotate_executed(
+        &mut self,
+        before: &StructureKey,
+        after: &StructureKey,
+        source: IVec3,
+    ) {
+        self.migrate_structure_key(before, after);
+        self.rotator_ignore
+            .entry(after.clone())
+            .or_default()
+            .insert(source);
+    }
+
+    pub(super) fn record_successful_rotate(
+        &mut self,
+        structure_before: &HashSet<IVec3>,
+        structure_after: &HashSet<IVec3>,
+        source: IVec3,
+    ) {
+        let before = StructureKey::from_structure(structure_before);
+        let after = StructureKey::from_structure(structure_after);
+        self.record_rotate_executed(&before, &after, source);
+    }
+
+    pub(super) fn record_successful_translate(
+        &mut self,
+        structure_before: &HashSet<IVec3>,
+        structure_after: &HashSet<IVec3>,
+    ) {
+        let before = StructureKey::from_structure(structure_before);
+        let after = StructureKey::from_structure(structure_after);
+        self.record_structure_migrated(&before, &after);
+    }
+
+    pub(super) fn begin_turn_from_candidates(
+        &mut self,
+        rotate: &[MovementCandidate],
+        conveyor: &[MovementCandidate],
+    ) {
+        let (active_rotators, active_conveyors) = active_sources_from_candidates(rotate, conveyor);
+        self.retain_for_turn(&active_rotators, &active_conveyors);
+    }
+
+    pub(super) fn finish_turn_from_candidates(&mut self, conveyor: &[MovementCandidate]) {
+        let (_, active_conveyors) = active_sources_from_candidates(&[], conveyor);
+        self.commit_conveyor_marking(&active_conveyors);
+    }
+
+    pub(super) fn compare_conveyor_candidates(
+        &self,
+        a: &MovementCandidate,
+        b: &MovementCandidate,
+    ) -> std::cmp::Ordering {
+        conveyor_candidate_priority(a, self).cmp(&conveyor_candidate_priority(b, self))
+    }
+
+    #[cfg(test)]
+    pub(super) fn rotator_is_ignored(&self, movement: &StructureMove) -> bool {
+        self.ignores_rotator(movement)
+    }
+
+    #[cfg(test)]
+    pub(super) fn conveyor_penalty(&self, movement: &StructureMove) -> u32 {
+        self.conveyor_stale_penalty(movement)
+    }
+}
+
+fn retain_history_sources(
+    history: &mut HashMap<StructureKey, HashSet<IVec3>>,
+    active: &HashMap<StructureKey, HashSet<IVec3>>,
+) {
+    history.retain(|structure, sources| {
+        let Some(active_sources) = active.get(structure) else {
+            return false;
+        };
+        sources.retain(|source| active_sources.contains(source));
+        !sources.is_empty()
+    });
+}
+
+fn active_sources_from_candidates(
+    rotate: &[MovementCandidate],
+    conveyor: &[MovementCandidate],
+) -> (
+    HashMap<StructureKey, HashSet<IVec3>>,
+    HashMap<StructureKey, HashSet<IVec3>>,
+) {
+    let mut rotators: HashMap<StructureKey, HashSet<IVec3>> = HashMap::new();
+    for candidate in rotate {
+        let Some(source) = candidate.primary.source() else {
+            continue;
+        };
+        rotators
+            .entry(StructureKey::from_structure(candidate.primary.structure()))
+            .or_default()
+            .insert(source);
+    }
+    let mut conveyors: HashMap<StructureKey, HashSet<IVec3>> = HashMap::new();
+    for candidate in conveyor {
+        let Some(source) = candidate.primary.source() else {
+            continue;
+        };
+        conveyors
+            .entry(StructureKey::from_structure(candidate.primary.structure()))
+            .or_default()
+            .insert(source);
+    }
+    (rotators, conveyors)
+}
+
+fn conveyor_candidate_priority(
+    candidate: &MovementCandidate,
+    influence: &MovementInfluenceCache,
+) -> (u32, i32, i32, i32) {
+    (
+        influence.conveyor_stale_penalty_for(&candidate.primary),
+        candidate
+            .primary
+            .source()
+            .map(|pos| pos.x)
+            .unwrap_or(i32::MIN),
+        candidate
+            .primary
+            .source()
+            .map(|pos| pos.y)
+            .unwrap_or(i32::MIN),
+        candidate
+            .primary
+            .source()
+            .map(|pos| pos.z)
+            .unwrap_or(i32::MIN),
+    )
 }
 
 impl StructureKey {
@@ -167,6 +402,14 @@ struct ExecutedMovement {
     before: StructureKey,
     after: StructureKey,
     source: IVec3,
+    kind: ExecutedMovementKind,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ExecutedMovementKind {
+    Rotate,
+    Conveyor,
+    Other,
 }
 
 impl StructureMove {
@@ -217,9 +460,16 @@ impl StructureMove {
         self
     }
 
-    fn source(&self) -> Option<IVec3> {
+    pub(super) fn source(&self) -> Option<IVec3> {
         match self {
             Self::Translate { source, .. } | Self::Rotate { source, .. } => *source,
+        }
+    }
+
+    pub(super) fn pusher_actor(&self) -> Option<IVec3> {
+        match self {
+            Self::Translate { actor, .. } => actor.map(|actor| actor.pos),
+            Self::Rotate { .. } => None,
         }
     }
 
@@ -275,8 +525,9 @@ pub(super) fn merge_structure_movement_plan(
 ) -> Vec<StructureMove> {
     planned_moves = expand_structure_movement_plan(planned_moves, world, structures);
     let mut device_moves = expand_structure_movement_plan(device_moves, world, structures);
-    let active_sources = active_device_sources(&device_moves);
-    influence_cache.retain_active_sources(&active_sources);
+    let (active_rotators, active_conveyors) = active_sources_by_kind(&device_moves);
+    influence_cache.retain_for_turn(&active_rotators, &active_conveyors);
+    device_moves.retain(|movement| !influence_cache.ignores_rotator(movement));
     device_moves.sort_by(|a, b| compare_movement_priority(a, b, influence_cache));
 
     for movement in device_moves {
@@ -294,21 +545,37 @@ pub(super) fn merge_structure_movement_plan(
         });
         planned_moves.push(movement);
     }
+    influence_cache.commit_conveyor_marking(&active_conveyors);
     planned_moves
 }
 
-fn active_device_sources(moves: &[StructureMove]) -> HashMap<StructureKey, HashSet<IVec3>> {
-    let mut active = HashMap::new();
+fn active_sources_by_kind(
+    moves: &[StructureMove],
+) -> (
+    HashMap<StructureKey, HashSet<IVec3>>,
+    HashMap<StructureKey, HashSet<IVec3>>,
+) {
+    let mut rotators: HashMap<StructureKey, HashSet<IVec3>> = HashMap::new();
+    let mut conveyors: HashMap<StructureKey, HashSet<IVec3>> = HashMap::new();
     for movement in moves {
         let Some(source) = movement.source() else {
             continue;
         };
-        active
-            .entry(StructureKey::from_structure(movement.structure()))
-            .or_insert_with(HashSet::new)
-            .insert(source);
+        let key = StructureKey::from_structure(movement.structure());
+        match movement {
+            StructureMove::Rotate { .. } => {
+                rotators.entry(key).or_default().insert(source);
+            }
+            StructureMove::Translate {
+                mark: MovementMark::Conveyor,
+                ..
+            } => {
+                conveyors.entry(key).or_default().insert(source);
+            }
+            _ => {}
+        }
     }
-    active
+    (rotators, conveyors)
 }
 
 fn movement_beats(
@@ -332,9 +599,7 @@ fn movement_priority_key(
     influence_cache: &MovementInfluenceCache,
 ) -> (u32, u8, ConveyorSourcePriority) {
     (
-        movement
-            .source()
-            .map_or(u32::MAX, |_| influence_cache.count(movement)),
+        influence_cache.conveyor_stale_penalty(movement),
         movement_kind_priority(movement),
         conveyor_source_priority(movement),
     )
@@ -355,6 +620,10 @@ fn movement_kind_priority(movement: &StructureMove) -> u8 {
             mark: MovementMark::Conveyor,
             ..
         } => 3,
+        StructureMove::Translate {
+            mark: MovementMark::Fixed,
+            ..
+        } => 4,
     }
 }
 
@@ -502,10 +771,16 @@ pub(super) fn execute_structure_moves_with_pushers(
                     let target_structure: HashSet<IVec3> =
                         structure.into_iter().map(|pos| pos + offset).collect();
                     if let Some(source) = source {
+                        let kind = if mark == MovementMark::Conveyor {
+                            ExecutedMovementKind::Conveyor
+                        } else {
+                            ExecutedMovementKind::Other
+                        };
                         executed.push(ExecutedMovement {
                             before: before_key,
                             after: StructureKey::from_structure(&target_structure),
                             source,
+                            kind,
                         });
                     }
                     moved.extend(target_structure);
@@ -552,6 +827,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                             before: before_key,
                             after: StructureKey::from_structure(&target_structure),
                             source,
+                            kind: ExecutedMovementKind::Rotate,
                         });
                     }
                     moved.extend(target_structure);
@@ -619,7 +895,7 @@ fn hard_pusher_head_blocks_move(
     })
 }
 
-fn expanded_move_structure(
+pub(super) fn expanded_move_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,
@@ -679,7 +955,7 @@ pub(super) fn can_translate_structure(
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-enum MovementExpansionMode {
+pub(super) enum MovementExpansionMode {
     Normal,
     Gravity,
 }
@@ -791,6 +1067,33 @@ fn rotate_facing(facing: Facing, clockwise: bool) -> Facing {
     }
 }
 
+pub(super) fn rotate_facing_internal(facing: Facing, clockwise: bool) -> Facing {
+    rotate_facing(facing, clockwise)
+}
+
+pub(super) fn movement_expansion_mode_public(
+    mark: MovementMark,
+    source: Option<IVec3>,
+) -> MovementExpansionMode {
+    movement_expansion_mode(mark, source)
+}
+
+pub(super) fn hard_pusher_head_blocks_move_public(
+    structure: &HashSet<IVec3>,
+    offset: IVec3,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
+) -> bool {
+    hard_pusher_head_blocks_move(structure, offset, hard_pusher_head_occupancy)
+}
+
+pub(super) fn hard_pusher_head_blocked_below_public(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
+) -> bool {
+    hard_pusher_head_blocked_below(world, structure, hard_pusher_head_occupancy)
+}
+
 fn moved_welds(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
@@ -828,4 +1131,61 @@ fn moved_face_marks(
             (face, *mark)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod movement_history_tests {
+    use super::*;
+    use bevy::prelude::IVec3;
+    use std::collections::HashSet;
+
+    #[test]
+    fn rotator_history_skips_repeat_mark_until_contact_ends() {
+        let structure = HashSet::from([IVec3::new(0, 2, 0)]);
+        let rotator = IVec3::new(1, 1, 0);
+        let movement = StructureMove::rotate(structure.clone(), rotator, true).with_source(rotator);
+        let mut cache = MovementInfluenceCache::default();
+
+        assert!(!cache.rotator_is_ignored(&movement));
+        cache.record_successful_rotate(&structure, &HashSet::from([IVec3::new(0, 2, 1)]), rotator);
+        let movement_after_rotate =
+            StructureMove::rotate(HashSet::from([IVec3::new(0, 2, 1)]), rotator, true)
+                .with_source(rotator);
+        assert!(cache.rotator_is_ignored(&movement_after_rotate));
+    }
+
+    #[test]
+    fn conveyor_history_deprioritizes_stale_source() {
+        let structure = HashSet::from([IVec3::ZERO]);
+        let stale =
+            StructureMove::translate_marked(structure.clone(), IVec3::X, MovementMark::Conveyor)
+                .with_source(IVec3::new(-1, 0, 0));
+        let fresh = StructureMove::translate_marked(structure, IVec3::X, MovementMark::Conveyor)
+            .with_source(IVec3::new(1, 0, 0));
+        let mut cache = MovementInfluenceCache::default();
+        cache.begin_turn_from_candidates(
+            &[],
+            &[MovementCandidate {
+                primary: stale.clone(),
+                fallbacks: Vec::new(),
+            }],
+        );
+        cache.finish_turn_from_candidates(&[MovementCandidate {
+            primary: stale,
+            fallbacks: Vec::new(),
+        }]);
+
+        assert_eq!(cache.conveyor_penalty(&fresh), 0);
+        assert_eq!(
+            cache.conveyor_penalty(
+                &StructureMove::translate_marked(
+                    HashSet::from([IVec3::ZERO]),
+                    IVec3::X,
+                    MovementMark::Conveyor,
+                )
+                .with_source(IVec3::new(-1, 0, 0))
+            ),
+            1
+        );
+    }
 }

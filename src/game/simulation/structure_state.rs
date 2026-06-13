@@ -290,7 +290,8 @@ impl StructureState {
 
     pub fn pusher_target_structure(
         &self,
-        world: &WorldBlocks,
+        solution: &WorldBlocks,
+        turn: &WorldBlocks,
         pusher_pos: IVec3,
         target_pos: IVec3,
         offset: IVec3,
@@ -300,8 +301,8 @@ impl StructureState {
             return None;
         }
         let structure =
-            connected_subset_with_blocked_edge(world, target, target_pos, Some(pusher_pos));
-        if structure.contains(&pusher_pos) || !factory_subset_pushable(world, &structure, offset) {
+            connected_subset_with_blocked_edge(solution, target, target_pos, Some(pusher_pos));
+        if structure.contains(&pusher_pos) || !factory_subset_pushable(turn, &structure, offset) {
             return None;
         }
         Some(structure)
@@ -766,6 +767,7 @@ mod tests {
 
         let subset = state.pusher_target_structure(
             &world,
+            &world,
             IVec3::new(0, 2, 0),
             IVec3::new(1, 2, 0),
             IVec3::X,
@@ -795,6 +797,7 @@ mod tests {
         let state = StructureState::rebuild_for_simulation_standalone(&world);
         assert!(state
             .pusher_target_structure(
+                &world,
                 &world,
                 IVec3::new(2, 1, 0),
                 IVec3::new(1, 1, 0),

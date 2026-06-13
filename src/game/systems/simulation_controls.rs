@@ -71,11 +71,10 @@ pub fn simulation_controls(
         deps.presentation.last_render_powered_wires.clear();
         if let Some(worker) = deps.worker.as_ref() {
             worker.reset(
-                SimSnapshot::from_world(
+                SimSnapshot::at_simulation_start(
                     &deps.world,
                     &deps.pending_generated,
                     &deps.signal_cache,
-                    &deps.structure_state,
                     &deps.movement_influence,
                     &deps.pusher_state,
                 ),
@@ -115,11 +114,10 @@ pub fn simulation_controls(
         deps.presentation.last_render_powered_wires.clear();
         if let Some(worker) = deps.worker.as_ref() {
             worker.reset(
-                SimSnapshot::from_world(
+                SimSnapshot::at_simulation_start(
                     &deps.world,
                     &deps.pending_generated,
                     &deps.signal_cache,
-                    &deps.structure_state,
                     &deps.movement_influence,
                     &deps.pusher_state,
                 ),

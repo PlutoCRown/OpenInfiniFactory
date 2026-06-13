@@ -43,54 +43,11 @@ pub struct SimulationStepStats {
 #[derive(Resource, Default, Clone)]
 pub struct PendingGeneratedMaterials {
     pending: HashMap<IVec3, PendingGeneratedMaterial>,
-    pending_destroyed: HashMap<IVec3, u64>,
-    pending_acceptance_sparks: HashMap<IVec3, u64>,
-    pending_teleports: HashMap<IVec3, u64>,
 }
 
 impl PendingGeneratedMaterials {
     pub fn clear(&mut self) {
         self.pending.clear();
-        self.pending_destroyed.clear();
-        self.pending_acceptance_sparks.clear();
-        self.pending_teleports.clear();
-    }
-
-    pub(super) fn mark_destroyed(&mut self, pos: IVec3, ready_turn: u64) {
-        self.pending_destroyed.entry(pos).or_insert(ready_turn);
-    }
-
-    pub(super) fn mark_teleport(&mut self, entrance: IVec3, ready_turn: u64) {
-        self.pending_teleports.entry(entrance).or_insert(ready_turn);
-    }
-
-    pub(super) fn remove_pending_teleport(&mut self, entrance: IVec3) {
-        self.pending_teleports.remove(&entrance);
-    }
-
-    pub(super) fn ready_teleport_entrances(&self, turn: u64) -> Vec<IVec3> {
-        self.pending_teleports
-            .iter()
-            .filter_map(|(entrance, ready_turn)| (*ready_turn <= turn).then_some(*entrance))
-            .collect()
-    }
-
-    pub(super) fn mark_acceptance_spark(&mut self, pos: IVec3, ready_turn: u64) {
-        self.pending_acceptance_sparks
-            .entry(pos)
-            .or_insert(ready_turn);
-    }
-
-    pub(crate) fn pending_destroy_turn(&self, pos: IVec3) -> Option<u64> {
-        self.pending_destroyed.get(&pos).copied()
-    }
-
-    pub(crate) fn pending_acceptance_spark_turn(&self, pos: IVec3) -> Option<u64> {
-        self.pending_acceptance_sparks.get(&pos).copied()
-    }
-
-    pub(crate) fn has_pending_destruction(&self) -> bool {
-        !self.pending_destroyed.is_empty()
     }
 
     pub(crate) fn pending_keys(&self) -> impl Iterator<Item = IVec3> + '_ {
@@ -112,21 +69,6 @@ impl PendingGeneratedMaterials {
 
     pub(crate) fn take_pending_block(&mut self, pos: IVec3) -> Option<BlockData> {
         self.pending.remove(&pos).map(|pending| pending.block)
-    }
-
-    pub(crate) fn ready_destroyed_positions(&self, turn: u64) -> Vec<IVec3> {
-        self.pending_destroyed
-            .iter()
-            .filter_map(|(pos, ready_turn)| (*ready_turn <= turn).then_some(*pos))
-            .collect()
-    }
-
-    pub(crate) fn remove_destroyed(&mut self, pos: IVec3) {
-        self.pending_destroyed.remove(&pos);
-    }
-
-    pub(crate) fn take_acceptance_spark(&mut self, pos: IVec3) -> Option<u64> {
-        self.pending_acceptance_sparks.remove(&pos)
     }
 
     pub(crate) fn pending_entries(&self) -> impl Iterator<Item = (IVec3, BlockData, u64)> + '_ {

@@ -34,7 +34,12 @@ describe("debug HTTP simulation core", () => {
 
   test("runs simulation fixtures", async () => {
     const client = new DebugClient(PORT);
-    for (const path of ["sim/welder_weld_point.json", "sim/wire_detector_power.json"]) {
+    for (const path of [
+      "sim/welder_weld_point.json",
+      "sim/wire_detector_power.json",
+      "sim/opposing_pushers_shared_head.json",
+      "sim/conveyor_blocked_by_pusher_head.json",
+    ]) {
       const body = await client.post(`/runFixture?path=${path}`);
       expect(body.ok, JSON.stringify(body)).toBe(true);
     }

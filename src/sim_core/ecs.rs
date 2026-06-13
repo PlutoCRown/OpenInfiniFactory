@@ -8,6 +8,7 @@ use crate::game::simulation::runtime::{
 };
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;
+use crate::game::simulation::SimulationWorlds;
 use crate::game::world::grid::WorldBlocks;
 
 use super::control::SimulationControl;
@@ -136,18 +137,33 @@ impl<'w> SimCoreWorld<'w> {
             mut movement_influence,
             mut pusher_state,
         ) = state.get_mut(self.world);
+        let solution = control
+            .start_snapshot
+            .clone()
+            .unwrap_or_else(|| world_blocks.clone());
+        let solution_structures = control
+            .start_structures
+            .clone()
+            .unwrap_or_else(|| structure_state.clone());
+        let mut worlds = SimulationWorlds::from_snapshot_parts(
+            solution,
+            solution_structures,
+            world_blocks.clone(),
+            structure_state.clone(),
+        );
         let output = simulate_turn(
-            &mut world_blocks,
+            &mut worlds,
             &mut pending_generated,
             &mut signal_cache,
             next_turn,
             animation_duration,
-            &mut structure_state,
-            &mut movement_influence,
             &mut pusher_state,
+            &mut movement_influence,
             sim_log,
             stats,
         );
+        *world_blocks = worlds.turn;
+        *structure_state = worlds.turn_structures;
         control.turn = next_turn;
         output
     }

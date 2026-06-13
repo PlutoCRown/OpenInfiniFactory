@@ -1,0 +1,85 @@
+{
+  "name": "conveyor_blocked_by_pusher_head",
+  "setup": [
+    {
+      "x": -1,
+      "y": 0,
+      "z": 0,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 1,
+      "y": 0,
+      "z": 0,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 2,
+      "y": 0,
+      "z": 0,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": -1,
+      "y": 1,
+      "z": 0,
+      "kind": "Conveyor",
+      "facing": "East"
+    },
+    {
+      "x": 0,
+      "y": 1,
+      "z": 0,
+      "kind": "Material",
+      "facing": "North"
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "z": 0,
+      "kind": "Pusher",
+      "facing": "West"
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "z": 1,
+      "kind": "Generator",
+      "facing": "North"
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "z": 2,
+      "kind": "Wire",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "beginSimulation"
+    },
+    {
+      "op": "run",
+      "turns": 1
+    },
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 1,
+      "z": 0,
+      "kind": "Material",
+      "layer": "material"
+    }
+  ]
+}
