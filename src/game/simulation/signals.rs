@@ -6,7 +6,7 @@ use crate::game::world::grid::WorldBlocks;
 
 use super::signal_offsets;
 
-#[derive(Default, Resource)]
+#[derive(Default, Resource, Clone)]
 pub struct SignalNetworkCache {
     topology_revision: u64,
     wire_components: HashMap<IVec3, usize>,

@@ -106,7 +106,7 @@ pub(super) enum PusherAnimationKind {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct StructureKey(Vec<IVec3>);
 
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Clone)]
 pub struct MovementInfluenceCache {
     counts: HashMap<StructureKey, HashMap<IVec3, u32>>,
 }
@@ -466,22 +466,20 @@ pub(super) fn execute_structure_moves_with_pushers(
                     movement_expansion_mode(mark, source),
                 ) {
                     let before_key = StructureKey::from_structure(&structure);
-                    if offset.abs().element_sum() == 1 {
-                        for pos in &structure {
-                            if let Some(block) = world.blocks.get(pos) {
-                                animations.insert(
-                                    *pos + offset,
-                                    BlockAnimation {
-                                        from_pos: *pos,
-                                        to_pos: *pos + offset,
-                                        from_facing: block.facing,
-                                        to_facing: block.facing,
-                                        kind: BlockAnimationKind::Move,
-                                        duration: None,
-                                        progress: None,
-                                    },
-                                );
-                            }
+                    for pos in &structure {
+                        if let Some(block) = world.blocks.get(pos) {
+                            animations.insert(
+                                *pos + offset,
+                                BlockAnimation {
+                                    from_pos: *pos,
+                                    to_pos: *pos + offset,
+                                    from_facing: block.facing,
+                                    to_facing: block.facing,
+                                    kind: BlockAnimationKind::Move,
+                                    duration: None,
+                                    progress: None,
+                                },
+                            );
                         }
                     }
                     if let Some(actor) = actor {

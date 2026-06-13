@@ -6,8 +6,12 @@
 
 use bevy::prelude::*;
 
+use crate::scene::BlockEntityIndex;
 use crate::shared::launch::LaunchOptions;
-use crate::sim_core::TurnCache;
+use crate::sim_core::{SimulationWorker, TurnCache};
 
 impl Resource for TurnCache {}
 impl Resource for LaunchOptions {}
+impl Resource for SimulationWorker {}
+impl Resource for BlockEntityIndex {}
+impl Resource for crate::game::simulation::runtime::SimulationPresentationState {}

@@ -213,7 +213,7 @@ fn dispatch_action(
     if changed {
         ctx.world.set_generator_settings(pos, settings);
         ctx.mark_dirty();
-        refresh_world_after_edit(world);
+        refresh_world_after_edit(world, pos);
     }
 }
 

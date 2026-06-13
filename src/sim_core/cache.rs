@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 
-use crate::sim_core::TurnOutput;
+use super::snapshot::CachedTurn;
 
 pub const TURN_PREFETCH_DEPTH: u64 = 4;
 
 #[derive(Default)]
 pub struct TurnCache {
     pub simulated_through: u64,
-    pending: BTreeMap<u64, TurnOutput>,
+    pending: BTreeMap<u64, CachedTurn>,
 }
 
 impl TurnCache {
@@ -33,16 +33,26 @@ impl TurnCache {
         self.simulated_through < display_turn + game_prefetch_depth()
     }
 
-    pub fn take_pending(&mut self, expected_turn: u64) -> Option<TurnOutput> {
+    pub fn take_pending(&mut self, expected_turn: u64) -> Option<CachedTurn> {
         self.pending.remove(&expected_turn)
     }
 
-    pub fn store_prefetch(&mut self, output: TurnOutput) {
-        self.simulated_through = output.turn;
-        self.pending.insert(output.turn, output);
+    pub fn store_prefetch(&mut self, cached: CachedTurn) {
+        self.simulated_through = cached.output.turn;
+        self.pending.insert(cached.output.turn, cached);
+    }
+
+    pub fn ingest_worker_results(&mut self, results: impl IntoIterator<Item = CachedTurn>) {
+        for cached in results {
+            if self.pending.contains_key(&cached.output.turn) {
+                continue;
+            }
+            self.simulated_through = self.simulated_through.max(cached.output.turn);
+            self.pending.insert(cached.output.turn, cached);
+        }
     }
 }
 
 fn game_prefetch_depth() -> u64 {
-    1
+    2
 }

@@ -649,7 +649,7 @@ pub fn spawn_block_with_animation(
     data: BlockData,
     animation: Option<BlockAnimation>,
     factory_debug: Option<&StructureState>,
-) {
+) -> Entity {
     spawn_block_with_timed_animation(
         commands,
         meshes,
@@ -660,7 +660,8 @@ pub fn spawn_block_with_animation(
         animation,
         AnimationTiming::edit(),
         factory_debug,
-    );
+        false,
+    )
 }
 
 pub fn spawn_block_with_timed_animation(
@@ -673,7 +674,8 @@ pub fn spawn_block_with_timed_animation(
     animation: Option<BlockAnimation>,
     timing: AnimationTiming,
     factory_debug: Option<&StructureState>,
-) {
+    powered_wire: bool,
+) -> Entity {
     spawn_block_model(
         commands,
         meshes,
@@ -681,7 +683,7 @@ pub fn spawn_block_with_timed_animation(
         world,
         pos,
         data,
-        assets.block_material(data.kind),
+        block_render_material(assets, data, powered_wire),
         None,
         animation,
         None,
@@ -691,7 +693,7 @@ pub fn spawn_block_with_timed_animation(
         true,
         None,
         factory_debug,
-    );
+    )
 }
 
 pub fn spawn_pending_generated_block(
@@ -873,7 +875,7 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
     );
 }
 
-fn block_render_material(
+pub(crate) fn block_render_material(
     assets: &WorldRenderAssets,
     data: BlockData,
     powered_wire: bool,
@@ -1082,6 +1084,39 @@ fn render_rotation(data: BlockData, facing: crate::game::world::direction::Facin
     }
 }
 
+pub(crate) fn spawn_world_block_entity(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    assets: &WorldRenderAssets,
+    world: &WorldBlocks,
+    pos: IVec3,
+    data: BlockData,
+    animation: Option<BlockAnimation>,
+    pusher_animation: Option<PusherAnimation>,
+    timing: AnimationTiming,
+    powered_wire: bool,
+    factory_debug: Option<&StructureState>,
+) -> Entity {
+    spawn_block_model(
+        commands,
+        meshes,
+        assets,
+        world,
+        pos,
+        data,
+        block_render_material(assets, data, powered_wire),
+        None,
+        animation,
+        pusher_animation,
+        timing,
+        true,
+        false,
+        true,
+        None,
+        factory_debug,
+    )
+}
+
 fn spawn_block_model(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -1099,7 +1134,7 @@ fn spawn_block_model(
     show_generator_preview: bool,
     icon_render: Option<(Vec3, &RenderLayers)>,
     factory_debug: Option<&StructureState>,
-) {
+) -> Entity {
     let debug_overlay = factory_debug.and_then(|structure_state| {
         factory_debug_overlay_material(assets, structure_state, pos, data.kind)
     });
@@ -1216,7 +1251,7 @@ fn spawn_block_model(
 
         if let Some(weld_connector) = render_behavior.weld_connector {
             let offsets = match weld_connector {
-                WeldConnectorBehavior::AllSides => signal_offsets().to_vec(),
+                WeldConnectorBehavior::AllSides => signal_neighbor_offsets().to_vec(),
                 WeldConnectorBehavior::Offset(offset) => vec![offset],
             };
             for offset in offsets {
@@ -1241,7 +1276,7 @@ fn spawn_block_model(
                 WireConnectorBehavior::Wire => None,
             };
             let mut connected_offsets = Vec::new();
-            for offset in signal_offsets() {
+            for offset in signal_neighbor_offsets() {
                 if blocked_offset == Some(offset) {
                     continue;
                 }
@@ -1308,6 +1343,7 @@ fn spawn_block_model(
             spawn_factory_debug_overlay(parent, assets, material);
         }
     });
+    entity.id()
 }
 
 fn spawn_selected_material_preview(
@@ -1471,7 +1507,7 @@ fn wire_connects_to(block: &BlockData, wire_from_block: IVec3) -> bool {
     }
 }
 
-fn signal_offsets() -> [IVec3; 6] {
+pub(crate) fn signal_neighbor_offsets() -> [IVec3; 6] {
     [
         IVec3::X,
         IVec3::NEG_X,

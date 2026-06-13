@@ -169,7 +169,7 @@ fn on_click(
     if changed {
         ctx.world.set_goal_settings(pos, settings);
         ctx.mark_dirty();
-        refresh_world_after_edit(&mut world);
+        refresh_world_after_edit(&mut world, pos);
     }
 }
 

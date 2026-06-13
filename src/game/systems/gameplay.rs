@@ -27,6 +27,7 @@ use crate::game::world::grid::{
     grid_to_world, raycast_blocks, raycast_edit_drag_grid, MaterialWeld, TargetHit, WorldBlocks,
 };
 use crate::game::world::rendering::StructureBounds;
+use crate::scene::{refresh_edit_changes, BlockEntityIndex};
 use crate::game::world::rendering::{
     block_face_highlight_transform, despawn_edit_previews, rebuild_world_for_debug_state,
     rebuild_world_with_animations, rebuild_world_with_animations_for_debug_state,
@@ -78,6 +79,7 @@ pub struct PlacementQueries<'w, 's> {
     render_assets: Option<Res<'w, WorldRenderAssets>>,
     debug: Res<'w, DebugState>,
     structure_state: ResMut<'w, StructureState>,
+    block_index: ResMut<'w, BlockEntityIndex>,
 }
 
 pub fn gameplay_input(
@@ -190,6 +192,7 @@ pub fn placement_input(
         render_assets,
         debug,
         mut structure_state,
+        mut block_index,
     } = queries;
 
     if *mode.get() != GameMode::Playing || !playing_ui.active_play() {
@@ -429,7 +432,7 @@ pub fn placement_input(
                     &render_assets,
                     &debug,
                     &mut structure_state,
-                    &block_entities,
+                    &mut block_index,
                 ) {
                     solution_state.dirty = true;
                 }
@@ -946,9 +949,9 @@ fn commit_edit_gesture(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &mut StructureState,
-    block_entities: &Query<(Entity, &BlockEntity)>,
+    block_index: &mut BlockEntityIndex,
 ) -> bool {
-    let mut changed = false;
+    let mut changed_positions = std::collections::HashSet::new();
     match gesture.kind {
         EditGestureKind::Place { block } => {
             let positions = selection_positions(
@@ -959,20 +962,8 @@ fn commit_edit_gesture(
             for pos in &positions {
                 if can_place_block_at(*pos, block, builder_mode, world, player_pos) {
                     world.insert(*pos, block);
-                    changed = true;
+                    changed_positions.insert(*pos);
                 }
-            }
-            if changed {
-                refresh_edit_generated_markers(world);
-                despawn_block_entities(commands, block_entities);
-                rebuild_world_for_debug_state(
-                    commands,
-                    meshes,
-                    world,
-                    render_assets,
-                    debug,
-                    structure_state,
-                );
             }
         }
         EditGestureKind::Delete => {
@@ -982,32 +973,27 @@ fn commit_edit_gesture(
                 current_delete_at.unwrap_or(gesture.start),
             );
             for pos in &positions {
-                let removed = delete_block_at(*pos, builder_mode, world);
-                if removed {
-                    changed = true;
-                    if let Some((entity, _)) = block_entities
-                        .iter()
-                        .find(|(_, block_entity)| block_entity.pos == *pos)
-                    {
-                        commands.entity(entity).despawn();
-                    }
+                if delete_block_at(*pos, builder_mode, world) {
+                    changed_positions.insert(*pos);
                 }
-            }
-            if changed {
-                refresh_edit_generated_markers(world);
-                despawn_block_entities(commands, block_entities);
-                rebuild_world_for_debug_state(
-                    commands,
-                    meshes,
-                    world,
-                    render_assets,
-                    debug,
-                    structure_state,
-                );
             }
         }
     }
-    changed
+    if changed_positions.is_empty() {
+        return false;
+    }
+    refresh_edit_generated_markers(world);
+    refresh_edit_changes(
+        commands,
+        meshes,
+        block_index,
+        world,
+        render_assets,
+        debug,
+        structure_state,
+        &changed_positions,
+    );
+    true
 }
 
 fn spawn_gesture_previews(

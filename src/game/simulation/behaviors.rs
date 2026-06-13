@@ -14,6 +14,7 @@ use super::signal_offsets;
 use super::structure_state::StructureState;
 use super::structures::material_structure;
 
+#[derive(Clone, Copy)]
 pub struct LaserBeam {
     pub pos: IVec3,
     pub direction: IVec3,

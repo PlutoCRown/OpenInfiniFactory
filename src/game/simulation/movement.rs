@@ -10,7 +10,7 @@ use super::structures::{
     can_translate_structure, MovementMark, PusherActor, PusherAnimationKind, StructureMove,
 };
 
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Clone)]
 pub struct PusherState {
     entries: HashMap<IVec3, PusherStateEntry>,
 }

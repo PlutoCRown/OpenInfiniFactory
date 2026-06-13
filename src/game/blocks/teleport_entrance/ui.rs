@@ -146,7 +146,7 @@ pub fn dispatch_teleport_action(
             ctx.world.set_teleport_pair(pos, pair);
             ctx.close_dropdown();
             ctx.mark_dirty();
-            refresh_world_after_edit(world);
+            refresh_world_after_edit(world, pos);
         }
     }
 }

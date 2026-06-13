@@ -124,7 +124,7 @@ pub fn dispatch_labeler_action(
     if changed {
         ctx.world.set_labeler_settings(pos, settings);
         ctx.mark_dirty();
-        refresh_world_after_edit(world);
+        refresh_world_after_edit(world, pos);
     }
 }
 

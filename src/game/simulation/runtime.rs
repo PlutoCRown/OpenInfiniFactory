@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::game::blocks::BlockData;
-use crate::game::simulation::core::{prepare_upcoming_generation, simulate_turn};
+use crate::game::simulation::core::prepare_upcoming_generation;
 use crate::game::state::{BuilderMode, SimulationState};
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
@@ -11,11 +11,11 @@ use crate::game::world::animation::{
 };
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_pending_generated_previews, spawn_pending_generated_block, BlockEntity,
-    PendingGeneratedPreview, WorldRenderAssets,
+    despawn_pending_generated_previews, spawn_pending_generated_block, PendingGeneratedPreview,
+    WorldRenderAssets,
 };
-use crate::scene::apply_turn_output;
-use crate::sim_core::{SimulationDebugLog, TurnCache};
+use crate::scene::{apply_turn_output, BlockEntityIndex};
+use crate::sim_core::{CachedTurn, SimSnapshot, SimulationDebugLog, SimulationWorker, TurnCache};
 
 use super::movement::PusherState;
 use super::structure_state::StructureState;
@@ -40,7 +40,7 @@ pub struct SimulationStepStats {
     pub render_rebuild_ms: f64,
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Clone)]
 pub struct PendingGeneratedMaterials {
     pending: HashMap<IVec3, PendingGeneratedMaterial>,
     pending_destroyed: HashMap<IVec3, u64>,
@@ -136,6 +136,7 @@ impl PendingGeneratedMaterials {
     }
 }
 
+#[derive(Clone)]
 struct PendingGeneratedMaterial {
     block: BlockData,
     ready_turn: u64,
@@ -168,80 +169,102 @@ pub(crate) struct SimulationTurnDeps<'w> {
     sim_log: ResMut<'w, SimulationDebugLog>,
 }
 
-pub fn prefetch_simulation_turn(
+#[derive(Default)]
+pub struct SimulationPresentationState {
+    pub committed_world: WorldBlocks,
+}
+
+pub fn apply_sim_snapshot(
+    snapshot: &SimSnapshot,
+    world: &mut WorldBlocks,
+    pending_generated: &mut PendingGeneratedMaterials,
+    signal_cache: &mut SignalNetworkCache,
+    structure_state: &mut StructureState,
+    movement_influence: &mut MovementInfluenceCache,
+    pusher_state: &mut PusherState,
+) {
+    *world = snapshot.world.clone();
+    *pending_generated = snapshot.pending_generated.clone();
+    *signal_cache = snapshot.signal_cache.clone();
+    *structure_state = snapshot.structure_state.clone();
+    *movement_influence = snapshot.movement_influence.clone();
+    *pusher_state = snapshot.pusher_state.clone();
+}
+
+pub fn poll_simulation_worker(
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
-    mut world: ResMut<WorldBlocks>,
-    mut pending_generated: ResMut<PendingGeneratedMaterials>,
-    mut signal_cache: ResMut<SignalNetworkCache>,
+    worker: Option<Res<SimulationWorker>>,
     mut turn_cache: ResMut<TurnCache>,
-    mut turn_deps: SimulationTurnDeps,
 ) {
+    let Some(worker) = worker else {
+        return;
+    };
     if *builder_mode != BuilderMode::Play {
         return;
     }
-    if !simulation.running && !simulation.step_requested {
-        return;
-    }
-    if !turn_cache.needs_prefetch(simulation.turn) {
-        return;
-    }
+    worker.configure(
+        simulation.turn,
+        simulation.running,
+        simulation.step_requested,
+        simulation.speed,
+        simulation.is_active(),
+    );
+    turn_cache.ingest_worker_results(worker.drain_results());
+}
 
-    let animation_duration = if simulation.running {
-        SIMULATION_TURN_SECONDS / simulation.speed.max(0.001)
-    } else {
-        SIMULATION_TURN_SECONDS
-    };
+pub fn prefetch_simulation_turn(
+    _builder_mode: Res<BuilderMode>,
+    _simulation: Res<SimulationState>,
+    _world: ResMut<WorldBlocks>,
+    _pending_generated: ResMut<PendingGeneratedMaterials>,
+    _signal_cache: ResMut<SignalNetworkCache>,
+    _turn_cache: ResMut<TurnCache>,
+    _turn_deps: SimulationTurnDeps,
+) {
+}
 
-    while turn_cache.needs_prefetch(simulation.turn) {
-        let next_turn = turn_cache.simulated_through.max(simulation.turn) + 1;
-        if turn_cache.has_pending_turn(next_turn) {
-            break;
-        }
-        let output = simulate_turn(
-            &mut world,
-            &mut pending_generated,
-            &mut signal_cache,
-            next_turn,
-            animation_duration,
-            &mut turn_deps.structure_state,
-            &mut turn_deps.movement_influence,
-            &mut turn_deps.pusher_state,
-            Some(&mut turn_deps.sim_log),
-            None,
-        );
-        turn_cache.store_prefetch(output);
-    }
+#[derive(SystemParam)]
+pub(crate) struct SimulationTickDeps<'w> {
+    world: ResMut<'w, WorldBlocks>,
+    pending_generated: ResMut<'w, PendingGeneratedMaterials>,
+    signal_cache: ResMut<'w, SignalNetworkCache>,
+    structure_state: ResMut<'w, StructureState>,
+    movement_influence: ResMut<'w, MovementInfluenceCache>,
+    pusher_state: ResMut<'w, PusherState>,
+    turn_cache: ResMut<'w, TurnCache>,
+    sim_stats: ResMut<'w, SimulationStepStats>,
+    presentation: ResMut<'w, SimulationPresentationState>,
+    block_index: ResMut<'w, BlockEntityIndex>,
+    meshes: ResMut<'w, Assets<Mesh>>,
+    render_assets: Option<Res<'w, WorldRenderAssets>>,
+    debug: Res<'w, DebugState>,
 }
 
 pub fn tick_simulation(
     time: Res<Time>,
     builder_mode: Res<BuilderMode>,
     mut simulation: ResMut<SimulationState>,
-    world: ResMut<WorldBlocks>,
-    mut pending_generated: ResMut<PendingGeneratedMaterials>,
-    mut turn_cache: ResMut<TurnCache>,
-    mut sim_stats: ResMut<SimulationStepStats>,
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    block_entities: Query<Entity, With<BlockEntity>>,
     pending_previews: Query<Entity, With<PendingGeneratedPreview>>,
-    render_assets: Option<Res<WorldRenderAssets>>,
-    debug: Res<DebugState>,
-    turn_deps: SimulationTurnDeps,
+    mut deps: SimulationTickDeps,
 ) {
-    let Some(render_assets) = render_assets.as_ref() else {
+    let Some(render_assets) = deps.render_assets.as_ref() else {
         return;
     };
     if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
-        prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
+        prepare_upcoming_generation(
+            &deps.world,
+            &mut deps.pending_generated,
+            simulation.turn + 1,
+        );
         refresh_pending_generated_previews(
             &mut commands,
-            &mut meshes,
+            &mut deps.meshes,
             &pending_previews,
             render_assets,
-            &world,
-            &pending_generated,
+            &deps.world,
+            &deps.pending_generated,
             simulation.turn,
             simulation.accumulator,
         );
@@ -259,29 +282,38 @@ pub fn tick_simulation(
     if simulation.step_requested {
         simulation.step_requested = false;
         simulation.accumulator = 0.0;
-        if let Some(output) = turn_cache.take_pending(simulation.turn + 1) {
+        if let Some(cached) = deps.turn_cache.take_pending(simulation.turn + 1) {
             simulation.turn += 1;
             present_turn(
-                output,
+                cached,
                 animation_duration_for(simulation.running, simulation.speed),
-                &world,
+                &mut deps.presentation,
+                &mut deps.world,
+                &mut deps.pending_generated,
+                &mut deps.signal_cache,
+                &mut deps.structure_state,
+                &mut deps.movement_influence,
+                &mut deps.pusher_state,
                 &mut commands,
-                &mut meshes,
-                &block_entities,
+                &mut deps.meshes,
+                &mut deps.block_index,
                 render_assets,
-                &debug,
-                &turn_deps.structure_state,
-                &mut sim_stats,
+                &deps.debug,
+                &mut deps.sim_stats,
             );
         }
-        prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
+        prepare_upcoming_generation(
+            &deps.world,
+            &mut deps.pending_generated,
+            simulation.turn + 1,
+        );
         refresh_pending_generated_previews(
             &mut commands,
-            &mut meshes,
+            &mut deps.meshes,
             &pending_previews,
             render_assets,
-            &world,
-            &pending_generated,
+            &deps.world,
+            &deps.pending_generated,
             simulation.turn,
             simulation.accumulator,
         );
@@ -290,63 +322,89 @@ pub fn tick_simulation(
 
     simulation.accumulator += time.delta_secs() * simulation.speed / SIMULATION_TURN_SECONDS;
     while simulation.accumulator >= 1.0 {
-        let Some(output) = turn_cache.take_pending(simulation.turn + 1) else {
+        let Some(cached) = deps.turn_cache.take_pending(simulation.turn + 1) else {
             break;
         };
         simulation.turn += 1;
         simulation.accumulator -= 1.0;
         present_turn(
-            output,
+            cached,
             animation_duration_for(simulation.running, simulation.speed),
-            &world,
+            &mut deps.presentation,
+            &mut deps.world,
+            &mut deps.pending_generated,
+            &mut deps.signal_cache,
+            &mut deps.structure_state,
+            &mut deps.movement_influence,
+            &mut deps.pusher_state,
             &mut commands,
-            &mut meshes,
-            &block_entities,
+            &mut deps.meshes,
+            &mut deps.block_index,
             render_assets,
-            &debug,
-            &turn_deps.structure_state,
-            &mut sim_stats,
+            &deps.debug,
+            &mut deps.sim_stats,
         );
     }
 
-    prepare_upcoming_generation(&world, &mut pending_generated, simulation.turn + 1);
+    prepare_upcoming_generation(
+        &deps.world,
+        &mut deps.pending_generated,
+        simulation.turn + 1,
+    );
     refresh_pending_generated_previews(
         &mut commands,
-        &mut meshes,
+        &mut deps.meshes,
         &pending_previews,
         render_assets,
-        &world,
-        &pending_generated,
+        &deps.world,
+        &deps.pending_generated,
         simulation.turn,
         simulation.accumulator,
     );
 }
 
 fn present_turn(
-    output: crate::game::simulation::core::TurnOutput,
+    cached: CachedTurn,
     animation_duration: f32,
-    world: &WorldBlocks,
+    presentation: &mut SimulationPresentationState,
+    world: &mut WorldBlocks,
+    pending_generated: &mut PendingGeneratedMaterials,
+    signal_cache: &mut SignalNetworkCache,
+    structure_state: &mut StructureState,
+    movement_influence: &mut MovementInfluenceCache,
+    pusher_state: &mut PusherState,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    block_entities: &Query<Entity, With<BlockEntity>>,
+    block_index: &mut BlockEntityIndex,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
-    structure_state: &StructureState,
     sim_stats: &mut SimulationStepStats,
 ) {
-    *sim_stats = output.stats.clone();
-    apply_turn_output(
-        &output,
+    let before = presentation.committed_world.clone();
+    apply_sim_snapshot(
+        &cached.after,
         world,
+        pending_generated,
+        signal_cache,
+        structure_state,
+        movement_influence,
+        pusher_state,
+    );
+    *sim_stats = cached.output.stats.clone();
+    apply_turn_output(
+        &before,
+        world,
+        &cached.output,
         animation_duration,
         commands,
         meshes,
-        block_entities,
+        block_index,
         render_assets,
         debug,
         structure_state,
         sim_stats,
     );
+    presentation.committed_world = world.clone();
 }
 
 fn refresh_pending_generated_previews(

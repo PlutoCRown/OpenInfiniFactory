@@ -20,6 +20,7 @@ use super::structures::{
     StructureMove,
 };
 
+#[derive(Clone)]
 pub struct TurnOutput {
     pub turn: u64,
     pub animations: HashMap<IVec3, BlockAnimation>,
