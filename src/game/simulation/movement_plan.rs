@@ -819,7 +819,7 @@ mod tests {
         );
 
         let heads = pusher_state.hard_head_occupancy(&realtime);
-        assert_eq!(heads, HashSet::from([middle]));
+        assert!(heads.is_empty());
     }
 
     #[test]

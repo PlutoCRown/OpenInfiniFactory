@@ -232,7 +232,8 @@ pub fn get_factory_block_state_json(
             continue;
         }
         let offset = block.facing.forward_ivec3();
-        let turn_subset = turn_structures.pusher_target_structure(
+        let turn_subset = solution_structures.pusher_target_structure(
+            turn_structures,
             solution,
             world,
             *pusher_pos,
@@ -240,8 +241,9 @@ pub fn get_factory_block_state_json(
             offset,
         );
         let solution_subset = solution_structures.pusher_target_structure(
+            turn_structures,
             solution,
-            world,
+            solution,
             *pusher_pos,
             source,
             offset,

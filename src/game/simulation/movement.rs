@@ -228,14 +228,27 @@ pub(super) fn collect_pusher_candidate(
 
     PusherMarkResult {
         candidate: None,
-        bare_animation: Some((
-            pos,
-            PusherAnimation {
-                duration: 0.0,
-                from_extension,
-                to_extension,
-            },
-        )),
+        bare_animation: if desired_extended && !ctx.turn.is_factory_at(pos + source) {
+            Some((
+                pos,
+                PusherAnimation {
+                    duration: 0.0,
+                    from_extension,
+                    to_extension,
+                },
+            ))
+        } else if !desired_extended {
+            Some((
+                pos,
+                PusherAnimation {
+                    duration: 0.0,
+                    from_extension,
+                    to_extension,
+                },
+            ))
+        } else {
+            None
+        },
     }
 }
 
@@ -370,7 +383,8 @@ fn mark_structure_translate(
             .get(&actor)
             .is_some_and(|block| matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker))
     {
-        ctx.turn_structures.pusher_target_structure(
+        ctx.solution_structures.pusher_target_structure(
+            ctx.turn_structures,
             ctx.solution,
             ctx.turn,
             actor,

@@ -290,22 +290,25 @@ impl StructureState {
 
     pub fn pusher_target_structure(
         &self,
-        _solution: &WorldBlocks,
+        turn_structures: &StructureState,
+        solution: &WorldBlocks,
         turn: &WorldBlocks,
         pusher_pos: IVec3,
         target_pos: IVec3,
         offset: IVec3,
     ) -> Option<HashSet<IVec3>> {
-        let target = self.structure(target_pos)?;
-        if target.kind != StructureKind::Factory {
+        if !turn.is_factory_at(target_pos) {
             return None;
         }
+        let solution_target = turn_to_solution_pos(turn, solution, turn_structures, target_pos)?;
+        let solution_pusher = solution_pusher_pos(solution, turn, turn_structures, pusher_pos)?;
+        let structure_delta = target_pos - solution_target;
         let structure =
-            connected_subset_with_blocked_edge(turn, target, target_pos, Some(pusher_pos));
-        if structure.contains(&pusher_pos) || !factory_subset_pushable(turn, &structure, offset) {
+            factory_structure_with_blocked_edge(solution, solution_target, Some(solution_pusher));
+        if structure.is_empty() || !factory_subset_pushable(solution, &structure, offset) {
             return None;
         }
-        Some(structure)
+        Some(structure.iter().map(|pos| *pos + structure_delta).collect())
     }
 
     pub fn falling_structure_at(
@@ -559,6 +562,62 @@ fn collect_gravity_support(
         .collect()
 }
 
+fn solution_pusher_pos(
+    solution: &WorldBlocks,
+    turn: &WorldBlocks,
+    turn_structures: &StructureState,
+    pusher_pos: IVec3,
+) -> Option<IVec3> {
+    if solution
+        .blocks
+        .get(&pusher_pos)
+        .is_some_and(|block| matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker))
+    {
+        return Some(pusher_pos);
+    }
+    turn_to_solution_pos(turn, solution, turn_structures, pusher_pos)
+}
+
+fn turn_to_solution_pos(
+    turn: &WorldBlocks,
+    solution: &WorldBlocks,
+    turn_structures: &StructureState,
+    turn_pos: IVec3,
+) -> Option<IVec3> {
+    let turn_block = turn.blocks.get(&turn_pos)?;
+    if !turn_block.kind.is_factory() {
+        return None;
+    }
+    if solution
+        .blocks
+        .get(&turn_pos)
+        .is_some_and(|block| block.kind == turn_block.kind)
+    {
+        return Some(turn_pos);
+    }
+    let turn_index = turn_structures.structure_index_at(turn_pos)?;
+    let turn_positions = turn_structures.structure_positions(turn_index)?;
+    for (solution_pos, solution_block) in solution.blocks.iter() {
+        if solution_block.kind != turn_block.kind {
+            continue;
+        }
+        let delta = turn_pos - *solution_pos;
+        if turn_positions.iter().all(|pos| {
+            let Some(turn_member) = turn.blocks.get(pos) else {
+                return false;
+            };
+            let mapped = *pos - delta;
+            solution
+                .blocks
+                .get(&mapped)
+                .is_some_and(|block| block.kind == turn_member.kind)
+        }) {
+            return Some(*solution_pos);
+        }
+    }
+    None
+}
+
 fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     factory_structure_with_blocked_edge(world, start, None)
 }
@@ -574,15 +633,6 @@ fn factory_structure_with_blocked_edge(
         .filter_map(|(pos, block)| block.kind.is_factory().then_some(*pos))
         .collect();
     connected_factory_subset(world, &allowed, start, blocked_pusher_pos)
-}
-
-fn connected_subset_with_blocked_edge(
-    world: &WorldBlocks,
-    structure: &Structure,
-    start: IVec3,
-    blocked_pusher_pos: Option<IVec3>,
-) -> HashSet<IVec3> {
-    connected_factory_subset(world, &structure.positions, start, blocked_pusher_pos)
 }
 
 fn connected_factory_subset(
@@ -778,6 +828,7 @@ mod tests {
         assert!(!state.structure(IVec3::Y).unwrap().pushable);
 
         let subset = state.pusher_target_structure(
+            &state,
             &world,
             &world,
             IVec3::new(0, 2, 0),
@@ -785,6 +836,50 @@ mod tests {
             IVec3::X,
         );
         assert_eq!(subset, Some(HashSet::from([IVec3::new(1, 2, 0)])));
+    }
+
+    #[test]
+    fn pusher_target_structure_uses_solution_connectivity_not_turn() {
+        let mut solution = WorldBlocks::default();
+        solution.insert(
+            IVec3::ZERO,
+            BlockData {
+                kind: BlockKind::Stone,
+                facing: Facing::North,
+            },
+        );
+        solution.insert(IVec3::Y, platform(IVec3::Y));
+        solution.insert(
+            IVec3::new(1, 2, 0),
+            BlockData {
+                kind: BlockKind::Pusher,
+                facing: Facing::East,
+            },
+        );
+        solution.insert(
+            IVec3::new(2, 2, 0),
+            BlockData {
+                kind: BlockKind::ReverseConveyor,
+                facing: Facing::North,
+            },
+        );
+
+        let mut turn = solution.clone();
+        turn.insert(IVec3::new(1, 2, 0), platform(IVec3::new(1, 2, 0)));
+        turn.insert(IVec3::new(0, 2, 0), platform(IVec3::new(0, 2, 0)));
+
+        let solution_state = StructureState::rebuild_for_simulation_standalone(&solution);
+        let turn_state = StructureState::rebuild_for_simulation_standalone(&turn);
+        let conveyor = IVec3::new(2, 2, 0);
+        let subset = solution_state.pusher_target_structure(
+            &turn_state,
+            &solution,
+            &turn,
+            IVec3::new(1, 2, 0),
+            conveyor,
+            IVec3::X,
+        );
+        assert_eq!(subset, Some(HashSet::from([conveyor])));
     }
 
     #[test]
@@ -809,6 +904,7 @@ mod tests {
         let state = StructureState::rebuild_for_simulation_standalone(&world);
         assert!(state
             .pusher_target_structure(
+                &state,
                 &world,
                 &world,
                 IVec3::new(2, 1, 0),

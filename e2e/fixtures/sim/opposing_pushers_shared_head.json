@@ -110,7 +110,7 @@
     },
     {
       "op": "assertExtendedDeviceCount",
-      "count": 1
+      "count": 0
     }
   ]
 }
