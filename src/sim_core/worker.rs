@@ -130,6 +130,7 @@ fn worker_main(command_rx: Receiver<WorkerCommand>, result_tx: Sender<CachedTurn
                         snapshot.solution_structures.clone(),
                         snapshot.world.clone(),
                         snapshot.structure_state.clone(),
+                        snapshot.factory_registry.clone(),
                     );
                     let output = simulate_turn(
                         &mut worlds,
@@ -144,6 +145,7 @@ fn worker_main(command_rx: Receiver<WorkerCommand>, result_tx: Sender<CachedTurn
                     );
                     snapshot.world = worlds.turn;
                     snapshot.structure_state = worlds.turn_structures;
+                    snapshot.factory_registry = worlds.factory_registry;
                     simulated_through = next_turn;
                     let after = snapshot.clone();
                     if result_tx.send(CachedTurn { output, after }).is_err() {

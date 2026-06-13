@@ -173,6 +173,7 @@ pub(super) struct MovementMarkContext<'a> {
     pub solution: &'a WorldBlocks,
     pub turn_structures: &'a StructureState,
     pub solution_structures: &'a StructureState,
+    pub factory_registry: &'a crate::game::world::factory_registry::FactoryBlockRegistry,
 }
 
 pub(super) struct PusherMarkResult {
@@ -384,9 +385,8 @@ fn mark_structure_translate(
             .is_some_and(|block| matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker))
     {
         ctx.solution_structures.pusher_target_structure(
-            ctx.turn_structures,
             ctx.solution,
-            ctx.turn,
+            ctx.factory_registry,
             actor,
             source,
             offset,

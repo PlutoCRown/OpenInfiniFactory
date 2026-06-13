@@ -262,6 +262,7 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
                         ctx.world,
                         ctx.turn_structures,
                         &ctx.solution_structures,
+                        ctx.factory_registry,
                         ctx.control,
                         ctx.signal_cache,
                     ) {
@@ -288,6 +289,7 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
                 json_ok(preview_movement_plan_json(
                     ctx.world,
                     ctx.turn_structures,
+                    ctx.factory_registry,
                     ctx.control,
                     ctx.signal_cache,
                     ctx.pusher_state,

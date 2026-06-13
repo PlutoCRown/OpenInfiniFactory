@@ -9,6 +9,7 @@ use crate::game::simulation::runtime::{
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::simulation::SimulationWorlds;
+use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 
 use super::control::SimulationControl;
@@ -18,6 +19,7 @@ pub struct IntrospectionContext<'a> {
     pub world: &'a WorldBlocks,
     pub turn_structures: &'a StructureState,
     pub solution_structures: StructureState,
+    pub factory_registry: &'a FactoryBlockRegistry,
     pub control: &'a SimulationControl,
     pub signal_cache: &'a mut SignalNetworkCache,
     pub pusher_state: &'a PusherState,
@@ -57,21 +59,23 @@ impl<'w> SimCoreWorld<'w> {
         &mut self,
         f: impl FnOnce(&WorldBlocks, &mut SignalNetworkCache) -> R,
     ) -> R {
-        self.world.resource_scope(|world, mut signal_cache: Mut<SignalNetworkCache>| {
-            let blocks = world.resource::<WorldBlocks>();
-            f(blocks, &mut signal_cache)
-        })
+        self.world
+            .resource_scope(|world, mut signal_cache: Mut<SignalNetworkCache>| {
+                let blocks = world.resource::<WorldBlocks>();
+                f(blocks, &mut signal_cache)
+            })
     }
 
     pub fn introspection_scope<R>(&mut self, f: impl FnOnce(IntrospectionContext<'_>) -> R) -> R {
-        self.world.resource_scope(
-            |world, mut signal_cache: Mut<SignalNetworkCache>| {
+        self.world
+            .resource_scope(|world, mut signal_cache: Mut<SignalNetworkCache>| {
                 world.resource_scope(
                     |world, mut movement_influence: Mut<MovementInfluenceCache>| {
                         let control = world.resource::<SimulationControl>();
                         let blocks = world.resource::<WorldBlocks>();
                         let turn_structures = world.resource::<StructureState>();
                         let pusher_state = world.resource::<PusherState>();
+                        let factory_registry = world.resource::<FactoryBlockRegistry>();
                         let solution_structures = control
                             .start_structures
                             .clone()
@@ -80,6 +84,7 @@ impl<'w> SimCoreWorld<'w> {
                             world: blocks,
                             turn_structures,
                             solution_structures,
+                            factory_registry,
                             control,
                             signal_cache: &mut signal_cache,
                             pusher_state,
@@ -87,8 +92,7 @@ impl<'w> SimCoreWorld<'w> {
                         })
                     },
                 )
-            },
-        )
+            })
     }
 
     pub fn is_active(&self) -> bool {
@@ -109,6 +113,9 @@ impl<'w> SimCoreWorld<'w> {
                     .resource_mut::<StructureState>()
                     .rebuild_for_simulation(&world_blocks);
                 control.start_structures = Some(world.resource::<StructureState>().clone());
+                let mut factory_registry = world.resource_mut::<FactoryBlockRegistry>();
+                *factory_registry = FactoryBlockRegistry::rebuild_from_world(&world_blocks);
+                factory_registry.freeze_solution();
             });
     }
 
@@ -138,6 +145,7 @@ impl<'w> SimCoreWorld<'w> {
                 world.resource_mut::<PendingGeneratedMaterials>().clear();
                 world.resource_mut::<MovementInfluenceCache>().clear();
                 world.resource_mut::<PusherState>().clear();
+                world.resource_mut::<FactoryBlockRegistry>().clear();
                 let factory_snapshot = control.start_structures.take();
                 if let Some(snapshot) = control.start_snapshot.take() {
                     *world.resource_mut::<WorldBlocks>() = snapshot;
@@ -181,6 +189,7 @@ impl<'w> SimCoreWorld<'w> {
             ResMut<'static, PendingGeneratedMaterials>,
             ResMut<'static, SignalNetworkCache>,
             ResMut<'static, StructureState>,
+            ResMut<'static, FactoryBlockRegistry>,
             ResMut<'static, MovementInfluenceCache>,
             ResMut<'static, PusherState>,
         )>::new(self.world);
@@ -190,6 +199,7 @@ impl<'w> SimCoreWorld<'w> {
             mut pending_generated,
             mut signal_cache,
             mut structure_state,
+            mut factory_registry,
             mut movement_influence,
             mut pusher_state,
         ) = state.get_mut(self.world);
@@ -206,6 +216,7 @@ impl<'w> SimCoreWorld<'w> {
             solution_structures,
             world_blocks.clone(),
             structure_state.clone(),
+            factory_registry.clone(),
         );
         let output = simulate_turn(
             &mut worlds,
@@ -220,6 +231,7 @@ impl<'w> SimCoreWorld<'w> {
         );
         *world_blocks = worlds.turn;
         *structure_state = worlds.turn_structures;
+        *factory_registry = worlds.factory_registry;
         control.turn = next_turn;
         output
     }

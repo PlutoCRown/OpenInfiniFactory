@@ -9,6 +9,7 @@ use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::UiRuntime;
+use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
@@ -26,6 +27,7 @@ pub struct SimulationControlDeps<'w> {
     pending_generated: ResMut<'w, PendingGeneratedMaterials>,
     signal_cache: Res<'w, SignalNetworkCache>,
     structure_state: ResMut<'w, StructureState>,
+    factory_registry: ResMut<'w, FactoryBlockRegistry>,
     movement_influence: ResMut<'w, MovementInfluenceCache>,
     pusher_state: ResMut<'w, PusherState>,
     world: ResMut<'w, WorldBlocks>,
@@ -65,6 +67,7 @@ pub fn simulation_controls(
             &mut deps.simulation,
             &deps.world,
             &mut deps.structure_state,
+            &mut deps.factory_registry,
             &mut deps.pusher_state,
         );
         deps.presentation.committed_world = deps.world.clone();
@@ -109,6 +112,7 @@ pub fn simulation_controls(
         deps.structure_state.clear();
         deps.movement_influence.clear();
         deps.pusher_state.clear();
+        *deps.factory_registry = FactoryBlockRegistry::rebuild_from_world(&deps.world);
         deps.turn_cache.reset_to_turn(0);
         deps.presentation.committed_world = deps.world.clone();
         deps.presentation.last_render_powered_wires.clear();
@@ -145,22 +149,32 @@ fn start_simulation_state(
     simulation: &mut SimulationState,
     world: &WorldBlocks,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
     pusher_state: &mut PusherState,
 ) {
     simulation.start_snapshot = Some(world.clone());
     *pusher_state = PusherState::rebuild_from_world(world);
     structure_state.rebuild_for_simulation(world);
     simulation.start_structures = Some(structure_state.clone());
+    *factory_registry = FactoryBlockRegistry::rebuild_from_world(world);
+    factory_registry.freeze_solution();
 }
 
 pub fn start_simulation_if_needed(
     simulation: &mut SimulationState,
     world: &WorldBlocks,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
     pusher_state: &mut PusherState,
 ) {
     if !simulation.is_active() {
-        start_simulation_state(simulation, world, structure_state, pusher_state);
+        start_simulation_state(
+            simulation,
+            world,
+            structure_state,
+            factory_registry,
+            pusher_state,
+        );
     }
 }
 

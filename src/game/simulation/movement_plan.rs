@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
 use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAnimation};
+use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 
 use super::gravity::mark_gravity_phase;
@@ -39,6 +40,7 @@ pub fn collect_movement_plan(
     solution: &WorldBlocks,
     turn_structures: &mut StructureState,
     solution_structures: &StructureState,
+    factory_registry: &FactoryBlockRegistry,
     powered_devices: &HashSet<IVec3>,
     pusher_state: &PusherState,
     movement_influence: &mut MovementInfluenceCache,
@@ -54,6 +56,7 @@ pub fn collect_movement_plan(
             solution,
             turn_structures,
             solution_structures,
+            factory_registry,
         };
         for (pos, kind, rule) in super::movement::sorted_factory_movers(turn) {
             match rule {
@@ -114,6 +117,7 @@ pub fn collect_movement_plan(
             solution,
             turn_structures,
             solution_structures,
+            factory_registry,
         };
         for (pos, _kind, rule) in super::movement::sorted_factory_movers(turn) {
             let crate::game::blocks::MovementRule::Translate { source, offset } = rule else {
@@ -208,6 +212,7 @@ pub fn execute_movement_plan(
     plan: &MovementPlan,
     realtime: &mut WorldBlocks,
     turn_structures: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
     pusher_state: &mut PusherState,
     movement_influence: &mut MovementInfluenceCache,
 ) -> MovementExecutionOutput {
@@ -228,6 +233,7 @@ pub fn execute_movement_plan(
                 if try_execute_move(
                     realtime,
                     turn_structures,
+                    factory_registry,
                     pusher_state,
                     movement_influence,
                     &hard_heads,
@@ -297,6 +303,7 @@ fn apply_pusher_extension_from_animation(
 fn try_execute_move(
     realtime: &mut WorldBlocks,
     turn_structures: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
     pusher_state: &mut PusherState,
     movement_influence: &mut MovementInfluenceCache,
     hard_heads: &HashSet<IVec3>,
@@ -389,6 +396,7 @@ fn try_execute_move(
             moved.extend(expanded.iter().copied());
             move_structure(realtime, &expanded, *offset);
             turn_structures.move_positions(&expanded, *offset);
+            factory_registry.translate_turn(&before, *offset);
             let target: HashSet<IVec3> = expanded.iter().map(|pos| *pos + offset).collect();
             movement_influence.record_successful_translate(&before, &target);
             moved.extend(target.iter().copied());
@@ -434,6 +442,7 @@ fn try_execute_move(
                 .map(|pos| rotate_pos_y(*pos, *pivot, *clockwise))
                 .collect();
             turn_structures.replace_structure_positions(structure, targets.clone());
+            factory_registry.rotate_turn(structure, *pivot, *clockwise);
             if let Some(source) = source {
                 movement_influence.record_successful_rotate(&before, &targets, *source);
             }
@@ -460,6 +469,7 @@ pub fn preview_movement_plan(
     solution: &WorldBlocks,
     turn_structures: &mut StructureState,
     solution_structures: &StructureState,
+    factory_registry: &FactoryBlockRegistry,
     powered_devices: &HashSet<IVec3>,
     pusher_state: &PusherState,
     movement_influence: &mut MovementInfluenceCache,
@@ -469,6 +479,7 @@ pub fn preview_movement_plan(
         solution,
         turn_structures,
         solution_structures,
+        factory_registry,
         powered_devices,
         pusher_state,
         movement_influence,
@@ -602,6 +613,7 @@ pub fn movement_plan_debug_json(
     turn_structures: &StructureState,
     solution: &WorldBlocks,
     solution_structures: &StructureState,
+    factory_registry: &FactoryBlockRegistry,
     signal_cache: &mut super::runtime::SignalNetworkCache,
     pusher_state: &PusherState,
     movement_influence: &mut MovementInfluenceCache,
@@ -616,6 +628,7 @@ pub fn movement_plan_debug_json(
         solution,
         &mut turn_structures,
         solution_structures,
+        factory_registry,
         &powered,
         pusher_state,
         movement_influence,
@@ -723,6 +736,12 @@ mod tests {
         state
     }
 
+    fn frozen_registry(world: &WorldBlocks) -> FactoryBlockRegistry {
+        let mut registry = FactoryBlockRegistry::rebuild_from_world(world);
+        registry.freeze_solution();
+        registry
+    }
+
     #[test]
     fn four_converging_bare_pushers_only_one_occupies_shared_head_cell() {
         let center = IVec3::new(1, 1, 0);
@@ -745,12 +764,14 @@ mod tests {
         let mut pusher_state = PusherState::default();
         let mut movement_influence = MovementInfluenceCache::default();
         let powered = HashSet::from([north, south, east, west]);
+        let mut factory_registry = frozen_registry(&world);
 
         let plan = collect_movement_plan(
             &world,
             &solution,
             &mut turn_structures,
             &solution_structures,
+            &factory_registry,
             &powered,
             &pusher_state,
             &mut movement_influence,
@@ -763,6 +784,7 @@ mod tests {
             &plan,
             &mut realtime,
             &mut turn_structures,
+            &mut factory_registry,
             &mut pusher_state,
             &mut movement_influence,
         );
@@ -798,12 +820,14 @@ mod tests {
         let mut pusher_state = PusherState::default();
         let mut movement_influence = MovementInfluenceCache::default();
         let powered = HashSet::from([left, right]);
+        let mut factory_registry = frozen_registry(&world);
 
         let plan = collect_movement_plan(
             &world,
             &solution,
             &mut turn_structures,
             &solution_structures,
+            &factory_registry,
             &powered,
             &pusher_state,
             &mut movement_influence,
@@ -813,6 +837,7 @@ mod tests {
             &plan,
             &mut realtime,
             &mut turn_structures,
+            &mut factory_registry,
             &mut pusher_state,
             &mut movement_influence,
         );
@@ -841,12 +866,14 @@ mod tests {
         let mut pusher_state = PusherState::default();
         pusher_state.set_extended(pusher_pos, &world, true);
         let mut movement_influence = MovementInfluenceCache::default();
+        let mut factory_registry = frozen_registry(&world);
 
         let plan = collect_movement_plan(
             &world,
             &solution,
             &mut turn_structures,
             &solution_structures,
+            &factory_registry,
             &HashSet::new(),
             &pusher_state,
             &mut movement_influence,
@@ -856,6 +883,7 @@ mod tests {
             &plan,
             &mut realtime,
             &mut turn_structures,
+            &mut factory_registry,
             &mut pusher_state,
             &mut movement_influence,
         );
@@ -879,6 +907,7 @@ mod tests {
         let mut turn_structures = solution_structures.clone();
         let mut pusher_state = PusherState::default();
         let mut movement_influence = MovementInfluenceCache::default();
+        let mut factory_registry = frozen_registry(&world);
 
         let mut realtime = world.clone();
         for (expected, unexpected) in [
@@ -891,6 +920,7 @@ mod tests {
                 &solution,
                 &mut turn_structures,
                 &solution_structures,
+                &factory_registry,
                 &HashSet::new(),
                 &pusher_state,
                 &mut movement_influence,
@@ -899,6 +929,7 @@ mod tests {
                 &plan,
                 &mut realtime,
                 &mut turn_structures,
+                &mut factory_registry,
                 &mut pusher_state,
                 &mut movement_influence,
             );
@@ -926,12 +957,14 @@ mod tests {
         let mut turn_structures = solution_structures.clone();
         let mut pusher_state = PusherState::default();
         let mut movement_influence = MovementInfluenceCache::default();
+        let mut factory_registry = frozen_registry(&world);
 
         let plan = collect_movement_plan(
             &world,
             &solution,
             &mut turn_structures,
             &solution_structures,
+            &factory_registry,
             &HashSet::new(),
             &pusher_state,
             &mut movement_influence,
@@ -941,6 +974,7 @@ mod tests {
             &plan,
             &mut realtime,
             &mut turn_structures,
+            &mut factory_registry,
             &mut pusher_state,
             &mut movement_influence,
         );

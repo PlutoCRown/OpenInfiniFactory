@@ -3,17 +3,17 @@ use bevy::prelude::*;
 use crate::game::ui::access::bind_ui_scope;
 
 use super::components::{
-    absolute_text_bundle, auto_width_button, default_button_size, flex_row_auto, panel_bundle_auto,
-    panel_content, panel_title_bar, panel_title_label, raised_border, root_node, styled_button,
-    text, BUTTON_BG, STATUS_TEXT,
+    auto_width_button, default_button_size, flex_row_auto, panel_bundle_auto, panel_content,
+    panel_title_bar, panel_title_label, raised_border, root_node, styled_button, text, BUTTON_BG,
+    STATUS_TEXT,
 };
 use super::screens::{
     spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_inventory_tooltip,
     spawn_main_menu, spawn_pause_panel, spawn_save_list,
 };
 use super::types::{
-    Crosshair, GameplayHudVisibility, InGameHudVisibility, PanelVisibility, PlayingUiRoot,
-    StatusText, StatusTextKind, UiRoot,
+    Crosshair, InGameHudVisibility, PanelVisibility, PlayingUiRoot, StatusText, StatusTextKind,
+    UiRoot,
 };
 use super::widgets::spawn_confirm_dialog_button;
 use crate::game::blocks::panels::{spawn_all_overlays, spawn_all_panels};
@@ -121,73 +121,26 @@ fn spawn_crosshair(root: &mut ChildSpawnerCommands) {
 fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
     spawn_crosshair(root);
     root.spawn((
-        absolute_text_bundle(
-            "",
-            16.0,
-            Color::WHITE,
-            Some(Val::Px(18.0)),
-            None,
-            Some(Val::Px(62.0)),
-            None,
-        ),
-        StatusText(StatusTextKind::Hotbar),
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(18.0),
+            top: Val::Px(18.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(6.0),
+            ..default()
+        },
         InGameHudVisibility,
-        GameplayHudVisibility,
-    ));
-    root.spawn((
-        absolute_text_bundle(
-            "",
-            15.0,
-            STATUS_TEXT,
-            Some(Val::Px(18.0)),
-            None,
-            Some(Val::Px(18.0)),
-            None,
-        ),
-        StatusText(StatusTextKind::CurrentSave),
-        InGameHudVisibility,
-        GameplayHudVisibility,
-    ));
-    root.spawn((
-        absolute_text_bundle(
-            "",
-            16.0,
-            STATUS_TEXT,
-            Some(Val::Px(18.0)),
-            None,
-            Some(Val::Px(112.0)),
-            None,
-        ),
-        StatusText(StatusTextKind::Simulation),
-        InGameHudVisibility,
-        GameplayHudVisibility,
-    ));
-    root.spawn((
-        absolute_text_bundle(
-            "",
-            15.0,
-            Color::srgb(0.82, 0.92, 1.0),
-            Some(Val::Px(18.0)),
-            None,
-            Some(Val::Px(156.0)),
-            None,
-        ),
-        StatusText(StatusTextKind::TargetBlock),
-        InGameHudVisibility,
-    ));
-    root.spawn((
-        absolute_text_bundle(
-            "",
-            16.0,
-            STATUS_TEXT,
-            None,
-            Some(Val::Px(18.0)),
-            None,
-            Some(Val::Px(18.0)),
-        ),
-        StatusText(StatusTextKind::SimulationOverlay),
-        InGameHudVisibility,
-    ));
+    ))
+    .with_children(|column| {
+        column.spawn((
+            text("", 15.0, STATUS_TEXT),
+            StatusText(StatusTextKind::Summary),
+        ));
+        column.spawn((
+            text("", 15.0, Color::srgb(0.82, 0.92, 1.0)),
+            StatusText(StatusTextKind::TargetBlock),
+        ));
+    });
 }
 
 fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {

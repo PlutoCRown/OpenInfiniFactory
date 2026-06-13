@@ -9,6 +9,7 @@ use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     AnimationTiming, BlockAnimation, BlockAnimationKind, SIMULATION_TURN_SECONDS,
 };
+use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_pending_generated_previews, spawn_pending_generated_block, PendingGeneratedPreview,
@@ -116,6 +117,7 @@ pub fn apply_sim_snapshot(
     pending_generated: &mut PendingGeneratedMaterials,
     signal_cache: &mut SignalNetworkCache,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
 ) {
@@ -123,6 +125,7 @@ pub fn apply_sim_snapshot(
     *pending_generated = snapshot.pending_generated.clone();
     *signal_cache = snapshot.signal_cache.clone();
     *structure_state = snapshot.structure_state.clone();
+    *factory_registry = snapshot.factory_registry.clone();
     *movement_influence = snapshot.movement_influence.clone();
     *pusher_state = snapshot.pusher_state.clone();
 }
@@ -165,6 +168,7 @@ pub struct SimulationTickDeps<'w> {
     pending_generated: ResMut<'w, PendingGeneratedMaterials>,
     signal_cache: ResMut<'w, SignalNetworkCache>,
     structure_state: ResMut<'w, StructureState>,
+    factory_registry: ResMut<'w, FactoryBlockRegistry>,
     movement_influence: ResMut<'w, MovementInfluenceCache>,
     pusher_state: ResMut<'w, PusherState>,
     turn_cache: ResMut<'w, TurnCache>,
@@ -227,6 +231,7 @@ pub fn tick_simulation(
                 &mut deps.pending_generated,
                 &mut deps.signal_cache,
                 &mut deps.structure_state,
+                &mut deps.factory_registry,
                 &mut deps.movement_influence,
                 &mut deps.pusher_state,
                 &mut commands,
@@ -270,6 +275,7 @@ pub fn tick_simulation(
             &mut deps.pending_generated,
             &mut deps.signal_cache,
             &mut deps.structure_state,
+            &mut deps.factory_registry,
             &mut deps.movement_influence,
             &mut deps.pusher_state,
             &mut commands,
@@ -306,6 +312,7 @@ pub fn present_cached_turn(
     pending_generated: &mut PendingGeneratedMaterials,
     signal_cache: &mut SignalNetworkCache,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     commands: &mut Commands,
@@ -322,6 +329,7 @@ pub fn present_cached_turn(
         pending_generated,
         signal_cache,
         structure_state,
+        factory_registry,
         movement_influence,
         pusher_state,
     );

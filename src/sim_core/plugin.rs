@@ -4,6 +4,7 @@ use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::runtime::{PendingGeneratedMaterials, SignalNetworkCache};
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;
+use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 
 use super::control::SimulationControl;
@@ -22,6 +23,7 @@ impl Plugin for SimCorePlugin {
             .init_resource::<StructureState>()
             .init_resource::<MovementInfluenceCache>()
             .init_resource::<PusherState>()
+            .init_resource::<FactoryBlockRegistry>()
             .init_resource::<SimulationControl>()
             .init_resource::<SimulationDebugLog>();
     }

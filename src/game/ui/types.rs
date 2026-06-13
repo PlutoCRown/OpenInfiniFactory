@@ -20,8 +20,8 @@ pub use crate::game::ui::features::settings::types::{
     SettingsValueText, GAMEPLAY_SETTINGS,
 };
 
-use crate::game::state::BuilderMode;
 use crate::game::blocks::{edit_blocks, BlockKind, PLAY_BLOCKS};
+use crate::game::state::BuilderMode;
 use crate::shared::config::ActionKeyName;
 
 pub const HOTBAR_SLOTS: usize = 9;
@@ -66,11 +66,8 @@ pub struct StatusText(pub StatusTextKind);
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum StatusTextKind {
-    Hotbar,
-    CurrentSave,
-    Simulation,
+    Summary,
     TargetBlock,
-    SimulationOverlay,
 }
 
 #[derive(Component)]

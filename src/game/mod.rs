@@ -89,6 +89,7 @@ impl Plugin for GamePlugin {
             .insert_resource(simulation::structure_state::StructureState::default())
             .insert_resource(simulation::movement::PusherState::default())
             .insert_resource(simulation::structures::MovementInfluenceCache::default())
+            .insert_resource(world::factory_registry::FactoryBlockRegistry::default())
             .insert_resource(simulation::runtime::SimulationPresentationState::default())
             .insert_resource(BlockEntityIndex::default())
             .insert_resource(SimulationWorker::spawn())

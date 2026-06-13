@@ -290,18 +290,17 @@ impl StructureState {
 
     pub fn pusher_target_structure(
         &self,
-        turn_structures: &StructureState,
         solution: &WorldBlocks,
-        turn: &WorldBlocks,
+        factory_registry: &crate::game::world::factory_registry::FactoryBlockRegistry,
         pusher_pos: IVec3,
         target_pos: IVec3,
         offset: IVec3,
     ) -> Option<HashSet<IVec3>> {
-        if !turn.is_factory_at(target_pos) {
+        if !factory_registry.has_turn_factory(target_pos) {
             return None;
         }
-        let solution_target = turn_to_solution_pos(turn, solution, turn_structures, target_pos)?;
-        let solution_pusher = solution_pusher_pos(solution, turn, turn_structures, pusher_pos)?;
+        let solution_target = factory_registry.turn_to_solution_pos(target_pos)?;
+        let solution_pusher = factory_registry.turn_to_solution_pos(pusher_pos)?;
         let structure_delta = target_pos - solution_target;
         let structure =
             factory_structure_with_blocked_edge(solution, solution_target, Some(solution_pusher));
@@ -562,62 +561,6 @@ fn collect_gravity_support(
         .collect()
 }
 
-fn solution_pusher_pos(
-    solution: &WorldBlocks,
-    turn: &WorldBlocks,
-    turn_structures: &StructureState,
-    pusher_pos: IVec3,
-) -> Option<IVec3> {
-    if solution
-        .blocks
-        .get(&pusher_pos)
-        .is_some_and(|block| matches!(block.kind, BlockKind::Pusher | BlockKind::Blocker))
-    {
-        return Some(pusher_pos);
-    }
-    turn_to_solution_pos(turn, solution, turn_structures, pusher_pos)
-}
-
-fn turn_to_solution_pos(
-    turn: &WorldBlocks,
-    solution: &WorldBlocks,
-    turn_structures: &StructureState,
-    turn_pos: IVec3,
-) -> Option<IVec3> {
-    let turn_block = turn.blocks.get(&turn_pos)?;
-    if !turn_block.kind.is_factory() {
-        return None;
-    }
-    if solution
-        .blocks
-        .get(&turn_pos)
-        .is_some_and(|block| block.kind == turn_block.kind)
-    {
-        return Some(turn_pos);
-    }
-    let turn_index = turn_structures.structure_index_at(turn_pos)?;
-    let turn_positions = turn_structures.structure_positions(turn_index)?;
-    for (solution_pos, solution_block) in solution.blocks.iter() {
-        if solution_block.kind != turn_block.kind {
-            continue;
-        }
-        let delta = turn_pos - *solution_pos;
-        if turn_positions.iter().all(|pos| {
-            let Some(turn_member) = turn.blocks.get(pos) else {
-                return false;
-            };
-            let mapped = *pos - delta;
-            solution
-                .blocks
-                .get(&mapped)
-                .is_some_and(|block| block.kind == turn_member.kind)
-        }) {
-            return Some(*solution_pos);
-        }
-    }
-    None
-}
-
 fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     factory_structure_with_blocked_edge(world, start, None)
 }
@@ -721,6 +664,8 @@ mod tests {
     use crate::game::blocks::{BlockData, BlockKind};
     use crate::game::world::direction::Facing;
 
+    use crate::game::world::factory_registry::FactoryBlockRegistry;
+
     fn platform(_pos: IVec3) -> BlockData {
         BlockData {
             kind: BlockKind::Platform,
@@ -733,6 +678,12 @@ mod tests {
             kind: BlockKind::Material,
             facing: Facing::North,
         }
+    }
+
+    fn frozen_registry(world: &WorldBlocks) -> FactoryBlockRegistry {
+        let mut registry = FactoryBlockRegistry::rebuild_from_world(world);
+        registry.freeze_solution();
+        registry
     }
 
     #[test]
@@ -825,12 +776,12 @@ mod tests {
         world.insert(IVec3::new(1, 2, 0), platform(IVec3::new(1, 2, 0)));
 
         let state = StructureState::rebuild_for_simulation_standalone(&world);
+        let registry = frozen_registry(&world);
         assert!(!state.structure(IVec3::Y).unwrap().pushable);
 
         let subset = state.pusher_target_structure(
-            &state,
             &world,
-            &world,
+            &registry,
             IVec3::new(0, 2, 0),
             IVec3::new(1, 2, 0),
             IVec3::X,
@@ -867,14 +818,14 @@ mod tests {
         let mut turn = solution.clone();
         turn.insert(IVec3::new(1, 2, 0), platform(IVec3::new(1, 2, 0)));
         turn.insert(IVec3::new(0, 2, 0), platform(IVec3::new(0, 2, 0)));
+        let _ = turn;
 
         let solution_state = StructureState::rebuild_for_simulation_standalone(&solution);
-        let turn_state = StructureState::rebuild_for_simulation_standalone(&turn);
+        let registry = frozen_registry(&solution);
         let conveyor = IVec3::new(2, 2, 0);
         let subset = solution_state.pusher_target_structure(
-            &turn_state,
             &solution,
-            &turn,
+            &registry,
             IVec3::new(1, 2, 0),
             conveyor,
             IVec3::X,
@@ -902,11 +853,11 @@ mod tests {
         );
 
         let state = StructureState::rebuild_for_simulation_standalone(&world);
+        let registry = frozen_registry(&world);
         assert!(state
             .pusher_target_structure(
-                &state,
                 &world,
-                &world,
+                &registry,
                 IVec3::new(2, 1, 0),
                 IVec3::new(1, 1, 0),
                 IVec3::NEG_X,

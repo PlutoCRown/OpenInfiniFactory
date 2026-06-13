@@ -8,6 +8,7 @@ use crate::debug_http::embedded_session::{build_runtime_snapshot, simulation_con
 use crate::game::simulation::core::simulate_turn;
 use crate::game::simulation::runtime::present_cached_turn;
 use crate::game::simulation::SimulationWorlds;
+use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::animation::SIMULATION_TURN_SECONDS;
 use crate::sim_core::{CachedTurn, SimSnapshot};
 use crate::debug_http::introspection::{
@@ -47,6 +48,7 @@ pub struct EmbeddedSimDeps<'w, 's> {
     world: ResMut<'w, WorldBlocks>,
     simulation: ResMut<'w, SimulationState>,
     structure_state: ResMut<'w, StructureState>,
+    factory_registry: ResMut<'w, FactoryBlockRegistry>,
     pusher_state: ResMut<'w, PusherState>,
     pending_generated: ResMut<'w, PendingGeneratedMaterials>,
     signal_cache: ResMut<'w, SignalNetworkCache>,
@@ -136,6 +138,7 @@ impl<'w, 's> EmbeddedSimDeps<'w, 's> {
             &mut self.simulation,
             &self.world,
             &mut self.structure_state,
+            &mut self.factory_registry,
             &mut self.pusher_state,
         );
         self.presentation.committed_world = self.world.clone();
@@ -178,6 +181,7 @@ impl<'w, 's> EmbeddedSimDeps<'w, 's> {
             &self.simulation,
             &self.world,
             &self.structure_state,
+            &self.factory_registry,
             &self.pending_generated,
             &self.signal_cache,
             &self.movement_influence,
@@ -191,6 +195,7 @@ impl<'w, 's> EmbeddedSimDeps<'w, 's> {
                 snapshot.solution_structures.clone(),
                 snapshot.world.clone(),
                 snapshot.structure_state.clone(),
+                snapshot.factory_registry.clone(),
             );
             let output = simulate_turn(
                 &mut worlds,
@@ -205,6 +210,7 @@ impl<'w, 's> EmbeddedSimDeps<'w, 's> {
             );
             snapshot.world = worlds.turn;
             snapshot.structure_state = worlds.turn_structures;
+            snapshot.factory_registry = worlds.factory_registry;
             self.simulation.turn = next_turn;
             let cached = CachedTurn {
                 output,
@@ -218,6 +224,7 @@ impl<'w, 's> EmbeddedSimDeps<'w, 's> {
                 &mut self.pending_generated,
                 &mut self.signal_cache,
                 &mut self.structure_state,
+                &mut self.factory_registry,
                 &mut self.movement_influence,
                 &mut self.pusher_state,
                 &mut self.commands,
@@ -343,6 +350,7 @@ fn handle_embedded_debug_command(
                 &mut sim_deps.simulation,
                 &sim_deps.world,
                 &mut sim_deps.structure_state,
+                &mut sim_deps.factory_registry,
                 &mut sim_deps.pusher_state,
             );
             request_continuous_run(&mut sim_deps.simulation);
@@ -467,6 +475,7 @@ fn handle_embedded_debug_command(
                 &sim_deps.world,
                 &structure_snapshot,
                 &solution_structures,
+                &sim_deps.factory_registry,
                 &control,
                 &mut sim_deps.signal_cache,
             ) {
@@ -489,6 +498,7 @@ fn handle_embedded_debug_command(
             json_ok(preview_movement_plan_json(
                 &sim_deps.world,
                 &sim_deps.structure_state,
+                &sim_deps.factory_registry,
                 &control,
                 &mut sim_deps.signal_cache,
                 &sim_deps.pusher_state,
@@ -530,6 +540,7 @@ mod tests {
             &simulation,
             &world,
             &structures,
+            &FactoryBlockRegistry::default(),
             &pending,
             &signal,
             &influence,

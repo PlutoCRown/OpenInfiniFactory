@@ -10,6 +10,7 @@ use crate::game::state::{
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{CarriedItem, InventoryItems};
+use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
@@ -136,6 +137,7 @@ pub fn switch_to_edit_mode_and_rebuild(
     render_assets: Option<&WorldRenderAssets>,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
 ) {
@@ -154,6 +156,7 @@ pub fn switch_to_edit_mode_and_rebuild(
         structure_state.clear();
         movement_influence.clear();
         pusher_state.clear();
+        *factory_registry = FactoryBlockRegistry::rebuild_from_world(world);
         rebuild_world_for_debug_state(
             commands,
             meshes,
@@ -174,6 +177,7 @@ pub fn reset_current_solution(
     render_assets: Option<&WorldRenderAssets>,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     solution_state: &SolutionState,
@@ -190,6 +194,7 @@ pub fn reset_current_solution(
         structure_state.clear();
         movement_influence.clear();
         pusher_state.clear();
+        *factory_registry = FactoryBlockRegistry::rebuild_from_world(world);
         if let Some(render_assets) = render_assets {
             despawn_world(commands, block_entities);
             rebuild_world_for_debug_state(
@@ -216,6 +221,7 @@ pub fn exit_to_main_menu(
     block_entities: &Query<Entity, With<BlockEntity>>,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     next_state: &mut NextState<GameMode>,
@@ -233,6 +239,7 @@ pub fn exit_to_main_menu(
         block_entities,
         debug,
         structure_state,
+        factory_registry,
         movement_influence,
         pusher_state,
     );
@@ -257,6 +264,7 @@ pub fn load_world_into_session(
     render_assets: Option<&WorldRenderAssets>,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     current_mode: GameMode,
@@ -305,6 +313,7 @@ pub fn load_world_into_session(
     structure_state.clear();
     movement_influence.clear();
     pusher_state.clear();
+    *factory_registry = FactoryBlockRegistry::rebuild_from_world(world);
 
     match current_mode {
         GameMode::StartMenu => next_state.set(GameMode::Playing),
@@ -336,6 +345,7 @@ pub fn clear_loaded_world(
     block_entities: &Query<Entity, With<BlockEntity>>,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    factory_registry: &mut FactoryBlockRegistry,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
 ) {
@@ -357,6 +367,7 @@ pub fn clear_loaded_world(
     structure_state.clear();
     movement_influence.clear();
     pusher_state.clear();
+    factory_registry.clear();
     if let Some(render_assets) = render_assets {
         despawn_world(commands, block_entities);
         rebuild_world_for_debug_state(

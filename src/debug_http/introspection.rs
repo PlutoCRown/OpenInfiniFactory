@@ -210,6 +210,7 @@ pub fn get_factory_block_state_json(
     world: &WorldBlocks,
     turn_structures: &StructureState,
     solution_structures: &StructureState,
+    factory_registry: &crate::game::world::factory_registry::FactoryBlockRegistry,
     control: &SimulationControl,
     signal_cache: &mut SignalNetworkCache,
 ) -> Result<Value, String> {
@@ -233,17 +234,15 @@ pub fn get_factory_block_state_json(
         }
         let offset = block.facing.forward_ivec3();
         let turn_subset = solution_structures.pusher_target_structure(
-            turn_structures,
             solution,
-            world,
+            factory_registry,
             *pusher_pos,
             source,
             offset,
         );
         let solution_subset = solution_structures.pusher_target_structure(
-            turn_structures,
             solution,
-            solution,
+            factory_registry,
             *pusher_pos,
             source,
             offset,
@@ -296,6 +295,7 @@ pub fn get_structure_at_json(pos: IVec3, turn_structures: &StructureState) -> Re
 pub fn preview_movement_plan_json(
     world: &WorldBlocks,
     turn_structures: &StructureState,
+    factory_registry: &crate::game::world::factory_registry::FactoryBlockRegistry,
     control: &SimulationControl,
     signal_cache: &mut SignalNetworkCache,
     pusher_state: &PusherState,
@@ -314,6 +314,7 @@ pub fn preview_movement_plan_json(
         turn_structures,
         &solution,
         &solution_structures,
+        factory_registry,
         signal_cache,
         pusher_state,
         movement_influence,

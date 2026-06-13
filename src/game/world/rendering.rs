@@ -581,8 +581,9 @@ pub fn spawn_delete_bounds_preview(
     min: IVec3,
     max: IVec3,
 ) {
+    const PREVIEW_PADDING: f32 = 0.1;
     let center = (grid_to_world(min) + grid_to_world(max)) * 0.5;
-    let size = (max - min + IVec3::ONE).as_vec3() * 1.1;
+    let size = (max - min + IVec3::ONE).as_vec3() + Vec3::splat(PREVIEW_PADDING * 2.0);
     commands.spawn((
         Mesh3d(assets.block.clone()),
         MeshMaterial3d(assets.edit_preview_material(EditPreviewKind::Delete)),

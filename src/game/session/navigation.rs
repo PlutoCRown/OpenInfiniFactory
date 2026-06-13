@@ -43,6 +43,7 @@ pub fn handle_exit_to_main_menu(
             &world.block_entities,
             &world.debug,
             &mut world.structure_state,
+            &mut world.factory_registry,
             &mut world.movement_influence,
             &mut world.pusher_state,
             &mut next_state,

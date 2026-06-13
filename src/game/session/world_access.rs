@@ -5,6 +5,7 @@ use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::systems::debug::DebugState;
+use crate::game::world::factory_registry::FactoryBlockRegistry;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{BlockEntity, WorldRenderAssets};
 use crate::scene::BlockEntityIndex;
@@ -18,6 +19,7 @@ pub struct PlayingWorldParams<'w, 's> {
     pub render_assets: Option<Res<'w, WorldRenderAssets>>,
     pub debug: Res<'w, DebugState>,
     pub structure_state: ResMut<'w, StructureState>,
+    pub factory_registry: ResMut<'w, FactoryBlockRegistry>,
     pub movement_influence: ResMut<'w, MovementInfluenceCache>,
     pub pusher_state: ResMut<'w, PusherState>,
     pub block_index: ResMut<'w, BlockEntityIndex>,

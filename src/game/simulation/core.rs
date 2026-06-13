@@ -62,6 +62,7 @@ pub fn simulate_turn(
         &worlds.solution,
         &mut worlds.turn_structures,
         &worlds.solution_structures,
+        &worlds.factory_registry,
         &powered_devices,
         pusher_state,
         movement_influence,
@@ -73,6 +74,7 @@ pub fn simulate_turn(
         &movement_plan,
         &mut realtime,
         &mut worlds.turn_structures,
+        &mut worlds.factory_registry,
         pusher_state,
         movement_influence,
     );
