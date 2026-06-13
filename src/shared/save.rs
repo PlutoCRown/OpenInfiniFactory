@@ -494,6 +494,16 @@ pub fn next_named_save(existing: &[String], base: &str) -> String {
     unreachable!()
 }
 
+pub fn next_solution_name_for_puzzle(existing: &[String], puzzle_name: &str) -> String {
+    let puzzle = normalized_save_name(puzzle_name);
+    let base = if puzzle.is_empty() {
+        "solution".to_string()
+    } else {
+        format!("{puzzle}_Solution")
+    };
+    next_named_save(existing, &base)
+}
+
 fn sanitize_save_name(name: &str) -> String {
     name.chars()
         .map(|ch| {
@@ -706,5 +716,20 @@ mod tests {
 
         delete_save("test_puzzle_ref");
         delete_save("test_solution_ref");
+    }
+
+    #[test]
+    fn next_solution_name_for_puzzle_appends_solution_suffix() {
+        assert_eq!(
+            next_solution_name_for_puzzle(&["puzzle".to_string()], "puzzle"),
+            "puzzle_Solution"
+        );
+        assert_eq!(
+            next_solution_name_for_puzzle(
+                &["puzzle".to_string(), "puzzle_Solution".to_string()],
+                "puzzle",
+            ),
+            "puzzle_Solution_2"
+        );
     }
 }

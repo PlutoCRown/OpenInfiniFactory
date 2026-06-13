@@ -5,6 +5,7 @@ pub mod headless;
 pub mod introspection;
 pub mod protocol;
 pub mod snapshot;
+pub mod world_layer;
 pub mod world_ops;
 
 #[cfg(not(target_arch = "wasm32"))]

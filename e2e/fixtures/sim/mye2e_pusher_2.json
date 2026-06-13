@@ -1,0 +1,159 @@
+{
+  "name": "mye2e_pusher_2",
+  "source": {
+    "save": "mye2e_pusher_2",
+    "min": [
+      -13,
+      0,
+      10
+    ],
+    "max": [
+      -10,
+      4,
+      12
+    ],
+    "origin": [
+      -13,
+      0,
+      10
+    ]
+  },
+  "setup": [
+    {
+      "x": 1,
+      "y": 0,
+      "z": 2,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 1,
+      "y": 0,
+      "z": 0,
+      "kind": "Platform",
+      "facing": "West"
+    },
+    {
+      "x": 2,
+      "y": 0,
+      "z": 0,
+      "kind": "Conveyor",
+      "facing": "West"
+    },
+    {
+      "x": 3,
+      "y": 0,
+      "z": 0,
+      "kind": "Conveyor",
+      "facing": "West"
+    },
+    {
+      "x": 1,
+      "y": 0,
+      "z": 1,
+      "kind": "Platform",
+      "facing": "West"
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 2,
+      "kind": "Platform",
+      "facing": "West"
+    },
+    {
+      "x": 2,
+      "y": 0,
+      "z": 2,
+      "kind": "Platform",
+      "facing": "West"
+    },
+    {
+      "x": 3,
+      "y": 1,
+      "z": 0,
+      "kind": "Platform",
+      "facing": "West"
+    },
+    {
+      "x": 1,
+      "y": 1,
+      "z": 1,
+      "kind": "Detector",
+      "facing": "North"
+    },
+    {
+      "x": 0,
+      "y": 1,
+      "z": 2,
+      "kind": "Platform",
+      "facing": "West"
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "z": 2,
+      "kind": "Platform",
+      "facing": "West"
+    },
+    {
+      "x": 1,
+      "y": 3,
+      "z": 2,
+      "kind": "Wire",
+      "facing": "West"
+    },
+    {
+      "x": 1,
+      "y": 4,
+      "z": 1,
+      "kind": "ReverseConveyor",
+      "facing": "West"
+    },
+    {
+      "x": 1,
+      "y": 4,
+      "z": 2,
+      "kind": "Pusher",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "beginSimulation"
+    },
+    {
+      "op": "run",
+      "turns": 2
+    },
+    {
+      "op": "assertBlock",
+      "x": 1,
+      "y": 1,
+      "z": 0,
+      "kind": "Platform"
+    },
+    {
+      "op": "run",
+      "turns": 2
+    },
+    {
+      "op": "assertBlock",
+      "x": 2,
+      "y": 1,
+      "z": 0,
+      "kind": "Platform"
+    },
+    {
+      "op": "run",
+      "turns": 1
+    },
+    {
+      "op": "assertBlock",
+      "x": 1,
+      "y": 1,
+      "z": 0,
+      "kind": "Platform"
+    }
+  ]
+}

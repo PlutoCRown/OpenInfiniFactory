@@ -2,6 +2,7 @@ use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
 use crate::game::session;
+use crate::game::session::{puzzle_save_needs_confirm, save_current_world_resources};
 use crate::game::state::{
     BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
     StartMenuScreen, WorldEntryMode,
@@ -11,12 +12,11 @@ use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost, UiRootEntity};
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiInstanceId};
 use crate::game::ui::core::runtime::UiPanelContext;
 use crate::game::ui::core::text_input::primary_click;
-use crate::game::ui::features::save::open_save_puzzle_confirm;
 use crate::game::ui::features::save::open_save_as_new_puzzle_prompt;
-use crate::game::session::{puzzle_save_needs_confirm, save_current_world_resources};
+use crate::game::ui::features::save::open_save_puzzle_confirm;
 use crate::game::ui::types::{CarriedItem, InventoryItems};
 use crate::game::world::grid::WorldBlocks;
-use crate::shared::save::{next_named_save, SaveKind, SaveState};
+use crate::shared::save::{next_solution_name_for_puzzle, SaveKind, SaveState};
 
 use super::confirm::{
     on_reset_solution, on_return_to_main, on_save_before_edit, reset_solution_spec,
@@ -143,7 +143,7 @@ fn dispatch_menu_action(
                     simulation.start_structures = None;
                     solution_state.puzzle_snapshot = Some(world.clone());
                     solution_state.puzzle_id = save_state.current.clone();
-                    save_state.current = Some(next_named_save(
+                    save_state.current = Some(next_solution_name_for_puzzle(
                         &save_state
                             .entries
                             .iter()

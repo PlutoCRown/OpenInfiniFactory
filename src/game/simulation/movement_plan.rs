@@ -334,9 +334,25 @@ fn try_execute_move(
             else {
                 return false;
             };
-            if super::structures::hard_pusher_head_blocks_move_public(
-                &expanded, *offset, hard_heads,
-            ) {
+            let head_blocks = if let Some(actor) = actor {
+                if matches!(actor.animation, PusherAnimationKind::Retract) {
+                    let Some(head) = pusher_head_position(realtime, actor.pos) else {
+                        return false;
+                    };
+                    super::structures::hard_pusher_head_blocks_move_public_excluding(
+                        &expanded, *offset, hard_heads, head,
+                    )
+                } else {
+                    super::structures::hard_pusher_head_blocks_move_public(
+                        &expanded, *offset, hard_heads,
+                    )
+                }
+            } else {
+                super::structures::hard_pusher_head_blocks_move_public(
+                    &expanded, *offset, hard_heads,
+                )
+            };
+            if head_blocks {
                 return false;
             }
             if let Some(actor) = actor {
@@ -398,6 +414,7 @@ fn try_execute_move(
             move_structure(realtime, &expanded, *offset);
             turn_structures.move_positions(&expanded, *offset);
             factory_registry.translate_turn(&before, *offset);
+            pusher_state.translate_device_entries(&before, *offset);
             let target: HashSet<IVec3> = expanded.iter().map(|pos| *pos + offset).collect();
             movement_influence.record_successful_translate(&before, &target);
             moved.extend(target.iter().copied());
@@ -444,6 +461,7 @@ fn try_execute_move(
                 .collect();
             turn_structures.replace_structure_positions(structure, targets.clone());
             factory_registry.rotate_turn(structure, *pivot, *clockwise);
+            pusher_state.rotate_device_entries(structure, *pivot, *clockwise);
             if let Some(source) = source {
                 movement_influence.record_successful_rotate(&before, &targets, *source);
             }
@@ -1150,5 +1168,275 @@ mod tests {
             .blocks
             .get(&platform_pos)
             .is_some_and(|block| block.kind == BlockKind::Platform));
+    }
+
+    fn mye2e_pusher_2_world() -> WorldBlocks {
+        let mut world = WorldBlocks::default();
+        world.insert(IVec3::new(-12, 0, 12), stone(IVec3::new(-12, 0, 12)));
+        for (pos, kind, facing) in [
+            (IVec3::new(-12, 0, 11), BlockKind::Platform, Facing::West),
+            (IVec3::new(-10, 1, 10), BlockKind::Platform, Facing::West),
+            (IVec3::new(-10, 0, 10), BlockKind::Conveyor, Facing::West),
+            (IVec3::new(-12, 4, 12), BlockKind::Pusher, Facing::North),
+            (IVec3::new(-11, 0, 10), BlockKind::Conveyor, Facing::West),
+            (IVec3::new(-13, 0, 12), BlockKind::Platform, Facing::West),
+            (IVec3::new(-12, 0, 10), BlockKind::Platform, Facing::West),
+            (
+                IVec3::new(-12, 4, 11),
+                BlockKind::ReverseConveyor,
+                Facing::West,
+            ),
+            (IVec3::new(-11, 0, 12), BlockKind::Platform, Facing::West),
+            (IVec3::new(-11, 1, 12), BlockKind::Platform, Facing::West),
+            (IVec3::new(-12, 1, 11), BlockKind::Detector, Facing::North),
+            (IVec3::new(-12, 3, 12), BlockKind::Wire, Facing::West),
+            (IVec3::new(-13, 1, 12), BlockKind::Platform, Facing::West),
+        ] {
+            world.insert(pos, BlockData { kind, facing });
+        }
+        world
+    }
+
+    #[test]
+    fn mye2e_pusher_target_structure_before_and_after_gravity() {
+        use super::super::core::simulate_turn;
+
+        let start_world = mye2e_pusher_2_world();
+        let structures = rebuild_structures(&start_world);
+        let mut worlds = super::super::worlds::SimulationWorlds::at_simulation_start(
+            start_world.clone(),
+            structures,
+        );
+        let pusher_pos = IVec3::new(-12, 4, 12);
+        let target_pos = IVec3::new(-12, 4, 11);
+        let offset = IVec3::new(0, 0, -1);
+        let before = worlds.solution_structures.pusher_target_structure(
+            &worlds.solution,
+            &worlds.factory_registry,
+            pusher_pos,
+            target_pos,
+            offset,
+        );
+        assert_eq!(before, Some(HashSet::from([target_pos])));
+
+        let mut pending = super::super::runtime::PendingGeneratedMaterials::default();
+        let mut signal_cache = super::super::runtime::SignalNetworkCache::default();
+        let mut pusher_state = PusherState::rebuild_from_world(&worlds.turn);
+        let mut movement_influence = MovementInfluenceCache::default();
+        for turn in 0..2 {
+            simulate_turn(
+                &mut worlds,
+                &mut pending,
+                &mut signal_cache,
+                turn,
+                0.0,
+                &mut pusher_state,
+                &mut movement_influence,
+                None,
+                None,
+            );
+        }
+
+        let actual_pusher = worlds
+            .turn
+            .blocks
+            .iter()
+            .find_map(|(pos, block)| (block.kind == BlockKind::Pusher).then_some(*pos))
+            .unwrap();
+        let fallen_target = IVec3::new(-12, 2, 11);
+        let actual_rcx = worlds
+            .turn
+            .blocks
+            .iter()
+            .find_map(|(pos, block)| (block.kind == BlockKind::ReverseConveyor).then_some(*pos))
+            .unwrap();
+        assert_eq!(
+            actual_pusher,
+            IVec3::new(-12, 2, 12),
+            "unexpected pusher position"
+        );
+        assert_eq!(
+            actual_rcx, fallen_target,
+            "unexpected reverse conveyor position"
+        );
+        assert!(worlds.factory_registry.has_turn_factory(actual_pusher));
+        assert!(worlds.factory_registry.has_turn_factory(actual_rcx));
+        let after = worlds.solution_structures.pusher_target_structure(
+            &worlds.solution,
+            &worlds.factory_registry,
+            actual_pusher,
+            actual_rcx,
+            offset,
+        );
+        assert_eq!(after, Some(HashSet::from([fallen_target])));
+    }
+
+    #[test]
+    fn mye2e_pusher_2_platform_oscillates_between_minus_11_and_minus_12() {
+        use super::super::core::simulate_turn;
+        use super::super::runtime::{PendingGeneratedMaterials, SignalNetworkCache};
+
+        let start_world = mye2e_pusher_2_world();
+        let structures = rebuild_structures(&start_world);
+        let mut worlds = super::super::worlds::SimulationWorlds::at_simulation_start(
+            start_world.clone(),
+            structures,
+        );
+        let mut pending = PendingGeneratedMaterials::default();
+        let mut signal_cache = SignalNetworkCache::default();
+        let mut pusher_state = PusherState::rebuild_from_world(&worlds.turn);
+        let mut movement_influence = MovementInfluenceCache::default();
+
+        let tracked = IVec3::new(-10, 1, 10);
+        let mut positions = Vec::new();
+        for turn in 0..10 {
+            simulate_turn(
+                &mut worlds,
+                &mut pending,
+                &mut signal_cache,
+                turn,
+                0.0,
+                &mut pusher_state,
+                &mut movement_influence,
+                None,
+                None,
+            );
+            let pos = worlds
+                .turn
+                .blocks
+                .iter()
+                .find_map(|(pos, block)| {
+                    (block.kind == BlockKind::Platform
+                        && pos.x >= -12
+                        && pos.x <= -10
+                        && pos.y == 1
+                        && pos.z == 10)
+                        .then_some(*pos)
+                })
+                .unwrap_or(tracked);
+            positions.push(pos);
+        }
+
+        assert!(
+            positions.contains(&IVec3::new(-11, 1, 10)),
+            "platform never reached (-11,1,10); path: {:?}",
+            positions
+        );
+        assert!(
+            positions.contains(&IVec3::new(-12, 1, 10)),
+            "platform never reached (-12,1,10); path: {:?}",
+            positions
+        );
+        let oscillates = positions.windows(2).any(|window| {
+            (window[0] == IVec3::new(-12, 1, 10) && window[1] == IVec3::new(-11, 1, 10))
+                || (window[0] == IVec3::new(-11, 1, 10) && window[1] == IVec3::new(-12, 1, 10))
+        });
+        assert!(
+            oscillates,
+            "platform did not oscillate between (-11,1,10) and (-12,1,10); path: {:?}",
+            positions
+        );
+    }
+
+    fn mye2e_pusher_back_2_world() -> WorldBlocks {
+        let mut world = WorldBlocks::default();
+        world.insert(IVec3::new(2, 0, 1), stone(IVec3::new(2, 0, 1)));
+        world.insert(IVec3::new(2, 1, 0), platform());
+        world.insert(
+            IVec3::new(1, 1, 1),
+            BlockData {
+                kind: BlockKind::Detector,
+                facing: Facing::West,
+            },
+        );
+        world.insert(IVec3::new(2, 1, 1), pusher(Facing::North));
+        world.insert(
+            IVec3::new(1, 2, 1),
+            BlockData {
+                kind: BlockKind::Wire,
+                facing: Facing::North,
+            },
+        );
+        world.insert(
+            IVec3::new(2, 2, 1),
+            BlockData {
+                kind: BlockKind::Wire,
+                facing: Facing::North,
+            },
+        );
+        world.insert(IVec3::new(0, 3, 1), platform());
+        world
+    }
+
+    #[test]
+    fn mye2e_pusher_back_2_retracts_after_single_power_pulse() {
+        use super::super::core::simulate_turn;
+        use super::super::runtime::{PendingGeneratedMaterials, SignalNetworkCache};
+
+        let start_world = mye2e_pusher_back_2_world();
+        let structures = rebuild_structures(&start_world);
+        let mut worlds = super::super::worlds::SimulationWorlds::at_simulation_start(
+            start_world.clone(),
+            structures,
+        );
+        let mut pending = PendingGeneratedMaterials::default();
+        let mut signal_cache = SignalNetworkCache::default();
+        let mut pusher_state = PusherState::rebuild_from_world(&worlds.turn);
+        let mut movement_influence = MovementInfluenceCache::default();
+        let pusher_pos = IVec3::new(2, 1, 1);
+
+        for turn in 0..3 {
+            simulate_turn(
+                &mut worlds,
+                &mut pending,
+                &mut signal_cache,
+                turn,
+                0.0,
+                &mut pusher_state,
+                &mut movement_influence,
+                None,
+                None,
+            );
+        }
+        assert!(
+            pusher_state.is_device_extended(pusher_pos),
+            "pusher should extend after the single powered turn"
+        );
+        assert!(
+            !worlds.turn.blocks.contains_key(&IVec3::new(2, 1, 0)),
+            "platform should leave the cell in front of the pusher when pushed"
+        );
+        assert!(
+            worlds.turn.blocks.contains_key(&IVec3::new(2, 1, -1)),
+            "platform should be pushed one cell north"
+        );
+
+        simulate_turn(
+            &mut worlds,
+            &mut pending,
+            &mut signal_cache,
+            3,
+            0.0,
+            &mut pusher_state,
+            &mut movement_influence,
+            None,
+            None,
+        );
+        assert!(
+            !pusher_state.is_device_extended(pusher_pos),
+            "pusher should retract once power is removed"
+        );
+        assert!(
+            worlds
+                .turn
+                .blocks
+                .get(&IVec3::new(2, 1, 0))
+                .is_some_and(|block| block.kind == BlockKind::Platform),
+            "bound platform should be pulled back in front of the pusher"
+        );
+        assert!(
+            !worlds.turn.blocks.contains_key(&IVec3::new(2, 1, -1)),
+            "platform should not remain at the pushed position"
+        );
     }
 }

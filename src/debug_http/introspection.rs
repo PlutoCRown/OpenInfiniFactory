@@ -3,15 +3,26 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 
 use crate::debug_http::snapshot::{block_json, pos_json};
+use crate::debug_http::world_layer::{world_layer_label, DebugWorldLayer};
+use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::movement_plan::movement_plan_debug_json;
 use crate::game::simulation::runtime::{detector_is_active_public, SignalNetworkCache};
 use crate::game::simulation::structure_state::{
     FactoryActivity, StructureFreedom, StructureKind, StructureState,
 };
 use crate::game::simulation::structures::MovementInfluenceCache;
-use crate::game::simulation::movement::PusherState;
+use crate::game::world::factory_registry::{
+    FactoryBlockId, FactoryBlockRegistry, FactoryWorldLayer,
+};
 use crate::game::world::grid::WorldBlocks;
 use crate::sim_core::SimulationControl;
+
+fn factory_world_layer(layer: DebugWorldLayer) -> FactoryWorldLayer {
+    match layer {
+        DebugWorldLayer::Turn => FactoryWorldLayer::Turn,
+        DebugWorldLayer::Solution => FactoryWorldLayer::Solution,
+    }
+}
 
 fn activity_label(activity: FactoryActivity) -> &'static str {
     match activity {
@@ -122,7 +133,10 @@ pub fn get_power_networks_json(
     let networks: Vec<_> = (0..signal_cache.network_count())
         .map(|id| {
             let wires = signal_cache.network_wires(id);
-            let detector_count = signal_cache.network_detectors(id).map(|d| d.len()).unwrap_or(0);
+            let detector_count = signal_cache
+                .network_detectors(id)
+                .map(|d| d.len())
+                .unwrap_or(0);
             json!({
                 "id": id,
                 "powered": signal_cache.network_is_powered(world, id),
@@ -205,23 +219,63 @@ pub fn get_powered_devices_json(
     json!({ "count": powered.len(), "devices": powered })
 }
 
+pub fn get_factory_id_at_json(
+    pos: IVec3,
+    world: &WorldBlocks,
+    factory_registry: &FactoryBlockRegistry,
+    layer: DebugWorldLayer,
+) -> Result<Value, String> {
+    let factory_layer = factory_world_layer(layer);
+    let id = factory_registry
+        .id_at(pos, factory_layer)
+        .ok_or_else(|| format!("no factory block at ({},{},{})", pos.x, pos.y, pos.z))?;
+    Ok(json!({
+        "world": world_layer_label(layer),
+        "pos": pos_json(pos),
+        "id": id.as_u32(),
+        "block": block_json(world, pos),
+    }))
+}
+
+pub fn get_factory_pos_json(
+    id: FactoryBlockId,
+    factory_registry: &FactoryBlockRegistry,
+    layer: DebugWorldLayer,
+) -> Result<Value, String> {
+    let factory_layer = factory_world_layer(layer);
+    let pos = factory_registry
+        .pos_at(id, factory_layer)
+        .ok_or_else(|| format!("no factory block with id {}", id.as_u32()))?;
+    Ok(json!({
+        "world": world_layer_label(layer),
+        "id": id.as_u32(),
+        "pos": pos_json(pos),
+    }))
+}
+
 pub fn get_factory_block_state_json(
     pos: IVec3,
     world: &WorldBlocks,
+    turn_world: &WorldBlocks,
     turn_structures: &StructureState,
     solution_structures: &StructureState,
-    factory_registry: &crate::game::world::factory_registry::FactoryBlockRegistry,
+    factory_registry: &FactoryBlockRegistry,
     control: &SimulationControl,
     signal_cache: &mut SignalNetworkCache,
+    layer: DebugWorldLayer,
 ) -> Result<Value, String> {
-    signal_cache.ensure_fresh(world);
-    let index = turn_structures
+    signal_cache.ensure_fresh(turn_world);
+    let structures = match layer {
+        DebugWorldLayer::Turn => turn_structures,
+        DebugWorldLayer::Solution => solution_structures,
+    };
+    let index = structures
         .structure_index_at(pos)
         .ok_or_else(|| format!("no structure at ({},{},{})", pos.x, pos.y, pos.z))?;
     let empty_solution = WorldBlocks::default();
     let solution = control.start_snapshot.as_ref().unwrap_or(&empty_solution);
     let mut pusher_debug = Value::Null;
-    for (pusher_pos, block) in &world.blocks {
+    for (pusher_pos, block) in &turn_world.blocks {
         if !matches!(
             block.kind,
             crate::game::blocks::BlockKind::Pusher | crate::game::blocks::BlockKind::Blocker
@@ -233,7 +287,7 @@ pub fn get_factory_block_state_json(
             continue;
         }
         let offset = block.facing.forward_ivec3();
-        let turn_subset = solution_structures.pusher_target_structure(
+        let turn_subset = turn_structures.pusher_target_structure(
             solution,
             factory_registry,
             *pusher_pos,
@@ -259,34 +313,40 @@ pub fn get_factory_block_state_json(
         break;
     }
     Ok(json!({
+        "world": world_layer_label(layer),
         "pos": pos_json(pos),
         "block": block_json(world, pos),
         "structure_index": index,
-        "kind": turn_structures.kind_at(pos).map(kind_label),
-        "activity": turn_structures.activity_at(pos).map(activity_label),
-        "freedom": turn_structures.freedom_at(pos).map(freedom_label),
-        "pushable": turn_structures.pushable_at(pos),
-        "member_count": turn_structures.member_count_at(pos),
+        "kind": structures.kind_at(pos).map(kind_label),
+        "activity": structures.activity_at(pos).map(activity_label),
+        "freedom": structures.freedom_at(pos).map(freedom_label),
+        "pushable": structures.pushable_at(pos),
+        "member_count": structures.member_count_at(pos),
         "wire_network_id": signal_cache.wire_network_id(pos),
         "device_network_ids": signal_cache.device_network_ids(pos),
         "pusher_push": pusher_debug,
     }))
 }
 
-pub fn get_structure_at_json(pos: IVec3, turn_structures: &StructureState) -> Result<Value, String> {
-    let index = turn_structures
+pub fn get_structure_at_json(
+    pos: IVec3,
+    structures: &StructureState,
+    layer: DebugWorldLayer,
+) -> Result<Value, String> {
+    let index = structures
         .structure_index_at(pos)
         .ok_or_else(|| format!("no structure at ({},{},{})", pos.x, pos.y, pos.z))?;
-    let positions = turn_structures
+    let positions = structures
         .structure_positions(index)
         .ok_or_else(|| format!("missing structure index {index}"))?;
     Ok(json!({
+        "world": world_layer_label(layer),
         "index": index,
         "query": pos_json(pos),
-        "kind": turn_structures.kind_at(pos).map(kind_label),
-        "activity": turn_structures.activity_at(pos).map(activity_label),
-        "freedom": turn_structures.freedom_at(pos).map(freedom_label),
-        "pushable": turn_structures.pushable_at(pos),
+        "kind": structures.kind_at(pos).map(kind_label),
+        "activity": structures.activity_at(pos).map(activity_label),
+        "freedom": structures.freedom_at(pos).map(freedom_label),
+        "pushable": structures.pushable_at(pos),
         "member_count": positions.len(),
         "members": positions_json(positions),
     }))

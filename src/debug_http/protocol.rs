@@ -6,6 +6,7 @@ pub enum DebugHttpCommand {
         x: Option<i32>,
         y: Option<i32>,
         z: Option<i32>,
+        world: Option<String>,
     },
     GetExtendedDevices,
     GetStatus,
@@ -36,6 +37,7 @@ pub enum DebugHttpCommand {
         max_x: Option<i32>,
         max_y: Option<i32>,
         max_z: Option<i32>,
+        world: Option<String>,
     },
     GetPowerNetworks,
     GetPowerNetwork { id: Option<usize> },
@@ -44,11 +46,23 @@ pub enum DebugHttpCommand {
         x: Option<i32>,
         y: Option<i32>,
         z: Option<i32>,
+        world: Option<String>,
+    },
+    GetFactoryIdAt {
+        x: Option<i32>,
+        y: Option<i32>,
+        z: Option<i32>,
+        world: Option<String>,
+    },
+    GetFactoryPos {
+        id: Option<u32>,
+        world: Option<String>,
     },
     GetStructureAt {
         x: Option<i32>,
         y: Option<i32>,
         z: Option<i32>,
+        world: Option<String>,
     },
     PreviewMovementPlan,
 }
@@ -74,6 +88,7 @@ pub fn parse_http_request(request: &tiny_http::Request) -> DebugHttpCommand {
             x: params.get("x").and_then(|v| v.parse().ok()),
             y: params.get("y").and_then(|v| v.parse().ok()),
             z: params.get("z").and_then(|v| v.parse().ok()),
+            world: params.get("world").cloned(),
         },
         ("GET", "/getextendeddevices") | ("GET", "/extendeddevices") => {
             DebugHttpCommand::GetExtendedDevices
@@ -127,6 +142,7 @@ pub fn parse_http_request(request: &tiny_http::Request) -> DebugHttpCommand {
             max_x: params.get("max_x").or_else(|| params.get("maxx")).and_then(|v| v.parse().ok()),
             max_y: params.get("max_y").or_else(|| params.get("maxy")).and_then(|v| v.parse().ok()),
             max_z: params.get("max_z").or_else(|| params.get("maxz")).and_then(|v| v.parse().ok()),
+            world: params.get("world").cloned(),
         },
         ("GET", "/getpowernetworks") | ("GET", "/powernetworks") => {
             DebugHttpCommand::GetPowerNetworks
@@ -145,12 +161,24 @@ pub fn parse_http_request(request: &tiny_http::Request) -> DebugHttpCommand {
                 x: params.get("x").and_then(|v| v.parse().ok()),
                 y: params.get("y").and_then(|v| v.parse().ok()),
                 z: params.get("z").and_then(|v| v.parse().ok()),
+                world: params.get("world").cloned(),
             }
         }
+        ("GET", "/getfactoryidat") | ("GET", "/factoryidat") => DebugHttpCommand::GetFactoryIdAt {
+            x: params.get("x").and_then(|v| v.parse().ok()),
+            y: params.get("y").and_then(|v| v.parse().ok()),
+            z: params.get("z").and_then(|v| v.parse().ok()),
+            world: params.get("world").cloned(),
+        },
+        ("GET", "/getfactorypos") | ("GET", "/factorypos") => DebugHttpCommand::GetFactoryPos {
+            id: params.get("id").and_then(|v| v.parse().ok()),
+            world: params.get("world").cloned(),
+        },
         ("GET", "/getstructureat") | ("GET", "/structureat") => DebugHttpCommand::GetStructureAt {
             x: params.get("x").and_then(|v| v.parse().ok()),
             y: params.get("y").and_then(|v| v.parse().ok()),
             z: params.get("z").and_then(|v| v.parse().ok()),
+            world: params.get("world").cloned(),
         },
         ("GET", "/previewmovementplan") | ("GET", "/movementplan") => {
             DebugHttpCommand::PreviewMovementPlan
@@ -173,7 +201,7 @@ pub fn help_json() -> String {
     serde_json::json!({
         "ok": true,
         "endpoints": [
-            {"method": "GET", "path": "/getPosBlock?x=&y=&z=", "desc": "block at coordinate"},
+            {"method": "GET", "path": "/getPosBlock?x=&y=&z=&world=turn|solution", "desc": "block at coordinate (default world=turn)"},
             {"method": "GET", "path": "/getExtendedDevices", "desc": "extended pusher/blocker positions"},
             {"method": "GET", "path": "/status", "desc": "simulation snapshot"},
             {"method": "GET", "path": "/blockKinds", "desc": "all registered block kinds"},
@@ -188,12 +216,14 @@ pub fn help_json() -> String {
             {"method": "POST", "path": "/runN?n=", "desc": "advance N turns"},
             {"method": "GET", "path": "/logs?limit=100", "desc": "recent simulation logs"},
             {"method": "DELETE", "path": "/logs", "desc": "clear logs"},
-            {"method": "GET", "path": "/getRegion?min_x=&min_y=&min_z=&max_x=&max_y=&max_z=", "desc": "blocks in axis-aligned region"},
+            {"method": "GET", "path": "/getRegion?min_x=&min_y=&min_z=&max_x=&max_y=&max_z=&world=turn|solution", "desc": "blocks in axis-aligned region (default world=turn)"},
             {"method": "GET", "path": "/getPowerNetworks", "desc": "all wire network summaries"},
             {"method": "GET", "path": "/getPowerNetwork?id=", "desc": "one wire network detail"},
             {"method": "GET", "path": "/getPoweredDevices", "desc": "currently powered pusher/blocker devices"},
-            {"method": "GET", "path": "/getFactoryBlockState?x=&y=&z=", "desc": "structure + signal state for factory cell"},
-            {"method": "GET", "path": "/getStructureAt?x=&y=&z=", "desc": "full connected structure members"},
+            {"method": "GET", "path": "/getFactoryBlockState?x=&y=&z=&world=turn|solution", "desc": "structure + signal state for factory cell (default world=turn)"},
+            {"method": "GET", "path": "/getFactoryIdAt?x=&y=&z=&world=turn|solution", "desc": "factory block id at coordinate (default world=turn)"},
+            {"method": "GET", "path": "/getFactoryPos?id=&world=turn|solution", "desc": "factory block position by id (default world=turn)"},
+            {"method": "GET", "path": "/getStructureAt?x=&y=&z=&world=turn|solution", "desc": "full connected structure members (default world=turn)"},
             {"method": "GET", "path": "/previewMovementPlan", "desc": "movement plan preview with execute feasibility"},
         ]
     })

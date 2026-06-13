@@ -79,6 +79,9 @@ pub fn simulate_turn(
         movement_influence,
     );
     worlds.turn = realtime;
+    worlds
+        .factory_registry
+        .reconcile_turn_positions(&worlds.solution, &worlds.turn);
     sample.movement_execute_ms = mark_elapsed_ms(&mut mark);
 
     let mut animations = movement_output.animations;

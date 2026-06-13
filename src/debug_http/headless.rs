@@ -1,17 +1,20 @@
 use bevy::prelude::*;
 
 use crate::game::simulation::movement::pusher_head_position;
+use crate::game::world::factory_registry::{FactoryBlockId, FactoryBlockRegistry};
 use crate::game::world::animation::SIMULATION_TURN_SECONDS;
 use crate::sim_core::{SimulationControl, SimulationDebugLog};
 
 use super::fixture::{apply_fixture_setup, load_fixture_file, run_fixture_dir, run_fixture_file};
 use super::introspection::{
-    get_factory_block_state_json, get_power_network_json, get_power_networks_json,
-    get_powered_devices_json, get_region_json, get_structure_at_json, preview_movement_plan_json,
+    get_factory_block_state_json, get_factory_id_at_json, get_factory_pos_json,
+    get_power_network_json, get_power_networks_json, get_powered_devices_json, get_region_json,
+    get_structure_at_json, preview_movement_plan_json,
 };
 use super::protocol::{help_json, json_error, json_ok, DebugHttpCommand};
 use super::snapshot::{block_json, pos_json, session_status_json};
 use super::standalone::HeadlessDebugState;
+use super::world_layer::{parse_world_layer_option, resolve_world_blocks, world_layer_label, DebugWorldLayer};
 use super::world_ops::{
     block_kinds_json, fixture_root, load_save_into_session, parse_block_kind, parse_facing,
     place_block, reset_session,
@@ -21,14 +24,22 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
     match command {
         DebugHttpCommand::Help => help_json(),
         DebugHttpCommand::BlockKinds => block_kinds_json(),
-        DebugHttpCommand::GetPosBlock { x, y, z } => {
+        DebugHttpCommand::GetPosBlock { x, y, z, world } => {
+            let layer = parse_world_layer_option(world.as_deref());
             if let (Some(x), Some(y), Some(z)) = (x, y, z) {
                 let pos = IVec3::new(x, y, z);
-                let world = state.app.world();
-                json_ok(serde_json::json!({
-                    "pos": pos_json(pos),
-                    "block": block_json(world.resource(), pos),
-                }))
+                state.with_core(|core, _| {
+                    let turn = core.world_blocks();
+                    let control = core.control();
+                    match resolve_world_blocks(layer, turn, control) {
+                        Ok(world) => json_ok(serde_json::json!({
+                            "world": world_layer_label(layer),
+                            "pos": pos_json(pos),
+                            "block": block_json(world, pos),
+                        })),
+                        Err(error) => json_error(&error),
+                    }
+                })
             } else {
                 json_error("headless mode requires ?x=&y=&z= for /getPosBlock")
             }
@@ -203,7 +214,9 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
             max_x,
             max_y,
             max_z,
+            world,
         } => {
+            let layer = parse_world_layer_option(world.as_deref());
             let Some((min_x, min_y, min_z, max_x, max_y, max_z)) = min_x
                 .zip(min_y)
                 .zip(min_z)
@@ -215,6 +228,8 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
                 return json_error("getRegion requires min_x/y/z and max_x/y/z");
             };
             state.with_core(|core, _| {
+                let turn = core.world_blocks();
+                let control = core.control();
                 let mut params = std::collections::HashMap::new();
                 params.insert("min_x".into(), min_x.to_string());
                 params.insert("min_y".into(), min_y.to_string());
@@ -222,8 +237,19 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
                 params.insert("max_x".into(), max_x.to_string());
                 params.insert("max_y".into(), max_y.to_string());
                 params.insert("max_z".into(), max_z.to_string());
-                match get_region_json(core.world_blocks(), &params) {
-                    Ok(data) => json_ok(data),
+                match resolve_world_blocks(layer, turn, control) {
+                    Ok(world) => match get_region_json(world, &params) {
+                        Ok(mut data) => {
+                            if let Some(object) = data.as_object_mut() {
+                                object.insert(
+                                    "world".into(),
+                                    world_layer_label(layer).into(),
+                                );
+                            }
+                            json_ok(data)
+                        }
+                        Err(error) => json_error(&error),
+                    },
                     Err(error) => json_error(&error),
                 }
             })
@@ -251,20 +277,29 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
                 json_ok(get_powered_devices_json(world, signal_cache))
             })
         }),
-        DebugHttpCommand::GetFactoryBlockState { x, y, z } => {
+        DebugHttpCommand::GetFactoryBlockState { x, y, z, world } => {
+            let layer = parse_world_layer_option(world.as_deref());
             let Some((x, y, z)) = x.zip(y).zip(z).map(|((a, b), c)| (a, b, c)) else {
                 return json_error("getFactoryBlockState requires ?x=&y=&z=");
             };
             state.with_core(|mut core, _| {
                 core.introspection_scope(|ctx| {
+                    let turn = ctx.world;
+                    let control = ctx.control;
+                    let query_world = match resolve_world_blocks(layer, turn, control) {
+                        Ok(world) => world,
+                        Err(error) => return json_error(&error),
+                    };
                     match get_factory_block_state_json(
                         IVec3::new(x, y, z),
-                        ctx.world,
+                        query_world,
+                        turn,
                         ctx.turn_structures,
                         &ctx.solution_structures,
                         ctx.factory_registry,
-                        ctx.control,
+                        control,
                         ctx.signal_cache,
+                        layer,
                     ) {
                         Ok(data) => json_ok(data),
                         Err(error) => json_error(&error),
@@ -272,13 +307,60 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
                 })
             })
         }
-        DebugHttpCommand::GetStructureAt { x, y, z } => {
+        DebugHttpCommand::GetFactoryIdAt { x, y, z, world } => {
+            let layer = parse_world_layer_option(world.as_deref());
+            let Some((x, y, z)) = x.zip(y).zip(z).map(|((a, b), c)| (a, b, c)) else {
+                return json_error("getFactoryIdAt requires ?x=&y=&z=");
+            };
+            state.with_core(|core, _| {
+                let turn = core.world_blocks();
+                let control = core.control();
+                let query_world = match resolve_world_blocks(layer, turn, control) {
+                    Ok(world) => world,
+                    Err(error) => return json_error(&error),
+                };
+                match get_factory_id_at_json(
+                    IVec3::new(x, y, z),
+                    query_world,
+                    core.world().resource::<FactoryBlockRegistry>(),
+                    layer,
+                ) {
+                    Ok(data) => json_ok(data),
+                    Err(error) => json_error(&error),
+                }
+            })
+        }
+        DebugHttpCommand::GetFactoryPos { id, world } => {
+            let layer = parse_world_layer_option(world.as_deref());
+            let Some(id) = id else {
+                return json_error("getFactoryPos requires ?id=");
+            };
+            state.with_core(|core, _| {
+                match get_factory_pos_json(
+                    FactoryBlockId::from_u32(id),
+                    core.world().resource::<FactoryBlockRegistry>(),
+                    layer,
+                ) {
+                    Ok(data) => json_ok(data),
+                    Err(error) => json_error(&error),
+                }
+            })
+        }
+        DebugHttpCommand::GetStructureAt { x, y, z, world } => {
+            let layer = parse_world_layer_option(world.as_deref());
             let Some((x, y, z)) = x.zip(y).zip(z).map(|((a, b), c)| (a, b, c)) else {
                 return json_error("getStructureAt requires ?x=&y=&z=");
             };
             state.with_core(|core, _| {
-                let structures = core.world().resource::<crate::game::simulation::structure_state::StructureState>();
-                match get_structure_at_json(IVec3::new(x, y, z), structures) {
+                let structures = match layer {
+                    DebugWorldLayer::Turn => core.world().resource::<crate::game::simulation::structure_state::StructureState>().clone(),
+                    DebugWorldLayer::Solution => core
+                        .control()
+                        .start_structures
+                        .clone()
+                        .unwrap_or_else(|| core.world().resource::<crate::game::simulation::structure_state::StructureState>().clone()),
+                };
+                match get_structure_at_json(IVec3::new(x, y, z), &structures, layer) {
                     Ok(data) => json_ok(data),
                     Err(error) => json_error(&error),
                 }

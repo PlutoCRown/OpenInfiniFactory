@@ -111,7 +111,9 @@ pub fn run_fixture_step(core: &mut SimCoreWorld<'_>, step: &FixtureStep) -> Resu
             Ok(())
         }
         FixtureStep::Run { turns } => {
-            core.begin_simulation();
+            if !core.is_active() {
+                core.begin_simulation();
+            }
             for _ in 0..*turns {
                 core.simulate_next_turn(
                     crate::game::world::animation::SIMULATION_TURN_SECONDS,

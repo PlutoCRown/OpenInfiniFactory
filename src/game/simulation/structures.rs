@@ -495,9 +495,20 @@ fn hard_pusher_head_blocks_move(
     offset: IVec3,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> bool {
+    hard_pusher_head_blocks_move_excluding(structure, offset, hard_pusher_head_occupancy, None)
+}
+
+fn hard_pusher_head_blocks_move_excluding(
+    structure: &HashSet<IVec3>,
+    offset: IVec3,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
+    exclude: Option<IVec3>,
+) -> bool {
     structure.iter().any(|pos| {
         let target = *pos + offset;
-        !structure.contains(&target) && hard_pusher_head_occupancy.contains(&target)
+        !structure.contains(&target)
+            && hard_pusher_head_occupancy.contains(&target)
+            && exclude != Some(target)
     })
 }
 
@@ -690,6 +701,20 @@ pub(super) fn hard_pusher_head_blocks_move_public(
     hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> bool {
     hard_pusher_head_blocks_move(structure, offset, hard_pusher_head_occupancy)
+}
+
+pub(super) fn hard_pusher_head_blocks_move_public_excluding(
+    structure: &HashSet<IVec3>,
+    offset: IVec3,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
+    exclude: IVec3,
+) -> bool {
+    hard_pusher_head_blocks_move_excluding(
+        structure,
+        offset,
+        hard_pusher_head_occupancy,
+        Some(exclude),
+    )
 }
 
 pub(super) fn hard_pusher_head_blocked_below_public(

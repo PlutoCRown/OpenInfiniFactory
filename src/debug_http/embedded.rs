@@ -5,18 +5,22 @@ use std::thread::{self, JoinHandle};
 use std::sync::{mpsc, Mutex};
 
 use crate::debug_http::embedded_session::{build_runtime_snapshot, simulation_control_adapter};
-use crate::game::simulation::core::simulate_turn;
-use crate::game::simulation::runtime::present_cached_turn;
-use crate::game::simulation::SimulationWorlds;
-use crate::game::world::factory_registry::FactoryBlockRegistry;
-use crate::game::world::animation::SIMULATION_TURN_SECONDS;
-use crate::sim_core::{CachedTurn, SimSnapshot};
 use crate::debug_http::introspection::{
-    get_factory_block_state_json, get_power_network_json, get_power_networks_json,
-    get_powered_devices_json, get_region_json, get_structure_at_json, preview_movement_plan_json,
+    get_factory_block_state_json, get_factory_id_at_json, get_factory_pos_json,
+    get_power_network_json, get_power_networks_json, get_powered_devices_json, get_region_json,
+    get_structure_at_json, preview_movement_plan_json,
 };
 use crate::debug_http::protocol::{help_json, json_error, json_ok, DebugHttpCommand, DebugHttpRequest};
 use crate::debug_http::snapshot::{block_json, cursor_target_json, simulation_status_json};
+use crate::debug_http::world_layer::{
+    parse_world_layer_option, resolve_world_blocks, world_layer_label, DebugWorldLayer,
+};
+use crate::game::simulation::core::simulate_turn;
+use crate::game::simulation::runtime::present_cached_turn;
+use crate::game::simulation::SimulationWorlds;
+use crate::game::world::factory_registry::{FactoryBlockId, FactoryBlockRegistry};
+use crate::game::world::animation::SIMULATION_TURN_SECONDS;
+use crate::sim_core::{CachedTurn, SimSnapshot};
 use crate::game::simulation::movement::{pusher_head_position, PusherState};
 use crate::game::simulation::runtime::{
     PendingGeneratedMaterials, SignalNetworkCache, SimulationPresentationState,
@@ -302,21 +306,28 @@ fn handle_embedded_debug_command(
 
     match command {
         DebugHttpCommand::Help => help_json(),
-        DebugHttpCommand::GetPosBlock { x, y, z } => {
-            let world = &*sim_deps.world;
+        DebugHttpCommand::GetPosBlock { x, y, z, world } => {
+            let layer = parse_world_layer_option(world.as_deref());
+            let control = simulation_control_adapter(&sim_deps.simulation);
+            let turn = &*sim_deps.world;
+            let query_world = match resolve_world_blocks(layer, turn, &control) {
+                Ok(world) => world,
+                Err(error) => return json_error(&error),
+            };
             if let (Some(x), Some(y), Some(z)) = (x, y, z) {
                 let pos = IVec3::new(x, y, z);
                 serde_json::json!({
                     "ok": true,
+                    "world": world_layer_label(layer),
                     "pos": crate::debug_http::snapshot::pos_json(pos),
-                    "block": block_json(world, pos),
-                    "cursor": cursor_target_json(placement, world),
+                    "block": block_json(query_world, pos),
+                    "cursor": cursor_target_json(placement, turn),
                 })
                 .to_string()
             } else {
                 serde_json::json!({
                     "ok": true,
-                    "cursor": cursor_target_json(placement, world),
+                    "cursor": cursor_target_json(placement, turn),
                 })
                 .to_string()
             }
@@ -414,7 +425,10 @@ fn handle_embedded_debug_command(
             max_x,
             max_y,
             max_z,
+            world,
         } => {
+            let layer = parse_world_layer_option(world.as_deref());
+            let control = simulation_control_adapter(&sim_deps.simulation);
             let Some((min_x, min_y, min_z, max_x, max_y, max_z)) = min_x
                 .zip(min_y)
                 .zip(min_z)
@@ -425,6 +439,10 @@ fn handle_embedded_debug_command(
             else {
                 return json_error("getRegion requires min_x/y/z and max_x/y/z");
             };
+            let query_world = match resolve_world_blocks(layer, &sim_deps.world, &control) {
+                Ok(world) => world,
+                Err(error) => return json_error(&error),
+            };
             let mut params = std::collections::HashMap::new();
             params.insert("min_x".into(), min_x.to_string());
             params.insert("min_y".into(), min_y.to_string());
@@ -432,8 +450,13 @@ fn handle_embedded_debug_command(
             params.insert("max_x".into(), max_x.to_string());
             params.insert("max_y".into(), max_y.to_string());
             params.insert("max_z".into(), max_z.to_string());
-            match get_region_json(&sim_deps.world, &params) {
-                Ok(data) => json_ok(data),
+            match get_region_json(query_world, &params) {
+                Ok(mut data) => {
+                    if let Some(object) = data.as_object_mut() {
+                        object.insert("world".into(), world_layer_label(layer).into());
+                    }
+                    json_ok(data)
+                }
                 Err(error) => json_error(&error),
             }
         }
@@ -458,7 +481,8 @@ fn handle_embedded_debug_command(
                 &mut sim_deps.signal_cache,
             ))
         }
-        DebugHttpCommand::GetFactoryBlockState { x, y, z } => {
+        DebugHttpCommand::GetFactoryBlockState { x, y, z, world } => {
+            let layer = parse_world_layer_option(world.as_deref());
             let Some((x, y, z)) = x.zip(y).zip(z).map(|((a, b), c)| (a, b, c)) else {
                 return json_error("getFactoryBlockState requires ?x=&y=&z=");
             };
@@ -469,25 +493,70 @@ fn handle_embedded_debug_command(
                 .clone()
                 .unwrap_or_else(|| sim_deps.structure_state.clone());
             let structure_snapshot = sim_deps.structure_state.clone();
+            let query_world = match resolve_world_blocks(layer, &sim_deps.world, &control) {
+                Ok(world) => world,
+                Err(error) => return json_error(&error),
+            };
             sim_deps.signal_cache.ensure_fresh(&sim_deps.world);
             match get_factory_block_state_json(
                 IVec3::new(x, y, z),
+                query_world,
                 &sim_deps.world,
                 &structure_snapshot,
                 &solution_structures,
                 &sim_deps.factory_registry,
                 &control,
                 &mut sim_deps.signal_cache,
+                layer,
             ) {
                 Ok(data) => json_ok(data),
                 Err(error) => json_error(&error),
             }
         }
-        DebugHttpCommand::GetStructureAt { x, y, z } => {
+        DebugHttpCommand::GetFactoryIdAt { x, y, z, world } => {
+            let layer = parse_world_layer_option(world.as_deref());
+            let Some((x, y, z)) = x.zip(y).zip(z).map(|((a, b), c)| (a, b, c)) else {
+                return json_error("getFactoryIdAt requires ?x=&y=&z=");
+            };
+            let control = simulation_control_adapter(&sim_deps.simulation);
+            let query_world = match resolve_world_blocks(layer, &sim_deps.world, &control) {
+                Ok(world) => world,
+                Err(error) => return json_error(&error),
+            };
+            match get_factory_id_at_json(
+                IVec3::new(x, y, z),
+                query_world,
+                &sim_deps.factory_registry,
+                layer,
+            ) {
+                Ok(data) => json_ok(data),
+                Err(error) => json_error(&error),
+            }
+        }
+        DebugHttpCommand::GetFactoryPos { id, world } => {
+            let layer = parse_world_layer_option(world.as_deref());
+            let Some(id) = id else {
+                return json_error("getFactoryPos requires ?id=");
+            };
+            match get_factory_pos_json(FactoryBlockId::from_u32(id), &sim_deps.factory_registry, layer) {
+                Ok(data) => json_ok(data),
+                Err(error) => json_error(&error),
+            }
+        }
+        DebugHttpCommand::GetStructureAt { x, y, z, world } => {
+            let layer = parse_world_layer_option(world.as_deref());
             let Some((x, y, z)) = x.zip(y).zip(z).map(|((a, b), c)| (a, b, c)) else {
                 return json_error("getStructureAt requires ?x=&y=&z=");
             };
-            match get_structure_at_json(IVec3::new(x, y, z), &sim_deps.structure_state) {
+            let structures = match layer {
+                DebugWorldLayer::Turn => sim_deps.structure_state.clone(),
+                DebugWorldLayer::Solution => sim_deps
+                    .simulation
+                    .start_structures
+                    .clone()
+                    .unwrap_or_else(|| sim_deps.structure_state.clone()),
+            };
+            match get_structure_at_json(IVec3::new(x, y, z), &structures, layer) {
                 Ok(data) => json_ok(data),
                 Err(error) => json_error(&error),
             }

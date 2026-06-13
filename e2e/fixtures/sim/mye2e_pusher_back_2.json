@@ -1,0 +1,119 @@
+{
+  "name": "mye2e_pusher_back_2",
+  "source": {
+    "save": "mye2e_pusher_back_2",
+    "min": [
+      10,
+      0,
+      11
+    ],
+    "max": [
+      12,
+      3,
+      12
+    ],
+    "origin": [
+      10,
+      0,
+      11
+    ]
+  },
+  "setup": [
+    {
+      "x": 2,
+      "y": 0,
+      "z": 1,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "z": 0,
+      "kind": "Platform",
+      "facing": "North"
+    },
+    {
+      "x": 1,
+      "y": 1,
+      "z": 1,
+      "kind": "Detector",
+      "facing": "West"
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "z": 1,
+      "kind": "Pusher",
+      "facing": "North"
+    },
+    {
+      "x": 1,
+      "y": 2,
+      "z": 1,
+      "kind": "Wire",
+      "facing": "North"
+    },
+    {
+      "x": 2,
+      "y": 2,
+      "z": 1,
+      "kind": "Wire",
+      "facing": "North"
+    },
+    {
+      "x": 0,
+      "y": 3,
+      "z": 1,
+      "kind": "Platform",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "beginSimulation"
+    },
+    {
+      "op": "run",
+      "turns": 3
+    },
+    {
+      "op": "assertExtendedDeviceCount",
+      "count": 1
+    },
+    {
+      "op": "assertBlockAbsent",
+      "x": 2,
+      "y": 1,
+      "z": 0
+    },
+    {
+      "op": "assertBlock",
+      "x": 2,
+      "y": 1,
+      "z": -1,
+      "kind": "Platform"
+    },
+    {
+      "op": "run",
+      "turns": 1
+    },
+    {
+      "op": "assertExtendedDeviceCount",
+      "count": 0
+    },
+    {
+      "op": "assertBlock",
+      "x": 2,
+      "y": 1,
+      "z": 0,
+      "kind": "Platform"
+    },
+    {
+      "op": "assertBlockAbsent",
+      "x": 2,
+      "y": 1,
+      "z": -1
+    }
+  ]
+}

@@ -44,21 +44,54 @@ impl PusherState {
         self.entries.clear();
     }
 
+    pub fn translate_device_entries(
+        &mut self,
+        positions: &std::collections::HashSet<IVec3>,
+        offset: IVec3,
+    ) {
+        for pos in positions {
+            let Some(entry) = self.entries.remove(pos) else {
+                continue;
+            };
+            self.entries.insert(*pos + offset, entry);
+        }
+    }
+
+    pub fn rotate_device_entries(
+        &mut self,
+        positions: &std::collections::HashSet<IVec3>,
+        pivot: IVec3,
+        clockwise: bool,
+    ) {
+        for pos in positions {
+            let Some(entry) = self.entries.remove(pos) else {
+                continue;
+            };
+            let new_pos = super::structures::rotate_pos_y(*pos, pivot, clockwise);
+            self.entries.insert(new_pos, entry);
+        }
+    }
+
     pub fn set_extended(&mut self, pos: IVec3, world: &WorldBlocks, extended: bool) {
-        let bound_front = world.is_factory_at(
-            pos + world
-                .blocks
-                .get(&pos)
-                .map(|block| block.facing.forward_ivec3())
-                .unwrap_or(IVec3::ZERO),
-        );
+        let bound_front = Self::front_is_factory(pos, world);
         self.entries
             .entry(pos)
-            .and_modify(|entry| entry.extended = extended)
+            .and_modify(|entry| {
+                entry.extended = extended;
+                if extended {
+                    entry.bound_front = bound_front;
+                } else {
+                    entry.bound_front = false;
+                }
+            })
             .or_insert(PusherStateEntry {
                 extended,
-                bound_front,
+                bound_front: extended && bound_front,
             });
+    }
+
+    fn front_is_factory(pos: IVec3, world: &WorldBlocks) -> bool {
+        world.is_factory_at(pos + forward(world, pos))
     }
 
     fn is_extended(&self, pos: IVec3) -> bool {
@@ -83,7 +116,7 @@ impl PusherState {
         self.entries
             .get(&pos)
             .map(|entry| entry.bound_front)
-            .unwrap_or_else(|| world.is_factory_at(pos + forward(world, pos)))
+            .unwrap_or_else(|| Self::front_is_factory(pos, world))
     }
 
     pub fn sustained_animations(&self) -> HashMap<IVec3, PusherAnimation> {

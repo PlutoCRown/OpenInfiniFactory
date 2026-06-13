@@ -6,6 +6,8 @@ const SIM_FIXTURES = [
   "sim/four_converging_blockers_shared_head.json",
   "sim/reverse_conveyor_platform_fall_push.json",
   "sim/reverse_conveyor_self_push_on_stone.json",
+  "sim/mye2e_pusher_2.json",
+  "sim/mye2e_pusher_back_2.json",
 ];
 
 let server: ReturnType<typeof spawnDebugServer>;
@@ -60,5 +62,28 @@ describe("debug HTTP simulation core", () => {
     const body = await client.post("/runN?n=3");
     expect(body.ok, JSON.stringify(body)).toBe(true);
     expect(body.simulation.turn).toBe(3);
+  });
+
+  test("factory id lookup supports turn and solution worlds", async () => {
+    const client = new DebugClient(PORT);
+    await client.post("/world/reset");
+    await client.post("/loadFixture?path=sim/mye2e_pusher_2.json");
+    await client.post("/beginSimulation");
+    const turnId = await client.get("/getFactoryIdAt?x=3&y=1&z=0&world=turn");
+    expect(turnId.ok).toBe(true);
+    expect(typeof turnId.id).toBe("number");
+    const solutionId = await client.get("/getFactoryIdAt?x=3&y=1&z=0&world=solution");
+    expect(solutionId.ok).toBe(true);
+    expect(solutionId.id).toBe(turnId.id);
+    const turnPos = await client.get(`/getFactoryPos?id=${turnId.id}&world=turn`);
+    expect(turnPos.ok).toBe(true);
+    expect(turnPos.pos).toEqual({ x: 3, y: 1, z: 0 });
+    await client.post("/runN?n=2");
+    const movedPos = await client.get(`/getFactoryPos?id=${turnId.id}&world=turn`);
+    expect(movedPos.ok).toBe(true);
+    expect(movedPos.pos).toEqual({ x: 1, y: 1, z: 0 });
+    const frozenPos = await client.get(`/getFactoryPos?id=${turnId.id}&world=solution`);
+    expect(frozenPos.ok).toBe(true);
+    expect(frozenPos.pos).toEqual({ x: 3, y: 1, z: 0 });
   });
 });
