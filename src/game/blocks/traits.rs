@@ -38,6 +38,10 @@ pub trait BlockBehavior: Send + Sync {
         false
     }
 
+    fn non_connection_face(&self, _facing: Facing) -> Option<IVec3> {
+        None
+    }
+
     fn marker_behavior(&self, _facing: Facing) -> Option<MarkerBehavior> {
         None
     }
@@ -76,6 +80,15 @@ pub trait BlockRender: Send + Sync {
     fn model(&self) -> BlockModel {
         BlockModel::Default
     }
+
+    fn block_texture(&self) -> Option<Image> {
+        None
+    }
+}
+
+/// Inventory / hotbar slot tint for blocks the player can pick up.
+pub trait PlaceableBlock: Send + Sync {
+    fn item_slot_color(&self) -> Color;
 }
 
 /// In-game property panel editing.

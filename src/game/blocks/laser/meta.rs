@@ -1,6 +1,8 @@
 use super::LaserBlock;
 
-use crate::game::blocks::traits::BlockMeta;
+use bevy::prelude::Color;
+
+use crate::game::blocks::traits::{BlockMeta, PlaceableBlock};
 use crate::game::blocks::{BlockDefinition, BlockKind, rgb};
 
 impl BlockMeta for LaserBlock {
@@ -14,11 +16,16 @@ impl BlockMeta for LaserBlock {
             "block.laser",
             "short.laser",
             rgb(0.85, 0.20, 0.34),
-            rgb(0.72, 0.12, 0.26),
         )
     }
 
     fn alternate(&self) -> Option<BlockKind> {
         Some(BlockKind::Drill)
+    }
+}
+
+impl PlaceableBlock for LaserBlock {
+    fn item_slot_color(&self) -> Color {
+        rgb(0.72, 0.12, 0.26).color()
     }
 }

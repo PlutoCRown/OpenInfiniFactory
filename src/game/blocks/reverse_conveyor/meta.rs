@@ -1,6 +1,8 @@
 use super::ReverseConveyorBlock;
 
-use crate::game::blocks::traits::BlockMeta;
+use bevy::prelude::Color;
+
+use crate::game::blocks::traits::{BlockMeta, PlaceableBlock};
 use crate::game::blocks::{BlockDefinition, BlockKind, rgb};
 
 impl BlockMeta for ReverseConveyorBlock {
@@ -14,11 +16,16 @@ impl BlockMeta for ReverseConveyorBlock {
             "block.reverse_conveyor",
             "short.reverse_conveyor",
             rgb(0.86, 0.46, 0.14),
-            rgb(0.70, 0.34, 0.08),
         )
     }
 
     fn alternate(&self) -> Option<BlockKind> {
         Some(BlockKind::Conveyor)
+    }
+}
+
+impl PlaceableBlock for ReverseConveyorBlock {
+    fn item_slot_color(&self) -> Color {
+        rgb(0.70, 0.34, 0.08).color()
     }
 }

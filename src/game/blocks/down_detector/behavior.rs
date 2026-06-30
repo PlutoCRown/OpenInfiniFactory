@@ -11,4 +11,8 @@ impl BlockBehavior for DownDetectorBlock {
             detection_pos: IVec3::NEG_Y,
         })
     }
+
+    fn non_connection_face(&self, _facing: Facing) -> Option<IVec3> {
+        Some(IVec3::NEG_Y)
+    }
 }

@@ -1,6 +1,8 @@
 use super::CounterRotatorBlock;
 
-use crate::game::blocks::traits::BlockMeta;
+use bevy::prelude::Color;
+
+use crate::game::blocks::traits::{BlockMeta, PlaceableBlock};
 use crate::game::blocks::{BlockDefinition, BlockKind, rgb};
 
 impl BlockMeta for CounterRotatorBlock {
@@ -14,11 +16,16 @@ impl BlockMeta for CounterRotatorBlock {
             "block.counter_rotator",
             "short.counter_rotator",
             rgb(0.62, 0.28, 0.78),
-            rgb(0.54, 0.22, 0.68),
         )
     }
 
     fn alternate(&self) -> Option<BlockKind> {
         Some(BlockKind::Rotator)
+    }
+}
+
+impl PlaceableBlock for CounterRotatorBlock {
+    fn item_slot_color(&self) -> Color {
+        rgb(0.54, 0.22, 0.68).color()
     }
 }

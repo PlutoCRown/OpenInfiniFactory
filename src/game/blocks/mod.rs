@@ -4,6 +4,7 @@ pub mod panels;
 mod register;
 mod basic;
 mod registry;
+mod model_spawn;
 pub mod traits;
 
 mod blocker;
@@ -43,6 +44,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub use self::registry::{all_blocks, assert_registry_consistent, edit_blocks, PLAY_BLOCKS};
+pub use self::model_spawn::spawn_model_parts;
 use crate::game::state::UiPanelId;
 pub use crate::game::world::direction::Facing;
 use crate::game::world::grid::BlockSettings;
@@ -56,6 +58,10 @@ pub trait Block: Send + Sync {
 
     fn is_directional(&self) -> bool {
         false
+    }
+
+    fn non_connection_face(&self, _facing: Facing) -> Option<IVec3> {
+        None
     }
 
     fn marker_behavior(&self, _facing: Facing) -> Option<MarkerBehavior> {
@@ -106,6 +112,10 @@ pub trait Block: Send + Sync {
         BlockModel::Default
     }
 
+    fn block_texture(&self) -> Option<Image> {
+        None
+    }
+
     fn alternate(&self) -> Option<BlockKind> {
         None
     }
@@ -127,13 +137,11 @@ pub struct BlockDefinition {
     pub name_key: &'static str,
     pub short_name_key: &'static str,
     color: ColorSpec,
-    slot_color: ColorSpec,
     class: BlockClass,
     persistence: Option<PersistentLayer>,
     shape: BlockShape,
     collision: bool,
     transparent: bool,
-    texture: Option<BlockTexture>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -210,19 +218,6 @@ pub enum VirtualBlock {
 pub enum BlockShape {
     Cube,
     Node,
-}
-
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub enum BlockTexture {
-    Material,
-    IronMaterial,
-    CopperMaterial,
-    Platform,
-    Grass,
-    Stone,
-    Dirt,
-    Wood,
-    BorderedWood,
 }
 
 #[derive(Clone, Copy)]
@@ -375,6 +370,7 @@ pub enum BlockModel {
     Default,
     Parts(&'static [BlockModelPart]),
     PartsOnly(&'static [BlockModelPart]),
+    PusherParts(&'static [BlockModelPart]),
 }
 
 #[derive(Clone, Copy)]
@@ -405,14 +401,12 @@ impl BlockDefinition {
         name_key: &'static str,
         short_name_key: &'static str,
         color: ColorSpec,
-        slot_color: ColorSpec,
     ) -> Self {
         Self::new(
             kind,
             name_key,
             short_name_key,
             color,
-            slot_color,
             BlockClass::Scene,
             Some(PersistentLayer::Puzzle),
         )
@@ -423,14 +417,12 @@ impl BlockDefinition {
         name_key: &'static str,
         short_name_key: &'static str,
         color: ColorSpec,
-        slot_color: ColorSpec,
     ) -> Self {
         Self::new(
             kind,
             name_key,
             short_name_key,
             color,
-            slot_color,
             BlockClass::Factory,
             Some(PersistentLayer::SolutionFactory),
         )
@@ -441,14 +433,12 @@ impl BlockDefinition {
         name_key: &'static str,
         short_name_key: &'static str,
         color: ColorSpec,
-        slot_color: ColorSpec,
     ) -> Self {
         Self::new(
             kind,
             name_key,
             short_name_key,
             color,
-            slot_color,
             BlockClass::Material,
             None,
         )
@@ -459,14 +449,12 @@ impl BlockDefinition {
         name_key: &'static str,
         short_name_key: &'static str,
         color: ColorSpec,
-        slot_color: ColorSpec,
     ) -> Self {
         Self::new(
             kind,
             name_key,
             short_name_key,
             color,
-            slot_color,
             BlockClass::Virtual,
             None,
         )
@@ -477,14 +465,12 @@ impl BlockDefinition {
         name_key: &'static str,
         short_name_key: &'static str,
         color: ColorSpec,
-        slot_color: ColorSpec,
     ) -> Self {
         Self::new(
             kind,
             name_key,
             short_name_key,
             color,
-            slot_color,
             BlockClass::System,
             Some(PersistentLayer::Puzzle),
         )
@@ -495,7 +481,6 @@ impl BlockDefinition {
         name_key: &'static str,
         short_name_key: &'static str,
         color: ColorSpec,
-        slot_color: ColorSpec,
         class: BlockClass,
         persistence: Option<PersistentLayer>,
     ) -> Self {
@@ -504,13 +489,11 @@ impl BlockDefinition {
             name_key,
             short_name_key,
             color,
-            slot_color,
             class,
             persistence,
             shape: BlockShape::Cube,
             collision: true,
             transparent: false,
-            texture: None,
         }
     }
 
@@ -529,17 +512,8 @@ impl BlockDefinition {
         self
     }
 
-    pub(crate) const fn textured(mut self, texture: BlockTexture) -> Self {
-        self.texture = Some(texture);
-        self
-    }
-
     pub fn color(self) -> Color {
         self.color.color()
-    }
-
-    pub fn slot_color(self) -> Color {
-        self.slot_color.color()
     }
 
     pub fn class(self) -> BlockClass {
@@ -552,10 +526,6 @@ impl BlockDefinition {
 
     pub fn is_transparent(self) -> bool {
         self.transparent
-    }
-
-    pub fn texture(self) -> Option<BlockTexture> {
-        self.texture
     }
 }
 
@@ -714,8 +684,10 @@ impl BlockKind {
         self.definition().color()
     }
 
-    pub fn slot_color(self) -> Color {
-        self.definition().slot_color()
+    pub fn item_slot_color(self) -> Color {
+        registry::placeable(self)
+            .expect("inventory blocks must implement PlaceableBlock")
+            .item_slot_color()
     }
 
     pub fn shape(self) -> BlockShape {
@@ -844,5 +816,13 @@ impl BlockKind {
 
     pub fn model(self) -> BlockModel {
         self.block().model()
+    }
+
+    pub fn non_connection_face(self, facing: Facing) -> Option<IVec3> {
+        self.block().non_connection_face(facing)
+    }
+
+    pub fn block_texture(self) -> Option<Image> {
+        self.block().block_texture()
     }
 }

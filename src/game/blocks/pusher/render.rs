@@ -16,6 +16,6 @@ impl BlockRender for PusherBlock {
     }
 
     fn model(&self) -> BlockModel {
-        BlockModel::PartsOnly(MODEL)
+        BlockModel::PusherParts(MODEL)
     }
 }

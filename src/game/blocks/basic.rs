@@ -1,7 +1,9 @@
+use bevy::prelude::{Color, Image};
+
 use crate::game::state::UiPanelId;
 
-use super::{BlockDefinition, BlockKind, BlockTexture, MaterialKind};
-use super::traits::{BlockMeta, BlockUi};
+use super::traits::{BlockMeta, BlockRender, BlockUi, PlaceableBlock};
+use super::{BlockDefinition, BlockKind, MaterialKind};
 use crate::game::blocks::ColorSpec;
 
 #[derive(Clone, Copy)]
@@ -17,8 +19,11 @@ pub trait BasicBlockDef {
     const NAME_KEY: &'static str;
     const SHORT_NAME_KEY: &'static str;
     const COLOR: ColorSpec;
-    const SLOT_COLOR: ColorSpec;
-    const TEXTURE: BlockTexture;
+    const ITEM_SLOT_COLOR: ColorSpec;
+
+    fn block_texture() -> Option<Image> {
+        None
+    }
 }
 
 impl<T: BasicBlockDef + Send + Sync> BlockMeta for T {
@@ -28,22 +33,12 @@ impl<T: BasicBlockDef + Send + Sync> BlockMeta for T {
 
     fn definition(&self) -> BlockDefinition {
         match T::LAYER {
-            BasicBlockLayer::Scene => BlockDefinition::scene(
-                self.id(),
-                T::NAME_KEY,
-                T::SHORT_NAME_KEY,
-                T::COLOR,
-                T::SLOT_COLOR,
-            )
-            .textured(T::TEXTURE),
-            BasicBlockLayer::Material(_) => BlockDefinition::material(
-                self.id(),
-                T::NAME_KEY,
-                T::SHORT_NAME_KEY,
-                T::COLOR,
-                T::SLOT_COLOR,
-            )
-            .textured(T::TEXTURE),
+            BasicBlockLayer::Scene => {
+                BlockDefinition::scene(self.id(), T::NAME_KEY, T::SHORT_NAME_KEY, T::COLOR)
+            }
+            BasicBlockLayer::Material(_) => {
+                BlockDefinition::material(self.id(), T::NAME_KEY, T::SHORT_NAME_KEY, T::COLOR)
+            }
         }
     }
 
@@ -52,6 +47,18 @@ impl<T: BasicBlockDef + Send + Sync> BlockMeta for T {
             BasicBlockLayer::Scene => None,
             BasicBlockLayer::Material(material) => Some(material),
         }
+    }
+}
+
+impl<T: BasicBlockDef + Send + Sync> BlockRender for T {
+    fn block_texture(&self) -> Option<Image> {
+        T::block_texture()
+    }
+}
+
+impl<T: BasicBlockDef + Send + Sync> PlaceableBlock for T {
+    fn item_slot_color(&self) -> Color {
+        T::ITEM_SLOT_COLOR.color()
     }
 }
 

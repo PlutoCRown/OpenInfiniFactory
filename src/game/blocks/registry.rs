@@ -1,3 +1,4 @@
+use super::traits::PlaceableBlock;
 use super::{Block, BlockKind, EditableBlock, MaterialKind};
 
 pub fn edit_blocks() -> Vec<BlockKind> {
@@ -9,7 +10,9 @@ pub fn edit_blocks() -> Vec<BlockKind> {
 }
 
 pub fn all_blocks() -> Vec<BlockKind> {
-    let mut blocks: Vec<_> = registrations().map(|registration| registration.kind).collect();
+    let mut blocks: Vec<_> = registrations()
+        .map(|registration| registration.kind)
+        .collect();
     sort_blocks(&mut blocks);
     blocks
 }
@@ -39,8 +42,7 @@ pub fn get(kind: BlockKind) -> &'static (dyn Block + Send + Sync) {
 }
 
 pub fn is_editable(kind: BlockKind) -> bool {
-    registrations()
-        .any(|registration| registration.kind == kind && registration.editable)
+    registrations().any(|registration| registration.kind == kind && registration.editable)
 }
 
 pub fn editable(kind: BlockKind) -> Option<&'static (dyn EditableBlock + Send + Sync)> {
@@ -51,11 +53,18 @@ pub fn editable(kind: BlockKind) -> Option<&'static (dyn EditableBlock + Send + 
     })
 }
 
+pub fn placeable(kind: BlockKind) -> Option<&'static (dyn PlaceableBlock + Send + Sync)> {
+    registrations().find_map(|registration| {
+        (registration.kind == kind)
+            .then_some(registration.placeable_block)
+            .flatten()
+    })
+}
+
 pub fn material_block_kind(material: MaterialKind) -> Option<BlockKind> {
-    registrations()
-        .find_map(|registration| {
-            (registration.block.material_kind() == Some(material)).then_some(registration.kind)
-        })
+    registrations().find_map(|registration| {
+        (registration.block.material_kind() == Some(material)).then_some(registration.kind)
+    })
 }
 
 pub fn assert_registry_consistent() {
@@ -65,6 +74,10 @@ pub fn assert_registry_consistent() {
         debug_assert_eq!(definition.kind, registration.block.id());
         debug_assert_eq!(definition.class(), registration.kind.layer().class());
         debug_assert_eq!(registration.editable, registration.editable_block.is_some());
+        debug_assert_eq!(
+            registration.editable || registration.play_palette,
+            registration.placeable_block.is_some()
+        );
 
         if registration.play_palette {
             debug_assert!(PLAY_BLOCKS.contains(&registration.kind));

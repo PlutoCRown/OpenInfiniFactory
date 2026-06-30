@@ -1,6 +1,8 @@
 use super::GeneratorBlock;
 
-use crate::game::blocks::traits::BlockMeta;
+use bevy::prelude::Color;
+
+use crate::game::blocks::traits::{BlockMeta, PlaceableBlock};
 use crate::game::blocks::{BlockDefinition, BlockKind, rgba};
 use bevy::prelude::{IVec3};
 use crate::game::world::grid::{BlockSettings, GeneratorSettings};
@@ -16,7 +18,6 @@ impl BlockMeta for GeneratorBlock {
             "block.generator",
             "short.generator",
             rgba(0.42, 0.62, 1.0, 0.30),
-            rgba(0.32, 0.48, 0.82, 0.46),
         )
         .no_collision()
         .transparent()
@@ -24,5 +25,11 @@ impl BlockMeta for GeneratorBlock {
 
     fn default_settings(&self, _pos: IVec3) -> Option<BlockSettings> {
         Some(BlockSettings::Generator(GeneratorSettings::default()))
+    }
+}
+
+impl PlaceableBlock for GeneratorBlock {
+    fn item_slot_color(&self) -> Color {
+        rgba(0.32, 0.48, 0.82, 0.46).color()
     }
 }

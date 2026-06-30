@@ -1,6 +1,8 @@
 use super::DetectorBlock;
 
-use crate::game::blocks::traits::BlockMeta;
+use bevy::prelude::Color;
+
+use crate::game::blocks::traits::{BlockMeta, PlaceableBlock};
 use crate::game::blocks::{BlockDefinition, BlockKind, rgb};
 
 impl BlockMeta for DetectorBlock {
@@ -14,11 +16,16 @@ impl BlockMeta for DetectorBlock {
             "block.detector",
             "short.detector",
             rgb(0.15, 0.45, 0.72),
-            rgb(0.12, 0.34, 0.62),
         )
     }
 
     fn alternate(&self) -> Option<BlockKind> {
         Some(BlockKind::DownDetector)
+    }
+}
+
+impl PlaceableBlock for DetectorBlock {
+    fn item_slot_color(&self) -> Color {
+        rgb(0.12, 0.34, 0.62).color()
     }
 }

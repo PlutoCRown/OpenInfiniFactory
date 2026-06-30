@@ -2,6 +2,7 @@ use super::DrillBlock;
 
 use crate::game::blocks::traits::BlockBehavior;
 use crate::game::blocks::{MarkerBehavior, MaterialDestroyer};
+use bevy::prelude::IVec3;
 use crate::game::world::direction::Facing;
 
 impl BlockBehavior for DrillBlock {
@@ -20,5 +21,9 @@ impl BlockBehavior for DrillBlock {
         Some(MaterialDestroyer::Drill {
             target: facing.forward_ivec3(),
         })
+    }
+
+    fn non_connection_face(&self, facing: Facing) -> Option<IVec3> {
+        Some(facing.forward_ivec3())
     }
 }

@@ -8,5 +8,6 @@ mod meta;
 mod behavior;
 pub mod model;
 mod render;
+pub mod texture;
 
 register_block!(BLOCK, BlockKind::Pusher, editable: false, play: true);

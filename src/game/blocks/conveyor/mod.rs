@@ -4,8 +4,8 @@ pub struct ConveyorBlock;
 
 pub static BLOCK: BlockImpl<ConveyorBlock> = BlockImpl(ConveyorBlock);
 
-mod meta;
 mod behavior;
+mod meta;
 mod render;
 
 register_block!(BLOCK, BlockKind::Conveyor, editable: false, play: true);

@@ -1,6 +1,8 @@
 use super::GoalBlock;
 
-use crate::game::blocks::traits::BlockMeta;
+use bevy::prelude::Color;
+
+use crate::game::blocks::traits::{BlockMeta, PlaceableBlock};
 use crate::game::blocks::{rgba, BlockDefinition, BlockKind};
 use crate::game::world::grid::{BlockSettings, GoalSettings};
 use bevy::prelude::IVec3;
@@ -16,7 +18,6 @@ impl BlockMeta for GoalBlock {
             "block.goal",
             "short.goal",
             rgba(0.35, 0.72, 0.42, 0.30),
-            rgba(0.24, 0.56, 0.30, 0.46),
         )
         .no_collision()
         .transparent()
@@ -24,5 +25,11 @@ impl BlockMeta for GoalBlock {
 
     fn default_settings(&self, _pos: IVec3) -> Option<BlockSettings> {
         Some(BlockSettings::Goal(GoalSettings::default()))
+    }
+}
+
+impl PlaceableBlock for GoalBlock {
+    fn item_slot_color(&self) -> Color {
+        rgba(0.24, 0.56, 0.30, 0.46).color()
     }
 }

@@ -3,25 +3,14 @@ use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
-use crate::game::blocks::BlockTexture;
+pub const SIZE: u32 = 32;
 
-pub fn block_texture(kind: BlockTexture) -> Image {
-    const SIZE: u32 = 32;
+pub fn from_fn(pixel: impl Fn(u32, u32) -> [u8; 3]) -> Image {
     let mut data = Vec::with_capacity((SIZE * SIZE * 4) as usize);
 
     for y in 0..SIZE {
         for x in 0..SIZE {
-            let [r, g, b] = match kind {
-                BlockTexture::Material => material_pixel(x, y, [210, 188, 118], 131),
-                BlockTexture::IronMaterial => material_pixel(x, y, [158, 166, 170], 149),
-                BlockTexture::CopperMaterial => material_pixel(x, y, [201, 112, 58], 167),
-                BlockTexture::Platform => platform_pixel(x, y, SIZE),
-                BlockTexture::Grass => grass_pixel(x, y),
-                BlockTexture::Stone => material_pixel(x, y, [124, 128, 132], 89),
-                BlockTexture::Dirt => material_pixel(x, y, [118, 82, 45], 173),
-                BlockTexture::Wood => wood_pixel(x, y),
-                BlockTexture::BorderedWood => bordered_wood_pixel(x, y, SIZE),
-            };
+            let [r, g, b] = pixel(x, y);
             data.extend_from_slice(&[r, g, b, 255]);
         }
     }
@@ -43,8 +32,8 @@ pub fn block_texture(kind: BlockTexture) -> Image {
     image
 }
 
-fn platform_pixel(x: u32, y: u32, size: u32) -> [u8; 3] {
-    let center = (size as f32 - 1.0) * 0.5;
+pub fn platform_pixel(x: u32, y: u32) -> [u8; 3] {
+    let center = (SIZE as f32 - 1.0) * 0.5;
     let dx = (x as f32 - center) / center.max(1.0);
     let dy = (y as f32 - center) / center.max(1.0);
     let t = (dx * dx + dy * dy).sqrt().clamp(0.0, 1.0);
@@ -56,7 +45,7 @@ fn platform_pixel(x: u32, y: u32, size: u32) -> [u8; 3] {
     }
 }
 
-fn grass_pixel(x: u32, y: u32) -> [u8; 3] {
+pub fn grass_pixel(x: u32, y: u32) -> [u8; 3] {
     let noise = texture_noise(x, y, 197);
     let fleck = ((x * 7 + y * 19 + noise as u32) % 31) < 4;
     if fleck {
@@ -66,15 +55,7 @@ fn grass_pixel(x: u32, y: u32) -> [u8; 3] {
     }
 }
 
-fn lerp_rgb(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
-    [
-        (a[0] as f32 + (b[0] as f32 - a[0] as f32) * t).round() as u8,
-        (a[1] as f32 + (b[1] as f32 - a[1] as f32) * t).round() as u8,
-        (a[2] as f32 + (b[2] as f32 - a[2] as f32) * t).round() as u8,
-    ]
-}
-
-fn material_pixel(x: u32, y: u32, base: [u8; 3], seed: u32) -> [u8; 3] {
+pub fn material_pixel(x: u32, y: u32, base: [u8; 3], seed: u32) -> [u8; 3] {
     let noise = texture_noise(x, y, seed);
     let fleck = ((x * 11 + y * 17 + noise as u32) % 29) < 3;
     let band = (x + y + seed) % 9 == 0;
@@ -87,7 +68,7 @@ fn material_pixel(x: u32, y: u32, base: [u8; 3], seed: u32) -> [u8; 3] {
     }
 }
 
-fn wood_pixel(x: u32, y: u32) -> [u8; 3] {
+pub fn wood_pixel(x: u32, y: u32) -> [u8; 3] {
     let noise = texture_noise(x, y, 211);
     let grain = ((y * 5 + noise as u32 / 18) % 13) < 5;
     if grain {
@@ -97,14 +78,22 @@ fn wood_pixel(x: u32, y: u32) -> [u8; 3] {
     }
 }
 
-fn bordered_wood_pixel(x: u32, y: u32, size: u32) -> [u8; 3] {
-    let border = size / 8;
-    if x < border || y < border || x >= size - border || y >= size - border {
+pub fn bordered_wood_pixel(x: u32, y: u32) -> [u8; 3] {
+    let border = SIZE / 8;
+    if x < border || y < border || x >= SIZE - border || y >= SIZE - border {
         let noise = texture_noise(x, y, 233);
         shade([64, 45, 34], noise, 12)
     } else {
         wood_pixel(x, y)
     }
+}
+
+fn lerp_rgb(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
+    [
+        (a[0] as f32 + (b[0] as f32 - a[0] as f32) * t).round() as u8,
+        (a[1] as f32 + (b[1] as f32 - a[1] as f32) * t).round() as u8,
+        (a[2] as f32 + (b[2] as f32 - a[2] as f32) * t).round() as u8,
+    ]
 }
 
 fn texture_noise(x: u32, y: u32, seed: u32) -> u8 {

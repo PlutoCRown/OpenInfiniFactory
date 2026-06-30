@@ -5,10 +5,9 @@ use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
 use crate::game::blocks::{
-    all_blocks, BlockKind, BlockShape, BlockTexture, ModelMaterial, ModelMesh, StampColor,
-    BLOCK_SIZE,
+    all_blocks, BlockKind, BlockShape, ModelMaterial, ModelMesh, StampColor, BLOCK_SIZE,
 };
-use crate::game::world::procedural_textures::block_texture;
+use crate::game::blocks::pusher::texture;
 
 #[derive(Resource, Clone)]
 pub struct WorldRenderAssets {
@@ -69,9 +68,8 @@ impl WorldRenderAssets {
         let block_textures: HashMap<_, _> = all_blocks()
             .into_iter()
             .filter_map(|kind| {
-                kind.definition()
-                    .texture()
-                    .map(|texture| (kind, images.add(block_texture(texture))))
+                kind.block_texture()
+                    .map(|image| (kind, images.add(image)))
             })
             .collect();
         let platform_texture = block_textures
@@ -86,7 +84,7 @@ impl WorldRenderAssets {
             .get(&BlockKind::Planks)
             .expect("planks define a texture")
             .clone();
-        let bordered_wood_texture = images.add(block_texture(BlockTexture::BorderedWood));
+        let bordered_wood_texture = images.add(texture::bordered_wood());
         let block_materials = all_blocks()
             .into_iter()
             .map(|kind| {

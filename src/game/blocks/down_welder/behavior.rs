@@ -12,4 +12,8 @@ impl BlockBehavior for DownWelderBlock {
             facing: Facing::North,
         })
     }
+
+    fn non_connection_face(&self, _facing: Facing) -> Option<IVec3> {
+        Some(IVec3::NEG_Y)
+    }
 }

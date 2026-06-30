@@ -315,7 +315,7 @@ where
 pub(super) fn slot_color(item: InventoryItem) -> Color {
     match item {
         InventoryItem::Area(AreaKind::Selection) => Color::srgb(0.22, 0.66, 0.62),
-        InventoryItem::Block(kind) => kind.slot_color(),
+        InventoryItem::Block(kind) => kind.item_slot_color(),
     }
 }
 

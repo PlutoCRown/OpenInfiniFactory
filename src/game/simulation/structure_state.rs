@@ -617,16 +617,7 @@ fn is_blocked_pusher_edge(
 
 fn is_blocked_factory_connection(world: &WorldBlocks, from: IVec3, to: IVec3) -> bool {
     world.blocks.get(&from).is_some_and(|block| {
-        let offset = to - from;
-        match block.kind {
-            BlockKind::Detector | BlockKind::Drill | BlockKind::Welder => {
-                offset == block.facing.forward_ivec3()
-            }
-            BlockKind::DownDetector | BlockKind::DownWelder => offset == IVec3::NEG_Y,
-            BlockKind::Lifter | BlockKind::Conveyor => offset == IVec3::Y,
-            BlockKind::ReverseConveyor => offset == IVec3::NEG_Y,
-            _ => false,
-        }
+        block.kind.non_connection_face(block.facing) == Some(to - from)
     })
 }
 

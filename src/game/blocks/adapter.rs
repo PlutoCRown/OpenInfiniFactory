@@ -4,7 +4,7 @@ use crate::game::state::UiPanelId;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::BlockSettings;
 
-use super::traits::{BlockBehavior, BlockMeta, BlockRender, BlockUi};
+use super::traits::{BlockBehavior, BlockMeta, BlockRender, BlockUi, PlaceableBlock};
 use super::{
     Block, BlockDefinition, BlockKind, BlockModel, EditableBlock, MarkerBehavior,
     MaterialDestroyer, MaterialKind, MaterialLabeler, MaterialSource, MovementRule,
@@ -28,6 +28,10 @@ where
 
     fn is_directional(&self) -> bool {
         self.0.is_directional()
+    }
+
+    fn non_connection_face(&self, facing: Facing) -> Option<IVec3> {
+        self.0.non_connection_face(facing)
     }
 
     fn marker_behavior(&self, facing: Facing) -> Option<MarkerBehavior> {
@@ -78,6 +82,10 @@ where
         self.0.model()
     }
 
+    fn block_texture(&self) -> Option<Image> {
+        self.0.block_texture()
+    }
+
     fn alternate(&self) -> Option<BlockKind> {
         self.0.alternate()
     }
@@ -89,5 +97,14 @@ where
 {
     fn ui_panel(&self) -> Option<UiPanelId> {
         self.0.ui_panel()
+    }
+}
+
+impl<T> PlaceableBlock for BlockImpl<T>
+where
+    T: PlaceableBlock + Send + Sync,
+{
+    fn item_slot_color(&self) -> Color {
+        self.0.item_slot_color()
     }
 }

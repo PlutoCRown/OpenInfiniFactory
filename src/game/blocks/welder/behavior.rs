@@ -2,6 +2,7 @@ use super::WelderBlock;
 
 use crate::game::blocks::traits::BlockBehavior;
 use crate::game::blocks::{MarkerBehavior};
+use bevy::prelude::IVec3;
 use crate::game::world::direction::{Facing};
 
 impl BlockBehavior for WelderBlock {
@@ -14,5 +15,9 @@ impl BlockBehavior for WelderBlock {
             offset: facing.forward_ivec3(),
             facing,
         })
+    }
+
+    fn non_connection_face(&self, facing: Facing) -> Option<IVec3> {
+        Some(facing.forward_ivec3())
     }
 }
