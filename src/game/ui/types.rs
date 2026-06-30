@@ -8,7 +8,6 @@ pub use crate::game::ui::core::{
     PanelTitleBar, PanelVisibility, PanelWindow, TextPromptRoot, TextPromptState, UiActionLabel,
     UiHost, UiHoverState, UiPanelBinding, UiRuntime,
 };
-pub use crate::game::ui::features::menu::types::MenuAction;
 pub use crate::game::ui::features::save::types::{
     SaveListAction, SaveListCloseButton, SaveListPanel, SaveListPrompt, SaveListPuzzleColumn,
     SaveListRenderState, SaveListSolutionColumn, SaveListTitleText,

@@ -8,12 +8,48 @@ use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::settings::confirm::{on_reset_defaults, reset_defaults_spec};
+use crate::list_ui_config;
 use crate::shared::config::{input_from_buttons, open_config_folder, save_config, GameConfig};
 
 use super::types::{
     ActiveSettingsSlider, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
     SettingsSliderTrigger, SettingsTab,
 };
+
+struct SettingsFooterCtx<'w> {
+    open_dropdown: &'w mut OpenSettingsDropdown,
+    pending_key_bind: &'w mut PendingKeyBind,
+}
+
+struct SettingsFooterButton {
+    action: SettingsAction,
+    on_click: fn(&mut SettingsFooterCtx<'_>, &mut Commands),
+}
+
+const SETTINGS_FOOTER: &[SettingsFooterButton] = list_ui_config!(
+    SettingsFooterButton,
+    ctx: SettingsFooterCtx<'_>,
+    {
+        for SettingsAction::ResetDefaults =>
+        on_click(_ctx, _commands) {
+            ui.open_confirm_then(reset_defaults_spec(), on_reset_defaults);
+        }
+    };
+    {
+        for SettingsAction::OpenFolder =>
+        on_click(_ctx, _commands) {
+            open_config_folder();
+        }
+    };
+    {
+        for SettingsAction::Back =>
+        on_click(ctx, commands) {
+            ctx.open_dropdown.0 = None;
+            ctx.pending_key_bind.0 = None;
+            ui.unmount_panel(UiPanelId::Settings, commands);
+        }
+    }
+);
 
 pub fn settings_menu_actions(
     keys: Res<ButtonInput<KeyCode>>,
@@ -110,6 +146,13 @@ pub fn dispatch_settings_actions(
         let UiActionKind::Settings(action) = action.kind.clone() else {
             continue;
         };
+        let mut footer_ctx = SettingsFooterCtx {
+            open_dropdown: &mut open_dropdown,
+            pending_key_bind: &mut pending_key_bind,
+        };
+        if dispatch_settings_footer(action, &mut footer_ctx, &mut commands) {
+            continue;
+        }
         match action {
             SettingsAction::TabGameplay => {
                 *settings_tab = SettingsTab::Gameplay;
@@ -148,19 +191,23 @@ pub fn dispatch_settings_actions(
             SettingsAction::Bind(action) => {
                 pending_key_bind.0 = Some(action);
             }
-            SettingsAction::ResetDefaults => {
-                ui.open_confirm_then(reset_defaults_spec(), on_reset_defaults);
-            }
-            SettingsAction::OpenFolder => {
-                open_config_folder();
-            }
-            SettingsAction::Back => {
-                open_dropdown.0 = None;
-                pending_key_bind.0 = None;
-                ui.unmount_panel(UiPanelId::Settings, &mut commands);
-            }
+            SettingsAction::ResetDefaults | SettingsAction::OpenFolder | SettingsAction::Back => {}
         }
     }
+}
+
+fn dispatch_settings_footer(
+    action: SettingsAction,
+    ctx: &mut SettingsFooterCtx<'_>,
+    commands: &mut Commands,
+) -> bool {
+    for entry in SETTINGS_FOOTER {
+        if entry.action == action {
+            (entry.on_click)(ctx, commands);
+            return true;
+        }
+    }
+    false
 }
 
 fn update_settings_sliders_from_input(

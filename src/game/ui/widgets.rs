@@ -8,8 +8,8 @@ use super::components::{
     styled_button, text_button, BUTTON_BG,
 };
 use super::types::{
-    AreaKind, ConfirmButtonId, InventoryItem, InventorySlot, KeyBindingButton, MenuAction,
-    SettingsAction, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList, SettingsField,
+    AreaKind, ConfirmButtonId, InventoryItem, InventorySlot, KeyBindingButton, SettingsAction,
+    SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList, SettingsField,
     SettingsSliderFill, SettingsSliderKnob, SettingsText, SettingsTextKind, SettingsValueText,
     SlotArea, UiActionLabel,
 };
@@ -80,19 +80,6 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
                     ..default()
                 },
             ));
-        });
-}
-
-pub(super) fn spawn_menu_button(
-    parent: &mut ChildSpawnerCommands,
-    height: f32,
-    font_size: f32,
-    action: MenuAction,
-) {
-    parent
-        .spawn((full_width_button(height), action))
-        .with_children(|button| {
-            button.spawn(label_text("", font_size, Color::WHITE));
         });
 }
 

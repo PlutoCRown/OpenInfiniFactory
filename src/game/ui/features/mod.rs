@@ -1,8 +1,9 @@
 pub mod block_panels;
 pub mod inventory;
-pub mod menu;
+pub mod pause_menu;
 pub mod save;
 pub mod settings;
+pub mod start_menu;
 
 use bevy::prelude::*;
 
@@ -13,7 +14,8 @@ use crate::game::ui::core::host::{dispatch_ui_action, dispatch_ui_host_completio
 
 pub use block_panels::BlockPanelsPlugin;
 pub use inventory::InventoryPlugin;
-pub use menu::MenuPlugin;
+pub use pause_menu::PauseMenuPlugin;
+pub use start_menu::StartMenuPlugin;
 pub use save::SavePlugin;
 pub use settings::SettingsPlugin;
 
@@ -25,7 +27,8 @@ pub struct UiFeaturesPlugin;
 impl Plugin for UiFeaturesPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
-            MenuPlugin,
+            StartMenuPlugin,
+            PauseMenuPlugin,
             SavePlugin,
             SettingsPlugin,
             BlockPanelsPlugin,

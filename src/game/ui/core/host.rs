@@ -10,7 +10,6 @@ use crate::game::ui::core::runtime::{UiPanelContext, UiRuntime};
 use crate::game::ui::core::text_prompt::{
     PendingTextPromptHandler, TextPromptProps, TextPromptResult, TextPromptState,
 };
-use crate::game::ui::features::menu::types::MenuAction;
 use crate::game::ui::features::save::types::SaveListAction;
 use crate::game::ui::features::settings::types::SettingsAction;
 use crate::game::ui::screens::spawn_settings_panel;
@@ -28,10 +27,11 @@ pub struct UiHostMountRoot;
 pub struct UiInstanceId(u64);
 
 impl UiInstanceId {
-    pub const MENU: Self = Self(u64::MAX);
+    pub const START_MENU: Self = Self(u64::MAX);
     pub const SAVE_LIST: Self = Self(u64::MAX - 1);
     pub const SETTINGS: Self = Self(u64::MAX - 2);
     pub const INVENTORY: Self = Self(u64::MAX - 4);
+    pub const PAUSE_MENU: Self = Self(u64::MAX - 5);
 
     #[allow(dead_code)]
     pub fn raw(self) -> u64 {
@@ -55,7 +55,6 @@ pub struct UiAction {
 #[allow(dead_code)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UiActionKind {
-    Menu(MenuAction),
     SaveList(SaveListAction),
     Settings(SettingsAction),
     InventorySlot {
@@ -411,8 +410,7 @@ pub fn dispatch_ui_action(
                 text_prompt.submit();
             }
             UiActionKind::TextPromptCancel => text_prompt.cancel(),
-            UiActionKind::Menu(_)
-            | UiActionKind::SaveList(_)
+            UiActionKind::SaveList(_)
             | UiActionKind::Settings(_)
             | UiActionKind::InventorySlot { .. } => {}
             UiActionKind::PanelClose => {}

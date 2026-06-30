@@ -96,8 +96,6 @@ pub fn update_panel_visibility(
     mode: Res<State<GameMode>>,
     start_menu_screen: Res<StartMenuScreen>,
     playing_ui: Res<PlayingUiState>,
-    save_state: Res<SaveState>,
-    solution_state: Res<SolutionState>,
     settings_tab: Res<SettingsTab>,
     ui_runtime: Res<UiRuntime>,
     ui_host: Res<UiHost>,
@@ -105,7 +103,6 @@ pub fn update_panel_visibility(
     mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut nodes: ParamSet<(
         Query<(&PanelVisibility, &mut Node)>,
-        Query<(&MenuAction, &mut Node), With<Button>>,
         Query<(&UiPanelBinding, &mut Node)>,
         Query<
             (&mut Node, &mut Visibility, &mut PanelPosition),
@@ -127,23 +124,15 @@ pub fn update_panel_visibility(
         ));
     }
 
-    for (action, mut style) in &mut nodes.p1() {
-        style.display = if action.pause_menu_visible(&save_state, &solution_state) {
-            Display::Flex
-        } else {
-            Display::None
-        };
-    }
-
     if open_block_dropdown.0.is_some() && !active_block_has_panel(&ui_runtime, &world, active_panel)
     {
         open_block_dropdown.0 = None;
     }
-    for (binding, mut style) in &mut nodes.p2() {
+    for (binding, mut style) in &mut nodes.p1() {
         style.display = display_for(active_panel == Some(binding.0));
     }
 
-    for (mut style, mut visibility, mut position) in &mut nodes.p3() {
+    for (mut style, mut visibility, mut position) in &mut nodes.p2() {
         if style.display == Display::None {
             position.dragged = false;
             reset_panel_centering(&mut style);

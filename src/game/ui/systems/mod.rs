@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use crate::game::debug::target_status_line;
 use crate::game::state::{
-    BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
+    BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState,
     StartMenuScreen, UiPanelId,
 };
 use crate::game::world::grid::WorldBlocks;
@@ -16,10 +16,10 @@ use crate::game::ui::components::ui_logical_bounds;
 
 use super::types::{
     CarriedItem, Crosshair, GameplayHudVisibility, InGameHudStyle, InGameHudVisibility,
-    InlineTextEditState, InventoryItems, LocalizedText, MenuAction, OpenBlockPanelDropdown,
+    InlineTextEditState, InventoryItems, LocalizedText, OpenBlockPanelDropdown,
     OpenSettingsDropdown, PanelCloseButton, PanelDragState, PanelPosition, PanelTitleBar,
-    PanelVisibility, PanelWindow, PendingKeyBind, SettingsTab, StatusText, StatusTextKind,
-    TextPromptRoot, UiHost, UiHoverState, UiPanelBinding, UiRuntime,
+    PanelVisibility, PanelWindow, PendingKeyBind, SettingsTab, StatusText,
+    StatusTextKind, TextPromptRoot, UiHost, UiHoverState, UiPanelBinding, UiRuntime,
 };
 include!("font.rs");
 include!("status.rs");

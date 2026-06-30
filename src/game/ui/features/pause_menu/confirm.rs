@@ -4,9 +4,9 @@ use crate::game::session::{
     exit_to_main_menu_in_world, puzzle_save_needs_confirm, reset_solution_in_world,
     save_current_world_in_world, switch_to_edit_mode_in_world,
 };
-use crate::game::ui::features::save::open_save_puzzle_confirm_before_exit;
 use crate::game::ui::access::i18n;
 use crate::game::ui::core::confirm_dialog::{ConfirmExtraButton, ConfirmProps, ConfirmResult};
+use crate::game::ui::features::save::open_save_puzzle_confirm_before_exit;
 use crate::shared::save::SaveState;
 
 pub const EXTRA_DISCARD: u32 = 0;

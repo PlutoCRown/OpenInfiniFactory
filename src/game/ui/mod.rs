@@ -3,6 +3,9 @@ pub(crate) mod components;
 pub mod core;
 pub mod features;
 mod layout;
+#[macro_use]
+mod list_ui_config;
+mod menu_button;
 mod screens;
 mod systems;
 pub(crate) mod types;
@@ -33,6 +36,7 @@ use components::{
     button_hovered, button_pressed, button_released, button_unhovered, update_scroll_containers,
 };
 use features::UiFeaturesPlugin;
+use menu_button::register_menu_button_clicks;
 
 pub struct GameUiPlugin;
 
@@ -52,7 +56,9 @@ impl Plugin for GameUiPlugin {
             .insert_resource(CarriedItem::default())
             .insert_resource(PanelDragState::default())
             .insert_resource(UiHoverState::default())
-            .add_plugins(UiFeaturesPlugin)
+            .add_plugins(UiFeaturesPlugin);
+        register_menu_button_clicks(app);
+        app
             .add_observer(panel_close_clicked)
             .add_observer(panel_drag_started)
             .add_observer(panel_dragged)
