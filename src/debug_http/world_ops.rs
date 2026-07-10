@@ -40,7 +40,7 @@ pub fn place_block(
             pos.x, pos.y, pos.z
         ));
     }
-    world.insert(pos, BlockData { kind, facing });
+    world.insert(pos, BlockData::new(kind, facing));
     refresh_static_generated_markers(world);
     Ok(())
 }
@@ -81,4 +81,3 @@ pub fn block_kinds_json() -> String {
         .collect();
     serde_json::json!({ "ok": true, "kinds": kinds }).to_string()
 }
-

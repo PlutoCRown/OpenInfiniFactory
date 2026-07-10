@@ -160,10 +160,7 @@ pub(super) fn material_source_generation(
                     };
                     generated.push(GeneratedMaterial {
                         pos: spawn_pos,
-                        block: BlockData {
-                            kind,
-                            facing: Facing::North,
-                        },
+                        block: BlockData::new(kind, Facing::North),
                     });
                 }
             }
@@ -609,23 +606,14 @@ mod tests {
     fn place_goal(world: &mut WorldBlocks, pos: IVec3, material: MaterialKind) {
         world.insert(
             pos,
-            BlockData {
-                kind: BlockKind::Goal,
-                facing: Facing::North,
-            },
+            BlockData::new(BlockKind::Goal, Facing::North),
         );
         world.set_goal_settings(pos, GoalSettings { material });
     }
 
     fn place_material(world: &mut WorldBlocks, pos: IVec3, material: MaterialKind) {
         let kind = BlockKind::material_block_kind(material).unwrap();
-        world.insert(
-            pos,
-            BlockData {
-                kind,
-                facing: Facing::North,
-            },
-        );
+        world.insert(pos, BlockData::new(kind, Facing::North));
     }
 
     fn acceptor_state(world: &WorldBlocks) -> StructureState {
@@ -637,17 +625,11 @@ mod tests {
     fn place_teleport_pair(world: &mut WorldBlocks, entrance: IVec3, exit: IVec3) {
         world.insert(
             entrance,
-            BlockData {
-                kind: BlockKind::TeleportEntrance,
-                facing: Facing::North,
-            },
+            BlockData::new(BlockKind::TeleportEntrance, Facing::North),
         );
         world.insert(
             exit,
-            BlockData {
-                kind: BlockKind::TeleportExit,
-                facing: Facing::North,
-            },
+            BlockData::new(BlockKind::TeleportExit, Facing::North),
         );
         world.set_teleport_pair(entrance, Some(exit));
     }

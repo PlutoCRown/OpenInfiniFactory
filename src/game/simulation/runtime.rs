@@ -439,6 +439,7 @@ fn refresh_pending_generated_previews(
             pos,
             block,
             Some(BlockAnimation {
+                block_id: block.id,
                 from_pos: pos,
                 to_pos: pos,
                 from_facing: block.facing,

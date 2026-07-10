@@ -466,10 +466,7 @@ fn selected_place_block(
 ) -> Option<BlockData> {
     let kind = inventory.hotbar[placement.selected]?;
     let kind = kind.block()?;
-    can_place_in_mode(kind, builder_mode).then_some(BlockData {
-        kind,
-        facing: placement.preview_facing,
-    })
+    can_place_in_mode(kind, builder_mode).then_some(BlockData::new(kind, placement.preview_facing))
 }
 
 fn selected_area(inventory: &InventoryItems, placement: &PlacementState) -> Option<AreaKind> {
@@ -706,9 +703,11 @@ fn move_selection(
     for (pos, block) in selected {
         let target = pos + offset;
         world.insert(target, block);
+        let stored = world.blocks[&target];
         animations.insert(
             target,
             BlockAnimation {
+                block_id: stored.id,
                 from_pos: pos,
                 to_pos: target,
                 from_facing: block.facing,
@@ -824,6 +823,7 @@ fn rotate_block_at(
     animations.insert(
         pos,
         BlockAnimation {
+            block_id: updated.id,
             from_pos: pos,
             to_pos: pos,
             from_facing,

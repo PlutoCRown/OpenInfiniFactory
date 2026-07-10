@@ -172,22 +172,13 @@ mod tests {
     use crate::game::world::direction::Facing;
 
     fn place_factory(world: &mut WorldBlocks, pos: IVec3, kind: BlockKind) {
-        world.insert(
-            pos,
-            BlockData {
-                kind,
-                facing: Facing::North,
-            },
-        );
+        world.insert(pos, BlockData::new(kind, Facing::North));
     }
 
     fn wired_detector(world: &mut WorldBlocks, detector: IVec3, wire: IVec3) {
         world.insert(
             detector,
-            BlockData {
-                kind: BlockKind::Detector,
-                facing: Facing::East,
-            },
+            BlockData::new(BlockKind::Detector, Facing::East),
         );
         place_factory(world, wire, BlockKind::Wire);
     }

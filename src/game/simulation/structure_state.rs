@@ -66,6 +66,7 @@ impl StructureState {
     }
 
     /// Build factory structures (connectivity + activity), acceptor structures, and material structures (welds).
+    /// 工厂连通按当前世界相邻关系建一次（开局/放置快照）；之后运行时只搬迁成员，不因贴上而合并。
     pub fn rebuild_for_simulation(&mut self, world: &WorldBlocks) {
         *self = Self::default();
         self.append_factory_structures(world);
@@ -616,9 +617,10 @@ fn is_blocked_pusher_edge(
 }
 
 fn is_blocked_factory_connection(world: &WorldBlocks, from: IVec3, to: IVec3) -> bool {
-    world.blocks.get(&from).is_some_and(|block| {
-        block.kind.non_connection_face(block.facing) == Some(to - from)
-    })
+    world
+        .blocks
+        .get(&from)
+        .is_some_and(|block| block.kind.non_connection_face(block.facing) == Some(to - from))
 }
 
 fn pusher_front_neighbor(world: &WorldBlocks, pos: IVec3) -> Option<IVec3> {
@@ -650,17 +652,11 @@ mod tests {
     use crate::game::world::direction::Facing;
 
     fn platform(_pos: IVec3) -> BlockData {
-        BlockData {
-            kind: BlockKind::Platform,
-            facing: Facing::North,
-        }
+        BlockData::new(BlockKind::Platform, Facing::North)
     }
 
     fn basic_material(_pos: IVec3) -> BlockData {
-        BlockData {
-            kind: BlockKind::Material,
-            facing: Facing::North,
-        }
+        BlockData::new(BlockKind::Material, Facing::North)
     }
 
     #[test]
@@ -680,26 +676,11 @@ mod tests {
     #[test]
     fn rebuild_for_simulation_groups_connected_acceptors() {
         let mut world = WorldBlocks::default();
-        world.insert(
-            IVec3::ZERO,
-            BlockData {
-                kind: BlockKind::Goal,
-                facing: Facing::North,
-            },
-        );
-        world.insert(
-            IVec3::X,
-            BlockData {
-                kind: BlockKind::Goal,
-                facing: Facing::North,
-            },
-        );
+        world.insert(IVec3::ZERO, BlockData::new(BlockKind::Goal, Facing::North));
+        world.insert(IVec3::X, BlockData::new(BlockKind::Goal, Facing::North));
         world.insert(
             IVec3::new(0, 2, 0),
-            BlockData {
-                kind: BlockKind::Goal,
-                facing: Facing::North,
-            },
+            BlockData::new(BlockKind::Goal, Facing::North),
         );
 
         let state = StructureState::rebuild_for_simulation_standalone(&world);
@@ -717,13 +698,7 @@ mod tests {
     #[test]
     fn gravity_support_cache_survives_lookup_after_recorded() {
         let mut world = WorldBlocks::default();
-        world.insert(
-            IVec3::ZERO,
-            BlockData {
-                kind: BlockKind::Stone,
-                facing: Facing::North,
-            },
-        );
+        world.insert(IVec3::ZERO, BlockData::new(BlockKind::Stone, Facing::North));
         world.insert(IVec3::Y, platform(IVec3::Y));
 
         let mut state = StructureState::rebuild_for_simulation_standalone(&world);
@@ -735,20 +710,11 @@ mod tests {
     #[test]
     fn pusher_target_structure_allows_front_subset_when_whole_structure_is_scene_anchored() {
         let mut world = WorldBlocks::default();
-        world.insert(
-            IVec3::ZERO,
-            BlockData {
-                kind: BlockKind::Stone,
-                facing: Facing::North,
-            },
-        );
+        world.insert(IVec3::ZERO, BlockData::new(BlockKind::Stone, Facing::North));
         world.insert(IVec3::Y, platform(IVec3::Y));
         world.insert(
             IVec3::new(0, 2, 0),
-            BlockData {
-                kind: BlockKind::Pusher,
-                facing: Facing::East,
-            },
+            BlockData::new(BlockKind::Pusher, Facing::East),
         );
         world.insert(IVec3::new(1, 2, 0), platform(IVec3::new(1, 2, 0)));
 
@@ -769,18 +735,12 @@ mod tests {
         let mut world = WorldBlocks::default();
         world.insert(
             IVec3::new(1, 0, 0),
-            BlockData {
-                kind: BlockKind::Stone,
-                facing: Facing::North,
-            },
+            BlockData::new(BlockKind::Stone, Facing::North),
         );
         world.insert(IVec3::new(1, 1, 0), platform(IVec3::new(1, 1, 0)));
         world.insert(
             IVec3::new(2, 1, 0),
-            BlockData {
-                kind: BlockKind::Pusher,
-                facing: Facing::West,
-            },
+            BlockData::new(BlockKind::Pusher, Facing::West),
         );
 
         let state = StructureState::rebuild_for_simulation_standalone(&world);

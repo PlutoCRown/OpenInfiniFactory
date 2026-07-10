@@ -1,0 +1,171 @@
+{
+  "name": "runtime_no_merge_conveyor",
+  "setup": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 1,
+      "y": 0,
+      "z": 0,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 2,
+      "y": 0,
+      "z": 0,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 3,
+      "y": 0,
+      "z": 0,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 1,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 1,
+      "y": 0,
+      "z": 1,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 2,
+      "y": 0,
+      "z": 1,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 3,
+      "y": 0,
+      "z": 1,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 0,
+      "y": 1,
+      "z": 0,
+      "kind": "Conveyor",
+      "facing": "East"
+    },
+    {
+      "x": 1,
+      "y": 1,
+      "z": 0,
+      "kind": "Conveyor",
+      "facing": "South"
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "z": 0,
+      "kind": "Conveyor",
+      "facing": "South"
+    },
+    {
+      "x": 3,
+      "y": 1,
+      "z": 0,
+      "kind": "Conveyor",
+      "facing": "West"
+    },
+    {
+      "x": 1,
+      "y": 1,
+      "z": 1,
+      "kind": "Conveyor",
+      "facing": "South"
+    },
+    {
+      "x": 0,
+      "y": 2,
+      "z": 0,
+      "kind": "Platform",
+      "facing": "North"
+    },
+    {
+      "x": 3,
+      "y": 2,
+      "z": 0,
+      "kind": "Platform",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "beginSimulation"
+    },
+    {
+      "op": "run",
+      "turns": 1
+    },
+    {
+      "op": "assertBlock",
+      "x": 1,
+      "y": 2,
+      "z": 0,
+      "kind": "Platform",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": 2,
+      "y": 2,
+      "z": 0,
+      "kind": "Platform",
+      "layer": "factory"
+    },
+    {
+      "op": "run",
+      "turns": 1
+    },
+    {
+      "op": "assertBlock",
+      "x": 1,
+      "y": 2,
+      "z": 1,
+      "kind": "Platform",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": 2,
+      "y": 2,
+      "z": 1,
+      "kind": "Platform",
+      "layer": "factory"
+    },
+    {
+      "op": "run",
+      "turns": 1
+    },
+    {
+      "op": "assertBlock",
+      "x": 1,
+      "y": 2,
+      "z": 2,
+      "kind": "Platform",
+      "layer": "factory"
+    },
+    {
+      "op": "run",
+      "turns": 1
+    }
+  ]
+}

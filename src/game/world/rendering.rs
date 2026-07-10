@@ -35,9 +35,33 @@ pub fn block_face_highlight_transform(block_pos: IVec3, normal: IVec3) -> Transf
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BlockEntityLayer {
+    /// 工厂/材料：可做移动动画，有 BlockId
+    Animatable,
+    /// 系统/虚拟：可与工厂材料重叠，独立实体
+    System,
+    /// 场景：无 ID、无动画
+    Scene,
+}
+
+impl BlockEntityLayer {
+    pub fn from_kind(kind: crate::game::blocks::BlockKind) -> Self {
+        if kind.is_factory() || kind.is_material() {
+            Self::Animatable
+        } else if kind.is_system_layer() {
+            Self::System
+        } else {
+            Self::Scene
+        }
+    }
+}
+
 #[derive(Component)]
 pub struct BlockEntity {
     pub pos: IVec3,
+    pub id: crate::game::blocks::BlockId,
+    pub layer: BlockEntityLayer,
 }
 
 #[derive(Component)]
@@ -342,10 +366,7 @@ fn spawn_block_icon_model(
     origin: Vec3,
     icon_layer: &RenderLayers,
 ) {
-    let data = BlockData {
-        kind,
-        facing: crate::game::world::direction::Facing::South,
-    };
+    let data = BlockData::new(kind, crate::game::world::direction::Facing::South);
     spawn_block_model(
         commands,
         meshes,
@@ -1234,7 +1255,11 @@ fn spawn_block_model(
     }
 
     if with_block_entity {
-        entity.insert(BlockEntity { pos });
+        entity.insert(BlockEntity {
+            pos,
+            id: data.id,
+            layer: BlockEntityLayer::from_kind(data.kind),
+        });
     }
 
     if pending_generated_preview {

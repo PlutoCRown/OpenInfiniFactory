@@ -72,6 +72,6 @@ fn place_generated_marker(world: &mut WorldBlocks, origin: IVec3, marker: Marker
         world.can_place_virtual_block_at(pos)
     };
     if can_place {
-        world.insert(pos, BlockData { kind, facing });
+        world.insert(pos, BlockData::new(kind, facing));
     }
 }

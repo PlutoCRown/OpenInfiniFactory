@@ -59,6 +59,7 @@ pub fn simulate_turn(
     let generated_animations = place_ready_generated_materials(world, pending_generated, turn);
     run_static_marker_phase(world);
     let weld_sparks = run_weld_behavior_phase(world);
+    // 材料结构随焊接更新；工厂连通在开局已按放置关系固定，运行时不因相邻合并
     structure_state.refresh_material_structures(world);
     sample.prep_ms = mark_elapsed_ms(&mut mark);
 
@@ -126,13 +127,8 @@ pub fn simulate_turn(
     if let Some(sim_log) = sim_log.as_mut() {
         log_movement_plan(turn, sim_log, world, "devices", &device_movement_plan);
     }
-    movement_plan = merge_structure_movement_plan(
-        movement_plan,
-        device_movement_plan,
-        world,
-        structure_state,
-        movement_influence,
-    );
+    movement_plan =
+        merge_structure_movement_plan(movement_plan, device_movement_plan, movement_influence);
     if let Some(sim_log) = sim_log.as_mut() {
         log_movement_plan(turn, sim_log, world, "merged", &movement_plan);
     }
@@ -225,9 +221,11 @@ fn place_ready_generated_materials(
         };
         if world.can_place_platform_at(pos) {
             world.insert(pos, block);
+            let id = world.blocks.get(&pos).map(|b| b.id).unwrap_or(block.id);
             animations.insert(
                 pos,
                 BlockAnimation {
+                    block_id: id,
                     from_pos: pos,
                     to_pos: pos,
                     from_facing: block.facing,

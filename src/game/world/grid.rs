@@ -18,6 +18,8 @@ pub struct WorldBlocks {
     pub material_face_marks: HashMap<MaterialFace, MaterialFaceMark>,
     pub block_settings: HashMap<IVec3, BlockSettings>,
     pub topology_revision: u64,
+    /// 下一个可分配的方块实例 ID（0 表示未分配）
+    pub next_block_id: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -176,7 +178,23 @@ impl MaterialWeld {
 }
 
 impl WorldBlocks {
-    pub fn insert(&mut self, pos: IVec3, block: BlockData) -> Option<BlockData> {
+    // 仅为工厂/材料分配实例 ID；系统、虚拟、场景不参与动画体系
+    pub fn assign_block_id(&mut self, block: &mut BlockData) {
+        if !(block.kind.is_factory() || block.kind.is_material()) {
+            block.id = crate::game::blocks::BlockId::NONE;
+            return;
+        }
+        if block.id.is_none() {
+            self.next_block_id = self.next_block_id.max(1);
+            block.id = crate::game::blocks::BlockId(self.next_block_id);
+            self.next_block_id += 1;
+        } else {
+            self.next_block_id = self.next_block_id.max(block.id.0.saturating_add(1));
+        }
+    }
+
+    pub fn insert(&mut self, pos: IVec3, mut block: BlockData) -> Option<BlockData> {
+        self.assign_block_id(&mut block);
         let previous = if block.kind.is_system_layer() {
             self.system_blocks.insert(pos, block)
         } else {
@@ -724,10 +742,7 @@ pub fn seed_demo_world(world: &mut WorldBlocks) {
         for z in -FLOOR_RADIUS..=FLOOR_RADIUS {
             world.insert(
                 IVec3::new(x, 0, z),
-                BlockData {
-                    kind: BlockKind::Stone,
-                    facing: Facing::North,
-                },
+                BlockData::new(BlockKind::Stone, Facing::North),
             );
         }
     }
@@ -851,13 +866,7 @@ mod tests {
     #[test]
     fn factory_cannot_overlap_system_block() {
         let mut world = WorldBlocks::default();
-        world.insert(
-            POS,
-            BlockData {
-                kind: BlockKind::Generator,
-                facing: Facing::North,
-            },
-        );
+        world.insert(POS, BlockData::new(BlockKind::Generator, Facing::North));
 
         assert!(!world.can_place_block_kind_at(POS, BlockKind::Platform));
         assert!(world.can_place_block_kind_at(POS, BlockKind::Material));
@@ -867,13 +876,7 @@ mod tests {
     #[test]
     fn system_block_cannot_overlap_factory() {
         let mut world = WorldBlocks::default();
-        world.insert(
-            POS,
-            BlockData {
-                kind: BlockKind::Platform,
-                facing: Facing::North,
-            },
-        );
+        world.insert(POS, BlockData::new(BlockKind::Platform, Facing::North));
 
         assert!(!world.can_place_block_kind_at(POS, BlockKind::Goal));
     }
@@ -881,13 +884,7 @@ mod tests {
     #[test]
     fn factory_cannot_overlap_generated_marker() {
         let mut world = WorldBlocks::default();
-        world.insert(
-            POS,
-            BlockData {
-                kind: BlockKind::DrillHead,
-                facing: Facing::North,
-            },
-        );
+        world.insert(POS, BlockData::new(BlockKind::DrillHead, Facing::North));
 
         assert!(!world.can_place_block_kind_at(POS, BlockKind::Wire));
         assert!(world.can_place_block_kind_at(POS, BlockKind::Material));

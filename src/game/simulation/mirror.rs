@@ -154,24 +154,15 @@ mod tests {
         let mut world = WorldBlocks::default();
         world.insert(
             IVec3::new(1, 0, 0),
-            BlockData {
-                kind: BlockKind::Laser,
-                facing: Facing::East,
-            },
+            BlockData::new(BlockKind::Laser, Facing::East),
         );
         world.insert(
             IVec3::new(2, 0, 0),
-            BlockData {
-                kind: BlockKind::Mirror,
-                facing: Facing::North,
-            },
+            BlockData::new(BlockKind::Mirror, Facing::North),
         );
         world.insert(
             IVec3::new(5, 0, 0),
-            BlockData {
-                kind: BlockKind::Platform,
-                facing: Facing::North,
-            },
+            BlockData::new(BlockKind::Platform, Facing::North),
         );
 
         let mut beams = Vec::new();
@@ -206,25 +197,16 @@ mod tests {
         let mut world = WorldBlocks::default();
         world.insert(
             IVec3::new(1, 0, 0),
-            BlockData {
-                kind: BlockKind::Laser,
-                facing: Facing::East,
-            },
+            BlockData::new(BlockKind::Laser, Facing::East),
         );
         world.insert(
             IVec3::new(2, 0, 0),
-            BlockData {
-                kind: BlockKind::Mirror,
-                facing: Facing::North,
-            },
+            BlockData::new(BlockKind::Mirror, Facing::North),
         );
         let material_pos = IVec3::new(2, 0, -1);
         world.insert(
             material_pos,
-            BlockData {
-                kind: BlockKind::material_block_kind(MaterialKind::Basic).unwrap(),
-                facing: Facing::North,
-            },
+            BlockData::new(BlockKind::material_block_kind(MaterialKind::Basic).unwrap(), Facing::North),
         );
 
         let mut beams = Vec::new();
@@ -246,17 +228,11 @@ mod tests {
         let mut world = WorldBlocks::default();
         world.insert(
             IVec3::new(5, 9, 3),
-            BlockData {
-                kind: BlockKind::Laser,
-                facing: Facing::South,
-            },
+            BlockData::new(BlockKind::Laser, Facing::South),
         );
         world.insert(
             IVec3::new(5, 9, 9),
-            BlockData {
-                kind: BlockKind::VerticalMirror,
-                facing: Facing::East,
-            },
+            BlockData::new(BlockKind::VerticalMirror, Facing::East),
         );
 
         let mut beams = Vec::new();

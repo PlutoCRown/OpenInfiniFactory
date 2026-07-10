@@ -4,11 +4,13 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use crate::game::blocks::{BlockData, BlockKind};
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::systems::debug::DebugState;
-use crate::game::world::animation::{AnimationTiming, BlockAnimation, PusherAnimation};
+use crate::game::world::animation::{
+    AnimatedBlock, AnimationTiming, BlockAnimation, PusherAnimation,
+};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     signal_neighbor_offsets, spawn_acceptance_sparks, spawn_laser_beams, spawn_weld_sparks,
-    spawn_world_block_entity, WorldRenderAssets,
+    spawn_world_block_entity, BlockEntity, BlockEntityLayer, WorldRenderAssets,
 };
 use crate::sim_core::TurnOutput;
 
@@ -22,10 +24,63 @@ pub fn block_data_at(world: &WorldBlocks, pos: IVec3) -> Option<BlockData> {
         .or_else(|| world.system_blocks.get(&pos).copied())
 }
 
-pub fn despawn_block_at(commands: &mut Commands, index: &mut BlockEntityIndex, pos: IVec3) {
-    if let Some(entity) = index.remove(pos) {
+fn despawn_entity(commands: &mut Commands, index: &mut BlockEntityIndex, entity: Entity) {
+    index.remove_entity(entity);
+    commands.entity(entity).despawn();
+}
+
+fn despawn_animatable_at(commands: &mut Commands, index: &mut BlockEntityIndex, pos: IVec3) {
+    if let Some(entity) = index.remove_animatable(pos) {
         commands.entity(entity).despawn();
     }
+}
+
+fn despawn_system_at(commands: &mut Commands, index: &mut BlockEntityIndex, pos: IVec3) {
+    if let Some(entity) = index.remove_system(pos) {
+        commands.entity(entity).despawn();
+    }
+}
+
+fn despawn_scene_at(commands: &mut Commands, index: &mut BlockEntityIndex, pos: IVec3) {
+    if let Some(entity) = index.remove_scene(pos) {
+        commands.entity(entity).despawn();
+    }
+}
+
+fn spawn_and_index(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    index: &mut BlockEntityIndex,
+    world: &WorldBlocks,
+    assets: &WorldRenderAssets,
+    pos: IVec3,
+    data: BlockData,
+    animation: Option<BlockAnimation>,
+    pusher_animation: Option<PusherAnimation>,
+    timing: AnimationTiming,
+    powered_wire: bool,
+    factory_debug: Option<&StructureState>,
+) {
+    let entity = spawn_world_block_entity(
+        commands,
+        meshes,
+        assets,
+        world,
+        pos,
+        data,
+        animation,
+        pusher_animation,
+        timing,
+        powered_wire,
+        factory_debug,
+    );
+    index.insert(pos, data.id, BlockEntityLayer::from_kind(data.kind), entity);
+}
+
+// 无连接件的工厂/材料实例可原地保留，避免对向移动时未动方块被刷新闪烁
+fn can_preserve_animatable(data: BlockData) -> bool {
+    let behavior = data.kind.render_behavior(data.facing);
+    behavior.wire_connector.is_none() && behavior.weld_connector.is_none()
 }
 
 fn needs_connectivity_refresh(data: BlockData) -> bool {
@@ -39,7 +94,11 @@ fn needs_connectivity_refresh(data: BlockData) -> bool {
 fn insert_connectivity_neighbors(world: &WorldBlocks, refresh: &mut HashSet<IVec3>, pos: IVec3) {
     for offset in signal_neighbor_offsets() {
         let neighbor = pos + offset;
-        if block_data_at(world, neighbor).is_some_and(|block| block.kind.is_material()) {
+        if world
+            .blocks
+            .get(&neighbor)
+            .is_some_and(|block| block.kind.is_material())
+        {
             continue;
         }
         refresh.insert(neighbor);
@@ -49,7 +108,12 @@ fn insert_connectivity_neighbors(world: &WorldBlocks, refresh: &mut HashSet<IVec
 fn expand_wire_connectivity(world: &WorldBlocks, seeds: &HashSet<IVec3>, out: &mut HashSet<IVec3>) {
     let mut queue: VecDeque<IVec3> = seeds
         .iter()
-        .filter(|&&pos| block_data_at(world, pos).is_some_and(|b| b.kind == BlockKind::Wire))
+        .filter(|&&pos| {
+            world
+                .blocks
+                .get(&pos)
+                .is_some_and(|b| b.kind == BlockKind::Wire)
+        })
         .copied()
         .collect();
     while let Some(pos) = queue.pop_front() {
@@ -58,11 +122,19 @@ fn expand_wire_connectivity(world: &WorldBlocks, seeds: &HashSet<IVec3>, out: &m
         }
         for offset in signal_neighbor_offsets() {
             let neighbor = pos + offset;
-            if block_data_at(world, neighbor).is_some_and(|block| block.kind.is_material()) {
+            if world
+                .blocks
+                .get(&neighbor)
+                .is_some_and(|block| block.kind.is_material())
+            {
                 continue;
             }
             out.insert(neighbor);
-            if block_data_at(world, neighbor).is_some_and(|b| b.kind == BlockKind::Wire) {
+            if world
+                .blocks
+                .get(&neighbor)
+                .is_some_and(|b| b.kind == BlockKind::Wire)
+            {
                 queue.push_back(neighbor);
             }
         }
@@ -98,9 +170,9 @@ pub fn diff_block_positions(before: &WorldBlocks, after: &WorldBlocks) -> HashSe
         .chain(after.blocks.keys())
         .chain(after.system_blocks.keys())
     {
-        let prev = block_data_at(before, *pos);
-        let next = block_data_at(after, *pos);
-        if prev != next {
+        let blocks_changed = before.blocks.get(pos) != after.blocks.get(pos);
+        let system_changed = before.system_blocks.get(pos) != after.system_blocks.get(pos);
+        if blocks_changed || system_changed {
             changed.insert(*pos);
         }
     }
@@ -115,21 +187,23 @@ pub fn collect_sim_refresh_positions(
     let changed = diff_block_positions(before, after);
     let animated_destinations: HashSet<IVec3> = output.animations.keys().copied().collect();
     let mut refresh = HashSet::new();
-    for pos in output.pusher_animations.keys() {
-        refresh.insert(*pos);
-    }
     for &pos in &changed {
-        if block_data_at(after, pos).is_some_and(|block| block.kind.is_material()) {
+        if after.blocks.get(&pos).is_some_and(|b| b.kind.is_material()) {
             if !animated_destinations.contains(&pos) {
                 refresh.insert(pos);
             }
             continue;
         }
         refresh.insert(pos);
-        if block_data_at(after, pos).is_some_and(needs_connectivity_refresh) {
-            insert_connectivity_neighbors(after, &mut refresh, pos);
-        } else if block_data_at(before, pos).is_some_and(needs_connectivity_refresh) {
-            insert_connectivity_neighbors(after, &mut refresh, pos);
+        if let Some(data) = block_data_at(after, pos) {
+            if needs_connectivity_refresh(data) {
+                insert_connectivity_neighbors(after, &mut refresh, pos);
+            }
+        }
+        if let Some(before_data) = block_data_at(before, pos) {
+            if needs_connectivity_refresh(before_data) {
+                insert_connectivity_neighbors(before, &mut refresh, pos);
+            }
         }
     }
     expand_wire_connectivity(after, &changed, &mut refresh);
@@ -137,17 +211,21 @@ pub fn collect_sim_refresh_positions(
 }
 
 pub fn collect_wire_power_refresh_positions(
-    after: &WorldBlocks,
-    current: &HashSet<IVec3>,
-    previous: &HashSet<IVec3>,
+    world: &WorldBlocks,
+    powered_wires: &HashSet<IVec3>,
+    previous_powered_wires: &HashSet<IVec3>,
 ) -> HashSet<IVec3> {
     let mut refresh = HashSet::new();
-    for &pos in current {
+    for &pos in powered_wires.symmetric_difference(previous_powered_wires) {
         refresh.insert(pos);
-    }
-    for &pos in previous {
-        if block_data_at(after, pos).is_some_and(|block| block.kind == BlockKind::Wire) {
-            refresh.insert(pos);
+        if world
+            .blocks
+            .get(&pos)
+            .is_some_and(|b| b.kind == BlockKind::Wire)
+        {
+            for offset in signal_neighbor_offsets() {
+                refresh.insert(pos + offset);
+            }
         }
     }
     refresh
@@ -172,24 +250,80 @@ pub fn refresh_positions(
         if skip.contains(&pos) {
             continue;
         }
-        despawn_block_at(commands, index, pos);
-        let Some(data) = block_data_at(world, pos) else {
-            continue;
-        };
-        let entity = spawn_world_block_entity(
-            commands,
-            meshes,
-            assets,
-            world,
-            pos,
-            data,
-            None,
-            pusher_animations.get(&pos).copied(),
-            timing,
-            powered_wires.contains(&pos),
-            factory_debug,
-        );
-        index.insert(pos, entity);
+
+        // blocks 层（工厂/材料/场景）
+        match world.blocks.get(&pos).copied() {
+            Some(data) if data.kind.is_factory() || data.kind.is_material() => {
+                let same_instance = index
+                    .get_by_id(data.id)
+                    .is_some_and(|entity| index.get_animatable(pos) == Some(entity));
+                if !(same_instance && can_preserve_animatable(data)) {
+                    despawn_animatable_at(commands, index, pos);
+                    despawn_scene_at(commands, index, pos);
+                    spawn_and_index(
+                        commands,
+                        meshes,
+                        index,
+                        world,
+                        assets,
+                        pos,
+                        data,
+                        None,
+                        pusher_animations.get(&pos).copied(),
+                        timing,
+                        powered_wires.contains(&pos),
+                        factory_debug,
+                    );
+                }
+            }
+            Some(data) => {
+                despawn_animatable_at(commands, index, pos);
+                despawn_scene_at(commands, index, pos);
+                spawn_and_index(
+                    commands,
+                    meshes,
+                    index,
+                    world,
+                    assets,
+                    pos,
+                    data,
+                    None,
+                    None,
+                    timing,
+                    false,
+                    factory_debug,
+                );
+            }
+            None => {
+                despawn_animatable_at(commands, index, pos);
+                despawn_scene_at(commands, index, pos);
+            }
+        }
+
+        // 系统/虚拟层：与上者重叠，绝不参与工厂材料动画
+        match world.system_blocks.get(&pos).copied() {
+            Some(data) => {
+                if index.get_system(pos).is_none() {
+                    spawn_and_index(
+                        commands,
+                        meshes,
+                        index,
+                        world,
+                        assets,
+                        pos,
+                        data,
+                        None,
+                        None,
+                        timing,
+                        false,
+                        factory_debug,
+                    );
+                }
+            }
+            None => {
+                despawn_system_at(commands, index, pos);
+            }
+        }
     }
 }
 
@@ -207,36 +341,92 @@ pub fn apply_structure_animations(
     timing: AnimationTiming,
 ) -> HashSet<IVec3> {
     let factory_debug = debug.factory_activity.then_some(structure_state);
-    let destinations: HashSet<IVec3> = animations.keys().copied().collect();
     let mut handled = HashSet::new();
+
+    // 先收集本回合所有可动画移动，避免 HashMap 迭代顺序导致「后到的目标格把先走的实体误删」
+    let mut planned: Vec<(IVec3, BlockAnimation, BlockData, Option<Entity>)> = Vec::new();
     for (&pos, animation) in animations {
-        let Some(data) = block_data_at(world, pos) else {
+        let Some(data) = world.blocks.get(&pos).copied() else {
             continue;
         };
+        if !(data.kind.is_factory() || data.kind.is_material()) {
+            continue;
+        }
         handled.insert(pos);
         handled.insert(animation.from_pos);
-        let from_is_also_destination =
-            animation.from_pos != pos && destinations.contains(&animation.from_pos);
-        if !from_is_also_destination {
-            despawn_block_at(commands, index, animation.from_pos);
+        let entity = index
+            .get_by_id(animation.block_id)
+            .or_else(|| index.get_animatable(animation.from_pos));
+        planned.push((pos, *animation, data, entity));
+    }
+
+    let moving_entities: HashSet<Entity> = planned.iter().filter_map(|(_, _, _, e)| *e).collect();
+
+    // 阶段 1：全部从旧格解绑（不销毁、不清 by_id）
+    for (_, animation, _, entity) in &planned {
+        let Some(entity) = entity else {
+            continue;
+        };
+        if index.get_animatable(animation.from_pos) == Some(*entity) {
+            index.unbind_animatable_pos(animation.from_pos);
         }
-        if animation.from_pos != pos {
-            despawn_block_at(commands, index, pos);
+    }
+
+    // 阶段 2：绑定到目标格并挂上动画
+    for (pos, animation, data, entity) in planned {
+        if let Some(entity) = entity {
+            if let Some(occupant) = index.get_animatable(pos) {
+                if occupant != entity {
+                    if moving_entities.contains(&occupant) {
+                        // 对方也在本回合搬走，只解绑占位
+                        index.unbind_animatable_pos(pos);
+                    } else {
+                        despawn_entity(commands, index, occupant);
+                    }
+                }
+            }
+            index.insert(
+                pos,
+                animation.block_id,
+                BlockEntityLayer::Animatable,
+                entity,
+            );
+            let animated = AnimatedBlock::new(animation, timing);
+            let start = animated.start_transform();
+            commands.entity(entity).insert((
+                BlockEntity {
+                    pos,
+                    id: animation.block_id,
+                    layer: BlockEntityLayer::Animatable,
+                },
+                animated,
+                start,
+            ));
+            continue;
         }
-        let entity = spawn_world_block_entity(
+
+        // 找不到原实体时才新建；不要误删其它正在移动的实体
+        if let Some(occupant) = index.get_animatable(pos) {
+            if !moving_entities.contains(&occupant) {
+                despawn_entity(commands, index, occupant);
+            } else {
+                index.unbind_animatable_pos(pos);
+            }
+        }
+        spawn_and_index(
             commands,
             meshes,
-            assets,
+            index,
             world,
+            assets,
             pos,
             data,
-            Some(*animation),
+            Some(animation),
             pusher_animations.get(&pos).copied(),
             timing,
             powered_wires.contains(&pos),
             factory_debug,
         );
-        index.insert(pos, entity);
     }
     handled
 }
@@ -318,14 +508,15 @@ pub fn apply_turn_output_incremental(
         timing,
     );
     for (&pos, data) in &after.blocks {
-        if !data.kind.is_material() || index.get(pos).is_some() {
+        if !data.kind.is_material() || index.get_animatable(pos).is_some() {
             continue;
         }
-        let entity = spawn_world_block_entity(
+        spawn_and_index(
             commands,
             meshes,
-            assets,
+            index,
             after,
+            assets,
             pos,
             *data,
             None,
@@ -334,7 +525,25 @@ pub fn apply_turn_output_incremental(
             output.render_powered_wires.contains(&pos),
             debug.factory_activity.then_some(structure_state),
         );
-        index.insert(pos, entity);
+    }
+    for (&pos, data) in &after.system_blocks {
+        if index.get_system(pos).is_some() {
+            continue;
+        }
+        spawn_and_index(
+            commands,
+            meshes,
+            index,
+            after,
+            assets,
+            pos,
+            *data,
+            None,
+            None,
+            timing,
+            false,
+            debug.factory_activity.then_some(structure_state),
+        );
     }
     spawn_weld_sparks(commands, assets, &output.weld_sparks);
     spawn_weld_sparks(commands, assets, &output.behavior_sparks);

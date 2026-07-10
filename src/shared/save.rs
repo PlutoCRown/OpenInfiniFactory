@@ -539,13 +539,7 @@ mod tests {
             (exit, BlockKind::TeleportExit),
             (generated_marker, BlockKind::WeldPoint),
         ] {
-            world.insert(
-                pos,
-                BlockData {
-                    kind,
-                    facing: Facing::North,
-                },
-            );
+            world.insert(pos, BlockData::new(kind, Facing::North));
         }
 
         world.set_generator_settings(
@@ -665,25 +659,13 @@ mod tests {
     #[test]
     fn solution_loads_factory_blocks_from_puzzle_reference() {
         let mut puzzle_world = WorldBlocks::default();
-        puzzle_world.insert(
-            IVec3::ZERO,
-            BlockData {
-                kind: BlockKind::Stone,
-                facing: Facing::North,
-            },
-        );
+        puzzle_world.insert(IVec3::ZERO, BlockData::new(BlockKind::Stone, Facing::North));
         let puzzle_inventory = InventoryItems::for_mode(BuilderMode::Edit);
         let puzzle_save = SaveFile::puzzle(capture_puzzle_layer(&puzzle_world, &puzzle_inventory));
         write_save("test_puzzle_ref", &puzzle_save);
 
         let mut solution_world = puzzle_world.clone();
-        solution_world.insert(
-            IVec3::X,
-            BlockData {
-                kind: BlockKind::Platform,
-                facing: Facing::North,
-            },
-        );
+        solution_world.insert(IVec3::X, BlockData::new(BlockKind::Platform, Facing::North));
         let solution_inventory = InventoryItems::for_mode(BuilderMode::Play);
         write_save(
             "test_solution_ref",

@@ -35,6 +35,7 @@ impl AnimationTiming {
 
 #[derive(Clone, Copy)]
 pub struct BlockAnimation {
+    pub block_id: crate::game::blocks::BlockId,
     pub from_pos: IVec3,
     pub to_pos: IVec3,
     pub from_facing: Facing,
@@ -185,6 +186,16 @@ impl AnimatedBlock {
             kind: animation.kind,
             elapsed: animation.progress.unwrap_or(0.0).clamp(0.0, 1.0) * timing.duration,
             timing,
+        }
+    }
+
+    // 动画起始 Transform，用于复用实体时对齐到 from
+    pub fn start_transform(&self) -> Transform {
+        Transform {
+            translation: self.from_translation,
+            rotation: self.from_rotation,
+            scale: self.from_scale,
+            ..Default::default()
         }
     }
 }

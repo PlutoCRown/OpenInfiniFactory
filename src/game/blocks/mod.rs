@@ -552,10 +552,34 @@ impl BlockLayer {
     }
 }
 
+/// 方块实例 ID：放置/加载时分配，移动时保持不变，供动画与场景实体追踪
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct BlockId(pub u64);
+
+impl BlockId {
+    pub const NONE: Self = Self(0);
+
+    pub const fn is_none(self) -> bool {
+        self.0 == 0
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BlockData {
     pub kind: BlockKind,
     pub facing: Facing,
+    #[serde(default)]
+    pub id: BlockId,
+}
+
+impl BlockData {
+    pub const fn new(kind: BlockKind, facing: Facing) -> Self {
+        Self {
+            kind,
+            facing,
+            id: BlockId::NONE,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
