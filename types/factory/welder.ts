@@ -1,12 +1,13 @@
 class WelderBlock extends FactoryBlock implements Directional, Alternateable {
     static item_slot_color: Color = { r: 1, g: 1, b: 1 };
     direction: Direction;
-    work_pos: Vec3Int;
+    get work_pos() {
+        return this.pos.add(Vec3Unit.from_direction(this.direction));
+    }
     in_network_id: RuntimeNetworkID;
     constructor(pos: Vec3Int, direction: Direction) {
         super(pos);
         this.direction = direction;
-        this.work_pos = pos.add(Vec3Unit.from_direction(direction));
     }
     on_alternate() {
         return new DownWelderBlock(this.pos, this.direction);
@@ -36,7 +37,9 @@ class WelderBlock extends FactoryBlock implements Directional, Alternateable {
 class DownWelderBlock extends WelderBlock {
     constructor(pos: Vec3Int, direction: Direction) {
         super(pos, direction);
-        this.work_pos = pos.add(Vec3Unit.Unit_Y_NEG);
+    }
+    override get work_pos() {
+        return this.pos.add(Vec3Unit.Unit_Y_NEG);
     }
 }
 

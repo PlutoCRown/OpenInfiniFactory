@@ -2,11 +2,12 @@ class DetectorBlock extends FactoryBlock implements Directional, Alternateable, 
     static item_slot_color: Color = { r: 1, g: 1, b: 1 };
     direction: Direction;
     in_network_id: RuntimeNetworkID;
-    work_pos: Vec3Int;
+    get work_pos() {
+        return this.pos.add(Vec3Unit.from_direction(this.direction));
+    }
     constructor(pos: Vec3Int, direction: Direction) {
         super(pos);
         this.direction = direction;
-        this.work_pos = pos.add(Vec3Unit.from_direction(direction));
     }
     on_alternate() {
         return new DownDetectorBlock(this.pos, this.direction);
