@@ -11,8 +11,8 @@ use super::behaviors::{
     run_ready_material_teleports, run_weld_behavior_phase, LaserBeam,
 };
 use super::gravity::mark_gravity_phase;
-use super::markers::{run_powered_marker_phase, run_static_marker_phase};
-use super::movement::{blocker_animations, mark_structure_movement_phase, PusherState};
+use super::markers::run_static_marker_phase;
+use super::movement::{mark_structure_movement_phase, PusherState};
 use super::runtime::{PendingGeneratedMaterials, SignalNetworkCache, SimulationStepStats};
 use super::structure_state::StructureState;
 use super::structures::{
@@ -119,7 +119,6 @@ pub fn simulate_turn(
         log_movement_plan(turn, sim_log, world, "gravity", &movement_plan);
     }
 
-    run_powered_marker_phase(world, &powered_devices);
     sample.marker_before_move_ms = mark_elapsed_ms(&mut mark);
 
     let (device_movement_plan, bare_pusher_animations) =
@@ -140,6 +139,10 @@ pub fn simulate_turn(
         structure_state,
         movement_influence,
     );
+    // 粘头推动只有执行成功才提交伸出/收回，避免推失败却叠头
+    for (pos, animation) in &pusher_animations {
+        pusher_state.set_extended(*pos, animation.to_extension > 0.5);
+    }
     merge_generated_animations(&mut animations, generated_animations);
     let mut pusher_animations = pusher_animations
         .into_iter()
@@ -152,13 +155,9 @@ pub fn simulate_turn(
     for (pos, animation) in pusher_state.sustained_animations() {
         pusher_animations.entry(pos).or_insert(animation);
     }
-    for (pos, animation) in blocker_animations(world, &powered_devices) {
-        pusher_animations.entry(pos).or_insert(animation);
-    }
     sample.movement_execute_ms = mark_elapsed_ms(&mut mark);
 
     run_static_marker_phase(world);
-    run_powered_marker_phase(world, &powered_devices);
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
     let behavior_effects =

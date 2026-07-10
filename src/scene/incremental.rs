@@ -207,6 +207,8 @@ pub fn collect_sim_refresh_positions(
         }
     }
     expand_wire_connectivity(after, &changed, &mut refresh);
+    // 空头伸出/收回只改 PusherState 动画，世界格子不变；必须单独纳入刷新
+    refresh.extend(output.pusher_animations.keys().copied());
     refresh
 }
 

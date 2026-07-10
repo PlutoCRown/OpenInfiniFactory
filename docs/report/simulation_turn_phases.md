@@ -19,14 +19,12 @@
 | 3 | 重力移动标记 | `gravity::mark_gravity_phase(world)` | 重力检查 |
 | 4 | 信号网络刷新 | `signal_cache.refresh(world)` | 信号检查 |
 | 5 | 查询激活网络和受电器 | `powered_components` / `powered_devices` | 信号检查 |
-| 6 | 通电阻拦器标记 | `markers::run_powered_marker_phase(world, &powered_devices)` | 信号影响下的 marker 准备 |
-| 7 | 材料移动标记 | `movement::mark_material_movement_phase(world, &powered_devices)` | 移动标记 |
-| 8 | 统一执行移动 | `execute_structure_moves(world, movement_plan)` | 统一执行移动 |
-| 9 | 重新生成静态 marker | `markers::run_static_marker_phase(world)` | 移动后同步生成方块 |
-| 10 | 重新生成通电 marker | `markers::run_powered_marker_phase(world, &powered_devices)` | 移动后同步生成方块 |
-| 11 | 执行材料行为阶段 | `behaviors::run_material_behavior_phase(world, turn, &powered_devices)` | 执行行为 |
-| 12 | 回合后信号刷新 | `signal_cache.refresh(world)` | 维护缓存 |
-| 13 | 重建动画和渲染实体 | `pair_block_animations` / `rebuild_world_with_timed_animations` | 渲染同步 |
+| 6 | 材料移动标记 | `movement::mark_material_movement_phase(world, &powered_devices)` | 移动标记 |
+| 7 | 统一执行移动 | `execute_structure_moves(world, movement_plan)` | 统一执行移动 |
+| 8 | 重新生成静态 marker | `markers::run_static_marker_phase(world)` | 移动后同步生成方块 |
+| 9 | 执行材料行为阶段 | `behaviors::run_material_behavior_phase(world, turn, &powered_devices)` | 执行行为 |
+| 10 | 回合后信号刷新 | `signal_cache.refresh(world)` | 维护缓存 |
+| 11 | 重建动画和渲染实体 | `pair_block_animations` / `rebuild_world_with_timed_animations` | 渲染同步 |
 
 `run_material_behavior_phase` 内部顺序如下：
 

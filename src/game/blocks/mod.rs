@@ -8,7 +8,6 @@ mod registry;
 pub mod traits;
 
 mod blocker;
-mod blocker_head;
 mod converter;
 mod conveyor;
 mod copper_material;
@@ -216,7 +215,6 @@ pub enum SystemBlock {
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum VirtualBlock {
     WeldPoint,
-    BlockerHead,
     DrillHead,
 }
 
@@ -229,7 +227,6 @@ pub enum BlockShape {
 #[derive(Clone, Copy)]
 pub enum MarkerBehavior {
     WeldPoint { offset: IVec3, facing: Facing },
-    BlockerHead { offset: IVec3, facing: Facing },
     DrillHead { offset: IVec3, facing: Facing },
 }
 
@@ -565,7 +562,9 @@ impl BlockId {
 }
 
 /// 验收结构 ID：Goal 放置相连时分配，供生成器连接模式绑定
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize,
+)]
 pub struct AcceptorId(pub u64);
 
 impl AcceptorId {
@@ -672,7 +671,6 @@ pub enum BlockKind {
     IronMaterial,
     CopperMaterial,
     WeldPoint,
-    BlockerHead,
     DrillHead,
 }
 
@@ -716,7 +714,6 @@ impl BlockKind {
             BlockKind::TeleportEntrance => BlockLayer::System(SystemBlock::TeleportEntrance),
             BlockKind::TeleportExit => BlockLayer::System(SystemBlock::TeleportExit),
             BlockKind::WeldPoint => BlockLayer::Virtual(VirtualBlock::WeldPoint),
-            BlockKind::BlockerHead => BlockLayer::Virtual(VirtualBlock::BlockerHead),
             BlockKind::DrillHead => BlockLayer::Virtual(VirtualBlock::DrillHead),
         }
     }
