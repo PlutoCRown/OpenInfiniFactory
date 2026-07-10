@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::game::blocks::BlockKind;
+use crate::game::blocks::{AcceptorId, BlockKind};
 use crate::game::world::grid::WorldBlocks;
 
 use super::signal_offsets;
@@ -45,6 +45,7 @@ pub struct Structure {
 
 #[derive(Clone, Debug)]
 pub struct AcceptorStructure {
+    pub id: AcceptorId,
     pub positions: HashSet<IVec3>,
     pub count: u32,
 }
@@ -123,22 +124,10 @@ impl StructureState {
     }
 
     fn append_acceptor_structures(&mut self, world: &WorldBlocks) {
-        let mut handled = HashSet::new();
-        let mut starts: Vec<IVec3> = world
-            .system_blocks
-            .iter()
-            .filter_map(|(pos, block)| (block.kind == BlockKind::Goal).then_some(*pos))
-            .collect();
-        starts.sort_by_key(|pos| (pos.x, pos.y, pos.z));
-
-        for start in starts {
-            if handled.contains(&start) {
-                continue;
-            }
-            let positions = acceptor_structure(world, start);
-            handled.extend(positions.iter().copied());
+        for stored in &world.acceptor_structures {
             self.acceptor_structures.push(AcceptorStructure {
-                positions,
+                id: stored.id,
+                positions: stored.positions.iter().copied().collect(),
                 count: 0,
             });
         }
@@ -473,31 +462,6 @@ impl StructureState {
             .get(&pos)
             .and_then(|index| self.structures.get(*index))
     }
-}
-
-pub fn acceptor_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
-    let mut structure = HashSet::new();
-    let mut queue = VecDeque::from([start]);
-    structure.insert(start);
-
-    while let Some(pos) = queue.pop_front() {
-        for offset in signal_offsets() {
-            let neighbor = pos + offset;
-            if structure.contains(&neighbor) {
-                continue;
-            }
-            if world
-                .system_blocks
-                .get(&neighbor)
-                .is_some_and(|block| block.kind == BlockKind::Goal)
-            {
-                structure.insert(neighbor);
-                queue.push_back(neighbor);
-            }
-        }
-    }
-
-    structure
 }
 
 pub fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {

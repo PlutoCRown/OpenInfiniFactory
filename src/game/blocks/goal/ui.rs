@@ -17,7 +17,7 @@ use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::access::UiMainThread;
 use crate::game::ui::components::{
-    default_button_size, localized_text, spawn_panel as spawn_ui_panel, transparent_node,
+    default_button_size, localized_text, spawn_panel as spawn_ui_panel, text, transparent_node,
     PanelOptions,
 };
 use crate::game::ui::core::host::UiHost;
@@ -45,6 +45,9 @@ struct GoalMaterialList;
 #[derive(Component, Clone, Copy)]
 struct GoalMaterialOption(MaterialKind);
 
+#[derive(Component, Clone, Copy)]
+struct GoalAcceptorIdText;
+
 impl UiActionLabel for GoalAction {
     fn label_key(self) -> &'static str {
         match self {
@@ -65,6 +68,9 @@ pub fn spawn_panel(root: &mut ChildSpawnerCommands) {
         PanelOptions::new(430.0, "goal.title").closable(),
         UiPanelBinding(UiPanelId::Goal),
         |panel| {
+            spawn_row(panel, "panel.acceptor_id", |row| {
+                row.spawn((text("-", 18.0, Color::WHITE), GoalAcceptorIdText));
+            });
             spawn_row(panel, "panel.material", |row| {
                 spawn_material_icon_toggle(row, GoalMaterialSlot, GoalAction::ToggleMaterial);
             });
@@ -84,8 +90,12 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
 }
 
 pub fn register(app: &mut App) {
-    app.add_observer(on_click)
-        .add_systems(Update, update_dropdowns.in_set(BlockPanelSystems));
+    app.add_observer(on_click).add_systems(
+        Update,
+        (update_panel, update_dropdowns)
+            .chain()
+            .in_set(BlockPanelSystems),
+    );
 }
 
 inventory::submit! {
@@ -170,6 +180,27 @@ fn on_click(
         ctx.world.set_goal_settings(pos, settings);
         ctx.mark_dirty();
         refresh_world_after_edit(&mut world, pos);
+    }
+}
+
+fn update_panel(
+    _ui_thread: UiMainThread,
+    ui_runtime: Res<UiRuntime>,
+    world: Res<WorldBlocks>,
+    mut id_text: Query<&mut Text, With<GoalAcceptorIdText>>,
+) {
+    let Some(pos) = ui_runtime.active_block_pos() else {
+        return;
+    };
+    if ui_runtime.active_panel() != Some(UiPanelId::Goal) {
+        return;
+    }
+    let label = world
+        .acceptor_id_at(pos)
+        .map(|id| format!("#{}", id.0))
+        .unwrap_or_else(|| "-".to_string());
+    for mut text in &mut id_text {
+        text.0 = label.clone();
     }
 }
 

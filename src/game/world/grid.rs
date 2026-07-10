@@ -2,13 +2,21 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::game::blocks::{BlockData, BlockKind, MaterialKind, StampColor};
+use crate::game::blocks::{AcceptorId, BlockData, BlockKind, MaterialKind, StampColor};
 use crate::game::world::direction::Facing;
 
 pub const REACH: f32 = 12.0;
 pub const FLOOR_RADIUS: i32 = 12;
 const TELEPORT_ENTRANCE_NAMES: &[&str] = &["Alpha In", "Beta In", "Gamma In", "Delta In"];
 const TELEPORT_EXIT_NAMES: &[&str] = &["Alpha Out", "Beta Out", "Gamma Out", "Delta Out"];
+const ACCEPTOR_NEIGHBOR_OFFSETS: [IVec3; 6] = [
+    IVec3::X,
+    IVec3::NEG_X,
+    IVec3::Y,
+    IVec3::NEG_Y,
+    IVec3::Z,
+    IVec3::NEG_Z,
+];
 
 #[derive(Resource, Default, Clone)]
 pub struct WorldBlocks {
@@ -17,9 +25,20 @@ pub struct WorldBlocks {
     pub material_welds: HashSet<MaterialWeld>,
     pub material_face_marks: HashMap<MaterialFace, MaterialFaceMark>,
     pub block_settings: HashMap<IVec3, BlockSettings>,
+    /// 编辑态维护的验收结构（含持久 ID）
+    pub acceptor_structures: Vec<StoredAcceptorStructure>,
     pub topology_revision: u64,
     /// 下一个可分配的方块实例 ID（0 表示未分配）
     pub next_block_id: u64,
+    /// 下一个可分配的验收结构 ID
+    pub next_acceptor_id: u64,
+}
+
+/// 世界中持久保存的验收结构（无验收计数）
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct StoredAcceptorStructure {
+    pub id: AcceptorId,
+    pub positions: Vec<IVec3>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -44,10 +63,39 @@ impl BlockSettings {
     }
 }
 
+/// 生成器触发模式：周期或连接验收结构
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub enum GeneratorMode {
+    Period { period: u64, offset: u64 },
+    Link { acceptor: AcceptorId },
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GeneratorSettings {
-    pub period: u64,
+    pub mode: GeneratorMode,
     pub material: MaterialKind,
+}
+
+impl GeneratorSettings {
+    /// 同参相连判定键（忽略材料种类）
+    pub fn trigger_key(self) -> GeneratorMode {
+        match self.mode {
+            GeneratorMode::Period { period, offset } => GeneratorMode::Period {
+                period: period.max(1),
+                offset: offset % period.max(1),
+            },
+            link => link,
+        }
+    }
+
+    pub fn clamps_offset(mut self) -> Self {
+        if let GeneratorMode::Period { period, offset } = &mut self.mode {
+            let p = (*period).max(1);
+            *period = p;
+            *offset %= p;
+        }
+        self
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -141,7 +189,10 @@ pub enum MaterialFaceMarkSource {
 impl Default for GeneratorSettings {
     fn default() -> Self {
         Self {
-            period: crate::game::blocks::DEFAULT_GENERATOR_PERIOD,
+            mode: GeneratorMode::Period {
+                period: crate::game::blocks::DEFAULT_GENERATOR_PERIOD,
+                offset: 0,
+            },
             material: MaterialKind::Basic,
         }
     }
@@ -195,21 +246,25 @@ impl WorldBlocks {
 
     pub fn insert(&mut self, pos: IVec3, mut block: BlockData) -> Option<BlockData> {
         self.assign_block_id(&mut block);
+        let kind = block.kind;
         let previous = if block.kind.is_system_layer() {
             self.system_blocks.insert(pos, block)
         } else {
             self.blocks.insert(pos, block)
         };
         if !self.block_settings.contains_key(&pos) {
-            if let Some(mut settings) = block.kind.default_settings(pos) {
+            if let Some(mut settings) = kind.default_settings(pos) {
                 if let BlockSettings::Teleport(teleport_settings) = &mut settings {
-                    teleport_settings.name = self.next_teleport_name(block.kind);
+                    teleport_settings.name = self.next_teleport_name(kind);
                 }
                 self.block_settings.insert(pos, settings);
             }
         }
         if previous != Some(block) {
             self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+        if kind == BlockKind::Goal {
+            self.resync_acceptor_structures();
         }
         previous
     }
@@ -227,6 +282,9 @@ impl WorldBlocks {
     pub fn remove_system(&mut self, pos: &IVec3) -> Option<BlockData> {
         let removed = self.system_blocks.remove(pos);
         if removed.is_some() {
+            let was_goal = removed
+                .as_ref()
+                .is_some_and(|block| block.kind == BlockKind::Goal);
             self.block_settings.remove(pos);
             for settings in self.block_settings.values_mut() {
                 if let BlockSettings::Teleport(settings) = settings {
@@ -236,17 +294,25 @@ impl WorldBlocks {
                 }
             }
             self.topology_revision = self.topology_revision.wrapping_add(1);
+            if was_goal {
+                self.resync_acceptor_structures();
+            }
         }
         removed
     }
 
     pub fn clear(&mut self) {
-        if !self.blocks.is_empty() || !self.system_blocks.is_empty() {
+        if !self.blocks.is_empty()
+            || !self.system_blocks.is_empty()
+            || !self.acceptor_structures.is_empty()
+        {
             self.blocks.clear();
             self.system_blocks.clear();
             self.material_welds.clear();
             self.material_face_marks.clear();
             self.block_settings.clear();
+            self.acceptor_structures.clear();
+            self.next_acceptor_id = 0;
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -288,7 +354,145 @@ impl WorldBlocks {
     }
 
     pub fn set_generator_settings(&mut self, pos: IVec3, settings: GeneratorSettings) {
-        self.set_block_settings(pos, BlockSettings::Generator(settings));
+        self.set_block_settings(pos, BlockSettings::Generator(settings.clamps_offset()));
+    }
+
+    /// 查询 Goal 格所属验收结构 ID
+    pub fn acceptor_id_at(&self, pos: IVec3) -> Option<AcceptorId> {
+        self.acceptor_structures
+            .iter()
+            .find(|structure| structure.positions.iter().any(|p| *p == pos))
+            .map(|structure| structure.id)
+    }
+
+    /// 按当前 Goal 连通重算验收结构，尽量保留代表格所在块的旧 ID
+    pub fn resync_acceptor_structures(&mut self) {
+        let old = std::mem::take(&mut self.acceptor_structures);
+        let old_reps: Vec<(AcceptorId, IVec3)> = old
+            .iter()
+            .filter_map(|structure| {
+                let mut positions = structure.positions.clone();
+                positions.sort_by_key(|pos| (pos.x, pos.y, pos.z));
+                positions
+                    .into_iter()
+                    .find(|pos| {
+                        self.system_blocks
+                            .get(pos)
+                            .is_some_and(|block| block.kind == BlockKind::Goal)
+                    })
+                    .map(|rep| (structure.id, rep))
+            })
+            .collect();
+
+        let mut handled = HashSet::new();
+        let mut starts: Vec<IVec3> = self
+            .system_blocks
+            .iter()
+            .filter_map(|(pos, block)| (block.kind == BlockKind::Goal).then_some(*pos))
+            .collect();
+        starts.sort_by_key(|pos| (pos.x, pos.y, pos.z));
+
+        let mut next = Vec::new();
+        let mut alive = HashSet::new();
+        for start in starts {
+            if handled.contains(&start) {
+                continue;
+            }
+            let positions = self.connected_goal_positions(start);
+            handled.extend(positions.iter().copied());
+
+            let owners: Vec<AcceptorId> = old_reps
+                .iter()
+                .filter(|(_, rep)| positions.contains(rep))
+                .map(|(id, _)| *id)
+                .collect();
+            let id = if let Some(id) = owners.into_iter().min() {
+                id
+            } else {
+                self.next_acceptor_id = self.next_acceptor_id.max(1);
+                let id = AcceptorId(self.next_acceptor_id);
+                self.next_acceptor_id += 1;
+                id
+            };
+            alive.insert(id);
+            let mut sorted = positions;
+            sorted.sort_by_key(|pos| (pos.x, pos.y, pos.z));
+            next.push(StoredAcceptorStructure {
+                id,
+                positions: sorted,
+            });
+        }
+
+        self.acceptor_structures = next;
+        self.invalidate_stale_generator_links(&alive);
+    }
+
+    /// 加载存档后恢复验收结构；无数据时按 Goal 重算
+    pub fn restore_acceptor_structures(
+        &mut self,
+        next_acceptor_id: u64,
+        structures: Vec<StoredAcceptorStructure>,
+    ) {
+        if structures.is_empty() && next_acceptor_id == 0 {
+            self.resync_acceptor_structures();
+            return;
+        }
+        self.next_acceptor_id = next_acceptor_id.max(
+            structures
+                .iter()
+                .map(|structure| structure.id.0.saturating_add(1))
+                .max()
+                .unwrap_or(1),
+        );
+        self.acceptor_structures = structures;
+        // 与当前 Goal 对齐，保留已恢复的 ID
+        self.resync_acceptor_structures();
+    }
+
+    fn connected_goal_positions(&self, start: IVec3) -> Vec<IVec3> {
+        let mut structure = Vec::new();
+        let mut queue = std::collections::VecDeque::from([start]);
+        let mut seen = HashSet::from([start]);
+        while let Some(pos) = queue.pop_front() {
+            structure.push(pos);
+            for offset in ACCEPTOR_NEIGHBOR_OFFSETS {
+                let neighbor = pos + offset;
+                if seen.contains(&neighbor) {
+                    continue;
+                }
+                if self
+                    .system_blocks
+                    .get(&neighbor)
+                    .is_some_and(|block| block.kind == BlockKind::Goal)
+                {
+                    seen.insert(neighbor);
+                    queue.push_back(neighbor);
+                }
+            }
+        }
+        structure
+    }
+
+    fn invalidate_stale_generator_links(&mut self, alive: &HashSet<AcceptorId>) {
+        let stale: Vec<IVec3> = self
+            .block_settings
+            .iter()
+            .filter_map(|(pos, settings)| match settings {
+                BlockSettings::Generator(GeneratorSettings {
+                    mode: GeneratorMode::Link { acceptor },
+                    ..
+                }) if !acceptor.is_none() && !alive.contains(acceptor) => Some(*pos),
+                _ => None,
+            })
+            .collect();
+        for pos in stale {
+            let mut settings = self.generator_settings(pos);
+            settings.mode = GeneratorMode::Link {
+                acceptor: AcceptorId::NONE,
+            };
+            self.block_settings
+                .insert(pos, BlockSettings::Generator(settings));
+        }
     }
 
     pub fn goal_settings(&self, pos: IVec3) -> GoalSettings {
@@ -879,6 +1083,44 @@ mod tests {
         world.insert(POS, BlockData::new(BlockKind::Platform, Facing::North));
 
         assert!(!world.can_place_block_kind_at(POS, BlockKind::Goal));
+    }
+
+    #[test]
+    fn adjacent_goals_share_acceptor_id() {
+        let mut world = WorldBlocks::default();
+        world.insert(IVec3::ZERO, BlockData::new(BlockKind::Goal, Facing::North));
+        world.insert(IVec3::X, BlockData::new(BlockKind::Goal, Facing::North));
+        world.insert(
+            IVec3::new(0, 2, 0),
+            BlockData::new(BlockKind::Goal, Facing::North),
+        );
+
+        assert_eq!(world.acceptor_structures.len(), 2);
+        let id_a = world.acceptor_id_at(IVec3::ZERO).unwrap();
+        let id_b = world.acceptor_id_at(IVec3::X).unwrap();
+        let id_c = world.acceptor_id_at(IVec3::new(0, 2, 0)).unwrap();
+        assert_eq!(id_a, id_b);
+        assert_ne!(id_a, id_c);
+        assert!(!id_a.is_none());
+    }
+
+    #[test]
+    fn removing_goal_splits_acceptor_and_keeps_representative_id() {
+        let mut world = WorldBlocks::default();
+        world.insert(IVec3::ZERO, BlockData::new(BlockKind::Goal, Facing::North));
+        world.insert(IVec3::X, BlockData::new(BlockKind::Goal, Facing::North));
+        world.insert(
+            IVec3::new(2, 0, 0),
+            BlockData::new(BlockKind::Goal, Facing::North),
+        );
+        let original = world.acceptor_id_at(IVec3::ZERO).unwrap();
+        assert_eq!(world.acceptor_structures.len(), 1);
+
+        world.remove_system(&IVec3::X);
+        assert_eq!(world.acceptor_structures.len(), 2);
+        assert_eq!(world.acceptor_id_at(IVec3::ZERO), Some(original));
+        let other = world.acceptor_id_at(IVec3::new(2, 0, 0)).unwrap();
+        assert_ne!(other, original);
     }
 
     #[test]

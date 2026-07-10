@@ -258,6 +258,7 @@ pub fn tick_simulation(
             &deps.world,
             &mut deps.pending_generated,
             simulation.turn + 1,
+            &HashSet::new(),
         );
         refresh_pending_generated_previews(
             &mut commands,
@@ -307,6 +308,7 @@ pub fn tick_simulation(
             &deps.world,
             &mut deps.pending_generated,
             simulation.turn + 1,
+            &HashSet::new(),
         );
         refresh_pending_generated_previews(
             &mut commands,
@@ -351,6 +353,7 @@ pub fn tick_simulation(
         &deps.world,
         &mut deps.pending_generated,
         simulation.turn + 1,
+        &HashSet::new(),
     );
     refresh_pending_generated_previews(
         &mut commands,

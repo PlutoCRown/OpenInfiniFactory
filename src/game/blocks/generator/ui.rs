@@ -12,11 +12,10 @@ use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::{BlockEditContext, OpenBlockPanelDropdown};
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::blocks::MaterialKind;
+use crate::game::blocks::{AcceptorId, MaterialKind};
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
-use crate::game::ui::access::UiMainThread;
-use crate::game::ui::features::block_panels::BlockPanelSystems;
+use crate::game::ui::access::{i18n, UiMainThread};
 use crate::game::ui::components::{
     default_button_size, localized_text, spawn_panel as spawn_ui_panel, text, transparent_node,
     PanelOptions,
@@ -24,22 +23,46 @@ use crate::game::ui::components::{
 use crate::game::ui::core::host::UiHost;
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
+use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{UiActionLabel, UiPanelBinding};
-use crate::game::world::grid::WorldBlocks;
+use crate::game::world::grid::{GeneratorMode, WorldBlocks};
 use crate::game::world::rendering::BlockIconAssets;
 
 const MATERIAL_SLOT: u8 = 0;
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GeneratorAction {
+    ToggleMode,
     PeriodDown,
     PeriodUp,
+    OffsetDown,
+    OffsetUp,
+    AcceptorPrev,
+    AcceptorNext,
     ToggleMaterial,
     SetMaterial(MaterialKind),
 }
 
 #[derive(Component, Clone, Copy)]
+struct GeneratorModeText;
+
+#[derive(Component, Clone, Copy)]
 struct GeneratorPeriodText;
+
+#[derive(Component, Clone, Copy)]
+struct GeneratorOffsetText;
+
+#[derive(Component, Clone, Copy)]
+struct GeneratorAcceptorText;
+
+#[derive(Component, Clone, Copy)]
+struct GeneratorPeriodRow;
+
+#[derive(Component, Clone, Copy)]
+struct GeneratorOffsetRow;
+
+#[derive(Component, Clone, Copy)]
+struct GeneratorAcceptorRow;
 
 #[derive(Component, Clone, Copy)]
 struct GeneratorMaterialSlot;
@@ -53,8 +76,9 @@ struct GeneratorMaterialOption(MaterialKind);
 impl UiActionLabel for GeneratorAction {
     fn label_key(self) -> &'static str {
         match self {
-            Self::PeriodDown => "button.period_down",
-            Self::PeriodUp => "button.period_up",
+            Self::ToggleMode => "button.generator_mode",
+            Self::PeriodDown | Self::OffsetDown | Self::AcceptorPrev => "button.period_down",
+            Self::PeriodUp | Self::OffsetUp | Self::AcceptorNext => "button.period_up",
             Self::ToggleMaterial | Self::SetMaterial(_) => "button.material_next",
         }
     }
@@ -72,13 +96,24 @@ pub fn spawn_panel(root: &mut ChildSpawnerCommands) {
         PanelOptions::new(430.0, "generator.title").closable(),
         UiPanelBinding(UiPanelId::Generator),
         |panel| {
-            spawn_row(panel, "panel.period", |row| {
+            spawn_row(panel, "panel.mode", |row| {
+                spawn_labeled_panel_button(row, GeneratorAction::ToggleMode);
+                row.spawn((text("", 18.0, Color::WHITE), GeneratorModeText));
+            });
+            spawn_tagged_row(panel, "panel.period", GeneratorPeriodRow, |row| {
                 spawn_labeled_panel_button(row, GeneratorAction::PeriodDown);
-                row.spawn((
-                    text("", 18.0, Color::WHITE),
-                    GeneratorPeriodText,
-                ));
+                row.spawn((text("", 18.0, Color::WHITE), GeneratorPeriodText));
                 spawn_labeled_panel_button(row, GeneratorAction::PeriodUp);
+            });
+            spawn_tagged_row(panel, "panel.offset", GeneratorOffsetRow, |row| {
+                spawn_labeled_panel_button(row, GeneratorAction::OffsetDown);
+                row.spawn((text("", 18.0, Color::WHITE), GeneratorOffsetText));
+                spawn_labeled_panel_button(row, GeneratorAction::OffsetUp);
+            });
+            spawn_tagged_row(panel, "panel.acceptor", GeneratorAcceptorRow, |row| {
+                spawn_labeled_panel_button(row, GeneratorAction::AcceptorPrev);
+                row.spawn((text("", 18.0, Color::WHITE), GeneratorAcceptorText));
+                spawn_labeled_panel_button(row, GeneratorAction::AcceptorNext);
             });
             spawn_row(panel, "panel.material", |row| {
                 spawn_material_icon_toggle(
@@ -95,12 +130,9 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
     spawn_material_icon_list(
         root,
         GeneratorMaterialList,
-        MaterialKind::ALL.into_iter().map(|material| {
-            (
-                material,
-                GeneratorAction::SetMaterial(material),
-            )
-        }),
+        MaterialKind::ALL
+            .into_iter()
+            .map(|material| (material, GeneratorAction::SetMaterial(material))),
         GeneratorMaterialOption,
     );
 }
@@ -137,6 +169,36 @@ fn spawn_row(
             column_gap: Val::Px(10.0),
             ..default()
         }))
+        .with_children(|row| {
+            row.spawn((
+                localized_text(label_key, 16.0, Color::srgb(0.86, 0.88, 0.86)),
+                Node {
+                    width: Val::Px(110.0),
+                    ..default()
+                },
+            ));
+            controls(row);
+        });
+}
+
+fn spawn_tagged_row<T: Component>(
+    panel: &mut ChildSpawnerCommands,
+    label_key: &'static str,
+    tag: T,
+    controls: impl FnOnce(&mut ChildSpawnerCommands),
+) {
+    panel
+        .spawn((
+            transparent_node(Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(default_button_size(40.0)),
+                display: Display::Flex,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(10.0),
+                ..default()
+            }),
+            tag,
+        ))
         .with_children(|row| {
             row.spawn((
                 localized_text(label_key, 16.0, Color::srgb(0.86, 0.88, 0.86)),
@@ -189,14 +251,64 @@ fn dispatch_action(
 ) {
     let mut ctx = BlockEditContext::new(pos, &mut world.world, solution_state, open_dropdown);
     let mut settings = ctx.world.generator_settings(pos);
+    let acceptor_ids: Vec<AcceptorId> = ctx
+        .world
+        .acceptor_structures
+        .iter()
+        .map(|structure| structure.id)
+        .collect();
 
     let changed = match action {
+        GeneratorAction::ToggleMode => {
+            settings.mode = match settings.mode {
+                GeneratorMode::Period { .. } => GeneratorMode::Link {
+                    acceptor: acceptor_ids.first().copied().unwrap_or(AcceptorId::NONE),
+                },
+                GeneratorMode::Link { .. } => GeneratorMode::Period {
+                    period: crate::game::blocks::DEFAULT_GENERATOR_PERIOD,
+                    offset: 0,
+                },
+            };
+            true
+        }
         GeneratorAction::PeriodDown => {
-            settings.period = settings.period.saturating_sub(1).max(1);
+            if let GeneratorMode::Period { period, offset } = &mut settings.mode {
+                *period = period.saturating_sub(1).max(1);
+                *offset %= *period;
+            }
             true
         }
         GeneratorAction::PeriodUp => {
-            settings.period = (settings.period + 1).min(120);
+            if let GeneratorMode::Period { period, offset } = &mut settings.mode {
+                *period = (*period + 1).min(120);
+                *offset %= *period;
+            }
+            true
+        }
+        GeneratorAction::OffsetDown => {
+            if let GeneratorMode::Period { period, offset } = &mut settings.mode {
+                let period = (*period).max(1);
+                *offset = offset.saturating_sub(1) % period;
+            }
+            true
+        }
+        GeneratorAction::OffsetUp => {
+            if let GeneratorMode::Period { period, offset } = &mut settings.mode {
+                let period = (*period).max(1);
+                *offset = (*offset + 1) % period;
+            }
+            true
+        }
+        GeneratorAction::AcceptorPrev => {
+            if let GeneratorMode::Link { acceptor } = &mut settings.mode {
+                *acceptor = cycle_acceptor(*acceptor, &acceptor_ids, false);
+            }
+            true
+        }
+        GeneratorAction::AcceptorNext => {
+            if let GeneratorMode::Link { acceptor } = &mut settings.mode {
+                *acceptor = cycle_acceptor(*acceptor, &acceptor_ids, true);
+            }
             true
         }
         GeneratorAction::ToggleMaterial => {
@@ -217,11 +329,53 @@ fn dispatch_action(
     }
 }
 
+fn cycle_acceptor(current: AcceptorId, ids: &[AcceptorId], forward: bool) -> AcceptorId {
+    if ids.is_empty() {
+        return AcceptorId::NONE;
+    }
+    let Some(index) = ids.iter().position(|id| *id == current) else {
+        return ids[0];
+    };
+    if forward {
+        ids[(index + 1) % ids.len()]
+    } else {
+        ids[(index + ids.len() - 1) % ids.len()]
+    }
+}
+
 fn update_panel(
     _ui_thread: UiMainThread,
     ui_runtime: Res<UiRuntime>,
     world: Res<WorldBlocks>,
-    mut period_text: Query<&mut Text, With<GeneratorPeriodText>>,
+    mut mode_text: Query<&mut Text, With<GeneratorModeText>>,
+    mut period_text: Query<&mut Text, (With<GeneratorPeriodText>, Without<GeneratorModeText>)>,
+    mut offset_text: Query<
+        &mut Text,
+        (
+            With<GeneratorOffsetText>,
+            Without<GeneratorModeText>,
+            Without<GeneratorPeriodText>,
+        ),
+    >,
+    mut acceptor_text: Query<
+        &mut Text,
+        (
+            With<GeneratorAcceptorText>,
+            Without<GeneratorModeText>,
+            Without<GeneratorPeriodText>,
+            Without<GeneratorOffsetText>,
+        ),
+    >,
+    mut period_rows: Query<&mut Node, With<GeneratorPeriodRow>>,
+    mut offset_rows: Query<&mut Node, (With<GeneratorOffsetRow>, Without<GeneratorPeriodRow>)>,
+    mut acceptor_rows: Query<
+        &mut Node,
+        (
+            With<GeneratorAcceptorRow>,
+            Without<GeneratorPeriodRow>,
+            Without<GeneratorOffsetRow>,
+        ),
+    >,
 ) {
     let Some(pos) = ui_runtime.active_block_pos() else {
         return;
@@ -230,8 +384,53 @@ fn update_panel(
         return;
     }
     let settings = world.generator_settings(pos);
-    for mut text in &mut period_text {
-        text.0 = settings.period.to_string();
+    let is_period = matches!(settings.mode, GeneratorMode::Period { .. });
+    for mut node in &mut period_rows {
+        node.display = if is_period {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    for mut node in &mut offset_rows {
+        node.display = if is_period {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    for mut node in &mut acceptor_rows {
+        node.display = if is_period {
+            Display::None
+        } else {
+            Display::Flex
+        };
+    }
+
+    match settings.mode {
+        GeneratorMode::Period { period, offset } => {
+            for mut text in &mut mode_text {
+                text.0 = i18n.t("generator.mode_period");
+            }
+            for mut text in &mut period_text {
+                text.0 = period.to_string();
+            }
+            for mut text in &mut offset_text {
+                text.0 = offset.to_string();
+            }
+        }
+        GeneratorMode::Link { acceptor } => {
+            for mut text in &mut mode_text {
+                text.0 = i18n.t("generator.mode_link");
+            }
+            for mut text in &mut acceptor_text {
+                text.0 = if acceptor.is_none() {
+                    "-".to_string()
+                } else {
+                    format!("#{}", acceptor.0)
+                };
+            }
+        }
     }
 }
 
@@ -245,19 +444,8 @@ fn update_dropdowns(
     mut material_slots: Query<(&GeneratorMaterialSlot, &Children)>,
     mut material_options: Query<(&GeneratorMaterialOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
-    mut lists: Query<(
-        &GeneratorMaterialList,
-        &mut Node,
-        &ComputedNode,
-    )>,
-    triggers: Query<
-        (
-            &GeneratorAction,
-            &ComputedNode,
-            &UiGlobalTransform,
-        ),
-        With<Button>,
-    >,
+    mut lists: Query<(&GeneratorMaterialList, &mut Node, &ComputedNode)>,
+    triggers: Query<(&GeneratorAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     let active_pos = ui_runtime.active_block_pos();
     let panel = UiPanelId::Generator;
@@ -269,12 +457,7 @@ fn update_dropdowns(
             update_material_icon(children, material, block_icons, &mut material_icons);
         }
         for (option, children) in &mut material_options {
-            update_material_icon(
-                children,
-                Some(option.0),
-                block_icons,
-                &mut material_icons,
-            );
+            update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
         }
     }
 
@@ -295,12 +478,9 @@ fn update_dropdowns(
                 .then_some((node, transform))
         });
         if let Some((trigger_node, transform)) = trigger {
-            if let Some((left, top)) = position_dropdown_from_trigger(
-                trigger_node,
-                transform,
-                list_node,
-                viewport,
-            ) {
+            if let Some((left, top)) =
+                position_dropdown_from_trigger(trigger_node, transform, list_node, viewport)
+            {
                 style.left = Val::Px(left);
                 style.top = Val::Px(top);
             }

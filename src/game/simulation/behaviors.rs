@@ -2,11 +2,12 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 use crate::game::blocks::{
-    BlockData, BlockKind, MaterialDestroyer, MaterialLabeler, MaterialSource, SignalBehavior,
+    AcceptorId, BlockData, BlockKind, MaterialDestroyer, MaterialLabeler, SignalBehavior,
 };
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{
-    ConverterMode, MaterialFace, MaterialFaceMark, MaterialFaceMarkSource, WorldBlocks,
+    ConverterMode, GeneratorMode, MaterialFace, MaterialFaceMark, MaterialFaceMarkSource,
+    WorldBlocks,
 };
 
 use super::mirror;
@@ -35,6 +36,7 @@ pub struct LaserBeam {
 pub(super) struct MaterialBehaviorEffects {
     pub sparks: Vec<IVec3>,
     pub laser_beams: Vec<LaserBeam>,
+    pub accepted_acceptors: HashSet<AcceptorId>,
 }
 
 pub(super) fn run_material_behavior_phase(
@@ -47,8 +49,13 @@ pub(super) fn run_material_behavior_phase(
     mark_material_teleport_phase(world, pending_destroyed, ready_turn);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
-    run_material_acceptance_phase(world, structure_state, pending_destroyed, ready_turn);
-    effects
+    let accepted_acceptors =
+        run_material_acceptance_phase(world, structure_state, pending_destroyed, ready_turn);
+    MaterialBehaviorEffects {
+        sparks: effects.sparks,
+        laser_beams: effects.laser_beams,
+        accepted_acceptors,
+    }
 }
 
 // 通电激光先发射：摧毁材料，并记录打中工作面的传感器（供本回合二次供电）
@@ -91,6 +98,7 @@ pub(super) fn run_laser_phase(
         MaterialBehaviorEffects {
             sparks,
             laser_beams,
+            accepted_acceptors: HashSet::new(),
         },
         hit_detectors,
     )
@@ -126,44 +134,48 @@ pub(super) fn material_source_generation(
     world: &WorldBlocks,
     turn: u64,
     blocked_generation: &HashSet<IVec3>,
+    accepted_acceptors: &HashSet<AcceptorId>,
 ) -> Vec<GeneratedMaterial> {
     let mut generated = Vec::new();
     if turn == 0 {
         return generated;
     }
 
-    let sources: Vec<(IVec3, MaterialSource)> = world
+    let sources: Vec<IVec3> = world
         .system_blocks
         .iter()
         .filter_map(|(pos, block)| {
             block
                 .kind
                 .material_source(block.facing)
-                .map(|source| (*pos, source))
+                .map(|_| *pos)
         })
         .collect();
 
-    for (pos, source) in sources {
-        match source {
-            MaterialSource::Generator => {
-                let settings = world.generator_settings(pos);
-                if turn % settings.period.max(1) != 0 {
-                    continue;
-                }
-
-                let spawn_pos = pos;
-                if world.can_place_platform_at(spawn_pos)
-                    && !blocked_generation.contains(&spawn_pos)
-                {
-                    let Some(kind) = BlockKind::material_block_kind(settings.material) else {
-                        continue;
-                    };
-                    generated.push(GeneratedMaterial {
-                        pos: spawn_pos,
-                        block: BlockData::new(kind, Facing::North),
-                    });
-                }
+    for pos in sources {
+        let settings = world.generator_settings(pos);
+        let should_spawn = match settings.mode {
+            GeneratorMode::Period { period, offset } => {
+                let period = period.max(1);
+                turn % period == offset % period
             }
+            GeneratorMode::Link { acceptor } => {
+                !acceptor.is_none() && accepted_acceptors.contains(&acceptor)
+            }
+        };
+        if !should_spawn {
+            continue;
+        }
+
+        let spawn_pos = pos;
+        if world.can_place_platform_at(spawn_pos) && !blocked_generation.contains(&spawn_pos) {
+            let Some(kind) = BlockKind::material_block_kind(settings.material) else {
+                continue;
+            };
+            generated.push(GeneratedMaterial {
+                pos: spawn_pos,
+                block: BlockData::new(kind, Facing::North),
+            });
         }
     }
     generated
@@ -430,6 +442,7 @@ fn run_material_destroy_phase(
     MaterialBehaviorEffects {
         sparks,
         laser_beams: Vec::new(),
+        accepted_acceptors: HashSet::new(),
     }
 }
 
@@ -552,12 +565,14 @@ fn run_material_acceptance_phase(
     structure_state: &mut StructureState,
     pending_destroyed: &mut PendingGeneratedMaterials,
     ready_turn: u64,
-) {
+) -> HashSet<AcceptorId> {
+    let mut accepted = HashSet::new();
     let acceptor_count = structure_state.acceptor_structures().len();
     for index in 0..acceptor_count {
         let Some(acceptor) = structure_state.acceptor_structures().get(index) else {
             continue;
         };
+        let acceptor_id = acceptor.id;
         let acceptor_positions = &acceptor.positions;
         let mut matched_material = HashSet::new();
         let mut sample_material_pos = None;
@@ -592,7 +607,11 @@ fn run_material_acceptance_phase(
             pending_destroyed.mark_acceptance_spark(*pos, ready_turn);
         }
         structure_state.increment_acceptor_count(index);
+        if !acceptor_id.is_none() {
+            accepted.insert(acceptor_id);
+        }
     }
+    accepted
 }
 
 #[cfg(test)]
@@ -910,5 +929,70 @@ mod tests {
         assert_eq!(pending.pending_destroy_turn(IVec3::ZERO), Some(2));
         assert_eq!(pending.pending_destroy_turn(IVec3::X), Some(2));
         assert_eq!(state.acceptor_structures()[0].count, 1);
+    }
+
+    #[test]
+    fn period_offset_triggers_on_matching_turns() {
+        let mut world = WorldBlocks::default();
+        let pos = IVec3::new(1, 1, 0);
+        world.insert(pos, BlockData::new(BlockKind::Generator, Facing::North));
+        world.set_generator_settings(
+            pos,
+            crate::game::world::grid::GeneratorSettings {
+                mode: GeneratorMode::Period {
+                    period: 3,
+                    offset: 1,
+                },
+                material: MaterialKind::Basic,
+            },
+        );
+        let blocked = HashSet::new();
+        let accepted = HashSet::new();
+        assert_eq!(
+            material_source_generation(&world, 1, &blocked, &accepted).len(),
+            1
+        );
+        assert!(material_source_generation(&world, 2, &blocked, &accepted).is_empty());
+        assert!(material_source_generation(&world, 3, &blocked, &accepted).is_empty());
+        assert_eq!(
+            material_source_generation(&world, 4, &blocked, &accepted).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn link_mode_triggers_only_for_accepted_acceptor() {
+        let mut world = WorldBlocks::default();
+        world.insert(IVec3::ZERO, BlockData::new(BlockKind::Goal, Facing::North));
+        let acceptor = world.acceptor_id_at(IVec3::ZERO).unwrap();
+        let gen = IVec3::new(2, 1, 0);
+        world.insert(gen, BlockData::new(BlockKind::Generator, Facing::North));
+        world.set_generator_settings(
+            gen,
+            crate::game::world::grid::GeneratorSettings {
+                mode: GeneratorMode::Link { acceptor },
+                material: MaterialKind::Iron,
+            },
+        );
+        let blocked = HashSet::new();
+        let none_accepted = HashSet::new();
+        assert!(material_source_generation(&world, 5, &blocked, &none_accepted).is_empty());
+        let accepted = HashSet::from([acceptor]);
+        let generated = material_source_generation(&world, 5, &blocked, &accepted);
+        assert_eq!(generated.len(), 1);
+        assert_eq!(generated[0].pos, gen);
+    }
+
+    #[test]
+    fn acceptance_returns_acceptor_id() {
+        let mut world = WorldBlocks::default();
+        place_goal(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        place_material(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        let expected = world.acceptor_id_at(IVec3::ZERO).unwrap();
+        let mut state = acceptor_state(&world);
+        let mut pending = PendingGeneratedMaterials::default();
+
+        let accepted = run_material_acceptance_phase(&mut world, &mut state, &mut pending, 2);
+        assert!(accepted.contains(&expected));
     }
 }

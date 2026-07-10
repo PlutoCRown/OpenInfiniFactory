@@ -564,6 +564,18 @@ impl BlockId {
     }
 }
 
+/// 验收结构 ID：Goal 放置相连时分配，供生成器连接模式绑定
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+pub struct AcceptorId(pub u64);
+
+impl AcceptorId {
+    pub const NONE: Self = Self(0);
+
+    pub const fn is_none(self) -> bool {
+        self.0 == 0
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BlockData {
     pub kind: BlockKind,

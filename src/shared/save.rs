@@ -3,7 +3,7 @@ use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 
 use crate::game::blocks::{BlockData, PersistentLayer};
-use crate::game::world::grid::{BlockSettings, WorldBlocks};
+use crate::game::world::grid::{BlockSettings, StoredAcceptorStructure, WorldBlocks};
 use crate::game::{
     state::BuilderMode,
     ui::{HotbarItems, InventoryItems},
@@ -86,6 +86,10 @@ struct SaveFile {
     #[serde(default)]
     block_settings: Vec<SavedBlockSettings>,
     #[serde(default)]
+    next_acceptor_id: u64,
+    #[serde(default)]
+    acceptor_structures: Vec<StoredAcceptorStructure>,
+    #[serde(default)]
     hotbar: Option<HotbarItems>,
 }
 
@@ -102,6 +106,10 @@ struct WorldLayer {
     system_blocks: Vec<SavedBlock>,
     #[serde(default)]
     block_settings: Vec<SavedBlockSettings>,
+    #[serde(default)]
+    next_acceptor_id: u64,
+    #[serde(default)]
+    acceptor_structures: Vec<StoredAcceptorStructure>,
     #[serde(default)]
     hotbar: Option<HotbarItems>,
 }
@@ -247,6 +255,8 @@ impl SaveFile {
             blocks: puzzle.blocks,
             system_blocks: puzzle.system_blocks,
             block_settings: puzzle.block_settings,
+            next_acceptor_id: puzzle.next_acceptor_id,
+            acceptor_structures: puzzle.acceptor_structures,
             hotbar: puzzle.hotbar,
         }
     }
@@ -263,6 +273,8 @@ impl SaveFile {
             blocks: Vec::new(),
             system_blocks: Vec::new(),
             block_settings: Vec::new(),
+            next_acceptor_id: 0,
+            acceptor_structures: Vec::new(),
             hotbar: Some(inventory.hotbar),
         }
     }
@@ -289,6 +301,8 @@ impl SaveFile {
                     blocks: self.blocks,
                     system_blocks: self.system_blocks,
                     block_settings: self.block_settings,
+                    next_acceptor_id: self.next_acceptor_id,
+                    acceptor_structures: self.acceptor_structures,
                     hotbar: self.hotbar,
                 };
                 let hotbar = puzzle
@@ -319,6 +333,8 @@ fn load_puzzle_world(puzzle_id: &str) -> Option<WorldBlocks> {
             blocks: save.blocks,
             system_blocks: save.system_blocks,
             block_settings: save.block_settings,
+            next_acceptor_id: save.next_acceptor_id,
+            acceptor_structures: save.acceptor_structures,
             hotbar: save.hotbar,
         },
     );
@@ -383,6 +399,8 @@ fn capture_puzzle_layer(world: &WorldBlocks, inventory: &InventoryItems) -> Worl
                     })
             })
             .collect(),
+        next_acceptor_id: world.next_acceptor_id,
+        acceptor_structures: world.acceptor_structures.clone(),
         hotbar: Some(inventory.hotbar),
     }
 }
@@ -408,6 +426,7 @@ fn apply_layer(world: &mut WorldBlocks, layer: WorldLayer) {
     for saved in layer.block_settings {
         world.set_block_settings(saved.pos(), saved.settings);
     }
+    world.restore_acceptor_structures(layer.next_acceptor_id, layer.acceptor_structures);
 }
 
 fn apply_factory_blocks(world: &mut WorldBlocks, factory_blocks: Vec<SavedBlock>) {
@@ -514,7 +533,8 @@ mod tests {
     use super::*;
     use crate::game::blocks::{BlockData, BlockKind, Facing, MaterialKind, StampColor};
     use crate::game::world::grid::{
-        ConverterMode, ConverterSettings, GeneratorSettings, LabelerSettings, TeleportSettings,
+        ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, LabelerSettings,
+        TeleportSettings,
     };
 
     #[test]
@@ -545,7 +565,10 @@ mod tests {
         world.set_generator_settings(
             generator,
             GeneratorSettings {
-                period: 9,
+                mode: GeneratorMode::Period {
+                    period: 9,
+                    offset: 0,
+                },
                 material: MaterialKind::Copper,
             },
         );
@@ -601,7 +624,10 @@ mod tests {
         assert_eq!(
             round_trip.generator_settings(generator),
             GeneratorSettings {
-                period: 9,
+                mode: GeneratorMode::Period {
+                    period: 9,
+                    offset: 0,
+                },
                 material: MaterialKind::Copper,
             }
         );

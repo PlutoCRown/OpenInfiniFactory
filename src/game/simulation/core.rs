@@ -165,7 +165,12 @@ pub fn simulate_turn(
         run_material_behavior_phase(world, structure_state, pending_generated, turn + 1);
     structure_state.refresh_material_structures(world);
 
-    prepare_upcoming_generation(world, pending_generated, turn + 1);
+    prepare_upcoming_generation(
+        world,
+        pending_generated,
+        turn + 1,
+        &behavior_effects.accepted_acceptors,
+    );
     sample.behavior_ms = mark_elapsed_ms(&mut mark);
 
     signal_cache.refresh(world);
@@ -200,9 +205,11 @@ pub fn prepare_upcoming_generation(
     world: &WorldBlocks,
     pending_generated: &mut PendingGeneratedMaterials,
     ready_turn: u64,
+    accepted_acceptors: &HashSet<crate::game::blocks::AcceptorId>,
 ) {
     let blocked_generation: HashSet<IVec3> = pending_generated.pending_keys().collect();
-    let generated = material_source_generation(world, ready_turn, &blocked_generation);
+    let generated =
+        material_source_generation(world, ready_turn, &blocked_generation, accepted_acceptors);
     for generated in generated {
         pending_generated.insert_pending(generated.pos, generated.block, ready_turn);
     }
@@ -215,6 +222,7 @@ fn place_ready_generated_materials(
 ) -> HashMap<IVec3, BlockAnimation> {
     let ready = pending_generated.ready_pending_positions(turn);
     let mut animations = HashMap::new();
+    let mut placed = Vec::new();
     for pos in ready {
         let Some(block) = pending_generated.take_pending_block(pos) else {
             continue;
@@ -235,9 +243,42 @@ fn place_ready_generated_materials(
                     progress: None,
                 },
             );
+            placed.push(pos);
         }
     }
+    // 同参相连生成器本回合同时生成的材料焊接为同一结构
+    weld_co_generated_materials(world, &placed);
     animations
+}
+
+fn weld_co_generated_materials(world: &mut WorldBlocks, placed: &[IVec3]) {
+    let offsets = [
+        IVec3::X,
+        IVec3::NEG_X,
+        IVec3::Y,
+        IVec3::NEG_Y,
+        IVec3::Z,
+        IVec3::NEG_Z,
+    ];
+    let placed_set: HashSet<IVec3> = placed.iter().copied().collect();
+    for &pos in placed {
+        let key = world.generator_settings(pos).trigger_key();
+        for offset in offsets {
+            let neighbor = pos + offset;
+            if neighbor.x < pos.x
+                || (neighbor.x == pos.x && neighbor.y < pos.y)
+                || (neighbor.x == pos.x && neighbor.y == pos.y && neighbor.z <= pos.z)
+            {
+                continue;
+            }
+            if !placed_set.contains(&neighbor) || !world.is_material_at(neighbor) {
+                continue;
+            }
+            if world.generator_settings(neighbor).trigger_key() == key {
+                world.weld_materials(pos, neighbor);
+            }
+        }
+    }
 }
 
 fn remove_ready_destroyed_materials(
@@ -343,5 +384,51 @@ fn log_movement_plan(
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::game::blocks::{BlockData, BlockKind, MaterialKind};
+    use crate::game::simulation::runtime::PendingGeneratedMaterials;
+    use crate::game::world::direction::Facing;
+    use crate::game::world::grid::{GeneratorMode, GeneratorSettings};
+
+    #[test]
+    fn co_generated_adjacent_materials_are_welded() {
+        let mut world = WorldBlocks::default();
+        let a = IVec3::ZERO;
+        let b = IVec3::X;
+        world.insert(a, BlockData::new(BlockKind::Generator, Facing::North));
+        world.insert(b, BlockData::new(BlockKind::Generator, Facing::North));
+        let settings = GeneratorSettings {
+            mode: GeneratorMode::Period {
+                period: 1,
+                offset: 0,
+            },
+            material: MaterialKind::Basic,
+        };
+        world.set_generator_settings(a, settings);
+        world.set_generator_settings(
+            b,
+            GeneratorSettings {
+                mode: GeneratorMode::Period {
+                    period: 1,
+                    offset: 0,
+                },
+                material: MaterialKind::Iron,
+            },
+        );
+
+        let mut pending = PendingGeneratedMaterials::default();
+        prepare_upcoming_generation(&world, &mut pending, 1, &HashSet::new());
+        let animations = place_ready_generated_materials(&mut world, &mut pending, 1);
+        assert_eq!(animations.len(), 2);
+        assert!(world.is_material_at(a));
+        assert!(world.is_material_at(b));
+        assert!(world
+            .material_welds
+            .contains(&crate::game::world::grid::MaterialWeld::new(a, b)));
     }
 }
