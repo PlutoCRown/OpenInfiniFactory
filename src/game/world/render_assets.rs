@@ -4,10 +4,10 @@ use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
+use crate::game::blocks::pusher::texture;
 use crate::game::blocks::{
     all_blocks, BlockKind, BlockShape, ModelMaterial, ModelMesh, StampColor, BLOCK_SIZE,
 };
-use crate::game::blocks::pusher::texture;
 
 #[derive(Resource, Clone)]
 pub struct WorldRenderAssets {
@@ -36,6 +36,9 @@ pub struct WorldRenderAssets {
     part_rod_x: Handle<Mesh>,
     part_rod_y: Handle<Mesh>,
     part_rod_z: Handle<Mesh>,
+    part_mirror_face: Handle<Mesh>,
+    part_vertical_mirror_face: Handle<Mesh>,
+    part_splitter_face: Handle<Mesh>,
     part_pusher_body: Handle<Mesh>,
     part_pusher_head: Handle<Mesh>,
     block_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
@@ -47,6 +50,7 @@ pub struct WorldRenderAssets {
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
     pub(crate) active_wire_material: Handle<StandardMaterial>,
     pub(crate) weld_connector_material: Handle<StandardMaterial>,
+    pub(crate) laser_beam_material: Handle<StandardMaterial>,
     pub(crate) acceptance_spark_material: Handle<StandardMaterial>,
     delete_preview_material: Handle<StandardMaterial>,
     selection_preview_material: Handle<StandardMaterial>,
@@ -67,10 +71,7 @@ impl WorldRenderAssets {
     ) -> Self {
         let block_textures: HashMap<_, _> = all_blocks()
             .into_iter()
-            .filter_map(|kind| {
-                kind.block_texture()
-                    .map(|image| (kind, images.add(image)))
-            })
+            .filter_map(|kind| kind.block_texture().map(|image| (kind, images.add(image))))
             .collect();
         let platform_texture = block_textures
             .get(&BlockKind::Platform)
@@ -194,6 +195,18 @@ impl WorldRenderAssets {
                 ModelMaterial::Laser,
                 emissive_material(1.0, 0.10, 0.22, 0.35, 0.01, 0.04),
             ),
+            (
+                ModelMaterial::Mirror,
+                StandardMaterial {
+                    base_color: Color::srgb(0.45, 0.88, 1.0),
+                    emissive: LinearRgba::new(0.10, 0.22, 0.30, 1.0),
+                    alpha_mode: AlphaMode::Blend,
+                    perceptual_roughness: 0.72,
+                    reflectance: 0.10,
+                    cull_mode: None,
+                    ..default()
+                },
+            ),
             (ModelMaterial::System, srgb_material(0.35, 0.28, 0.48)),
             (
                 ModelMaterial::SystemAccent,
@@ -256,6 +269,22 @@ impl WorldRenderAssets {
             part_rod_x: meshes.add(Cuboid::new(0.72, 0.12, 0.12)),
             part_rod_y: meshes.add(Cuboid::new(0.12, 0.72, 0.12)),
             part_rod_z: meshes.add(Cuboid::new(0.12, 0.12, 0.72)),
+            // 镜子面片：000, 101, 111, 010
+            part_mirror_face: meshes.add(thick_quad_mesh([
+                [0, 0, 0],
+                [1, 0, 1],
+                [1, 1, 1],
+                [0, 1, 0],
+            ])),
+            // 垂直镜子面片：000, 001, 111, 110
+            part_vertical_mirror_face: meshes.add(thick_quad_mesh([
+                [0, 0, 0],
+                [0, 0, 1],
+                [1, 1, 1],
+                [1, 1, 0],
+            ])),
+            // 分光镜：x+y+z=0 六边形再烘焙 -180° yaw
+            part_splitter_face: meshes.add(thick_splitter_hexagon_mesh()),
             part_pusher_body: meshes.add(cover_cuboid_mesh(Vec3::new(1.0, 1.0, 0.80))),
             part_pusher_head: meshes.add(cover_cuboid_mesh(Vec3::new(1.0, 1.0, 0.20))),
             block_materials,
@@ -276,6 +305,13 @@ impl WorldRenderAssets {
             }),
             weld_connector_material: materials.add(StandardMaterial {
                 base_color: Color::srgba(1.0, 0.22, 0.10, 0.72),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            }),
+            laser_beam_material: materials.add(StandardMaterial {
+                base_color: Color::srgba(1.0, 0.12, 0.26, 0.92),
+                emissive: LinearRgba::new(0.55, 0.02, 0.10, 1.0),
                 alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 ..default()
@@ -401,6 +437,9 @@ impl WorldRenderAssets {
             ModelMesh::RodX => self.part_rod_x.clone(),
             ModelMesh::RodY => self.part_rod_y.clone(),
             ModelMesh::RodZ => self.part_rod_z.clone(),
+            ModelMesh::MirrorFace => self.part_mirror_face.clone(),
+            ModelMesh::VerticalMirrorFace => self.part_vertical_mirror_face.clone(),
+            ModelMesh::SplitterFace => self.part_splitter_face.clone(),
             ModelMesh::PusherBody => self.part_pusher_body.clone(),
             ModelMesh::PusherHead => self.part_pusher_head.clone(),
         }
@@ -494,6 +533,144 @@ fn textured_model_material(base_color: Color, texture: Handle<Image>) -> Standar
         reflectance: 0.12,
         ..default()
     }
+}
+
+fn block_corner(v: [u8; 3]) -> Vec3 {
+    Vec3::new(v[0] as f32 - 0.5, v[1] as f32 - 0.5, v[2] as f32 - 0.5)
+}
+
+const MIRROR_FACE_THICKNESS: f32 = 0.06;
+
+fn thick_quad_mesh(corners: [[u8; 3]; 4]) -> Mesh {
+    let vertices = corners.map(block_corner);
+    thick_face_mesh(&vertices, &[[0, 1, 2], [0, 2, 3]], MIRROR_FACE_THICKNESS)
+}
+
+// 分光镜六边形：先取过中心的 x+y+z=0 切面，再把 -180° yaw 烘焙进顶点
+fn thick_splitter_hexagon_mesh() -> Mesh {
+    let yaw = Quat::from_rotation_y(-std::f32::consts::PI);
+    // x+y+z=0 与立方体相交的六个边中点，绕向使法线朝向 (1,1,1)
+    let vertices = [
+        Vec3::new(0.5, -0.5, 0.0),
+        Vec3::new(0.5, 0.0, -0.5),
+        Vec3::new(0.0, 0.5, -0.5),
+        Vec3::new(-0.5, 0.5, 0.0),
+        Vec3::new(-0.5, 0.0, 0.5),
+        Vec3::new(0.0, -0.5, 0.5),
+    ]
+    .map(|vertex| yaw * vertex);
+    thick_face_mesh(
+        &vertices,
+        &[[0, 1, 2], [0, 2, 3], [0, 3, 4], [0, 4, 5]],
+        MIRROR_FACE_THICKNESS,
+    )
+}
+
+fn thick_face_mesh(vertices: &[Vec3], front_triangles: &[[usize; 3]], thickness: f32) -> Mesh {
+    let normal = face_normal(vertices, front_triangles[0]);
+    let back: Vec<Vec3> = vertices
+        .iter()
+        .map(|vertex| *vertex - normal * thickness)
+        .collect();
+
+    let mut positions = Vec::new();
+    let mut normals = Vec::new();
+    let mut uvs = Vec::new();
+    let mut indices = Vec::new();
+
+    push_face(
+        &mut positions,
+        &mut normals,
+        &mut uvs,
+        &mut indices,
+        vertices,
+        normal,
+        front_triangles,
+    );
+    let back_triangles: Vec<[usize; 3]> = front_triangles
+        .iter()
+        .map(|triangle| [triangle[0], triangle[2], triangle[1]])
+        .collect();
+    push_face(
+        &mut positions,
+        &mut normals,
+        &mut uvs,
+        &mut indices,
+        &back,
+        -normal,
+        &back_triangles,
+    );
+
+    for index in 0..vertices.len() {
+        let next = (index + 1) % vertices.len();
+        push_side_quad(
+            &mut positions,
+            &mut normals,
+            &mut uvs,
+            &mut indices,
+            vertices[index],
+            vertices[next],
+            back[next],
+            back[index],
+        );
+    }
+
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+    .with_inserted_indices(Indices::U32(indices))
+}
+
+fn face_normal(vertices: &[Vec3], triangle: [usize; 3]) -> Vec3 {
+    (vertices[triangle[1]] - vertices[triangle[0]])
+        .cross(vertices[triangle[2]] - vertices[triangle[0]])
+        .normalize_or_zero()
+}
+
+fn push_face(
+    positions: &mut Vec<[f32; 3]>,
+    normals: &mut Vec<[f32; 3]>,
+    uvs: &mut Vec<[f32; 2]>,
+    indices: &mut Vec<u32>,
+    vertices: &[Vec3],
+    normal: Vec3,
+    triangles: &[[usize; 3]],
+) {
+    let base = positions.len() as u32;
+    for vertex in vertices {
+        positions.push([vertex.x, vertex.y, vertex.z]);
+        normals.push([normal.x, normal.y, normal.z]);
+        uvs.push([vertex.x + 0.5, vertex.y + 0.5]);
+    }
+    for triangle in triangles {
+        indices.extend(triangle.iter().map(|index| base + *index as u32));
+    }
+}
+
+fn push_side_quad(
+    positions: &mut Vec<[f32; 3]>,
+    normals: &mut Vec<[f32; 3]>,
+    uvs: &mut Vec<[f32; 2]>,
+    indices: &mut Vec<u32>,
+    front_a: Vec3,
+    front_b: Vec3,
+    back_b: Vec3,
+    back_a: Vec3,
+) {
+    let side_normal = (front_b - front_a)
+        .cross(back_a - front_a)
+        .normalize_or_zero();
+    let base = positions.len() as u32;
+    for vertex in [front_a, front_b, back_b, back_a] {
+        positions.push([vertex.x, vertex.y, vertex.z]);
+        normals.push([side_normal.x, side_normal.y, side_normal.z]);
+        uvs.push([vertex.x + 0.5, vertex.z + 0.5]);
+    }
+    indices.extend([base, base + 1, base + 2, base, base + 2, base + 3]);
 }
 
 fn cover_cuboid_mesh(size: Vec3) -> Mesh {

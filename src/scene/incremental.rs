@@ -338,12 +338,7 @@ pub fn apply_turn_output_incremental(
     }
     spawn_weld_sparks(commands, assets, &output.weld_sparks);
     spawn_weld_sparks(commands, assets, &output.behavior_sparks);
-    spawn_laser_beams(
-        commands,
-        assets,
-        &output.laser_beams,
-        animation_duration * 0.5,
-    );
+    spawn_laser_beams(commands, assets, &output.laser_beams, animation_duration);
     spawn_acceptance_sparks(commands, assets, &output.acceptance_sparks);
     stats.render_rebuild_ms = render_start.elapsed().as_secs_f64() * 1000.0;
     stats.total_ms += stats.render_rebuild_ms;

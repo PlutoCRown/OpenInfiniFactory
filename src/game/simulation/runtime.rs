@@ -21,7 +21,7 @@ use super::movement::PusherState;
 use super::structure_state::StructureState;
 use super::structures::MovementInfluenceCache;
 
-pub use super::behaviors::LaserBeam;
+pub use super::behaviors::{LaserBeam, LaserBeamStop};
 pub use super::signals::SignalNetworkCache;
 
 #[derive(Resource, Clone)]

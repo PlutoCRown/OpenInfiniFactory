@@ -11,13 +11,12 @@ use crate::game::blocks::{
     edit_blocks, spawn_model_parts, BlockData, BlockKind, BlockModel, WeldConnectorBehavior,
     WireConnectorBehavior, PLAY_BLOCKS,
 };
-use crate::game::simulation::runtime::LaserBeam;
+use crate::game::simulation::runtime::{LaserBeam, LaserBeamStop};
 use crate::game::simulation::structure_state::{FactoryActivity, StructureKind, StructureState};
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
-    rotate_world_pos_y, AnimatedBlock, AnimationEasing,
-    AnimationTiming, BlockAnimation, BlockAnimationKind, LaserBeamBurst, PusherAnimation,
-    WeldSpark,
+    rotate_world_pos_y, AnimatedBlock, AnimationEasing, AnimationTiming, BlockAnimation,
+    BlockAnimationKind, LaserBeamBurst, PusherAnimation, WeldSpark,
 };
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
@@ -470,6 +469,22 @@ pub fn despawn_pending_generated_previews(
 
 const CONNECTOR_BEAM_LENGTH: f32 = 0.55;
 
+fn laser_beam_segment(beam: &LaserBeam) -> (Vec3, Vec3) {
+    let dir = beam.direction.as_vec3();
+    let hit = beam.pos + beam.direction * beam.range;
+    let start = if beam.emits_from_center {
+        grid_to_world(beam.pos)
+    } else {
+        grid_to_world(beam.pos) + dir * 0.5
+    };
+    let end = match beam.stop {
+        LaserBeamStop::Mirror => grid_to_world(hit),
+        LaserBeamStop::Solid => grid_to_world(hit) - dir * 0.5,
+        LaserBeamStop::Open => grid_to_world(hit) + dir * 0.5,
+    };
+    (start, end)
+}
+
 pub fn spawn_laser_beams(
     commands: &mut Commands,
     assets: &WorldRenderAssets,
@@ -478,19 +493,20 @@ pub fn spawn_laser_beams(
 ) {
     for beam in beams {
         let direction = beam.direction.as_vec3();
-        let full_length = beam.range as f32;
-        let origin = grid_to_world(beam.pos) + direction * 0.5;
+        let (start, end) = laser_beam_segment(beam);
+        let full_length = (end - start).length().max(0.01);
         let axis_scale = full_length / CONNECTOR_BEAM_LENGTH;
+        // 统一用 Z 向杆再旋转到发射方向；按轴向选 X/Y mesh 会导致竖直激光几乎看不见
         let rotation = Quat::from_rotation_arc(Vec3::Z, direction);
-        let transform = Transform::from_translation(origin + direction * (full_length * 0.5))
+        let transform = Transform::from_translation(start + (end - start) * 0.5)
             .with_rotation(rotation)
             .with_scale(Vec3::new(1.0, 1.0, axis_scale));
 
         commands.spawn((
-            Mesh3d(assets.connector_mesh(beam.direction)),
-            MeshMaterial3d(assets.weld_connector_material.clone()),
+            Mesh3d(assets.connector_mesh(IVec3::Z)),
+            MeshMaterial3d(assets.laser_beam_material.clone()),
             transform,
-            LaserBeamBurst::new(origin, direction, full_length, axis_scale, duration),
+            LaserBeamBurst::new(start, direction, full_length, axis_scale, duration),
         ));
     }
 }
@@ -1174,8 +1190,7 @@ fn spawn_block_model(
         || matches!(
             data.kind.model(),
             BlockModel::PartsOnly(_) | BlockModel::PusherParts(_)
-        )
-    {
+        ) {
         commands.spawn((transform, Visibility::default()))
     } else if data.kind == BlockKind::Platform {
         commands.spawn((

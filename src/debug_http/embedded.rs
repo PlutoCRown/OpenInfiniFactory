@@ -3,20 +3,25 @@ use std::sync::{mpsc, Mutex};
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread::{self, JoinHandle};
 
-use crate::debug_http::protocol::{json_error, help_json, DebugHttpCommand, DebugHttpRequest};
-use crate::debug_http::snapshot::{
-    block_json, cursor_target_json, simulation_status_json,
+use crate::debug_http::protocol::{
+    help_json, json_error, json_ok, DebugHttpCommand, DebugHttpRequest,
 };
-use crate::game::simulation::movement::PusherState;
-use crate::game::simulation::structure_state::StructureState;
+use crate::debug_http::snapshot::{
+    block_json, cursor_target_json, pos_json, simulation_status_json,
+};
+use crate::debug_http::world_ops::{block_kinds_json, parse_block_kind, parse_facing, place_block};
+use crate::game::block_editing::world_refresh::refresh_world_after_edit;
+use crate::game::session::PlayingWorldParams;
+use crate::game::simulation::runtime::{
+    PendingGeneratedMaterials, SignalNetworkCache, SimulationPresentationState,
+};
 use crate::game::state::{BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState};
 use crate::game::systems::simulation_controls::{
     request_continuous_run, request_one_turn, start_simulation_if_needed,
 };
 use crate::game::ui::UiRuntime;
-use crate::game::world::grid::WorldBlocks;
 use crate::shared::launch::LaunchOptions;
-use crate::sim_core::SimulationDebugLog;
+use crate::sim_core::{SimSnapshot, SimulationDebugLog, SimulationWorker, TurnCache};
 
 #[derive(Resource)]
 pub struct DebugHttpBridge {
@@ -98,61 +103,37 @@ pub fn poll_debug_http(
     playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
     placement: Res<PlacementState>,
-    world: Res<WorldBlocks>,
     mut simulation: ResMut<SimulationState>,
-    mut structure_state: ResMut<StructureState>,
-    mut pusher_state: ResMut<PusherState>,
     mut sim_log: ResMut<SimulationDebugLog>,
+    mut presentation: ResMut<SimulationPresentationState>,
+    mut pending_generated: ResMut<PendingGeneratedMaterials>,
+    mut signal_cache: ResMut<SignalNetworkCache>,
+    mut turn_cache: ResMut<TurnCache>,
+    worker: Option<Res<SimulationWorker>>,
     bridge: Option<Res<DebugHttpBridge>>,
-    render_assets: Option<Res<crate::game::world::rendering::WorldRenderAssets>>,
+    mut playing: PlayingWorldParams,
 ) {
     let Some(bridge) = bridge else {
         return;
     };
-    drain_debug_http_requests(
-        &bridge,
-        *mode.get(),
-        *builder_mode,
-        &playing_ui,
-        &ui_runtime,
-        &placement,
-        &world,
-        &mut simulation,
-        &mut structure_state,
-        &mut pusher_state,
-        &mut sim_log,
-        render_assets.is_some(),
-    );
-}
-
-pub fn drain_debug_http_requests(
-    bridge: &DebugHttpBridge,
-    mode: GameMode,
-    builder_mode: BuilderMode,
-    playing_ui: &PlayingUiState,
-    ui_runtime: &UiRuntime,
-    placement: &PlacementState,
-    world: &WorldBlocks,
-    simulation: &mut SimulationState,
-    structure_state: &mut StructureState,
-    pusher_state: &mut PusherState,
-    sim_log: &mut SimulationDebugLog,
-    render_ready: bool,
-) {
+    let render_ready = playing.render_assets.is_some();
     while let Ok(request) = bridge.receiver.lock().unwrap().try_recv() {
         let body = handle_embedded_debug_command(
             request.command,
-            mode,
-            builder_mode,
-            playing_ui,
-            ui_runtime,
-            placement,
-            world,
-            simulation,
-            structure_state,
-            pusher_state,
-            sim_log,
+            *mode.get(),
+            *builder_mode,
+            &playing_ui,
+            &ui_runtime,
+            &placement,
+            &mut simulation,
+            &mut sim_log,
+            &mut presentation,
+            &mut pending_generated,
+            &mut signal_cache,
+            &mut turn_cache,
+            worker.as_deref(),
             render_ready,
+            &mut playing,
         );
         let _ = request.respond_to.send(body);
     }
@@ -165,12 +146,15 @@ fn handle_embedded_debug_command(
     playing_ui: &PlayingUiState,
     ui_runtime: &UiRuntime,
     placement: &PlacementState,
-    world: &WorldBlocks,
     simulation: &mut SimulationState,
-    structure_state: &mut StructureState,
-    pusher_state: &mut PusherState,
     sim_log: &mut SimulationDebugLog,
+    presentation: &mut SimulationPresentationState,
+    pending_generated: &mut PendingGeneratedMaterials,
+    signal_cache: &mut SignalNetworkCache,
+    turn_cache: &mut TurnCache,
+    worker: Option<&SimulationWorker>,
     render_ready: bool,
+    playing: &mut PlayingWorldParams,
 ) -> String {
     if mode != GameMode::Playing {
         return json_error("game is not in Playing mode");
@@ -178,20 +162,21 @@ fn handle_embedded_debug_command(
 
     match command {
         DebugHttpCommand::Help => help_json(),
+        DebugHttpCommand::BlockKinds => block_kinds_json(),
         DebugHttpCommand::GetPosBlock { x, y, z } => {
             if let (Some(x), Some(y), Some(z)) = (x, y, z) {
                 let pos = IVec3::new(x, y, z);
                 serde_json::json!({
                     "ok": true,
-                    "pos": crate::debug_http::snapshot::pos_json(pos),
-                    "block": block_json(world, pos),
-                    "cursor": cursor_target_json(placement, world),
+                    "pos": pos_json(pos),
+                    "block": block_json(&playing.world, pos),
+                    "cursor": cursor_target_json(placement, &playing.world),
                 })
                 .to_string()
             } else {
                 serde_json::json!({
                     "ok": true,
-                    "cursor": cursor_target_json(placement, world),
+                    "cursor": cursor_target_json(placement, &playing.world),
                 })
                 .to_string()
             }
@@ -199,12 +184,55 @@ fn handle_embedded_debug_command(
         DebugHttpCommand::GetStatus => serde_json::json!({
             "ok": true,
             "simulation": simulation_status_json(simulation, builder_mode),
-            "cursor": cursor_target_json(placement, world),
+            "cursor": cursor_target_json(placement, &playing.world),
             "render_ready": render_ready,
             "active_play": playing_ui.active_play(),
             "ui_blocks_gameplay": ui_runtime.blocks_gameplay(),
         })
         .to_string(),
+        DebugHttpCommand::PlaceBlock {
+            x,
+            y,
+            z,
+            kind,
+            facing,
+        } => {
+            let Some(kind) = parse_block_kind(&kind) else {
+                return json_error(&format!("unknown block kind `{kind}`"));
+            };
+            let Some(facing) = parse_facing(&facing) else {
+                return json_error(&format!("unknown facing `{facing}`"));
+            };
+            let pos = IVec3::new(x, y, z);
+            match place_block(&mut playing.world, pos, kind, facing) {
+                Ok(()) => {
+                    refresh_world_after_edit(playing, pos);
+                    // 模拟进行中时同步 committed/worker，否则下一回合快照会抹掉放置并留下幽灵实体
+                    if simulation.is_active() {
+                        presentation.committed_world = playing.world.clone();
+                        turn_cache.reset_to_turn(simulation.turn);
+                        if let Some(worker) = worker {
+                            worker.reset(
+                                SimSnapshot::from_world(
+                                    &playing.world,
+                                    pending_generated,
+                                    signal_cache,
+                                    &playing.structure_state,
+                                    &playing.movement_influence,
+                                    &playing.pusher_state,
+                                ),
+                                simulation.turn,
+                            );
+                        }
+                    }
+                    json_ok(serde_json::json!({
+                        "pos": pos_json(pos),
+                        "block": block_json(&playing.world, pos),
+                    }))
+                }
+                Err(error) => json_error(&error),
+            }
+        }
         DebugHttpCommand::Run => {
             if builder_mode != BuilderMode::Play {
                 return json_error("switch to Play mode first");
@@ -215,7 +243,31 @@ fn handle_embedded_debug_command(
             if !render_ready {
                 return json_error("world render assets are not ready");
             }
-            start_simulation_if_needed(simulation, world, structure_state, pusher_state);
+            let starting = !simulation.is_active();
+            start_simulation_if_needed(
+                simulation,
+                &playing.world,
+                &mut playing.structure_state,
+                &mut playing.pusher_state,
+            );
+            if starting {
+                presentation.committed_world = playing.world.clone();
+                presentation.last_render_powered_wires.clear();
+                turn_cache.reset_to_turn(simulation.turn);
+                if let Some(worker) = worker {
+                    worker.reset(
+                        SimSnapshot::from_world(
+                            &playing.world,
+                            pending_generated,
+                            signal_cache,
+                            &playing.structure_state,
+                            &playing.movement_influence,
+                            &playing.pusher_state,
+                        ),
+                        simulation.turn,
+                    );
+                }
+            }
             request_continuous_run(simulation);
             sim_log.log(simulation.turn, "HTTP /run");
             serde_json::json!({
@@ -234,7 +286,33 @@ fn handle_embedded_debug_command(
             if !render_ready {
                 return json_error("world render assets are not ready");
             }
-            start_simulation_if_needed(simulation, world, structure_state, pusher_state);
+            let starting = !simulation.is_active();
+            start_simulation_if_needed(
+                simulation,
+                &playing.world,
+                &mut playing.structure_state,
+                &mut playing.pusher_state,
+            );
+            if starting {
+                presentation.committed_world = playing.world.clone();
+                presentation.last_render_powered_wires.clear();
+                turn_cache.reset_to_turn(simulation.turn);
+                if let Some(worker) = worker {
+                    worker.reset(
+                        SimSnapshot::from_world(
+                            &playing.world,
+                            pending_generated,
+                            signal_cache,
+                            &playing.structure_state,
+                            &playing.movement_influence,
+                            &playing.pusher_state,
+                        ),
+                        simulation.turn,
+                    );
+                }
+                // is_active = running || turn>0；先拉起 running 才能单步
+                request_continuous_run(simulation);
+            }
             match request_one_turn(simulation) {
                 Ok(()) => {
                     sim_log.log(simulation.turn.saturating_add(1), "HTTP /runOneTurn queued");
@@ -253,11 +331,9 @@ fn handle_embedded_debug_command(
             r#"{"ok":true}"#.into()
         }
         DebugHttpCommand::RunN { .. }
-        | DebugHttpCommand::BlockKinds
         | DebugHttpCommand::WorldReset
         | DebugHttpCommand::BeginSimulation
         | DebugHttpCommand::LoadSave { .. }
-        | DebugHttpCommand::PlaceBlock { .. }
         | DebugHttpCommand::LoadFixture { .. }
         | DebugHttpCommand::RunFixture { .. }
         | DebugHttpCommand::RunAllFixtures => {

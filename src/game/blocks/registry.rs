@@ -17,7 +17,7 @@ pub fn all_blocks() -> Vec<BlockKind> {
     blocks
 }
 
-pub const PLAY_BLOCKS: [BlockKind; 15] = [
+pub const PLAY_BLOCKS: [BlockKind; 18] = [
     BlockKind::Platform,
     BlockKind::Welder,
     BlockKind::DownWelder,
@@ -33,6 +33,9 @@ pub const PLAY_BLOCKS: [BlockKind; 15] = [
     BlockKind::Blocker,
     BlockKind::Drill,
     BlockKind::Laser,
+    BlockKind::Mirror,
+    BlockKind::VerticalMirror,
+    BlockKind::Splitter,
 ];
 
 pub fn get(kind: BlockKind) -> &'static (dyn Block + Send + Sync) {
@@ -125,16 +128,19 @@ fn block_order(kind: BlockKind) -> usize {
         BlockKind::Blocker => 18,
         BlockKind::Drill => 19,
         BlockKind::Laser => 20,
-        BlockKind::Stamper => 21,
-        BlockKind::Roller => 22,
-        BlockKind::Converter => 23,
-        BlockKind::TeleportEntrance => 24,
-        BlockKind::TeleportExit => 25,
-        BlockKind::Material => 26,
-        BlockKind::IronMaterial => 27,
-        BlockKind::CopperMaterial => 28,
-        BlockKind::WeldPoint => 29,
-        BlockKind::BlockerHead => 30,
-        BlockKind::DrillHead => 31,
+        BlockKind::Mirror => 21,
+        BlockKind::VerticalMirror => 22,
+        BlockKind::Splitter => 23,
+        BlockKind::Stamper => 24,
+        BlockKind::Roller => 25,
+        BlockKind::Converter => 26,
+        BlockKind::TeleportEntrance => 27,
+        BlockKind::TeleportExit => 28,
+        BlockKind::Material => 29,
+        BlockKind::IronMaterial => 30,
+        BlockKind::CopperMaterial => 31,
+        BlockKind::WeldPoint => 32,
+        BlockKind::BlockerHead => 33,
+        BlockKind::DrillHead => 34,
     }
 }

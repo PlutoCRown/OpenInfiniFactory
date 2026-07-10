@@ -3,8 +3,8 @@ pub mod panels;
 #[macro_use]
 mod register;
 mod basic;
-mod registry;
 mod model_spawn;
+mod registry;
 pub mod traits;
 
 mod blocker;
@@ -26,16 +26,19 @@ mod iron_material;
 mod laser;
 mod lifter;
 mod material;
+mod mirror;
 mod planks;
 mod platform;
 pub mod pusher;
 mod reverse_conveyor;
 mod roller;
 mod rotator;
+mod splitter;
 mod stamper;
 mod stone;
 mod teleport_entrance;
 mod teleport_exit;
+mod vertical_mirror;
 mod weld_point;
 mod welder;
 mod wire;
@@ -43,8 +46,8 @@ mod wire;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-pub use self::registry::{all_blocks, assert_registry_consistent, edit_blocks, PLAY_BLOCKS};
 pub use self::model_spawn::spawn_model_parts;
+pub use self::registry::{all_blocks, assert_registry_consistent, edit_blocks, PLAY_BLOCKS};
 use crate::game::state::UiPanelId;
 pub use crate::game::world::direction::Facing;
 use crate::game::world::grid::BlockSettings;
@@ -194,6 +197,9 @@ pub enum FactoryBlock {
     Blocker,
     Drill,
     Laser,
+    Mirror,
+    VerticalMirror,
+    Splitter,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -301,6 +307,9 @@ pub enum ModelMesh {
     RodX,
     RodY,
     RodZ,
+    MirrorFace,
+    VerticalMirrorFace,
+    SplitterFace,
 }
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
@@ -328,6 +337,7 @@ pub enum ModelMaterial {
     Rotation,
     Drill,
     Laser,
+    Mirror,
     System,
     SystemAccent,
     TeleportIn,
@@ -612,6 +622,9 @@ pub enum BlockKind {
     Blocker,
     Drill,
     Laser,
+    Mirror,
+    VerticalMirror,
+    Splitter,
     Stamper,
     Roller,
     Converter,
@@ -655,6 +668,9 @@ impl BlockKind {
             BlockKind::Blocker => BlockLayer::Factory(FactoryBlock::Blocker),
             BlockKind::Drill => BlockLayer::Factory(FactoryBlock::Drill),
             BlockKind::Laser => BlockLayer::Factory(FactoryBlock::Laser),
+            BlockKind::Mirror => BlockLayer::Factory(FactoryBlock::Mirror),
+            BlockKind::VerticalMirror => BlockLayer::Factory(FactoryBlock::VerticalMirror),
+            BlockKind::Splitter => BlockLayer::Factory(FactoryBlock::Splitter),
             BlockKind::Generator => BlockLayer::System(SystemBlock::Generator),
             BlockKind::Goal => BlockLayer::System(SystemBlock::Goal),
             BlockKind::Stamper => BlockLayer::System(SystemBlock::Stamper),

@@ -9,16 +9,27 @@ use crate::game::world::grid::{
     ConverterMode, MaterialFace, MaterialFaceMark, MaterialFaceMarkSource, WorldBlocks,
 };
 
+use super::mirror;
 use super::runtime::PendingGeneratedMaterials;
 use super::signal_offsets;
 use super::structure_state::StructureState;
 use super::structures::material_structure;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LaserBeamStop {
+    Open,
+    Mirror,
+    Solid,
+}
 
 #[derive(Clone, Copy)]
 pub struct LaserBeam {
     pub pos: IVec3,
     pub direction: IVec3,
     pub range: i32,
+    pub stop: LaserBeamStop,
+    /// 镜子/分光镜反射光从方块中心发出；激光器从出射面发出
+    pub emits_from_center: bool,
 }
 
 pub(super) struct MaterialBehaviorEffects {
@@ -375,12 +386,15 @@ fn run_material_destroy_phase(
             }
             MaterialDestroyer::Laser { direction, range } => {
                 if powered_devices.contains(&pos) {
-                    laser_beams.push(LaserBeam {
+                    trace_laser(
+                        world,
                         pos,
                         direction,
                         range,
-                    });
-                    fire_laser(world, pos, direction, range);
+                        &mut laser_beams,
+                        &mut sparks,
+                        0,
+                    );
                 }
             }
         }
@@ -404,20 +418,93 @@ fn mark_material_destroy(
     }
 }
 
-fn fire_laser(world: &mut WorldBlocks, pos: IVec3, direction: IVec3, range: i32) {
+fn trace_laser(
+    world: &mut WorldBlocks,
+    origin: IVec3,
+    direction: IVec3,
+    range: i32,
+    beams: &mut Vec<LaserBeam>,
+    sparks: &mut Vec<IVec3>,
+    bounce_depth: u32,
+) {
+    const MAX_BOUNCES: u32 = 8;
+    if range <= 0 || bounce_depth > MAX_BOUNCES {
+        return;
+    }
+
+    let mut traveled = 0;
+    let mut stop = LaserBeamStop::Open;
     for distance in 1..=range {
-        let target = pos + direction * distance;
+        let target = origin + direction * distance;
         let Some(block) = world.blocks.get(&target).copied() else {
+            traveled = distance;
             continue;
         };
         if block.kind.is_material() {
             world.remove(&target);
+            sparks.push(target);
+            traveled = distance;
             continue;
         }
+        traveled = distance;
+        let reflections = mirror::reflect_laser(block.kind, block.facing, direction);
+        if !reflections.is_empty() {
+            sparks.push(target);
+        }
+        for reflected in reflections {
+            // 与激光发射器相同：从镜面格出发，沿反射方向重新 trace 一整段
+            trace_laser(
+                world,
+                target,
+                reflected,
+                range,
+                beams,
+                sparks,
+                bounce_depth + 1,
+            );
+        }
         if block.kind.blocks_laser() {
+            stop = if matches!(
+                block.kind,
+                BlockKind::Mirror | BlockKind::VerticalMirror | BlockKind::Splitter
+            ) {
+                LaserBeamStop::Mirror
+            } else {
+                LaserBeamStop::Solid
+            };
             break;
         }
     }
+    if traveled > 0 {
+        beams.push(LaserBeam {
+            pos: origin,
+            direction,
+            range: traveled,
+            stop,
+            emits_from_center: bounce_depth > 0,
+        });
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn trace_laser_for_test(
+    world: &mut WorldBlocks,
+    origin: IVec3,
+    direction: IVec3,
+    range: i32,
+    beams: &mut Vec<LaserBeam>,
+    bounce_depth: u32,
+) {
+    let mut sparks = Vec::new();
+    trace_laser(
+        world,
+        origin,
+        direction,
+        range,
+        beams,
+        &mut sparks,
+        bounce_depth,
+    );
 }
 
 fn run_material_acceptance_phase(

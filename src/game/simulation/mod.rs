@@ -2,6 +2,7 @@ mod behaviors;
 pub mod core;
 mod gravity;
 pub mod markers;
+mod mirror;
 pub mod movement;
 pub mod runtime;
 mod signals;
