@@ -45,8 +45,17 @@ class DownWelderBlock extends WelderBlock {
 
 class WelderPointBlock extends VirtualBlock implements Connectable {
     connected;
-    on_update() {
-        // FIXME: 链接逻辑
-
+    on_turn({ turn_world }: RuntimeTurn) {
+        const block = turn_world.blocks.get_block_by_pos(this.pos)
+        if (!(block && block instanceof MaterialBlock)) return;
+        // 这里通过 connected 开过滤的话还能省点
+        turn_world.blocks.find_neighbors(this.pos).forEach(neighbor => {
+            if (neighbor instanceof MaterialBlock && neighbor.in_structure_id !== block.in_structure_id) {
+                const other_structure = turn_world.structures.get(neighbor.in_structure_id) as MaterialStructure;
+                const this_structure = turn_world.structures.get(block.in_structure_id) as MaterialStructure;
+                this_structure.merge(other_structure);
+                turn_world.structures.delete(other_structure.id);
+            }
+        });
     }
 }

@@ -28,7 +28,6 @@ interface Directional {
 interface Connectable {
     /** X,X_NEG,Y,Y_NEG,Z,Z_NEG */
     connected: [boolean, boolean, boolean, boolean, boolean, boolean];
-    on_update: () => void;
 }
 /** helper 函数 ，用于将 方向向量填写进 Connectable.connected */
 const ConnectedIndexMapper = (unit: Vec3Unit): number => {
@@ -192,11 +191,15 @@ interface Alternateable {
     on_alternate(): void;
 }
 
-abstract class MaterialBlock extends Block {
+class MaterialBlock extends Block {
     in_structure_id: RuntimeStructureID;
 }
 
 abstract class VirtualBlock extends Block {
+
+}
+abstract class SystemBlock extends Block {
+    abstract on_turn(runtime_world: RuntimeTurn): void;
 
 }
 

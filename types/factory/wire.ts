@@ -5,11 +5,8 @@ class WireBlock extends FactoryBlock implements Connectable, SingalDevice {
     on_turn(_: RuntimeTurn) { }
 
     connected: [boolean, boolean, boolean, boolean, boolean, boolean];
-    on_update() {
-        // FIXME: 链接逻辑
-    }
     on_placed(world: World): void {
-        const neighbors = world.find_neighbors(this.pos);
+        const neighbors = world.blocks.find_neighbors(this.pos);
         neighbors.forEach(neighbor => {
             // 更新链接状态
             if (neighbor instanceof WireBlock) {
