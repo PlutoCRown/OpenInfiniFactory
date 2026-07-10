@@ -7,8 +7,8 @@ use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAn
 use crate::game::world::grid::WorldBlocks;
 
 use super::behaviors::{
-    material_source_generation, run_material_behavior_phase, run_ready_material_teleports,
-    run_weld_behavior_phase, LaserBeam,
+    material_source_generation, run_laser_phase, run_material_behavior_phase,
+    run_ready_material_teleports, run_weld_behavior_phase, LaserBeam,
 };
 use super::gravity::mark_gravity_phase;
 use super::markers::{run_powered_marker_phase, run_static_marker_phase};
@@ -62,8 +62,12 @@ pub fn simulate_turn(
     structure_state.refresh_material_structures(world);
     sample.prep_ms = mark_elapsed_ms(&mut mark);
 
+    // 先按平台/材料算电，通电激光本回合先发射；打中传感器工作面后再二次供电
     signal_cache.refresh(world);
-    let powered_components = signal_cache.powered_components(world);
+    let laser_power = signal_cache.powered_components(world, &HashSet::new());
+    let laser_devices = signal_cache.powered_devices(&laser_power);
+    let (laser_effects, laser_hit_detectors) = run_laser_phase(world, &laser_devices);
+    let powered_components = signal_cache.powered_components(world, &laser_hit_detectors);
     let powered_devices = signal_cache.powered_devices(&powered_components);
     let render_powered_wires = signal_cache.powered_wires(&powered_components);
     sample.signal_ms = mark_elapsed_ms(&mut mark);
@@ -71,9 +75,10 @@ pub fn simulate_turn(
         sim_log.log(
             turn,
             format!(
-                "signals: {} powered networks, {} powered devices",
+                "signals: {} powered networks, {} powered devices, {} laser-hit detectors",
                 powered_components.len(),
-                powered_devices.len()
+                powered_devices.len(),
+                laser_hit_detectors.len()
             ),
         );
         for pos in powered_devices.iter().copied().collect::<Vec<_>>() {
@@ -94,7 +99,10 @@ pub fn simulate_turn(
         for pos in actuating_devices.iter().copied().collect::<Vec<_>>() {
             sim_log.log(
                 turn,
-                format!("  actuating pusher/blocker at ({}, {}, {})", pos.x, pos.y, pos.z),
+                format!(
+                    "  actuating pusher/blocker at ({}, {}, {})",
+                    pos.x, pos.y, pos.z
+                ),
             );
         }
     }
@@ -157,13 +165,8 @@ pub fn simulate_turn(
     run_powered_marker_phase(world, &powered_devices);
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
-    let behavior_effects = run_material_behavior_phase(
-        world,
-        &powered_devices,
-        structure_state,
-        pending_generated,
-        turn + 1,
-    );
+    let behavior_effects =
+        run_material_behavior_phase(world, structure_state, pending_generated, turn + 1);
     structure_state.refresh_material_structures(world);
 
     prepare_upcoming_generation(world, pending_generated, turn + 1);
@@ -181,14 +184,17 @@ pub fn simulate_turn(
         *stats = sample.clone();
     }
 
+    let mut behavior_sparks = laser_effects.sparks;
+    behavior_sparks.extend(behavior_effects.sparks);
+
     TurnOutput {
         turn,
         animations,
         pusher_animations,
         render_powered_wires,
         weld_sparks,
-        behavior_sparks: behavior_effects.sparks,
-        laser_beams: behavior_effects.laser_beams,
+        behavior_sparks,
+        laser_beams: laser_effects.laser_beams,
         acceptance_sparks,
         stats: sample,
     }
@@ -312,7 +318,10 @@ fn log_movement_plan(
                         .get(pos)
                         .map(|block| format!("{:?}", block.kind))
                         .unwrap_or_else(|| "?".into());
-                    sim_log.log(turn, format!("    at ({}, {}, {}) {kind}", pos.x, pos.y, pos.z));
+                    sim_log.log(
+                        turn,
+                        format!("    at ({}, {}, {}) {kind}", pos.x, pos.y, pos.z),
+                    );
                 }
                 if structure.len() > 8 {
                     sim_log.log(turn, format!("    ... {} more", structure.len() - 8));

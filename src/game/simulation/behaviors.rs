@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 use crate::game::blocks::{
-    BlockData, BlockKind, MaterialDestroyer, MaterialLabeler, MaterialSource,
+    BlockData, BlockKind, MaterialDestroyer, MaterialLabeler, MaterialSource, SignalBehavior,
 };
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{
@@ -39,17 +39,61 @@ pub(super) struct MaterialBehaviorEffects {
 
 pub(super) fn run_material_behavior_phase(
     world: &mut WorldBlocks,
-    powered_devices: &HashSet<IVec3>,
     structure_state: &mut StructureState,
     pending_destroyed: &mut PendingGeneratedMaterials,
     ready_turn: u64,
 ) -> MaterialBehaviorEffects {
-    let effects = run_material_destroy_phase(world, powered_devices, pending_destroyed, ready_turn);
+    let effects = run_material_destroy_phase(world, pending_destroyed, ready_turn);
     mark_material_teleport_phase(world, pending_destroyed, ready_turn);
     run_material_label_phase(world);
     run_material_conversion_phase(world);
     run_material_acceptance_phase(world, structure_state, pending_destroyed, ready_turn);
     effects
+}
+
+// 通电激光先发射：摧毁材料，并记录打中工作面的传感器（供本回合二次供电）
+pub(super) fn run_laser_phase(
+    world: &mut WorldBlocks,
+    powered_devices: &HashSet<IVec3>,
+) -> (MaterialBehaviorEffects, HashSet<IVec3>) {
+    let lasers: Vec<(IVec3, IVec3, i32)> = world
+        .blocks
+        .iter()
+        .filter_map(
+            |(pos, block)| match block.kind.material_destroyer(block.facing) {
+                Some(MaterialDestroyer::Laser { direction, range }) => {
+                    Some((*pos, direction, range))
+                }
+                _ => None,
+            },
+        )
+        .collect();
+
+    let mut sparks = Vec::new();
+    let mut laser_beams = Vec::new();
+    let mut hit_detectors = HashSet::new();
+    for (pos, direction, range) in lasers {
+        if !powered_devices.contains(&pos) {
+            continue;
+        }
+        trace_laser(
+            world,
+            pos,
+            direction,
+            range,
+            &mut laser_beams,
+            &mut sparks,
+            &mut hit_detectors,
+            0,
+        );
+    }
+    (
+        MaterialBehaviorEffects {
+            sparks,
+            laser_beams,
+        },
+        hit_detectors,
+    )
 }
 
 pub(super) fn mark_material_teleport_phase(
@@ -347,7 +391,6 @@ fn run_ready_material_teleports_impl(
 
 fn run_material_destroy_phase(
     world: &mut WorldBlocks,
-    powered_devices: &HashSet<IVec3>,
     pending_destroyed: &mut PendingGeneratedMaterials,
     ready_turn: u64,
 ) -> MaterialBehaviorEffects {
@@ -363,7 +406,6 @@ fn run_material_destroy_phase(
         .collect();
 
     let mut sparks = Vec::new();
-    let mut laser_beams = Vec::new();
     for (pos, destroyer) in destroyers {
         match destroyer {
             MaterialDestroyer::Drill { target } => mark_material_destroy(
@@ -384,24 +426,13 @@ fn run_material_destroy_phase(
                     );
                 }
             }
-            MaterialDestroyer::Laser { direction, range } => {
-                if powered_devices.contains(&pos) {
-                    trace_laser(
-                        world,
-                        pos,
-                        direction,
-                        range,
-                        &mut laser_beams,
-                        &mut sparks,
-                        0,
-                    );
-                }
-            }
+            // 激光已在 run_laser_phase 处理
+            MaterialDestroyer::Laser { .. } => {}
         }
     }
     MaterialBehaviorEffects {
         sparks,
-        laser_beams,
+        laser_beams: Vec::new(),
     }
 }
 
@@ -425,6 +456,7 @@ fn trace_laser(
     range: i32,
     beams: &mut Vec<LaserBeam>,
     sparks: &mut Vec<IVec3>,
+    hit_detectors: &mut HashSet<IVec3>,
     bounce_depth: u32,
 ) {
     const MAX_BOUNCES: u32 = 8;
@@ -447,6 +479,14 @@ fn trace_laser(
             continue;
         }
         traveled = distance;
+        // 激光打中传感器工作面：入射方向正对检测方向
+        if let Some(SignalBehavior::Detector { detection_pos }) =
+            block.kind.signal_behavior(block.facing)
+        {
+            if direction == -detection_pos {
+                hit_detectors.insert(target);
+            }
+        }
         let reflections = mirror::reflect_laser(block.kind, block.facing, direction);
         if !reflections.is_empty() {
             sparks.push(target);
@@ -460,6 +500,7 @@ fn trace_laser(
                 range,
                 beams,
                 sparks,
+                hit_detectors,
                 bounce_depth + 1,
             );
         }
@@ -496,6 +537,7 @@ pub(crate) fn trace_laser_for_test(
     bounce_depth: u32,
 ) {
     let mut sparks = Vec::new();
+    let mut hit_detectors = HashSet::new();
     trace_laser(
         world,
         origin,
@@ -503,6 +545,7 @@ pub(crate) fn trace_laser_for_test(
         range,
         beams,
         &mut sparks,
+        &mut hit_detectors,
         bounce_depth,
     );
 }

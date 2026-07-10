@@ -326,6 +326,7 @@ pub enum ModelMaterial {
     Wire,
     Signal,
     Power,
+    DetectorBody,
     Pusher,
     Platform,
     PlatformBase,

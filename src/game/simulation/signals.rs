@@ -103,14 +103,22 @@ impl SignalNetworkCache {
         }
     }
 
-    pub(super) fn powered_components(&self, world: &WorldBlocks) -> HashSet<usize> {
+    // laser_hit_detectors：本回合激光打中工作面的传感器，视为已激活
+    pub(super) fn powered_components(
+        &self,
+        world: &WorldBlocks,
+        laser_hit_detectors: &HashSet<IVec3>,
+    ) -> HashSet<usize> {
         self.component_detectors
             .iter()
             .enumerate()
             .filter_map(|(component, detectors)| {
                 detectors
                     .iter()
-                    .any(|detector_pos| detector_is_active(world, *detector_pos))
+                    .any(|detector_pos| {
+                        laser_hit_detectors.contains(detector_pos)
+                            || detector_is_active(world, *detector_pos)
+                    })
                     .then_some(component)
             })
             .collect()
@@ -193,13 +201,14 @@ mod tests {
         wired_detector(&mut world, detector, wire);
         let mut cache = SignalNetworkCache::default();
 
+        let no_laser = HashSet::new();
         place_factory(&mut world, target, BlockKind::Platform);
         cache.refresh(&world);
-        assert!(cache.powered_components(&world).contains(&0));
+        assert!(cache.powered_components(&world, &no_laser).contains(&0));
 
         place_factory(&mut world, target, BlockKind::Conveyor);
         cache.refresh(&world);
-        assert!(cache.powered_components(&world).is_empty());
+        assert!(cache.powered_components(&world, &no_laser).is_empty());
 
         world.remove(&target);
         place_factory(
@@ -208,6 +217,22 @@ mod tests {
             BlockKind::material_block_kind(crate::game::blocks::MaterialKind::Basic).unwrap(),
         );
         cache.refresh(&world);
-        assert!(cache.powered_components(&world).contains(&0));
+        assert!(cache.powered_components(&world, &no_laser).contains(&0));
+    }
+
+    #[test]
+    fn laser_hit_detector_powers_network_without_detectable_target() {
+        let mut world = WorldBlocks::default();
+        let detector = IVec3::ZERO;
+        let wire = IVec3::NEG_X;
+        wired_detector(&mut world, detector, wire);
+        let mut cache = SignalNetworkCache::default();
+        cache.refresh(&world);
+
+        let no_laser = HashSet::new();
+        assert!(cache.powered_components(&world, &no_laser).is_empty());
+
+        let laser_hits = HashSet::from([detector]);
+        assert!(cache.powered_components(&world, &laser_hits).contains(&0));
     }
 }

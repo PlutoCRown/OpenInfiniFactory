@@ -160,6 +160,10 @@ impl WorldRenderAssets {
                 ModelMaterial::Power,
                 emissive_material(1.0, 0.52, 0.20, 0.22, 0.08, 0.02),
             ),
+            (
+                ModelMaterial::DetectorBody,
+                block_material(BlockKind::Detector),
+            ),
             (ModelMaterial::Pusher, srgb_material(0.54, 0.56, 0.54)),
             (
                 ModelMaterial::Platform,
