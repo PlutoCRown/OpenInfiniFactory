@@ -286,7 +286,7 @@ impl SaveFile {
                 let hotbar = self
                     .hotbar
                     .or_else(|| Some(InventoryItems::for_mode(BuilderMode::Play).hotbar));
-                let mut puzzle_world = load_puzzle_world(&puzzle_id)?;
+                let puzzle_world = load_puzzle_world(&puzzle_id)?;
                 let mut world = puzzle_world.clone();
                 apply_factory_blocks(&mut world, self.factory_blocks);
                 Some(LoadedSave {

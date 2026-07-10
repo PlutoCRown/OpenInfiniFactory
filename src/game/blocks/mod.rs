@@ -385,7 +385,7 @@ pub enum BlockModel {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct ColorSpec {
+pub struct ColorSpec {
     r: f32,
     g: f32,
     b: f32,

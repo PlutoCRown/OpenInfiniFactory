@@ -10,7 +10,7 @@ type TextPromptHandler = Box<dyn FnOnce(TextPromptResult, &mut World) + Send>;
 
 /// Stored as a [`NonSend`] resource because [`TextPromptHandler`] is not [`Sync`].
 #[derive(Default)]
-pub(crate) struct PendingTextPromptHandler {
+pub struct PendingTextPromptHandler {
     pub handler: Option<TextPromptHandler>,
 }
 

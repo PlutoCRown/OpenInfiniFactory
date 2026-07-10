@@ -631,7 +631,7 @@ mod tests {
         world.insert(IVec3::new(2, 0, 0), basic_material(IVec3::new(2, 0, 0)));
         world.weld_materials(IVec3::X, IVec3::new(2, 0, 0));
 
-        let state = StructureState::rebuild_for_simulation_standalone(&world);
+        let state = rebuild_for_simulation_standalone(&world);
         assert_eq!(state.structures.len(), 2);
         assert_eq!(state.kind_at(IVec3::ZERO), Some(StructureKind::Factory));
         assert_eq!(state.kind_at(IVec3::X), Some(StructureKind::Material));
@@ -647,7 +647,7 @@ mod tests {
             BlockData::new(BlockKind::Goal, Facing::North),
         );
 
-        let state = StructureState::rebuild_for_simulation_standalone(&world);
+        let state = rebuild_for_simulation_standalone(&world);
         assert_eq!(state.acceptor_structures().len(), 2);
         assert!(state
             .acceptor_structures()
@@ -665,7 +665,7 @@ mod tests {
         world.insert(IVec3::ZERO, BlockData::new(BlockKind::Stone, Facing::North));
         world.insert(IVec3::Y, platform(IVec3::Y));
 
-        let mut state = StructureState::rebuild_for_simulation_standalone(&world);
+        let mut state = rebuild_for_simulation_standalone(&world);
         let index = state.structure_index_at(IVec3::Y).unwrap();
         state.record_gravity_support(index, &world);
         assert!(state.gravity_support_valid(index, &world));
@@ -682,7 +682,7 @@ mod tests {
         );
         world.insert(IVec3::new(1, 2, 0), platform(IVec3::new(1, 2, 0)));
 
-        let state = StructureState::rebuild_for_simulation_standalone(&world);
+        let state = rebuild_for_simulation_standalone(&world);
         assert!(!state.structure(IVec3::Y).unwrap().pushable);
 
         let subset = state.pusher_target_structure(
@@ -707,7 +707,7 @@ mod tests {
             BlockData::new(BlockKind::Pusher, Facing::West),
         );
 
-        let state = StructureState::rebuild_for_simulation_standalone(&world);
+        let state = rebuild_for_simulation_standalone(&world);
         assert!(state
             .pusher_target_structure(
                 &world,
@@ -717,11 +717,9 @@ mod tests {
             )
             .is_none());
     }
-}
 
-impl StructureState {
-    fn rebuild_for_simulation_standalone(world: &WorldBlocks) -> Self {
-        let mut state = Self::default();
+    fn rebuild_for_simulation_standalone(world: &WorldBlocks) -> StructureState {
+        let mut state = StructureState::default();
         state.rebuild_for_simulation(world);
         state
     }

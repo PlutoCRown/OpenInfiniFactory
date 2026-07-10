@@ -17,7 +17,7 @@ use crate::shared::config::{ActionKeyName, GameConfig};
 use crate::sim_core::{SimSnapshot, SimulationWorker, TurnCache};
 
 #[derive(SystemParam)]
-pub(crate) struct SimulationControlDeps<'w> {
+pub struct SimulationControlDeps<'w> {
     builder_mode: Res<'w, BuilderMode>,
     mode: Res<'w, State<GameMode>>,
     playing_ui: Res<'w, PlayingUiState>,

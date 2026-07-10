@@ -38,7 +38,7 @@ use crate::game::world::rendering::{
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
 #[derive(SystemParam)]
-pub(crate) struct PanelCloseDeps<'w> {
+pub struct PanelCloseDeps<'w> {
     ui_runtime: ResMut<'w, UiRuntime>,
     ui_host: ResMut<'w, UiHost>,
     open_block_dropdown: ResMut<'w, OpenBlockPanelDropdown>,
@@ -1119,7 +1119,7 @@ pub fn apply_fov(
 }
 
 #[derive(SystemParam)]
-pub(crate) struct HoverPreviewDeps<'w, 's> {
+pub struct HoverPreviewDeps<'w, 's> {
     commands: Commands<'w, 's>,
     meshes: ResMut<'w, Assets<Mesh>>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,

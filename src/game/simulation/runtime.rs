@@ -15,7 +15,7 @@ use crate::game::world::rendering::{
     WorldRenderAssets,
 };
 use crate::scene::{apply_turn_output, BlockEntityIndex};
-use crate::sim_core::{CachedTurn, SimSnapshot, SimulationDebugLog, SimulationWorker, TurnCache};
+use crate::sim_core::{CachedTurn, SimSnapshot, SimulationWorker, TurnCache};
 
 use super::movement::PusherState;
 use super::structure_state::StructureState;
@@ -81,18 +81,6 @@ impl PendingGeneratedMaterials {
             .or_insert(ready_turn);
     }
 
-    pub(crate) fn pending_destroy_turn(&self, pos: IVec3) -> Option<u64> {
-        self.pending_destroyed.get(&pos).copied()
-    }
-
-    pub(crate) fn pending_acceptance_spark_turn(&self, pos: IVec3) -> Option<u64> {
-        self.pending_acceptance_sparks.get(&pos).copied()
-    }
-
-    pub(crate) fn has_pending_destruction(&self) -> bool {
-        !self.pending_destroyed.is_empty()
-    }
-
     pub(crate) fn pending_keys(&self) -> impl Iterator<Item = IVec3> + '_ {
         self.pending.keys().copied()
     }
@@ -136,6 +124,21 @@ impl PendingGeneratedMaterials {
     }
 }
 
+#[cfg(test)]
+impl PendingGeneratedMaterials {
+    pub(crate) fn pending_destroy_turn(&self, pos: IVec3) -> Option<u64> {
+        self.pending_destroyed.get(&pos).copied()
+    }
+
+    pub(crate) fn pending_acceptance_spark_turn(&self, pos: IVec3) -> Option<u64> {
+        self.pending_acceptance_sparks.get(&pos).copied()
+    }
+
+    pub(crate) fn has_pending_destruction(&self) -> bool {
+        !self.pending_destroyed.is_empty()
+    }
+}
+
 #[derive(Clone)]
 struct PendingGeneratedMaterial {
     block: BlockData,
@@ -159,14 +162,6 @@ impl Default for SimulationStepStats {
             render_rebuild_ms: 0.0,
         }
     }
-}
-
-#[derive(SystemParam)]
-pub(crate) struct SimulationTurnDeps<'w> {
-    structure_state: ResMut<'w, StructureState>,
-    movement_influence: ResMut<'w, MovementInfluenceCache>,
-    pusher_state: ResMut<'w, PusherState>,
-    sim_log: ResMut<'w, SimulationDebugLog>,
 }
 
 #[derive(Default)]
@@ -221,12 +216,11 @@ pub fn prefetch_simulation_turn(
     _pending_generated: ResMut<PendingGeneratedMaterials>,
     _signal_cache: ResMut<SignalNetworkCache>,
     _turn_cache: ResMut<TurnCache>,
-    _turn_deps: SimulationTurnDeps,
 ) {
 }
 
 #[derive(SystemParam)]
-pub(crate) struct SimulationTickDeps<'w> {
+pub struct SimulationTickDeps<'w> {
     world: ResMut<'w, WorldBlocks>,
     pending_generated: ResMut<'w, PendingGeneratedMaterials>,
     signal_cache: ResMut<'w, SignalNetworkCache>,

@@ -78,10 +78,10 @@ pub struct LocalizedText {
 }
 
 #[derive(Component)]
-pub(crate) struct InventoryTooltip;
+pub struct InventoryTooltip;
 
 #[derive(Component)]
-pub(crate) struct CarriedItemPreview;
+pub struct CarriedItemPreview;
 
 #[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InventorySlot {

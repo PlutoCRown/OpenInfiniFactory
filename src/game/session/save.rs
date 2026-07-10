@@ -5,10 +5,10 @@ use crate::game::ui::InventoryItems;
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::save::{save_puzzle, SaveKind, SaveState};
 
-use super::messages::{SaveCurrentWorld, SaveCurrentWorldInvalidateSolutions, SaveWorldAsNewPuzzle};
-use super::world_ops::{
-    save_current_world, save_current_world_invalidate_solutions, SaveCurrentWorldResult,
+use super::messages::{
+    SaveCurrentWorld, SaveCurrentWorldInvalidateSolutions, SaveWorldAsNewPuzzle,
 };
+use super::world_ops::{save_current_world, save_current_world_invalidate_solutions};
 
 pub fn handle_save_current_world(
     mut requests: MessageReader<SaveCurrentWorld>,
@@ -67,20 +67,4 @@ pub fn handle_save_world_as_new_puzzle(
             save_state.refresh();
         }
     }
-}
-
-pub fn save_current_world_result(
-    world: &WorldBlocks,
-    inventory: &InventoryItems,
-    save_state: &mut SaveState,
-    solution_state: &mut SolutionState,
-    simulation: &SimulationState,
-) -> SaveCurrentWorldResult {
-    save_current_world(
-        world,
-        inventory,
-        save_state,
-        solution_state,
-        simulation,
-    )
 }

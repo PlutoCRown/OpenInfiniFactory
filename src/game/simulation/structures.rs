@@ -360,15 +360,6 @@ fn structure_supported_by_lifter(world: &WorldBlocks, structure: &HashSet<IVec3>
     })
 }
 
-pub(super) fn execute_structure_moves(
-    world: &mut WorldBlocks,
-    moves: Vec<StructureMove>,
-    structures: &mut StructureState,
-) -> HashMap<IVec3, BlockAnimation> {
-    let mut influence_cache = MovementInfluenceCache::default();
-    execute_structure_moves_with_pushers(world, moves, structures, &mut influence_cache).0
-}
-
 /// 按序执行运动标签：失败则试下一个；种子判占用，成功后标记展开后的格子
 pub(super) fn execute_structure_moves_with_pushers(
     world: &mut WorldBlocks,
