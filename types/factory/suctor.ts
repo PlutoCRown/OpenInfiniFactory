@@ -10,9 +10,9 @@ class SuctorBlock extends FactoryBlock implements Directional, SingalDevice {
         return new SuctorBlock(this.pos, this.direction);
     }
     on_turn({ turn_world }: RuntimeTurn) {
-        const block = turn_world.get_block_by_pos(this.pos.add(Vec3Unit.from_direction(this.direction)));
+        const block = turn_world.blocks.get_block_by_pos(this.pos.add(Vec3Unit.from_direction(this.direction)));
         if (block instanceof MaterialBlock) {
-            turn_world.destroy_block(block.pos);
+            turn_world.blocks.destroy_block(block.pos);
         }
     }
 }

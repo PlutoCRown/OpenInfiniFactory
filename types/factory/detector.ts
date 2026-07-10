@@ -20,7 +20,7 @@ class DetectorBlock extends FactoryBlock implements Directional, Alternateable, 
         this.direction = reader.read_number() as Direction;
     }
     on_turn({ turn_world }: RuntimeTurn) {
-        const block = turn_world.get_block_by_pos(this.work_pos);
+        const block = turn_world.blocks.get_block_by_pos(this.work_pos);
         if (block instanceof PlatformBlock || block instanceof MaterialBlock) {
             turn_world.signal_networks.get(this.in_network_id)?.activate();
         }

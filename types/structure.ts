@@ -51,40 +51,35 @@ class SceneStructure extends Structure {
 }
 // #endregion
 // #region World
+/** 运行时这的总世界！包含全部方块、结构、网络等快捷查找信息 */
 class World {
-    blocks: Map<Vec3Int, Block>;
+    // 方块快速查询表
+    blocks: BlockManager;
+    // 其他内容
+    virtual_blocks: Map<Vec3Int, VirtualBlock>;
     structures: Map<RuntimeStructureID, Structure>;
-    signal_networks: Map<RuntimeNetworkID, SignalNetwork>;
-    welder_networks: Map<RuntimeNetworkID, WelderNetwork>;
-}
-class RuntimeWorld extends World {
-    turn: number;
-    materials: MaterialStructure[];
+    signal_networks: NetworkManager;
+    constructor() {
+        this.blocks = new BlockManager(this);
+        this.virtual_blocks = new Map();
+        this.structures = new Map();
+        this.signal_networks = new NetworkManager(this);
+    }
+    /** 通过 坐标 查找存在的结构 */
     get_structure_by_pos(pos: Vec3Int): Structure | null {
-        const block = this.blocks.get(pos)
+        const block = this.blocks.get_block_by_pos(pos)
         if (block instanceof FactoryBlock || block instanceof MaterialBlock) {
             return this.structures.get(block.in_structure_id);
         }
         return null;
     }
-    get_block_by_pos(pos: Vec3Int): Block | null {
-        return this.blocks.get(pos);
-    }
 
-    find_neighbors(pos: Vec3Int): Block[] {
-        return [
-            this.get_block_by_pos(pos.add(Vec3Unit.Unit_X)),
-            this.get_block_by_pos(pos.add(Vec3Unit.Unit_X_NEG)),
-            this.get_block_by_pos(pos.add(Vec3Unit.Unit_Y)),
-            this.get_block_by_pos(pos.add(Vec3Unit.Unit_Y_NEG)),
-            this.get_block_by_pos(pos.add(Vec3Unit.Unit_Z)),
-        ];
-    }
-    destroy_block(pos: Vec3Int): void {
-        const block = this.get_block_by_pos(pos);
-        this.blocks.delete(pos);
-        // FIXME: 这里要进行结构重建
-    }
+
+}
+/** 模拟期的世界，在世界的基础上还包含模拟期信息 */
+class RuntimeWorld extends World {
+    turn: number;
+    materials: MaterialStructure[];
 }
 
 class RuntimeTurn {

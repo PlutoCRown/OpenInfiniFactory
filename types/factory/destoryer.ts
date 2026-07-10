@@ -19,9 +19,9 @@ class DrillBlock extends FactoryBlock implements Directional, Alternateable {
         this.direction = reader.read_number() as Direction;
     }
     on_turn({ turn_world }: RuntimeTurn) {
-        const block = turn_world.get_block_by_pos(this.work_pos);
+        const block = turn_world.blocks.get_block_by_pos(this.work_pos);
         if (block instanceof MaterialBlock) {
-            turn_world.destroy_block(block.pos);
+            turn_world.blocks.destroy_block(block.pos);
         }
     }
 }
@@ -67,9 +67,9 @@ class LaserLight {
     execute(turn_world: RuntimeWorld) {
         const direction = Vec3Unit.from_facing(this.facing)
         for (let i = 1; i <= this.range; i++) {
-            const block = turn_world.get_block_by_pos(this.origin.add(direction.multiply(i)));
+            const block = turn_world.blocks.get_block_by_pos(this.origin.add(direction.multiply(i)));
             if (block instanceof MaterialBlock) {
-                turn_world.destroy_block(block.pos);
+                turn_world.blocks.destroy_block(block.pos);
             } else if (block instanceof MirrorBlock) {
                 block.reflect(this.facing)?.execute(turn_world);
             }

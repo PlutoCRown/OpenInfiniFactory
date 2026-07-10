@@ -20,9 +20,9 @@ class WelderBlock extends FactoryBlock implements Directional, Alternateable {
         this.direction = reader.read_number() as Direction;
     }
     on_turn({ turn_world }: RuntimeTurn) {
-        const block = turn_world.get_block_by_pos(this.work_pos);
+        const block = turn_world.blocks.get_block_by_pos(this.work_pos);
         if (block instanceof MaterialBlock) {
-            turn_world.find_neighbors(this.work_pos).forEach(neighbor => {
+            turn_world.blocks.find_neighbors(this.work_pos).forEach(neighbor => {
                 if (neighbor instanceof MaterialBlock && neighbor.in_structure_id !== this.in_structure_id) {
                     const other_structure = turn_world.structures.get(neighbor.in_structure_id) as MaterialStructure;
                     const this_structure = turn_world.structures.get(this.in_structure_id) as MaterialStructure;
@@ -41,4 +41,9 @@ class DownWelderBlock extends WelderBlock {
 }
 
 class WelderPointBlock extends VirtualBlock implements Connectable {
+    connected;
+    on_update() {
+        // FIXME: 链接逻辑
+
+    }
 }
