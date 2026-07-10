@@ -1,7 +1,9 @@
+use bevy::prelude::Resource;
+
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::world::grid::WorldBlocks;
 
-#[derive(Clone, Default)]
+#[derive(Resource, Clone, Default)]
 pub struct SimulationControl {
     pub turn: u64,
     pub running: bool,

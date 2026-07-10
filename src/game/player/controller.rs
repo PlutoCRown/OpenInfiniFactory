@@ -6,7 +6,7 @@ use bevy::light::ShadowFilteringMethod;
 use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
 use bevy::prelude::*;
 use bevy::render::camera::TemporalJitter;
-use bevy::render::view::Hdr;
+use bevy::camera::Hdr;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use crate::game::cameras::{GameplayCamera, MENU_CLEAR};

@@ -68,11 +68,14 @@ pub fn update_inventory_slots(
             SlotArea::Hotbar => inventory.hotbar[slot.index],
             SlotArea::Backpack => inventory.backpack[slot.index],
         };
-        node.display = if slot.area == SlotArea::Backpack && item.is_none() {
+        let next = if slot.area == SlotArea::Backpack && item.is_none() {
             Display::None
         } else {
             Display::Flex
         };
+        if node.display != next {
+            node.display = next;
+        }
         let icon_handle = item
             .and_then(|item| item.block())
             .and_then(|kind| block_icons.as_deref().and_then(|icons| icons.get(kind)));

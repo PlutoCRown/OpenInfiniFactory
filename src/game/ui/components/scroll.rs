@@ -1,15 +1,18 @@
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
+/// 滚动容器状态
 #[derive(Component)]
 pub struct ScrollContainer {
     pub offset: f32,
     pub max_offset: f32,
 }
 
+/// 滚动内容标记（通过改 top 实现滚动）
 #[derive(Component)]
 pub struct ScrollContent;
 
+/// 固定高度纵向滚动容器
 pub fn scroll_container(height: f32) -> (impl Bundle, ScrollContainer) {
     (
         (
@@ -18,6 +21,7 @@ pub fn scroll_container(height: f32) -> (impl Bundle, ScrollContainer) {
                 height: Val::Px(height),
                 position_type: PositionType::Relative,
                 overflow: Overflow::clip_y(),
+                flex_shrink: 0.0,
                 ..default()
             },
             BackgroundColor(Color::NONE),
@@ -29,10 +33,26 @@ pub fn scroll_container(height: f32) -> (impl Bundle, ScrollContainer) {
     )
 }
 
-pub fn scroll_content() -> ScrollContent {
-    ScrollContent
+/// 滚动内容列
+pub fn scroll_content() -> impl Bundle {
+    (
+        ScrollContent,
+        Node {
+            width: Val::Percent(100.0),
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            top: Val::Px(0.0),
+            flex_direction: FlexDirection::Column,
+            flex_shrink: 0.0,
+            // Bevy 0.19.0：Visible 祖先会截断 clip_check，必须非 Visible 才能走到容器裁剪
+            overflow: Overflow::clip(),
+            ..default()
+        },
+        BackgroundColor(Color::NONE),
+    )
 }
 
+/// 滚轮驱动滚动偏移
 pub fn update_scroll_containers(
     mut mouse_wheel: MessageReader<MouseWheel>,
     mut containers: Query<(&mut ScrollContainer, &Children, &ComputedNode)>,
@@ -55,6 +75,30 @@ pub fn update_scroll_containers(
         } else {
             container.offset = container.offset.clamp(0.0, container.max_offset);
         }
-        style.top = Val::Px(-container.offset);
+        let next_top = Val::Px(-container.offset);
+        if style.top != next_top {
+            style.top = next_top;
+        }
+    }
+}
+
+/// 绕过 Bevy 0.19.0 clip_check_recursive 回归：中间 Visible 祖先会提前返回，滚出视口仍挡上方控件
+pub fn fix_scroll_clip_picking(
+    contents: Query<Entity, Added<ScrollContent>>,
+    children: Query<&Children>,
+    mut nodes: Query<&mut Node>,
+) {
+    for root in &contents {
+        let mut stack = vec![root];
+        while let Some(entity) = stack.pop() {
+            if let Ok(mut node) = nodes.get_mut(entity) {
+                if node.overflow.is_visible() {
+                    node.overflow = Overflow::clip();
+                }
+            }
+            if let Ok(kids) = children.get(entity) {
+                stack.extend(kids.iter());
+            }
+        }
     }
 }

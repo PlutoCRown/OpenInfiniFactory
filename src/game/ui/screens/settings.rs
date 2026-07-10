@@ -4,7 +4,7 @@ use crate::shared::config::{ActionKeyName, ConfigSelectionMode};
 
 use super::super::components::{
     default_button_size, flex_row, localized_text, scroll_container, scroll_content, spawn_panel,
-    transparent_node, PanelOptions,
+    transparent_node, PanelOptions, ScrollContent,
 };
 use super::super::types::{
     PanelVisibility, SettingsAction, SettingsControl, SettingsDropdown, SettingsDropdownRow,
@@ -62,12 +62,11 @@ fn spawn_settings_dropdown_row(
         ))
         .with_children(|row| {
             spawn_settings_label(row, label_key);
-            row.spawn(transparent_node(Node {
-                width: Val::Px(530.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(8.0),
-                justify_content: JustifyContent::Center,
-                ..default()
+            row.spawn(transparent_node({
+                let mut cell = settings_cell(530.0);
+                cell.flex_direction = FlexDirection::Column;
+                cell.justify_content = JustifyContent::Center;
+                cell
             }))
             .with_children(|controls| {
                 spawn_settings_dropdown(controls, dropdown);
@@ -96,10 +95,10 @@ fn spawn_settings_slider_row(
         .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
         .with_children(|row| {
             spawn_settings_label(row, label_key);
-            row.spawn(transparent_node(Node {
-                width: Val::Px(360.0),
-                justify_content: JustifyContent::Center,
-                ..default()
+            row.spawn(transparent_node({
+                let mut cell = settings_cell(360.0);
+                cell.justify_content = JustifyContent::Center;
+                cell
             }))
             .with_children(|controls| {
                 if let SettingsControl::Slider { field, .. } = item.control {
@@ -112,26 +111,45 @@ fn spawn_settings_slider_row(
         });
 }
 
+fn settings_row_height() -> f32 {
+    default_button_size(40.0)
+}
+
 fn settings_row_node() -> impl Bundle {
     transparent_node(Node {
         width: Val::Percent(100.0),
-        min_height: Val::Px(default_button_size(54.0)),
+        height: Val::Px(settings_row_height()),
         display: Display::Flex,
+        flex_direction: FlexDirection::Row,
         align_items: AlignItems::Center,
         column_gap: Val::Px(18.0),
+        flex_shrink: 0.0,
         ..default()
     })
 }
 
+fn settings_cell(width: f32) -> Node {
+    Node {
+        width: Val::Px(width),
+        min_width: Val::Px(width),
+        height: Val::Percent(100.0),
+        flex_shrink: 0.0,
+        display: Display::Flex,
+        align_items: AlignItems::Center,
+        justify_content: JustifyContent::FlexStart,
+        ..default()
+    }
+}
+
 fn spawn_settings_label(row: &mut ChildSpawnerCommands, label_key: &'static str) {
-    row.spawn((
-        localized_text(label_key, 15.0, Color::srgb(0.82, 0.88, 0.90)),
-        Node {
-            width: Val::Px(220.0),
-            align_self: AlignSelf::Center,
-            ..default()
-        },
-    ));
+    row.spawn(transparent_node(settings_cell(220.0)))
+        .with_children(|cell| {
+            cell.spawn(localized_text(
+                label_key,
+                15.0,
+                Color::srgb(0.82, 0.88, 0.90),
+            ));
+        });
 }
 
 fn spawn_settings_item(
@@ -156,23 +174,24 @@ fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, settings: &GameSett
         .with_children(|container| {
             container
                 .spawn((
-                    transparent_node(Node {
+                    ScrollContent,
+                    Node {
                         width: Val::Percent(100.0),
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        top: Val::Px(0.0),
                         flex_direction: FlexDirection::Column,
                         row_gap: Val::Px(8.0),
+                        flex_shrink: 0.0,
+                        overflow: Overflow::clip(),
                         ..default()
-                    }),
-                    scroll_content(),
+                    },
+                    BackgroundColor(Color::NONE),
                 ))
                 .with_children(|content| {
                     for item in GAMEPLAY_SETTINGS {
                         spawn_settings_item(content, *item, settings);
                     }
-                    content.spawn(transparent_node(Node {
-                        width: Val::Percent(100.0),
-                        height: Val::Px(120.0),
-                        ..default()
-                    }));
                     spawn_settings_footer(content);
                 });
         });
@@ -183,16 +202,18 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands) {
         .spawn(scroll_container(360.0))
         .insert(PanelVisibility::SettingsTab(SettingsTab::KeyBindings))
         .with_children(|container| {
-            container
-                .spawn((key_bindings_columns_bundle(), scroll_content()))
-                .with_children(|columns| {
-                    spawn_key_group(columns, "settings.group.general", &ActionKeyName::GENERAL);
-                    spawn_key_group(
-                        columns,
-                        "settings.group.simulation",
-                        &ActionKeyName::SIMULATION,
-                    );
-                });
+            container.spawn(scroll_content()).with_children(|content| {
+                content
+                    .spawn(key_bindings_columns_bundle())
+                    .with_children(|columns| {
+                        spawn_key_group(columns, "settings.group.general", &ActionKeyName::GENERAL);
+                        spawn_key_group(
+                            columns,
+                            "settings.group.simulation",
+                            &ActionKeyName::SIMULATION,
+                        );
+                    });
+            });
         });
 }
 
@@ -231,11 +252,11 @@ fn spawn_settings_footer(panel: &mut ChildSpawnerCommands) {
 
 fn key_bindings_columns_bundle() -> impl Bundle {
     transparent_node(Node {
-        position_type: PositionType::Absolute,
         width: Val::Percent(100.0),
         flex_direction: FlexDirection::Row,
         align_items: AlignItems::FlexStart,
         column_gap: Val::Px(14.0),
+        flex_shrink: 0.0,
         ..default()
     })
 }

@@ -74,7 +74,7 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
             ));
             slot.spawn((
                 label_text("", 12.0, Color::WHITE),
-                TextLayout::new_with_justify(Justify::Center),
+                TextLayout::justify(Justify::Center),
                 Node {
                     margin: UiRect::all(Val::Px(2.0)),
                     ..default()
@@ -92,7 +92,7 @@ pub(super) fn spawn_confirm_dialog_button(
         .with_children(|button| {
             button.spawn((
                 label_text("", 15.0, Color::WHITE),
-                TextLayout::new_with_no_wrap(),
+                TextLayout::no_wrap(),
             ));
         });
 }
@@ -154,16 +154,24 @@ pub(super) fn spawn_settings_slider(
 }
 
 pub(super) fn spawn_settings_slider_value(parent: &mut ChildSpawnerCommands, field: SettingsField) {
-    parent.spawn((
-        label_text("", 13.0, Color::srgb(0.88, 0.94, 0.96)),
-        TextLayout::new_with_justify(Justify::Right),
-        Node {
+    parent
+        .spawn(plain_node(Node {
             width: Val::Px(130.0),
-            align_self: AlignSelf::Center,
+            min_width: Val::Px(130.0),
+            height: Val::Percent(100.0),
+            flex_shrink: 0.0,
+            display: Display::Flex,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::FlexEnd,
             ..default()
-        },
-        SettingsValueText(field),
-    ));
+        }))
+        .with_children(|cell| {
+            cell.spawn((
+                label_text("", 13.0, Color::srgb(0.88, 0.94, 0.96)),
+                TextLayout::justify(Justify::Right),
+                SettingsValueText(field),
+            ));
+        });
 }
 
 const DROPDOWN_CHEVRON_COLOR: Color = Color::srgb(0.72, 0.80, 0.84);

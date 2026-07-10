@@ -1,6 +1,6 @@
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
-use bevy::ui_widgets::{CoreSliderDragState, Slider, SliderRange, SliderValue};
+use bevy::ui_widgets::{Slider, SliderDragState, SliderRange, SliderValue};
 
 use crate::game::state::{GameSettings, UiPanelId};
 use crate::game::ui::access::{i18n, ui, UiMainThread};
@@ -67,11 +67,11 @@ pub fn settings_menu_actions(
             &SettingsAction,
             Ref<SliderValue>,
             &SliderRange,
-            &CoreSliderDragState,
+            &SliderDragState,
         ),
         (
             With<Slider>,
-            Or<(Changed<SliderValue>, Changed<CoreSliderDragState>)>,
+            Or<(Changed<SliderValue>, Changed<SliderDragState>)>,
         ),
     >,
 ) {
@@ -216,11 +216,11 @@ fn update_settings_sliders_from_input(
             &SettingsAction,
             Ref<SliderValue>,
             &SliderRange,
-            &CoreSliderDragState,
+            &SliderDragState,
         ),
         (
             With<Slider>,
-            Or<(Changed<SliderValue>, Changed<CoreSliderDragState>)>,
+            Or<(Changed<SliderValue>, Changed<SliderDragState>)>,
         ),
     >,
     active_slider: &mut ActiveSettingsSlider,

@@ -164,7 +164,7 @@ impl Default for SimulationStepStats {
     }
 }
 
-#[derive(Default)]
+#[derive(Resource, Default)]
 pub struct SimulationPresentationState {
     pub committed_world: WorldBlocks,
     pub last_render_powered_wires: HashSet<IVec3>,

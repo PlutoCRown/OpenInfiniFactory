@@ -26,6 +26,7 @@ pub fn slider_bundle(action: impl Component + Copy, initial_value: f32) -> impl 
         ),
         Slider {
             track_click: TrackClick::Snap,
+            ..default()
         },
         SliderValue(initial_value.clamp(0.0, 100.0)),
         SliderRange::new(0.0, 100.0),

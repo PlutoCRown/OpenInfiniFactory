@@ -9,9 +9,6 @@ use crate::game::world::grid::WorldBlocks;
 use super::control::SimulationControl;
 use super::SimulationDebugLog;
 
-impl Resource for SimulationControl {}
-impl Resource for SimulationDebugLog {}
-
 pub struct SimCorePlugin;
 
 impl Plugin for SimCorePlugin {

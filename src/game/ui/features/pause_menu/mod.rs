@@ -249,11 +249,14 @@ fn sync_pause_menu_buttons(
         let Some(button) = PAUSE_MENU_BUTTONS.get(marker.index as usize) else {
             continue;
         };
-        node.display = if (button.visible)(&save_state, &solution_state) {
+        let next = if (button.visible)(&save_state, &solution_state) {
             Display::Flex
         } else {
             Display::None
         };
+        if node.display != next {
+            node.display = next;
+        }
         if !labels_dirty {
             continue;
         }

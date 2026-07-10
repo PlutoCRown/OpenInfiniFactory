@@ -166,7 +166,7 @@ fn spawn_save_row_button(
 fn save_row_label(value: impl Into<String>, font_size: f32) -> impl Bundle {
     (
         text(value, font_size, Color::WHITE),
-        TextLayout::new_with_no_wrap(),
+        TextLayout::no_wrap(),
         Node {
             max_width: Val::Percent(100.0),
             overflow: Overflow::clip(),

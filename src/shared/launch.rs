@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 pub const DEFAULT_DEBUG_HTTP_PORT: u16 = 8765;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Resource, Clone, Debug, Default)]
 pub struct LaunchOptions {
     pub debug_http_port: Option<u16>,
     pub load_save: Option<String>,

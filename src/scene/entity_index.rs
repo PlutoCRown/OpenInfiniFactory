@@ -5,7 +5,7 @@ use crate::game::blocks::BlockId;
 use crate::game::world::rendering::{BlockEntity, BlockEntityLayer};
 
 /// 场景实体索引：工厂/材料与系统层分槽，避免重叠格抓错模型
-#[derive(Default)]
+#[derive(Resource, Default)]
 pub struct BlockEntityIndex {
     by_id: HashMap<BlockId, Entity>,
     animatable_pos: HashMap<IVec3, Entity>,

@@ -9,7 +9,7 @@ struct LogEntry {
     message: String,
 }
 
-#[derive(Default)]
+#[derive(Resource, Default)]
 pub struct SimulationDebugLog {
     pub enabled: bool,
     entries: VecDeque<LogEntry>,

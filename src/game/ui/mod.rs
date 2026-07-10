@@ -33,7 +33,8 @@ use crate::game::ui::core::text_prompt::{
 };
 use access::unbind_ui_scope;
 use components::{
-    button_hovered, button_pressed, button_released, button_unhovered, update_scroll_containers,
+    button_hovered, button_pressed, button_released, button_unhovered, fix_scroll_clip_picking,
+    update_scroll_containers,
 };
 use features::UiFeaturesPlugin;
 use menu_button::register_menu_button_clicks;
@@ -51,15 +52,14 @@ impl Plugin for GameUiPlugin {
             .insert_resource(crate::game::ui::core::host::UiHost::default())
             .insert_resource(crate::game::ui::core::text_prompt::TextPromptState::default())
             .insert_resource(crate::game::ui::core::confirm_dialog::ConfirmDialogState::default())
-            .insert_non_send_resource(PendingConfirmHandler::default())
-            .insert_non_send_resource(PendingTextPromptHandler::default())
+            .insert_non_send(PendingConfirmHandler::default())
+            .insert_non_send(PendingTextPromptHandler::default())
             .insert_resource(CarriedItem::default())
             .insert_resource(PanelDragState::default())
             .insert_resource(UiHoverState::default())
             .add_plugins(UiFeaturesPlugin);
         register_menu_button_clicks(app);
-        app
-            .add_observer(panel_close_clicked)
+        app.add_observer(panel_close_clicked)
             .add_observer(panel_drag_started)
             .add_observer(panel_dragged)
             .add_observer(panel_drag_ended)
@@ -77,6 +77,7 @@ impl Plugin for GameUiPlugin {
                     update_localized_ui,
                     update_text_prompt_ui,
                     update_confirm_dialog_ui,
+                    fix_scroll_clip_picking,
                     update_scroll_containers,
                     apply_ui_font,
                 )

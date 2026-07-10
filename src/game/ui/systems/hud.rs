@@ -15,35 +15,41 @@ pub fn update_hud_visibility(
     let hide_gameplay_hud = *builder_mode == BuilderMode::Play && simulation.running;
     let active_play = playing_ui.active_play();
 
+    let hud_display = if has_world {
+        Display::Flex
+    } else {
+        Display::None
+    };
     for mut style in &mut hud_style {
-        style.display = if has_world {
-            Display::Flex
-        } else {
-            Display::None
-        };
+        if style.display != hud_display {
+            style.display = hud_display;
+        }
     }
 
+    let crosshair = if has_world && *mode.get() == GameMode::Playing && active_play {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
     for mut visibility in &mut visibility_sets.p0() {
-        *visibility = if has_world && *mode.get() == GameMode::Playing && active_play {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
+        visibility.set_if_neq(crosshair);
     }
 
+    let in_game = if has_world {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
     for mut visibility in &mut visibility_sets.p1() {
-        *visibility = if has_world {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
+        visibility.set_if_neq(in_game);
     }
 
+    let gameplay = if has_world && !hide_gameplay_hud {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
     for mut visibility in &mut visibility_sets.p2() {
-        *visibility = if has_world && !hide_gameplay_hud {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
+        visibility.set_if_neq(gameplay);
     }
 }

@@ -7,7 +7,7 @@ mod view;
 
 use bevy::prelude::*;
 
-pub use actions::{dispatch_save_list_actions, emit_save_list_actions, text_prompt_input};
+pub use actions::{dispatch_save_list_actions, emit_save_list_actions};
 pub use confirm::{
     open_save_puzzle_confirm, open_save_puzzle_confirm_before_exit, EXTRA_SAVE_AS,
 };

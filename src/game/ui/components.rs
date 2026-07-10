@@ -18,6 +18,9 @@ pub use panel::{
     panel_bundle_auto, panel_bundle_responsive, panel_content, panel_title_bar, panel_title_button,
     panel_title_label, spawn_panel, spawn_panel_with_title_marker, PanelOptions, STATUS_TEXT,
 };
-pub use scroll::{scroll_container, scroll_content, update_scroll_containers};
+pub use scroll::{
+    fix_scroll_clip_picking, scroll_container, scroll_content, update_scroll_containers,
+    ScrollContent,
+};
 pub use slider::{slider_bundle, slider_fill, slider_knob};
 pub use text::{default_button_size, default_font_size, localized_text, text};

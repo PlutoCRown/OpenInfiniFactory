@@ -1,5 +1,10 @@
+use bevy::input::keyboard::{Key, KeyboardInput};
+use bevy::input::ButtonState;
+use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
+use bevy::text::{EditableText, TextEdit};
+use bevy::ui::widget::TextScroll;
 
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost};
 use crate::game::ui::core::text_input::primary_click;
@@ -20,14 +25,16 @@ pub enum TextPromptButtonId {
     Cancel,
 }
 
-#[derive(Component)]
+#[derive(Component, Default, Clone)]
 pub struct TextPromptRoot;
 
-#[derive(Component, Clone, Copy, Eq, PartialEq)]
-pub enum TextPromptText {
-    Title,
-    Value,
-}
+/// 文本提示框标题
+#[derive(Component, Default, Clone)]
+pub struct TextPromptTitle;
+
+/// 文本提示框的可编辑输入
+#[derive(Component, Default, Clone)]
+pub struct TextPromptInput;
 
 #[derive(Clone)]
 pub struct TextPromptProps {
@@ -51,6 +58,8 @@ pub struct TextPromptState {
     pub save_text: String,
     pub cancel_text: String,
     result: Option<TextPromptResult>,
+    /// 打开时需要把默认值写入 EditableText
+    seed_input: bool,
 }
 
 impl TextPromptState {
@@ -69,6 +78,7 @@ impl TextPromptState {
         self.save_text = spec.save_text;
         self.cancel_text = spec.cancel_text;
         self.result = None;
+        self.seed_input = true;
     }
 
     pub fn submit(&mut self) {
@@ -92,12 +102,21 @@ impl TextPromptState {
     }
 }
 
+fn input_value(inputs: &Query<&EditableText, With<TextPromptInput>>, fallback: &str) -> String {
+    inputs
+        .iter()
+        .next()
+        .map(|text| text.value().to_string())
+        .unwrap_or_else(|| fallback.to_string())
+}
+
 pub fn emit_text_prompt_actions(
     mut click: On<Pointer<Click>>,
     prompt: Res<TextPromptState>,
     host: Res<UiHost>,
     mut actions: MessageWriter<UiAction>,
     buttons: Query<&TextPromptButtonId>,
+    inputs: Query<&EditableText, With<TextPromptInput>>,
 ) {
     if !primary_click(&mut click) || !prompt.is_open() {
         return;
@@ -111,62 +130,118 @@ pub fn emit_text_prompt_actions(
     click.propagate(false);
     let kind = match button {
         TextPromptButtonId::Save => UiActionKind::TextPromptSubmit {
-            value: prompt.value.clone(),
+            value: input_value(&inputs, &prompt.value),
         },
         TextPromptButtonId::Cancel => UiActionKind::TextPromptCancel,
     };
     actions.write(UiAction { instance, kind });
 }
 
+/// Enter 提交 / Escape 取消（EditableText 负责打字）
+pub fn text_prompt_hotkeys(
+    mut prompt: ResMut<TextPromptState>,
+    mut keyboard_input: MessageReader<KeyboardInput>,
+    host: Res<UiHost>,
+    mut actions: MessageWriter<UiAction>,
+    inputs: Query<&EditableText, With<TextPromptInput>>,
+) {
+    if !prompt.is_open() {
+        return;
+    }
+    let Some(instance) = host.active_text_prompt_instance() else {
+        return;
+    };
+    if inputs.iter().any(EditableText::is_composing) {
+        return;
+    }
+    let mut submit = false;
+    let mut cancel = false;
+    for event in keyboard_input.read() {
+        if event.state != ButtonState::Pressed {
+            continue;
+        }
+        match &event.logical_key {
+            Key::Enter => submit = true,
+            Key::Escape => cancel = true,
+            _ => {}
+        }
+    }
+    if submit {
+        let value = input_value(&inputs, &prompt.value);
+        prompt.value.clone_from(&value);
+        actions.write(UiAction {
+            instance,
+            kind: UiActionKind::TextPromptSubmit { value },
+        });
+    } else if cancel {
+        actions.write(UiAction {
+            instance,
+            kind: UiActionKind::TextPromptCancel,
+        });
+    }
+}
+
 pub fn update_text_prompt_ui(
-    prompt: Res<TextPromptState>,
+    mut prompt: ResMut<TextPromptState>,
+    mut focus: ResMut<InputFocus>,
     mut roots: Query<(&mut Node, &mut Visibility), With<TextPromptRoot>>,
-    mut texts: ParamSet<(
-        Query<(&TextPromptText, &mut Text)>,
-        Query<(&TextPromptButtonId, &Children)>,
-        Query<&mut Text, Without<TextPromptText>>,
-    )>,
+    mut titles: Query<&mut Text, With<TextPromptTitle>>,
+    mut inputs: Query<(Entity, &mut EditableText), With<TextPromptInput>>,
+    buttons: Query<(&TextPromptButtonId, &Children)>,
+    mut button_labels: Query<&mut Text, Without<TextPromptTitle>>,
 ) {
     let visible = prompt.is_open();
+    let next_display = if visible {
+        Display::Flex
+    } else {
+        Display::None
+    };
+    let next_visibility = if visible {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
     for (mut node, mut visibility) in &mut roots {
-        node.display = if visible {
-            Display::Flex
-        } else {
-            Display::None
-        };
-        *visibility = if visible {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
+        if node.display != next_display {
+            node.display = next_display;
+        }
+        visibility.set_if_neq(next_visibility);
     }
     if !visible {
         return;
     }
-    if !prompt.is_changed() {
-        return;
-    }
 
-    for (marker, mut text) in &mut texts.p0() {
-        text.0 = match marker {
-            TextPromptText::Title => prompt.title.clone(),
-            TextPromptText::Value => format!("{}_", prompt.value),
-        };
-    }
-
-    let mut button_labels = Vec::new();
-    for (button, children) in &texts.p1() {
-        let label = match button {
-            TextPromptButtonId::Save => prompt.save_text.clone(),
-            TextPromptButtonId::Cancel => prompt.cancel_text.clone(),
-        };
-        button_labels.push((children.iter().collect::<Vec<_>>(), label));
-    }
-    for (children, label) in button_labels {
-        for child in children {
-            if let Ok(mut text) = texts.p2().get_mut(child) {
-                text.0 = label.clone();
+    if prompt.is_changed() {
+        for mut text in &mut titles {
+            text.0 = prompt.title.clone();
+        }
+        let mut labels = Vec::new();
+        for (button, children) in &buttons {
+            let label = match button {
+                TextPromptButtonId::Save => prompt.save_text.clone(),
+                TextPromptButtonId::Cancel => prompt.cancel_text.clone(),
+            };
+            labels.push((children.iter().collect::<Vec<_>>(), label));
+        }
+        for (children, label) in labels {
+            for child in children {
+                if let Ok(mut text) = button_labels.get_mut(child) {
+                    text.0 = label.clone();
+                }
             }
+        }
+    }
+
+    if prompt.seed_input {
+        prompt.seed_input = false;
+        let value = prompt.value.clone();
+        for (entity, mut editable) in &mut inputs {
+            editable.clear();
+            editable.max_characters = Some(TEXT_PROMPT_MAX_LEN);
+            editable.allow_newlines = false;
+            editable.editor.set_text(&value);
+            editable.queue_edit(TextEdit::TextEnd(false));
+            focus.set(entity, FocusCause::Navigated);
         }
     }
 }

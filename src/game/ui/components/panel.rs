@@ -74,17 +74,14 @@ pub fn spawn_panel_with_title_marker(
     root.spawn((panel_bundle(options.width), GlobalZIndex(0), markers))
         .with_children(|panel| {
             panel.spawn(panel_title_bar()).with_children(|title| {
-                let mut title_text = title.spawn(panel_title_label(
-                    i18n.t(options.title_key),
-                    options.title_size,
+                title.spawn((
+                    panel_title_label(i18n.t(options.title_key), options.title_size),
+                    title_marker,
                 ));
-                if options.dynamic_title {
-                    // Prefer spawn_panel_with_title_marker for runtime titles.
-                } else {
-                    title_text.insert(title_marker);
-                }
                 if options.show_close {
-                    title.spawn(panel_close_button()).with_children(spawn_close_icon);
+                    title
+                        .spawn(panel_close_button())
+                        .with_children(spawn_close_icon);
                 }
             });
             panel.spawn(panel_content()).with_children(content);
@@ -192,10 +189,7 @@ fn panel_window_bundle(width: Val, max_width: Val) -> impl Bundle {
             display: Display::None,
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(12.0),
-            overflow: Overflow {
-                x: OverflowAxis::Clip,
-                y: OverflowAxis::Scroll,
-            },
+            overflow: Overflow::clip(),
             ..default()
         },
         PanelWindow,
@@ -236,6 +230,7 @@ pub fn panel_title_bar() -> impl Bundle {
             ..default()
         },
         PanelTitleBar,
+        ZIndex(10),
         BackgroundColor(Color::NONE),
         BorderColor {
             bottom: PANEL_DARK_EDGE,

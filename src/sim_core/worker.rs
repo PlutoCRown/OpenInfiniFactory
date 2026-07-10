@@ -2,12 +2,15 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
+use bevy::prelude::Resource;
+
 use crate::game::simulation::core::simulate_turn;
 use crate::game::world::animation::SIMULATION_TURN_SECONDS;
 use crate::sim_core::SimulationDebugLog;
 
 use super::snapshot::{CachedTurn, SimSnapshot};
 
+#[derive(Resource)]
 pub struct SimulationWorker {
     command_tx: Sender<WorkerCommand>,
     result_rx: Mutex<Receiver<CachedTurn>>,

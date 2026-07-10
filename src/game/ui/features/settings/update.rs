@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy::ui_widgets::{CoreSliderDragState, Slider, SliderRange, SliderValue};
+use bevy::ui_widgets::{Slider, SliderDragState, SliderRange, SliderValue};
 use bevy::window::PrimaryWindow;
 
 use crate::game::state::GameSettings;
@@ -57,7 +57,7 @@ pub fn update_settings_sliders_ui(
         (Without<SettingsSliderFill>, Without<SettingsDropdownList>),
     >,
     slider_values: Query<
-        (Entity, &SettingsAction, &SliderValue, &CoreSliderDragState),
+        (Entity, &SettingsAction, &SliderValue, &SliderDragState),
         With<Slider>,
     >,
     mut commands: Commands,
@@ -158,7 +158,14 @@ pub fn update_settings_dropdowns_ui(
         .unwrap_or(Vec2::ZERO);
     for (list, mut style, list_node) in &mut dropdown_lists {
         let open = open_dropdown.0 == Some(list.0);
-        style.display = if open { Display::Flex } else { Display::None };
+        let next = if open {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        if style.display != next {
+            style.display = next;
+        }
         if !open {
             continue;
         }
@@ -241,7 +248,7 @@ fn live_slider_percent(
     field: SettingsField,
     settings: &GameSettings,
     slider_values: &Query<
-        (Entity, &SettingsAction, &SliderValue, &CoreSliderDragState),
+        (Entity, &SettingsAction, &SliderValue, &SliderDragState),
         With<Slider>,
     >,
 ) -> f32 {

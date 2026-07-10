@@ -115,7 +115,7 @@ pub fn spawn_carried_label(root: &mut ChildSpawnerCommands) {
                 ..default()
             },
             TextColor(Color::WHITE),
-            TextLayout::new_with_justify(Justify::Center),
+            TextLayout::justify(Justify::Center),
             Node {
                 margin: UiRect::all(Val::Px(2.0)),
                 ..default()
@@ -146,7 +146,7 @@ pub fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
         tooltip.spawn((
             text("", 14.0, Color::WHITE),
             Pickable::IGNORE,
-            TextLayout::new_with_justify(Justify::Center),
+            TextLayout::justify(Justify::Center),
         ));
     });
 }

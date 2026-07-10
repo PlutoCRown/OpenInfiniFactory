@@ -1,10 +1,12 @@
 use bevy::prelude::*;
+use bevy::text::{EditableText, TextCursorStyle};
+use bevy::ui::widget::TextScroll;
 
 use crate::game::ui::access::bind_ui_scope;
 
 use super::components::{
-    absolute_text_bundle, auto_width_button, default_button_size, flex_row_auto, panel_bundle_auto,
-    panel_content, panel_title_bar, panel_title_label, raised_border, root_node, styled_button,
+    absolute_text_bundle, auto_width_button, default_button_size, default_font_size, flex_row_auto,
+    panel_bundle_auto, panel_content, panel_title_bar, panel_title_label, raised_border, root_node,
     text, BUTTON_BG, STATUS_TEXT,
 };
 use super::screens::{
@@ -15,13 +17,14 @@ use super::types::{
     Crosshair, GameplayHudVisibility, InGameHudVisibility, PanelVisibility, PlayingUiRoot,
     StatusText, StatusTextKind, UiRoot,
 };
-use super::widgets::spawn_confirm_dialog_button;
 use crate::game::blocks::panels::{spawn_all_overlays, spawn_all_panels};
 use crate::game::ui::core::confirm_dialog::{
     ConfirmButtonId, ConfirmMessageText, ConfirmTitleText,
 };
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiRootEntity};
-use crate::game::ui::core::text_prompt::{TextPromptButtonId, TextPromptRoot, TextPromptText};
+use crate::game::ui::core::text_prompt::{
+    TextPromptButtonId, TextPromptInput, TextPromptRoot, TextPromptTitle,
+};
 
 pub fn setup_menu_ui(world: &mut World) {
     bind_ui_scope(world);
@@ -195,31 +198,50 @@ fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
         panel_bundle_auto(560.0),
         GlobalZIndex(0),
         PanelVisibility::ConfirmDialog,
-    ))
-    .with_children(|panel| {
-        panel.spawn(panel_title_bar()).with_children(|title| {
-            title.spawn((panel_title_label("", 24.0), ConfirmTitleText));
-        });
-        panel.spawn(panel_content()).with_children(|panel| {
-            panel.spawn((
-                text("", 15.0, STATUS_TEXT),
-                TextLayout::new_with_justify(Justify::Center),
-                Node {
-                    width: Val::Auto,
-                    max_width: Val::Px(520.0),
-                    min_height: Val::Px(54.0),
-                    align_self: AlignSelf::Center,
-                    ..default()
-                },
-                ConfirmMessageText,
-            ));
-            panel.spawn(flex_row_auto(34.0, 8.0)).with_children(|row| {
-                spawn_confirm_dialog_button(row, ConfirmButtonId::Confirm);
-                spawn_confirm_dialog_button(row, ConfirmButtonId::Extra);
-                spawn_confirm_dialog_button(row, ConfirmButtonId::Cancel);
-            });
-        });
-    });
+        children![
+            (
+                panel_title_bar(),
+                children![(panel_title_label("", 24.0), ConfirmTitleText)]
+            ),
+            (
+                panel_content(),
+                children![
+                    (
+                        text("", 15.0, STATUS_TEXT),
+                        TextLayout::justify(Justify::Center),
+                        Node {
+                            width: Val::Auto,
+                            max_width: Val::Px(520.0),
+                            min_height: Val::Px(54.0),
+                            align_self: AlignSelf::Center,
+                            ..default()
+                        },
+                        ConfirmMessageText,
+                    ),
+                    (
+                        flex_row_auto(34.0, 8.0),
+                        children![
+                            (
+                                auto_width_button(34.0),
+                                ConfirmButtonId::Confirm,
+                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
+                            ),
+                            (
+                                auto_width_button(34.0),
+                                ConfirmButtonId::Extra,
+                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
+                            ),
+                            (
+                                auto_width_button(34.0),
+                                ConfirmButtonId::Cancel,
+                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+        ],
+    ));
 }
 
 fn spawn_text_prompt(root: &mut ChildSpawnerCommands) {
@@ -227,46 +249,59 @@ fn spawn_text_prompt(root: &mut ChildSpawnerCommands) {
         panel_bundle_auto(420.0),
         GlobalZIndex(30_000),
         TextPromptRoot,
-    ))
-    .with_children(|panel| {
-        panel.spawn(panel_title_bar()).with_children(|title| {
-            title.spawn((panel_title_label("", 20.0), TextPromptText::Title));
-        });
-        panel.spawn(panel_content()).with_children(|content| {
-            content
-                .spawn(styled_button(
-                    Node {
-                        width: Val::Percent(100.0),
-                        min_height: Val::Px(default_button_size(38.0)),
-                        padding: UiRect::horizontal(Val::Px(12.0)),
-                        border: UiRect::all(Val::Px(1.0)),
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    raised_border(),
-                    BUTTON_BG,
-                ))
-                .with_children(|input| {
-                    input.spawn((text("", 16.0, Color::WHITE), TextPromptText::Value));
-                });
-            content
-                .spawn(flex_row_auto(34.0, 8.0))
-                .with_children(|row| {
-                    row.spawn((auto_width_button(34.0), TextPromptButtonId::Save))
-                        .with_children(|button| {
-                            button.spawn((
-                                text("", 15.0, Color::WHITE),
-                                TextLayout::new_with_no_wrap(),
-                            ));
-                        });
-                    row.spawn((auto_width_button(34.0), TextPromptButtonId::Cancel))
-                        .with_children(|button| {
-                            button.spawn((
-                                text("", 15.0, Color::WHITE),
-                                TextLayout::new_with_no_wrap(),
-                            ));
-                        });
-                });
-        });
-    });
+        children![
+            (
+                panel_title_bar(),
+                children![(panel_title_label("", 20.0), TextPromptTitle)]
+            ),
+            (
+                panel_content(),
+                children![
+                    (
+                        Node {
+                            width: Val::Percent(100.0),
+                            min_height: Val::Px(default_button_size(38.0)),
+                            padding: UiRect::horizontal(Val::Px(12.0)),
+                            border: UiRect::all(Val::Px(1.0)),
+                            align_items: AlignItems::Center,
+                            overflow: Overflow::clip(),
+                            ..default()
+                        },
+                        raised_border(),
+                        BackgroundColor(BUTTON_BG),
+                        EditableText {
+                            max_characters: Some(24),
+                            allow_newlines: false,
+                            visible_lines: Some(1.0),
+                            ..EditableText::new("")
+                        },
+                        TextScroll::default(),
+                        TextFont {
+                            font_size: default_font_size(16.0),
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                        TextLayout::no_wrap(),
+                        TextCursorStyle::default(),
+                        TextPromptInput,
+                    ),
+                    (
+                        flex_row_auto(34.0, 8.0),
+                        children![
+                            (
+                                auto_width_button(34.0),
+                                TextPromptButtonId::Save,
+                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
+                            ),
+                            (
+                                auto_width_button(34.0),
+                                TextPromptButtonId::Cancel,
+                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+        ],
+    ));
 }

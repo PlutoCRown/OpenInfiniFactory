@@ -32,8 +32,7 @@ pub struct DebugPanel;
 pub struct DebugText;
 
 pub fn load_debug_font(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
-    let font = Font::try_from_bytes(bevy::text::DEFAULT_FONT_DATA.to_vec())
-        .expect("Bevy default debug font must be valid");
+    let font = Font::from_bytes(bevy::text::DEFAULT_FONT_DATA.to_vec());
     commands.insert_resource(DebugFont(fonts.add(font)));
 }
 
@@ -41,12 +40,12 @@ pub fn setup_debug_ui(mut commands: Commands, debug_font: Res<DebugFont>) {
     commands.spawn((
         Text::new(""),
         TextFont {
-            font: debug_font.0.clone(),
-            font_size: DEBUG_FONT_SIZE,
+            font: debug_font.0.clone().into(),
+            font_size: FontSize::Px(DEBUG_FONT_SIZE),
             ..default()
         },
         TextColor(Color::srgb(0.95, 1.0, 0.72)),
-        TextLayout::new_with_no_wrap(),
+        TextLayout::no_wrap(),
         Node {
             position_type: PositionType::Absolute,
             right: Val::Px(18.0),

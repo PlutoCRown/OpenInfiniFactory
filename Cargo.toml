@@ -24,7 +24,10 @@ name = "export_fixture"
 path = "src/bin/export_fixture.rs"
 
 [dependencies]
-bevy = { version = "0.18.1", features = ["experimental_bevy_ui_widgets"] }
+bevy = { version = "0.19" }
+# Bevy 0.19 / parley 0.9 缺 CJK 分词字典，会刷 ICU4X stderr；logging 特征把 eprintln 转成 log，再过滤掉。
+# 见 https://github.com/bevyengine/bevy/issues/24094
+icu_provider = { version = "2.2", features = ["logging"] }
 inventory = "0.3"
 paste = "1"
 ron = "0.8"

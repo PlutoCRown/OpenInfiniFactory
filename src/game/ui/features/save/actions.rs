@@ -1,12 +1,10 @@
-use bevy::input::keyboard::KeyboardInput;
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
 use crate::game::session::LoadWorld;
 use crate::game::state::{GameMode, SolutionState, StartMenuScreen, WorldEntryMode};
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
-use crate::game::ui::core::text_input::{primary_click, push_text_input};
-use crate::game::ui::core::text_prompt::TextPromptState;
+use crate::game::ui::core::text_input::primary_click;
 use crate::list_ui_config;
 use crate::shared::save::SaveState;
 
@@ -223,47 +221,5 @@ fn dispatch_save_list_row_action(
             }
         }
         SaveListAction::NewPuzzle | SaveListAction::NewSolution | SaveListAction::Back => {}
-    }
-}
-
-pub fn text_prompt_input(
-    mut prompt: ResMut<TextPromptState>,
-    mut keyboard_input: MessageReader<KeyboardInput>,
-    host: Res<UiHost>,
-    mut actions: MessageWriter<UiAction>,
-) {
-    if !prompt.is_open() {
-        return;
-    }
-    let mut submit = false;
-    let mut cancel = false;
-    for event in keyboard_input.read() {
-        if event.state != bevy::input::ButtonState::Pressed {
-            continue;
-        }
-        match &event.logical_key {
-            bevy::input::keyboard::Key::Enter => submit = true,
-            bevy::input::keyboard::Key::Escape => cancel = true,
-            bevy::input::keyboard::Key::Backspace => {
-                prompt.value.pop();
-            }
-            _ => push_text_input(&mut prompt.value, event),
-        }
-    }
-    let Some(instance) = host.active_text_prompt_instance() else {
-        return;
-    };
-    if submit {
-        actions.write(UiAction {
-            instance,
-            kind: UiActionKind::TextPromptSubmit {
-                value: prompt.value.clone(),
-            },
-        });
-    } else if cancel {
-        actions.write(UiAction {
-            instance,
-            kind: UiActionKind::TextPromptCancel,
-        });
     }
 }

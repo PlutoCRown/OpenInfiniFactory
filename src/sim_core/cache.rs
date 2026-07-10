@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
 
+use bevy::prelude::Resource;
+
 use super::snapshot::CachedTurn;
 
 pub const TURN_PREFETCH_DEPTH: u64 = 4;
 
-#[derive(Default)]
+#[derive(Resource, Default)]
 pub struct TurnCache {
     pub simulated_through: u64,
     pending: BTreeMap<u64, CachedTurn>,

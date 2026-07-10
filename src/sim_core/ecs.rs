@@ -135,7 +135,7 @@ impl<'w> SimCoreWorld<'w> {
             mut structure_state,
             mut movement_influence,
             mut pusher_state,
-        ) = state.get_mut(self.world);
+        ) = state.get_mut(self.world).unwrap();
         let output = simulate_turn(
             &mut world_blocks,
             &mut pending_generated,

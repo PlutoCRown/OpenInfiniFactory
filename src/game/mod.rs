@@ -1,4 +1,3 @@
-pub mod bevy_bridge;
 pub mod block_editing;
 pub mod blocks;
 pub mod cameras;
@@ -12,16 +11,15 @@ pub mod ui;
 pub mod world;
 
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
-use bevy::input_focus::InputDispatchPlugin;
 use bevy::light::{DirectionalLightShadowMap, GlobalAmbientLight};
 use bevy::prelude::*;
-use bevy::ui_widgets::{slider_self_update, UiWidgetsPlugins};
+use bevy::ui_widgets::slider_self_update;
 
+use crate::scene::{sync_block_entity_index, BlockEntityIndex};
 use crate::shared::config::load_config;
 use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::launch::LaunchOptions;
 use crate::shared::save::SaveState;
-use crate::scene::{sync_block_entity_index, BlockEntityIndex};
 use crate::sim_core::{SimulationWorker, TurnCache};
 
 use cameras::spawn_ui_camera;
@@ -100,8 +98,6 @@ impl Plugin for GamePlugin {
             .insert_resource(SaveState::default())
             .insert_resource(systems::debug::DebugState::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
-            .add_plugins(InputDispatchPlugin)
-            .add_plugins(UiWidgetsPlugins)
             .add_plugins(SessionPlugin)
             .add_plugins(GameUiPlugin)
             .add_plugins(PerfPlugin)

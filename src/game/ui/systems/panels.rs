@@ -113,7 +113,7 @@ pub fn update_panel_visibility(
     let active_panel = ui_runtime.active_panel();
     let mode = mode.get();
     for (visibility, mut style) in &mut nodes.p0() {
-        style.display = display_for(panel_visible(
+        let next = display_for(panel_visible(
             *visibility,
             *mode,
             *start_menu_screen,
@@ -122,6 +122,9 @@ pub fn update_panel_visibility(
             &ui_runtime,
             &ui_host,
         ));
+        if style.display != next {
+            style.display = next;
+        }
     }
 
     if open_block_dropdown.0.is_some() && !active_block_has_panel(&ui_runtime, &world, active_panel)
@@ -129,19 +132,22 @@ pub fn update_panel_visibility(
         open_block_dropdown.0 = None;
     }
     for (binding, mut style) in &mut nodes.p1() {
-        style.display = display_for(active_panel == Some(binding.0));
+        let next = display_for(active_panel == Some(binding.0));
+        if style.display != next {
+            style.display = next;
+        }
     }
 
     for (mut style, mut visibility, mut position) in &mut nodes.p2() {
         if style.display == Display::None {
             position.dragged = false;
             reset_panel_centering(&mut style);
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
         } else if position.dragged {
-            *visibility = Visibility::Visible;
+            visibility.set_if_neq(Visibility::Visible);
         } else {
             reset_panel_centering(&mut style);
-            *visibility = Visibility::Visible;
+            visibility.set_if_neq(Visibility::Visible);
         }
     }
 }
@@ -300,11 +306,21 @@ fn panel_logical_top_left(computed: &ComputedNode, transform: &UiGlobalTransform
 }
 
 fn reset_panel_centering(style: &mut Node) {
-    style.left = Val::Auto;
-    style.right = Val::Auto;
-    style.top = Val::Auto;
-    style.bottom = Val::Auto;
-    style.margin = UiRect::all(Val::Auto);
+    if style.left != Val::Auto {
+        style.left = Val::Auto;
+    }
+    if style.right != Val::Auto {
+        style.right = Val::Auto;
+    }
+    if style.top != Val::Auto {
+        style.top = Val::Auto;
+    }
+    if style.bottom != Val::Auto {
+        style.bottom = Val::Auto;
+    }
+    if style.margin != UiRect::all(Val::Auto) {
+        style.margin = UiRect::all(Val::Auto);
+    }
 }
 
 pub fn update_ui_layers(

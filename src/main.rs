@@ -4,6 +4,7 @@ use open_infinifactory::shared::platform;
 
 #[cfg(target_arch = "wasm32")]
 use bevy::asset::AssetMetaCheck;
+use bevy::log::{LogPlugin, DEFAULT_FILTER};
 use bevy::prelude::*;
 
 #[bevy_main]
@@ -25,6 +26,11 @@ fn main() {
                         present_mode: bevy::window::PresentMode::AutoVsync,
                         ..default()
                     }),
+                    ..default()
+                })
+                .set(LogPlugin {
+                    // CJK 文本布局会触发 icu_provider 缺分词模型警告（Bevy #24094）
+                    filter: format!("{DEFAULT_FILTER},icu_provider=error"),
                     ..default()
                 }),
         )

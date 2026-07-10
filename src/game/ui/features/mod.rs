@@ -7,7 +7,7 @@ pub mod start_menu;
 
 use bevy::prelude::*;
 
-use save::text_prompt_input;
+use crate::game::ui::core::text_prompt::text_prompt_hotkeys;
 use settings::settings_menu_actions;
 
 use crate::game::ui::core::host::{dispatch_ui_action, dispatch_ui_host_completions};
@@ -37,7 +37,7 @@ impl Plugin for UiFeaturesPlugin {
         .add_systems(
             Update,
             (
-                text_prompt_input,
+                text_prompt_hotkeys,
                 dispatch_ui_action,
                 dispatch_ui_host_completions,
                 settings_menu_actions,
