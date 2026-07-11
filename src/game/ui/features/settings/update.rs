@@ -14,6 +14,8 @@ use super::types::{
     SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind, SettingsValueText,
 };
 use crate::game::ui::access::UiMainThread;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::debug_http::DebugHttpBridge;
 use crate::shared::config::{ActionKeyName, ConfigChord, ConfigInput, GameConfig};
 
 pub fn localized_chord_display(chord: ConfigChord) -> String {
@@ -51,6 +53,7 @@ pub fn update_settings_text_ui(
     _ui_thread: UiMainThread,
     config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
+    #[cfg(not(target_arch = "wasm32"))] bridge: Option<Res<DebugHttpBridge>>,
     mut settings_texts: Query<(&SettingsText, Option<&ChildOf>, &mut Text)>,
     key_buttons: Query<&KeyBindingButton>,
 ) {
@@ -71,6 +74,23 @@ pub fn update_settings_text_ui(
                     .map(|_| "...".to_string())
                     .unwrap_or_else(|| localized_binding_display(&config, button.0));
                 format!("{}: {suffix}", i18n.t(button.0.label_key()))
+            }
+            SettingsTextKind::DebugHttp => {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    if let Some(bridge) = bridge.as_ref() {
+                        i18n.fmt(
+                            "settings.debug_http_running",
+                            &[("port", bridge.port.to_string())],
+                        )
+                    } else {
+                        i18n.t("button.start_debug_http")
+                    }
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    String::new()
+                }
             }
         };
         if text.0 != next {

@@ -1,3 +1,5 @@
+use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use std::sync::{mpsc, Mutex};
 #[cfg(not(target_arch = "wasm32"))]
@@ -7,21 +9,24 @@ use crate::debug_http::protocol::{
     help_json, json_error, json_ok, DebugHttpCommand, DebugHttpRequest,
 };
 use crate::debug_http::snapshot::{
-    block_json, cursor_target_json, pos_json, simulation_status_json,
+    block_json, cursor_target_json, perf_stats_json, pos_json, simulation_status_json,
 };
 use crate::debug_http::world_ops::{block_kinds_json, parse_block_kind, parse_facing, place_block};
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::edit_history::EditHistory;
+use crate::game::player::controller::FlyCamera;
 use crate::game::session::PlayingWorldParams;
 use crate::game::simulation::runtime::{
-    PendingGeneratedMaterials, SignalNetworkCache, SimulationPresentationState,
+    PendingGeneratedMaterials, SignalNetworkCache, SimulationPresentationState, SimulationStepStats,
 };
 use crate::game::state::{BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState};
+use crate::game::systems::perf::PerfStats;
 use crate::game::systems::simulation_controls::{
     request_continuous_run, request_one_turn, start_simulation_if_needed,
 };
 use crate::game::ui::UiRuntime;
-use crate::shared::launch::LaunchOptions;
+use crate::game::world::rendering::BlockEntity;
+use crate::shared::launch::{LaunchOptions, DEFAULT_DEBUG_HTTP_PORT};
 use crate::sim_core::{SimSnapshot, SimulationDebugLog, SimulationWorker, TurnCache};
 
 #[derive(Resource)]
@@ -32,19 +37,71 @@ pub struct DebugHttpBridge {
     pub port: u16,
 }
 
+#[derive(Resource, Default)]
+pub struct PendingDebugHttpStart(pub bool);
+
+/// 供 HTTP /perf 读取的帧统计（合并参数，避免 poll 系统超限）
+#[derive(SystemParam)]
+pub struct DebugHttpPerfSnapshot<'w, 's> {
+    perf: Res<'w, PerfStats>,
+    diagnostics: Res<'w, DiagnosticsStore>,
+    sim_stats: Res<'w, SimulationStepStats>,
+    player: Query<'w, 's, &'static Transform, With<FlyCamera>>,
+    block_entities: Query<'w, 's, Entity, With<BlockEntity>>,
+}
+
+impl<'w, 's> DebugHttpPerfSnapshot<'w, 's> {
+    fn capture(
+        &self,
+        builder_mode: BuilderMode,
+        simulation: &SimulationState,
+        block_count: usize,
+    ) -> serde_json::Value {
+        let fps = self
+            .diagnostics
+            .get(&FrameTimeDiagnosticsPlugin::FPS)
+            .and_then(|fps| fps.smoothed())
+            .unwrap_or(0.0);
+        let player_pos = self
+            .player
+            .single()
+            .ok()
+            .map(|transform| transform.translation);
+        perf_stats_json(
+            fps,
+            &self.perf,
+            &self.sim_stats,
+            builder_mode,
+            simulation,
+            block_count,
+            self.block_entities.iter().len(),
+            player_pos,
+        )
+    }
+}
+
 pub struct DebugToolsPlugin;
 
 impl Plugin for DebugToolsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SimulationDebugLog>();
+        app.init_resource::<SimulationDebugLog>()
+            .init_resource::<PendingDebugHttpStart>();
 
         #[cfg(not(target_arch = "wasm32"))]
-        if app
-            .world()
-            .get_resource::<LaunchOptions>()
-            .is_some_and(LaunchOptions::debug_http_enabled)
         {
-            app.add_systems(Startup, start_debug_http_server);
+            if app
+                .world()
+                .get_resource::<LaunchOptions>()
+                .is_some_and(LaunchOptions::debug_http_enabled)
+            {
+                app.add_systems(Startup, start_debug_http_server);
+            }
+            app.add_systems(Update, process_pending_debug_http_start);
+            app.add_systems(
+                Update,
+                poll_debug_http
+                    .before(crate::game::systems::simulation_controls::simulation_controls),
+            );
         }
 
         app.add_systems(Update, sync_sim_debug_log);
@@ -73,11 +130,23 @@ pub fn start_debug_http_server(
     launch: Res<LaunchOptions>,
     mut commands: Commands,
     mut sim_log: ResMut<SimulationDebugLog>,
+    bridge: Option<Res<DebugHttpBridge>>,
 ) {
+    if bridge.is_some() {
+        return;
+    }
     let Some(port) = launch.debug_http_port else {
         return;
     };
+    try_start_debug_http_server(&mut commands, &mut sim_log, port);
+}
 
+#[cfg(not(target_arch = "wasm32"))]
+pub fn try_start_debug_http_server(
+    commands: &mut Commands,
+    sim_log: &mut SimulationDebugLog,
+    port: u16,
+) {
     let (request_tx, request_rx) = mpsc::channel();
     let listen_addr = format!("127.0.0.1:{port}");
     let thread_tx = request_tx.clone();
@@ -98,12 +167,28 @@ pub fn start_debug_http_server(
     });
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+fn process_pending_debug_http_start(
+    mut commands: Commands,
+    mut pending: ResMut<PendingDebugHttpStart>,
+    mut sim_log: ResMut<SimulationDebugLog>,
+    bridge: Option<Res<DebugHttpBridge>>,
+) {
+    if !pending.0 || bridge.is_some() {
+        pending.0 = false;
+        return;
+    }
+    pending.0 = false;
+    try_start_debug_http_server(&mut commands, &mut sim_log, DEFAULT_DEBUG_HTTP_PORT);
+}
+
 pub fn poll_debug_http(
     mode: Res<State<GameMode>>,
     builder_mode: Res<BuilderMode>,
     playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
     placement: Res<PlacementState>,
+    perf_snapshot: DebugHttpPerfSnapshot,
     mut simulation: ResMut<SimulationState>,
     mut sim_log: ResMut<SimulationDebugLog>,
     mut presentation: ResMut<SimulationPresentationState>,
@@ -127,6 +212,7 @@ pub fn poll_debug_http(
             &playing_ui,
             &ui_runtime,
             &placement,
+            &perf_snapshot,
             &mut simulation,
             &mut sim_log,
             &mut presentation,
@@ -149,6 +235,7 @@ fn handle_embedded_debug_command(
     playing_ui: &PlayingUiState,
     ui_runtime: &UiRuntime,
     placement: &PlacementState,
+    perf_snapshot: &DebugHttpPerfSnapshot<'_, '_>,
     simulation: &mut SimulationState,
     sim_log: &mut SimulationDebugLog,
     presentation: &mut SimulationPresentationState,
@@ -160,11 +247,20 @@ fn handle_embedded_debug_command(
     playing: &mut PlayingWorldParams,
     edit_history: &mut EditHistory,
 ) -> String {
+    if matches!(command, DebugHttpCommand::GetPerf) {
+        return json_ok(perf_snapshot.capture(
+            builder_mode,
+            simulation,
+            playing.world.blocks.len(),
+        ));
+    }
+
     if mode != GameMode::Playing {
         return json_error("game is not in Playing mode");
     }
 
     match command {
+        DebugHttpCommand::GetPerf => unreachable!(),
         DebugHttpCommand::Help => help_json(),
         DebugHttpCommand::BlockKinds => block_kinds_json(),
         DebugHttpCommand::GetPosBlock { x, y, z } => {

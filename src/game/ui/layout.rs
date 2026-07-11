@@ -14,14 +14,14 @@ use super::screens::{
     spawn_main_menu, spawn_pause_panel, spawn_save_list,
 };
 use super::types::{
-    Crosshair, GameplayHudVisibility, InGameHudVisibility, PanelVisibility, PlayingUiRoot,
-    StatusText, StatusTextKind, UiRoot,
+    Crosshair, InGameHudVisibility, PanelVisibility, PlayingUiRoot, StatusText, StatusTextKind,
+    UiRoot,
 };
 use crate::game::blocks::panels::{spawn_all_overlays, spawn_all_panels};
+use crate::game::cameras::{GameplayViewBackdrop, GameplayViewImage};
 use crate::game::ui::core::confirm_dialog::{
     ConfirmButtonId, ConfirmMessageText, ConfirmTitleText,
 };
-use crate::game::cameras::{GameplayViewBackdrop, GameplayViewImage};
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiRootEntity};
 use crate::game::ui::core::text_prompt::{
     TextPromptButtonId, TextPromptInput, TextPromptRoot, TextPromptTitle,
@@ -41,7 +41,6 @@ pub fn setup_menu_ui(world: &mut World) {
         .id();
     commands.insert_resource(UiRootEntity(root));
 }
-
 
 fn spawn_gameplay_view_backdrop(root: &mut ChildSpawnerCommands, image: Handle<Image>) {
     root.spawn((
@@ -148,68 +147,14 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
         absolute_text_bundle(
             "",
             16.0,
-            Color::WHITE,
-            Some(Val::Px(18.0)),
-            None,
-            Some(Val::Px(62.0)),
-            None,
-        ),
-        StatusText(StatusTextKind::Hotbar),
-        InGameHudVisibility,
-        GameplayHudVisibility,
-    ));
-    root.spawn((
-        absolute_text_bundle(
-            "",
-            15.0,
             STATUS_TEXT,
             Some(Val::Px(18.0)),
             None,
             Some(Val::Px(18.0)),
             None,
         ),
-        StatusText(StatusTextKind::CurrentSave),
-        InGameHudVisibility,
-        GameplayHudVisibility,
-    ));
-    root.spawn((
-        absolute_text_bundle(
-            "",
-            16.0,
-            STATUS_TEXT,
-            Some(Val::Px(18.0)),
-            None,
-            Some(Val::Px(112.0)),
-            None,
-        ),
-        StatusText(StatusTextKind::Simulation),
-        InGameHudVisibility,
-        GameplayHudVisibility,
-    ));
-    root.spawn((
-        absolute_text_bundle(
-            "",
-            15.0,
-            Color::srgb(0.82, 0.92, 1.0),
-            Some(Val::Px(18.0)),
-            None,
-            Some(Val::Px(156.0)),
-            None,
-        ),
-        StatusText(StatusTextKind::TargetBlock),
-        InGameHudVisibility,
-    ));
-    root.spawn((
-        absolute_text_bundle(
-            "",
-            16.0,
-            STATUS_TEXT,
-            None,
-            Some(Val::Px(18.0)),
-            None,
-            Some(Val::Px(18.0)),
-        ),
-        StatusText(StatusTextKind::SimulationOverlay),
+        TextLayout::no_wrap(),
+        StatusText(StatusTextKind::Gameplay),
         InGameHudVisibility,
     ));
 }

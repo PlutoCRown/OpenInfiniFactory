@@ -241,11 +241,20 @@ fn spawn_key_group(
 
 fn spawn_settings_footer(panel: &mut ChildSpawnerCommands) {
     panel.spawn(flex_row(42.0, 8.0)).with_children(|row| {
-        for action in [
+        #[cfg(not(target_arch = "wasm32"))]
+        let actions = [
+            SettingsAction::StartDebugHttp,
             SettingsAction::ResetDefaults,
             SettingsAction::OpenFolder,
             SettingsAction::Back,
-        ] {
+        ];
+        #[cfg(target_arch = "wasm32")]
+        let actions = [
+            SettingsAction::ResetDefaults,
+            SettingsAction::OpenFolder,
+            SettingsAction::Back,
+        ];
+        for action in actions {
             spawn_localized_settings_button(row, action);
         }
     });

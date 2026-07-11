@@ -24,16 +24,15 @@ pub use messages::LoadWorld;
 pub use world_access::PlayingWorldParams;
 pub use world_ops::SaveCurrentWorldResult;
 
-use cover::{on_screenshot_saved_for_exit, PendingMainMenuExit};
 #[cfg(not(target_arch = "wasm32"))]
 use cover::CoverScreenshotComplete;
+use cover::{on_screenshot_saved_for_exit, PendingMainMenuExit};
 
 use bevy::prelude::*;
 
 use crate::game::cameras::GameplayViewImage;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{PlayingUiState, StartMenuScreen, UiPanelId};
-use crate::game::systems::debug::DebugPanel;
 use crate::game::systems::debug::DebugState;
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost};
@@ -73,22 +72,22 @@ impl Plugin for SessionPlugin {
         app.add_message::<CoverScreenshotComplete>()
             .add_observer(on_screenshot_saved_for_exit);
         app.add_systems(
-                Update,
-                (
-                    handle_save_current_world,
-                    handle_save_current_world_invalidate_solutions,
-                    handle_save_world_as_new_puzzle,
-                    handle_exit_to_main_menu,
-                    handle_reset_solution,
-                    handle_switch_to_edit_mode,
-                    handle_load_world,
-                    handle_create_new_puzzle,
-                    handle_create_new_solution,
-                )
-                    .chain()
-                    .after(PerfScope::Menus)
-                    .before(PerfScope::Simulation),
-            );
+            Update,
+            (
+                handle_save_current_world,
+                handle_save_current_world_invalidate_solutions,
+                handle_save_world_as_new_puzzle,
+                handle_exit_to_main_menu,
+                handle_reset_solution,
+                handle_switch_to_edit_mode,
+                handle_load_world,
+                handle_create_new_puzzle,
+                handle_create_new_solution,
+            )
+                .chain()
+                .after(PerfScope::Menus)
+                .before(PerfScope::Simulation),
+        );
         #[cfg(not(target_arch = "wasm32"))]
         app.add_systems(
             Update,
@@ -135,7 +134,6 @@ pub fn on_exit_playing(
     gameplay_scene: Query<Entity, With<GameplayScene>>,
     icon_roots: Query<Entity, With<BlockIconRenderRoot>>,
     playing_ui_roots: Query<Entity, With<PlayingUiRoot>>,
-    debug_panels: Query<Entity, With<DebugPanel>>,
 ) {
     playing_ui.reset();
 
@@ -146,9 +144,6 @@ pub fn on_exit_playing(
         commands.entity(entity).despawn();
     }
     for entity in &playing_ui_roots {
-        commands.entity(entity).despawn();
-    }
-    for entity in &debug_panels {
         commands.entity(entity).despawn();
     }
     ui_host.unmount_panel(UiPanelId::Settings, &mut ui_runtime, None);

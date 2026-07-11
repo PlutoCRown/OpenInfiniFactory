@@ -11,8 +11,12 @@ pub mod standalone;
 pub use embedded::DebugToolsPlugin;
 pub use protocol::DebugHttpCommand;
 pub use snapshot::{
-    block_json, cursor_target_json, pos_json, simulation_status_json, target_status_line,
+    block_json, cursor_target_json, perf_stats_json, pos_json, simulation_status_json,
+    target_status_line,
 };
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use embedded::{poll_debug_http, start_debug_http_server, DebugHttpBridge};
+pub use embedded::{
+    poll_debug_http, start_debug_http_server, try_start_debug_http_server, DebugHttpBridge,
+    PendingDebugHttpStart,
+};

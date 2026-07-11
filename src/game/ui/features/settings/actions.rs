@@ -10,6 +10,8 @@ use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::settings::confirm::{on_reset_defaults, reset_defaults_spec};
 use crate::list_ui_config;
 use crate::shared::config::{chord_from_input, input_from_buttons, open_config_folder, save_config, GameConfig};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::debug_http::PendingDebugHttpStart;
 
 use super::types::{
     ActiveSettingsSlider, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
@@ -39,6 +41,13 @@ const SETTINGS_FOOTER: &[SettingsFooterButton] = list_ui_config!(
         for SettingsAction::OpenFolder =>
         on_click(_ctx, _commands) {
             open_config_folder();
+        }
+    };
+    {
+        for SettingsAction::StartDebugHttp =>
+        on_click(_ctx, commands) {
+            #[cfg(not(target_arch = "wasm32"))]
+            commands.insert_resource(PendingDebugHttpStart(true));
         }
     };
     {
@@ -197,7 +206,7 @@ pub fn dispatch_settings_actions(
             SettingsAction::Bind(action) => {
                 pending_key_bind.0 = Some(action);
             }
-            SettingsAction::ResetDefaults | SettingsAction::OpenFolder | SettingsAction::Back => {}
+            SettingsAction::ResetDefaults | SettingsAction::OpenFolder | SettingsAction::StartDebugHttp | SettingsAction::Back => {}
         }
     }
 }

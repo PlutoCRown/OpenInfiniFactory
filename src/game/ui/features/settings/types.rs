@@ -13,6 +13,7 @@ pub struct SettingsText(pub SettingsTextKind);
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum SettingsTextKind {
     KeyBinding,
+    DebugHttp,
 }
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
@@ -281,6 +282,7 @@ pub enum SettingsAction {
     Bind(ActionKeyName),
     ResetDefaults,
     OpenFolder,
+    StartDebugHttp,
     Back,
 }
 
@@ -292,6 +294,7 @@ impl UiActionLabel for SettingsAction {
             Self::Bind(action) => action.label_key(),
             Self::ResetDefaults => "button.reset_defaults",
             Self::OpenFolder => "button.open_config_folder",
+            Self::StartDebugHttp => "button.start_debug_http",
             Self::Back => "button.back",
             Self::Field(_)
             | Self::SetPlaceSelectionMode(_)

@@ -19,16 +19,15 @@ use bevy::ui_widgets::slider_self_update;
 use crate::scene::BlockEntityIndex;
 use crate::shared::config::load_config;
 use crate::shared::i18n::{resolve_language, I18n};
-use crate::shared::launch::LaunchOptions;
 use crate::shared::save::SaveState;
 use crate::sim_core::{SimulationWorker, TurnCache};
 
 use cameras::{spawn_ui_camera, sync_gameplay_view_image_size};
 use debug::DebugToolsPlugin;
+use edit_history::{edit_history_input, EditHistory};
 use player::controller::{
     apply_pending_player_spawn, camera_look, camera_move, spawn_player, sync_cursor_grab,
 };
-use edit_history::{edit_history_input, EditHistory};
 use session::{on_exit_playing, prepare_playing_session, rebuild_playing_world, SessionPlugin};
 use state::{
     BuilderMode, GameMode, GameSettings, PendingPlayerSpawn, PlacementState, PlayingUiState,
@@ -213,15 +212,6 @@ impl Plugin for GamePlugin {
                     .after(PerfScope::Ui)
                     .before(PerfScope::Debug),
             );
-
-        #[cfg(not(target_arch = "wasm32"))]
-        if app
-            .world()
-            .get_resource::<LaunchOptions>()
-            .is_some_and(LaunchOptions::debug_http_enabled)
-        {
-            app.add_systems(Update, debug::poll_debug_http.before(simulation_controls));
-        }
     }
 }
 

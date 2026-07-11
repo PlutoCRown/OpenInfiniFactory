@@ -6,6 +6,7 @@ use crate::game::player::controller::{player_collision_box, FlyCamera};
 use crate::game::simulation::runtime::SimulationStepStats;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
+use crate::game::ui::core::host::PlayingUiRootEntity;
 use crate::game::ui::{PendingKeyBind, TextPromptState};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
@@ -36,27 +37,35 @@ pub fn load_debug_font(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) 
     commands.insert_resource(DebugFont(fonts.add(font)));
 }
 
-pub fn setup_debug_ui(mut commands: Commands, debug_font: Res<DebugFont>) {
-    commands.spawn((
-        Text::new(""),
-        TextFont {
-            font: debug_font.0.clone().into(),
-            font_size: FontSize::Px(DEBUG_FONT_SIZE),
-            ..default()
-        },
-        TextColor(Color::srgb(0.95, 1.0, 0.72)),
-        TextLayout::no_wrap(),
-        Node {
-            position_type: PositionType::Absolute,
-            right: Val::Px(18.0),
-            top: Val::Px(14.0),
-            width: Val::Px(DEBUG_PANEL_WIDTH),
-            display: Display::None,
-            ..default()
-        },
-        DebugPanel,
-        DebugText,
-    ));
+pub fn setup_debug_ui(
+    mut commands: Commands,
+    debug_font: Res<DebugFont>,
+    playing_ui_root: Res<PlayingUiRootEntity>,
+) {
+    // 挂在 PlayingUiRoot 下，由 PlayingUiCamera 渲染；独立根节点在菜单相机关闭后不会显示
+    commands.entity(playing_ui_root.0).with_children(|root| {
+        root.spawn((
+            Text::new(""),
+            TextFont {
+                font: debug_font.0.clone().into(),
+                font_size: FontSize::Px(DEBUG_FONT_SIZE),
+                ..default()
+            },
+            TextColor(Color::srgb(0.95, 1.0, 0.72)),
+            TextLayout::no_wrap(),
+            Node {
+                position_type: PositionType::Absolute,
+                right: Val::Px(18.0),
+                top: Val::Px(14.0),
+                width: Val::Px(DEBUG_PANEL_WIDTH),
+                display: Display::None,
+                ..default()
+            },
+            GlobalZIndex(25_000),
+            DebugPanel,
+            DebugText,
+        ));
+    });
 }
 
 pub fn toggle_debug(

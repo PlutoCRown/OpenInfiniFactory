@@ -8,6 +8,7 @@ pub enum DebugHttpCommand {
         z: Option<i32>,
     },
     GetStatus,
+    GetPerf,
     Run,
     RunOneTurn,
     RunN { n: u64 },
@@ -53,6 +54,7 @@ pub fn parse_http_request(request: &tiny_http::Request) -> DebugHttpCommand {
             z: params.get("z").and_then(|v| v.parse().ok()),
         },
         ("GET", "/status") => DebugHttpCommand::GetStatus,
+        ("GET", "/perf") => DebugHttpCommand::GetPerf,
         ("GET", "/blockkinds") | ("GET", "/blocks") => DebugHttpCommand::BlockKinds,
         ("GET", "/logs") => DebugHttpCommand::GetLogs {
             limit: params
@@ -114,6 +116,7 @@ pub fn help_json() -> String {
         "endpoints": [
             {"method": "GET", "path": "/getPosBlock?x=&y=&z=", "desc": "block at coordinate"},
             {"method": "GET", "path": "/status", "desc": "simulation snapshot"},
+            {"method": "GET", "path": "/perf", "desc": "frame timing stats (in-game overlay)"},
             {"method": "GET", "path": "/blockKinds", "desc": "all registered block kinds"},
             {"method": "POST", "path": "/world/reset", "desc": "clear session world"},
             {"method": "POST", "path": "/world/place?x=&y=&z=&kind=&facing=", "desc": "place one block"},

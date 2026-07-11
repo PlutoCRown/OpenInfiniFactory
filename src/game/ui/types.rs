@@ -65,11 +65,7 @@ pub struct StatusText(pub StatusTextKind);
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum StatusTextKind {
-    Hotbar,
-    CurrentSave,
-    Simulation,
-    TargetBlock,
-    SimulationOverlay,
+    Gameplay,
 }
 
 #[derive(Component)]

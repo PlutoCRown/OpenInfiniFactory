@@ -87,6 +87,7 @@ pub(super) fn spawn_localized_settings_button(
     action: SettingsAction,
 ) {
     let is_binding = matches!(action, SettingsAction::Bind(_));
+    let is_debug_http = matches!(action, SettingsAction::StartDebugHttp);
     let key = action.label_key();
     let mut button = parent.spawn((full_width_button(36.0), action));
     if let SettingsAction::Bind(action) = action {
@@ -97,6 +98,11 @@ pub(super) fn spawn_localized_settings_button(
             button.spawn((
                 label_text("", 14.0, Color::WHITE),
                 SettingsText(SettingsTextKind::KeyBinding),
+            ));
+        } else if is_debug_http {
+            button.spawn((
+                label_text("", 14.0, Color::WHITE),
+                SettingsText(SettingsTextKind::DebugHttp),
             ));
         } else {
             button.spawn(localized_text(key, 14.0, Color::WHITE));

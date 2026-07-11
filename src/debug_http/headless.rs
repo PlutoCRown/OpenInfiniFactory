@@ -176,6 +176,9 @@ pub fn handle_headless_command(
                 .clear();
             r#"{"ok":true}"#.into()
         }
+        DebugHttpCommand::GetPerf => {
+            json_error("perf stats only available in the embedded game client")
+        }
     }
 }
 

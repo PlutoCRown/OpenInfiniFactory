@@ -2,7 +2,9 @@ use bevy::prelude::*;
 use serde_json::{json, Value};
 
 use crate::game::blocks::BlockKind;
+use crate::game::simulation::runtime::SimulationStepStats;
 use crate::game::state::{BuilderMode, PlacementState, SimulationState};
+use crate::game::systems::perf::{PerfScope, PerfStats};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{TargetHit, WorldBlocks};
 use crate::sim_core::SimulationControl;
@@ -84,6 +86,66 @@ pub fn session_status_json(control: &SimulationControl) -> Value {
         "step_requested": control.step_requested,
         "turn": control.turn,
         "speed": control.speed,
+    })
+}
+
+pub fn perf_stats_json(
+    fps: f64,
+    perf: &PerfStats,
+    sim_stats: &SimulationStepStats,
+    builder_mode: BuilderMode,
+    simulation: &SimulationState,
+    block_count: usize,
+    entity_count: usize,
+    player: Option<Vec3>,
+) -> Value {
+    let render_remainder_ms = (perf.render_other_ms() - perf.render_gap_ms()).max(0.0);
+    let scopes: Vec<Value> = PerfScope::ORDER
+        .iter()
+        .map(|scope| {
+            let ms = perf.scope_ms(*scope);
+            json!({
+                "name": scope.label(),
+                "ms": ms,
+                "us": ms * 1000.0,
+            })
+        })
+        .collect();
+    let sim_turn = (builder_mode == BuilderMode::Play
+        && simulation.running
+        && sim_stats.has_sample)
+        .then(|| {
+            json!({
+                "total_ms": sim_stats.total_ms,
+                "prep_ms": sim_stats.prep_ms,
+                "gravity_ms": sim_stats.gravity_ms,
+                "signal_ms": sim_stats.signal_ms,
+                "marker_before_move_ms": sim_stats.marker_before_move_ms,
+                "movement_mark_ms": sim_stats.movement_mark_ms,
+                "movement_execute_ms": sim_stats.movement_execute_ms,
+                "marker_after_move_ms": sim_stats.marker_after_move_ms,
+                "behavior_ms": sim_stats.behavior_ms,
+                "signal_refresh_ms": sim_stats.signal_refresh_ms,
+                "render_rebuild_ms": sim_stats.render_rebuild_ms,
+            })
+        });
+    json!({
+        "fps": fps,
+        "frame_ms": perf.frame_ms(),
+        "main_ms": perf.main_ms(),
+        "main_other_us": perf.main_other_ms() * 1000.0,
+        "render_ms": perf.render_other_ms(),
+        "render_gap_ms": perf.render_gap_ms(),
+        "render_remainder_ms": render_remainder_ms,
+        "scopes": scopes,
+        "sim_turn": sim_turn,
+        "blocks": block_count,
+        "entities": entity_count,
+        "player": player.map(|pos| json!({
+            "x": pos.x,
+            "y": pos.y,
+            "z": pos.z,
+        })),
     })
 }
 
