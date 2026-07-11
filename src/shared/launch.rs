@@ -17,6 +17,8 @@ pub struct LaunchOptions {
     pub load_fixture: Option<String>,
     pub config_path: Option<PathBuf>,
     pub language: Option<Language>,
+    /// 强制启用虚拟遥感（桌面调试用）
+    pub force_touch: bool,
 }
 
 impl LaunchOptions {
@@ -90,6 +92,9 @@ impl LaunchOptions {
                 value if value.starts_with("--language=") => {
                     options.language =
                         Some(parse_language(value.trim_start_matches("--language=")));
+                }
+                "--touch" | "--virtual-remote" => {
+                    options.force_touch = true;
                 }
                 _ => {}
             }
@@ -184,6 +189,7 @@ Options:
   --debug-http-port PORT    Same as --debug-http=PORT
   --config=PATH             Use this config.ron instead of saves/config.ron
   --language=en|zh-CN       Override UI language for this launch
+  --touch, --virtual-remote Force virtual on-screen controls (desktop debug)
   --load-save=PATH          Load save and enter world (game client + headless)
                             Examples: Important_Test
                                       Important_Test/solutions/Solution1

@@ -154,6 +154,7 @@ pub fn dispatch_settings_actions(
     mut open_dropdown: ResMut<OpenSettingsDropdown>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut active_slider: ResMut<ActiveSettingsSlider>,
+    touch: Res<crate::shared::touch_profile::TouchProfile>,
     mut commands: Commands,
 ) {
     for action in actions.read() {
@@ -180,8 +181,16 @@ pub fn dispatch_settings_actions(
                 open_dropdown.0 = None;
             }
             SettingsAction::TabKeyBindings => {
-                *settings_tab = SettingsTab::KeyBindings;
-                open_dropdown.0 = None;
+                if touch.enabled {
+                    commands.queue(|world: &mut World| {
+                        crate::game::ui::features::virtual_remote::open_virtual_layout_editor(
+                            world,
+                        );
+                    });
+                } else {
+                    *settings_tab = SettingsTab::KeyBindings;
+                    open_dropdown.0 = None;
+                }
             }
             SettingsAction::Field(field) => {
                 active_slider.0 = Some(field);

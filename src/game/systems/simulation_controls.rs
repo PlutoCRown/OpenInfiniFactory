@@ -6,7 +6,6 @@ use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::pending::PendingGeneratedMaterials;
 use crate::game::simulation::signals::SignalNetworkCache;
-use crate::sim_bridge::SimulationPresentationState;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
@@ -16,7 +15,7 @@ use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
 };
-use crate::shared::config::{ActionKeyName, GameConfig};
+use crate::sim_bridge::SimulationPresentationState;
 use crate::sim_bridge::{SimSnapshot, SimulationWorker, TurnCache};
 
 #[derive(SystemParam)]
@@ -41,8 +40,7 @@ pub struct SimulationControlDeps<'w> {
 }
 
 pub fn simulation_controls(
-    keys: Res<ButtonInput<KeyCode>>,
-    config: Res<GameConfig>,
+    input: Res<crate::game::input::GameplayInputState>,
     mut commands: Commands,
     block_entities: Query<Entity, With<BlockEntity>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -60,12 +58,7 @@ pub fn simulation_controls(
         return;
     };
 
-    let simulate_key = config.key(ActionKeyName::Simulate).key_code();
-    let fast_key = config.key(ActionKeyName::SimulationFast).key_code();
-    let rollback_key = config.key(ActionKeyName::SimulationRollback).key_code();
-    let step_key = config.key(ActionKeyName::SimulationStep).key_code();
-
-    if keys.just_pressed(simulate_key) {
+    if input.simulate {
         start_simulation_if_needed(
             &mut deps.simulation,
             &deps.world,
@@ -91,7 +84,7 @@ pub fn simulation_controls(
         request_continuous_run(&mut deps.simulation);
     }
 
-    if keys.just_pressed(step_key) {
+    if input.sim_step {
         if !deps.simulation.is_active() {
             return;
         }
@@ -103,13 +96,13 @@ pub fn simulation_controls(
         }
     }
 
-    deps.simulation.speed = if deps.simulation.running && keys.pressed(fast_key) {
+    deps.simulation.speed = if deps.simulation.running && input.sim_fast {
         4.0
     } else {
         1.0
     };
 
-    if keys.just_pressed(rollback_key) && deps.simulation.is_active() {
+    if input.rollback && deps.simulation.is_active() {
         let factory_snapshot = rollback_simulation(&mut deps.simulation, &mut deps.world);
         refresh_static_generated_markers(&mut deps.world);
         deps.pending_generated.clear();
@@ -172,7 +165,13 @@ pub fn start_simulation_if_needed(
     edit_history: &mut EditHistory,
 ) {
     if !simulation.is_active() {
-        start_simulation_state(simulation, world, structure_state, pusher_state, edit_history);
+        start_simulation_state(
+            simulation,
+            world,
+            structure_state,
+            pusher_state,
+            edit_history,
+        );
     }
 }
 

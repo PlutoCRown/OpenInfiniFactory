@@ -5,3 +5,4 @@ pub mod persistent_storage;
 pub mod platform;
 pub mod save;
 pub mod save_format;
+pub mod touch_profile;

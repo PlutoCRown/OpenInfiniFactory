@@ -2,7 +2,6 @@ use bevy::anti_alias::taa::TemporalAntiAliasing;
 use bevy::camera::{Hdr, RenderTarget};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
-use bevy::input::mouse::MouseMotion;
 use bevy::light::ShadowFilteringMethod;
 use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
 use bevy::prelude::*;
@@ -18,7 +17,6 @@ use crate::game::state::{GameMode, GameSettings, PlayingUiState};
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 use crate::game::world::rendering::GameplayScene;
-use crate::shared::config::{ActionKeyName, GameConfig};
 
 pub const EYE_HEIGHT: f32 = 1.7;
 pub const PLAYER_RADIUS: f32 = 0.28;
@@ -150,8 +148,7 @@ pub fn apply_pending_player_spawn(
 
 pub fn camera_move(
     time: Res<Time>,
-    keys: Res<ButtonInput<KeyCode>>,
-    config: Res<GameConfig>,
+    input: Res<crate::game::input::GameplayInputState>,
     settings: Res<GameSettings>,
     mode: Res<State<GameMode>>,
     playing_ui: Res<PlayingUiState>,
@@ -170,11 +167,8 @@ pub fn camera_move(
     };
 
     let now = time.elapsed_secs();
-    let bindings = &config.key_bindings;
-    let jump_key = bindings.jump_or_fly_up.key_code();
-    let fly_down_key = bindings.fly_down.key_code();
 
-    if keys.just_pressed(jump_key) {
+    if input.jump.just_pressed {
         if now - camera.last_space_press <= DOUBLE_TAP_WINDOW {
             camera.flying = !camera.flying;
             camera.velocity_y = 0.0;
@@ -191,18 +185,8 @@ pub fn camera_move(
     let forward = yaw_rotation * Vec3::NEG_Z;
     let right = yaw_rotation * Vec3::X;
 
-    if keys.pressed(config.key(ActionKeyName::Forward).key_code()) {
-        direction += forward;
-    }
-    if keys.pressed(config.key(ActionKeyName::Backward).key_code()) {
-        direction -= forward;
-    }
-    if keys.pressed(config.key(ActionKeyName::Right).key_code()) {
-        direction += right;
-    }
-    if keys.pressed(config.key(ActionKeyName::Left).key_code()) {
-        direction -= right;
-    }
+    direction += forward * input.move_axis.y;
+    direction += right * input.move_axis.x;
 
     if direction.length_squared() > 0.0 {
         let horizontal = Vec3::new(direction.x, 0.0, direction.z).normalize();
@@ -217,10 +201,10 @@ pub fn camera_move(
 
     if camera.flying {
         let mut vertical = 0.0;
-        if keys.pressed(jump_key) {
+        if input.fly_up {
             vertical += 1.0;
         }
-        if keys.pressed(fly_down_key) {
+        if input.fly_down {
             vertical -= 1.0;
         }
         if vertical != 0.0 {
@@ -270,11 +254,11 @@ pub fn camera_move(
 
 pub fn camera_look(
     keys: Res<ButtonInput<KeyCode>>,
+    input: Res<crate::game::input::GameplayInputState>,
     mode: Res<State<GameMode>>,
     playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
     settings: Res<GameSettings>,
-    mut mouse_motion: MessageReader<MouseMotion>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
     let Ok((mut camera, mut transform)) = query.single_mut() else {
@@ -286,13 +270,12 @@ pub fn camera_look(
         || ui_runtime.blocks_gameplay()
         || alt_pressed(&keys)
     {
-        mouse_motion.clear();
         return;
     }
 
-    let mut delta = Vec2::ZERO;
-    for event in mouse_motion.read() {
-        delta += event.delta;
+    let delta = input.look_delta;
+    if delta == Vec2::ZERO {
+        return;
     }
 
     camera.yaw -= delta.x * BASE_MOUSE_SENSITIVITY * settings.mouse_sensitivity_x;
@@ -304,6 +287,7 @@ pub fn camera_look(
 
 pub fn sync_cursor_grab(
     keys: Res<ButtonInput<KeyCode>>,
+    touch: Res<crate::shared::touch_profile::TouchProfile>,
     mode: Res<State<GameMode>>,
     playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
@@ -312,6 +296,12 @@ pub fn sync_cursor_grab(
     let Ok(mut cursor) = windows.single_mut() else {
         return;
     };
+
+    if touch.enabled {
+        cursor.grab_mode = CursorGrabMode::None;
+        cursor.visible = true;
+        return;
+    }
 
     if *mode.get() == GameMode::Playing
         && playing_ui.active_play()

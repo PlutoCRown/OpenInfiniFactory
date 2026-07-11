@@ -3,6 +3,7 @@ pub mod blocks;
 pub mod cameras;
 pub mod debug;
 pub mod edit_history;
+pub mod input;
 pub mod player;
 pub mod session;
 pub mod simulation;
@@ -129,6 +130,7 @@ impl Plugin for GamePlugin {
             .init_resource::<PendingPlayerSpawn>()
             .insert_resource(systems::debug::DebugState::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
+            .add_plugins(input::GameplayInputPlugin)
             .add_plugins(SessionPlugin)
             .add_plugins(GameUiPlugin)
             .add_plugins(PerfPlugin);
@@ -175,7 +177,12 @@ impl Plugin for GamePlugin {
             )
             .add_systems(
                 Update,
-                (camera_move, camera_look, sync_cursor_grab)
+                (
+                    input::gather_gameplay_input,
+                    camera_move,
+                    camera_look,
+                    sync_cursor_grab,
+                )
                     .chain()
                     .before(PerfScope::Input),
             )

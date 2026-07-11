@@ -40,6 +40,8 @@ pub struct PlacementQueries<'w, 's> {
     debug: Res<'w, DebugState>,
     structure_state: ResMut<'w, StructureState>,
     block_index: ResMut<'w, BlockEntityIndex>,
+    input: Res<'w, crate::game::input::GameplayInputState>,
+    touch: Res<'w, crate::shared::touch_profile::TouchProfile>,
 }
 
 /// 处理放置/删除手势、取块、旋转与框选入口
@@ -69,6 +71,8 @@ pub fn placement_input(
         debug,
         mut structure_state,
         mut block_index,
+        input,
+        touch,
     } = queries;
 
     if *mode.get() != GameMode::Playing || !playing_ui.active_play() {
@@ -98,6 +102,22 @@ pub fn placement_input(
         return;
     }
 
+    if input.cancel_edit_gesture {
+        if let Some(gesture) = placement.edit_gesture.as_mut() {
+            gesture.canceled = true;
+        }
+    }
+
+    if input.open_block_config {
+        let current_target_pos = placement.target.map(|target| target.pos);
+        if open_target_block_ui(current_target_pos, &world, *builder_mode, &mut ui_runtime) {
+            placement.edit_gesture = None;
+            placement.selection.clear();
+            despawn_edit_previews(&mut commands, &edit_previews);
+            return;
+        }
+    }
+
     if selected_area(&inventory, &placement) != Some(AreaKind::Selection) {
         placement.selection.clear();
     }
@@ -120,8 +140,10 @@ pub fn placement_input(
     let current_delete_at = placement.target.map(|target| target.pos);
     let current_target_pos = placement.target.map(|target| target.pos);
     let force_place = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
-    if mouse_buttons.just_pressed(place_button)
+    // 触控下配置走独立按钮，放置键不再误开面板
+    if input.place.just_pressed
         && !force_place
+        && !touch.enabled
         && open_target_block_ui(current_target_pos, &world, *builder_mode, &mut ui_runtime)
     {
         placement.edit_gesture = None;
@@ -155,7 +177,7 @@ pub fn placement_input(
 
     placement.selection.clear();
 
-    if mouse_buttons.just_pressed(pick_button) {
+    if input.pick.just_pressed {
         if let Some(pos) = current_target_pos {
             pick_target_block(pos, &world, &mut placement, &mut inventory);
         }
@@ -164,10 +186,7 @@ pub fn placement_input(
         return;
     }
 
-    if *builder_mode == BuilderMode::Play
-        && !simulation.is_active()
-        && keys.just_pressed(config.key_bindings.alternate.key_code())
-    {
+    if *builder_mode == BuilderMode::Play && !simulation.is_active() && input.alternate {
         if let Some(pos) = current_target_pos {
             edit_history.flush_pending_rotation();
             if alternate_block_at(
@@ -190,7 +209,7 @@ pub fn placement_input(
         return;
     }
 
-    if keys.just_pressed(config.key_bindings.rotate_or_rollback.key_code()) {
+    if input.rotate {
         let reverse_rotation = shift_pressed(&keys);
         if let Some(gesture) = placement.edit_gesture.as_mut() {
             if let EditGestureKind::Place { block } = &mut gesture.kind {
@@ -230,16 +249,14 @@ pub fn placement_input(
         }
     }
 
-    if mouse_buttons.just_pressed(delete_button)
-        && *builder_mode == BuilderMode::Play
-        && try_player_teleport(current_target_pos, &world, &mut player)
-    {
-        placement.edit_gesture = None;
-        despawn_edit_previews(&mut commands, &edit_previews);
-        return;
-    }
-
-    if mouse_buttons.just_pressed(delete_button) {
+    if input.delete.just_pressed {
+        if *builder_mode == BuilderMode::Play
+            && try_player_teleport(current_target_pos, &world, &mut player)
+        {
+            placement.edit_gesture = None;
+            despawn_edit_previews(&mut commands, &edit_previews);
+            return;
+        }
         match placement.edit_gesture.as_mut() {
             Some(gesture) if matches!(gesture.kind, EditGestureKind::Place { .. }) => {
                 gesture.canceled = true;
@@ -262,7 +279,7 @@ pub fn placement_input(
         }
     }
 
-    if mouse_buttons.just_pressed(place_button) {
+    if input.place.just_pressed {
         match placement.edit_gesture.as_mut() {
             Some(gesture) if matches!(gesture.kind, EditGestureKind::Delete) => {
                 gesture.canceled = true;
@@ -290,8 +307,8 @@ pub fn placement_input(
         }
     }
 
-    let released_place = mouse_buttons.just_released(place_button);
-    let released_delete = mouse_buttons.just_released(delete_button);
+    let released_place = input.place.just_released;
+    let released_delete = input.delete.just_released;
     let should_finish = placement.edit_gesture.as_ref().is_some_and(|gesture| {
         matches!(gesture.kind, EditGestureKind::Place { .. }) && released_place
             || matches!(gesture.kind, EditGestureKind::Delete) && released_delete
@@ -344,6 +361,8 @@ pub fn placement_input(
             );
         }
     }
+
+    let _ = (place_button, delete_button, pick_button);
 }
 
 /// 取当前快捷栏选中的可放置方块
