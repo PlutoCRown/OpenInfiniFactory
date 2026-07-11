@@ -50,7 +50,7 @@ impl PusherState {
                 entry.extended.then_some((
                     *pos,
                     PusherAnimation {
-                        duration: 0.0,
+                        duration: None,
                         from_extension: 1.0,
                         to_extension: 1.0,
                     },
@@ -304,7 +304,7 @@ fn mark_pusher_movement(
     bare_pusher_animations.insert(
         pos,
         PusherAnimation {
-            duration: 0.0,
+            duration: None,
             from_extension,
             to_extension,
         },

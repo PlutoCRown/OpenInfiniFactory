@@ -113,7 +113,6 @@ impl<'w> SimCoreWorld<'w> {
 
     pub fn simulate_next_turn(
         &mut self,
-        animation_duration: f32,
         sim_log: Option<&mut SimulationDebugLog>,
         stats: Option<&mut SimulationStepStats>,
     ) -> TurnOutput {
@@ -141,7 +140,6 @@ impl<'w> SimCoreWorld<'w> {
             &mut pending_generated,
             &mut signal_cache,
             next_turn,
-            animation_duration,
             &mut structure_state,
             &mut movement_influence,
             &mut pusher_state,

@@ -5,8 +5,6 @@ use std::thread::{self, JoinHandle};
 use bevy::prelude::Resource;
 
 use crate::game::simulation::core::simulate_turn;
-use crate::game::world::animation::SIMULATION_TURN_SECONDS;
-use crate::sim_core::SimulationDebugLog;
 
 use super::snapshot::{CachedTurn, SimSnapshot};
 
@@ -27,7 +25,6 @@ enum WorkerCommand {
         display_turn: u64,
         running: bool,
         step_requested: bool,
-        speed: f32,
         active: bool,
     },
 }
@@ -51,19 +48,11 @@ impl SimulationWorker {
         });
     }
 
-    pub fn configure(
-        &self,
-        display_turn: u64,
-        running: bool,
-        step_requested: bool,
-        speed: f32,
-        active: bool,
-    ) {
+    pub fn configure(&self, display_turn: u64, running: bool, step_requested: bool, active: bool) {
         let _ = self.command_tx.send(WorkerCommand::Configure {
             display_turn,
             running,
             step_requested,
-            speed,
             active,
         });
     }
@@ -93,8 +82,6 @@ fn worker_main(command_rx: Receiver<WorkerCommand>, result_tx: Sender<CachedTurn
         &Default::default(),
     );
     let mut simulated_through = 0_u64;
-    let mut sim_log = SimulationDebugLog::default();
-    sim_log.set_enabled(false);
 
     while let Ok(command) = command_rx.recv() {
         match command {
@@ -110,7 +97,6 @@ fn worker_main(command_rx: Receiver<WorkerCommand>, result_tx: Sender<CachedTurn
                 display_turn,
                 running,
                 step_requested,
-                speed,
                 active,
             } => {
                 if !active {
@@ -123,17 +109,11 @@ fn worker_main(command_rx: Receiver<WorkerCommand>, result_tx: Sender<CachedTurn
                 let target = display_turn + depth;
                 while simulated_through < target {
                     let next_turn = simulated_through + 1;
-                    let animation_duration = if running {
-                        SIMULATION_TURN_SECONDS / speed.max(0.001)
-                    } else {
-                        SIMULATION_TURN_SECONDS
-                    };
                     let output = simulate_turn(
                         &mut snapshot.world,
                         &mut snapshot.pending_generated,
                         &mut snapshot.signal_cache,
                         next_turn,
-                        animation_duration,
                         &mut snapshot.structure_state,
                         &mut snapshot.movement_influence,
                         &mut snapshot.pusher_state,

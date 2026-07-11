@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use bevy::camera::visibility::VisibilitySystems;
+use bevy::light::SimulationLightSystems;
 use bevy::platform::time::Instant;
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
@@ -53,7 +54,10 @@ perf_scopes! {
     PostUpdateStart => "Update tail",
     PostUpdateUi => "Post/UI layout",
     PostUpdateTransform => "Post/Transform",
-    PostUpdateVisibility => "Post/Visibility",
+    PostVisPrep => "Post/Vis prep",
+    PostVisCheck => "Post/Vis check",
+    PostVisLights => "Post/Vis lights",
+    PostVisDone => "Post/Vis done",
     Last => "Last",
 }
 
@@ -236,8 +240,33 @@ impl Plugin for PerfPlugin {
             )
             .add_systems(
                 PostUpdate,
-                perf_mark_post_update_visibility
-                    .in_set(PerfScope::PostUpdateVisibility)
+                perf_mark_post_vis_prep
+                    .in_set(PerfScope::PostVisPrep)
+                    .after(VisibilitySystems::UpdateFrusta)
+                    .after(VisibilitySystems::CalculateBounds)
+                    .after(VisibilitySystems::VisibilityPropagate)
+                    .before(VisibilitySystems::CheckVisibility),
+            )
+            .add_systems(
+                PostUpdate,
+                perf_mark_post_vis_check
+                    .in_set(PerfScope::PostVisCheck)
+                    .after(VisibilitySystems::CheckVisibility)
+                    .before(SimulationLightSystems::AssignLightsToClusters)
+                    .before(SimulationLightSystems::UpdateLightFrusta)
+                    .before(SimulationLightSystems::CheckLightVisibility),
+            )
+            .add_systems(
+                PostUpdate,
+                perf_mark_post_vis_lights
+                    .in_set(PerfScope::PostVisLights)
+                    .after(SimulationLightSystems::CheckLightVisibility)
+                    .before(VisibilitySystems::MarkNewlyHiddenEntitiesInvisible),
+            )
+            .add_systems(
+                PostUpdate,
+                perf_mark_post_vis_done
+                    .in_set(PerfScope::PostVisDone)
                     .after(VisibilitySystems::MarkNewlyHiddenEntitiesInvisible),
             )
             .add_systems(
@@ -259,7 +288,7 @@ mod tests {
 
     #[test]
     fn scope_order_matches_enum_variants() {
-        assert_eq!(PerfScope::ORDER.len(), 13);
+        assert_eq!(PerfScope::ORDER.len(), 16);
         assert_eq!(PerfScope::Input.idx(), 1);
     }
 }

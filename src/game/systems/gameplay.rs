@@ -27,14 +27,14 @@ use crate::game::world::grid::{
     grid_to_world, raycast_blocks, raycast_edit_drag_grid, MaterialWeld, TargetHit, WorldBlocks,
 };
 use crate::game::world::rendering::StructureBounds;
-use crate::scene::{refresh_edit_changes, BlockEntityIndex};
 use crate::game::world::rendering::{
     block_face_highlight_transform, despawn_edit_previews, rebuild_world_for_debug_state,
     rebuild_world_with_animations, rebuild_world_with_animations_for_debug_state,
     spawn_block_preview, spawn_block_with_animation, spawn_delete_bounds_preview,
-    spawn_edit_preview, AimFaceHighlight, BlockEntity, EditPreview, EditPreviewKind, HoverMarker,
+    spawn_edit_preview, AimFaceHighlight, BlockEntity, BlockEntityLayer, EditPreview, EditPreviewKind, HoverMarker,
     HoverStructureBounds, WorldRenderAssets,
 };
+use crate::scene::{refresh_edit_changes, BlockEntityIndex};
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
 #[derive(SystemParam)]
@@ -267,6 +267,7 @@ pub fn placement_input(
             &render_assets,
             &debug,
             &mut structure_state,
+            &mut block_index,
         ) {
             solution_state.dirty = true;
         }
@@ -300,6 +301,7 @@ pub fn placement_input(
                 &render_assets,
                 &debug,
                 &mut structure_state,
+                &mut block_index,
             ) {
                 solution_state.dirty = true;
             }
@@ -329,6 +331,7 @@ pub fn placement_input(
                 &render_assets,
                 &debug,
                 &mut structure_state,
+                &mut block_index,
             ) {
                 solution_state.dirty = true;
             } else if selected_place_block(&inventory, *builder_mode, &placement)
@@ -564,6 +567,7 @@ fn handle_selection_area_input(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    block_index: &mut BlockEntityIndex,
 ) -> bool {
     let mut changed = false;
     if let Some(drag) = placement.selection.drag.as_mut() {
@@ -587,6 +591,7 @@ fn handle_selection_area_input(
                         render_assets,
                         debug,
                         structure_state,
+                        block_index,
                         bounds,
                         drag.offset,
                     ) {
@@ -661,6 +666,7 @@ fn move_selection(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    block_index: &mut BlockEntityIndex,
     bounds: SelectionBounds,
     offset: IVec3,
 ) -> bool {
@@ -691,10 +697,21 @@ fn move_selection(
 
     for (pos, _) in &selected {
         world.remove(pos);
-        if let Some((entity, _)) = block_entities
+        if let Some((entity, block_entity)) = block_entities
             .iter()
             .find(|(_, block_entity)| block_entity.pos == *pos)
         {
+            match block_entity.layer {
+                BlockEntityLayer::Animatable => {
+                    block_index.remove_animatable(*pos);
+                }
+                BlockEntityLayer::System => {
+                    block_index.remove_system(*pos);
+                }
+                BlockEntityLayer::Scene => {
+                    block_index.remove_scene(*pos);
+                }
+            }
             commands.entity(entity).despawn();
         }
     }
@@ -720,7 +737,7 @@ fn move_selection(
     }
     world.replace_material_welds(updated_welds);
     if debug.factory_activity {
-        despawn_block_entities(commands, block_entities);
+        despawn_block_entities(commands, block_entities, block_index);
         rebuild_world_with_animations_for_debug_state(
             commands,
             meshes,
@@ -729,6 +746,7 @@ fn move_selection(
             &animations,
             debug,
             structure_state,
+            block_index,
         );
     } else {
         for (target, animation) in animations {
@@ -742,13 +760,19 @@ fn move_selection(
                 block,
                 Some(animation),
                 None,
+                block_index,
             );
         }
     }
     true
 }
 
-fn despawn_block_entities(commands: &mut Commands, block_entities: &Query<(Entity, &BlockEntity)>) {
+fn despawn_block_entities(
+    commands: &mut Commands,
+    block_entities: &Query<(Entity, &BlockEntity)>,
+    block_index: &mut BlockEntityIndex,
+) {
+    block_index.clear();
     for (entity, _) in block_entities {
         commands.entity(entity).despawn();
     }
@@ -767,6 +791,7 @@ fn alternate_block_at(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    block_index: &mut BlockEntityIndex,
 ) -> bool {
     let Some(block) = world.blocks.get_mut(&pos) else {
         return false;
@@ -784,7 +809,7 @@ fn alternate_block_at(
     }
     block.kind = kind;
     refresh_edit_generated_markers(world);
-    despawn_block_entities(commands, block_entities);
+    despawn_block_entities(commands, block_entities, block_index);
     rebuild_world_for_debug_state(
         commands,
         meshes,
@@ -792,6 +817,7 @@ fn alternate_block_at(
         render_assets,
         debug,
         structure_state,
+        block_index,
     );
     true
 }
@@ -806,6 +832,7 @@ fn rotate_block_at(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    block_index: &mut BlockEntityIndex,
 ) -> bool {
     let Some(block) = world.blocks.get_mut(&pos) else {
         return false;
@@ -834,7 +861,7 @@ fn rotate_block_at(
         },
     );
 
-    despawn_block_entities(commands, block_entities);
+    despawn_block_entities(commands, block_entities, block_index);
     if debug.factory_activity {
         rebuild_world_with_animations_for_debug_state(
             commands,
@@ -844,9 +871,18 @@ fn rotate_block_at(
             &animations,
             debug,
             structure_state,
+            block_index,
         );
     } else {
-        rebuild_world_with_animations(commands, meshes, world, render_assets, &animations, None);
+        rebuild_world_with_animations(
+            commands,
+            meshes,
+            world,
+            render_assets,
+            &animations,
+            None,
+            block_index,
+        );
     }
     true
 }

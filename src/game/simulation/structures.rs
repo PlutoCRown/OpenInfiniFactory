@@ -426,7 +426,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                     pusher_animations.insert(
                         actor.pos,
                         PusherAnimation {
-                            duration: 0.0,
+                            duration: None,
                             from_extension,
                             to_extension,
                         },

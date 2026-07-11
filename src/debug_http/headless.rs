@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 
-use crate::game::world::animation::SIMULATION_TURN_SECONDS;
 use crate::sim_core::{SimulationControl, SimulationDebugLog};
 
 use super::fixture::{apply_fixture_setup, load_fixture_file, run_fixture_dir, run_fixture_file};
@@ -12,7 +11,10 @@ use super::world_ops::{
     place_block, reset_session,
 };
 
-pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHttpCommand) -> String {
+pub fn handle_headless_command(
+    state: &mut HeadlessDebugState,
+    command: DebugHttpCommand,
+) -> String {
     match command {
         DebugHttpCommand::Help => help_json(),
         DebugHttpCommand::BlockKinds => block_kinds_json(),
@@ -46,15 +48,15 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
             if name.is_empty() {
                 return json_error("loadSave requires ?name=");
             }
-            state.with_core(|mut core, _| {
-                match load_save_into_session(&mut core, &name) {
+            state.with_core(
+                |mut core, _| match load_save_into_session(&mut core, &name) {
                     Ok(()) => json_ok(serde_json::json!({
                         "save": name,
                         "simulation": session_status_json(core.control()),
                     })),
                     Err(error) => json_error(&error),
-                }
-            })
+                },
+            )
         }
         DebugHttpCommand::PlaceBlock {
             x,
@@ -85,15 +87,17 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
                 return json_error("loadFixture requires ?path=");
             }
             match load_fixture_file(&path) {
-                Ok(fixture) => state.with_core(|mut core, _| {
-                    match apply_fixture_setup(&mut core, &fixture) {
-                        Ok(()) => json_ok(serde_json::json!({
-                            "fixture": fixture.name,
-                            "simulation": session_status_json(core.control()),
-                        })),
-                        Err(error) => json_error(&error),
-                    }
-                }),
+                Ok(fixture) => {
+                    state.with_core(
+                        |mut core, _| match apply_fixture_setup(&mut core, &fixture) {
+                            Ok(()) => json_ok(serde_json::json!({
+                                "fixture": fixture.name,
+                                "simulation": session_status_json(core.control()),
+                            })),
+                            Err(error) => json_error(&error),
+                        },
+                    )
+                }
                 Err(error) => json_error(&error),
             }
         }
@@ -135,7 +139,7 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
             core.request_continuous_run();
             sim_log.log(core.control().turn, "HTTP /run (headless batch)");
             for _ in 0..10 {
-                core.simulate_next_turn(SIMULATION_TURN_SECONDS, Some(sim_log), None);
+                core.simulate_next_turn(Some(sim_log), None);
             }
             json_ok(serde_json::json!({
                 "simulation": session_status_json(core.control()),
@@ -144,14 +148,14 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
         }),
         DebugHttpCommand::RunOneTurn => state.with_core(|mut core, sim_log| {
             core.begin_simulation();
-            core.simulate_next_turn(SIMULATION_TURN_SECONDS, Some(sim_log), None);
+            core.simulate_next_turn(Some(sim_log), None);
             sim_log.log(core.control().turn, "HTTP /runOneTurn (headless)");
             json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
         }),
         DebugHttpCommand::RunN { n } => state.with_core(|mut core, sim_log| {
             core.begin_simulation();
             for _ in 0..n {
-                core.simulate_next_turn(SIMULATION_TURN_SECONDS, Some(sim_log), None);
+                core.simulate_next_turn(Some(sim_log), None);
             }
             sim_log.log(core.control().turn, format!("HTTP /runN n={n}"));
             json_ok(serde_json::json!({
@@ -175,6 +179,9 @@ pub fn handle_headless_command(state: &mut HeadlessDebugState, command: DebugHtt
     }
 }
 
-fn run_fixture_file_path(state: &mut HeadlessDebugState, path: &str) -> Result<super::fixture::E2eFixture, String> {
+fn run_fixture_file_path(
+    state: &mut HeadlessDebugState,
+    path: &str,
+) -> Result<super::fixture::E2eFixture, String> {
     state.with_core(|mut core, _| run_fixture_file(&mut core, path))
 }

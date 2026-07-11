@@ -204,7 +204,6 @@ pub fn poll_simulation_worker(
         simulation.turn,
         simulation.running,
         simulation.step_requested,
-        simulation.speed,
         simulation.is_active(),
     );
 }

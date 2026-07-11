@@ -97,6 +97,7 @@ pub fn rebuild_playing_world(
     render_assets: Res<WorldRenderAssets>,
     debug: Res<DebugState>,
     mut structure_state: ResMut<StructureState>,
+    mut index: ResMut<crate::scene::BlockEntityIndex>,
 ) {
     crate::game::world::rendering::rebuild_world_on_enter(
         &mut commands,
@@ -105,6 +106,7 @@ pub fn rebuild_playing_world(
         &render_assets,
         &debug,
         &mut structure_state,
+        &mut index,
     );
 }
 

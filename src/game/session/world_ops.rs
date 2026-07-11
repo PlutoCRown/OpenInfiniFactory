@@ -14,6 +14,7 @@ use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
 };
+use crate::scene::BlockEntityIndex;
 use crate::shared::save::{
     has_solutions_for_puzzle, invalidate_solutions_for_puzzle, load_world, next_named_save,
     reset_solution_world, save_puzzle, save_solution, SaveKind, SaveState,
@@ -138,6 +139,7 @@ pub fn switch_to_edit_mode_and_rebuild(
     structure_state: &mut StructureState,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
+    block_index: &mut BlockEntityIndex,
 ) {
     switch_to_edit_mode(
         world,
@@ -150,7 +152,7 @@ pub fn switch_to_edit_mode_and_rebuild(
         solution_state,
     );
     if let Some(render_assets) = render_assets {
-        despawn_world(commands, block_entities);
+        despawn_world(commands, block_entities, block_index);
         structure_state.clear();
         movement_influence.clear();
         pusher_state.clear();
@@ -161,6 +163,7 @@ pub fn switch_to_edit_mode_and_rebuild(
             render_assets,
             debug,
             structure_state,
+            block_index,
         );
     }
 }
@@ -177,6 +180,7 @@ pub fn reset_current_solution(
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     solution_state: &SolutionState,
+    block_index: &mut BlockEntityIndex,
 ) {
     if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
         reset_solution_world(world, puzzle_snapshot);
@@ -191,7 +195,7 @@ pub fn reset_current_solution(
         movement_influence.clear();
         pusher_state.clear();
         if let Some(render_assets) = render_assets {
-            despawn_world(commands, block_entities);
+            despawn_world(commands, block_entities, block_index);
             rebuild_world_for_debug_state(
                 commands,
                 meshes,
@@ -199,6 +203,7 @@ pub fn reset_current_solution(
                 render_assets,
                 debug,
                 structure_state,
+                block_index,
             );
         }
     }
@@ -220,6 +225,7 @@ pub fn exit_to_main_menu(
     pusher_state: &mut PusherState,
     next_state: &mut NextState<GameMode>,
     start_menu_screen: &mut StartMenuScreen,
+    block_index: &mut BlockEntityIndex,
 ) {
     clear_loaded_world(
         world,
@@ -235,6 +241,7 @@ pub fn exit_to_main_menu(
         structure_state,
         movement_influence,
         pusher_state,
+        block_index,
     );
     *start_menu_screen = StartMenuScreen::Main;
     next_state.set(GameMode::StartMenu);
@@ -261,6 +268,7 @@ pub fn load_world_into_session(
     pusher_state: &mut PusherState,
     current_mode: GameMode,
     next_state: &mut NextState<GameMode>,
+    block_index: &mut BlockEntityIndex,
 ) {
     let Some(loaded) = load_world(world, name) else {
         return;
@@ -310,7 +318,7 @@ pub fn load_world_into_session(
         GameMode::StartMenu => next_state.set(GameMode::Playing),
         GameMode::Playing => {
             if let Some(render_assets) = render_assets {
-                despawn_world(commands, block_entities);
+                despawn_world(commands, block_entities, block_index);
                 rebuild_world_for_debug_state(
                     commands,
                     meshes,
@@ -318,6 +326,7 @@ pub fn load_world_into_session(
                     render_assets,
                     debug,
                     structure_state,
+                    block_index,
                 );
             }
         }
@@ -338,6 +347,7 @@ pub fn clear_loaded_world(
     structure_state: &mut StructureState,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
+    block_index: &mut BlockEntityIndex,
 ) {
     simulation.running = false;
     simulation.step_requested = false;
@@ -358,7 +368,7 @@ pub fn clear_loaded_world(
     movement_influence.clear();
     pusher_state.clear();
     if let Some(render_assets) = render_assets {
-        despawn_world(commands, block_entities);
+        despawn_world(commands, block_entities, block_index);
         rebuild_world_for_debug_state(
             commands,
             meshes,
@@ -366,6 +376,7 @@ pub fn clear_loaded_world(
             render_assets,
             debug,
             structure_state,
+            block_index,
         );
     }
 }

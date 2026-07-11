@@ -25,8 +25,12 @@ pub fn update_settings_text_ui(
 ) {
     use crate::game::ui::access::i18n;
 
+    if !(config.is_changed() || pending_key_bind.is_changed()) {
+        return;
+    }
+
     for (settings_text, parent, mut text) in &mut settings_texts {
-        text.0 = match settings_text.0 {
+        let next = match settings_text.0 {
             SettingsTextKind::KeyBinding => {
                 let Some(parent) = parent else {
                     continue;
@@ -42,6 +46,9 @@ pub fn update_settings_text_ui(
                 format!("{}: {suffix}", i18n.t(button.0.label_key()))
             }
         };
+        if text.0 != next {
+            text.0 = next;
+        }
     }
 }
 
@@ -79,12 +86,18 @@ pub fn update_settings_sliders_ui(
 
     for (fill, mut style) in &mut slider_fills {
         let percent = live_slider_percent(fill.0, &settings, &slider_values);
-        style.width = Val::Percent(percent);
+        let next = Val::Percent(percent);
+        if style.width != next {
+            style.width = next;
+        }
     }
 
     for (knob, mut style) in &mut slider_knobs {
         let percent = live_slider_percent(knob.0, &settings, &slider_values);
-        style.left = Val::Percent(percent);
+        let next = Val::Percent(percent);
+        if style.left != next {
+            style.left = next;
+        }
     }
 }
 
@@ -145,11 +158,17 @@ pub fn update_settings_dropdowns_ui(
     triggers: Query<(&SettingsAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     for (label, mut text) in &mut texts.p0() {
-        text.0 = label.0.trigger_label(&config);
+        let next = label.0.trigger_label(&config);
+        if text.0 != next {
+            text.0 = next;
+        }
     }
 
     for (value, mut text) in &mut texts.p1() {
-        text.0 = value.0.display(&settings);
+        let next = value.0.display(&settings);
+        if text.0 != next {
+            text.0 = next;
+        }
     }
 
     let window = windows.single().ok();

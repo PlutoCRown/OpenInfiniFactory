@@ -20,6 +20,7 @@ use crate::game::world::animation::{
 };
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
+use crate::scene::BlockEntityIndex;
 
 const ICON_TEXTURE_SIZE: u32 = 256;
 const ICON_RENDER_LAYER: usize = 3;
@@ -131,7 +132,8 @@ pub fn setup_scene(
     commands.spawn((
         PointLight {
             intensity: 1100.0,
-            shadow_maps_enabled: true,
+            // 点光阴影是立方体贴图，主线程 Vis/Lights 成本很高；场景以平行光阴影为主
+            shadow_maps_enabled: false,
             range: 18.0,
             radius: 3.5,
             ..default()
@@ -220,6 +222,7 @@ pub fn rebuild_world_on_enter(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &mut StructureState,
+    index: &mut BlockEntityIndex,
 ) {
     structure_state.clear();
     if debug.factory_activity {
@@ -232,6 +235,7 @@ pub fn rebuild_world_on_enter(
         render_assets,
         debug,
         structure_state,
+        index,
     );
 }
 
@@ -384,6 +388,7 @@ fn spawn_block_icon_model(
         true,
         Some((origin - Vec3::splat(0.5), icon_layer)),
         None,
+        None,
     );
 }
 
@@ -393,12 +398,32 @@ pub fn rebuild_world(
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     factory_debug: Option<&StructureState>,
+    index: &mut BlockEntityIndex,
 ) {
+    index.clear();
     for (pos, data) in &world.blocks {
-        spawn_block(commands, meshes, assets, world, *pos, *data, factory_debug);
+        spawn_block(
+            commands,
+            meshes,
+            assets,
+            world,
+            *pos,
+            *data,
+            factory_debug,
+            index,
+        );
     }
     for (pos, data) in &world.system_blocks {
-        spawn_block(commands, meshes, assets, world, *pos, *data, factory_debug);
+        spawn_block(
+            commands,
+            meshes,
+            assets,
+            world,
+            *pos,
+            *data,
+            factory_debug,
+            index,
+        );
     }
 }
 
@@ -409,6 +434,7 @@ pub fn rebuild_world_for_debug_state(
     assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &StructureState,
+    index: &mut BlockEntityIndex,
 ) {
     rebuild_world(
         commands,
@@ -416,6 +442,7 @@ pub fn rebuild_world_for_debug_state(
         world,
         assets,
         debug.factory_activity.then_some(structure_state),
+        index,
     );
 }
 
@@ -427,6 +454,7 @@ pub fn rebuild_world_with_animations_for_debug_state(
     animations: &HashMap<IVec3, BlockAnimation>,
     debug: &DebugState,
     structure_state: &StructureState,
+    index: &mut BlockEntityIndex,
 ) {
     rebuild_world_with_animations(
         commands,
@@ -435,10 +463,16 @@ pub fn rebuild_world_with_animations_for_debug_state(
         assets,
         animations,
         debug.factory_activity.then_some(structure_state),
+        index,
     );
 }
 
-pub fn despawn_world(commands: &mut Commands, block_entities: &Query<Entity, With<BlockEntity>>) {
+pub fn despawn_world(
+    commands: &mut Commands,
+    block_entities: &Query<Entity, With<BlockEntity>>,
+    index: &mut BlockEntityIndex,
+) {
+    index.clear();
     for entity in block_entities {
         commands.entity(entity).despawn();
     }
@@ -653,6 +687,7 @@ pub fn spawn_block_preview(
         true,
         None,
         None,
+        None,
     );
 }
 
@@ -664,6 +699,7 @@ pub fn spawn_block(
     pos: IVec3,
     data: BlockData,
     factory_debug: Option<&StructureState>,
+    index: &mut BlockEntityIndex,
 ) {
     spawn_block_with_animation(
         commands,
@@ -674,6 +710,7 @@ pub fn spawn_block(
         data,
         None,
         factory_debug,
+        index,
     );
 }
 
@@ -686,6 +723,7 @@ pub fn spawn_block_with_animation(
     data: BlockData,
     animation: Option<BlockAnimation>,
     factory_debug: Option<&StructureState>,
+    index: &mut BlockEntityIndex,
 ) -> Entity {
     spawn_block_with_timed_animation(
         commands,
@@ -698,6 +736,7 @@ pub fn spawn_block_with_animation(
         AnimationTiming::edit(),
         factory_debug,
         false,
+        index,
     )
 }
 
@@ -712,6 +751,7 @@ pub fn spawn_block_with_timed_animation(
     timing: AnimationTiming,
     factory_debug: Option<&StructureState>,
     powered_wire: bool,
+    index: &mut BlockEntityIndex,
 ) -> Entity {
     spawn_block_model(
         commands,
@@ -730,6 +770,7 @@ pub fn spawn_block_with_timed_animation(
         true,
         None,
         factory_debug,
+        Some(index),
     )
 }
 
@@ -760,6 +801,7 @@ pub fn spawn_pending_generated_block(
         false,
         None,
         None,
+        None,
     );
 }
 
@@ -770,6 +812,7 @@ pub fn rebuild_world_with_animations(
     assets: &WorldRenderAssets,
     animations: &HashMap<IVec3, BlockAnimation>,
     factory_debug: Option<&StructureState>,
+    index: &mut BlockEntityIndex,
 ) {
     rebuild_world_with_timed_animations(
         commands,
@@ -779,6 +822,7 @@ pub fn rebuild_world_with_animations(
         animations,
         AnimationTiming::edit(),
         factory_debug,
+        index,
     );
 }
 
@@ -790,7 +834,9 @@ pub fn rebuild_world_with_timed_animations(
     animations: &HashMap<IVec3, BlockAnimation>,
     timing: AnimationTiming,
     factory_debug: Option<&StructureState>,
+    index: &mut BlockEntityIndex,
 ) {
+    index.clear();
     for (pos, data) in &world.blocks {
         spawn_block_model(
             commands,
@@ -809,6 +855,7 @@ pub fn rebuild_world_with_timed_animations(
             true,
             None,
             factory_debug,
+            Some(index),
         );
     }
     for (pos, data) in &world.system_blocks {
@@ -829,6 +876,7 @@ pub fn rebuild_world_with_timed_animations(
             true,
             None,
             None,
+            Some(index),
         );
     }
 }
@@ -843,7 +891,9 @@ pub fn rebuild_world_with_runtime_animations(
     timing: AnimationTiming,
     powered_wires: &HashSet<IVec3>,
     factory_debug: Option<&StructureState>,
+    index: &mut BlockEntityIndex,
 ) {
+    index.clear();
     for (pos, data) in &world.blocks {
         let material = block_render_material(assets, *data, powered_wires.contains(pos));
         spawn_block_model(
@@ -863,6 +913,7 @@ pub fn rebuild_world_with_runtime_animations(
             false,
             None,
             factory_debug,
+            Some(index),
         );
     }
     for (pos, data) in &world.system_blocks {
@@ -883,6 +934,7 @@ pub fn rebuild_world_with_runtime_animations(
             false,
             None,
             None,
+            Some(index),
         );
     }
 }
@@ -898,6 +950,7 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
     debug: &DebugState,
     structure_state: &StructureState,
     powered_wires: &HashSet<IVec3>,
+    index: &mut BlockEntityIndex,
 ) {
     rebuild_world_with_runtime_animations(
         commands,
@@ -909,6 +962,7 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
         timing,
         powered_wires,
         debug.factory_activity.then_some(structure_state),
+        index,
     );
 }
 
@@ -1124,6 +1178,7 @@ fn render_rotation(data: BlockData, facing: crate::game::world::direction::Facin
 pub(crate) fn spawn_world_block_entity(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
+    index: &mut BlockEntityIndex,
     assets: &WorldRenderAssets,
     world: &WorldBlocks,
     pos: IVec3,
@@ -1151,6 +1206,7 @@ pub(crate) fn spawn_world_block_entity(
         true,
         None,
         factory_debug,
+        Some(index),
     )
 }
 
@@ -1171,6 +1227,7 @@ fn spawn_block_model(
     show_generator_preview: bool,
     icon_render: Option<(Vec3, &RenderLayers)>,
     factory_debug: Option<&StructureState>,
+    index: Option<&mut BlockEntityIndex>,
 ) -> Entity {
     let debug_overlay = factory_debug.and_then(|structure_state| {
         factory_debug_overlay_material(assets, structure_state, pos, data.kind)
@@ -1255,11 +1312,17 @@ fn spawn_block_model(
     }
 
     if with_block_entity {
+        let layer = BlockEntityLayer::from_kind(data.kind);
         entity.insert(BlockEntity {
             pos,
             id: data.id,
-            layer: BlockEntityLayer::from_kind(data.kind),
+            layer,
         });
+        if let Some(index) = index {
+            index.insert(pos, data.id, layer, entity.id());
+        } else {
+            debug_assert!(false, "with_block_entity 时必须传入 BlockEntityIndex");
+        }
     }
 
     if pending_generated_preview {

@@ -47,6 +47,7 @@ pub fn handle_exit_to_main_menu(
             &mut world.pusher_state,
             &mut next_state,
             &mut start_menu_screen,
+            &mut world.block_index,
         );
     }
 }

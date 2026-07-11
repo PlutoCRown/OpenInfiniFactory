@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::game::blocks::BlockId;
-use crate::game::world::rendering::{BlockEntity, BlockEntityLayer};
+use crate::game::world::rendering::BlockEntityLayer;
 
 /// 场景实体索引：工厂/材料与系统层分槽，避免重叠格抓错模型
 #[derive(Resource, Default)]
@@ -82,12 +82,5 @@ impl BlockEntityIndex {
         self.animatable_pos.clear();
         self.system_pos.clear();
         self.scene_pos.clear();
-    }
-
-    pub fn rebuild_from_world(&mut self, blocks: &Query<(Entity, &BlockEntity)>) {
-        self.clear();
-        for (entity, block) in blocks {
-            self.insert(block.pos, block.id, block.layer, entity);
-        }
     }
 }

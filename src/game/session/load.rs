@@ -46,6 +46,7 @@ pub fn handle_load_world(
             &mut world.pusher_state,
             *mode.get(),
             &mut next_state,
+            &mut world.block_index,
         );
     }
 }
@@ -90,6 +91,7 @@ pub fn handle_create_new_puzzle(
                 &mut world.pusher_state,
                 *mode.get(),
                 &mut next_state,
+                &mut world.block_index,
             );
         }
     }
@@ -142,6 +144,7 @@ pub fn handle_create_new_solution(
                 &mut world.pusher_state,
                 *mode.get(),
                 &mut next_state,
+                &mut world.block_index,
             );
         }
     }

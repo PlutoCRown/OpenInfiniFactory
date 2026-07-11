@@ -22,14 +22,7 @@ pub fn spawn_model_parts(
             }
         }
         BlockModel::PusherParts(parts) => {
-            spawn_pusher_model_parts(
-                parent,
-                assets,
-                parts,
-                pusher_animation,
-                icon_layer,
-                preview,
-            );
+            spawn_pusher_model_parts(parent, assets, parts, pusher_animation, icon_layer, preview);
         }
     }
 }
@@ -50,13 +43,14 @@ fn spawn_pusher_model_parts(
         let mut translation = model_vec3(part.translation);
         let mut scale = model_vec3(part.scale);
 
+        // 必须用 from_extension：实体要到下一帧才进 animate，若用 to 会首帧直接画成终点
         if part.mesh == ModelMesh::PusherHead {
             if let Some(animation) = pusher_animation {
-                translation += Vec3::NEG_Z * animation.to_extension;
+                translation += Vec3::NEG_Z * animation.from_extension;
             }
         } else if part.mesh == ModelMesh::RodZ {
             let extension = pusher_animation
-                .map(|animation| animation.to_extension)
+                .map(|animation| animation.from_extension)
                 .unwrap_or(0.0);
             let length = pusher_rod_length(extension);
             translation.z = pusher_rod_center_z(extension);
@@ -125,13 +119,13 @@ fn spawn_part_mesh(
         child.insert((icon_layer.clone(), BlockIconRenderEntity));
     }
     if let Some(animation) = pusher_animation.filter(|animation| {
-        animation.duration > 0.0 && animation.from_extension != animation.to_extension
+        animation
+            .duration
+            .is_some_and(|duration| duration > 0.0)
+            && animation.from_extension != animation.to_extension
     }) {
         if part.mesh == ModelMesh::PusherHead {
-            child.insert(AnimatedPusher::new(
-                animation,
-                model_vec3(part.translation),
-            ));
+            child.insert(AnimatedPusher::new(animation, model_vec3(part.translation)));
         } else if part.mesh == ModelMesh::RodZ {
             child.insert(AnimatedPusherRod::new(animation, model_vec3(part.scale)));
         }

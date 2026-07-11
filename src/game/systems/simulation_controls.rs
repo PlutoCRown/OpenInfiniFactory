@@ -43,6 +43,7 @@ pub fn simulation_controls(
     block_entities: Query<Entity, With<BlockEntity>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut deps: SimulationControlDeps,
+    mut block_index: ResMut<crate::scene::BlockEntityIndex>,
 ) {
     if *deps.builder_mode != BuilderMode::Play
         || *deps.mode.get() != GameMode::Playing
@@ -131,7 +132,7 @@ pub fn simulation_controls(
         } else {
             deps.structure_state.clear();
         }
-        despawn_world(&mut commands, &block_entities);
+        despawn_world(&mut commands, &block_entities, &mut block_index);
         rebuild_world_for_debug_state(
             &mut commands,
             &mut meshes,
@@ -139,6 +140,7 @@ pub fn simulation_controls(
             render_assets,
             &deps.debug,
             &deps.structure_state,
+            &mut block_index,
         );
     }
 }

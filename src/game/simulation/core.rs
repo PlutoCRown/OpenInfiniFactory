@@ -38,7 +38,6 @@ pub fn simulate_turn(
     pending_generated: &mut PendingGeneratedMaterials,
     signal_cache: &mut SignalNetworkCache,
     turn: u64,
-    animation_duration: f32,
     structure_state: &mut StructureState,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
@@ -147,10 +146,6 @@ pub fn simulate_turn(
     let mut pusher_animations = pusher_animations
         .into_iter()
         .chain(bare_pusher_animations)
-        .map(|(pos, mut animation)| {
-            animation.duration = animation_duration;
-            (pos, animation)
-        })
         .collect::<HashMap<_, _>>();
     for (pos, animation) in pusher_state.sustained_animations() {
         pusher_animations.entry(pos).or_insert(animation);

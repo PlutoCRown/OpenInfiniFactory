@@ -61,9 +61,10 @@ fn spawn_and_index(
     powered_wire: bool,
     factory_debug: Option<&StructureState>,
 ) {
-    let entity = spawn_world_block_entity(
+    spawn_world_block_entity(
         commands,
         meshes,
+        index,
         assets,
         world,
         pos,
@@ -74,7 +75,6 @@ fn spawn_and_index(
         powered_wire,
         factory_debug,
     );
-    index.insert(pos, data.id, BlockEntityLayer::from_kind(data.kind), entity);
 }
 
 // 无连接件的工厂/材料实例可原地保留，避免对向移动时未动方块被刷新闪烁
@@ -476,6 +476,18 @@ pub fn apply_turn_output_incremental(
 ) {
     let render_start = bevy::platform::time::Instant::now();
     let timing = AnimationTiming::simulation(animation_duration);
+    // 与方块动画一致：时长只在放映时按当前倍速填写
+    let pusher_animations: HashMap<_, _> = output
+        .pusher_animations
+        .iter()
+        .map(|(&pos, animation)| {
+            let mut animation = *animation;
+            if animation.from_extension != animation.to_extension {
+                animation.duration = Some(animation_duration);
+            }
+            (pos, animation)
+        })
+        .collect();
     let animated = apply_structure_animations(
         commands,
         meshes,
@@ -486,7 +498,7 @@ pub fn apply_turn_output_incremental(
         structure_state,
         &output.render_powered_wires,
         &output.animations,
-        &output.pusher_animations,
+        &pusher_animations,
         timing,
     );
     let mut refresh = collect_sim_refresh_positions(before, after, output);
@@ -506,7 +518,7 @@ pub fn apply_turn_output_incremental(
         &output.render_powered_wires,
         &refresh,
         &animated,
-        &output.pusher_animations,
+        &pusher_animations,
         timing,
     );
     for (&pos, data) in &after.blocks {
@@ -522,7 +534,7 @@ pub fn apply_turn_output_incremental(
             pos,
             *data,
             None,
-            output.pusher_animations.get(&pos).copied(),
+            pusher_animations.get(&pos).copied(),
             timing,
             output.render_powered_wires.contains(&pos),
             debug.factory_activity.then_some(structure_state),

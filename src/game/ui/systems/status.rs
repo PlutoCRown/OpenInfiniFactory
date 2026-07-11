@@ -17,7 +17,7 @@ pub fn update_status_ui(
     mut texts: Query<(&StatusText, &mut Text)>,
 ) {
     for (status, mut text) in &mut texts {
-        text.0 = status_text_value(
+        let next = status_text_value(
             status.0,
             &placement,
             &world,
@@ -27,6 +27,9 @@ pub fn update_status_ui(
             &save_state,
             &config,
         );
+        if text.0 != next {
+            text.0 = next;
+        }
     }
 }
 

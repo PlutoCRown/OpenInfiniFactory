@@ -95,6 +95,7 @@ pub fn toggle_factory_activity_debug(
     mut meshes: ResMut<Assets<Mesh>>,
     render_assets: Option<Res<WorldRenderAssets>>,
     block_entities: Query<Entity, With<BlockEntity>>,
+    mut block_index: ResMut<crate::scene::BlockEntityIndex>,
 ) {
     if pending_key_bind.0.is_some()
         || text_prompt.is_open()
@@ -115,7 +116,7 @@ pub fn toggle_factory_activity_debug(
         } else if structure_state.is_empty() || !simulation.is_active() {
             structure_state.clear();
         }
-        despawn_world(&mut commands, &block_entities);
+        despawn_world(&mut commands, &block_entities, &mut block_index);
         rebuild_world_for_debug_state(
             &mut commands,
             &mut meshes,
@@ -123,6 +124,7 @@ pub fn toggle_factory_activity_debug(
             &render_assets,
             &debug,
             &structure_state,
+            &mut block_index,
         );
     }
 }
@@ -142,20 +144,31 @@ pub fn update_debug_ui(
     player: Query<&Transform, With<FlyCamera>>,
     block_entities: Query<Entity, With<BlockEntity>>,
     mut panel: Query<(&mut Text, &mut Node), With<DebugPanel>>,
+    mut refresh_at: Local<Option<std::time::Instant>>,
 ) {
     let Ok((mut text, mut style)) = panel.single_mut() else {
         return;
     };
 
-    style.display = if debug.enabled {
+    let next_display = if debug.enabled {
         Display::Flex
     } else {
         Display::None
     };
+    if style.display != next_display {
+        style.display = next_display;
+    }
 
     if !debug.enabled {
         return;
     }
+
+    // 调试字每帧改都会逼 UI 重新排版；限到约 10Hz
+    let now = std::time::Instant::now();
+    if refresh_at.is_some_and(|at| now.duration_since(at).as_millis() < 100) {
+        return;
+    }
+    *refresh_at = Some(now);
 
     let fps = diagnostics
         .get(&FrameTimeDiagnosticsPlugin::FPS)
@@ -191,7 +204,7 @@ pub fn update_debug_ui(
 
     let render_remainder_ms = (perf.render_other_ms() - perf.render_gap_ms()).max(0.0);
 
-    text.0 = format!(
+    let next = format!(
         "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n{}\n  Schedule/Untracked: {:>8.2} us\nRender/Engine: {:>5.2} ms\n  Frame Gap: {:>5.2} ms\n  Timing Remainder: {:>5.2} ms{}\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
         fps,
         perf.frame_ms(),
@@ -208,6 +221,9 @@ pub fn update_debug_ui(
         player_pos.y,
         player_pos.z
     );
+    if text.0 != next {
+        text.0 = next;
+    }
 }
 
 pub fn draw_player_collider(

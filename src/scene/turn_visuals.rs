@@ -38,10 +38,3 @@ pub fn apply_turn_output(
         stats,
     );
 }
-
-pub fn sync_block_entity_index(
-    mut index: ResMut<BlockEntityIndex>,
-    blocks: Query<(Entity, &crate::game::world::rendering::BlockEntity)>,
-) {
-    index.rebuild_from_world(&blocks);
-}

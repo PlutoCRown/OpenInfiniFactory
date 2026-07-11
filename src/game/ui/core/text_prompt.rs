@@ -4,7 +4,6 @@ use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 use bevy::text::{EditableText, TextEdit};
-use bevy::ui::widget::TextScroll;
 
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost};
 use crate::game::ui::core::text_input::primary_click;

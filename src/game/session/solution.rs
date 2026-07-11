@@ -8,7 +8,9 @@ use crate::shared::save::SaveState;
 
 use super::messages::{ResetSolution, SwitchToEditMode};
 use super::world_access::PlayingWorldParams;
-use super::world_ops::{reset_current_solution, save_current_world, switch_to_edit_mode_and_rebuild};
+use super::world_ops::{
+    reset_current_solution, save_current_world, switch_to_edit_mode_and_rebuild,
+};
 
 pub fn handle_reset_solution(
     mut requests: MessageReader<ResetSolution>,
@@ -30,6 +32,7 @@ pub fn handle_reset_solution(
             &mut world.movement_influence,
             &mut world.pusher_state,
             &solution_state,
+            &mut world.block_index,
         );
         playing_ui.paused = true;
     }
@@ -74,6 +77,7 @@ pub fn handle_switch_to_edit_mode(
             &mut world.structure_state,
             &mut world.movement_influence,
             &mut world.pusher_state,
+            &mut world.block_index,
         );
     }
 }

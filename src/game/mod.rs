@@ -15,7 +15,7 @@ use bevy::light::{DirectionalLightShadowMap, GlobalAmbientLight};
 use bevy::prelude::*;
 use bevy::ui_widgets::slider_self_update;
 
-use crate::scene::{sync_block_entity_index, BlockEntityIndex};
+use crate::scene::BlockEntityIndex;
 use crate::shared::config::load_config;
 use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::launch::LaunchOptions;
@@ -125,7 +125,6 @@ impl Plugin for GamePlugin {
                     ui::setup_playing_ui_system,
                     systems::debug::setup_debug_ui,
                     rebuild_playing_world,
-                    sync_block_entity_index,
                 )
                     .chain(),
             )
@@ -176,7 +175,6 @@ impl Plugin for GamePlugin {
                     .before(PerfScope::View),
             )
             .add_systems(Update, animate_blocks.after(PerfScope::View))
-            .add_systems(PostUpdate, sync_block_entity_index)
             .add_systems(Update, retire_block_icon_renderers)
             .add_systems(
                 Update,

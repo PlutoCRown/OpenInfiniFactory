@@ -67,7 +67,8 @@ pub struct AnimatedBlock {
 
 #[derive(Clone, Copy)]
 pub struct PusherAnimation {
-    pub duration: f32,
+    /// 仅放映时填写；模拟输出保持 None
+    pub duration: Option<f32>,
     pub from_extension: f32,
     pub to_extension: f32,
 }
@@ -138,7 +139,7 @@ impl AnimatedPusher {
             base_translation,
             direction: Vec3::NEG_Z,
             elapsed: 0.0,
-            duration: animation.duration,
+            duration: animation.duration.unwrap_or(0.0),
             from_extension: animation.from_extension,
             to_extension: animation.to_extension,
         }
@@ -150,7 +151,7 @@ impl AnimatedPusherRod {
         Self {
             xy_scale,
             elapsed: 0.0,
-            duration: animation.duration,
+            duration: animation.duration.unwrap_or(0.0),
             from_extension: animation.from_extension,
             to_extension: animation.to_extension,
         }
