@@ -261,6 +261,8 @@
   "status.gameplay.scene": "Scene",
   "status.simulation_overlay": "{state}\nTurn: {turns}\n{controls}",
   "status.simulation": "Mode: {mode}\nTurns: {turns}\nSim: {state} x{speed}",
+  "status.session_loading": "Loading…",
+  "status.session_saving": "Saving…",
   "teleport.name": "Name: {name}",
   "teleport.editing": "Name: {name}_",
   "teleport.none": "None",

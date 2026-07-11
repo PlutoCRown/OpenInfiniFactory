@@ -1,3 +1,4 @@
+mod busy;
 mod cover;
 mod dispatch;
 mod load;
@@ -8,6 +9,7 @@ mod solution;
 mod world_access;
 mod world_ops;
 
+pub use busy::SessionBusy;
 pub use dispatch::{
     create_new_puzzle_in_world, create_new_solution_in_world, exit_to_main_menu,
     exit_to_main_menu_in_world, load_world, puzzle_save_needs_confirm, reset_solution_in_world,
@@ -38,17 +40,17 @@ use crate::game::world::rendering::{
 };
 
 use load::{
-    handle_create_new_puzzle, handle_create_new_solution, handle_load_world, poll_pending_world_load,
-    PendingWorldLoad,
+    handle_create_new_puzzle, handle_create_new_solution, handle_load_world,
+    poll_pending_world_load, PendingWorldLoad,
 };
 use messages::{
     CreateNewPuzzle, CreateNewSolution, ExitToMainMenu, ResetSolution, SaveCurrentWorld,
     SaveCurrentWorldInvalidateSolutions, SaveWorldAsNewPuzzle, SwitchToEditMode,
 };
-use navigation::handle_exit_to_main_menu;
+use navigation::{handle_exit_to_main_menu, process_deferred_main_menu_exit};
 use save::{
     handle_save_current_world, handle_save_current_world_invalidate_solutions,
-    handle_save_world_as_new_puzzle,
+    handle_save_world_as_new_puzzle, process_pending_save, PendingSave,
 };
 use solution::{handle_reset_solution, handle_switch_to_edit_mode};
 
@@ -56,8 +58,10 @@ pub struct SessionPlugin;
 
 impl Plugin for SessionPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PendingMainMenuExit>()
+        app.init_resource::<SessionBusy>()
+            .init_resource::<PendingMainMenuExit>()
             .init_resource::<PendingWorldLoad>()
+            .init_resource::<PendingSave>()
             .add_message::<SaveCurrentWorld>()
             .add_message::<SaveCurrentWorldInvalidateSolutions>()
             .add_message::<SaveWorldAsNewPuzzle>()
@@ -75,8 +79,10 @@ impl Plugin for SessionPlugin {
             (
                 handle_save_current_world,
                 handle_save_current_world_invalidate_solutions,
+                process_pending_save,
                 handle_save_world_as_new_puzzle,
                 handle_exit_to_main_menu,
+                process_deferred_main_menu_exit,
                 handle_reset_solution,
                 handle_switch_to_edit_mode,
                 handle_load_world,
@@ -92,7 +98,7 @@ impl Plugin for SessionPlugin {
         app.add_systems(
             Update,
             navigation::finish_pending_main_menu_exit
-                .after(navigation::handle_exit_to_main_menu)
+                .after(process_deferred_main_menu_exit)
                 .before(PerfScope::Simulation),
         );
     }

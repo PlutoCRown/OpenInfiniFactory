@@ -1,7 +1,7 @@
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
-use crate::game::session::LoadWorld;
+use crate::game::session::{LoadWorld, SessionBusy};
 use crate::game::state::{GameMode, SolutionState, StartMenuScreen, WorldEntryMode};
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
 use crate::game::ui::core::text_input::primary_click;
@@ -65,10 +65,12 @@ pub fn emit_save_list_actions(
     mode: Res<State<GameMode>>,
     start_menu_screen: Res<StartMenuScreen>,
     ui_host: Res<UiHost>,
+    busy: Res<SessionBusy>,
     mut writer: MessageWriter<UiAction>,
     actions: Query<&SaveListAction>,
 ) {
-    if ui_host.modal_open()
+    if busy.is_busy()
+        || ui_host.modal_open()
         || !primary_click(&mut click)
         || *mode.get() != GameMode::StartMenu
         || *start_menu_screen != StartMenuScreen::SaveList
@@ -91,8 +93,12 @@ pub fn dispatch_save_list_actions(
     mut start_menu_screen: ResMut<StartMenuScreen>,
     mut save_state: ResMut<SaveState>,
     solution_state: Res<SolutionState>,
+    busy: Res<SessionBusy>,
     mut load_requests: MessageWriter<LoadWorld>,
 ) {
+    if busy.is_busy() {
+        return;
+    }
     for action in actions.read() {
         if action.instance != UiInstanceId::SAVE_LIST {
             continue;

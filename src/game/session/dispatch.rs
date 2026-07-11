@@ -28,7 +28,18 @@ pub fn save_current_world(commands: &mut Commands) {
 
 pub fn exit_to_main_menu(commands: &mut Commands, save_first: bool) {
     commands.queue(move |world: &mut World| {
-        exit_to_main_menu_in_world(world, save_first);
+        exit_to_main_menu_in_world(world, save_first, false);
+    });
+}
+
+pub fn exit_to_main_menu_in_world(
+    world: &mut World,
+    save_first: bool,
+    invalidate_solutions: bool,
+) {
+    world.write_message(ExitToMainMenu {
+        save_first,
+        invalidate_solutions,
     });
 }
 
@@ -44,10 +55,6 @@ pub fn save_current_world_in_world(world: &mut World) {
 
 pub fn save_world_as_new_puzzle_in_world(world: &mut World, name: String) {
     world.write_message(SaveWorldAsNewPuzzle { name });
-}
-
-pub fn exit_to_main_menu_in_world(world: &mut World, save_first: bool) {
-    world.write_message(ExitToMainMenu { save_first });
 }
 
 pub fn reset_solution_in_world(world: &mut World) {

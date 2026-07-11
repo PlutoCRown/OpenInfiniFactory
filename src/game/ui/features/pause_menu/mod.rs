@@ -3,7 +3,7 @@ mod confirm;
 use bevy::prelude::*;
 
 use crate::game::session;
-use crate::game::session::puzzle_save_needs_confirm;
+use crate::game::session::{puzzle_save_needs_confirm, SessionBusy};
 use crate::game::state::{
     BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
     WorldEntryMode,
@@ -19,7 +19,9 @@ use crate::game::ui::menu_button::{
 use crate::game::ui::types::{CarriedItem, InventoryItems};
 use crate::game::world::grid::WorldBlocks;
 use crate::list_ui_config;
-use crate::shared::save::{next_named_save, solution_names_for_puzzle, SaveKind, SaveSlot, SaveState};
+use crate::shared::save::{
+    next_named_save, solution_names_for_puzzle, SaveKind, SaveSlot, SaveState,
+};
 
 use confirm::{
     on_reset_solution, on_return_to_main, on_save_before_edit, reset_solution_spec,
@@ -204,10 +206,11 @@ fn dispatch_pause_menu_clicks(
     mut world: ResMut<WorldBlocks>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
+    busy: Res<SessionBusy>,
     playing_ui_root: Option<Res<PlayingUiRootEntity>>,
     mut commands: Commands,
 ) {
-    if *mode.get() != GameMode::Playing || !playing_ui.paused {
+    if *mode.get() != GameMode::Playing || !playing_ui.paused || busy.is_busy() {
         return;
     }
     let playing_ui_root = playing_ui_root.as_deref().map(|root| root.0);

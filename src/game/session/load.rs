@@ -12,6 +12,7 @@ use crate::shared::save::{
     decode_save_slot, load_world, save_puzzle, save_solution, LoadedSave, SaveSlot, SaveState,
 };
 
+use super::busy::SessionBusy;
 use super::messages::{CreateNewPuzzle, CreateNewSolution, LoadWorld};
 use super::world_access::PlayingWorldParams;
 use super::world_ops::load_world_into_session;
@@ -20,15 +21,23 @@ use super::world_ops::load_world_into_session;
 #[derive(Resource, Default)]
 pub struct PendingWorldLoad {
     task: Option<Task<Option<(SaveSlot, WorldEntryMode, LoadedSave)>>>,
+    /// `None`：尚未出结果；`Some(None)`：解码失败；`Some(Some(..))`：成功
+    ready: Option<Option<(SaveSlot, WorldEntryMode, LoadedSave)>>,
+    /// 至少留一帧给「加载中」绘制
+    hold_frames: u8,
 }
 
 pub fn handle_load_world(
     mut requests: MessageReader<LoadWorld>,
     mut pending: ResMut<PendingWorldLoad>,
     mut edit_history: ResMut<EditHistory>,
+    mut busy: ResMut<SessionBusy>,
 ) {
     for request in requests.read() {
         edit_history.clear();
+        *busy = SessionBusy::Loading;
+        pending.hold_frames = 1;
+        pending.ready = None;
         let slot = request.slot.clone();
         let entry = request.entry;
         pending.task = Some(AsyncComputeTaskPool::get().spawn(async move {
@@ -48,20 +57,39 @@ pub fn poll_pending_world_load(
     mut solution_state: ResMut<SolutionState>,
     mut simulation: ResMut<SimulationState>,
     mut pending_player: ResMut<PendingPlayerSpawn>,
+    mut busy: ResMut<SessionBusy>,
     mode: Res<State<GameMode>>,
     mut next_state: ResMut<NextState<GameMode>>,
 ) {
-    let Some(mut task) = pending.task.take() else {
+    if let Some(mut task) = pending.task.take() {
+        match block_on(future::poll_once(&mut task)) {
+            Some(result) => {
+                pending.ready = Some(result);
+            }
+            None => {
+                pending.task = Some(task);
+            }
+        }
+    }
+
+    if pending.hold_frames > 0 {
+        pending.hold_frames -= 1;
+        return;
+    }
+
+    if pending.task.is_some() {
+        return;
+    }
+
+    let Some(outcome) = pending.ready.take() else {
         return;
     };
-    let Some(result) = block_on(future::poll_once(&mut task)) else {
-        pending.task = Some(task);
-        return;
-    };
-    let Some((slot, entry, loaded)) = result else {
+    let Some((slot, entry, loaded)) = outcome else {
         bevy::log::warn!("Failed to decode save");
+        *busy = SessionBusy::None;
         return;
     };
+
     load_world_into_session(
         &slot,
         entry,
@@ -87,6 +115,7 @@ pub fn poll_pending_world_load(
         &mut next_state,
         &mut world.block_index,
     );
+    *busy = SessionBusy::None;
 }
 
 pub fn handle_create_new_puzzle(

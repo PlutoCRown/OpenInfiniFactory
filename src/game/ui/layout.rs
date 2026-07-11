@@ -26,6 +26,7 @@ use crate::game::ui::core::host::{PlayingUiRootEntity, UiRootEntity};
 use crate::game::ui::core::text_prompt::{
     TextPromptButtonId, TextPromptInput, TextPromptRoot, TextPromptTitle,
 };
+use crate::game::ui::features::session_busy::spawn_session_busy_overlay;
 
 pub fn setup_menu_ui(world: &mut World) {
     bind_ui_scope(world);
@@ -37,6 +38,7 @@ pub fn setup_menu_ui(world: &mut World) {
             spawn_text_prompt(root);
             spawn_main_menu(root);
             spawn_save_list(root);
+            spawn_session_busy_overlay(root);
         })
         .id();
     commands.insert_resource(UiRootEntity(root));
@@ -69,6 +71,7 @@ pub fn setup_playing_ui(commands: &mut Commands, view_image: Handle<Image>) {
             spawn_carried_label(root);
             spawn_inventory_tooltip(root);
             spawn_all_overlays(root);
+            spawn_session_busy_overlay(root);
         })
         .id();
     commands.insert_resource(PlayingUiRootEntity(root));

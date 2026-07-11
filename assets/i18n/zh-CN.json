@@ -261,6 +261,8 @@
   "status.gameplay.scene": "场景",
   "status.simulation_overlay": "{state}\n回合：{turns}\n{controls}",
   "status.simulation": "模式：{mode}\n回合：{turns}\n模拟：{state} x{speed}",
+  "status.session_loading": "加载中…",
+  "status.session_saving": "保存中…",
   "teleport.name": "名称：{name}",
   "teleport.editing": "名称：{name}_",
   "teleport.none": "无",
