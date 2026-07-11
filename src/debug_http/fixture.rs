@@ -1,16 +1,16 @@
-use bevy::prelude::*;
+use bevy::prelude::IVec3;
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 
 use crate::game::blocks::BlockData;
-use crate::game::world::grid::WorldBlocks;
-use crate::sim_core::SimCoreWorld;
+use oif_sim::SimSession;
 
 use super::world_ops::{
     parse_block_kind, parse_facing, place_block, reset_session, resolve_fixture_path,
 };
 
+/// e2e fixture 文档
 #[derive(Debug, Deserialize)]
 pub struct E2eFixture {
     pub name: String,
@@ -20,6 +20,7 @@ pub struct E2eFixture {
     pub steps: Vec<FixtureStep>,
 }
 
+/// fixture 放置一步
 #[derive(Debug, Deserialize)]
 pub struct FixturePlace {
     pub x: i32,
@@ -34,6 +35,7 @@ fn default_facing() -> String {
     "North".into()
 }
 
+/// fixture 步骤
 #[derive(Debug, Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase")]
 pub enum FixtureStep {
@@ -56,6 +58,7 @@ fn default_turns() -> u64 {
     1
 }
 
+/// 从路径加载 fixture
 pub fn load_fixture_file(path: &str) -> Result<E2eFixture, String> {
     let path = resolve_fixture_path(path);
     let contents = fs::read_to_string(&path)
@@ -63,14 +66,13 @@ pub fn load_fixture_file(path: &str) -> Result<E2eFixture, String> {
     parse_fixture_json(&contents)
 }
 
+/// 解析 fixture JSON
 pub fn parse_fixture_json(json: &str) -> Result<E2eFixture, String> {
     serde_json::from_str(json).map_err(|error| format!("invalid fixture json: {error}"))
 }
 
-pub fn apply_fixture_setup(
-    core: &mut SimCoreWorld<'_>,
-    fixture: &E2eFixture,
-) -> Result<(), String> {
+/// 应用 fixture 摆放
+pub fn apply_fixture_setup(core: &mut SimSession, fixture: &E2eFixture) -> Result<(), String> {
     reset_session(core);
     for place in &fixture.setup {
         let kind = parse_block_kind(&place.kind)
@@ -78,7 +80,7 @@ pub fn apply_fixture_setup(
         let facing = parse_facing(&place.facing)
             .ok_or_else(|| format!("unknown facing `{}`", place.facing))?;
         place_block(
-            &mut core.world_blocks_mut(),
+            core.world_blocks_mut(),
             IVec3::new(place.x, place.y, place.z),
             kind,
             facing,
@@ -87,7 +89,8 @@ pub fn apply_fixture_setup(
     Ok(())
 }
 
-pub fn run_fixture(core: &mut SimCoreWorld<'_>, fixture: &E2eFixture) -> Result<(), String> {
+/// 跑完整 fixture
+pub fn run_fixture(core: &mut SimSession, fixture: &E2eFixture) -> Result<(), String> {
     apply_fixture_setup(core, fixture)?;
     for (index, step) in fixture.steps.iter().enumerate() {
         run_fixture_step(core, step)
@@ -96,7 +99,8 @@ pub fn run_fixture(core: &mut SimCoreWorld<'_>, fixture: &E2eFixture) -> Result<
     Ok(())
 }
 
-pub fn run_fixture_step(core: &mut SimCoreWorld<'_>, step: &FixtureStep) -> Result<(), String> {
+/// 执行单步 fixture
+pub fn run_fixture_step(core: &mut SimSession, step: &FixtureStep) -> Result<(), String> {
     match step {
         FixtureStep::BeginSimulation => {
             core.begin_simulation();
@@ -105,7 +109,7 @@ pub fn run_fixture_step(core: &mut SimCoreWorld<'_>, step: &FixtureStep) -> Resu
         FixtureStep::Run { turns } => {
             core.begin_simulation();
             for _ in 0..*turns {
-                core.simulate_next_turn(None, None);
+                core.simulate_next_turn();
             }
             Ok(())
         }
@@ -140,7 +144,7 @@ pub fn run_fixture_step(core: &mut SimCoreWorld<'_>, step: &FixtureStep) -> Resu
     }
 }
 
-fn block_at(world: &WorldBlocks, pos: IVec3) -> Option<BlockData> {
+fn block_at(world: &oif_sim::WorldBlocks, pos: IVec3) -> Option<BlockData> {
     world
         .blocks
         .get(&pos)
@@ -148,14 +152,16 @@ fn block_at(world: &WorldBlocks, pos: IVec3) -> Option<BlockData> {
         .or_else(|| world.system_blocks.get(&pos).copied())
 }
 
-pub fn run_fixture_file(core: &mut SimCoreWorld<'_>, path: &str) -> Result<E2eFixture, String> {
+/// 跑单个 fixture 文件
+pub fn run_fixture_file(core: &mut SimSession, path: &str) -> Result<E2eFixture, String> {
     let fixture = load_fixture_file(path)?;
     run_fixture(core, &fixture)?;
     Ok(fixture)
 }
 
+/// 跑目录下全部 fixture
 pub fn run_fixture_dir(
-    core: &mut SimCoreWorld<'_>,
+    core: &mut SimSession,
     dir: &Path,
 ) -> Vec<(String, Result<(), String>)> {
     let mut results = Vec::new();

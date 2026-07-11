@@ -1,5 +1,5 @@
 use super::traits::PlaceableBlock;
-use super::{Block, BlockKind, EditableBlock, MaterialKind};
+use super::{Block, BlockKind, EditableBlock};
 
 pub fn edit_blocks() -> Vec<BlockKind> {
     let mut blocks: Vec<_> = registrations()
@@ -45,12 +45,7 @@ pub fn get(kind: BlockKind) -> &'static (dyn Block + Send + Sync) {
 }
 
 pub fn save_stores_facing(kind: BlockKind) -> bool {
-    match kind {
-        BlockKind::Platform | BlockKind::Wire | BlockKind::DownWelder | BlockKind::DownDetector => {
-            false
-        }
-        kind => get(kind).is_directional(),
-    }
+    oif_sim::blocks::save_stores_facing(kind)
 }
 
 pub fn is_editable(kind: BlockKind) -> bool {
@@ -73,13 +68,8 @@ pub fn placeable(kind: BlockKind) -> Option<&'static (dyn PlaceableBlock + Send 
     })
 }
 
-pub fn material_block_kind(material: MaterialKind) -> Option<BlockKind> {
-    registrations().find_map(|registration| {
-        (registration.block.material_kind() == Some(material)).then_some(registration.kind)
-    })
-}
-
 pub fn assert_registry_consistent() {
+    oif_sim::blocks::assert_registry_consistent();
     for registration in registrations() {
         let definition = registration.block.definition();
         debug_assert_eq!(definition.kind, registration.kind);

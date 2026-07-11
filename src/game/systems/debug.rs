@@ -3,7 +3,7 @@ use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
 use crate::game::player::controller::{player_collision_box, FlyCamera};
-use crate::game::simulation::runtime::SimulationStepStats;
+use crate::game::simulation::stats::SimulationStepStats;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
 use crate::game::ui::core::host::PlayingUiRootEntity;

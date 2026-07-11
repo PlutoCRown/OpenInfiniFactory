@@ -1,8 +1,11 @@
 use super::LaserBlock;
 
 use crate::game::blocks::traits::BlockRender;
-use crate::game::blocks::{BlockModel, BlockModelPart, ModelMaterial, ModelMesh, RenderBehavior, WireConnectorBehavior};
-use crate::game::world::direction::{Facing};
+use crate::game::blocks::{
+    render_directional_wire_device, BlockModel, BlockModelPart, ModelMaterial, ModelMesh,
+    RenderBehavior,
+};
+use crate::game::world::direction::Facing;
 
 const MODEL: &[BlockModelPart] = &[
     BlockModelPart::new(
@@ -19,12 +22,7 @@ const MODEL: &[BlockModelPart] = &[
 
 impl BlockRender for LaserBlock {
     fn render_behavior(&self, facing: Facing) -> RenderBehavior {
-        RenderBehavior {
-            wire_connector: Some(WireConnectorBehavior::Device {
-                blocked_offset: facing.forward_ivec3(),
-            }),
-            ..Default::default()
-        }
+        render_directional_wire_device(facing.forward_ivec3())
     }
 
     fn model(&self) -> BlockModel {

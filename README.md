@@ -56,78 +56,43 @@
 
 ## 系统架构
 
-项目按**模拟核心与表现层分离**的方式组织：回合逻辑只读写 ECS Resource，不创建场景实体、不触碰网格渲染。UI、场景渲染、HTTP 调试均作为上层消费者，依赖同一套模拟接口。
+模拟核心在独立 crate `oif-sim`；主 crate 负责表现桥接、UI、场景与 HTTP 调试。回合逻辑收敛到 `simulate_turn()`（四阶段），输出 `TurnOutput`；入口不得复制回合逻辑。
 
 ```mermaid
 flowchart TB
-    subgraph runtime["运行时（可独立部署）"]
+    subgraph runtime["主 crate"]
         UI["UI 与输入<br/>game/ui · game/systems"]
         Render["场景渲染<br/>scene/ · game/world"]
-        HTTP["HTTP 调试层<br/>debug_http/"]
+        Bridge["表现桥接 + 预取<br/>sim_bridge/"]
+        HTTP["HTTP 调试<br/>debug_http/"]
     end
 
-    subgraph core["模拟核心（平台无关）"]
-        SimTurn["回合逻辑 simulate_turn()<br/>game/simulation"]
-        SimCore["无头 ECS 封装<br/>sim_core · crates/oif-sim-core"]
-        State["世界状态 Resource<br/>WorldBlocks · StructureState · …"]
+    subgraph core["crates/oif-sim"]
+        SimTurn["simulate_turn()<br/>四阶段回合"]
+        Session["SimSession"]
+        State["WorldBlocks · StructureState · …"]
     end
 
-    UI --> State
-    Render --> State
-    HTTP --> State
+    UI --> Bridge
+    Render --> Bridge
+    Bridge --> SimTurn
+    Bridge --> Session
+    HTTP --> Session
     SimTurn --> State
-    SimCore --> State
+    Session --> State
 ```
-
-### 模拟核心
-
-模拟核心的职责是**纯回合运算**：重力、信号网络、结构标记与执行、材料生成 / 销毁 / 焊接 / 传送、激光追踪等，统一收敛到 `simulate_turn()`，输出本回合的结构 diff 与副作用。
 
 | 模块 | 职责 |
 |------|------|
-| `game/simulation/` | 游戏规则、方块行为、回合编排 |
-| `sim_core/` | 无头环境下的 `SimCoreWorld`、回合控制、调试日志 |
-| `crates/oif-sim-core` | 可复用的模拟内核 crate |
+| `crates/oif-sim` | 世界、方块 Meta/Behavior、`simulate_turn`、无头会话；`TurnOutput` 含运动 / 激光等纯数据 DTO |
+| `sim_bridge/` | 表现编排 + 预取（`present` / `SimulationWorker` / `TurnCache`）；会话类型 re-export 自 `oif-sim` |
 
-硬性依赖边界：`simulate_turn` 不得依赖 `Commands`、渲染资产或 UI 类型。任何入口（游戏客户端、无头服务、自动化测试）都通过 Resource 触发模拟，**不复制**回合逻辑。
+| 运行时 | 入口 | 窗口 | 用途 |
+|--------|------|------|------|
+| 游戏客户端 | `cargo run` | 有 | 游玩、编辑；预取 + 增量渲染 |
+| 无头模拟 | `cargo run --bin oif-debug-http` | 无 | CI、脚本 |
 
-### 双运行时
-
-项目维护两个独立的 Bevy `App`，共享同一套模拟 Resource 与 `simulate_turn()`：
-
-| 运行时 | 入口 | 窗口 / 渲染 | 典型用途 |
-|--------|------|-------------|----------|
-| **游戏客户端** | `cargo run` | 完整 3D 场景 + UI | 游玩、编辑、可视化调试 |
-| **无头模拟器** | `cargo run --bin oif-debug-http` | 无 | CI、脚本、批量回归 |
-
-游戏客户端在模拟之上额外挂载：
-
-- **预计算流水线**：独立 worker 线程预演未来回合，写入 `TurnCache`；主线程按播放节奏增量应用 `TurnOutput`
-- **增量渲染**：编辑期与模拟期均尽量局部刷新网格，避免全图重建
-
-无头运行时只注册 `SimCorePlugin` 与 HTTP 服务，不加载渲染与 UI 插件，可在服务器或 CI 环境中直接驱动存档与 fixture。
-
-### 独立调试器接入
-
-HTTP 调试层（`debug_http/`）是模拟核心的**并列接入方**，与 UI 同级，通过统一协议读写世界状态，而不是在客户端里再实现一套模拟。
-
-**两种接入方式：**
-
-| 方式 | 说明 |
-|------|------|
-| **嵌入游戏** | 启动参数 `--debug-http`，或游戏内「设置 → 启动 HTTP 调试器」；主循环每帧 `poll_debug_http` 处理请求 |
-| **独立无头服务** | `oif-debug-http` 二进制；仅启动模拟 ECS + HTTP 线程，适合自动化与远程脚本 |
-
-两者共用 `debug_http/protocol.rs` 中的路由与 JSON 协议，例如：
-
-- `/getPosBlock`、`/status`、`/perf` — 查询世界与帧统计
-- `/runOneTurn`、`/run` — 推进模拟
-- `/loadFixture`、`/runFixture` — 加载 E2E 用例并断言
-- `/logs` — 读取信号、重力、运动等待机日志
-
-无头模式通过 `SimCoreWorld::simulate_next_turn()` 直接推进回合；嵌入模式在 `Playing` 状态下复用同一 Resource 快照。E2E 测试（`e2e/`）对无头服务发 HTTP 请求，覆盖全部工厂方块的放置与派生 marker 行为。
-
-更细的模块划分见 [`docs/report/architecture.md`](docs/report/architecture.md)；方块 trait 与能力矩阵见 [`docs/report/blocks.md`](docs/report/blocks.md)。
+HTTP 调试可嵌入（`--debug-http`）或独立无头；共用 `debug_http/protocol.rs`。详见 [`docs/report/architecture.md`](docs/report/architecture.md)。
 
 ---
 

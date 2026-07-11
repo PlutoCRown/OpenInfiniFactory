@@ -26,58 +26,15 @@ pub fn save_current_world(commands: &mut Commands) {
     });
 }
 
-#[allow(dead_code)]
-pub fn save_world_as_new_puzzle(commands: &mut Commands, name: impl Into<String>) {
-    let name = name.into();
-    commands.queue(move |world: &mut World| {
-        save_world_as_new_puzzle_in_world(world, name);
-    });
-}
-
 pub fn exit_to_main_menu(commands: &mut Commands, save_first: bool) {
     commands.queue(move |world: &mut World| {
         exit_to_main_menu_in_world(world, save_first);
     });
 }
 
-#[allow(dead_code)]
-pub fn reset_solution(commands: &mut Commands) {
-    commands.queue(|world: &mut World| {
-        reset_solution_in_world(world);
-    });
-}
-
-#[allow(dead_code)]
-pub fn switch_to_edit_mode(commands: &mut Commands, save_first: bool) {
-    commands.queue(move |world: &mut World| {
-        switch_to_edit_mode_in_world(world, save_first);
-    });
-}
-
 pub fn load_world(commands: &mut Commands, slot: SaveSlot, entry: WorldEntryMode) {
     commands.queue(move |world: &mut World| {
         load_world_in_world(world, slot, entry);
-    });
-}
-
-#[allow(dead_code)]
-pub fn create_new_puzzle(commands: &mut Commands, name: impl Into<String>) {
-    let name = name.into();
-    commands.queue(move |world: &mut World| {
-        create_new_puzzle_in_world(world, name);
-    });
-}
-
-#[allow(dead_code)]
-pub fn create_new_solution(
-    commands: &mut Commands,
-    name: impl Into<String>,
-    puzzle: impl Into<String>,
-) {
-    let name = name.into();
-    let puzzle = puzzle.into();
-    commands.queue(move |world: &mut World| {
-        create_new_solution_in_world(world, name, puzzle);
     });
 }
 

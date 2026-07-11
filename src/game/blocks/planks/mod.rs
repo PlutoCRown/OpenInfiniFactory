@@ -1,28 +1,33 @@
-use bevy::prelude::Image;
+use crate::game::state::UiPanelId;
+pub use oif_sim::blocks::planks::Planks;
+
+use bevy::prelude::{Color, Image};
 
 use crate::game::blocks::adapter::BlockImpl;
-use crate::game::blocks::basic::{BasicBlockDef, BasicBlockLayer};
-use crate::game::blocks::{BlockKind, ColorSpec, rgb};
+use crate::game::blocks::traits::{BlockRender, BlockUi, PlaceableBlock};
+use crate::game::blocks::ColorSpecExt;
+use crate::game::blocks::{BlockKind, rgb};
 
-pub struct Planks;
+pub static BLOCK: BlockImpl<Planks> = BlockImpl(Planks);
 
 mod texture;
 
-impl BasicBlockDef for Planks {
-    const KIND: BlockKind = BlockKind::Planks;
-    const LAYER: BasicBlockLayer = BasicBlockLayer::Scene;
-    const NAME_KEY: &'static str = "block.planks";
-    const SHORT_NAME_KEY: &'static str = "short.planks";
-    const COLOR: ColorSpec = rgb(0.66, 0.45, 0.25);
-    const ITEM_SLOT_COLOR: ColorSpec = rgb(0.62, 0.40, 0.20);
-
-    fn block_texture() -> Option<Image> {
+impl BlockRender for Planks {
+    fn block_texture(&self) -> Option<Image> {
         Some(texture::image())
     }
 }
 
-pub static BLOCK: BlockImpl<Planks> = BlockImpl(Planks);
+impl PlaceableBlock for Planks {
+    fn item_slot_color(&self) -> Color {
+        rgb(0.62, 0.40, 0.20).color()
+    }
+}
 
-impl crate::game::blocks::traits::BlockBehavior for Planks {}
+impl BlockUi for Planks {
+    fn ui_panel(&self) -> Option<UiPanelId> {
+        None
+    }
+}
 
 register_block!(BLOCK, BlockKind::Planks, editable: true);

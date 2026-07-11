@@ -1,6 +1,4 @@
-use bevy::prelude::*;
-
-use crate::sim_core::{SimulationControl, SimulationDebugLog};
+use bevy::prelude::IVec3;
 
 use super::fixture::{apply_fixture_setup, load_fixture_file, run_fixture_dir, run_fixture_file};
 use super::protocol::{help_json, json_error, json_ok, DebugHttpCommand};
@@ -11,6 +9,7 @@ use super::world_ops::{
     place_block, reset_session,
 };
 
+/// 处理无头 debug HTTP 命令
 pub fn handle_headless_command(
     state: &mut HeadlessDebugState,
     command: DebugHttpCommand,
@@ -21,17 +20,17 @@ pub fn handle_headless_command(
         DebugHttpCommand::GetPosBlock { x, y, z } => {
             if let (Some(x), Some(y), Some(z)) = (x, y, z) {
                 let pos = IVec3::new(x, y, z);
-                let world = state.app.world();
+                let world = state.session.world_blocks();
                 json_ok(serde_json::json!({
                     "pos": pos_json(pos),
-                    "block": block_json(world.resource(), pos),
+                    "block": block_json(world, pos),
                 }))
             } else {
                 json_error("headless mode requires ?x=&y=&z= for /getPosBlock")
             }
         }
         DebugHttpCommand::GetStatus => {
-            let control = state.app.world().resource::<SimulationControl>();
+            let control = state.session.control();
             json_ok(serde_json::json!({
                 "game_mode": "headless",
                 "paused": false,
@@ -44,11 +43,11 @@ pub fn handle_headless_command(
                 "cursor": null,
             }))
         }
-        DebugHttpCommand::WorldReset => state.with_core(|mut core, _| {
-            reset_session(&mut core);
+        DebugHttpCommand::WorldReset => state.with_core(|core| {
+            reset_session(core);
             json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
         }),
-        DebugHttpCommand::BeginSimulation => state.with_core(|mut core, _| {
+        DebugHttpCommand::BeginSimulation => state.with_core(|core| {
             core.begin_simulation();
             json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
         }),
@@ -56,15 +55,13 @@ pub fn handle_headless_command(
             if name.is_empty() {
                 return json_error("loadSave requires ?name=");
             }
-            state.with_core(
-                |mut core, _| match load_save_into_session(&mut core, &name) {
-                    Ok(()) => json_ok(serde_json::json!({
-                        "save": name,
-                        "simulation": session_status_json(core.control()),
-                    })),
-                    Err(error) => json_error(&error),
-                },
-            )
+            state.with_core(|core| match load_save_into_session(core, &name) {
+                Ok(()) => json_ok(serde_json::json!({
+                    "save": name,
+                    "simulation": session_status_json(core.control()),
+                })),
+                Err(error) => json_error(&error),
+            })
         }
         DebugHttpCommand::PlaceBlock {
             x,
@@ -79,9 +76,9 @@ pub fn handle_headless_command(
             let Some(facing) = parse_facing(&facing) else {
                 return json_error(&format!("unknown facing `{facing}`"));
             };
-            state.with_core(|mut core, _| {
+            state.with_core(|core| {
                 let pos = IVec3::new(x, y, z);
-                match place_block(&mut core.world_blocks_mut(), pos, kind, facing) {
+                match place_block(core.world_blocks_mut(), pos, kind, facing) {
                     Ok(()) => json_ok(serde_json::json!({
                         "pos": pos_json(pos),
                         "block": block_json(core.world_blocks(), pos),
@@ -96,15 +93,13 @@ pub fn handle_headless_command(
             }
             match load_fixture_file(&path) {
                 Ok(fixture) => {
-                    state.with_core(
-                        |mut core, _| match apply_fixture_setup(&mut core, &fixture) {
-                            Ok(()) => json_ok(serde_json::json!({
-                                "fixture": fixture.name,
-                                "simulation": session_status_json(core.control()),
-                            })),
-                            Err(error) => json_error(&error),
-                        },
-                    )
+                    state.with_core(|core| match apply_fixture_setup(core, &fixture) {
+                        Ok(()) => json_ok(serde_json::json!({
+                            "fixture": fixture.name,
+                            "simulation": session_status_json(core.control()),
+                        })),
+                        Err(error) => json_error(&error),
+                    })
                 }
                 Err(error) => json_error(&error),
             }
@@ -114,7 +109,7 @@ pub fn handle_headless_command(
                 return json_error("runFixture requires ?path=");
             }
             match run_fixture_file_path(state, &path) {
-                Ok(fixture) => state.with_core(|core, _| {
+                Ok(fixture) => state.with_core(|core| {
                     json_ok(serde_json::json!({
                         "fixture": fixture.name,
                         "simulation": session_status_json(core.control()),
@@ -123,9 +118,9 @@ pub fn handle_headless_command(
                 Err(error) => json_error(&error),
             }
         }
-        DebugHttpCommand::RunAllFixtures => state.with_core(|mut core, _| {
+        DebugHttpCommand::RunAllFixtures => state.with_core(|core| {
             let dir = fixture_root().join("blocks");
-            let results = run_fixture_dir(&mut core, &dir);
+            let results = run_fixture_dir(core, &dir);
             let passed = results.iter().filter(|(_, result)| result.is_ok()).count();
             let payload: Vec<_> = results
                 .into_iter()
@@ -143,45 +138,40 @@ pub fn handle_headless_command(
                 "results": payload,
             }))
         }),
-        DebugHttpCommand::Run => state.with_core(|mut core, sim_log| {
+        DebugHttpCommand::Run => state.with_core(|core| {
             core.request_continuous_run();
-            sim_log.log(core.control().turn, "HTTP /run (headless batch)");
+            core.log
+                .log(core.control().turn, "HTTP /run (headless batch)");
             for _ in 0..10 {
-                core.simulate_next_turn(Some(sim_log), None);
+                core.simulate_next_turn();
             }
             json_ok(serde_json::json!({
                 "simulation": session_status_json(core.control()),
                 "note": "headless /run executes 10 turns immediately",
             }))
         }),
-        DebugHttpCommand::RunOneTurn => state.with_core(|mut core, sim_log| {
+        DebugHttpCommand::RunOneTurn => state.with_core(|core| {
             core.begin_simulation();
-            core.simulate_next_turn(Some(sim_log), None);
-            sim_log.log(core.control().turn, "HTTP /runOneTurn (headless)");
+            core.simulate_next_turn();
+            core.log
+                .log(core.control().turn, "HTTP /runOneTurn (headless)");
             json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
         }),
-        DebugHttpCommand::RunN { n } => state.with_core(|mut core, sim_log| {
+        DebugHttpCommand::RunN { n } => state.with_core(|core| {
             core.begin_simulation();
             for _ in 0..n {
-                core.simulate_next_turn(Some(sim_log), None);
+                core.simulate_next_turn();
             }
-            sim_log.log(core.control().turn, format!("HTTP /runN n={n}"));
+            core.log
+                .log(core.control().turn, format!("HTTP /runN n={n}"));
             json_ok(serde_json::json!({
                 "simulation": session_status_json(core.control()),
                 "turns": n,
             }))
         }),
-        DebugHttpCommand::GetLogs { limit } => state
-            .app
-            .world()
-            .resource::<SimulationDebugLog>()
-            .recent_json(limit),
+        DebugHttpCommand::GetLogs { limit } => state.session.log.recent_json(limit),
         DebugHttpCommand::ClearLogs => {
-            state
-                .app
-                .world_mut()
-                .resource_mut::<SimulationDebugLog>()
-                .clear();
+            state.session.log.clear();
             r#"{"ok":true}"#.into()
         }
         DebugHttpCommand::GetPerf => {
@@ -194,5 +184,5 @@ fn run_fixture_file_path(
     state: &mut HeadlessDebugState,
     path: &str,
 ) -> Result<super::fixture::E2eFixture, String> {
-    state.with_core(|mut core, _| run_fixture_file(&mut core, path))
+    state.with_core(|core| run_fixture_file(core, path))
 }

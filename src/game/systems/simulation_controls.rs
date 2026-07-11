@@ -4,7 +4,9 @@ use bevy::prelude::*;
 use crate::game::edit_history::EditHistory;
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::movement::PusherState;
-use crate::game::simulation::runtime::{PendingGeneratedMaterials, SignalNetworkCache};
+use crate::game::simulation::pending::PendingGeneratedMaterials;
+use crate::game::simulation::signals::SignalNetworkCache;
+use crate::sim_bridge::SimulationPresentationState;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
@@ -15,7 +17,7 @@ use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
 };
 use crate::shared::config::{ActionKeyName, GameConfig};
-use crate::sim_core::{SimSnapshot, SimulationWorker, TurnCache};
+use crate::sim_bridge::{SimSnapshot, SimulationWorker, TurnCache};
 
 #[derive(SystemParam)]
 pub struct SimulationControlDeps<'w> {
@@ -33,7 +35,7 @@ pub struct SimulationControlDeps<'w> {
     edit_history: ResMut<'w, EditHistory>,
     turn_cache: ResMut<'w, TurnCache>,
     worker: Option<Res<'w, SimulationWorker>>,
-    presentation: ResMut<'w, crate::game::simulation::runtime::SimulationPresentationState>,
+    presentation: ResMut<'w, SimulationPresentationState>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
     debug: Res<'w, DebugState>,
 }

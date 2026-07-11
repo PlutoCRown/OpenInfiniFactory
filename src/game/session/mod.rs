@@ -8,11 +8,6 @@ mod solution;
 mod world_access;
 mod world_ops;
 
-#[allow(unused_imports)]
-pub use dispatch::{
-    create_new_puzzle, create_new_solution, reset_solution, save_world_as_new_puzzle,
-    switch_to_edit_mode,
-};
 pub use dispatch::{
     create_new_puzzle_in_world, create_new_solution_in_world, exit_to_main_menu,
     exit_to_main_menu_in_world, load_world, puzzle_save_needs_confirm, reset_solution_in_world,

@@ -1,6 +1,7 @@
-use super::{Block, BlockKind, EditableBlock};
 use super::traits::PlaceableBlock;
+use super::{Block, BlockKind, EditableBlock};
 
+/// 游戏侧方块注册（含表现 / 可放置 / 可编辑）
 pub struct BlockRegistration {
     pub kind: BlockKind,
     pub block: &'static (dyn Block + Send + Sync),
@@ -12,7 +13,7 @@ pub struct BlockRegistration {
 
 inventory::collect!(BlockRegistration);
 
-/// One-line registration at the bottom of each block's `mod.rs`.
+/// 各方块 mod.rs 底部一行注册
 macro_rules! register_block {
     ($block:expr, $kind:expr, editable: false, play: true $(,)?) => {
         inventory::submit! {

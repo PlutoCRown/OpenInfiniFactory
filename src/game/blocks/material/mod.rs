@@ -1,28 +1,33 @@
-use bevy::prelude::Image;
+pub use oif_sim::blocks::material::BasicMaterial;
+
+use bevy::prelude::{Color, Image};
 
 use crate::game::blocks::adapter::BlockImpl;
-use crate::game::blocks::basic::{BasicBlockDef, BasicBlockLayer};
-use crate::game::blocks::{BlockKind, ColorSpec, MaterialKind, rgb};
+use crate::game::blocks::traits::{BlockRender, BlockUi, PlaceableBlock};
+use crate::game::state::UiPanelId;
+use crate::game::blocks::ColorSpecExt;
+use crate::game::blocks::{BlockKind, rgb};
 
-pub struct BasicMaterial;
+pub static BLOCK: BlockImpl<BasicMaterial> = BlockImpl(BasicMaterial);
 
 mod texture;
 
-impl BasicBlockDef for BasicMaterial {
-    const KIND: BlockKind = BlockKind::Material;
-    const LAYER: BasicBlockLayer = BasicBlockLayer::Material(MaterialKind::Basic);
-    const NAME_KEY: &'static str = "block.material";
-    const SHORT_NAME_KEY: &'static str = "short.material";
-    const COLOR: ColorSpec = rgb(0.82, 0.82, 0.86);
-    const ITEM_SLOT_COLOR: ColorSpec = rgb(0.74, 0.74, 0.78);
-
-    fn block_texture() -> Option<Image> {
+impl BlockRender for BasicMaterial {
+    fn block_texture(&self) -> Option<Image> {
         Some(texture::image())
     }
 }
 
-pub static BLOCK: BlockImpl<BasicMaterial> = BlockImpl(BasicMaterial);
+impl PlaceableBlock for BasicMaterial {
+    fn item_slot_color(&self) -> Color {
+        rgb(0.74, 0.74, 0.78).color()
+    }
+}
 
-impl crate::game::blocks::traits::BlockBehavior for BasicMaterial {}
+impl BlockUi for BasicMaterial {
+    fn ui_panel(&self) -> Option<UiPanelId> {
+        None
+    }
+}
 
 register_block!(BLOCK, BlockKind::Material, editable: false);

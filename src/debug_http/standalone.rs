@@ -1,37 +1,32 @@
-use bevy::prelude::*;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use crate::sim_core::{build_headless_sim_app, SimCoreWorld, SimulationDebugLog};
+use oif_sim::SimSession;
 
 use super::headless::handle_headless_command;
 use super::protocol::{parse_http_request, DebugHttpRequest};
 
+/// 无头调试状态：自有 SimSession
 pub struct HeadlessDebugState {
-    pub app: App,
+    pub session: SimSession,
 }
 
 impl HeadlessDebugState {
+    /// 新建无头会话
     pub fn new() -> Self {
         Self {
-            app: build_headless_sim_app(),
+            session: SimSession::new(),
         }
     }
 
-    pub fn with_core<R>(
-        &mut self,
-        f: impl FnOnce(SimCoreWorld<'_>, &mut SimulationDebugLog) -> R,
-    ) -> R {
-        self.app.world_mut().resource_scope(
-            |world, mut sim_log: Mut<SimulationDebugLog>| {
-                let core = SimCoreWorld::new(world);
-                f(core, &mut sim_log)
-            },
-        )
+    /// 在会话上执行操作
+    pub fn with_core<R>(&mut self, f: impl FnOnce(&mut SimSession) -> R) -> R {
+        f(&mut self.session)
     }
 }
 
+/// 启动无头 HTTP 调试服务（阻塞）
 pub fn run_headless_server(state: Arc<Mutex<HeadlessDebugState>>, port: u16) {
     let (request_tx, request_rx) = mpsc::channel();
     let listen_addr = format!("127.0.0.1:{port}");
@@ -52,6 +47,7 @@ pub fn run_headless_server(state: Arc<Mutex<HeadlessDebugState>>, port: u16) {
     let _ = listener.join();
 }
 
+/// HTTP 监听线程
 pub fn run_http_thread(listen_addr: &str, request_tx: mpsc::Sender<DebugHttpRequest>) {
     let server = match tiny_http::Server::http(listen_addr) {
         Ok(server) => server,

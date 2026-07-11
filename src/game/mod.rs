@@ -22,7 +22,7 @@ use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::launch::LaunchOptions;
 use crate::shared::persistent_storage;
 use crate::shared::save::SaveState;
-use crate::sim_core::{SimulationWorker, TurnCache};
+use crate::sim_bridge::{SimulationWorker, TurnCache};
 
 use cameras::{spawn_ui_camera, sync_gameplay_view_image_size};
 use debug::DebugToolsPlugin;
@@ -108,13 +108,13 @@ impl Plugin for GamePlugin {
             .insert_resource(BuilderMode::default())
             .insert_resource(SimulationState::default())
             .insert_resource(SolutionState::default())
-            .insert_resource(simulation::runtime::SignalNetworkCache::default())
-            .insert_resource(simulation::runtime::SimulationStepStats::default())
-            .insert_resource(simulation::runtime::PendingGeneratedMaterials::default())
+            .insert_resource(simulation::signals::SignalNetworkCache::default())
+            .insert_resource(simulation::stats::SimulationStepStats::default())
+            .insert_resource(simulation::pending::PendingGeneratedMaterials::default())
             .insert_resource(simulation::structure_state::StructureState::default())
             .insert_resource(simulation::movement::PusherState::default())
             .insert_resource(simulation::structures::MovementInfluenceCache::default())
-            .insert_resource(simulation::runtime::SimulationPresentationState::default())
+            .insert_resource(crate::sim_bridge::SimulationPresentationState::default())
             .insert_resource(BlockEntityIndex::default())
             .insert_resource(SimulationWorker::spawn())
             .insert_resource(TurnCache::default())
@@ -193,18 +193,18 @@ impl Plugin for GamePlugin {
                 Update,
                 simulation_controls
                     .after(PerfScope::Menus)
-                    .before(simulation::runtime::tick_simulation),
+                    .before(crate::sim_bridge::tick_simulation),
             )
             .add_systems(
                 Update,
-                simulation::runtime::poll_simulation_worker
+                crate::sim_bridge::poll_simulation_worker
                     .after(simulation_controls)
-                    .before(simulation::runtime::tick_simulation),
+                    .before(crate::sim_bridge::tick_simulation),
             )
             .add_systems(
                 Update,
-                simulation::runtime::tick_simulation
-                    .after(simulation::runtime::poll_simulation_worker)
+                crate::sim_bridge::tick_simulation
+                    .after(crate::sim_bridge::poll_simulation_worker)
                     .before(PerfScope::Simulation),
             )
             .add_systems(

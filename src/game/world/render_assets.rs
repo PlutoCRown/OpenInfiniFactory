@@ -4,7 +4,9 @@ use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
+use crate::game::blocks::ColorSpecExt;
 use crate::game::blocks::pusher::texture;
+use crate::game::blocks::BlockPresent;
 use crate::game::blocks::{
     all_blocks, BlockKind, BlockShape, ModelMaterial, ModelMesh, StampColor, BLOCK_SIZE,
 };
@@ -121,7 +123,7 @@ impl WorldRenderAssets {
                 (
                     color,
                     materials.add(StandardMaterial {
-                        base_color: color.color().with_alpha(0.82),
+                        base_color: color.color().color().with_alpha(0.82),
                         alpha_mode: AlphaMode::Blend,
                         unlit: true,
                         ..default()

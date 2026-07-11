@@ -17,9 +17,10 @@ use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::edit_history::EditHistory;
 use crate::game::player::controller::FlyCamera;
 use crate::game::session::PlayingWorldParams;
-use crate::game::simulation::runtime::{
-    PendingGeneratedMaterials, SignalNetworkCache, SimulationPresentationState, SimulationStepStats,
-};
+use crate::game::simulation::pending::PendingGeneratedMaterials;
+use crate::game::simulation::signals::SignalNetworkCache;
+use crate::game::simulation::stats::SimulationStepStats;
+use crate::sim_bridge::SimulationPresentationState;
 use crate::game::state::{
     BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
 };
@@ -32,7 +33,8 @@ use crate::game::world::animation::{AnimatedBlock, AnimatedPusherRod};
 use crate::game::world::rendering::BlockEntity;
 use crate::shared::launch::{LaunchOptions, DEFAULT_DEBUG_HTTP_PORT};
 use crate::shared::save::SaveState;
-use crate::sim_core::{SimSnapshot, SimulationDebugLog, SimulationWorker, TurnCache};
+use crate::sim_bridge::{SimSnapshot, SimulationWorker, TurnCache};
+use crate::game::debug::SimulationDebugLog;
 
 #[derive(Resource)]
 pub struct DebugHttpBridge {

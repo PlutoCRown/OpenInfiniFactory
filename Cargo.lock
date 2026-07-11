@@ -3967,10 +3967,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "oif-sim-core"
+name = "oif-sim"
 version = "0.1.0"
 dependencies = [
- "open_infinifactory",
+ "glam",
+ "inventory",
+ "paste",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -3987,6 +3991,7 @@ dependencies = [
  "bevy",
  "icu_provider",
  "inventory",
+ "oif-sim",
  "paste",
  "ron 0.8.1",
  "serde",

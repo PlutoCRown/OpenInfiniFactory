@@ -1,0 +1,170 @@
+use bevy::camera::visibility::RenderLayers;
+use bevy::camera::{RenderTarget, ScalingMode};
+use bevy::prelude::*;
+use bevy::render::render_resource::TextureFormat;
+
+use super::components::{
+    BlockIconAssets, BlockIconRenderCamera, BlockIconRenderEntity, BlockIconRenderRoot,
+    BlockIconRenderState,
+};
+use super::spawn::spawn_block_model;
+use crate::game::blocks::{edit_blocks, BlockData, BlockKind, PLAY_BLOCKS};
+use crate::game::world::animation::AnimationTiming;
+use crate::game::world::grid::WorldBlocks;
+use crate::game::world::render_assets::WorldRenderAssets;
+
+const ICON_TEXTURE_SIZE: u32 = 256;
+const ICON_RENDER_LAYER: usize = 3;
+const ICON_SPACING: f32 = 4.0;
+const ICON_RENDER_FRAMES: u8 = 3;
+
+/// 为 UI 离屏渲染各编辑/游玩方块图标
+pub fn setup_block_icons(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    assets: Res<WorldRenderAssets>,
+) {
+    let icon_layer = RenderLayers::layer(ICON_RENDER_LAYER);
+    let mut icon_assets = BlockIconAssets::default();
+    let icon_world = WorldBlocks::default();
+    let icon_kinds = block_icon_kinds();
+
+    commands.spawn((
+        DirectionalLight {
+            illuminance: 7800.0,
+            shadow_maps_enabled: false,
+            ..default()
+        },
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.85, -0.55, -0.25)),
+        icon_layer.clone(),
+        BlockIconRenderEntity,
+        BlockIconRenderRoot,
+    ));
+
+    for (index, kind) in icon_kinds.into_iter().enumerate() {
+        let image = Image::new_target_texture(
+            ICON_TEXTURE_SIZE,
+            ICON_TEXTURE_SIZE,
+            TextureFormat::Rgba8Unorm,
+            Some(TextureFormat::Rgba8UnormSrgb),
+        );
+        let image_handle = images.add(image);
+        icon_assets.icons.insert(kind, image_handle.clone());
+
+        let origin = Vec3::new(index as f32 * ICON_SPACING, -100.0, 0.0);
+        spawn_block_icon_model(
+            &mut commands,
+            &mut meshes,
+            &assets,
+            &icon_world,
+            kind,
+            origin,
+            &icon_layer,
+        );
+
+        commands.spawn((
+            Camera3d::default(),
+            Camera {
+                order: -2,
+                clear_color: Color::NONE.into(),
+                ..default()
+            },
+            RenderTarget::Image(image_handle.into()),
+            Projection::Orthographic(OrthographicProjection {
+                scaling_mode: ScalingMode::Fixed {
+                    width: 2.45,
+                    height: 2.45,
+                },
+                ..OrthographicProjection::default_3d()
+            }),
+            Transform::from_translation(origin + Vec3::new(2.8, 2.2, 2.8))
+                .looking_at(origin, Vec3::Y),
+            AmbientLight {
+                color: Color::WHITE,
+                brightness: 520.0,
+                ..default()
+            },
+            icon_layer.clone(),
+            BlockIconRenderEntity,
+            BlockIconRenderRoot,
+            BlockIconRenderCamera,
+        ));
+    }
+
+    commands.insert_resource(icon_assets);
+    commands.insert_resource(BlockIconRenderState {
+        frames_remaining: ICON_RENDER_FRAMES,
+    });
+}
+
+/// 需要生成图标的方块种类列表（去重）
+fn block_icon_kinds() -> Vec<BlockKind> {
+    let mut kinds = Vec::new();
+    for kind in edit_blocks().into_iter().chain(PLAY_BLOCKS).chain([
+        BlockKind::Material,
+        BlockKind::IronMaterial,
+        BlockKind::CopperMaterial,
+    ]) {
+        if !kinds.contains(&kind) {
+            kinds.push(kind);
+        }
+    }
+    kinds
+}
+
+/// 图标拍够帧后关闭相机并销毁离屏实体
+pub fn retire_block_icon_renderers(
+    mut commands: Commands,
+    state: Option<ResMut<BlockIconRenderState>>,
+    render_entities: Query<Entity, With<BlockIconRenderRoot>>,
+    mut cameras: Query<&mut Camera, With<BlockIconRenderCamera>>,
+) {
+    let Some(mut state) = state else {
+        return;
+    };
+    if state.frames_remaining > 0 {
+        state.frames_remaining -= 1;
+        return;
+    }
+
+    for mut camera in &mut cameras {
+        camera.is_active = false;
+    }
+    for entity in &render_entities {
+        commands.entity(entity).despawn();
+    }
+    commands.remove_resource::<BlockIconRenderState>();
+}
+
+/// 在离屏层生成单个方块图标模型
+fn spawn_block_icon_model(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    assets: &WorldRenderAssets,
+    world: &WorldBlocks,
+    kind: BlockKind,
+    origin: Vec3,
+    icon_layer: &RenderLayers,
+) {
+    let data = BlockData::new(kind, crate::game::world::direction::Facing::South);
+    spawn_block_model(
+        commands,
+        meshes,
+        assets,
+        world,
+        IVec3::ZERO,
+        data,
+        assets.block_material(data.kind),
+        None,
+        None,
+        None,
+        AnimationTiming::edit(),
+        false,
+        false,
+        true,
+        Some((origin - Vec3::splat(0.5), icon_layer)),
+        None,
+        None,
+    );
+}

@@ -435,8 +435,8 @@
 | `settings_menu_actions`                          | Update                                                          |
 | `show_input_row`                                 | Update                                                          |
 | `simulation_controls`                            | Update                                                          |
-| `simulation::runtime::poll_simulation_worker`    | Update                                                          |
-| `simulation::runtime::tick_simulation`           | Update                                                          |
+| `sim_bridge::poll_simulation_worker`             | Update                                                          |
+| `sim_bridge::tick_simulation`                    | Update                                                          |
 | `spawn_player`                                   | OnEnter(Playing)                                                |
 | `spawn_ui_camera`                                | Startup                                                         |
 | `start_debug_http_server`                        | Startup（非 wasm + debug_http）                                 |
@@ -534,7 +534,7 @@
 | `OpenBlockPanelDropdown`    | `game/block_editing/panel_state.rs`   |
 | `OpenSettingsDropdown`      | `game/ui/features/settings/types.rs`  |
 | `PanelDragState`            | `game/ui/core/panel.rs`               |
-| `PendingGeneratedMaterials` | `game/simulation/runtime.rs`          |
+| `PendingGeneratedMaterials` | `oif-sim/simulation/pending.rs`       |
 | `PendingKeyBind`            | `game/ui/features/settings/types.rs`  |
 | `PendingTeleportRename`     | `game/blocks/teleport_entrance/ui.rs` |
 | `PerfStats`                 | `game/systems/perf.rs`                |
@@ -547,7 +547,7 @@
 | `SettingsTab`               | `game/ui/features/settings/types.rs`  |
 | `SignalNetworkCache`        | `game/simulation/signals.rs`          |
 | `SimulationState`           | `game/state.rs`                       |
-| `SimulationStepStats`       | `game/simulation/runtime.rs`          |
+| `SimulationStepStats`       | `oif-sim/simulation/stats.rs`         |
 | `SolutionState`             | `game/state.rs`                       |
 | `StartMenuScreen`           | `game/state.rs`                       |
 | `StructureState`            | `game/simulation/structure_state.rs`  |
@@ -566,11 +566,11 @@
 | ----------------------------- | -------------------------------------------------------- |
 | `BlockEntityIndex`            | `scene/entity_index.rs`（impl 于 `game/bevy_bridge.rs`） |
 | `LaunchOptions`               | `shared/launch.rs`                                       |
-| `SimulationControl`           | `sim_core/control.rs`                                    |
-| `SimulationDebugLog`          | `sim_core/log.rs`                                        |
-| `SimulationPresentationState` | `game/simulation/runtime.rs`                             |
-| `SimulationWorker`            | `sim_core/worker.rs`                                     |
-| `TurnCache`                   | `sim_core/cache.rs`                                      |
+| `SimulationControl`           | `oif-sim/session/control.rs`                             |
+| `SimulationDebugLog`          | `oif-sim/session/log.rs`                                 |
+| `SimulationPresentationState` | `sim_bridge/present.rs`                                  |
+| `SimulationWorker`            | `sim_bridge/worker.rs`                                   |
+| `TurnCache`                   | `sim_bridge/cache.rs`                                    |
 
 ### 4.3 NonSend Resource
 

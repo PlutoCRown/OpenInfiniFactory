@@ -1,28 +1,33 @@
-use bevy::prelude::Image;
+use crate::game::state::UiPanelId;
+pub use oif_sim::blocks::dirt::Dirt;
+
+use bevy::prelude::{Color, Image};
 
 use crate::game::blocks::adapter::BlockImpl;
-use crate::game::blocks::basic::{BasicBlockDef, BasicBlockLayer};
-use crate::game::blocks::{BlockKind, ColorSpec, rgb};
+use crate::game::blocks::traits::{BlockRender, BlockUi, PlaceableBlock};
+use crate::game::blocks::ColorSpecExt;
+use crate::game::blocks::{BlockKind, rgb};
 
-pub struct Dirt;
+pub static BLOCK: BlockImpl<Dirt> = BlockImpl(Dirt);
 
 mod texture;
 
-impl BasicBlockDef for Dirt {
-    const KIND: BlockKind = BlockKind::Dirt;
-    const LAYER: BasicBlockLayer = BasicBlockLayer::Scene;
-    const NAME_KEY: &'static str = "block.dirt";
-    const SHORT_NAME_KEY: &'static str = "short.dirt";
-    const COLOR: ColorSpec = rgb(0.40, 0.27, 0.16);
-    const ITEM_SLOT_COLOR: ColorSpec = rgb(0.42, 0.26, 0.14);
-
-    fn block_texture() -> Option<Image> {
+impl BlockRender for Dirt {
+    fn block_texture(&self) -> Option<Image> {
         Some(texture::image())
     }
 }
 
-pub static BLOCK: BlockImpl<Dirt> = BlockImpl(Dirt);
+impl PlaceableBlock for Dirt {
+    fn item_slot_color(&self) -> Color {
+        rgb(0.42, 0.26, 0.14).color()
+    }
+}
 
-impl crate::game::blocks::traits::BlockBehavior for Dirt {}
+impl BlockUi for Dirt {
+    fn ui_panel(&self) -> Option<UiPanelId> {
+        None
+    }
+}
 
 register_block!(BLOCK, BlockKind::Dirt, editable: true);

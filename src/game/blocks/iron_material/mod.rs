@@ -1,28 +1,33 @@
-use bevy::prelude::Image;
+pub use oif_sim::blocks::iron_material::IronMaterial;
+
+use bevy::prelude::{Color, Image};
 
 use crate::game::blocks::adapter::BlockImpl;
-use crate::game::blocks::basic::{BasicBlockDef, BasicBlockLayer};
-use crate::game::blocks::{rgb, BlockKind, ColorSpec, MaterialKind};
+use crate::game::blocks::traits::{BlockRender, BlockUi, PlaceableBlock};
+use crate::game::state::UiPanelId;
+use crate::game::blocks::ColorSpecExt;
+use crate::game::blocks::{BlockKind, rgb};
 
-pub struct IronMaterial;
+pub static BLOCK: BlockImpl<IronMaterial> = BlockImpl(IronMaterial);
 
 mod texture;
 
-impl BasicBlockDef for IronMaterial {
-    const KIND: BlockKind = BlockKind::IronMaterial;
-    const LAYER: BasicBlockLayer = BasicBlockLayer::Material(MaterialKind::Iron);
-    const NAME_KEY: &'static str = "block.iron_material";
-    const SHORT_NAME_KEY: &'static str = "short.iron_material";
-    const COLOR: ColorSpec = rgb(0.62, 0.64, 0.66);
-    const ITEM_SLOT_COLOR: ColorSpec = rgb(0.54, 0.56, 0.58);
-
-    fn block_texture() -> Option<Image> {
+impl BlockRender for IronMaterial {
+    fn block_texture(&self) -> Option<Image> {
         Some(texture::image())
     }
 }
 
-pub static BLOCK: BlockImpl<IronMaterial> = BlockImpl(IronMaterial);
+impl PlaceableBlock for IronMaterial {
+    fn item_slot_color(&self) -> Color {
+        rgb(0.54, 0.56, 0.58).color()
+    }
+}
 
-impl crate::game::blocks::traits::BlockBehavior for IronMaterial {}
+impl BlockUi for IronMaterial {
+    fn ui_panel(&self) -> Option<UiPanelId> {
+        None
+    }
+}
 
 register_block!(BLOCK, BlockKind::IronMaterial, editable: false);
