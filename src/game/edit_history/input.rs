@@ -9,28 +9,14 @@ use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::WorldRenderAssets;
 use crate::scene::{refresh_edit_changes, BlockEntityIndex};
+use crate::shared::config::{ActionKeyName, GameConfig};
 
 use super::EditHistory;
-
-/// 平台主修饰键：macOS 为 Command，其它平台为 Control
-fn platform_primary_modifier(keys: &ButtonInput<KeyCode>) -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)
-    }
-}
-
-fn shift_pressed(keys: &ButtonInput<KeyCode>) -> bool {
-    keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight)
-}
 
 /// 处理 Undo / Redo 快捷键并刷新受影响的方块
 pub fn edit_history_input(
     keys: Res<ButtonInput<KeyCode>>,
+    config: Res<GameConfig>,
     mode: Res<State<GameMode>>,
     playing_ui: Res<PlayingUiState>,
     simulation: Res<SimulationState>,
@@ -54,24 +40,17 @@ pub fn edit_history_input(
     {
         return;
     }
-    if !platform_primary_modifier(&keys) {
-        return;
-    }
 
-    let redo = shift_pressed(&keys);
-    let undo_key = keys.just_pressed(KeyCode::KeyZ);
-    if !undo_key {
-        return;
-    }
-
-    let Some(render_assets) = render_assets.as_ref() else {
+    let patch = if config.chord(ActionKeyName::Redo).just_triggered(&keys) {
+        edit_history.redo(&mut world)
+    } else if config.chord(ActionKeyName::Undo).just_triggered(&keys) {
+        edit_history.undo(&mut world)
+    } else {
         return;
     };
 
-    let patch = if redo {
-        edit_history.redo(&mut world)
-    } else {
-        edit_history.undo(&mut world)
+    let Some(render_assets) = render_assets.as_ref() else {
+        return;
     };
     let Some(patch) = patch else {
         return;

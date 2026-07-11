@@ -22,7 +22,6 @@ pub struct PanelOptions {
     pub title_key: &'static str,
     pub show_close: bool,
     pub title_size: f32,
-    pub dynamic_title: bool,
 }
 
 impl PanelOptions {
@@ -32,7 +31,6 @@ impl PanelOptions {
             title_key,
             show_close: false,
             title_size: 26.0,
-            dynamic_title: false,
         }
     }
 

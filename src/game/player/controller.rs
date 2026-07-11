@@ -32,6 +32,8 @@ const GRAVITY: f32 = 18.0;
 const ONE_BLOCK_JUMP_HEIGHT: f32 = 1.5;
 const DOUBLE_TAP_WINDOW: f32 = 0.28;
 const AABB_EPSILON: f32 = 0.001;
+/// 鼠标视角基础灵敏度，X/Y 轴倍率由设置中的 mouse_sensitivity_x/y 控制。
+const BASE_MOUSE_SENSITIVITY: f32 = 0.0025;
 
 #[derive(Component)]
 pub struct FlyCamera {
@@ -41,7 +43,6 @@ pub struct FlyCamera {
     grounded: bool,
     flying: bool,
     last_space_press: f32,
-    sensitivity: f32,
 }
 
 pub fn spawn_player(
@@ -74,7 +75,6 @@ pub fn spawn_player(
                 grounded: false,
                 flying: false,
                 last_space_press: -10.0,
-                sensitivity: 0.0025,
             },
             GameplayCamera,
             GameplayScene,
@@ -273,6 +273,7 @@ pub fn camera_look(
     mode: Res<State<GameMode>>,
     playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
+    settings: Res<GameSettings>,
     mut mouse_motion: MessageReader<MouseMotion>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
@@ -294,8 +295,9 @@ pub fn camera_look(
         delta += event.delta;
     }
 
-    camera.yaw -= delta.x * camera.sensitivity;
-    camera.pitch = (camera.pitch - delta.y * camera.sensitivity).clamp(-1.45, 1.45);
+    camera.yaw -= delta.x * BASE_MOUSE_SENSITIVITY * settings.mouse_sensitivity_x;
+    camera.pitch = (camera.pitch - delta.y * BASE_MOUSE_SENSITIVITY * settings.mouse_sensitivity_y)
+        .clamp(-1.45, 1.45);
     transform.rotation =
         Quat::from_axis_angle(Vec3::Y, camera.yaw) * Quat::from_axis_angle(Vec3::X, camera.pitch);
 }

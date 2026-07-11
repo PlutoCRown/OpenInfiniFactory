@@ -7,14 +7,45 @@ use crate::game::ui::components::{
     hover_border, pressed_border, raised_border, ui_logical_bounds, BUTTON_BG, BUTTON_HOVER_BG,
 };
 use crate::game::ui::types::{KeyBindingButton, UiHoverState};
-use crate::shared::config::GameConfig;
 
-use crate::game::ui::access::UiMainThread;
 use super::types::{
     ActiveSettingsSlider, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
     SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
     SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind, SettingsValueText,
 };
+use crate::game::ui::access::UiMainThread;
+use crate::shared::config::{ActionKeyName, ConfigChord, ConfigInput, GameConfig};
+
+pub fn localized_chord_display(chord: ConfigChord) -> String {
+    use crate::game::ui::access::i18n;
+
+    let mut parts = Vec::new();
+    if chord.primary_modifier {
+        parts.push(i18n.t("input.modifier_command").to_string());
+    }
+    if chord.shift {
+        parts.push(i18n.t("input.modifier_shift").to_string());
+    }
+    if chord.alt {
+        parts.push(i18n.t("input.modifier_alt").to_string());
+    }
+    parts.push(chord.key.name().to_string());
+    parts.join("+")
+}
+
+pub fn localized_binding_display(config: &GameConfig, action: ActionKeyName) -> String {
+    use crate::game::ui::access::i18n;
+
+    if action.is_chord() {
+        return localized_chord_display(config.chord(action));
+    }
+    match config.input(action) {
+        ConfigInput::MouseLeft => i18n.t("input.mouse_left").to_string(),
+        ConfigInput::MouseRight => i18n.t("input.mouse_right").to_string(),
+        ConfigInput::MouseMiddle => i18n.t("input.mouse_middle").to_string(),
+        ConfigInput::Key(key) => key.name().to_string(),
+    }
+}
 
 pub fn update_settings_text_ui(
     _ui_thread: UiMainThread,
@@ -24,10 +55,6 @@ pub fn update_settings_text_ui(
     key_buttons: Query<&KeyBindingButton>,
 ) {
     use crate::game::ui::access::i18n;
-
-    if !(config.is_changed() || pending_key_bind.is_changed()) {
-        return;
-    }
 
     for (settings_text, parent, mut text) in &mut settings_texts {
         let next = match settings_text.0 {
@@ -41,8 +68,8 @@ pub fn update_settings_text_ui(
                 let suffix = pending_key_bind
                     .0
                     .filter(|pending| *pending == button.0)
-                    .map(|_| "...")
-                    .unwrap_or(config.input(button.0).name());
+                    .map(|_| "...".to_string())
+                    .unwrap_or_else(|| localized_binding_display(&config, button.0));
                 format!("{}: {suffix}", i18n.t(button.0.label_key()))
             }
         };
@@ -63,10 +90,7 @@ pub fn update_settings_sliders_ui(
         (&SettingsSliderKnob, &mut Node),
         (Without<SettingsSliderFill>, Without<SettingsDropdownList>),
     >,
-    slider_values: Query<
-        (Entity, &SettingsAction, &SliderValue, &SliderDragState),
-        With<Slider>,
-    >,
+    slider_values: Query<(Entity, &SettingsAction, &SliderValue, &SliderDragState), With<Slider>>,
     mut commands: Commands,
 ) {
     for (entity, action, value, drag_state) in &slider_values {
@@ -177,11 +201,7 @@ pub fn update_settings_dropdowns_ui(
         .unwrap_or(Vec2::ZERO);
     for (list, mut style, list_node) in &mut dropdown_lists {
         let open = open_dropdown.0 == Some(list.0);
-        let next = if open {
-            Display::Flex
-        } else {
-            Display::None
-        };
+        let next = if open { Display::Flex } else { Display::None };
         if style.display != next {
             style.display = next;
         }
@@ -266,10 +286,7 @@ pub fn update_settings_tabs_ui(
 fn live_slider_percent(
     field: SettingsField,
     settings: &GameSettings,
-    slider_values: &Query<
-        (Entity, &SettingsAction, &SliderValue, &SliderDragState),
-        With<Slider>,
-    >,
+    slider_values: &Query<(Entity, &SettingsAction, &SliderValue, &SliderDragState), With<Slider>>,
 ) -> f32 {
     slider_values
         .iter()

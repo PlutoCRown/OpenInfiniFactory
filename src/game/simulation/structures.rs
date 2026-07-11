@@ -258,13 +258,6 @@ impl StructureMove {
             Self::Translate { structure, .. } | Self::Rotate { structure, .. } => structure,
         }
     }
-
-    pub(super) fn pusher_actor_pos(&self) -> Option<IVec3> {
-        match self {
-            Self::Translate { actor, .. } => actor.as_ref().map(|actor| actor.pos),
-            Self::Rotate { .. } => None,
-        }
-    }
 }
 
 /// 合并重力与设备运动标签：保留全部重叠标签，按优先级排序，执行时再 fallback

@@ -212,6 +212,7 @@ fn spawn_key_bindings(panel: &mut ChildSpawnerCommands) {
                             "settings.group.simulation",
                             &ActionKeyName::SIMULATION,
                         );
+                        spawn_key_group(columns, "settings.group.mouse", &ActionKeyName::MOUSE);
                     });
             });
         });

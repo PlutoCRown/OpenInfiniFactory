@@ -6,8 +6,8 @@
 use std::cell::Cell;
 use std::ptr::NonNull;
 
-use bevy::ecs::system::SystemState;
 use bevy::ecs::system::NonSendMarker;
+use bevy::ecs::system::SystemState;
 use bevy::ecs::world::World;
 use bevy::prelude::*;
 
@@ -133,6 +133,8 @@ impl UiAccess {
                     fov_degrees: settings.fov_degrees,
                     ui_scale: settings.ui_scale,
                     gravity_scale: settings.gravity_scale,
+                    mouse_sensitivity_x: settings.mouse_sensitivity_x,
+                    mouse_sensitivity_y: settings.mouse_sensitivity_y,
                 }
             };
             let mut state = SystemState::<UiHostCommands>::new(world);

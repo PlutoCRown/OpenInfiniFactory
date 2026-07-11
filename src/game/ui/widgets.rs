@@ -3,15 +3,14 @@ use bevy::prelude::*;
 use crate::game::state::GameSettings;
 
 use super::components::{
-    auto_width_button, default_button_size, default_font_size, full_width_button, inset_border,
-    localized_text, menu_button, raised_border, slider_bundle, slider_fill, slider_knob,
-    styled_button, text_button, BUTTON_BG,
+    default_button_size, default_font_size, full_width_button, inset_border, localized_text,
+    menu_button, raised_border, slider_bundle, slider_fill, slider_knob, styled_button,
+    text_button, BUTTON_BG,
 };
 use super::types::{
-    AreaKind, ConfirmButtonId, InventoryItem, InventorySlot, KeyBindingButton, SettingsAction,
-    SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList, SettingsField,
-    SettingsSliderFill, SettingsSliderKnob, SettingsText, SettingsTextKind, SettingsValueText,
-    SlotArea, UiActionLabel,
+    AreaKind, InventoryItem, InventorySlot, KeyBindingButton, SettingsAction, SettingsDropdown,
+    SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
+    SettingsSliderKnob, SettingsText, SettingsTextKind, SettingsValueText, SlotArea, UiActionLabel,
 };
 
 fn label_text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bundle {
@@ -79,20 +78,6 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
                     margin: UiRect::all(Val::Px(2.0)),
                     ..default()
                 },
-            ));
-        });
-}
-
-pub(super) fn spawn_confirm_dialog_button(
-    parent: &mut ChildSpawnerCommands,
-    button: ConfirmButtonId,
-) {
-    parent
-        .spawn((auto_width_button(34.0), button))
-        .with_children(|button| {
-            button.spawn((
-                label_text("", 15.0, Color::WHITE),
-                TextLayout::no_wrap(),
             ));
         });
 }

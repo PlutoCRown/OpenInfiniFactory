@@ -51,6 +51,9 @@ pub const UI_SCALE_MAX: f32 = 3.0;
 pub const GRAVITY_SCALE_MIN: f32 = 1.0;
 pub const GRAVITY_SCALE_MAX: f32 = 2.0;
 pub const GRAVITY_SCALE_DEFAULT: f32 = 1.2;
+pub const MOUSE_SENSITIVITY_MIN: f32 = 0.5;
+pub const MOUSE_SENSITIVITY_MAX: f32 = 2.0;
+pub const MOUSE_SENSITIVITY_DEFAULT: f32 = 1.0;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
@@ -61,11 +64,19 @@ impl Plugin for GamePlugin {
         config.gravity_scale = config
             .gravity_scale
             .clamp(GRAVITY_SCALE_MIN, GRAVITY_SCALE_MAX);
+        config.mouse_sensitivity_x = config
+            .mouse_sensitivity_x
+            .clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX);
+        config.mouse_sensitivity_y = config
+            .mouse_sensitivity_y
+            .clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX);
         let i18n = I18n::new(resolve_language(config.language));
         let settings = GameSettings {
             fov_degrees: config.fov_degrees,
             ui_scale: config.ui_scale,
             gravity_scale: config.gravity_scale,
+            mouse_sensitivity_x: config.mouse_sensitivity_x,
+            mouse_sensitivity_y: config.mouse_sensitivity_y,
         };
 
         app.insert_resource(ClearColor(Color::srgb(0.58, 0.68, 0.76)))

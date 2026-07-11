@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::game::state::GameSettings;
-use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
+use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, MOUSE_SENSITIVITY_MAX, MOUSE_SENSITIVITY_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{ActionKeyName, ConfigSelectionMode};
 use crate::shared::i18n::Language;
 
@@ -38,6 +38,8 @@ pub enum SettingsField {
     Fov,
     UiScale,
     Gravity,
+    MouseSensitivityX,
+    MouseSensitivityY,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -107,6 +109,30 @@ pub const GAMEPLAY_SETTINGS: &[SettingsItem] = &[
         },
     },
     SettingsItem {
+        label_key: "settings.mouse_sensitivity_x",
+        control: SettingsControl::Slider {
+            field: SettingsField::MouseSensitivityX,
+            config: SettingsSliderConfig {
+                min: MOUSE_SENSITIVITY_MIN,
+                max: MOUSE_SENSITIVITY_MAX,
+                step: 0.1,
+                trigger: SettingsSliderTrigger::Live,
+            },
+        },
+    },
+    SettingsItem {
+        label_key: "settings.mouse_sensitivity_y",
+        control: SettingsControl::Slider {
+            field: SettingsField::MouseSensitivityY,
+            config: SettingsSliderConfig {
+                min: MOUSE_SENSITIVITY_MIN,
+                max: MOUSE_SENSITIVITY_MAX,
+                step: 0.1,
+                trigger: SettingsSliderTrigger::Live,
+            },
+        },
+    },
+    SettingsItem {
         label_key: "settings.language",
         control: SettingsControl::Dropdown(SettingsDropdown::Language),
     },
@@ -150,6 +176,14 @@ impl SettingsField {
                 "settings.gravity_value",
                 &[("scale", format!("{:.1}", settings.gravity_scale))],
             ),
+            Self::MouseSensitivityX => i18n.fmt(
+                "settings.mouse_sensitivity_value",
+                &[("scale", format!("{:.1}", settings.mouse_sensitivity_x))],
+            ),
+            Self::MouseSensitivityY => i18n.fmt(
+                "settings.mouse_sensitivity_value",
+                &[("scale", format!("{:.1}", settings.mouse_sensitivity_y))],
+            ),
         }
     }
 
@@ -178,6 +212,8 @@ impl SettingsField {
             Self::Fov => settings.fov_degrees,
             Self::UiScale => settings.ui_scale,
             Self::Gravity => settings.gravity_scale,
+            Self::MouseSensitivityX => settings.mouse_sensitivity_x,
+            Self::MouseSensitivityY => settings.mouse_sensitivity_y,
         }
     }
 
@@ -201,6 +237,14 @@ impl SettingsField {
             Self::Gravity => {
                 settings.gravity_scale = value;
                 config.gravity_scale = value;
+            }
+            Self::MouseSensitivityX => {
+                settings.mouse_sensitivity_x = value;
+                config.mouse_sensitivity_x = value;
+            }
+            Self::MouseSensitivityY => {
+                settings.mouse_sensitivity_y = value;
+                config.mouse_sensitivity_y = value;
             }
         }
     }

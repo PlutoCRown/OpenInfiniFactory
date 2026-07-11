@@ -9,7 +9,7 @@ use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::settings::confirm::{on_reset_defaults, reset_defaults_spec};
 use crate::list_ui_config;
-use crate::shared::config::{input_from_buttons, open_config_folder, save_config, GameConfig};
+use crate::shared::config::{chord_from_input, input_from_buttons, open_config_folder, save_config, GameConfig};
 
 use super::types::{
     ActiveSettingsSlider, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
@@ -83,7 +83,13 @@ pub fn settings_menu_actions(
     }
 
     if let Some(action) = pending_key_bind.0 {
-        if let Some(input) = input_from_buttons(&keys, &mouse_buttons) {
+        if action.is_chord() {
+            if let Some(chord) = chord_from_input(&keys) {
+                config.set_chord(action, chord);
+                save_config(&config);
+                pending_key_bind.0 = None;
+            }
+        } else if let Some(input) = input_from_buttons(&keys, &mouse_buttons) {
             config.set_input(action, input);
             save_config(&config);
             pending_key_bind.0 = None;

@@ -25,12 +25,16 @@ pub const DEFAULT_KEY_BINDINGS: KeyBindings = KeyBindings {
     place: ConfigInput::MouseLeft,
     delete: ConfigInput::MouseRight,
     pick: ConfigInput::MouseMiddle,
+    undo: ConfigChord::default_undo(),
+    redo: ConfigChord::default_redo(),
 };
 
 pub const DEFAULT_CONFIG: GameConfig = GameConfig {
     fov_degrees: 70.0,
     ui_scale: 1.0,
     gravity_scale: 1.2,
+    mouse_sensitivity_x: 1.0,
+    mouse_sensitivity_y: 1.0,
     language: None,
     place_selection_mode: ConfigSelectionMode::Point,
     delete_selection_mode: ConfigSelectionMode::Point,
@@ -44,6 +48,10 @@ pub struct GameConfig {
     pub ui_scale: f32,
     #[serde(default = "default_gravity_scale")]
     pub gravity_scale: f32,
+    #[serde(default = "default_mouse_sensitivity")]
+    pub mouse_sensitivity_x: f32,
+    #[serde(default = "default_mouse_sensitivity")]
+    pub mouse_sensitivity_y: f32,
     #[serde(default)]
     pub language: Option<Language>,
     #[serde(default)]
@@ -68,12 +76,106 @@ fn default_gravity_scale() -> f32 {
     DEFAULT_CONFIG.gravity_scale
 }
 
+fn default_mouse_sensitivity() -> f32 {
+    DEFAULT_CONFIG.mouse_sensitivity_x
+}
+
 fn default_key_bindings() -> KeyBindings {
     DEFAULT_CONFIG.key_bindings
 }
 
 fn default_debug_structure_key() -> ConfigKey {
     ConfigKey::KeyP
+}
+
+fn default_undo_chord() -> ConfigChord {
+    ConfigChord::default_undo()
+}
+
+fn default_redo_chord() -> ConfigChord {
+    ConfigChord::default_redo()
+}
+
+/// 组合键：修饰键 + 主键（primary_modifier 在 macOS 为 Command，其它平台为 Control）
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ConfigChord {
+    pub key: ConfigKey,
+    pub primary_modifier: bool,
+    pub shift: bool,
+    pub alt: bool,
+}
+
+impl ConfigChord {
+    pub const fn default_undo() -> Self {
+        Self {
+            key: ConfigKey::KeyZ,
+            primary_modifier: true,
+            shift: false,
+            alt: false,
+        }
+    }
+
+    pub const fn default_redo() -> Self {
+        Self {
+            key: ConfigKey::KeyZ,
+            primary_modifier: true,
+            shift: true,
+            alt: false,
+        }
+    }
+
+    pub fn display_name(self) -> String {
+        let mut parts = Vec::new();
+        if self.primary_modifier {
+            parts.push(primary_modifier_label().to_string());
+        }
+        if self.shift {
+            parts.push("Shift".to_string());
+        }
+        if self.alt {
+            parts.push("Alt".to_string());
+        }
+        parts.push(self.key.name().to_string());
+        parts.join("+")
+    }
+
+    pub fn just_triggered(self, keys: &ButtonInput<KeyCode>) -> bool {
+        keys.just_pressed(self.key.key_code())
+            && self.primary_modifier == primary_modifier_pressed(keys)
+            && self.shift == shift_modifier_pressed(keys)
+            && self.alt == alt_modifier_pressed(keys)
+    }
+}
+
+/// macOS 为 Command，其它平台为 Control（不用 ⌘ 符号，UI 字体可能缺字）
+pub fn primary_modifier_label() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "Command"
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "Ctrl"
+    }
+}
+
+pub fn primary_modifier_pressed(keys: &ButtonInput<KeyCode>) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)
+    }
+}
+
+pub fn shift_modifier_pressed(keys: &ButtonInput<KeyCode>) -> bool {
+    keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight)
+}
+
+pub fn alt_modifier_pressed(keys: &ButtonInput<KeyCode>) -> bool {
+    keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight)
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Reflect, Serialize, Deserialize)]
@@ -122,6 +224,10 @@ pub struct KeyBindings {
     pub place: ConfigInput,
     pub delete: ConfigInput,
     pub pick: ConfigInput,
+    #[serde(default = "default_undo_chord")]
+    pub undo: ConfigChord,
+    #[serde(default = "default_redo_chord")]
+    pub redo: ConfigChord,
 }
 
 impl Default for KeyBindings {
@@ -168,14 +274,20 @@ pub enum ActionKeyName {
     Delete,
     /// 拾取方块
     Pick,
+    /// 撤销编辑
+    Undo,
+    /// 重做编辑
+    Redo,
 }
 
 impl ActionKeyName {
-    pub const GENERAL: [ActionKeyName; 15] = [
+    pub const GENERAL: [ActionKeyName; 14] = [
         ActionKeyName::Pause,
         ActionKeyName::Inventory,
         ActionKeyName::Alternate,
         ActionKeyName::RotateOrRollback,
+        ActionKeyName::Undo,
+        ActionKeyName::Redo,
         ActionKeyName::Debug,
         ActionKeyName::DebugStructure,
         ActionKeyName::Forward,
@@ -184,6 +296,9 @@ impl ActionKeyName {
         ActionKeyName::Right,
         ActionKeyName::JumpOrFlyUp,
         ActionKeyName::FlyDown,
+    ];
+
+    pub const MOUSE: [ActionKeyName; 3] = [
         ActionKeyName::Place,
         ActionKeyName::Delete,
         ActionKeyName::Pick,
@@ -196,12 +311,18 @@ impl ActionKeyName {
         ActionKeyName::SimulationRollback,
     ];
 
+    pub fn is_chord(self) -> bool {
+        matches!(self, Self::Undo | Self::Redo)
+    }
+
     pub fn label_key(self) -> &'static str {
         match self {
             ActionKeyName::Pause => "action.pause",
             ActionKeyName::Inventory => "action.inventory",
             ActionKeyName::Alternate => "action.alternate",
             ActionKeyName::RotateOrRollback => "action.rotate",
+            ActionKeyName::Undo => "action.undo",
+            ActionKeyName::Redo => "action.redo",
             ActionKeyName::Simulate => "action.simulation_start",
             ActionKeyName::SimulationStep => "action.simulation_step",
             ActionKeyName::SimulationFast => "action.simulation_fast",
@@ -273,6 +394,7 @@ pub enum ConfigKey {
     KeyR,
     KeyS,
     KeyW,
+    KeyZ,
     Digit1,
     Digit2,
     Digit3,
@@ -302,6 +424,7 @@ impl ConfigKey {
             ConfigKey::KeyR => KeyCode::KeyR,
             ConfigKey::KeyS => KeyCode::KeyS,
             ConfigKey::KeyW => KeyCode::KeyW,
+            ConfigKey::KeyZ => KeyCode::KeyZ,
             ConfigKey::Digit1 => KeyCode::Digit1,
             ConfigKey::Digit2 => KeyCode::Digit2,
             ConfigKey::Digit3 => KeyCode::Digit3,
@@ -312,6 +435,10 @@ impl ConfigKey {
             ConfigKey::Digit8 => KeyCode::Digit8,
             ConfigKey::Digit9 => KeyCode::Digit9,
         }
+    }
+
+    pub fn is_modifier(self) -> bool {
+        matches!(self, Self::ShiftLeft | Self::ShiftRight)
     }
 
     pub fn name(self) -> &'static str {
@@ -331,6 +458,7 @@ impl ConfigKey {
             ConfigKey::KeyR => "R",
             ConfigKey::KeyS => "S",
             ConfigKey::KeyW => "W",
+            ConfigKey::KeyZ => "Z",
             ConfigKey::Digit1 => "1",
             ConfigKey::Digit2 => "2",
             ConfigKey::Digit3 => "3",
@@ -345,6 +473,30 @@ impl ConfigKey {
 }
 
 impl GameConfig {
+    pub fn chord(&self, action: ActionKeyName) -> ConfigChord {
+        match action {
+            ActionKeyName::Undo => self.key_bindings.undo,
+            ActionKeyName::Redo => self.key_bindings.redo,
+            _ => ConfigChord::default_undo(),
+        }
+    }
+
+    pub fn binding_display(&self, action: ActionKeyName) -> String {
+        if action.is_chord() {
+            self.chord(action).display_name()
+        } else {
+            self.input(action).name().to_string()
+        }
+    }
+
+    pub fn set_chord(&mut self, action: ActionKeyName, chord: ConfigChord) {
+        match action {
+            ActionKeyName::Undo => self.key_bindings.undo = chord,
+            ActionKeyName::Redo => self.key_bindings.redo = chord,
+            _ => {}
+        }
+    }
+
     pub fn key(&self, action: ActionKeyName) -> ConfigKey {
         match action {
             ActionKeyName::Pause => self.key_bindings.pause,
@@ -363,6 +515,8 @@ impl GameConfig {
             ActionKeyName::Right => self.key_bindings.right,
             ActionKeyName::JumpOrFlyUp => self.key_bindings.jump_or_fly_up,
             ActionKeyName::FlyDown => self.key_bindings.fly_down,
+            ActionKeyName::Undo => self.key_bindings.undo.key,
+            ActionKeyName::Redo => self.key_bindings.redo.key,
             ActionKeyName::Place | ActionKeyName::Delete | ActionKeyName::Pick => {
                 return self
                     .input(action)
@@ -395,6 +549,7 @@ impl GameConfig {
             ActionKeyName::Right => ConfigInput::Key(self.key_bindings.right),
             ActionKeyName::JumpOrFlyUp => ConfigInput::Key(self.key_bindings.jump_or_fly_up),
             ActionKeyName::FlyDown => ConfigInput::Key(self.key_bindings.fly_down),
+            ActionKeyName::Undo | ActionKeyName::Redo => ConfigInput::Key(self.chord(action).key),
             ActionKeyName::Place => self.key_bindings.place,
             ActionKeyName::Delete => self.key_bindings.delete,
             ActionKeyName::Pick => self.key_bindings.pick,
@@ -419,6 +574,7 @@ impl GameConfig {
             ActionKeyName::Right => self.key_bindings.right = key,
             ActionKeyName::JumpOrFlyUp => self.key_bindings.jump_or_fly_up = key,
             ActionKeyName::FlyDown => self.key_bindings.fly_down = key,
+            ActionKeyName::Undo | ActionKeyName::Redo => {}
             ActionKeyName::Place | ActionKeyName::Delete | ActionKeyName::Pick => {
                 self.set_input(action, ConfigInput::Key(key));
             }
@@ -487,35 +643,53 @@ pub fn open_config_folder() {
     }
 }
 
+const CONFIG_KEYS: [ConfigKey; 25] = [
+    ConfigKey::Escape,
+    ConfigKey::Space,
+    ConfigKey::ShiftLeft,
+    ConfigKey::ShiftRight,
+    ConfigKey::Slash,
+    ConfigKey::KeyA,
+    ConfigKey::KeyC,
+    ConfigKey::KeyD,
+    ConfigKey::KeyE,
+    ConfigKey::KeyF,
+    ConfigKey::KeyI,
+    ConfigKey::KeyP,
+    ConfigKey::KeyR,
+    ConfigKey::KeyS,
+    ConfigKey::KeyW,
+    ConfigKey::KeyZ,
+    ConfigKey::Digit1,
+    ConfigKey::Digit2,
+    ConfigKey::Digit3,
+    ConfigKey::Digit4,
+    ConfigKey::Digit5,
+    ConfigKey::Digit6,
+    ConfigKey::Digit7,
+    ConfigKey::Digit8,
+    ConfigKey::Digit9,
+];
+
+pub fn chord_from_input(keys: &ButtonInput<KeyCode>) -> Option<ConfigChord> {
+    let key = CONFIG_KEYS
+        .iter()
+        .copied()
+        .filter(|key| !key.is_modifier())
+        .find(|key| keys.just_pressed(key.key_code()))?;
+    Some(ConfigChord {
+        key,
+        primary_modifier: primary_modifier_pressed(keys),
+        shift: shift_modifier_pressed(keys),
+        alt: alt_modifier_pressed(keys),
+    })
+}
+
 pub fn key_from_input(keys: &ButtonInput<KeyCode>) -> Option<ConfigKey> {
-    [
-        ConfigKey::Escape,
-        ConfigKey::Space,
-        ConfigKey::ShiftLeft,
-        ConfigKey::ShiftRight,
-        ConfigKey::Slash,
-        ConfigKey::KeyA,
-        ConfigKey::KeyC,
-        ConfigKey::KeyD,
-        ConfigKey::KeyE,
-        ConfigKey::KeyF,
-        ConfigKey::KeyI,
-        ConfigKey::KeyP,
-        ConfigKey::KeyR,
-        ConfigKey::KeyS,
-        ConfigKey::KeyW,
-        ConfigKey::Digit1,
-        ConfigKey::Digit2,
-        ConfigKey::Digit3,
-        ConfigKey::Digit4,
-        ConfigKey::Digit5,
-        ConfigKey::Digit6,
-        ConfigKey::Digit7,
-        ConfigKey::Digit8,
-        ConfigKey::Digit9,
-    ]
-    .into_iter()
-    .find(|key| keys.just_pressed(key.key_code()))
+    CONFIG_KEYS
+        .iter()
+        .copied()
+        .find(|key| keys.just_pressed(key.key_code()))
 }
 
 pub fn input_from_buttons(
@@ -535,32 +709,8 @@ pub fn input_from_buttons(
 }
 
 fn key_from_input_code(key_code: KeyCode) -> Option<ConfigKey> {
-    [
-        ConfigKey::Escape,
-        ConfigKey::Space,
-        ConfigKey::ShiftLeft,
-        ConfigKey::ShiftRight,
-        ConfigKey::Slash,
-        ConfigKey::KeyA,
-        ConfigKey::KeyC,
-        ConfigKey::KeyD,
-        ConfigKey::KeyE,
-        ConfigKey::KeyF,
-        ConfigKey::KeyI,
-        ConfigKey::KeyP,
-        ConfigKey::KeyR,
-        ConfigKey::KeyS,
-        ConfigKey::KeyW,
-        ConfigKey::Digit1,
-        ConfigKey::Digit2,
-        ConfigKey::Digit3,
-        ConfigKey::Digit4,
-        ConfigKey::Digit5,
-        ConfigKey::Digit6,
-        ConfigKey::Digit7,
-        ConfigKey::Digit8,
-        ConfigKey::Digit9,
-    ]
-    .into_iter()
-    .find(|key| key.key_code() == key_code)
+    CONFIG_KEYS
+        .iter()
+        .copied()
+        .find(|key| key.key_code() == key_code)
 }
