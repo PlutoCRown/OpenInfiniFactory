@@ -47,7 +47,8 @@ pub fn spawn_delete_bounds_preview(
     max: IVec3,
 ) {
     let center = (grid_to_world(min) + grid_to_world(max)) * 0.5;
-    let size = (max - min + IVec3::ONE).as_vec3() * 1.1;
+    // 轴向长度 = 选中格数 + 两侧各约 0.03，避免 *1.1 在大选区多出整格
+    let size = (max - min + IVec3::ONE).as_vec3() + Vec3::splat(0.06);
     commands.spawn((
         Mesh3d(assets.block.clone()),
         MeshMaterial3d(assets.edit_preview_material(EditPreviewKind::Delete)),
