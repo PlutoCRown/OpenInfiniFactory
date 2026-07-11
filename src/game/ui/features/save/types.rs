@@ -25,6 +25,18 @@ pub struct SaveListPuzzleColumn;
 #[derive(Component, Clone, Copy)]
 pub struct SaveListSolutionColumn;
 
+/// 谜题列里动态行的容器（新建按钮不在这里，避免重建时被清掉）
+#[derive(Component, Clone, Copy)]
+pub struct SaveListPuzzleRows;
+
+/// 方案列里动态行的容器
+#[derive(Component, Clone, Copy)]
+pub struct SaveListSolutionRows;
+
+/// 列顶部的「新建」按钮（稳定实体）
+#[derive(Component, Clone, Copy)]
+pub struct SaveListCreateButton;
+
 #[derive(Component)]
 pub struct SaveListPrompt;
 

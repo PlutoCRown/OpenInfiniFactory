@@ -261,19 +261,16 @@ fn spawn_key_group(
 
 fn spawn_settings_footer(panel: &mut ChildSpawnerCommands) {
     panel.spawn(flex_row(42.0, 8.0)).with_children(|row| {
+        let mut actions = Vec::new();
         #[cfg(not(target_arch = "wasm32"))]
-        let actions = [
-            SettingsAction::StartDebugHttp,
-            SettingsAction::ResetDefaults,
-            SettingsAction::OpenFolder,
-            SettingsAction::Back,
-        ];
-        #[cfg(target_arch = "wasm32")]
-        let actions = [
-            SettingsAction::ResetDefaults,
-            SettingsAction::OpenFolder,
-            SettingsAction::Back,
-        ];
+        actions.push(SettingsAction::StartDebugHttp);
+        actions.push(SettingsAction::ResetDefaults);
+        if crate::shared::platform::StoragePlatform::current()
+            == crate::shared::platform::StoragePlatform::Desktop
+        {
+            actions.push(SettingsAction::OpenFolder);
+        }
+        actions.push(SettingsAction::Back);
         for action in actions {
             spawn_localized_settings_button(row, action);
         }

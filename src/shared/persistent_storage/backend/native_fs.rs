@@ -12,6 +12,12 @@ use crate::shared::platform::saves_directory;
 pub fn load_all() -> HashMap<String, Vec<u8>> {
     let mut entries = HashMap::new();
     let root = saves_directory();
+    if let Err(error) = fs::create_dir_all(root) {
+        bevy::log::warn!(
+            "Failed to create saves directory {}: {error}",
+            root.display()
+        );
+    }
 
     let config_path = config_path();
     if let Ok(bytes) = fs::read(&config_path) {

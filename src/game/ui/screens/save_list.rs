@@ -6,11 +6,12 @@ use crate::game::ui::access::i18n;
 use super::super::components::{
     default_button_size, flex_row, full_width_button, panel_bundle_responsive, panel_content,
     panel_title_bar, panel_title_button, panel_title_label, raised_border, spawn_close_icon,
-    styled_button, text, transparent_node, BUTTON_BG,
+    styled_button, text, text_button, transparent_node, BUTTON_BG,
 };
 use super::super::types::{
-    PanelVisibility, SaveListAction, SaveListCloseButton, SaveListPanel, SaveListPrompt,
-    SaveListPuzzleColumn, SaveListSolutionColumn, SaveListTitleText,
+    PanelVisibility, SaveListAction, SaveListCloseButton, SaveListCreateButton, SaveListPanel,
+    SaveListPrompt, SaveListPuzzleColumn, SaveListPuzzleRows, SaveListSolutionColumn,
+    SaveListSolutionRows, SaveListTitleText,
 };
 
 pub const SAVE_LIST_PANEL_WIDTH_PERCENT: f32 = 92.0;
@@ -40,8 +41,18 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands) {
         });
         panel.spawn(panel_content()).with_children(|panel| {
             panel.spawn(save_columns_row()).with_children(|columns| {
-                spawn_save_column(columns, SaveListAction::NewPuzzle, SaveListPuzzleColumn);
-                spawn_save_column(columns, SaveListAction::NewSolution, SaveListSolutionColumn);
+                spawn_save_column(
+                    columns,
+                    SaveListAction::NewPuzzle,
+                    SaveListPuzzleColumn,
+                    SaveListPuzzleRows,
+                );
+                spawn_save_column(
+                    columns,
+                    SaveListAction::NewSolution,
+                    SaveListSolutionColumn,
+                    SaveListSolutionRows,
+                );
             });
             panel.spawn((
                 text("", 16.0, Color::srgb(0.82, 0.86, 0.88)),
@@ -76,21 +87,48 @@ fn save_column_node() -> Node {
 fn spawn_save_column(
     columns: &mut ChildSpawnerCommands,
     create: SaveListAction,
-    marker: impl Component + Copy,
+    column_marker: impl Component + Copy,
+    rows_marker: impl Component + Copy,
 ) {
     columns
-        .spawn((transparent_node(save_column_node()), marker))
+        .spawn((transparent_node(save_column_node()), column_marker))
         .with_children(|column| {
-            spawn_save_slot_button(column, create);
+            // 新建按钮固定在列顶，重建存档行时不会被清掉
+            column
+                .spawn((
+                    create_list_button(34.0),
+                    create,
+                    SaveListCreateButton,
+                ))
+                .with_children(|button| {
+                    button.spawn(text("", 15.0, Color::WHITE));
+                });
+            column.spawn((transparent_node(save_rows_node()), rows_marker));
         });
 }
 
-fn spawn_save_slot_button(parent: &mut ChildSpawnerCommands, action: SaveListAction) {
-    parent
-        .spawn((full_width_button(34.0), action))
-        .with_children(|button| {
-            button.spawn(text("", 15.0, Color::WHITE));
-        });
+fn save_rows_node() -> Node {
+    Node {
+        width: Val::Percent(100.0),
+        flex_direction: FlexDirection::Column,
+        row_gap: Val::Px(6.0),
+        flex_grow: 0.0,
+        ..default()
+    }
+}
+
+fn create_list_button(height: f32) -> impl Bundle {
+    text_button(
+        Node {
+            width: Val::Percent(100.0),
+            flex_grow: 0.0,
+            flex_shrink: 0.0,
+            height: Val::Px(default_button_size(height)),
+            ..default()
+        },
+        raised_border(),
+        BUTTON_BG,
+    )
 }
 
 pub fn spawn_save_management_row(
