@@ -10,8 +10,8 @@ use crate::game::systems::perf::PerfScope;
 use crate::shared::config::VirtualControlId;
 
 pub use editor::{
-    exit_virtual_layout_editor, open_virtual_layout_editor, VirtualLayoutEditorOpen,
-    VirtualLayoutEditorState,
+    exit_virtual_layout_editor, open_virtual_layout_editor, VirtualLayoutDraft,
+    VirtualLayoutEditorOpen, VirtualLayoutEditorState, EDITOR_Z,
 };
 pub use spawn::{spawn_virtual_remote, VirtualRemoteRoot};
 
@@ -97,6 +97,7 @@ impl Plugin for VirtualRemotePlugin {
         app.init_resource::<VirtualRemoteRuntime>()
             .init_resource::<VirtualLayoutEditorState>()
             .init_resource::<VirtualLayoutEditorOpen>()
+            .init_resource::<VirtualLayoutDraft>()
             .add_observer(update::on_virtual_press)
             .add_observer(update::on_virtual_drag)
             .add_observer(update::on_virtual_release)

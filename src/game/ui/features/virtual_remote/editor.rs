@@ -1,15 +1,21 @@
 //! 虚拟遥感布局编辑界面
 
+use bevy::ecs::system::SystemState;
 use bevy::picking::pointer::PointerButton;
 use bevy::picking::prelude::{Click, Drag, Pointer, Press, Release};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::game::ui::components::{localized_text, raised_border, ui_logical_bounds, BUTTON_BG};
-use crate::game::ui::core::host::{PlayingUiRootEntity, UiRootEntity};
+use crate::game::ui::core::confirm_dialog::{
+    ConfirmDialogState, ConfirmExtraButton, ConfirmProps, ConfirmResult, PendingConfirmHandler,
+};
+use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost, UiRootEntity};
+use crate::game::ui::core::text_prompt::TextPromptState;
 use crate::shared::config::{
     save_config, GameConfig, VirtualControlAnchor, VirtualControlId, VirtualControlsLayout,
 };
+use crate::shared::i18n::I18n;
 use crate::shared::touch_profile::TouchProfile;
 
 use super::spawn::{
@@ -19,9 +25,10 @@ use super::spawn::{
 use super::{VirtualJoystickKnob, VirtualLayoutPreview, VirtualRemoteControl};
 
 /// 布局编辑层叠在设置/主菜单之上
-const EDITOR_Z: i32 = 50_000;
+pub const EDITOR_Z: i32 = 50_000;
 const SCALE_MIN: f32 = 0.4;
 const SCALE_MAX: f32 = 2.5;
+const EXTRA_DISCARD: u32 = 0;
 
 /// 布局编辑器是否打开
 #[derive(Resource, Default)]
@@ -34,13 +41,32 @@ pub struct VirtualLayoutEditorState {
     pub drag_last: Option<Vec2>,
 }
 
+/// 编辑中的草稿布局（未点保存前不写回 GameConfig）
+#[derive(Resource, Clone)]
+pub struct VirtualLayoutDraft {
+    pub layout: VirtualControlsLayout,
+    pub dirty: bool,
+}
+
+impl Default for VirtualLayoutDraft {
+    fn default() -> Self {
+        Self {
+            layout: VirtualControlsLayout::DEFAULT.clone(),
+            dirty: false,
+        }
+    }
+}
+
 #[derive(Component)]
 pub struct VirtualLayoutEditorRoot;
 
 #[derive(Component)]
 pub struct VirtualLayoutExitButton;
 
-/// 重置全部遥感布局为默认
+#[derive(Component)]
+pub struct VirtualLayoutSaveButton;
+
+/// 重置草稿为默认（需确认；仍需手动保存）
 #[derive(Component)]
 pub struct VirtualLayoutResetButton;
 
@@ -48,7 +74,7 @@ pub struct VirtualLayoutResetButton;
 #[derive(Component)]
 pub struct VirtualLayoutDeselectZone;
 
-/// 顶栏（退出 + 缩放滑条），需压过预览控件
+/// 顶栏，需压过预览控件
 #[derive(Component)]
 pub struct VirtualLayoutChrome;
 
@@ -60,6 +86,10 @@ pub struct VirtualLayoutScaleSlider;
 #[derive(Component)]
 pub struct VirtualLayoutScaleFill;
 
+/// 屏幕中心准心（对齐辅助）
+#[derive(Component)]
+pub struct VirtualLayoutCrosshair;
+
 /// 打开遥感布局编辑
 pub fn open_virtual_layout_editor(world: &mut World) {
     let enabled = world.resource::<TouchProfile>().enabled;
@@ -69,6 +99,12 @@ pub fn open_virtual_layout_editor(world: &mut World) {
     world.resource_mut::<VirtualLayoutEditorOpen>().0 = true;
     world.resource_mut::<VirtualLayoutEditorState>().selected = None;
     world.resource_mut::<VirtualLayoutEditorState>().drag_last = None;
+    {
+        let layout = world.resource::<GameConfig>().virtual_controls.clone();
+        let mut draft = world.resource_mut::<VirtualLayoutDraft>();
+        draft.layout = layout;
+        draft.dirty = false;
+    }
 
     let already = world
         .query_filtered::<Entity, With<VirtualLayoutEditorRoot>>()
@@ -128,7 +164,6 @@ pub fn open_virtual_layout_editor(world: &mut World) {
 }
 
 fn spawn_editor_layers(parent: &mut ChildSpawnerCommands) {
-    // 空白区：点按取消选中（滑条/退出/控件在更高层）
     parent.spawn((
         Node {
             width: Val::Percent(100.0),
@@ -155,6 +190,7 @@ fn spawn_editor_layers(parent: &mut ChildSpawnerCommands) {
             spawn_virtual_remote(preview, &TouchProfile { enabled: true }, true);
         });
 
+    spawn_crosshair(parent);
     spawn_editor_chrome(parent);
 
     parent.spawn((
@@ -169,6 +205,78 @@ fn spawn_editor_layers(parent: &mut ChildSpawnerCommands) {
         Pickable::IGNORE,
         GlobalZIndex(EDITOR_Z + 20),
     ));
+}
+
+fn spawn_crosshair(parent: &mut ChildSpawnerCommands) {
+    let line = Color::srgba(0.95, 0.95, 0.98, 0.55);
+    parent
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                position_type: PositionType::Absolute,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            VirtualLayoutCrosshair,
+            Pickable::IGNORE,
+            GlobalZIndex(EDITOR_Z + 2),
+        ))
+        .with_children(|root| {
+            root.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Px(28.0),
+                    height: Val::Px(2.0),
+                    ..default()
+                },
+                BackgroundColor(line),
+                Pickable::IGNORE,
+            ));
+            root.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Px(2.0),
+                    height: Val::Px(28.0),
+                    ..default()
+                },
+                BackgroundColor(line),
+                Pickable::IGNORE,
+            ));
+            root.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Px(6.0),
+                    height: Val::Px(6.0),
+                    border_radius: BorderRadius::all(Val::Px(3.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(1.0, 0.85, 0.35, 0.85)),
+                Pickable::IGNORE,
+            ));
+        });
+}
+
+fn chrome_button(label_key: &'static str) -> impl Bundle {
+    (
+        Node {
+            padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: UiRect::all(Val::Px(2.0)),
+            border_radius: BorderRadius::all(Val::Px(5.0)),
+            ..default()
+        },
+        BackgroundColor(BUTTON_BG),
+        raised_border(),
+        Button,
+        Pickable::default(),
+        children![(
+            localized_text(label_key, 14.0, Color::WHITE),
+            Pickable::IGNORE
+        )],
+    )
 }
 
 fn spawn_editor_chrome(parent: &mut ChildSpawnerCommands) {
@@ -194,48 +302,17 @@ fn spawn_editor_chrome(parent: &mut ChildSpawnerCommands) {
         ))
         .with_children(|bar| {
             bar.spawn((
-                Node {
-                    padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(2.0)),
-                    border_radius: BorderRadius::all(Val::Px(5.0)),
-                    ..default()
-                },
-                BackgroundColor(BUTTON_BG),
-                raised_border(),
-                Button,
+                chrome_button("virtual.layout_exit"),
                 VirtualLayoutExitButton,
-                Pickable::default(),
-            ))
-            .with_children(|btn| {
-                btn.spawn((
-                    localized_text("virtual.layout_exit", 14.0, Color::WHITE),
-                    Pickable::IGNORE,
-                ));
-            });
-
+            ));
             bar.spawn((
-                Node {
-                    padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(2.0)),
-                    border_radius: BorderRadius::all(Val::Px(5.0)),
-                    ..default()
-                },
-                BackgroundColor(BUTTON_BG),
-                raised_border(),
-                Button,
+                chrome_button("virtual.layout_save"),
+                VirtualLayoutSaveButton,
+            ));
+            bar.spawn((
+                chrome_button("virtual.layout_reset"),
                 VirtualLayoutResetButton,
-                Pickable::default(),
-            ))
-            .with_children(|btn| {
-                btn.spawn((
-                    localized_text("virtual.layout_reset", 14.0, Color::WHITE),
-                    Pickable::IGNORE,
-                ));
-            });
+            ));
 
             bar.spawn((
                 localized_text("virtual.layout_scale", 14.0, Color::srgb(0.88, 0.9, 0.92)),
@@ -274,13 +351,12 @@ fn spawn_editor_chrome(parent: &mut ChildSpawnerCommands) {
         });
 }
 
-/// 退出布局编辑并保存
+/// 关闭布局编辑（不写盘）
 pub fn exit_virtual_layout_editor(world: &mut World) {
     world.resource_mut::<VirtualLayoutEditorOpen>().0 = false;
     world.resource_mut::<VirtualLayoutEditorState>().selected = None;
     world.resource_mut::<VirtualLayoutEditorState>().drag_last = None;
-    let config = world.resource::<GameConfig>().clone();
-    save_config(&config);
+    world.resource_mut::<VirtualLayoutDraft>().dirty = false;
     let roots: Vec<Entity> = world
         .query_filtered::<Entity, With<VirtualLayoutEditorRoot>>()
         .iter(world)
@@ -290,6 +366,32 @@ pub fn exit_virtual_layout_editor(world: &mut World) {
             world.entity_mut(entity).despawn();
         }
     }
+}
+
+fn save_draft_to_config(world: &mut World) {
+    let layout = world.resource::<VirtualLayoutDraft>().layout.clone();
+    world.resource_mut::<GameConfig>().virtual_controls = layout;
+    world.resource_mut::<VirtualLayoutDraft>().dirty = false;
+    let config = world.resource::<GameConfig>().clone();
+    save_config(&config);
+}
+
+fn open_layout_confirm(
+    world: &mut World,
+    props: ConfirmProps,
+    on_complete: impl FnOnce(ConfirmResult, &mut World) + Send + 'static,
+) {
+    let mut state = SystemState::<(
+        ResMut<UiHost>,
+        ResMut<ConfirmDialogState>,
+        ResMut<TextPromptState>,
+        NonSendMut<PendingConfirmHandler>,
+    )>::new(world);
+    {
+        let (mut host, mut dialog, mut prompt, mut pending) = state.get_mut(world).unwrap();
+        host.open_confirm_then(props, &mut dialog, &mut prompt, &mut pending, on_complete);
+    }
+    state.apply(world);
 }
 
 fn scale_to_percent(scale: f32) -> f32 {
@@ -304,8 +406,10 @@ pub fn on_editor_control_click(
     mut click: On<Pointer<Click>>,
     editor_open: Res<VirtualLayoutEditorOpen>,
     mut editor: ResMut<VirtualLayoutEditorState>,
+    draft: Res<VirtualLayoutDraft>,
     controls: Query<&VirtualRemoteControl>,
     exit_buttons: Query<(), With<VirtualLayoutExitButton>>,
+    save_buttons: Query<(), With<VirtualLayoutSaveButton>>,
     reset_buttons: Query<(), With<VirtualLayoutResetButton>>,
     deselect_zones: Query<(), With<VirtualLayoutDeselectZone>>,
     scale_sliders: Query<(), With<VirtualLayoutScaleSlider>>,
@@ -316,19 +420,64 @@ pub fn on_editor_control_click(
     }
     if exit_buttons.get(click.entity).is_ok() {
         click.propagate(false);
+        let dirty = draft.dirty;
+        commands.queue(move |world: &mut World| {
+            if !dirty {
+                exit_virtual_layout_editor(world);
+                return;
+            }
+            let i18n = world.resource::<I18n>();
+            let props = ConfirmProps {
+                title: i18n.text("confirm.title"),
+                message: i18n.text("virtual.layout_unsaved_exit"),
+                confirm_text: i18n.text("virtual.layout_save_and_exit"),
+                cancel_text: i18n.text("button.cancel"),
+                extra: Some(ConfirmExtraButton {
+                    text: i18n.text("virtual.layout_discard_and_exit"),
+                    tag: EXTRA_DISCARD,
+                }),
+            };
+            open_layout_confirm(world, props, |result, world| match result {
+                ConfirmResult::Confirmed => {
+                    save_draft_to_config(world);
+                    exit_virtual_layout_editor(world);
+                }
+                ConfirmResult::Extra(EXTRA_DISCARD) => {
+                    exit_virtual_layout_editor(world);
+                }
+                _ => {}
+            });
+        });
+        return;
+    }
+    if save_buttons.get(click.entity).is_ok() {
+        click.propagate(false);
         commands.queue(|world: &mut World| {
-            exit_virtual_layout_editor(world);
+            save_draft_to_config(world);
         });
         return;
     }
     if reset_buttons.get(click.entity).is_ok() {
         click.propagate(false);
         commands.queue(|world: &mut World| {
-            world.resource_mut::<GameConfig>().virtual_controls = VirtualControlsLayout::DEFAULT;
-            world.resource_mut::<VirtualLayoutEditorState>().selected = None;
-            world.resource_mut::<VirtualLayoutEditorState>().drag_last = None;
-            let config = world.resource::<GameConfig>().clone();
-            save_config(&config);
+            let i18n = world.resource::<I18n>();
+            let props = ConfirmProps {
+                title: i18n.text("confirm.title"),
+                message: i18n.text("virtual.layout_reset_confirm"),
+                confirm_text: i18n.text("virtual.layout_reset"),
+                cancel_text: i18n.text("button.cancel"),
+                extra: None,
+            };
+            open_layout_confirm(world, props, |result, world| {
+                if !matches!(result, ConfirmResult::Confirmed) {
+                    return;
+                }
+                let mut draft = world.resource_mut::<VirtualLayoutDraft>();
+                draft.layout = VirtualControlsLayout::DEFAULT.clone();
+                draft.dirty = true;
+                world.resource_mut::<VirtualLayoutEditorState>().selected = None;
+                world.resource_mut::<VirtualLayoutEditorState>().drag_last = None;
+            });
         });
         return;
     }
@@ -354,7 +503,7 @@ pub fn on_editor_drag(
     mut drag: On<Pointer<Drag>>,
     editor_open: Res<VirtualLayoutEditorOpen>,
     mut editor: ResMut<VirtualLayoutEditorState>,
-    mut config: ResMut<GameConfig>,
+    mut draft: ResMut<VirtualLayoutDraft>,
     windows: Query<&Window, With<PrimaryWindow>>,
     controls: Query<&VirtualRemoteControl>,
     scale_sliders: Query<(&ComputedNode, &UiGlobalTransform), With<VirtualLayoutScaleSlider>>,
@@ -375,9 +524,10 @@ pub fn on_editor_drag(
         }
         let percent =
             ((drag.pointer_location.position.x - bounds.min.x) / bounds.width()).clamp(0.0, 1.0);
-        let mut t = config.virtual_controls.transform(selected);
+        let mut t = draft.layout.transform(selected);
         t.scale = percent_to_scale(percent);
-        config.virtual_controls.set_transform(selected, t);
+        draft.layout.set_transform(selected, t);
+        draft.dirty = true;
         return;
     }
 
@@ -406,7 +556,7 @@ pub fn on_editor_drag(
     let dx = delta.x / height_unit;
     let dy = delta.y / height_unit;
 
-    let mut transform = config.virtual_controls.transform(control.0);
+    let mut transform = draft.layout.transform(control.0);
     match control.0.anchor() {
         VirtualControlAnchor::BottomLeft => {
             transform.offset_x = (transform.offset_x + dx).max(0.0);
@@ -425,7 +575,8 @@ pub fn on_editor_drag(
             transform.offset_y = (transform.offset_y - dy).max(0.0);
         }
     }
-    config.virtual_controls.set_transform(control.0, transform);
+    draft.layout.set_transform(control.0, transform);
+    draft.dirty = true;
 }
 
 pub fn on_editor_release(
@@ -443,7 +594,7 @@ pub fn on_editor_scale_press(
     mut press: On<Pointer<Press>>,
     editor_open: Res<VirtualLayoutEditorOpen>,
     editor: Res<VirtualLayoutEditorState>,
-    mut config: ResMut<GameConfig>,
+    mut draft: ResMut<VirtualLayoutDraft>,
     scale_sliders: Query<(&ComputedNode, &UiGlobalTransform), With<VirtualLayoutScaleSlider>>,
 ) {
     if !editor_open.0 || press.event.button != PointerButton::Primary {
@@ -462,16 +613,17 @@ pub fn on_editor_scale_press(
     }
     let percent =
         ((press.pointer_location.position.x - bounds.min.x) / bounds.width()).clamp(0.0, 1.0);
-    let mut t = config.virtual_controls.transform(selected);
+    let mut t = draft.layout.transform(selected);
     t.scale = percent_to_scale(percent);
-    config.virtual_controls.set_transform(selected, t);
+    draft.layout.set_transform(selected, t);
+    draft.dirty = true;
 }
 
 pub fn update_layout_editor_ui(
     editor_open: Res<VirtualLayoutEditorOpen>,
     editor: Res<VirtualLayoutEditorState>,
     touch: Res<TouchProfile>,
-    config: Res<GameConfig>,
+    draft: Res<VirtualLayoutDraft>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut controls: Query<
         (
@@ -512,7 +664,7 @@ pub fn update_layout_editor_ui(
     for (_entity, control, mut node, mut bg, mut visibility, mut z, children) in &mut controls {
         *visibility = Visibility::Visible;
         *z = GlobalZIndex(EDITOR_Z + 1);
-        let transform = config.virtual_controls.transform(control.0);
+        let transform = draft.layout.transform(control.0);
         apply_layout_to_node(control.0, transform, height_unit, &mut node);
         *bg = if editor.selected == Some(control.0) {
             Color::srgba(0.55, 0.72, 0.95, 0.75).into()
@@ -533,7 +685,7 @@ pub fn update_layout_editor_ui(
 
     let fill_percent = editor
         .selected
-        .map(|id| scale_to_percent(config.virtual_controls.transform(id).scale))
+        .map(|id| scale_to_percent(draft.layout.transform(id).scale))
         .unwrap_or(0.0);
     for mut fill in &mut fills {
         fill.width = Val::Percent(fill_percent);
