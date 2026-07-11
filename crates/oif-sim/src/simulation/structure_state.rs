@@ -545,6 +545,10 @@ impl StructureState {
             .get(&pos)
             .and_then(|id| self.structures.get(id))
     }
+
+    pub(super) fn structure_by_id(&self, id: StructureId) -> Option<&Structure> {
+        self.structures.get(&id)
+    }
 }
 
 pub fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {

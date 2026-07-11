@@ -22,6 +22,7 @@ use super::structures::{
     execute_structure_moves_with_pushers, merge_structure_movement_plan, MovementInfluenceCache,
     StructureMove,
 };
+use super::suction::SuctionLinks;
 
 /// 单回合模拟输出：运动 DTO、通电表现与行为火花
 #[derive(Clone)]
@@ -108,6 +109,8 @@ pub fn simulate_turn(
         }
     }
 
+    let suction = SuctionLinks::rebuild(world, structure_state, &powered_devices);
+
     // —— 阶段 2 运动标记：重力 + 通电设备，再 merge ——
     let hard_pusher_head_occupancy = pusher_state.hard_head_occupancy(world);
     let mut movement_plan = mark_gravity_phase(
@@ -115,6 +118,7 @@ pub fn simulate_turn(
         structure_state,
         &HashSet::new(),
         &hard_pusher_head_occupancy,
+        &suction,
     );
     sample.gravity_ms = mark_elapsed_ms(&mut mark);
     if let Some(sim_log) = sim_log.as_mut() {
@@ -123,8 +127,13 @@ pub fn simulate_turn(
 
     sample.marker_before_move_ms = mark_elapsed_ms(&mut mark);
 
-    let device_movement_plan =
-        mark_structure_movement_phase(world, &powered_devices, structure_state, pusher_state);
+    let device_movement_plan = mark_structure_movement_phase(
+        world,
+        &powered_devices,
+        structure_state,
+        pusher_state,
+        &suction,
+    );
     if let Some(sim_log) = sim_log.as_mut() {
         log_movement_plan(turn, sim_log, world, "devices", &device_movement_plan);
     }
@@ -147,6 +156,7 @@ pub fn simulate_turn(
         structure_state,
         movement_influence,
         &hard_pusher_head_occupancy,
+        &suction,
     );
     // 粘头/空头推动只有执行成功才提交伸出/收回
     for (pos, animation) in &pusher_animations {

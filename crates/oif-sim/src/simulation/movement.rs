@@ -9,6 +9,7 @@ use super::structure_state::StructureState;
 use super::structures::{
     can_translate_structure, MovementMark, PusherActor, PusherAnimationKind, StructureMove,
 };
+use super::suction::SuctionLinks;
 
 /// 活塞/拦截器伸出状态，按方块运行时 ID 索引（随实体移动，不跟格子走）
 #[derive(Default, Clone)]
@@ -138,6 +139,7 @@ pub(super) fn mark_structure_movement_phase(
     powered_devices: &HashSet<IVec3>,
     structures: &StructureState,
     pusher_state: &mut PusherState,
+    suction: &SuctionLinks,
 ) -> Vec<StructureMove> {
     let mut movers: Vec<(IVec3, MovementRule)> = world
         .blocks
@@ -159,7 +161,7 @@ pub(super) fn mark_structure_movement_phase(
         match mover {
             MovementRule::Translate { source, offset } => {
                 if let Some(movement) =
-                    mark_conveyor_movement(world, structures, pos, source, offset)
+                    mark_conveyor_movement(world, structures, pos, source, offset, suction)
                 {
                     if let Some(source_id) = source_id {
                         moves.push(movement.with_source(source_id, pos));
@@ -167,14 +169,18 @@ pub(super) fn mark_structure_movement_phase(
                 }
             }
             MovementRule::Lift { range } => {
-                if let Some(movement) = mark_lift_structure(world, structures, pos, range) {
+                if let Some(movement) =
+                    mark_lift_structure(world, structures, pos, range, suction)
+                {
                     if let Some(source_id) = source_id {
                         moves.push(movement.with_source(source_id, pos));
                     }
                 }
             }
             MovementRule::Rotate { clockwise } => {
-                if let Some(movement) = mark_rotate_material_structure(structures, pos, clockwise) {
+                if let Some(movement) =
+                    mark_rotate_material_structure(structures, pos, clockwise, suction)
+                {
                     if let Some(source_id) = source_id {
                         moves.push(movement.with_source(source_id, pos));
                     }
@@ -200,6 +206,7 @@ pub(super) fn mark_structure_movement_phase(
                     offset,
                     desired_extended,
                     &mut claimed_heads,
+                    suction,
                 ) {
                     moves.push(movement);
                 }
@@ -215,6 +222,7 @@ fn mark_conveyor_movement(
     pos: IVec3,
     source: IVec3,
     offset: IVec3,
+    suction: &SuctionLinks,
 ) -> Option<StructureMove> {
     let target = pos + source;
     if let Some(movement) = mark_structure_translate(
@@ -224,16 +232,17 @@ fn mark_conveyor_movement(
         target,
         offset,
         MovementMark::Conveyor,
+        suction,
     ) {
-        if can_translate_structure(world, movement.structure(), offset, structures) {
+        if can_translate_structure(world, movement.structure(), offset, structures, suction) {
             return Some(movement);
         }
     } else if !world.is_occupied(target) {
         return None;
     }
 
-    let structure = structures.active_structure_at(pos, -offset)?;
-    if !can_translate_structure(world, &structure, -offset, structures) {
+    let structure = structures.linked_pushable_at(suction, pos, -offset)?;
+    if !can_translate_structure(world, &structure, -offset, structures, suction) {
         return None;
     }
     Some(StructureMove::translate_marked(
@@ -253,6 +262,7 @@ fn mark_pusher_movement(
     offset: IVec3,
     desired_extended: bool,
     claimed_heads: &mut HashSet<IVec3>,
+    suction: &SuctionLinks,
 ) -> Option<StructureMove> {
     let id = world.blocks.get(&pos)?.id;
     // 粘头只在开局 rebuild 写入；运行时新建条目视为不粘（不应靠当面有块临时粘上）
@@ -277,6 +287,7 @@ fn mark_pusher_movement(
             pos + source,
             offset,
             MovementMark::Push,
+            suction,
         )
     } else if entry.bound_front {
         // 收回：仅开局已粘的才拉回头前一格的结构
@@ -287,6 +298,7 @@ fn mark_pusher_movement(
             pos + source + offset,
             -offset,
             MovementMark::Push,
+            suction,
         )
     } else {
         None
@@ -319,7 +331,7 @@ fn mark_pusher_movement(
         claimed_heads.remove(&head);
     }
 
-    // 空头伸出/收回：对本结构发 Push 零位移标签，执行时优先于重力并抑制自身下落 fallback
+    // 空头伸出/收回：对本结构发 Push 零位移标签，执行时优先于重力并抑制自身下落
     let structure_id = structures.id_at(pos)?;
     let structure = structures.structure_positions(structure_id)?.clone();
     Some(
@@ -402,11 +414,12 @@ fn mark_structure_translate(
     source: IVec3,
     offset: IVec3,
     mark: MovementMark,
+    suction: &SuctionLinks,
 ) -> Option<StructureMove> {
     if world.is_material_at(source) {
         let structure_id = structures.id_at(source)?;
         return structures
-            .pushable_structure_at(source, offset)
+            .linked_pushable_at(suction, source, offset)
             .map(|structure| {
                 StructureMove::translate_marked(structure_id, structure, offset, mark)
             });
@@ -421,12 +434,14 @@ fn mark_structure_translate(
             )
         })
     {
-        structures.pusher_target_structure(world, actor, source, offset)?
+        // 活塞子集后再经吸盘扩展（子集不膨胀为整结构）
+        let subset = structures.pusher_target_structure(world, actor, source, offset)?;
+        structures.linked_expand_pusher_subset(suction, &subset, offset)?
     } else {
         if structures.structure_contains(source, actor) {
             return None;
         }
-        structures.active_structure_at(source, offset)?
+        structures.linked_pushable_at(suction, source, offset)?
     };
     Some(StructureMove::translate_marked(
         structure_id,
@@ -441,13 +456,14 @@ fn mark_lift_structure(
     structures: &StructureState,
     pos: IVec3,
     range: i32,
+    suction: &SuctionLinks,
 ) -> Option<StructureMove> {
     let source = (1..=range)
         .map(|height| pos + IVec3::Y * height)
         .find(|candidate| {
             world.is_material_at(*candidate)
                 || structures
-                    .active_structure_at(*candidate, IVec3::Y)
+                    .linked_pushable_at(suction, *candidate, IVec3::Y)
                     .is_some()
         })?;
 
@@ -458,6 +474,7 @@ fn mark_lift_structure(
         source,
         IVec3::Y,
         MovementMark::Vertical,
+        suction,
     )
 }
 
@@ -465,10 +482,15 @@ fn mark_rotate_material_structure(
     structures: &StructureState,
     pos: IVec3,
     clockwise: bool,
+    suction: &SuctionLinks,
 ) -> Option<StructureMove> {
     let source = pos + IVec3::Y;
     let structure_id = structures.id_at(source)?;
-    let structure = structures.pushable_structure_at(source, IVec3::ZERO)?;
+    // 粘连组含工厂时不允许旋转
+    if structures.linked_contains_factory(suction, source) {
+        return None;
+    }
+    let structure = structures.linked_pushable_at(suction, source, IVec3::ZERO)?;
     Some(StructureMove::rotate(
         structure_id,
         structure,
@@ -516,7 +538,7 @@ mod tests {
         let mut pusher_state = PusherState::rebuild_from_world(&world);
         let powered = HashSet::new();
         let device_moves =
-            mark_structure_movement_phase(&world, &powered, &structures, &mut pusher_state);
+            mark_structure_movement_phase(&world, &powered, &structures, &mut pusher_state, &SuctionLinks::default());
         assert_eq!(device_moves.len(), 1, "only one bare extend may be marked");
         assert!(pusher_state.entries.values().all(|e| !e.extended));
 
@@ -530,6 +552,7 @@ mod tests {
             &mut structures,
             &mut cache,
             &heads,
+            &SuctionLinks::default(),
         );
         for (pos, animation) in &pusher_anims {
             if let Some(block) = world.blocks.get(pos) {
@@ -603,7 +626,7 @@ mod tests {
         let mut pusher_state = PusherState::rebuild_from_world(&world);
         let powered = HashSet::new();
         let device_moves =
-            mark_structure_movement_phase(&world, &powered, &structures, &mut pusher_state);
+            mark_structure_movement_phase(&world, &powered, &structures, &mut pusher_state, &SuctionLinks::default());
         assert_eq!(device_moves.len(), 2);
         // 标记阶段尚未提交伸出
         assert!(pusher_state.entries.values().all(|e| !e.extended));
@@ -618,6 +641,7 @@ mod tests {
             &mut structures,
             &mut cache,
             &heads,
+            &SuctionLinks::default(),
         );
         for (pos, animation) in &pusher_anims {
             if let Some(block) = world.blocks.get(pos) {
@@ -665,7 +689,7 @@ mod tests {
         structures.rebuild_for_simulation(&world);
         let mut pusher_state = PusherState::rebuild_from_world(&world);
         let powered = HashSet::new();
-        let moves = mark_structure_movement_phase(&world, &powered, &structures, &mut pusher_state);
+        let moves = mark_structure_movement_phase(&world, &powered, &structures, &mut pusher_state, &SuctionLinks::default());
 
         assert!(moves.is_empty());
         let blocker_id = world.blocks.get(&blocker).unwrap().id;
@@ -681,7 +705,7 @@ mod tests {
         pusher_state: &mut PusherState,
         powered: &HashSet<IVec3>,
     ) {
-        let device_moves = mark_structure_movement_phase(world, powered, structures, pusher_state);
+        let device_moves = mark_structure_movement_phase(world, powered, structures, pusher_state, &SuctionLinks::default());
         if device_moves.is_empty() {
             return;
         }
@@ -690,7 +714,7 @@ mod tests {
         let plan =
             merge_structure_movement_plan(vec![], device_moves, &mut cache, structures, world);
         let (_anims, pusher_anims) =
-            execute_structure_moves_with_pushers(world, plan, structures, &mut cache, &heads);
+            execute_structure_moves_with_pushers(world, plan, structures, &mut cache, &heads, &SuctionLinks::default());
         for (pos, animation) in &pusher_anims {
             if let Some(block) = world.blocks.get(pos) {
                 pusher_state.set_extended(block.id, animation.to_extension > 0.5);

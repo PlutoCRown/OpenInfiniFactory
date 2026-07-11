@@ -53,6 +53,7 @@ pub enum ModelMesh {
     MirrorFace,
     VerticalMirrorFace,
     SplitterFace,
+    SuctionCup,
 }
 
 /// 方块模型材质枚举
@@ -87,6 +88,7 @@ pub enum ModelMaterial {
     SystemAccent,
     TeleportIn,
     TeleportOut,
+    SuctionCup,
 }
 
 /// 方块模型零件

@@ -8,6 +8,7 @@ use crate::world::grid::{MaterialFace, WorldBlocks};
 
 use super::motion::{BlockMotion, BlockMotionKind, PusherMotion};
 use super::structure_state::{StructureId, StructureState};
+use super::suction::SuctionLinks;
 
 pub(crate) use super::structure_state::material_structure;
 
@@ -16,6 +17,7 @@ pub(super) fn gravity_moves(
     structures: &mut StructureState,
     skip_factory_positions: &HashSet<IVec3>,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
+    suction: &SuctionLinks,
 ) -> Vec<StructureMove> {
     let ids = structures.gravity_structure_ids();
     let mut moves = Vec::new();
@@ -32,7 +34,13 @@ pub(super) fn gravity_moves(
             continue;
         }
 
-        let structure = positions.clone();
+        // 经吸盘扩展；粘到固定结构则整体不可落（种子为完整结构时并集等价）
+        let Some(structure) =
+            structures.linked_expand_pusher_subset(suction, positions, IVec3::NEG_Y)
+        else {
+            handled.extend(positions.iter().copied());
+            continue;
+        };
         handled.extend(structure.iter().copied());
 
         if structure
@@ -48,15 +56,29 @@ pub(super) fn gravity_moves(
             continue;
         }
         if structure_supported_by_lifter(world, &structure) {
-            structures.clear_gravity_support(id);
+            for pos in &structure {
+                if let Some(sid) = structures.id_at(*pos) {
+                    structures.clear_gravity_support(sid);
+                }
+            }
             continue;
         }
         if structures.gravity_support_valid(id, world, hard_pusher_head_occupancy) {
             continue;
         }
         // 整块结构一起下落；不可拆开，否则焊接材料会被撕开并丢掉焊缝
-        if can_move_gravity_structure(world, &structure, structures, hard_pusher_head_occupancy) {
-            structures.clear_gravity_support(id);
+        if can_move_gravity_structure(
+            world,
+            &structure,
+            structures,
+            hard_pusher_head_occupancy,
+            suction,
+        ) {
+            for pos in &structure {
+                if let Some(sid) = structures.id_at(*pos) {
+                    structures.clear_gravity_support(sid);
+                }
+            }
             moves.push(StructureMove::translate_marked(
                 id,
                 structure,
@@ -386,6 +408,7 @@ pub(super) fn execute_structure_moves_with_pushers(
     structures: &mut StructureState,
     influence_cache: &mut MovementInfluenceCache,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
+    suction: &SuctionLinks,
 ) -> (
     HashMap<IVec3, BlockMotion>,
     HashMap<IVec3, PusherMotion>,
@@ -426,6 +449,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                     offset,
                     structures,
                     movement_expansion_mode(mark, source),
+                    suction,
                 ) else {
                     continue;
                 };
@@ -563,6 +587,7 @@ fn can_move_gravity_structure(
     structure: &HashSet<IVec3>,
     structures: &StructureState,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
+    suction: &SuctionLinks,
 ) -> bool {
     if hard_pusher_head_blocked_below(world, structure, hard_pusher_head_occupancy) {
         return false;
@@ -573,6 +598,7 @@ fn can_move_gravity_structure(
         IVec3::NEG_Y,
         structures,
         MovementExpansionMode::Gravity,
+        suction,
     ) else {
         return false;
     };
@@ -623,10 +649,14 @@ fn expanded_move_structure(
     offset: IVec3,
     structures: &StructureState,
     mode: MovementExpansionMode,
+    suction: &SuctionLinks,
 ) -> Option<HashSet<IVec3>> {
+    // 先经吸盘并集；种子内已有结构 id 不膨胀，只并入其它粘连结构
+    let structure = structures.linked_expand_pusher_subset(suction, structure, offset)?;
+
     if offset.abs().element_sum() != 1 {
-        return can_move_structure_without_push(world, structure, offset)
-            .then(|| structure.clone());
+        return can_move_structure_without_push(world, &structure, offset)
+            .then_some(structure);
     }
 
     let mut expanded = structure.clone();
@@ -640,7 +670,7 @@ fn expanded_move_structure(
             continue;
         }
 
-        let pushed = pushable_structure_at(world, structures, target, offset)?;
+        let pushed = pushable_structure_at(world, structures, target, offset, suction)?;
         if mode == MovementExpansionMode::Gravity && structure_supported_by_lifter(world, &pushed) {
             return None;
         }
@@ -665,6 +695,7 @@ pub(super) fn can_translate_structure(
     structure: &HashSet<IVec3>,
     offset: IVec3,
     structures: &StructureState,
+    suction: &SuctionLinks,
 ) -> bool {
     expanded_move_structure(
         world,
@@ -672,6 +703,7 @@ pub(super) fn can_translate_structure(
         offset,
         structures,
         MovementExpansionMode::Normal,
+        suction,
     )
     .is_some()
 }
@@ -695,10 +727,11 @@ fn pushable_structure_at(
     structures: &StructureState,
     pos: IVec3,
     offset: IVec3,
+    suction: &SuctionLinks,
 ) -> Option<HashSet<IVec3>> {
     let block = world.blocks.get(&pos)?;
     if block.kind.is_material() || block.kind.is_factory() {
-        return structures.pushable_structure_at(pos, offset);
+        return structures.linked_pushable_at(suction, pos, offset);
     }
     None
 }
@@ -885,6 +918,7 @@ mod tests {
             &mut structures,
             &mut cache,
             &HashSet::new(),
+            &SuctionLinks::default(),
         );
 
         assert!(!world.is_material_at(material));
@@ -922,6 +956,7 @@ mod tests {
             &mut structures,
             &mut cache,
             &HashSet::new(),
+            &SuctionLinks::default(),
         );
 
         assert!(!world.is_material_at(a));
@@ -960,6 +995,7 @@ mod tests {
             &mut structures,
             &mut cache,
             &HashSet::new(),
+            &SuctionLinks::default(),
         );
 
         assert!(!world.is_material_at(a));

@@ -10,8 +10,10 @@ pub mod signals;
 pub mod stats;
 pub mod structure_state;
 pub mod structures;
+mod suction;
 
 pub use behaviors::{LaserBeam, LaserBeamStop};
+pub use suction::SuctionLinks;
 
 use glam::IVec3;
 

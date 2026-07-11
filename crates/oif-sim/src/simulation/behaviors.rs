@@ -699,7 +699,8 @@ mod tests {
             &world,
             &structure,
             IVec3::X,
-            &state
+            &state,
+            &crate::simulation::SuctionLinks::default(),
         ));
     }
 

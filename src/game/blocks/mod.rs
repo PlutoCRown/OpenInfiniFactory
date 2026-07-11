@@ -36,6 +36,7 @@ pub mod rotator;
 pub mod splitter;
 pub mod stamper;
 pub mod stone;
+pub mod suction_cup;
 pub mod teleport_entrance;
 pub mod teleport_exit;
 pub mod vertical_mirror;
