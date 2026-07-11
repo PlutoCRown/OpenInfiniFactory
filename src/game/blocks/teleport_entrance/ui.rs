@@ -8,8 +8,9 @@ use super::TeleportEntranceBlock;
 use crate::game::block_editing::widgets::{
     position_dropdown_from_trigger, spawn_labeled_panel_button, spawn_text_dropdown_toggle,
 };
+use crate::game::edit_history::{apply_teleport_pair_with_history, EditHistory};
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
-use crate::game::block_editing::{BlockEditContext, OpenBlockPanelDropdown};
+use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
 use crate::game::blocks::BlockKind;
@@ -130,22 +131,19 @@ pub fn dispatch_teleport_action(
     world: &mut PlayingWorldParams,
     solution_state: &mut SolutionState,
     open_dropdown: &mut OpenBlockPanelDropdown,
+    edit_history: &mut EditHistory,
 ) {
     match action {
         TeleportAction::StartRename => {
             debug_assert!(false, "rename is handled via text prompt");
         }
         TeleportAction::TogglePair => {
-            let mut ctx =
-                BlockEditContext::new(pos, &mut world.world, solution_state, open_dropdown);
-            ctx.toggle_dropdown(UiPanelId::Teleport, PAIR_SLOT);
+            open_dropdown.toggle(UiPanelId::Teleport, PAIR_SLOT);
         }
         TeleportAction::SetPair(pair) => {
-            let mut ctx =
-                BlockEditContext::new(pos, &mut world.world, solution_state, open_dropdown);
-            ctx.world.set_teleport_pair(pos, pair);
-            ctx.close_dropdown();
-            ctx.mark_dirty();
+            apply_teleport_pair_with_history(edit_history, &mut world.world, pos, pair);
+            open_dropdown.close();
+            solution_state.dirty = true;
             refresh_world_after_edit(world, pos);
         }
     }
@@ -184,6 +182,7 @@ fn on_click(
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut pending_rename: ResMut<PendingTeleportRename>,
     mut solution_state: ResMut<SolutionState>,
+    mut edit_history: ResMut<EditHistory>,
     mut world: PlayingWorldParams,
     actions: Query<&TeleportAction>,
 ) {
@@ -211,6 +210,7 @@ fn on_click(
         &mut world,
         &mut solution_state,
         &mut open_dropdown,
+        &mut edit_history,
     );
 }
 

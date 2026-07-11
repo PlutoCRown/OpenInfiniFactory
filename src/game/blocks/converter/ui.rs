@@ -4,12 +4,13 @@ use bevy::window::PrimaryWindow;
 
 use super::ConverterBlock;
 
+use crate::game::edit_history::{apply_block_settings_with_history, EditHistory};
 use crate::game::block_editing::widgets::{
     position_dropdown_from_trigger, spawn_material_icon_list, spawn_material_icon_toggle,
     update_material_icon,
 };
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
-use crate::game::block_editing::{BlockEditContext, OpenBlockPanelDropdown};
+use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
 use crate::game::blocks::MaterialKind;
@@ -180,6 +181,7 @@ fn on_click(
     ui_runtime: Res<UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut solution_state: ResMut<SolutionState>,
+    mut edit_history: ResMut<EditHistory>,
     mut world: PlayingWorldParams,
     actions: Query<&ConverterAction>,
 ) {
@@ -197,39 +199,35 @@ fn on_click(
         return;
     };
 
-    let mut ctx = BlockEditContext::new(
-        pos,
-        &mut world.world,
-        &mut solution_state,
-        &mut open_dropdown,
-    );
-    let mut settings = ctx.world.converter_settings(pos);
+    let mut settings = world.world.converter_settings(pos);
 
     let changed = match action {
         ConverterAction::ToggleInput => {
-            ctx.toggle_dropdown(UiPanelId::Converter, INPUT_SLOT);
+            open_dropdown.toggle(UiPanelId::Converter, INPUT_SLOT);
             return;
         }
         ConverterAction::ToggleOutput => {
-            ctx.toggle_dropdown(UiPanelId::Converter, OUTPUT_SLOT);
+            open_dropdown.toggle(UiPanelId::Converter, OUTPUT_SLOT);
             return;
         }
         ConverterAction::SetInput(material) => {
             settings.input = material;
             settings.mode = ConverterMode::SpecificInput;
-            ctx.close_dropdown();
+            open_dropdown.close();
             true
         }
         ConverterAction::SetOutput(material) => {
             settings.output = material;
-            ctx.close_dropdown();
+            open_dropdown.close();
             true
         }
     };
 
     if changed {
-        ctx.world.set_converter_settings(pos, settings);
-        ctx.mark_dirty();
+        apply_block_settings_with_history(&mut edit_history, &mut world.world, pos, |blocks| {
+            blocks.set_converter_settings(pos, settings);
+        });
+        solution_state.dirty = true;
         refresh_world_after_edit(&mut world, pos);
     }
 }

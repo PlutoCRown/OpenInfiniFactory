@@ -3,6 +3,9 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
 use crate::game::blocks::{BlockData, BlockKind};
+use crate::game::edit_history::{
+    build_cell_patch, build_relocate_patch, capture_welds_for_ids, weld_diff, EditHistory,
+};
 use crate::game::player::controller::{
     player_intersects_block, teleport_player_preserve_offset, FlyCamera,
 };
@@ -31,8 +34,8 @@ use crate::game::world::rendering::{
     block_face_highlight_transform, despawn_edit_previews, rebuild_world_for_debug_state,
     rebuild_world_with_animations, rebuild_world_with_animations_for_debug_state,
     spawn_block_preview, spawn_block_with_animation, spawn_delete_bounds_preview,
-    spawn_edit_preview, AimFaceHighlight, BlockEntity, BlockEntityLayer, EditPreview, EditPreviewKind, HoverMarker,
-    HoverStructureBounds, WorldRenderAssets,
+    spawn_edit_preview, AimFaceHighlight, BlockEntity, BlockEntityLayer, EditPreview,
+    EditPreviewKind, HoverMarker, HoverStructureBounds, WorldRenderAssets,
 };
 use crate::scene::{refresh_edit_changes, BlockEntityIndex};
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
@@ -174,6 +177,7 @@ pub fn placement_input(
     mut commands: Commands,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
+    mut edit_history: ResMut<EditHistory>,
     mut inventory: ResMut<InventoryItems>,
     config: Res<GameConfig>,
     builder_mode: Res<BuilderMode>,
@@ -261,6 +265,7 @@ pub fn placement_input(
             place_button,
             &mut placement,
             &mut world,
+            &mut edit_history,
             &block_entities,
             &mut commands,
             &mut meshes,
@@ -292,9 +297,11 @@ pub fn placement_input(
         && keys.just_pressed(config.key_bindings.alternate.key_code())
     {
         if let Some(pos) = current_target_pos {
+            edit_history.flush_pending_rotation();
             if alternate_block_at(
                 pos,
                 &mut world,
+                &mut edit_history,
                 &block_entities,
                 &mut commands,
                 &mut meshes,
@@ -321,6 +328,7 @@ pub fn placement_input(
                 }
             }
         } else if let Some(pos) = current_target_pos {
+            edit_history.prepare_rotation(&world, pos);
             if rotate_block_at(
                 pos,
                 reverse_rotation,
@@ -333,6 +341,9 @@ pub fn placement_input(
                 &mut structure_state,
                 &mut block_index,
             ) {
+                if let Some(facing) = world.blocks.get(&pos).map(|block| block.facing) {
+                    edit_history.finish_rotation(pos, facing);
+                }
                 solution_state.dirty = true;
             } else if selected_place_block(&inventory, *builder_mode, &placement)
                 .is_some_and(|block| block.kind.is_directional())
@@ -430,6 +441,7 @@ pub fn placement_input(
                     &mut world,
                     *builder_mode,
                     player_pos,
+                    &mut edit_history,
                     &mut commands,
                     &mut meshes,
                     &render_assets,
@@ -561,6 +573,7 @@ fn handle_selection_area_input(
     place_button: MouseButton,
     placement: &mut PlacementState,
     world: &mut WorldBlocks,
+    edit_history: &mut EditHistory,
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -585,6 +598,7 @@ fn handle_selection_area_input(
                 if let Some(bounds) = placement.selection.bounds {
                     if move_selection(
                         world,
+                        edit_history,
                         block_entities,
                         commands,
                         meshes,
@@ -660,6 +674,7 @@ fn strongest_axis(delta: IVec3) -> SelectionAxis {
 
 fn move_selection(
     world: &mut WorldBlocks,
+    edit_history: &mut EditHistory,
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -694,12 +709,19 @@ fn move_selection(
         return false;
     }
 
-    // 焊接按 BlockId：整段一起搬时无需改写；只断掉选区边界焊缝
     let selected_ids: std::collections::HashSet<_> = selected
         .iter()
         .map(|(_, block)| block.id)
         .filter(|id| !id.is_none())
         .collect();
+    let welds_before = capture_welds_for_ids(world, &selected_ids);
+    let moves: Vec<(IVec3, IVec3)> = selected
+        .iter()
+        .map(|(pos, _)| (*pos, *pos + offset))
+        .collect();
+    let mut patch = build_relocate_patch(world, &moves);
+
+    // 焊接按 BlockId：整段一起搬时无需改写；只断掉选区边界焊缝
     let weld_count = world.material_welds.len();
     world
         .material_welds
@@ -728,11 +750,17 @@ fn move_selection(
         }
     }
 
-    let moves: Vec<_> = selected
+    let relocate_moves: Vec<(IVec3, IVec3, BlockData)> = selected
         .iter()
         .map(|(pos, block)| (*pos, *pos + offset, *block))
         .collect();
-    world.relocate_blocks(moves);
+    world.relocate_blocks(relocate_moves);
+
+    let welds_after = capture_welds_for_ids(world, &selected_ids);
+    let (welds_add, welds_remove) = weld_diff(&welds_before, &welds_after);
+    patch.welds_add = welds_add;
+    patch.welds_remove = welds_remove;
+    edit_history.record(patch);
 
     let mut animations = std::collections::HashMap::new();
     for (pos, block) in selected {
@@ -801,6 +829,7 @@ fn refresh_edit_generated_markers(world: &mut WorldBlocks) {
 fn alternate_block_at(
     pos: IVec3,
     world: &mut WorldBlocks,
+    edit_history: &mut EditHistory,
     block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -809,21 +838,27 @@ fn alternate_block_at(
     structure_state: &mut StructureState,
     block_index: &mut BlockEntityIndex,
 ) -> bool {
-    let Some(block) = world.blocks.get_mut(&pos) else {
-        return false;
-    };
-    let Some(kind) = block.kind.alternate() else {
-        return false;
-    };
+    let patch = build_cell_patch(world, &[pos], |world| {
+        let Some(block) = world.blocks.get_mut(&pos) else {
+            return;
+        };
+        let Some(kind) = block.kind.alternate() else {
+            return;
+        };
 
-    if matches!(
-        (block.kind, kind),
-        (BlockKind::Conveyor, BlockKind::ReverseConveyor)
-            | (BlockKind::ReverseConveyor, BlockKind::Conveyor)
-    ) {
-        block.facing = block.facing.rotate().rotate();
+        if matches!(
+            (block.kind, kind),
+            (BlockKind::Conveyor, BlockKind::ReverseConveyor)
+                | (BlockKind::ReverseConveyor, BlockKind::Conveyor)
+        ) {
+            block.facing = block.facing.rotate().rotate();
+        }
+        block.kind = kind;
+    });
+    if patch.is_empty() {
+        return false;
     }
-    block.kind = kind;
+    edit_history.record(patch);
     refresh_edit_generated_markers(world);
     despawn_block_entities(commands, block_entities, block_index);
     rebuild_world_for_debug_state(
@@ -975,6 +1010,7 @@ fn commit_edit_gesture(
     world: &mut WorldBlocks,
     builder_mode: BuilderMode,
     player_pos: Option<Vec3>,
+    edit_history: &mut EditHistory,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
@@ -982,20 +1018,25 @@ fn commit_edit_gesture(
     structure_state: &mut StructureState,
     block_index: &mut BlockEntityIndex,
 ) -> bool {
-    let mut changed_positions = std::collections::HashSet::new();
-    match gesture.kind {
+    let patch = match gesture.kind {
         EditGestureKind::Place { block } => {
             let positions = selection_positions(
                 config.place_selection_mode,
                 gesture.start,
                 current_place_at.unwrap_or(gesture.start),
             );
-            for pos in &positions {
-                if can_place_block_at(*pos, block, builder_mode, world, player_pos) {
-                    world.insert(*pos, block);
-                    changed_positions.insert(*pos);
-                }
+            let positions: Vec<IVec3> = positions
+                .into_iter()
+                .filter(|pos| can_place_block_at(*pos, block, builder_mode, world, player_pos))
+                .collect();
+            if positions.is_empty() {
+                return false;
             }
+            build_cell_patch(world, &positions, |world| {
+                for pos in &positions {
+                    world.insert(*pos, block);
+                }
+            })
         }
         EditGestureKind::Delete => {
             let positions = selection_positions(
@@ -1003,16 +1044,25 @@ fn commit_edit_gesture(
                 gesture.start,
                 current_delete_at.unwrap_or(gesture.start),
             );
-            for pos in &positions {
-                if delete_block_at(*pos, builder_mode, world) {
-                    changed_positions.insert(*pos);
-                }
+            let positions: Vec<IVec3> = positions
+                .into_iter()
+                .filter(|pos| can_delete_at(*pos, builder_mode, world))
+                .collect();
+            if positions.is_empty() {
+                return false;
             }
+            build_cell_patch(world, &positions, |world| {
+                for pos in &positions {
+                    delete_block_at(*pos, builder_mode, world);
+                }
+            })
         }
-    }
-    if changed_positions.is_empty() {
+    };
+    if patch.is_empty() {
         return false;
     }
+    let changed_positions = patch.affected_positions();
+    edit_history.record(patch);
     refresh_edit_generated_markers(world);
     refresh_edit_changes(
         commands,

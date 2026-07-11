@@ -1,6 +1,7 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
+use crate::game::edit_history::EditHistory;
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::runtime::{PendingGeneratedMaterials, SignalNetworkCache};
@@ -29,6 +30,7 @@ pub struct SimulationControlDeps<'w> {
     movement_influence: ResMut<'w, MovementInfluenceCache>,
     pusher_state: ResMut<'w, PusherState>,
     world: ResMut<'w, WorldBlocks>,
+    edit_history: ResMut<'w, EditHistory>,
     turn_cache: ResMut<'w, TurnCache>,
     worker: Option<Res<'w, SimulationWorker>>,
     presentation: ResMut<'w, crate::game::simulation::runtime::SimulationPresentationState>,
@@ -67,6 +69,7 @@ pub fn simulation_controls(
             &deps.world,
             &mut deps.structure_state,
             &mut deps.pusher_state,
+            &mut deps.edit_history,
         );
         deps.presentation.committed_world = deps.world.clone();
         deps.presentation.last_render_powered_wires.clear();
@@ -150,7 +153,9 @@ fn start_simulation_state(
     world: &WorldBlocks,
     structure_state: &mut StructureState,
     pusher_state: &mut PusherState,
+    edit_history: &mut EditHistory,
 ) {
+    edit_history.clear();
     simulation.start_snapshot = Some(world.clone());
     *pusher_state = PusherState::rebuild_from_world(world);
     structure_state.rebuild_for_simulation(world);
@@ -162,9 +167,10 @@ pub fn start_simulation_if_needed(
     world: &WorldBlocks,
     structure_state: &mut StructureState,
     pusher_state: &mut PusherState,
+    edit_history: &mut EditHistory,
 ) {
     if !simulation.is_active() {
-        start_simulation_state(simulation, world, structure_state, pusher_state);
+        start_simulation_state(simulation, world, structure_state, pusher_state, edit_history);
     }
 }
 

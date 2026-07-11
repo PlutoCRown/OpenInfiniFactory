@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::game::edit_history::EditHistory;
 use crate::game::state::{
     BuilderMode, GameMode, PendingPlayerSpawn, PlacementState, SimulationState, SolutionState,
     WorldEntryMode,
@@ -23,10 +24,12 @@ pub fn handle_load_world(
     mut solution_state: ResMut<SolutionState>,
     mut simulation: ResMut<SimulationState>,
     mut pending_player: ResMut<PendingPlayerSpawn>,
+    mut edit_history: ResMut<EditHistory>,
     mode: Res<State<GameMode>>,
     mut next_state: ResMut<NextState<GameMode>>,
 ) {
     for request in requests.read() {
+        edit_history.clear();
         load_world_into_session(
             &request.slot,
             request.entry,
@@ -65,6 +68,7 @@ pub fn handle_create_new_puzzle(
     mut solution_state: ResMut<SolutionState>,
     mut simulation: ResMut<SimulationState>,
     mut pending_player: ResMut<PendingPlayerSpawn>,
+    mut edit_history: ResMut<EditHistory>,
     mode: Res<State<GameMode>>,
     mut next_state: ResMut<NextState<GameMode>>,
 ) {
@@ -74,6 +78,7 @@ pub fn handle_create_new_puzzle(
         *inventory = InventoryItems::for_mode(BuilderMode::Edit);
         if save_puzzle(&world.world, &SaveSlot::puzzle(&request.name), &inventory, None) {
             save_state.refresh();
+            edit_history.clear();
             load_world_into_session(
                 &SaveSlot::puzzle(&request.name),
                 WorldEntryMode::EditPuzzle,
@@ -113,6 +118,7 @@ pub fn handle_create_new_solution(
     mut solution_state: ResMut<SolutionState>,
     mut simulation: ResMut<SimulationState>,
     mut pending_player: ResMut<PendingPlayerSpawn>,
+    mut edit_history: ResMut<EditHistory>,
     mode: Res<State<GameMode>>,
     mut next_state: ResMut<NextState<GameMode>>,
 ) {
@@ -131,6 +137,7 @@ pub fn handle_create_new_solution(
             None,
         ) {
             save_state.refresh();
+            edit_history.clear();
             load_world_into_session(
                 &solution_slot,
                 WorldEntryMode::PlaySolution,

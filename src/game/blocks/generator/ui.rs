@@ -4,12 +4,14 @@ use bevy::window::PrimaryWindow;
 
 use super::GeneratorBlock;
 
+use crate::game::edit_history::{apply_block_settings_with_history, EditHistory};
+
 use crate::game::block_editing::widgets::{
     position_dropdown_from_trigger, spawn_labeled_panel_button, spawn_material_icon_list,
     spawn_material_icon_toggle, update_material_icon,
 };
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
-use crate::game::block_editing::{BlockEditContext, OpenBlockPanelDropdown};
+use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
 use crate::game::blocks::MaterialKind;
@@ -217,6 +219,7 @@ fn on_click(
     ui_runtime: Res<UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut solution_state: ResMut<SolutionState>,
+    mut edit_history: ResMut<EditHistory>,
     mut world: PlayingWorldParams,
     actions: Query<&GeneratorAction>,
 ) {
@@ -239,6 +242,7 @@ fn on_click(
         &mut world,
         &mut solution_state,
         &mut open_dropdown,
+        &mut edit_history,
     );
 }
 
@@ -248,10 +252,10 @@ fn dispatch_action(
     world: &mut PlayingWorldParams,
     solution_state: &mut SolutionState,
     open_dropdown: &mut OpenBlockPanelDropdown,
+    edit_history: &mut EditHistory,
 ) {
-    let mut ctx = BlockEditContext::new(pos, &mut world.world, solution_state, open_dropdown);
-    let mut settings = ctx.world.generator_settings(pos);
-    let acceptor_anchors: Vec<IVec3> = ctx
+    let mut settings = world.world.generator_settings(pos);
+    let acceptor_anchors: Vec<IVec3> = world
         .world
         .acceptor_structures
         .iter()
@@ -312,19 +316,21 @@ fn dispatch_action(
             true
         }
         GeneratorAction::ToggleMaterial => {
-            ctx.toggle_dropdown(UiPanelId::Generator, MATERIAL_SLOT);
+            open_dropdown.toggle(UiPanelId::Generator, MATERIAL_SLOT);
             return;
         }
         GeneratorAction::SetMaterial(material) => {
             settings.material = material;
-            ctx.close_dropdown();
+            open_dropdown.close();
             true
         }
     };
 
     if changed {
-        ctx.world.set_generator_settings(pos, settings);
-        ctx.mark_dirty();
+        apply_block_settings_with_history(edit_history, &mut world.world, pos, |blocks| {
+            blocks.set_generator_settings(pos, settings);
+        });
+        solution_state.dirty = true;
         refresh_world_after_edit(world, pos);
     }
 }

@@ -2,6 +2,7 @@ pub mod block_editing;
 pub mod blocks;
 pub mod cameras;
 pub mod debug;
+pub mod edit_history;
 pub mod player;
 pub mod session;
 pub mod simulation;
@@ -27,6 +28,7 @@ use debug::DebugToolsPlugin;
 use player::controller::{
     apply_pending_player_spawn, camera_look, camera_move, spawn_player, sync_cursor_grab,
 };
+use edit_history::{edit_history_input, EditHistory};
 use session::{on_exit_playing, prepare_playing_session, rebuild_playing_world, SessionPlugin};
 use state::{
     BuilderMode, GameMode, GameSettings, PendingPlayerSpawn, PlacementState, PlayingUiState,
@@ -98,6 +100,7 @@ impl Plugin for GamePlugin {
             .insert_resource(config)
             .insert_resource(i18n)
             .insert_resource(SaveState::default())
+            .init_resource::<EditHistory>()
             .init_resource::<PendingPlayerSpawn>()
             .insert_resource(systems::debug::DebugState::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
@@ -144,6 +147,12 @@ impl Plugin for GamePlugin {
             )
             .add_systems(Update, sync_gameplay_view_image_size)
             .add_systems(Update, gameplay_input.before(PerfScope::Input))
+            .add_systems(
+                Update,
+                edit_history_input
+                    .after(gameplay_input)
+                    .before(placement_input),
+            )
             .add_systems(
                 Update,
                 update_hover.after(gameplay_input).before(placement_input),

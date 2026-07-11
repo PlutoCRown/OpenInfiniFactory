@@ -4,11 +4,12 @@ use bevy::window::PrimaryWindow;
 
 use super::StamperBlock;
 
+use crate::game::edit_history::{apply_block_settings_with_history, EditHistory};
 use crate::game::block_editing::widgets::{
     position_dropdown_from_trigger, spawn_text_dropdown_list, spawn_text_dropdown_toggle,
 };
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
-use crate::game::block_editing::{BlockEditContext, OpenBlockPanelDropdown};
+use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
 use crate::game::blocks::{BlockKind, StampColor};
@@ -105,25 +106,27 @@ pub fn dispatch_labeler_action(
     world: &mut PlayingWorldParams,
     solution_state: &mut SolutionState,
     open_dropdown: &mut OpenBlockPanelDropdown,
+    edit_history: &mut EditHistory,
 ) {
-    let mut ctx = BlockEditContext::new(pos, &mut world.world, solution_state, open_dropdown);
-    let mut settings = ctx.world.labeler_settings(pos);
+    let mut settings = world.world.labeler_settings(pos);
 
     let changed = match action {
         LabelerAction::ToggleColor => {
-            ctx.toggle_dropdown(UiPanelId::Labeler, COLOR_SLOT);
+            open_dropdown.toggle(UiPanelId::Labeler, COLOR_SLOT);
             return;
         }
         LabelerAction::SetColor(color) => {
             settings.color = color;
-            ctx.close_dropdown();
+            open_dropdown.close();
             true
         }
     };
 
     if changed {
-        ctx.world.set_labeler_settings(pos, settings);
-        ctx.mark_dirty();
+        apply_block_settings_with_history(edit_history, &mut world.world, pos, |blocks| {
+            blocks.set_labeler_settings(pos, settings);
+        });
+        solution_state.dirty = true;
         refresh_world_after_edit(world, pos);
     }
 }
@@ -160,6 +163,7 @@ fn on_click(
     ui_runtime: Res<UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut solution_state: ResMut<SolutionState>,
+    mut edit_history: ResMut<EditHistory>,
     mut world: PlayingWorldParams,
     actions: Query<&LabelerAction>,
 ) {
@@ -182,6 +186,7 @@ fn on_click(
         &mut world,
         &mut solution_state,
         &mut open_dropdown,
+        &mut edit_history,
     );
 }
 

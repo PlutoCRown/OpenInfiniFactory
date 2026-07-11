@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::game::edit_history::EditHistory;
 use crate::game::player::controller::{capture_player_save, FlyCamera};
 use crate::game::state::{
     GameMode, PlacementState, SimulationState, SolutionState, StartMenuScreen,
@@ -29,6 +30,7 @@ pub fn handle_exit_to_main_menu(
     mut next_state: ResMut<NextState<GameMode>>,
     mut start_menu_screen: ResMut<StartMenuScreen>,
     mut pending_exit: ResMut<PendingMainMenuExit>,
+    mut edit_history: ResMut<EditHistory>,
     #[cfg(not(target_arch = "wasm32"))] view_image: Option<Res<GameplayViewImage>>,
 ) {
     for request in requests.read() {
@@ -58,6 +60,7 @@ pub fn handle_exit_to_main_menu(
                 continue;
             }
         }
+        edit_history.clear();
         exit_to_main_menu(
             &mut world.world,
             &mut placement,
@@ -90,12 +93,14 @@ pub fn finish_pending_main_menu_exit(
     mut next_state: ResMut<NextState<GameMode>>,
     mut start_menu_screen: ResMut<StartMenuScreen>,
     mut pending_exit: ResMut<PendingMainMenuExit>,
+    mut edit_history: ResMut<EditHistory>,
 ) {
     if !pending_exit.0 {
         return;
     }
     for _ in complete.read() {
         pending_exit.0 = false;
+        edit_history.clear();
         exit_to_main_menu(
             &mut world.world,
             &mut placement,
