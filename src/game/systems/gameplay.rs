@@ -24,7 +24,7 @@ use crate::game::ui::{
 };
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::{
-    grid_to_world, raycast_blocks, raycast_edit_drag_grid, MaterialWeld, TargetHit, WorldBlocks,
+    grid_to_world, raycast_blocks, raycast_edit_drag_grid, TargetHit, WorldBlocks,
 };
 use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
@@ -681,7 +681,6 @@ fn move_selection(
 
     let selected_positions: std::collections::HashSet<IVec3> =
         selected.iter().map(|(pos, _)| *pos).collect();
-    let updated_welds = moved_selection_welds(world, &selected_positions, offset);
     if selected.iter().any(|(pos, block)| {
         let target = *pos + offset;
         target.y < 0
@@ -695,8 +694,21 @@ fn move_selection(
         return false;
     }
 
+    // 焊接按 BlockId：整段一起搬时无需改写；只断掉选区边界焊缝
+    let selected_ids: std::collections::HashSet<_> = selected
+        .iter()
+        .map(|(_, block)| block.id)
+        .filter(|id| !id.is_none())
+        .collect();
+    let weld_count = world.material_welds.len();
+    world
+        .material_welds
+        .retain(|weld| selected_ids.contains(&weld.a) == selected_ids.contains(&weld.b));
+    if world.material_welds.len() != weld_count {
+        world.topology_revision = world.topology_revision.wrapping_add(1);
+    }
+
     for (pos, _) in &selected {
-        world.remove(pos);
         if let Some((entity, block_entity)) = block_entities
             .iter()
             .find(|(_, block_entity)| block_entity.pos == *pos)
@@ -716,10 +728,15 @@ fn move_selection(
         }
     }
 
+    let moves: Vec<_> = selected
+        .iter()
+        .map(|(pos, block)| (*pos, *pos + offset, *block))
+        .collect();
+    world.relocate_blocks(moves);
+
     let mut animations = std::collections::HashMap::new();
     for (pos, block) in selected {
         let target = pos + offset;
-        world.insert(target, block);
         let stored = world.blocks[&target];
         animations.insert(
             target,
@@ -735,7 +752,6 @@ fn move_selection(
             },
         );
     }
-    world.replace_material_welds(updated_welds);
     if debug.factory_activity {
         despawn_block_entities(commands, block_entities, block_index);
         rebuild_world_with_animations_for_debug_state(
@@ -900,27 +916,6 @@ fn rotate_facing(
 
 fn shift_pressed(keys: &ButtonInput<KeyCode>) -> bool {
     keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight)
-}
-
-fn moved_selection_welds(
-    world: &WorldBlocks,
-    selected_positions: &std::collections::HashSet<IVec3>,
-    offset: IVec3,
-) -> std::collections::HashSet<MaterialWeld> {
-    world
-        .material_welds
-        .iter()
-        .filter_map(|weld| {
-            let move_a = selected_positions.contains(&weld.a);
-            let move_b = selected_positions.contains(&weld.b);
-            if move_a != move_b {
-                return None;
-            }
-            let a = if move_a { weld.a + offset } else { weld.a };
-            let b = if move_b { weld.b + offset } else { weld.b };
-            (a != b).then_some(MaterialWeld::new(a, b))
-        })
-        .collect()
 }
 
 fn spawn_selection_previews(

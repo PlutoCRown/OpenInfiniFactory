@@ -65,11 +65,11 @@ pub fn simulate_turn(
     // 先按平台/材料算电，通电激光本回合先发射；打中传感器工作面后再二次供电
     signal_cache.refresh(world);
     let laser_power = signal_cache.powered_components(world, &HashSet::new());
-    let laser_devices = signal_cache.powered_devices(&laser_power);
+    let laser_devices = signal_cache.powered_devices(world, &laser_power);
     let (laser_effects, laser_hit_detectors) = run_laser_phase(world, &laser_devices);
     let powered_components = signal_cache.powered_components(world, &laser_hit_detectors);
-    let powered_devices = signal_cache.powered_devices(&powered_components);
-    let render_powered_wires = signal_cache.powered_wires(&powered_components);
+    let powered_devices = signal_cache.powered_devices(world, &powered_components);
+    let render_powered_wires = signal_cache.powered_wires(world, &powered_components);
     sample.signal_ms = mark_elapsed_ms(&mut mark);
     if let Some(sim_log) = sim_log.as_mut() {
         sim_log.log(
@@ -126,7 +126,13 @@ pub fn simulate_turn(
         log_movement_plan(turn, sim_log, world, "devices", &device_movement_plan);
     }
     movement_plan =
-        merge_structure_movement_plan(movement_plan, device_movement_plan, movement_influence);
+        merge_structure_movement_plan(
+            movement_plan,
+            device_movement_plan,
+            movement_influence,
+            structure_state,
+            world,
+        );
     if let Some(sim_log) = sim_log.as_mut() {
         log_movement_plan(turn, sim_log, world, "merged", &movement_plan);
     }
@@ -140,14 +146,16 @@ pub fn simulate_turn(
     );
     // 粘头推动只有执行成功才提交伸出/收回，避免推失败却叠头
     for (pos, animation) in &pusher_animations {
-        pusher_state.set_extended(*pos, animation.to_extension > 0.5);
+        if let Some(block) = world.blocks.get(pos) {
+            pusher_state.set_extended(block.id, animation.to_extension > 0.5);
+        }
     }
     merge_generated_animations(&mut animations, generated_animations);
     let mut pusher_animations = pusher_animations
         .into_iter()
         .chain(bare_pusher_animations)
         .collect::<HashMap<_, _>>();
-    for (pos, animation) in pusher_state.sustained_animations() {
+    for (pos, animation) in pusher_state.sustained_animations(world) {
         pusher_animations.entry(pos).or_insert(animation);
     }
     sample.movement_execute_ms = mark_elapsed_ms(&mut mark);
@@ -334,6 +342,7 @@ fn log_movement_plan(
                 actor,
                 mark,
                 source,
+                ..
             } => {
                 sim_log.log(
                     turn,
@@ -365,6 +374,7 @@ fn log_movement_plan(
                 pivot,
                 clockwise,
                 source,
+                ..
             } => {
                 sim_log.log(
                     turn,
@@ -385,6 +395,7 @@ fn log_movement_plan(
 mod tests {
     use super::*;
     use crate::game::blocks::{BlockData, BlockKind, MaterialKind};
+    use crate::game::simulation::movement::PusherState;
     use crate::game::simulation::runtime::PendingGeneratedMaterials;
     use crate::game::world::direction::Facing;
     use crate::game::world::grid::{GeneratorMode, GeneratorSettings};
@@ -421,8 +432,90 @@ mod tests {
         assert_eq!(animations.len(), 2);
         assert!(world.is_material_at(a));
         assert!(world.is_material_at(b));
+        let id_a = world.blocks[&a].id;
+        let id_b = world.blocks[&b].id;
         assert!(world
             .material_welds
-            .contains(&crate::game::world::grid::MaterialWeld::new(a, b)));
+            .contains(&crate::game::world::grid::MaterialWeld::new(id_a, id_b)));
+    }
+
+    #[test]
+    fn floating_blocker_extends_once_then_falls_every_turn() {
+        let mut world = WorldBlocks::default();
+        world.insert(
+            IVec3::new(0, 0, 0),
+            BlockData::new(BlockKind::Stone, Facing::North),
+        );
+        world.insert(
+            IVec3::new(0, 5, 0),
+            BlockData::new(BlockKind::Blocker, Facing::East),
+        );
+
+        let mut pending = PendingGeneratedMaterials::default();
+        let mut signal_cache = SignalNetworkCache::default();
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut influence = MovementInfluenceCache::default();
+        let mut pusher_state = PusherState::rebuild_from_world(&world);
+
+        let turn1 = simulate_turn(
+            &mut world,
+            &mut pending,
+            &mut signal_cache,
+            1,
+            &mut structures,
+            &mut influence,
+            &mut pusher_state,
+            None,
+            None,
+        );
+        assert!(world.is_factory_at(IVec3::new(0, 5, 0)));
+        assert!(pusher_state
+            .sustained_animations(&world)
+            .contains_key(&IVec3::new(0, 5, 0)));
+        assert!(turn1
+            .pusher_animations
+            .get(&IVec3::new(0, 5, 0))
+            .is_some_and(|a| a.from_extension < a.to_extension));
+
+        let turn2 = simulate_turn(
+            &mut world,
+            &mut pending,
+            &mut signal_cache,
+            2,
+            &mut structures,
+            &mut influence,
+            &mut pusher_state,
+            None,
+            None,
+        );
+        assert!(world.is_factory_at(IVec3::new(0, 4, 0)));
+        assert!(!world.is_factory_at(IVec3::new(0, 5, 0)));
+        assert!(pusher_state
+            .sustained_animations(&world)
+            .contains_key(&IVec3::new(0, 4, 0)));
+        assert!(
+            !turn2
+                .pusher_animations
+                .values()
+                .any(|a| a.from_extension != a.to_extension),
+            "already extended: must not replay extend while falling"
+        );
+
+        simulate_turn(
+            &mut world,
+            &mut pending,
+            &mut signal_cache,
+            3,
+            &mut structures,
+            &mut influence,
+            &mut pusher_state,
+            None,
+            None,
+        );
+        assert!(world.is_factory_at(IVec3::new(0, 3, 0)));
+        assert!(pusher_state
+            .sustained_animations(&world)
+            .contains_key(&IVec3::new(0, 3, 0)));
     }
 }

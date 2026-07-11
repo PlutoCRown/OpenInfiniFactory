@@ -1423,7 +1423,7 @@ fn spawn_block_model(
             for (face, mark) in world
                 .material_face_marks
                 .iter()
-                .filter(|(face, _)| face.pos == pos)
+                .filter(|(face, _)| face.block == data.id)
             {
                 let mut child = parent.spawn((
                     Mesh3d(assets.face_mark.clone()),

@@ -207,14 +207,7 @@ fn run_weld_phase(world: &mut WorldBlocks) -> Vec<IVec3> {
             if !world.is_material_at(neighbor) {
                 continue;
             }
-            let was_new =
-                !world
-                    .material_welds
-                    .contains(&crate::game::world::grid::MaterialWeld::new(
-                        weld_point, neighbor,
-                    ));
-            world.weld_materials(weld_point, neighbor);
-            if was_new {
+            if world.weld_materials(weld_point, neighbor) {
                 sparks.push(weld_point);
                 sparks.push(neighbor);
             }
@@ -244,8 +237,11 @@ fn run_material_label_phase(world: &mut WorldBlocks) {
         if !world.is_material_at(target) {
             continue;
         }
+        let Some(target_id) = world.blocks.get(&target).map(|block| block.id) else {
+            continue;
+        };
 
-        let face = MaterialFace::new(target, -target_offset);
+        let face = MaterialFace::new(target_id, -target_offset);
         if world
             .material_face_marks
             .get(&face)
@@ -294,7 +290,9 @@ fn run_material_conversion_phase(world: &mut WorldBlocks) {
 }
 
 fn detach_material_block(world: &mut WorldBlocks, pos: IVec3) {
-    world.material_welds.retain(|weld| !weld.contains(pos));
+    if let Some(id) = world.blocks.get(&pos).map(|block| block.id) {
+        world.material_welds.retain(|weld| !weld.contains(id));
+    }
 }
 
 fn teleport_entrance_material(world: &mut WorldBlocks, entrance: IVec3, exit: IVec3) -> bool {
@@ -307,27 +305,11 @@ fn teleport_entrance_material(world: &mut WorldBlocks, entrance: IVec3, exit: IV
 
     detach_material_block(world, entrance);
 
-    let updated_marks = world
-        .material_face_marks
-        .iter()
-        .map(|(face, mark)| {
-            let face = if face.pos == entrance {
-                MaterialFace {
-                    pos: exit,
-                    normal: face.normal,
-                }
-            } else {
-                *face
-            };
-            (face, *mark)
-        })
-        .collect();
-
-    let Some(block) = world.remove(&entrance) else {
+    // 面标记按 BlockId，搬迁无需改写；用 relocate 避免 remove 清掉标记
+    let Some(block) = world.blocks.get(&entrance).copied() else {
         return false;
     };
-    world.insert(exit, block);
-    world.replace_material_face_marks(updated_marks);
+    world.relocate_blocks(vec![(entrance, exit, block)]);
     true
 }
 
@@ -699,11 +681,12 @@ mod tests {
         assert!(!world.is_material_at(entrance));
         assert!(world.is_material_at(exit));
         assert!(world.is_material_at(entrance + IVec3::X));
+        let exit_id = world.blocks[&exit].id;
+        let neighbor_id = world.blocks[&(entrance + IVec3::X)].id;
         assert!(!world
             .material_welds
             .contains(&crate::game::world::grid::MaterialWeld::new(
-                exit,
-                entrance + IVec3::X
+                exit_id, neighbor_id
             )));
     }
 
@@ -821,11 +804,12 @@ mod tests {
         assert!(!world.is_material_at(entrance));
         assert!(world.is_material_at(exit));
         assert!(world.is_material_at(entrance + IVec3::X));
+        let exit_id = world.blocks[&exit].id;
+        let neighbor_id = world.blocks[&(entrance + IVec3::X)].id;
         assert!(!world
             .material_welds
             .contains(&crate::game::world::grid::MaterialWeld::new(
-                exit,
-                entrance + IVec3::X
+                exit_id, neighbor_id
             )));
     }
 

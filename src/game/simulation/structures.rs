@@ -2,12 +2,12 @@ use bevy::prelude::*;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::game::blocks::{BlockData, MovementRule};
+use crate::game::blocks::{BlockData, BlockId, MovementRule};
 use crate::game::world::animation::{BlockAnimation, BlockAnimationKind, PusherAnimation};
 use crate::game::world::direction::Facing;
-use crate::game::world::grid::{MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks};
+use crate::game::world::grid::{MaterialFace, WorldBlocks};
 
-use super::structure_state::StructureState;
+use super::structure_state::{StructureId, StructureState};
 
 pub(crate) use super::structure_state::material_structure;
 
@@ -17,12 +17,12 @@ pub(super) fn gravity_moves(
     skip_factory_positions: &HashSet<IVec3>,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> Vec<StructureMove> {
-    let indices = structures.gravity_structure_indices();
+    let ids = structures.gravity_structure_ids();
     let mut moves = Vec::new();
     let mut handled = HashSet::new();
 
-    for index in indices {
-        let Some(positions) = structures.structure_positions(index) else {
+    for id in ids {
+        let Some(positions) = structures.structure_positions(id) else {
             continue;
         };
         let Some(&sample) = positions.iter().next() else {
@@ -48,22 +48,23 @@ pub(super) fn gravity_moves(
             continue;
         }
         if structure_supported_by_lifter(world, &structure) {
-            structures.clear_gravity_support(index);
+            structures.clear_gravity_support(id);
             continue;
         }
-        if structures.gravity_support_valid(index, world) {
+        if structures.gravity_support_valid(id, world) {
             continue;
         }
         // 整块结构一起下落；不可拆开，否则焊接材料会被撕开并丢掉焊缝
         if can_move_gravity_structure(world, &structure, structures, hard_pusher_head_occupancy) {
-            structures.clear_gravity_support(index);
+            structures.clear_gravity_support(id);
             moves.push(StructureMove::translate_marked(
+                id,
                 structure,
                 IVec3::NEG_Y,
                 MovementMark::Vertical,
             ));
         } else {
-            structures.record_gravity_support(index, world);
+            structures.record_gravity_support(id, world);
         }
     }
     moves
@@ -71,17 +72,21 @@ pub(super) fn gravity_moves(
 
 pub(super) enum StructureMove {
     Translate {
+        structure_id: StructureId,
         structure: HashSet<IVec3>,
         offset: IVec3,
         actor: Option<PusherActor>,
         mark: MovementMark,
-        source: Option<IVec3>,
+        source: Option<BlockId>,
+        source_pos: Option<IVec3>,
     },
     Rotate {
+        structure_id: StructureId,
         structure: HashSet<IVec3>,
         pivot: IVec3,
         clockwise: bool,
-        source: Option<IVec3>,
+        source: Option<BlockId>,
+        source_pos: Option<IVec3>,
     },
 }
 
@@ -104,12 +109,10 @@ pub(super) enum PusherAnimationKind {
     Retract,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct StructureKey(Vec<IVec3>);
-
 #[derive(Resource, Default, Clone)]
 pub struct MovementInfluenceCache {
-    counts: HashMap<StructureKey, HashMap<IVec3, u32>>,
+    /// 按结构 ID + 推动源方块 ID 累计；结构 ID 稳定时跨回合保留，优先未作用过的源
+    counts: HashMap<StructureId, HashMap<BlockId, u32>>,
 }
 
 impl MovementInfluenceCache {
@@ -122,105 +125,131 @@ impl MovementInfluenceCache {
             return 0;
         };
         self.counts
-            .get(&StructureKey::from_structure(movement.structure()))
+            .get(&movement.structure_id())
             .and_then(|sources| sources.get(&source).copied())
             .unwrap_or(0)
     }
 
-    fn retain_active_sources(&mut self, active_sources: &HashMap<StructureKey, HashSet<IVec3>>) {
+    /// 只丢掉已不存在的结构/源，不因本回合未作用而清零
+    fn prune_missing(
+        &mut self,
+        living_structures: &HashSet<StructureId>,
+        living_blocks: &HashSet<BlockId>,
+    ) {
         self.counts.retain(|structure, sources| {
-            let Some(active) = active_sources.get(structure) else {
+            if !living_structures.contains(structure) {
                 return false;
-            };
-            sources.retain(|source, _| active.contains(source));
+            }
+            sources.retain(|source, _| living_blocks.contains(source));
             !sources.is_empty()
         });
     }
 
     fn record_executed(&mut self, executed: Vec<ExecutedMovement>) {
         for movement in executed {
-            let mut counts = self.counts.remove(&movement.before).unwrap_or_default();
-            if movement.before != movement.after {
-                let moved_counts = counts;
-                counts = self.counts.remove(&movement.after).unwrap_or_default();
-                for (source, count) in moved_counts {
-                    counts
-                        .entry(source)
-                        .and_modify(|current| *current = (*current).max(count))
-                        .or_insert(count);
-                }
-            }
-            *counts.entry(movement.source).or_insert(0) += 1;
-            self.counts.insert(movement.after, counts);
+            *self
+                .counts
+                .entry(movement.structure_id)
+                .or_default()
+                .entry(movement.source)
+                .or_insert(0) += 1;
         }
     }
 }
 
-impl StructureKey {
-    fn from_structure(structure: &HashSet<IVec3>) -> Self {
-        let mut positions: Vec<IVec3> = structure.iter().copied().collect();
-        positions.sort_by_key(|pos| (pos.x, pos.y, pos.z));
-        Self(positions)
-    }
-}
-
 struct ExecutedMovement {
-    before: StructureKey,
-    after: StructureKey,
-    source: IVec3,
+    structure_id: StructureId,
+    source: BlockId,
 }
 
 impl StructureMove {
     pub(super) fn translate_marked(
+        structure_id: StructureId,
         structure: HashSet<IVec3>,
         offset: IVec3,
         mark: MovementMark,
     ) -> Self {
         Self::Translate {
+            structure_id,
             structure,
             offset,
             actor: None,
             mark,
             source: None,
+            source_pos: None,
         }
     }
 
     pub(super) fn translate_by_pusher_actor(
+        structure_id: StructureId,
         structure: HashSet<IVec3>,
         offset: IVec3,
         actor: PusherActor,
         mark: MovementMark,
     ) -> Self {
         Self::Translate {
+            structure_id,
             structure,
             offset,
             actor: Some(actor),
             mark,
             source: None,
+            source_pos: None,
         }
     }
 
-    pub(super) fn rotate(structure: HashSet<IVec3>, pivot: IVec3, clockwise: bool) -> Self {
+    pub(super) fn rotate(
+        structure_id: StructureId,
+        structure: HashSet<IVec3>,
+        pivot: IVec3,
+        clockwise: bool,
+    ) -> Self {
         Self::Rotate {
+            structure_id,
             structure,
             pivot,
             clockwise,
             source: None,
+            source_pos: None,
         }
     }
 
-    pub(super) fn with_source(mut self, source_pos: IVec3) -> Self {
+    pub(super) fn with_source(mut self, source: BlockId, source_pos: IVec3) -> Self {
         match &mut self {
-            Self::Translate { source, .. } | Self::Rotate { source, .. } => {
-                *source = Some(source_pos);
+            Self::Translate {
+                source: slot,
+                source_pos: pos_slot,
+                ..
+            }
+            | Self::Rotate {
+                source: slot,
+                source_pos: pos_slot,
+                ..
+            } => {
+                *slot = Some(source);
+                *pos_slot = Some(source_pos);
             }
         }
         self
     }
 
-    fn source(&self) -> Option<IVec3> {
+    fn source(&self) -> Option<BlockId> {
         match self {
             Self::Translate { source, .. } | Self::Rotate { source, .. } => *source,
+        }
+    }
+
+    fn source_pos(&self) -> Option<IVec3> {
+        match self {
+            Self::Translate { source_pos, .. } | Self::Rotate { source_pos, .. } => *source_pos,
+        }
+    }
+
+    pub(super) fn structure_id(&self) -> StructureId {
+        match self {
+            Self::Translate { structure_id, .. } | Self::Rotate { structure_id, .. } => {
+                *structure_id
+            }
         }
     }
 
@@ -236,26 +265,15 @@ pub(super) fn merge_structure_movement_plan(
     mut planned_moves: Vec<StructureMove>,
     device_moves: Vec<StructureMove>,
     influence_cache: &mut MovementInfluenceCache,
+    structures: &StructureState,
+    world: &WorldBlocks,
 ) -> Vec<StructureMove> {
-    let active_sources = active_device_sources(&device_moves);
-    influence_cache.retain_active_sources(&active_sources);
+    let living_structures: HashSet<StructureId> = structures.structure_ids().collect();
+    let living_blocks: HashSet<BlockId> = world.blocks.values().map(|block| block.id).collect();
+    influence_cache.prune_missing(&living_structures, &living_blocks);
     planned_moves.extend(device_moves);
     planned_moves.sort_by(|a, b| compare_movement_priority(a, b, influence_cache));
     planned_moves
-}
-
-fn active_device_sources(moves: &[StructureMove]) -> HashMap<StructureKey, HashSet<IVec3>> {
-    let mut active = HashMap::new();
-    for movement in moves {
-        let Some(source) = movement.source() else {
-            continue;
-        };
-        active
-            .entry(StructureKey::from_structure(movement.structure()))
-            .or_insert_with(HashSet::new)
-            .insert(source);
-    }
-    active
 }
 
 fn compare_movement_priority(
@@ -316,7 +334,7 @@ struct ConveyorSourcePriority {
 }
 
 fn conveyor_source_priority(movement: &StructureMove) -> ConveyorSourcePriority {
-    let Some(source) = movement.source() else {
+    let Some(source) = movement.source_pos() else {
         return ConveyorSourcePriority::neutral();
     };
     if !matches!(
@@ -377,11 +395,13 @@ pub(super) fn execute_structure_moves_with_pushers(
     for movement in moves {
         match movement {
             StructureMove::Translate {
+                structure_id,
                 structure,
                 offset,
                 actor,
                 mark,
                 source,
+                source_pos: _,
             } => {
                 // 仅用种子结构判占用；展开在当前世界上做，避免预展开导致误跳过
                 if structure.iter().any(|pos| moved.contains(pos)) {
@@ -400,7 +420,6 @@ pub(super) fn execute_structure_moves_with_pushers(
                 if structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
                 }
-                let before_key = StructureKey::from_structure(&structure);
                 for pos in &structure {
                     if let Some(block) = world.blocks.get(pos) {
                         animations.insert(
@@ -439,24 +458,24 @@ pub(super) fn execute_structure_moves_with_pushers(
                     structure.into_iter().map(|pos| pos + offset).collect();
                 if let Some(source) = source {
                     executed.push(ExecutedMovement {
-                        before: before_key,
-                        after: StructureKey::from_structure(&target_structure),
+                        structure_id,
                         source,
                     });
                 }
                 moved.extend(target_structure);
             }
             StructureMove::Rotate {
+                structure_id,
                 structure,
                 pivot,
                 clockwise,
                 source,
+                source_pos: _,
             } => {
                 if structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
                 }
                 if can_rotate_structure(world, &structure, pivot, clockwise) {
-                    let before_key = StructureKey::from_structure(&structure);
                     let targets: Vec<IVec3> = structure
                         .iter()
                         .map(|pos| rotate_pos_y(*pos, pivot, clockwise))
@@ -485,8 +504,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                     structures.replace_structure_positions(&structure, target_structure.clone());
                     if let Some(source) = source {
                         executed.push(ExecutedMovement {
-                            before: before_key,
-                            after: StructureKey::from_structure(&target_structure),
+                            structure_id,
                             source,
                         });
                     }
@@ -620,7 +638,7 @@ enum MovementExpansionMode {
     Gravity,
 }
 
-fn movement_expansion_mode(mark: MovementMark, source: Option<IVec3>) -> MovementExpansionMode {
+fn movement_expansion_mode(mark: MovementMark, source: Option<BlockId>) -> MovementExpansionMode {
     if mark == MovementMark::Vertical && source.is_none() {
         MovementExpansionMode::Gravity
     } else {
@@ -653,21 +671,17 @@ fn can_move_structure_without_push(
 }
 
 pub(super) fn move_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, offset: IVec3) {
-    let updated_welds = moved_welds(world, structure, |pos| pos + offset);
-    let updated_marks = moved_face_marks(world, structure, |face| MaterialFace {
-        pos: face.pos + offset,
-        normal: face.normal,
-    });
-    let blocks: Vec<(IVec3, BlockData)> = structure
+    let moves: Vec<(IVec3, IVec3, BlockData)> = structure
         .iter()
-        .filter_map(|pos| world.remove(pos).map(|block| (*pos, block)))
+        .filter_map(|pos| {
+            world
+                .blocks
+                .get(pos)
+                .copied()
+                .map(|block| (*pos, *pos + offset, block))
+        })
         .collect();
-
-    for (pos, block) in blocks {
-        world.insert(pos + offset, block);
-    }
-    world.replace_material_welds(updated_welds);
-    world.replace_material_face_marks(updated_marks);
+    world.relocate_blocks(moves);
 }
 
 pub(super) fn can_rotate_structure(
@@ -688,22 +702,40 @@ pub(super) fn rotate_structure(
     pivot: IVec3,
     clockwise: bool,
 ) {
-    let updated_welds = moved_welds(world, structure, |pos| rotate_pos_y(pos, pivot, clockwise));
-    let updated_marks = moved_face_marks(world, structure, |face| MaterialFace {
-        pos: rotate_pos_y(face.pos, pivot, clockwise),
-        normal: rotate_offset_y(face.normal, clockwise),
-    });
-    let blocks: Vec<(IVec3, BlockData)> = structure
+    let structure_ids: HashSet<BlockId> = structure
         .iter()
-        .filter_map(|pos| world.remove(pos).map(|block| (*pos, block)))
+        .filter_map(|pos| world.blocks.get(pos).map(|block| block.id))
         .collect();
+    let moves: Vec<(IVec3, IVec3, BlockData)> = structure
+        .iter()
+        .filter_map(|pos| {
+            world.blocks.get(pos).copied().map(|mut block| {
+                block.facing = rotate_facing(block.facing, clockwise);
+                (*pos, rotate_pos_y(*pos, pivot, clockwise), block)
+            })
+        })
+        .collect();
+    world.relocate_blocks(moves);
 
-    for (pos, mut block) in blocks {
-        block.facing = rotate_facing(block.facing, clockwise);
-        world.insert(rotate_pos_y(pos, pivot, clockwise), block);
-    }
-    world.replace_material_welds(updated_welds);
-    world.replace_material_face_marks(updated_marks);
+    // 焊接按 BlockId 无需改写；旋转只更新面标记法线
+    let updated_marks: HashMap<_, _> = world
+        .material_face_marks
+        .iter()
+        .map(|(face, mark)| {
+            if structure_ids.contains(&face.block) {
+                (
+                    MaterialFace {
+                        block: face.block,
+                        normal: rotate_offset_y(face.normal, clockwise),
+                    },
+                    *mark,
+                )
+            } else {
+                (*face, *mark)
+            }
+        })
+        .collect();
+    world.material_face_marks = updated_marks;
 }
 
 pub(super) fn rotate_pos_y(pos: IVec3, pivot: IVec3, clockwise: bool) -> IVec3 {
@@ -725,45 +757,6 @@ fn rotate_facing(facing: Facing, clockwise: bool) -> Facing {
     } else {
         facing.rotate_counter()
     }
-}
-
-fn moved_welds(
-    world: &WorldBlocks,
-    structure: &HashSet<IVec3>,
-    transform: impl Fn(IVec3) -> IVec3,
-) -> HashSet<MaterialWeld> {
-    world
-        .material_welds
-        .iter()
-        .filter_map(|weld| {
-            let a_in = structure.contains(&weld.a);
-            let b_in = structure.contains(&weld.b);
-            match (a_in, b_in) {
-                (false, false) => Some(*weld),
-                (true, true) => Some(MaterialWeld::new(transform(weld.a), transform(weld.b))),
-                _ => None,
-            }
-        })
-        .collect()
-}
-
-fn moved_face_marks(
-    world: &WorldBlocks,
-    structure: &HashSet<IVec3>,
-    transform: impl Fn(MaterialFace) -> MaterialFace,
-) -> HashMap<MaterialFace, MaterialFaceMark> {
-    world
-        .material_face_marks
-        .iter()
-        .map(|(face, mark)| {
-            let face = if structure.contains(&face.pos) {
-                transform(*face)
-            } else {
-                *face
-            };
-            (face, *mark)
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -794,12 +787,20 @@ mod tests {
     #[test]
     fn merge_keeps_overlapping_lower_priority_tags() {
         let structure = set(IVec3::new(1, 1, 0));
-        let rotate =
-            StructureMove::rotate(structure.clone(), IVec3::ZERO, true).with_source(IVec3::ZERO);
-        let conveyor = StructureMove::translate_marked(structure, IVec3::X, MovementMark::Conveyor)
-            .with_source(IVec3::new(1, 0, 0));
+        let id = StructureId(1);
+        let rotate = StructureMove::rotate(id, structure.clone(), IVec3::ZERO, true)
+            .with_source(BlockId(1), IVec3::ZERO);
+        let conveyor =
+            StructureMove::translate_marked(id, structure, IVec3::X, MovementMark::Conveyor)
+                .with_source(BlockId(2), IVec3::new(1, 0, 0));
         let mut cache = MovementInfluenceCache::default();
-        let merged = merge_structure_movement_plan(vec![], vec![conveyor, rotate], &mut cache);
+        let merged = merge_structure_movement_plan(
+            vec![],
+            vec![conveyor, rotate],
+            &mut cache,
+            &StructureState::default(),
+            &WorldBlocks::default(),
+        );
         assert_eq!(merged.len(), 2);
         assert!(matches!(merged[0], StructureMove::Rotate { .. }));
         assert!(matches!(
@@ -821,11 +822,19 @@ mod tests {
         place(&mut world, IVec3::new(0, 1, 1), BlockKind::Stone);
 
         let mut structures = structures_for(&world);
+        let id = structures.id_at(material).unwrap();
         let structure = set(material);
-        let rotate = StructureMove::rotate(structure.clone(), pivot, true);
-        let conveyor = StructureMove::translate_marked(structure, IVec3::X, MovementMark::Conveyor);
+        let rotate = StructureMove::rotate(id, structure.clone(), pivot, true);
+        let conveyor =
+            StructureMove::translate_marked(id, structure, IVec3::X, MovementMark::Conveyor);
         let mut cache = MovementInfluenceCache::default();
-        let plan = merge_structure_movement_plan(vec![], vec![rotate, conveyor], &mut cache);
+        let plan = merge_structure_movement_plan(
+            vec![],
+            vec![rotate, conveyor],
+            &mut cache,
+            &structures,
+            &world,
+        );
         execute_structure_moves_with_pushers(&mut world, plan, &mut structures, &mut cache);
 
         assert!(!world.is_material_at(material));
@@ -843,11 +852,20 @@ mod tests {
         place_material(&mut world, b);
 
         let mut structures = structures_for(&world);
+        let id_a = structures.id_at(a).unwrap();
+        let id_b = structures.id_at(b).unwrap();
         let push_b =
-            StructureMove::translate_marked(set(b), IVec3::new(0, 0, 1), MovementMark::Push);
-        let conveyor_a = StructureMove::translate_marked(set(a), IVec3::X, MovementMark::Conveyor);
+            StructureMove::translate_marked(id_b, set(b), IVec3::new(0, 0, 1), MovementMark::Push);
+        let conveyor_a =
+            StructureMove::translate_marked(id_a, set(a), IVec3::X, MovementMark::Conveyor);
         let mut cache = MovementInfluenceCache::default();
-        let plan = merge_structure_movement_plan(vec![], vec![conveyor_a, push_b], &mut cache);
+        let plan = merge_structure_movement_plan(
+            vec![],
+            vec![conveyor_a, push_b],
+            &mut cache,
+            &structures,
+            &world,
+        );
         execute_structure_moves_with_pushers(&mut world, plan, &mut structures, &mut cache);
 
         assert!(!world.is_material_at(a));
@@ -866,16 +884,60 @@ mod tests {
         place(&mut world, IVec3::new(1, 1, 1), BlockKind::Stone);
 
         let mut structures = structures_for(&world);
+        let id_a = structures.id_at(a).unwrap();
+        let id_b = structures.id_at(b).unwrap();
         let push_b =
-            StructureMove::translate_marked(set(b), IVec3::new(0, 0, 1), MovementMark::Push);
-        let conveyor_a = StructureMove::translate_marked(set(a), IVec3::X, MovementMark::Conveyor);
+            StructureMove::translate_marked(id_b, set(b), IVec3::new(0, 0, 1), MovementMark::Push);
+        let conveyor_a =
+            StructureMove::translate_marked(id_a, set(a), IVec3::X, MovementMark::Conveyor);
         let mut cache = MovementInfluenceCache::default();
-        let plan = merge_structure_movement_plan(vec![], vec![conveyor_a, push_b], &mut cache);
+        let plan = merge_structure_movement_plan(
+            vec![],
+            vec![conveyor_a, push_b],
+            &mut cache,
+            &structures,
+            &world,
+        );
         execute_structure_moves_with_pushers(&mut world, plan, &mut structures, &mut cache);
 
         assert!(!world.is_material_at(a));
         assert!(world.is_material_at(b));
         assert!(world.is_material_at(IVec3::new(2, 1, 0)));
         assert!(world.blocks.contains_key(&IVec3::new(1, 1, 1)));
+    }
+
+    #[test]
+    fn unused_mover_outranks_already_used_mover() {
+        let mut world = WorldBlocks::default();
+        let material = IVec3::new(1, 1, 0);
+        let old_pos = IVec3::ZERO;
+        let new_pos = IVec3::new(2, 0, 0);
+        place_material(&mut world, material);
+        place(&mut world, old_pos, BlockKind::Rotator);
+        place(&mut world, new_pos, BlockKind::Rotator);
+        let structures = structures_for(&world);
+        let id = structures.id_at(material).unwrap();
+        let old_source = world.blocks.get(&old_pos).unwrap().id;
+        let new_source = world.blocks.get(&new_pos).unwrap().id;
+        let mut cache = MovementInfluenceCache::default();
+        cache.record_executed(vec![ExecutedMovement {
+            structure_id: id,
+            source: old_source,
+        }]);
+
+        let old = StructureMove::rotate(id, set(material), old_pos, true)
+            .with_source(old_source, old_pos);
+        let new = StructureMove::rotate(id, set(material), new_pos, false)
+            .with_source(new_source, new_pos);
+        // 故意把旧源放前面；排序后未作用过的新源应优先
+        let plan =
+            merge_structure_movement_plan(vec![], vec![old, new], &mut cache, &structures, &world);
+        assert!(matches!(
+            &plan[0],
+            StructureMove::Rotate {
+                source: Some(source),
+                ..
+            } if *source == new_source
+        ));
     }
 }

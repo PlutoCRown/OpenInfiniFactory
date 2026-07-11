@@ -1,17 +1,22 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::game::blocks::SignalBehavior;
+use crate::game::blocks::{BlockId, SignalBehavior};
 use crate::game::world::grid::WorldBlocks;
 
 use super::signal_offsets;
 
+/// 信号导线连通分量 ID（缓存内局部，拓扑重建时重分配）
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct SignalComponentId(pub usize);
+
+/// 信号网络缓存：导线/用电器按 BlockId 索引，移动后身份仍有效
 #[derive(Default, Resource, Clone)]
 pub struct SignalNetworkCache {
     topology_revision: u64,
-    wire_components: HashMap<IVec3, usize>,
-    component_detectors: Vec<Vec<IVec3>>,
-    device_components: HashMap<IVec3, Vec<usize>>,
+    wire_components: HashMap<BlockId, SignalComponentId>,
+    component_detectors: Vec<Vec<BlockId>>,
+    device_components: HashMap<BlockId, Vec<SignalComponentId>>,
     initialized: bool,
 }
 
@@ -31,21 +36,32 @@ impl SignalNetworkCache {
             if !matches!(
                 block.kind.signal_behavior(block.facing),
                 Some(SignalBehavior::Wire)
-            ) || self.wire_components.contains_key(&pos)
+            ) || self.wire_components.contains_key(&block.id)
             {
                 continue;
             }
 
-            let component = self.component_detectors.len();
+            let component = SignalComponentId(self.component_detectors.len());
             self.component_detectors.push(Vec::new());
             let mut queue = VecDeque::from([pos]);
-            self.wire_components.insert(pos, component);
+            self.wire_components.insert(block.id, component);
 
             while let Some(wire_pos) = queue.pop_front() {
                 for offset in signal_offsets() {
                     let neighbor = wire_pos + offset;
-                    if carries_signal_at(world, neighbor)
-                        && self.wire_components.insert(neighbor, component).is_none()
+                    let Some(neighbor_block) = world.blocks.get(&neighbor) else {
+                        continue;
+                    };
+                    if !matches!(
+                        neighbor_block.kind.signal_behavior(neighbor_block.facing),
+                        Some(SignalBehavior::Wire)
+                    ) {
+                        continue;
+                    }
+                    if self
+                        .wire_components
+                        .insert(neighbor_block.id, component)
+                        .is_none()
                     {
                         queue.push_back(neighbor);
                     }
@@ -56,33 +72,48 @@ impl SignalNetworkCache {
         for (&pos, block) in &world.blocks {
             match block.kind.signal_behavior(block.facing) {
                 Some(SignalBehavior::Detector { detection_pos }) => {
-                    self.cache_detector(pos, detection_pos);
+                    self.cache_detector(world, block.id, pos, detection_pos);
                 }
                 Some(SignalBehavior::PoweredDevice) => {
-                    self.cache_powered_device(pos, block.facing.forward_ivec3());
+                    self.cache_powered_device(world, block.id, pos, block.facing.forward_ivec3());
                 }
                 Some(SignalBehavior::Wire) | None => {}
             }
         }
     }
 
-    fn cache_detector(&mut self, pos: IVec3, blocked_offset: IVec3) {
+    fn cache_detector(
+        &mut self,
+        world: &WorldBlocks,
+        id: BlockId,
+        pos: IVec3,
+        blocked_offset: IVec3,
+    ) {
         let mut connected_components = HashSet::new();
         for offset in signal_offsets() {
             if offset == blocked_offset {
                 continue;
             }
 
-            let Some(&component) = self.wire_components.get(&(pos + offset)) else {
+            let Some(wire) = world.blocks.get(&(pos + offset)) else {
+                continue;
+            };
+            let Some(&component) = self.wire_components.get(&wire.id) else {
                 continue;
             };
             if connected_components.insert(component) {
-                self.component_detectors[component].push(pos);
+                self.component_detectors[component.0].push(id);
             }
         }
     }
 
-    fn cache_powered_device(&mut self, pos: IVec3, blocked_offset: IVec3) {
+    fn cache_powered_device(
+        &mut self,
+        world: &WorldBlocks,
+        id: BlockId,
+        pos: IVec3,
+        blocked_offset: IVec3,
+    ) {
         let mut components = Vec::new();
         let mut seen = HashSet::new();
         for offset in signal_offsets() {
@@ -90,7 +121,10 @@ impl SignalNetworkCache {
                 continue;
             }
 
-            let Some(&component) = self.wire_components.get(&(pos + offset)) else {
+            let Some(wire) = world.blocks.get(&(pos + offset)) else {
+                continue;
+            };
+            let Some(&component) = self.wire_components.get(&wire.id) else {
                 continue;
             };
             if seen.insert(component) {
@@ -99,47 +133,74 @@ impl SignalNetworkCache {
         }
 
         if !components.is_empty() {
-            self.device_components.insert(pos, components);
+            self.device_components.insert(id, components);
         }
     }
 
-    // laser_hit_detectors：本回合激光打中工作面的传感器，视为已激活
+    // laser_hit_detectors：本回合激光打中工作面的传感器，视为已激活（按当前坐标，回合内临时）
     pub(super) fn powered_components(
         &self,
         world: &WorldBlocks,
         laser_hit_detectors: &HashSet<IVec3>,
-    ) -> HashSet<usize> {
+    ) -> HashSet<SignalComponentId> {
+        let id_to_pos: HashMap<BlockId, IVec3> = world
+            .blocks
+            .iter()
+            .map(|(pos, block)| (block.id, *pos))
+            .collect();
         self.component_detectors
             .iter()
             .enumerate()
             .filter_map(|(component, detectors)| {
                 detectors
                     .iter()
-                    .any(|detector_pos| {
-                        laser_hit_detectors.contains(detector_pos)
-                            || detector_is_active(world, *detector_pos)
+                    .any(|detector_id| {
+                        let Some(&detector_pos) = id_to_pos.get(detector_id) else {
+                            return false;
+                        };
+                        laser_hit_detectors.contains(&detector_pos)
+                            || detector_is_active(world, detector_pos)
                     })
-                    .then_some(component)
+                    .then_some(SignalComponentId(component))
             })
             .collect()
     }
 
-    pub(super) fn powered_devices(&self, powered_components: &HashSet<usize>) -> HashSet<IVec3> {
-        self.device_components
+    pub(super) fn powered_devices(
+        &self,
+        world: &WorldBlocks,
+        powered_components: &HashSet<SignalComponentId>,
+    ) -> HashSet<IVec3> {
+        world
+            .blocks
             .iter()
-            .filter_map(|(pos, components)| {
-                components
-                    .iter()
-                    .any(|component| powered_components.contains(component))
-                    .then_some(*pos)
+            .filter_map(|(pos, block)| {
+                self.device_components
+                    .get(&block.id)
+                    .filter(|components| {
+                        components
+                            .iter()
+                            .any(|component| powered_components.contains(component))
+                    })
+                    .map(|_| *pos)
             })
             .collect()
     }
 
-    pub(super) fn powered_wires(&self, powered_components: &HashSet<usize>) -> HashSet<IVec3> {
-        self.wire_components
+    pub(super) fn powered_wires(
+        &self,
+        world: &WorldBlocks,
+        powered_components: &HashSet<SignalComponentId>,
+    ) -> HashSet<IVec3> {
+        world
+            .blocks
             .iter()
-            .filter_map(|(pos, component)| powered_components.contains(component).then_some(*pos))
+            .filter_map(|(pos, block)| {
+                self.wire_components
+                    .get(&block.id)
+                    .filter(|component| powered_components.contains(component))
+                    .map(|_| *pos)
+            })
             .collect()
     }
 }
@@ -154,15 +215,6 @@ fn detector_is_active(world: &WorldBlocks, pos: IVec3) -> bool {
     };
 
     world.is_detectable_by_detector_at(pos + detection_pos)
-}
-
-fn carries_signal_at(world: &WorldBlocks, pos: IVec3) -> bool {
-    world.blocks.get(&pos).is_some_and(|block| {
-        matches!(
-            block.kind.signal_behavior(block.facing),
-            Some(SignalBehavior::Wire)
-        )
-    })
 }
 
 #[cfg(test)]
@@ -195,7 +247,9 @@ mod tests {
         let no_laser = HashSet::new();
         place_factory(&mut world, target, BlockKind::Platform);
         cache.refresh(&world);
-        assert!(cache.powered_components(&world, &no_laser).contains(&0));
+        assert!(cache
+            .powered_components(&world, &no_laser)
+            .contains(&SignalComponentId(0)));
 
         place_factory(&mut world, target, BlockKind::Conveyor);
         cache.refresh(&world);
@@ -208,7 +262,9 @@ mod tests {
             BlockKind::material_block_kind(crate::game::blocks::MaterialKind::Basic).unwrap(),
         );
         cache.refresh(&world);
-        assert!(cache.powered_components(&world, &no_laser).contains(&0));
+        assert!(cache
+            .powered_components(&world, &no_laser)
+            .contains(&SignalComponentId(0)));
     }
 
     #[test]
@@ -224,6 +280,60 @@ mod tests {
         assert!(cache.powered_components(&world, &no_laser).is_empty());
 
         let laser_hits = HashSet::from([detector]);
-        assert!(cache.powered_components(&world, &laser_hits).contains(&0));
+        assert!(cache
+            .powered_components(&world, &laser_hits)
+            .contains(&SignalComponentId(0)));
+    }
+
+    #[test]
+    fn material_relocate_skips_topology_bump_and_wire_relocate_bumps_once() {
+        let mut world = WorldBlocks::default();
+        let detector = IVec3::ZERO;
+        let wire = IVec3::NEG_X;
+        let target = IVec3::X;
+        wired_detector(&mut world, detector, wire);
+        place_factory(&mut world, target, BlockKind::Platform);
+        place_factory(
+            &mut world,
+            IVec3::new(0, 2, 0),
+            BlockKind::material_block_kind(crate::game::blocks::MaterialKind::Basic).unwrap(),
+        );
+        let mut cache = SignalNetworkCache::default();
+        cache.refresh(&world);
+        let revision_after_build = world.topology_revision;
+        assert!(cache
+            .powered_components(&world, &HashSet::new())
+            .contains(&SignalComponentId(0)));
+
+        let material_pos = IVec3::new(0, 2, 0);
+        let material = world.blocks[&material_pos];
+        world.relocate_blocks(vec![(material_pos, material_pos + IVec3::Y, material)]);
+        assert_eq!(world.topology_revision, revision_after_build);
+        cache.refresh(&world);
+        assert!(cache
+            .powered_components(&world, &HashSet::new())
+            .contains(&SignalComponentId(0)));
+
+        let wire_block = world.blocks[&wire];
+        let detector_block = world.blocks[&detector];
+        world.relocate_blocks(vec![
+            (wire, wire + IVec3::Y, wire_block),
+            (detector, detector + IVec3::Y, detector_block),
+            (
+                target,
+                target + IVec3::Y,
+                world.blocks[&target],
+            ),
+        ]);
+        assert_eq!(
+            world.topology_revision,
+            revision_after_build.wrapping_add(1)
+        );
+        cache.refresh(&world);
+        let powered = cache.powered_components(&world, &HashSet::new());
+        assert!(powered.contains(&SignalComponentId(0)));
+        assert!(cache
+            .powered_wires(&world, &powered)
+            .contains(&(wire + IVec3::Y)));
     }
 }

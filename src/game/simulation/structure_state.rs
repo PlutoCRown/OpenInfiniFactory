@@ -1,10 +1,22 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::game::blocks::{AcceptorId, BlockKind};
+use crate::game::blocks::{AcceptorId, BlockId, BlockKind};
 use crate::game::world::grid::WorldBlocks;
 
 use super::signal_offsets;
+
+/// 结构运行时 ID：开局/焊接重建时分配，成员移动时保持不变
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct StructureId(pub u64);
+
+impl StructureId {
+    pub const NONE: Self = Self(0);
+
+    pub const fn is_none(self) -> bool {
+        self.0 == 0
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FactoryActivity {
@@ -35,6 +47,7 @@ pub type GravitySupportContact = (IVec3, IVec3);
 
 #[derive(Clone)]
 pub struct Structure {
+    pub id: StructureId,
     pub kind: StructureKind,
     pub positions: HashSet<IVec3>,
     pub activity: FactoryActivity,
@@ -52,8 +65,9 @@ pub struct AcceptorStructure {
 
 #[derive(Resource, Default, Clone)]
 pub struct StructureState {
-    structures: Vec<Structure>,
-    structure_by_pos: HashMap<IVec3, usize>,
+    structures: HashMap<StructureId, Structure>,
+    structure_by_pos: HashMap<IVec3, StructureId>,
+    next_structure_id: u64,
     acceptor_structures: Vec<AcceptorStructure>,
 }
 
@@ -66,6 +80,11 @@ impl StructureState {
         self.structure_by_pos.is_empty()
     }
 
+    fn alloc_id(&mut self) -> StructureId {
+        self.next_structure_id += 1;
+        StructureId(self.next_structure_id)
+    }
+
     /// Build factory structures (connectivity + activity), acceptor structures, and material structures (welds).
     /// 工厂连通按当前世界相邻关系建一次（开局/放置快照）；之后运行时只搬迁成员，不因贴上而合并。
     pub fn rebuild_for_simulation(&mut self, world: &WorldBlocks) {
@@ -73,7 +92,7 @@ impl StructureState {
         self.append_factory_structures(world);
         self.apply_factory_inactive_propagation(world);
         self.append_acceptor_structures(world);
-        self.append_material_structures(world);
+        self.append_material_structures(world, &HashMap::new(), &HashMap::new());
     }
 
     pub fn acceptor_structures(&self) -> &[AcceptorStructure] {
@@ -94,22 +113,33 @@ impl StructureState {
     }
 
     pub fn refresh_material_structures(&mut self, world: &WorldBlocks) {
+        // 按成员 BlockId 集合复用 StructureId，避免影响计数每回合清零
+        let mut previous_ids: HashMap<Vec<u64>, StructureId> = HashMap::new();
+        let mut previous_support: HashMap<StructureId, Vec<GravitySupportContact>> = HashMap::new();
+        for (id, structure) in &self.structures {
+            if structure.kind != StructureKind::Material {
+                continue;
+            }
+            let mut members: Vec<u64> = structure
+                .positions
+                .iter()
+                .filter_map(|pos| world.blocks.get(pos).map(|block| block.id.0))
+                .collect();
+            members.sort_unstable();
+            previous_ids.insert(members, *id);
+            previous_support.insert(*id, structure.gravity_support.clone());
+        }
         self.retain_factory_only();
-        self.append_material_structures(world);
+        self.append_material_structures(world, &previous_ids, &previous_support);
     }
 
     fn retain_factory_only(&mut self) {
-        let factory_structures: Vec<Structure> = self
-            .structures
-            .iter()
-            .filter(|structure| structure.kind == StructureKind::Factory)
-            .cloned()
-            .collect();
-        self.structures = factory_structures;
+        self.structures
+            .retain(|_, structure| structure.kind == StructureKind::Factory);
         self.structure_by_pos.clear();
-        for (index, structure) in self.structures.iter().enumerate() {
+        for (id, structure) in &self.structures {
             for pos in &structure.positions {
-                self.structure_by_pos.insert(*pos, index);
+                self.structure_by_pos.insert(*pos, *id);
             }
         }
     }
@@ -133,7 +163,12 @@ impl StructureState {
         }
     }
 
-    fn append_material_structures(&mut self, world: &WorldBlocks) {
+    fn append_material_structures(
+        &mut self,
+        world: &WorldBlocks,
+        previous_ids: &HashMap<Vec<u64>, StructureId>,
+        previous_support: &HashMap<StructureId, Vec<GravitySupportContact>>,
+    ) {
         let mut handled = self
             .structure_by_pos
             .keys()
@@ -151,19 +186,32 @@ impl StructureState {
                 continue;
             }
             let positions = material_structure(world, start);
-            let index = self.structures.len();
+            let mut members: Vec<u64> = positions
+                .iter()
+                .filter_map(|pos| world.blocks.get(pos).map(|block| block.id.0))
+                .collect();
+            members.sort_unstable();
+            let id = previous_ids
+                .get(&members)
+                .copied()
+                .unwrap_or_else(|| self.alloc_id());
+            let gravity_support = previous_support.get(&id).cloned().unwrap_or_default();
             for pos in &positions {
                 handled.insert(*pos);
-                self.structure_by_pos.insert(*pos, index);
+                self.structure_by_pos.insert(*pos, id);
             }
-            self.structures.push(Structure {
-                kind: StructureKind::Material,
-                positions,
-                activity: FactoryActivity::Active,
-                freedom: StructureFreedom::All,
-                pushable: true,
-                gravity_support: Vec::new(),
-            });
+            self.structures.insert(
+                id,
+                Structure {
+                    id,
+                    kind: StructureKind::Material,
+                    positions,
+                    activity: FactoryActivity::Active,
+                    freedom: StructureFreedom::All,
+                    pushable: true,
+                    gravity_support,
+                },
+            );
         }
     }
 
@@ -185,76 +233,94 @@ impl StructureState {
             }
 
             let positions = factory_structure(world, start);
-            let index = self.structures.len();
+            let id = self.alloc_id();
             for pos in &positions {
                 handled.insert(*pos);
-                self.structure_by_pos.insert(*pos, index);
+                self.structure_by_pos.insert(*pos, id);
             }
-            self.structures.push(Structure {
-                kind: StructureKind::Factory,
-                positions,
-                activity: FactoryActivity::Active,
-                freedom: StructureFreedom::All,
-                pushable: true,
-                gravity_support: Vec::new(),
-            });
+            self.structures.insert(
+                id,
+                Structure {
+                    id,
+                    kind: StructureKind::Factory,
+                    positions,
+                    activity: FactoryActivity::Active,
+                    freedom: StructureFreedom::All,
+                    pushable: true,
+                    gravity_support: Vec::new(),
+                },
+            );
         }
     }
 
     fn apply_factory_inactive_propagation(&mut self, world: &WorldBlocks) {
-        let scene_anchored: Vec<bool> = self
+        let factory_ids: Vec<StructureId> = self
             .structures
             .iter()
-            .map(|structure| {
-                structure.kind == StructureKind::Factory
-                    && touches_scene(world, &structure.positions)
+            .filter(|(_, structure)| structure.kind == StructureKind::Factory)
+            .map(|(id, _)| *id)
+            .collect();
+        let scene_anchored: HashMap<StructureId, bool> = factory_ids
+            .iter()
+            .map(|id| {
+                let anchored = self
+                    .structures
+                    .get(id)
+                    .is_some_and(|structure| touches_scene(world, &structure.positions));
+                (*id, anchored)
             })
             .collect();
-        let mut inactive = scene_anchored.clone();
+        let mut inactive: HashMap<StructureId, bool> = scene_anchored.clone();
         let mut queue = VecDeque::new();
-        for (index, anchored) in scene_anchored.iter().copied().enumerate() {
-            if anchored {
-                inactive[index] = true;
-                queue.push_back(index);
+        for (id, anchored) in &scene_anchored {
+            if *anchored {
+                inactive.insert(*id, true);
+                queue.push_back(*id);
             }
         }
 
-        while let Some(index) = queue.pop_front() {
-            if self.structures[index].kind != StructureKind::Factory {
+        while let Some(id) = queue.pop_front() {
+            let Some(structure) = self.structures.get(&id) else {
+                continue;
+            };
+            if structure.kind != StructureKind::Factory {
                 continue;
             }
-            for pos in &self.structures[index].positions.clone() {
+            for pos in structure.positions.clone() {
                 for offset in signal_offsets() {
-                    let neighbor = *pos + offset;
-                    let Some(neighbor_index) = self.structure_by_pos.get(&neighbor).copied() else {
+                    let neighbor = pos + offset;
+                    let Some(neighbor_id) = self.structure_by_pos.get(&neighbor).copied() else {
                         continue;
                     };
-                    if self.structures[neighbor_index].kind != StructureKind::Factory {
+                    let Some(neighbor_structure) = self.structures.get(&neighbor_id) else {
+                        continue;
+                    };
+                    if neighbor_structure.kind != StructureKind::Factory {
                         continue;
                     }
-                    if is_blocked_factory_connection(world, *pos, neighbor)
-                        || is_blocked_factory_connection(world, neighbor, *pos)
+                    if is_blocked_factory_connection(world, pos, neighbor)
+                        || is_blocked_factory_connection(world, neighbor, pos)
                     {
                         continue;
                     }
-                    if !inactive[neighbor_index] {
-                        inactive[neighbor_index] = true;
-                        queue.push_back(neighbor_index);
+                    if !inactive.get(&neighbor_id).copied().unwrap_or(false) {
+                        inactive.insert(neighbor_id, true);
+                        queue.push_back(neighbor_id);
                     }
                 }
             }
         }
 
-        for (index, structure) in self.structures.iter_mut().enumerate() {
-            if structure.kind != StructureKind::Factory {
+        for id in factory_ids {
+            let Some(structure) = self.structures.get_mut(&id) else {
                 continue;
-            }
+            };
             structure.activity = FactoryActivity::Active;
             structure.freedom = StructureFreedom::All;
             structure.pushable = true;
-            if inactive[index] {
+            if inactive.get(&id).copied().unwrap_or(false) {
                 structure.activity = FactoryActivity::Inactive;
-                if scene_anchored[index] {
+                if scene_anchored.get(&id).copied().unwrap_or(false) {
                     structure.freedom = StructureFreedom::None;
                     structure.pushable = false;
                 }
@@ -262,8 +328,16 @@ impl StructureState {
         }
     }
 
+    pub fn structure_ids(&self) -> impl Iterator<Item = StructureId> + '_ {
+        self.structures.keys().copied()
+    }
+
     pub fn activity_at(&self, pos: IVec3) -> Option<FactoryActivity> {
         Some(self.structure(pos)?.activity)
+    }
+
+    pub fn id_at(&self, pos: IVec3) -> Option<StructureId> {
+        self.structure_by_pos.get(&pos).copied()
     }
 
     pub fn pushable_structure_at(&self, pos: IVec3, offset: IVec3) -> Option<HashSet<IVec3>> {
@@ -301,28 +375,28 @@ impl StructureState {
         &self,
         pos: IVec3,
         offset: IVec3,
-    ) -> Option<(usize, HashSet<IVec3>)> {
-        let index = *self.structure_by_pos.get(&pos)?;
-        let structure = self.structures.get(index)?;
+    ) -> Option<(StructureId, HashSet<IVec3>)> {
+        let id = *self.structure_by_pos.get(&pos)?;
+        let structure = self.structures.get(&id)?;
         if structure.activity != FactoryActivity::Active || !structure.freedom.can_translate(offset)
         {
             return None;
         }
-        Some((index, structure.positions.clone()))
+        Some((id, structure.positions.clone()))
     }
 
-    pub fn structure_index_at(&self, pos: IVec3) -> Option<usize> {
+    pub fn structure_id_at(&self, pos: IVec3) -> Option<StructureId> {
         self.structure_by_pos.get(&pos).copied()
     }
 
-    pub fn structure_positions(&self, index: usize) -> Option<&HashSet<IVec3>> {
+    pub fn structure_positions(&self, id: StructureId) -> Option<&HashSet<IVec3>> {
         self.structures
-            .get(index)
+            .get(&id)
             .map(|structure| &structure.positions)
     }
 
-    pub fn gravity_support_valid(&self, index: usize, world: &WorldBlocks) -> bool {
-        let Some(structure) = self.structures.get(index) else {
+    pub fn gravity_support_valid(&self, id: StructureId, world: &WorldBlocks) -> bool {
+        let Some(structure) = self.structures.get(&id) else {
             return false;
         };
         let contacts = &structure.gravity_support;
@@ -337,36 +411,36 @@ impl StructureState {
             })
     }
 
-    pub fn record_gravity_support(&mut self, index: usize, world: &WorldBlocks) {
-        let Some(structure) = self.structures.get_mut(index) else {
+    pub fn record_gravity_support(&mut self, id: StructureId, world: &WorldBlocks) {
+        let Some(structure) = self.structures.get_mut(&id) else {
             return;
         };
         structure.gravity_support = collect_gravity_support(world, &structure.positions);
     }
 
-    pub fn clear_gravity_support(&mut self, index: usize) {
-        if let Some(structure) = self.structures.get_mut(index) {
+    pub fn clear_gravity_support(&mut self, id: StructureId) {
+        if let Some(structure) = self.structures.get_mut(&id) {
             structure.gravity_support.clear();
         }
     }
 
     pub fn move_positions(&mut self, positions: &HashSet<IVec3>, offset: IVec3) {
-        let mut changed_indices = HashSet::new();
+        let mut changed_ids = HashSet::new();
         for pos in positions {
-            if let Some(index) = self.structure_by_pos.get(pos).copied() {
-                changed_indices.insert(index);
+            if let Some(id) = self.structure_by_pos.get(pos).copied() {
+                changed_ids.insert(id);
             }
         }
-        for index in &changed_indices {
-            let Some(structure) = self.structures.get(*index) else {
+        for id in &changed_ids {
+            let Some(structure) = self.structures.get(id) else {
                 continue;
             };
             for pos in &structure.positions {
                 self.structure_by_pos.remove(pos);
             }
         }
-        for index in changed_indices {
-            let Some(structure) = self.structures.get_mut(index) else {
+        for id in changed_ids {
+            let Some(structure) = self.structures.get_mut(&id) else {
                 continue;
             };
             structure.positions = structure
@@ -386,7 +460,7 @@ impl StructureState {
                 }
             }
             for pos in &structure.positions {
-                self.structure_by_pos.insert(*pos, index);
+                self.structure_by_pos.insert(*pos, id);
             }
         }
     }
@@ -396,7 +470,7 @@ impl StructureState {
         old_positions: &HashSet<IVec3>,
         new_positions: HashSet<IVec3>,
     ) {
-        let Some(&index) = old_positions
+        let Some(&id) = old_positions
             .iter()
             .find_map(|pos| self.structure_by_pos.get(pos))
         else {
@@ -405,13 +479,13 @@ impl StructureState {
         for pos in old_positions {
             self.structure_by_pos.remove(pos);
         }
-        let Some(structure) = self.structures.get_mut(index) else {
+        let Some(structure) = self.structures.get_mut(&id) else {
             return;
         };
         structure.positions = new_positions;
         structure.gravity_support.clear();
         for pos in &structure.positions {
-            self.structure_by_pos.insert(*pos, index);
+            self.structure_by_pos.insert(*pos, id);
         }
     }
 
@@ -438,44 +512,66 @@ impl StructureState {
             .is_some_and(|structure| structure.positions.contains(&candidate))
     }
 
-    pub fn gravity_structure_indices(&self) -> Vec<usize> {
-        let mut indices: Vec<usize> = self
+    pub fn gravity_structure_ids(&self) -> Vec<StructureId> {
+        let mut ids: Vec<StructureId> = self
             .structures
             .iter()
-            .enumerate()
             .filter(|(_, structure)| structure.activity == FactoryActivity::Active)
-            .map(|(index, _)| index)
+            .map(|(id, _)| *id)
             .collect();
-        indices.sort_by_key(|index| {
-            self.structures[*index]
-                .positions
-                .iter()
-                .map(|pos| pos.y)
-                .min()
+        ids.sort_by_key(|id| {
+            self.structures
+                .get(id)
+                .and_then(|structure| structure.positions.iter().map(|pos| pos.y).min())
                 .unwrap_or(0)
         });
-        indices
+        ids
     }
 
     fn structure(&self, pos: IVec3) -> Option<&Structure> {
         self.structure_by_pos
             .get(&pos)
-            .and_then(|index| self.structures.get(*index))
+            .and_then(|id| self.structures.get(id))
     }
 }
 
 pub fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
+    let Some(start_id) = world
+        .blocks
+        .get(&start)
+        .filter(|block| block.kind.is_material() && !block.id.is_none())
+        .map(|block| block.id)
+    else {
+        return HashSet::new();
+    };
+    let id_to_pos: HashMap<BlockId, IVec3> = world
+        .blocks
+        .iter()
+        .filter(|(_, block)| block.kind.is_material() && !block.id.is_none())
+        .map(|(pos, block)| (block.id, *pos))
+        .collect();
+
     let mut structure = HashSet::new();
-    let mut queue = VecDeque::from([start]);
+    let mut seen_ids = HashSet::from([start_id]);
+    let mut queue = VecDeque::from([start_id]);
     structure.insert(start);
 
-    while let Some(pos) = queue.pop_front() {
-        for neighbor in welded_neighbors(world, pos) {
-            if structure.contains(&neighbor) {
+    while let Some(id) = queue.pop_front() {
+        for weld in &world.material_welds {
+            let Some(other_id) = weld.other(id) else {
+                continue;
+            };
+            if !seen_ids.insert(other_id) {
+                continue;
+            }
+            let Some(&neighbor) = id_to_pos.get(&other_id) else {
+                continue;
+            };
+            if !world.is_material_at(neighbor) {
                 continue;
             }
             structure.insert(neighbor);
-            queue.push_back(neighbor);
+            queue.push_back(other_id);
         }
     }
 
@@ -486,15 +582,6 @@ pub fn query_factory_structure(world: &WorldBlocks, pos: IVec3) -> Option<HashSe
     world
         .is_factory_at(pos)
         .then(|| factory_structure(world, pos))
-}
-
-fn welded_neighbors(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
-    world
-        .material_welds
-        .iter()
-        .filter_map(|weld| weld.other(pos))
-        .filter(|neighbor| world.is_material_at(*neighbor))
-        .collect()
 }
 
 fn collect_gravity_support(
@@ -666,9 +753,9 @@ mod tests {
         world.insert(IVec3::Y, platform(IVec3::Y));
 
         let mut state = rebuild_for_simulation_standalone(&world);
-        let index = state.structure_index_at(IVec3::Y).unwrap();
-        state.record_gravity_support(index, &world);
-        assert!(state.gravity_support_valid(index, &world));
+        let id = state.structure_id_at(IVec3::Y).unwrap();
+        state.record_gravity_support(id, &world);
+        assert!(state.gravity_support_valid(id, &world));
     }
 
     #[test]

@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::game::blocks::{AcceptorId, BlockData, BlockKind, MaterialKind, StampColor};
+use crate::game::blocks::{AcceptorId, BlockData, BlockId, BlockKind, MaterialKind, StampColor};
 use crate::game::world::direction::Facing;
 
 pub const REACH: f32 = 12.0;
@@ -24,6 +24,7 @@ pub struct WorldBlocks {
     pub system_blocks: HashMap<IVec3, BlockData>,
     pub material_welds: HashSet<MaterialWeld>,
     pub material_face_marks: HashMap<MaterialFace, MaterialFaceMark>,
+    /// 系统层方块设置：按格子键控（系统块无 BlockId、不参与模拟移动）
     pub block_settings: HashMap<IVec3, BlockSettings>,
     /// 编辑态维护的验收结构（含持久 ID）
     pub acceptor_structures: Vec<StoredAcceptorStructure>,
@@ -162,15 +163,16 @@ impl Default for GoalSettings {
     }
 }
 
+/// 材料面标记键：按方块实例 ID + 法线，移动时无需改写
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct MaterialFace {
-    pub pos: IVec3,
+    pub block: BlockId,
     pub normal: IVec3,
 }
 
 impl MaterialFace {
-    pub fn new(pos: IVec3, normal: IVec3) -> Self {
-        Self { pos, normal }
+    pub fn new(block: BlockId, normal: IVec3) -> Self {
+        Self { block, normal }
     }
 }
 
@@ -198,33 +200,34 @@ impl Default for GeneratorSettings {
     }
 }
 
+/// 材料焊接：两端按 BlockId 排序存储，移动时无需改写
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct MaterialWeld {
-    pub a: IVec3,
-    pub b: IVec3,
+    pub a: BlockId,
+    pub b: BlockId,
 }
 
 impl MaterialWeld {
-    pub fn new(a: IVec3, b: IVec3) -> Self {
-        if (a.x, a.y, a.z) <= (b.x, b.y, b.z) {
+    pub fn new(a: BlockId, b: BlockId) -> Self {
+        if a.0 <= b.0 {
             Self { a, b }
         } else {
             Self { a: b, b: a }
         }
     }
 
-    pub fn other(self, pos: IVec3) -> Option<IVec3> {
-        if self.a == pos {
+    pub fn other(self, id: BlockId) -> Option<BlockId> {
+        if self.a == id {
             Some(self.b)
-        } else if self.b == pos {
+        } else if self.b == id {
             Some(self.a)
         } else {
             None
         }
     }
 
-    pub fn contains(self, pos: IVec3) -> bool {
-        self.a == pos || self.b == pos
+    pub fn contains(self, id: BlockId) -> bool {
+        self.a == id || self.b == id
     }
 }
 
@@ -271,9 +274,13 @@ impl WorldBlocks {
 
     pub fn remove(&mut self, pos: &IVec3) -> Option<BlockData> {
         let removed = self.blocks.remove(pos);
-        if removed.is_some() {
-            self.material_welds.retain(|weld| !weld.contains(*pos));
-            self.material_face_marks.retain(|face, _| face.pos != *pos);
+        if let Some(ref block) = removed {
+            let id = block.id;
+            if !id.is_none() {
+                self.material_welds.retain(|weld| !weld.contains(id));
+                self.material_face_marks
+                    .retain(|face, _| face.block != id);
+            }
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
         removed
@@ -321,11 +328,30 @@ impl WorldBlocks {
         let before = self.blocks.len();
         self.blocks.retain(|pos, block| keep(pos, block));
         if self.blocks.len() != before {
-            self.material_welds.retain(|weld| {
-                self.blocks.contains_key(&weld.a) && self.blocks.contains_key(&weld.b)
-            });
+            let alive: HashSet<BlockId> = self.blocks.values().map(|block| block.id).collect();
+            self.material_welds
+                .retain(|weld| alive.contains(&weld.a) && alive.contains(&weld.b));
             self.material_face_marks
-                .retain(|face, _| self.blocks.contains_key(&face.pos));
+                .retain(|face, _| alive.contains(&face.block));
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+    }
+
+    /// 批量搬迁方块：保留 BlockId，不改焊接/面标记；信号相关方块移动时只 bump 一次 topology
+    pub fn relocate_blocks(&mut self, moves: Vec<(IVec3, IVec3, BlockData)>) {
+        if moves.is_empty() {
+            return;
+        }
+        let touches_signals = moves.iter().any(|(_, _, block)| {
+            block.kind.signal_behavior(block.facing).is_some()
+        });
+        for (from, _, _) in &moves {
+            self.blocks.remove(from);
+        }
+        for (_, to, block) in moves {
+            self.blocks.insert(to, block);
+        }
+        if touches_signals {
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -669,7 +695,12 @@ impl WorldBlocks {
     }
 
     pub fn set_material_face_mark(&mut self, face: MaterialFace, mark: MaterialFaceMark) {
-        if !self.is_material_at(face.pos) {
+        if face.block.is_none()
+            || !self
+                .blocks
+                .values()
+                .any(|block| block.id == face.block && block.kind.is_material())
+        {
             return;
         }
         if self.material_face_marks.insert(face, mark) != Some(mark) {
@@ -677,26 +708,31 @@ impl WorldBlocks {
         }
     }
 
-    pub fn replace_material_face_marks(&mut self, marks: HashMap<MaterialFace, MaterialFaceMark>) {
-        if self.material_face_marks != marks {
-            self.material_face_marks = marks;
-            self.topology_revision = self.topology_revision.wrapping_add(1);
+    pub fn weld_materials(&mut self, a: IVec3, b: IVec3) -> bool {
+        let Some(id_a) = self
+            .blocks
+            .get(&a)
+            .filter(|block| block.kind.is_material() && !block.id.is_none())
+            .map(|block| block.id)
+        else {
+            return false;
+        };
+        let Some(id_b) = self
+            .blocks
+            .get(&b)
+            .filter(|block| block.kind.is_material() && !block.id.is_none())
+            .map(|block| block.id)
+        else {
+            return false;
+        };
+        if id_a == id_b {
+            return false;
         }
-    }
-
-    pub fn weld_materials(&mut self, a: IVec3, b: IVec3) {
-        if a == b || !self.is_material_at(a) || !self.is_material_at(b) {
-            return;
-        }
-        if self.material_welds.insert(MaterialWeld::new(a, b)) {
+        if self.material_welds.insert(MaterialWeld::new(id_a, id_b)) {
             self.topology_revision = self.topology_revision.wrapping_add(1);
-        }
-    }
-
-    pub fn replace_material_welds(&mut self, welds: HashSet<MaterialWeld>) {
-        if self.material_welds != welds {
-            self.material_welds = welds;
-            self.topology_revision = self.topology_revision.wrapping_add(1);
+            true
+        } else {
+            false
         }
     }
 
