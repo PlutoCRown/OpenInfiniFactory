@@ -147,10 +147,16 @@ pub const GAMEPLAY_SETTINGS: &[SettingsItem] = &[
     },
 ];
 
-pub const GRAPHICS_SETTINGS: &[SettingsItem] = &[SettingsItem {
-    label_key: "settings.shadows",
-    control: SettingsControl::Dropdown(SettingsDropdown::Shadows),
-}];
+pub const GRAPHICS_SETTINGS: &[SettingsItem] = &[
+    SettingsItem {
+        label_key: "settings.shadows",
+        control: SettingsControl::Dropdown(SettingsDropdown::Shadows),
+    },
+    SettingsItem {
+        label_key: "settings.vsync",
+        control: SettingsControl::Dropdown(SettingsDropdown::Vsync),
+    },
+];
 
 impl SettingsField {
     pub fn slider(self) -> Option<SettingsSliderConfig> {
@@ -262,6 +268,7 @@ pub enum SettingsDropdown {
     PlaceSelectionMode,
     DeleteSelectionMode,
     Shadows,
+    Vsync,
 }
 
 impl SettingsDropdown {
@@ -273,6 +280,11 @@ impl SettingsDropdown {
             Self::PlaceSelectionMode => i18n.t(config.place_selection_mode.label_key()),
             Self::DeleteSelectionMode => i18n.t(config.delete_selection_mode.label_key()),
             Self::Shadows => i18n.t(if config.shadows_enabled {
+                "settings.option_on"
+            } else {
+                "settings.option_off"
+            }),
+            Self::Vsync => i18n.t(if config.vsync_enabled {
                 "settings.option_on"
             } else {
                 "settings.option_off"
@@ -291,6 +303,7 @@ pub enum SettingsAction {
     SetDeleteSelectionMode(ConfigSelectionMode),
     SetLanguage(Language),
     SetShadowsEnabled(bool),
+    SetVsyncEnabled(bool),
     ToggleDropdown(SettingsDropdown),
     Bind(ActionKeyName),
     ResetDefaults,
@@ -315,6 +328,7 @@ impl UiActionLabel for SettingsAction {
             | Self::SetDeleteSelectionMode(_)
             | Self::SetLanguage(_)
             | Self::SetShadowsEnabled(_)
+            | Self::SetVsyncEnabled(_)
             | Self::ToggleDropdown(_) => "",
         }
     }

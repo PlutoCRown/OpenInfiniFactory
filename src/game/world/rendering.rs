@@ -261,6 +261,26 @@ pub fn sync_shadow_settings(
     }
 }
 
+/// 把配置里的垂直同步开关同步到主窗口
+pub fn sync_vsync_settings(
+    config: Res<crate::shared::config::GameConfig>,
+    mut windows: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
+) {
+    if !config.is_changed() {
+        return;
+    }
+    let mode = if config.vsync_enabled {
+        bevy::window::PresentMode::AutoVsync
+    } else {
+        bevy::window::PresentMode::AutoNoVsync
+    };
+    for mut window in &mut windows {
+        if window.present_mode != mode {
+            window.present_mode = mode;
+        }
+    }
+}
+
 pub fn setup_block_icons(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,

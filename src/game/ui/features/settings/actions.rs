@@ -207,6 +207,11 @@ pub fn dispatch_settings_actions(
                 open_dropdown.0 = None;
                 save_config(&config);
             }
+            SettingsAction::SetVsyncEnabled(enabled) => {
+                config.vsync_enabled = enabled;
+                open_dropdown.0 = None;
+                save_config(&config);
+            }
             SettingsAction::ToggleDropdown(dropdown) => {
                 open_dropdown.0 = if open_dropdown.0 == Some(dropdown) {
                     None

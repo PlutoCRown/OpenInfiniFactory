@@ -33,7 +33,15 @@ pub fn handle_headless_command(
         DebugHttpCommand::GetStatus => {
             let control = state.app.world().resource::<SimulationControl>();
             json_ok(serde_json::json!({
+                "game_mode": "headless",
+                "paused": false,
+                "inventory_open": false,
+                "active_play": true,
+                "ui_blocks_gameplay": false,
+                "render_ready": true,
+                "save": null,
                 "simulation": session_status_json(control),
+                "cursor": null,
             }))
         }
         DebugHttpCommand::WorldReset => state.with_core(|mut core, _| {

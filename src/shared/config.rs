@@ -36,6 +36,7 @@ pub const DEFAULT_CONFIG: GameConfig = GameConfig {
     mouse_sensitivity_x: 1.0,
     mouse_sensitivity_y: 1.0,
     shadows_enabled: true,
+    vsync_enabled: true,
     language: None,
     place_selection_mode: ConfigSelectionMode::Point,
     delete_selection_mode: ConfigSelectionMode::Point,
@@ -55,6 +56,8 @@ pub struct GameConfig {
     pub mouse_sensitivity_y: f32,
     #[serde(default = "default_shadows_enabled")]
     pub shadows_enabled: bool,
+    #[serde(default = "default_vsync_enabled")]
+    pub vsync_enabled: bool,
     #[serde(default)]
     pub language: Option<Language>,
     #[serde(default)]
@@ -85,6 +88,10 @@ fn default_mouse_sensitivity() -> f32 {
 
 fn default_shadows_enabled() -> bool {
     DEFAULT_CONFIG.shadows_enabled
+}
+
+fn default_vsync_enabled() -> bool {
+    DEFAULT_CONFIG.vsync_enabled
 }
 
 fn default_key_bindings() -> KeyBindings {

@@ -83,6 +83,7 @@ fn spawn_settings_dropdown_layers(root: &mut ChildSpawnerCommands) {
         SettingsDropdown::PlaceSelectionMode,
         SettingsDropdown::DeleteSelectionMode,
         SettingsDropdown::Shadows,
+        SettingsDropdown::Vsync,
     ] {
         spawn_settings_dropdown_list(root, dropdown, settings_dropdown_options(dropdown));
     }
@@ -327,6 +328,16 @@ fn settings_dropdown_options(dropdown: SettingsDropdown) -> Vec<(String, Setting
             (
                 i18n.t("settings.option_off"),
                 SettingsAction::SetShadowsEnabled(false),
+            ),
+        ],
+        SettingsDropdown::Vsync => vec![
+            (
+                i18n.t("settings.option_on"),
+                SettingsAction::SetVsyncEnabled(true),
+            ),
+            (
+                i18n.t("settings.option_off"),
+                SettingsAction::SetVsyncEnabled(false),
             ),
         ],
     }

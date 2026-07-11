@@ -3,10 +3,15 @@ use serde_json::{json, Value};
 
 use crate::game::blocks::BlockKind;
 use crate::game::simulation::runtime::SimulationStepStats;
-use crate::game::state::{BuilderMode, PlacementState, SimulationState};
+use crate::game::state::{
+    BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
+    WorldEntryMode,
+};
 use crate::game::systems::perf::{PerfScope, PerfStats};
+use crate::game::ui::UiRuntime;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{TargetHit, WorldBlocks};
+use crate::shared::save::{SaveKind, SaveState};
 use crate::sim_core::SimulationControl;
 
 pub fn block_json(world: &WorldBlocks, pos: IVec3) -> Value {
@@ -61,9 +66,23 @@ pub fn cursor_target_json(placement: &PlacementState, world: &WorldBlocks) -> Va
     }
 }
 
+/// 模拟阶段：未开局 / 连续跑且无动画 / 回合间（含动画或停在回合边界）
+pub fn sim_phase_label(simulation: &SimulationState, animating: bool) -> &'static str {
+    if !simulation.is_active() {
+        "idle"
+    } else if animating {
+        "between_turns"
+    } else if simulation.running {
+        "running"
+    } else {
+        "between_turns"
+    }
+}
+
 pub fn simulation_status_json(
     simulation: &SimulationState,
     builder_mode: BuilderMode,
+    animating: bool,
 ) -> Value {
     json!({
         "builder_mode": match builder_mode {
@@ -75,10 +94,69 @@ pub fn simulation_status_json(
         "step_requested": simulation.step_requested,
         "turn": simulation.turn,
         "speed": simulation.speed,
+        "sim_phase": sim_phase_label(simulation, animating),
+        "accumulator": simulation.accumulator,
+    })
+}
+
+pub fn save_status_json(save_state: &SaveState, solution_state: &SolutionState) -> Value {
+    let Some(slot) = save_state.current.as_ref() else {
+        return Value::Null;
+    };
+    let kind = save_state.current_kind.unwrap_or_else(|| slot.kind());
+    json!({
+        "path": slot.storage_path(),
+        "kind": match kind {
+            SaveKind::Puzzle => "puzzle",
+            SaveKind::Solution => "solution",
+        },
+        "entry": match solution_state.entry {
+            WorldEntryMode::EditPuzzle => "edit_puzzle",
+            WorldEntryMode::PlaySolution => "play_solution",
+        },
+        "puzzle_id": solution_state.puzzle_id,
+        "dirty": solution_state.dirty,
+    })
+}
+
+/// 嵌入式客户端完整 /status（主菜单与 Playing 均可）
+pub fn embedded_status_json(
+    mode: GameMode,
+    builder_mode: BuilderMode,
+    playing_ui: &PlayingUiState,
+    ui_runtime: &UiRuntime,
+    simulation: &SimulationState,
+    save_state: &SaveState,
+    solution_state: &SolutionState,
+    render_ready: bool,
+    animating: bool,
+    cursor: Value,
+) -> Value {
+    json!({
+        "ok": true,
+        "game_mode": match mode {
+            GameMode::StartMenu => "start_menu",
+            GameMode::Playing => "playing",
+        },
+        "paused": playing_ui.paused,
+        "inventory_open": playing_ui.inventory_open,
+        "active_play": playing_ui.active_play(),
+        "ui_blocks_gameplay": ui_runtime.blocks_gameplay(),
+        "render_ready": render_ready,
+        "save": save_status_json(save_state, solution_state),
+        "simulation": simulation_status_json(simulation, builder_mode, animating),
+        "cursor": cursor,
     })
 }
 
 pub fn session_status_json(control: &SimulationControl) -> Value {
+    let phase = if !control.is_active() {
+        "idle"
+    } else if control.running {
+        "running"
+    } else {
+        "between_turns"
+    };
     json!({
         "mode": "headless",
         "active": control.is_active(),
@@ -86,6 +164,7 @@ pub fn session_status_json(control: &SimulationControl) -> Value {
         "step_requested": control.step_requested,
         "turn": control.turn,
         "speed": control.speed,
+        "sim_phase": phase,
     })
 }
 

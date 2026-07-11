@@ -115,7 +115,7 @@ pub fn help_json() -> String {
         "ok": true,
         "endpoints": [
             {"method": "GET", "path": "/getPosBlock?x=&y=&z=", "desc": "block at coordinate"},
-            {"method": "GET", "path": "/status", "desc": "simulation snapshot"},
+            {"method": "GET", "path": "/status", "desc": "session + simulation snapshot (any game mode)"},
             {"method": "GET", "path": "/perf", "desc": "frame timing stats (in-game overlay)"},
             {"method": "GET", "path": "/blockKinds", "desc": "all registered block kinds"},
             {"method": "POST", "path": "/world/reset", "desc": "clear session world"},

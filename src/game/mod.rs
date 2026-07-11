@@ -171,6 +171,7 @@ impl Plugin for GamePlugin {
             )
             .add_systems(Update, sync_gameplay_view_image_size)
             .add_systems(Update, world::rendering::sync_shadow_settings)
+            .add_systems(Update, world::rendering::sync_vsync_settings)
             .add_systems(Update, gameplay_input.before(PerfScope::Input))
             .add_systems(
                 Update,

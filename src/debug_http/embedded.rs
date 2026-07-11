@@ -9,7 +9,8 @@ use crate::debug_http::protocol::{
     help_json, json_error, json_ok, DebugHttpCommand, DebugHttpRequest,
 };
 use crate::debug_http::snapshot::{
-    block_json, cursor_target_json, perf_stats_json, pos_json, simulation_status_json,
+    block_json, cursor_target_json, embedded_status_json, perf_stats_json, pos_json,
+    simulation_status_json,
 };
 use crate::debug_http::world_ops::{block_kinds_json, parse_block_kind, parse_facing, place_block};
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
@@ -19,14 +20,18 @@ use crate::game::session::PlayingWorldParams;
 use crate::game::simulation::runtime::{
     PendingGeneratedMaterials, SignalNetworkCache, SimulationPresentationState, SimulationStepStats,
 };
-use crate::game::state::{BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState};
+use crate::game::state::{
+    BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
+};
 use crate::game::systems::perf::PerfStats;
 use crate::game::systems::simulation_controls::{
     request_continuous_run, request_one_turn, start_simulation_if_needed,
 };
 use crate::game::ui::UiRuntime;
+use crate::game::world::animation::{AnimatedBlock, AnimatedPusherRod};
 use crate::game::world::rendering::BlockEntity;
 use crate::shared::launch::{LaunchOptions, DEFAULT_DEBUG_HTTP_PORT};
+use crate::shared::save::SaveState;
 use crate::sim_core::{SimSnapshot, SimulationDebugLog, SimulationWorker, TurnCache};
 
 #[derive(Resource)]
@@ -39,6 +44,44 @@ pub struct DebugHttpBridge {
 
 #[derive(Resource, Default)]
 pub struct PendingDebugHttpStart(pub bool);
+
+/// 会话状态（合并参数，避免 poll 系统超限）
+#[derive(SystemParam)]
+pub struct DebugHttpSessionSnapshot<'w, 's> {
+    mode: Res<'w, State<GameMode>>,
+    builder_mode: Res<'w, BuilderMode>,
+    playing_ui: Res<'w, PlayingUiState>,
+    ui_runtime: Res<'w, UiRuntime>,
+    save_state: Res<'w, SaveState>,
+    solution_state: Res<'w, SolutionState>,
+    animated: Query<'w, 's, Entity, Or<(With<AnimatedBlock>, With<AnimatedPusherRod>)>>,
+}
+
+impl<'w, 's> DebugHttpSessionSnapshot<'w, 's> {
+    fn animating(&self) -> bool {
+        !self.animated.is_empty()
+    }
+
+    fn status_json(
+        &self,
+        simulation: &SimulationState,
+        render_ready: bool,
+        cursor: serde_json::Value,
+    ) -> serde_json::Value {
+        embedded_status_json(
+            *self.mode.get(),
+            *self.builder_mode,
+            &self.playing_ui,
+            &self.ui_runtime,
+            simulation,
+            &self.save_state,
+            &self.solution_state,
+            render_ready,
+            self.animating(),
+            cursor,
+        )
+    }
+}
 
 /// 供 HTTP /perf 读取的帧统计（合并参数，避免 poll 系统超限）
 #[derive(SystemParam)]
@@ -183,10 +226,7 @@ fn process_pending_debug_http_start(
 }
 
 pub fn poll_debug_http(
-    mode: Res<State<GameMode>>,
-    builder_mode: Res<BuilderMode>,
-    playing_ui: Res<PlayingUiState>,
-    ui_runtime: Res<UiRuntime>,
+    session: DebugHttpSessionSnapshot,
     placement: Res<PlacementState>,
     perf_snapshot: DebugHttpPerfSnapshot,
     mut simulation: ResMut<SimulationState>,
@@ -207,10 +247,7 @@ pub fn poll_debug_http(
     while let Ok(request) = bridge.receiver.lock().unwrap().try_recv() {
         let body = handle_embedded_debug_command(
             request.command,
-            *mode.get(),
-            *builder_mode,
-            &playing_ui,
-            &ui_runtime,
+            &session,
             &placement,
             &perf_snapshot,
             &mut simulation,
@@ -230,10 +267,7 @@ pub fn poll_debug_http(
 
 fn handle_embedded_debug_command(
     command: DebugHttpCommand,
-    mode: GameMode,
-    builder_mode: BuilderMode,
-    playing_ui: &PlayingUiState,
-    ui_runtime: &UiRuntime,
+    session: &DebugHttpSessionSnapshot<'_, '_>,
     placement: &PlacementState,
     perf_snapshot: &DebugHttpPerfSnapshot<'_, '_>,
     simulation: &mut SimulationState,
@@ -247,6 +281,12 @@ fn handle_embedded_debug_command(
     playing: &mut PlayingWorldParams,
     edit_history: &mut EditHistory,
 ) -> String {
+    let mode = *session.mode.get();
+    let builder_mode = *session.builder_mode;
+    let playing_ui = &*session.playing_ui;
+    let ui_runtime = &*session.ui_runtime;
+    let animating = session.animating();
+
     if matches!(command, DebugHttpCommand::GetPerf) {
         return json_ok(perf_snapshot.capture(
             builder_mode,
@@ -255,12 +295,27 @@ fn handle_embedded_debug_command(
         ));
     }
 
+    if matches!(command, DebugHttpCommand::GetStatus) {
+        let cursor = if mode == GameMode::Playing {
+            cursor_target_json(placement, &playing.world)
+        } else {
+            serde_json::Value::Null
+        };
+        return session
+            .status_json(
+                simulation,
+                render_ready && mode == GameMode::Playing,
+                cursor,
+            )
+            .to_string();
+    }
+
     if mode != GameMode::Playing {
         return json_error("game is not in Playing mode");
     }
 
     match command {
-        DebugHttpCommand::GetPerf => unreachable!(),
+        DebugHttpCommand::GetPerf | DebugHttpCommand::GetStatus => unreachable!(),
         DebugHttpCommand::Help => help_json(),
         DebugHttpCommand::BlockKinds => block_kinds_json(),
         DebugHttpCommand::GetPosBlock { x, y, z } => {
@@ -281,15 +336,6 @@ fn handle_embedded_debug_command(
                 .to_string()
             }
         }
-        DebugHttpCommand::GetStatus => serde_json::json!({
-            "ok": true,
-            "simulation": simulation_status_json(simulation, builder_mode),
-            "cursor": cursor_target_json(placement, &playing.world),
-            "render_ready": render_ready,
-            "active_play": playing_ui.active_play(),
-            "ui_blocks_gameplay": ui_runtime.blocks_gameplay(),
-        })
-        .to_string(),
         DebugHttpCommand::PlaceBlock {
             x,
             y,
@@ -373,7 +419,7 @@ fn handle_embedded_debug_command(
             sim_log.log(simulation.turn, "HTTP /run");
             serde_json::json!({
                 "ok": true,
-                "simulation": simulation_status_json(simulation, builder_mode),
+                "simulation": simulation_status_json(simulation, builder_mode, animating),
             })
             .to_string()
         }
@@ -420,7 +466,7 @@ fn handle_embedded_debug_command(
                     sim_log.log(simulation.turn.saturating_add(1), "HTTP /runOneTurn queued");
                     serde_json::json!({
                         "ok": true,
-                        "simulation": simulation_status_json(simulation, builder_mode),
+                        "simulation": simulation_status_json(simulation, builder_mode, animating),
                     })
                     .to_string()
                 }
