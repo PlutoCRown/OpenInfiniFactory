@@ -8,9 +8,9 @@ use crate::game::state::{
 use crate::game::ui::InventoryItems;
 use crate::shared::save::SaveState;
 
-use super::cover::{
-    begin_cover_capture, should_capture_cover, CoverScreenshotComplete, PendingMainMenuExit,
-};
+#[cfg(not(target_arch = "wasm32"))]
+use super::cover::{begin_cover_capture, CoverScreenshotComplete};
+use super::cover::{should_capture_cover, PendingMainMenuExit};
 use super::messages::ExitToMainMenu;
 use super::world_access::PlayingWorldParams;
 use super::world_ops::{exit_to_main_menu, save_current_world};

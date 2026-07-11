@@ -2,6 +2,8 @@
 target = "index.html"
 dist = "dist/web"
 public_url = "./"
+# wasm 不编 oif-debug-http / export_fixture（依赖 native-tools）
+no_default_features = true
 
 [serve]
 no_spa = true

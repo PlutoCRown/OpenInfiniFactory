@@ -122,7 +122,7 @@ cargo build --bin oif-debug-http && cd e2e && bun test
 | Linux | `scripts/package_linux.sh` |
 | Windows | `scripts/package_windows.ps1` |
 | Android | `scripts/package_android.sh` |
-| Web | `trunk build --release --features webgpu --dist dist/web` |
+| Web | `scripts/package_web.sh`（输出 `dist/web`；需 `~/.cargo/bin/trunk`） |
 
 ---
 

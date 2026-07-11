@@ -17,14 +17,15 @@ use bevy::prelude::*;
 use bevy::ui_widgets::slider_self_update;
 
 use crate::scene::BlockEntityIndex;
-use crate::shared::config::load_config;
+use crate::shared::config::{load_config, GameConfig};
 use crate::shared::i18n::{resolve_language, I18n};
 use crate::shared::launch::LaunchOptions;
-use crate::shared::persistent_storage;
+use crate::shared::persistent_storage::{self, StoragePlugin, StorageReady};
 use crate::shared::save::SaveState;
 use crate::sim_bridge::{SimulationWorker, TurnCache};
 
 use cameras::{spawn_ui_camera, sync_gameplay_view_image_size};
+#[cfg(not(target_arch = "wasm32"))]
 use debug::DebugToolsPlugin;
 use edit_history::{edit_history_input, EditHistory};
 use player::controller::{
@@ -91,7 +92,8 @@ impl Plugin for GamePlugin {
             mouse_sensitivity_y: config.mouse_sensitivity_y,
         };
 
-        app.insert_resource(ClearColor(Color::srgb(0.58, 0.68, 0.76)))
+        app.add_plugins(StoragePlugin)
+            .insert_resource(ClearColor(Color::srgb(0.58, 0.68, 0.76)))
             .insert_resource(GlobalAmbientLight {
                 color: Color::srgb(0.90, 0.94, 1.0),
                 brightness: 680.0,
@@ -129,20 +131,28 @@ impl Plugin for GamePlugin {
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(SessionPlugin)
             .add_plugins(GameUiPlugin)
-            .add_plugins(PerfPlugin)
-            .add_plugins(DebugToolsPlugin)
-            .add_observer(slider_self_update)
+            .add_plugins(PerfPlugin);
+        #[cfg(not(target_arch = "wasm32"))]
+        app.add_plugins(DebugToolsPlugin);
+        app.add_observer(slider_self_update)
             .add_systems(
                 Startup,
                 (
                     spawn_ui_camera,
-                    refresh_saves_on_startup,
-                    apply_launch_load_save,
                     ui::load_ui_font,
                     systems::debug::load_debug_font,
                     ui::setup_menu_ui,
                 )
                     .chain(),
+            )
+            .add_systems(
+                Update,
+                (
+                    apply_storage_ready,
+                    apply_launch_load_save_when_ready,
+                )
+                    .chain()
+                    .before(PerfScope::Menus),
             )
             .add_systems(
                 OnEnter(GameMode::Playing),
@@ -231,12 +241,58 @@ impl Plugin for GamePlugin {
     }
 }
 
-fn refresh_saves_on_startup(mut save_state: ResMut<SaveState>) {
+fn apply_storage_ready(
+    ready: Res<StorageReady>,
+    mut applied: Local<bool>,
+    mut save_state: ResMut<SaveState>,
+    mut config: ResMut<GameConfig>,
+    mut i18n: ResMut<I18n>,
+    mut settings: ResMut<GameSettings>,
+    mut ui_scale: ResMut<UiScale>,
+    launch: Res<LaunchOptions>,
+) {
+    if *applied || !ready.0 {
+        return;
+    }
+    *applied = true;
+
+    let mut loaded = load_config();
+    if let Some(language) = launch.language {
+        loaded.language = Some(language);
+    }
+    loaded.ui_scale = loaded.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
+    loaded.gravity_scale = loaded
+        .gravity_scale
+        .clamp(GRAVITY_SCALE_MIN, GRAVITY_SCALE_MAX);
+    loaded.mouse_sensitivity_x = loaded
+        .mouse_sensitivity_x
+        .clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX);
+    loaded.mouse_sensitivity_y = loaded
+        .mouse_sensitivity_y
+        .clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX);
+
+    *i18n = I18n::new(resolve_language(loaded.language));
+    settings.fov_degrees = loaded.fov_degrees;
+    settings.ui_scale = loaded.ui_scale;
+    settings.gravity_scale = loaded.gravity_scale;
+    settings.mouse_sensitivity_x = loaded.mouse_sensitivity_x;
+    settings.mouse_sensitivity_y = loaded.mouse_sensitivity_y;
+    ui_scale.0 = loaded.ui_scale;
+    *config = loaded;
     save_state.refresh();
 }
 
-/// 启动参数 `--load-save`：主菜单阶段排队加载并存入 Playing
-fn apply_launch_load_save(launch: Res<LaunchOptions>, mut commands: Commands) {
+/// 启动参数 `--load-save`：等存储就绪后再排队加载
+fn apply_launch_load_save_when_ready(
+    ready: Res<StorageReady>,
+    launch: Res<LaunchOptions>,
+    mut applied: Local<bool>,
+    mut commands: Commands,
+) {
+    if *applied || !ready.0 {
+        return;
+    }
+    *applied = true;
     let Some(raw) = launch.load_save.as_deref() else {
         return;
     };

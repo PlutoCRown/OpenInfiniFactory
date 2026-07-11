@@ -3991,12 +3991,14 @@ dependencies = [
  "bevy",
  "icu_provider",
  "inventory",
+ "js-sys",
  "oif-sim",
  "paste",
  "ron 0.8.1",
  "serde",
  "serde_json",
  "tiny_http",
+ "wasm-bindgen",
  "web-sys",
 ]
 

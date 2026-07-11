@@ -19,9 +19,9 @@ pub use messages::LoadWorld;
 pub use world_access::PlayingWorldParams;
 pub use world_ops::SaveCurrentWorldResult;
 
+use cover::PendingMainMenuExit;
 #[cfg(not(target_arch = "wasm32"))]
-use cover::CoverScreenshotComplete;
-use cover::{on_screenshot_saved_for_exit, PendingMainMenuExit};
+use cover::{on_screenshot_saved_for_exit, CoverScreenshotComplete};
 
 use bevy::prelude::*;
 
@@ -37,7 +37,10 @@ use crate::game::world::rendering::{
     teardown_playing_scene, BlockIconRenderRoot, GameplayScene, WorldRenderAssets,
 };
 
-use load::{handle_create_new_puzzle, handle_create_new_solution, handle_load_world};
+use load::{
+    handle_create_new_puzzle, handle_create_new_solution, handle_load_world, poll_pending_world_load,
+    PendingWorldLoad,
+};
 use messages::{
     CreateNewPuzzle, CreateNewSolution, ExitToMainMenu, ResetSolution, SaveCurrentWorld,
     SaveCurrentWorldInvalidateSolutions, SaveWorldAsNewPuzzle, SwitchToEditMode,
@@ -54,6 +57,7 @@ pub struct SessionPlugin;
 impl Plugin for SessionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PendingMainMenuExit>()
+            .init_resource::<PendingWorldLoad>()
             .add_message::<SaveCurrentWorld>()
             .add_message::<SaveCurrentWorldInvalidateSolutions>()
             .add_message::<SaveWorldAsNewPuzzle>()
@@ -76,6 +80,7 @@ impl Plugin for SessionPlugin {
                 handle_reset_solution,
                 handle_switch_to_edit_mode,
                 handle_load_world,
+                poll_pending_world_load,
                 handle_create_new_puzzle,
                 handle_create_new_solution,
             )

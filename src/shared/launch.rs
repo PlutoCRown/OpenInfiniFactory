@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::shared::i18n::Language;
 use crate::shared::persistent_storage;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::shared::platform::saves_directory;
 use crate::shared::save::SaveSlot;
 
@@ -116,22 +117,26 @@ fn normalize_save_arg(raw: &str) -> Option<String> {
     }
     let path = Path::new(trimmed);
     let relative = if path.is_absolute() {
-        let saves = saves_directory();
-        path.canonicalize()
-            .ok()
-            .and_then(|canon| {
-                canon
-                    .strip_prefix(saves)
-                    .ok()
-                    .map(|rest| rest.to_path_buf())
-            })
-            .or_else(|| {
-                path.strip_prefix(saves)
-                    .ok()
-                    .map(|rest| rest.to_path_buf())
-            })?
-            .to_string_lossy()
-            .into_owned()
+        #[cfg(target_arch = "wasm32")]
+        {
+            // Web 无本地 saves 目录，不接受绝对路径
+            return None;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let saves = saves_directory();
+            path.canonicalize()
+                .ok()
+                .and_then(|canon| {
+                    canon
+                        .strip_prefix(saves)
+                        .ok()
+                        .map(|rest| rest.to_path_buf())
+                })
+                .or_else(|| path.strip_prefix(saves).ok().map(|rest| rest.to_path_buf()))?
+                .to_string_lossy()
+                .into_owned()
+        }
     } else {
         trimmed
             .trim_start_matches("./")

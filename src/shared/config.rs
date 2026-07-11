@@ -617,7 +617,10 @@ pub fn load_config() -> GameConfig {
     let key = persistent_storage::config_key();
     let Some(contents) = persistent_storage::read(key) else {
         let config = GameConfig::default();
-        save_config(&config);
+        // Web hydrate 前不要落盘，避免被 replace_all 冲掉
+        if persistent_storage::is_ready() {
+            save_config(&config);
+        }
         return config;
     };
     ron::from_str::<GameConfig>(&contents).unwrap_or_else(|error| {

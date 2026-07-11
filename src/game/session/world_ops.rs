@@ -16,8 +16,8 @@ use crate::game::world::rendering::{
 };
 use crate::scene::BlockEntityIndex;
 use crate::shared::save::{
-    has_solutions_for_puzzle, invalidate_solutions_for_puzzle, load_world, next_named_save,
-    puzzle_names, reset_solution_world, save_puzzle, save_solution, solution_names_for_puzzle,
+    has_solutions_for_puzzle, invalidate_solutions_for_puzzle, next_named_save, puzzle_names,
+    reset_solution_world, save_puzzle, save_solution, solution_names_for_puzzle, LoadedSave,
     PlayerSave, SaveKind, SaveSlot, SaveState,
 };
 
@@ -261,6 +261,7 @@ pub fn exit_to_main_menu(
 pub fn load_world_into_session(
     slot: &SaveSlot,
     entry: WorldEntryMode,
+    loaded: LoadedSave,
     world: &mut WorldBlocks,
     builder_mode: &mut BuilderMode,
     inventory: &mut InventoryItems,
@@ -282,9 +283,7 @@ pub fn load_world_into_session(
     next_state: &mut NextState<GameMode>,
     block_index: &mut BlockEntityIndex,
 ) {
-    let Some(loaded) = load_world(world, slot) else {
-        return;
-    };
+    *world = loaded.world;
 
     simulation.running = false;
     simulation.step_requested = false;

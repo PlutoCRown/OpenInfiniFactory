@@ -213,10 +213,15 @@ pub fn save_solution(
 }
 
 pub fn load_world(world: &mut WorldBlocks, slot: &SaveSlot) -> Option<LoadedSave> {
-    let save = read_save(slot)?;
-    let loaded = save.into_loaded(slot)?;
+    let loaded = decode_save_slot(slot)?;
     *world = loaded.world.clone();
     Some(loaded)
+}
+
+/// 仅解码存档（可在后台任务中跑，不碰 ECS）
+pub fn decode_save_slot(slot: &SaveSlot) -> Option<LoadedSave> {
+    let save = read_save(slot)?;
+    save.into_loaded(slot)
 }
 
 pub fn save_kind(slot: &SaveSlot) -> Option<SaveKind> {

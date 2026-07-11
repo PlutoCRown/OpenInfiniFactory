@@ -1,4 +1,3 @@
-#[cfg(not(target_arch = "wasm32"))]
 use bevy::prelude::*;
 #[cfg(not(target_arch = "wasm32"))]
 use bevy::render::view::screenshot::{save_to_disk, Screenshot, ScreenshotCaptured};
