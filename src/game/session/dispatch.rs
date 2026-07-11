@@ -120,6 +120,7 @@ pub fn save_current_world_resources(
     save_state: &mut SaveState,
     solution_state: &mut SolutionState,
     simulation: &SimulationState,
+    player: Option<crate::shared::save::PlayerSave>,
 ) -> SaveCurrentWorldResult {
     save_current_world_impl(
         world,
@@ -127,6 +128,7 @@ pub fn save_current_world_resources(
         save_state,
         solution_state,
         simulation,
+        player,
     )
 }
 
@@ -136,6 +138,7 @@ pub fn save_current_world_invalidate_resources(
     save_state: &mut SaveState,
     solution_state: &mut SolutionState,
     simulation: &SimulationState,
+    player: Option<crate::shared::save::PlayerSave>,
 ) -> bool {
     save_current_world_invalidate_solutions(
         world,
@@ -143,6 +146,7 @@ pub fn save_current_world_invalidate_resources(
         save_state,
         solution_state,
         simulation,
+        player,
     )
 }
 

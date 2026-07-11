@@ -5,8 +5,8 @@ use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::state::{
-    BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
-    StartMenuScreen, WorldEntryMode,
+    BuilderMode, GameMode, PendingPlayerSpawn, PlacementState, PlayingUiState, SimulationState,
+    SolutionState, StartMenuScreen, WorldEntryMode,
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{CarriedItem, InventoryItems};
@@ -17,7 +17,7 @@ use crate::game::world::rendering::{
 use crate::scene::BlockEntityIndex;
 use crate::shared::save::{
     has_solutions_for_puzzle, invalidate_solutions_for_puzzle, load_world, next_named_save,
-    reset_solution_world, save_puzzle, save_solution, SaveKind, SaveState,
+    reset_solution_world, save_puzzle, save_solution, PlayerSave, SaveKind, SaveState,
 };
 
 pub enum SaveCurrentWorldResult {
@@ -40,6 +40,7 @@ pub fn save_current_world(
     save_state: &mut SaveState,
     solution_state: &mut SolutionState,
     simulation: &SimulationState,
+    player: Option<PlayerSave>,
 ) -> SaveCurrentWorldResult {
     if puzzle_save_needs_confirm(save_state) {
         return SaveCurrentWorldResult::NeedsPuzzleConfirm;
@@ -51,6 +52,7 @@ pub fn save_current_world(
         solution_state,
         simulation,
         false,
+        player,
     ) {
         SaveCurrentWorldResult::Saved
     } else {
@@ -64,6 +66,7 @@ pub fn save_current_world_invalidate_solutions(
     save_state: &mut SaveState,
     solution_state: &mut SolutionState,
     simulation: &SimulationState,
+    player: Option<PlayerSave>,
 ) -> bool {
     commit_save_current_world(
         world,
@@ -72,6 +75,7 @@ pub fn save_current_world_invalidate_solutions(
         solution_state,
         simulation,
         true,
+        player,
     )
 }
 
@@ -82,6 +86,7 @@ fn commit_save_current_world(
     solution_state: &mut SolutionState,
     simulation: &SimulationState,
     invalidate_solutions: bool,
+    player: Option<PlayerSave>,
 ) -> bool {
     let world = simulation.authoring_world(world);
     let kind = save_state.current_kind.unwrap_or(SaveKind::Puzzle);
@@ -100,7 +105,7 @@ fn commit_save_current_world(
             if invalidate_solutions {
                 invalidate_solutions_for_puzzle(&name);
             }
-            save_puzzle(world, &name, inventory)
+            save_puzzle(world, &name, inventory, player)
         }
         SaveKind::Solution => {
             let Some(puzzle_id) = solution_state
@@ -110,7 +115,7 @@ fn commit_save_current_world(
             else {
                 return false;
             };
-            save_solution(world, &name, &puzzle_id, inventory)
+            save_solution(world, &name, &puzzle_id, inventory, player)
         }
     };
     if saved {
@@ -266,6 +271,7 @@ pub fn load_world_into_session(
     structure_state: &mut StructureState,
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
+    pending_player: &mut PendingPlayerSpawn,
     current_mode: GameMode,
     next_state: &mut NextState<GameMode>,
     block_index: &mut BlockEntityIndex,
@@ -308,6 +314,7 @@ pub fn load_world_into_session(
         WorldEntryMode::EditPuzzle => None,
         WorldEntryMode::PlaySolution => loaded.puzzle_snapshot,
     };
+    pending_player.0 = loaded.player;
 
     refresh_static_generated_markers(world);
     structure_state.clear();

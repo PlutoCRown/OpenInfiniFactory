@@ -3,7 +3,7 @@ mod confirm;
 use bevy::prelude::*;
 
 use crate::game::session;
-use crate::game::session::{puzzle_save_needs_confirm, save_current_world_resources};
+use crate::game::session::puzzle_save_needs_confirm;
 use crate::game::state::{
     BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
     WorldEntryMode,
@@ -105,17 +105,11 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
                 _ => i18n.t("button.save_puzzle"),
             }
         }
-        on_click(ctx, _commands) {
+        on_click(ctx, commands) {
             if puzzle_save_needs_confirm(ctx.save_state) {
                 open_save_puzzle_confirm();
             } else {
-                let _ = save_current_world_resources(
-                    ctx.world,
-                    ctx.inventory,
-                    ctx.save_state,
-                    ctx.solution_state,
-                    ctx.simulation,
-                );
+                session::save_current_world(commands);
             }
         }
     };

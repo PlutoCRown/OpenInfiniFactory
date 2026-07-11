@@ -44,6 +44,15 @@ pub fn get(kind: BlockKind) -> &'static (dyn Block + Send + Sync) {
         .expect("every BlockKind must be registered")
 }
 
+pub fn save_stores_facing(kind: BlockKind) -> bool {
+    match kind {
+        BlockKind::Platform | BlockKind::Wire | BlockKind::DownWelder | BlockKind::DownDetector => {
+            false
+        }
+        kind => get(kind).is_directional(),
+    }
+}
+
 pub fn is_editable(kind: BlockKind) -> bool {
     registrations().any(|registration| registration.kind == kind && registration.editable)
 }

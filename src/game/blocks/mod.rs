@@ -46,7 +46,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub use self::model_spawn::spawn_model_parts;
-pub use self::registry::{all_blocks, assert_registry_consistent, edit_blocks, PLAY_BLOCKS};
+pub use self::registry::{all_blocks, assert_registry_consistent, edit_blocks, save_stores_facing, PLAY_BLOCKS};
 use crate::game::state::UiPanelId;
 pub use crate::game::world::direction::Facing;
 use crate::game::world::grid::BlockSettings;

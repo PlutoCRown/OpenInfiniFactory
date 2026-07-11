@@ -22,13 +22,15 @@ use crate::shared::launch::LaunchOptions;
 use crate::shared::save::SaveState;
 use crate::sim_core::{SimulationWorker, TurnCache};
 
-use cameras::spawn_ui_camera;
+use cameras::{spawn_ui_camera, sync_gameplay_view_image_size};
 use debug::DebugToolsPlugin;
-use player::controller::{camera_look, camera_move, spawn_player, sync_cursor_grab};
+use player::controller::{
+    apply_pending_player_spawn, camera_look, camera_move, spawn_player, sync_cursor_grab,
+};
 use session::{on_exit_playing, prepare_playing_session, rebuild_playing_world, SessionPlugin};
 use state::{
-    BuilderMode, GameMode, GameSettings, PlacementState, PlayingUiState, SimulationState,
-    SolutionState, StartMenuScreen,
+    BuilderMode, GameMode, GameSettings, PendingPlayerSpawn, PlacementState, PlayingUiState,
+    SimulationState, SolutionState, StartMenuScreen,
 };
 use systems::gameplay::{
     apply_fov, draw_hover_structure_bounds, gameplay_input, placement_input, update_hover,
@@ -96,6 +98,7 @@ impl Plugin for GamePlugin {
             .insert_resource(config)
             .insert_resource(i18n)
             .insert_resource(SaveState::default())
+            .init_resource::<PendingPlayerSpawn>()
             .insert_resource(systems::debug::DebugState::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(SessionPlugin)
@@ -122,6 +125,7 @@ impl Plugin for GamePlugin {
                     world::rendering::setup_scene,
                     world::rendering::setup_block_icons,
                     spawn_player,
+                    apply_pending_player_spawn,
                     ui::setup_playing_ui_system,
                     systems::debug::setup_debug_ui,
                     rebuild_playing_world,
@@ -138,6 +142,7 @@ impl Plugin for GamePlugin {
                     .chain()
                     .before(PerfScope::Input),
             )
+            .add_systems(Update, sync_gameplay_view_image_size)
             .add_systems(Update, gameplay_input.before(PerfScope::Input))
             .add_systems(
                 Update,

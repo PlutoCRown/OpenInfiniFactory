@@ -21,6 +21,7 @@ use crate::game::blocks::panels::{spawn_all_overlays, spawn_all_panels};
 use crate::game::ui::core::confirm_dialog::{
     ConfirmButtonId, ConfirmMessageText, ConfirmTitleText,
 };
+use crate::game::cameras::{GameplayViewBackdrop, GameplayViewImage};
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiRootEntity};
 use crate::game::ui::core::text_prompt::{
     TextPromptButtonId, TextPromptInput, TextPromptRoot, TextPromptTitle,
@@ -41,10 +42,26 @@ pub fn setup_menu_ui(world: &mut World) {
     commands.insert_resource(UiRootEntity(root));
 }
 
-pub fn setup_playing_ui(commands: &mut Commands) {
+
+fn spawn_gameplay_view_backdrop(root: &mut ChildSpawnerCommands, image: Handle<Image>) {
+    root.spawn((
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            position_type: PositionType::Absolute,
+            ..default()
+        },
+        ImageNode::new(image),
+        GameplayViewBackdrop,
+        Pickable::IGNORE,
+    ));
+}
+
+pub fn setup_playing_ui(commands: &mut Commands, view_image: Handle<Image>) {
     let root = commands
         .spawn((root_node(), PlayingUiRoot))
         .with_children(|root| {
+            spawn_gameplay_view_backdrop(root, view_image);
             spawn_status_overlays(root);
             spawn_hotbar(root);
             spawn_inventory_panel(root);
@@ -60,8 +77,12 @@ pub fn setup_playing_ui(commands: &mut Commands) {
 
 pub fn setup_playing_ui_system(world: &mut World) {
     bind_ui_scope(world);
+    let Some(view) = world.get_resource::<GameplayViewImage>() else {
+        return;
+    };
+    let image = view.0.clone();
     let mut commands = world.commands();
-    setup_playing_ui(&mut commands);
+    setup_playing_ui(&mut commands, image);
 }
 
 const CROSSHAIR_ARM: f32 = 12.0;

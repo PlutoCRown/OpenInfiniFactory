@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::game::player::controller::{capture_player_save, FlyCamera};
 use crate::game::state::{
     BuilderMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
 };
@@ -48,16 +49,22 @@ pub fn handle_switch_to_edit_mode(
     mut playing_ui: ResMut<PlayingUiState>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
+    player: Query<(&FlyCamera, &Transform)>,
     simulation: Res<SimulationState>,
 ) {
     for request in requests.read() {
         if request.save_first {
+            let player_save = player
+                .single()
+                .ok()
+                .map(|(camera, transform)| capture_player_save(camera, transform));
             save_current_world(
                 &world.world,
                 &inventory,
                 &mut save_state,
                 &mut solution_state,
                 &simulation,
+                player_save,
             );
         }
         switch_to_edit_mode_and_rebuild(

@@ -1,67 +1,82 @@
-//! Cross-platform key-value text storage.
-//!
-//! Desktop builds map keys to files under the saves directory. Web builds use
-//! `localStorage` (see [Bevy discussion on wasm persistence](https://github.com/bevyengine/bevy/discussions/19188)).
+//! 跨平台持久化：config 单文件 + 存档文件夹。
 
 const CONFIG_KEY: &str = "config";
 pub const SAVE_PREFIX: &str = "save/";
 
+const META_FILE: &str = "meta.json";
+
 pub fn read(key: &str) -> Option<String> {
-    backend::read(key)
+    backend::read_config(key)
 }
 
 pub fn write(key: &str, value: &str) -> bool {
-    backend::write(key, value)
-}
-
-pub fn remove(key: &str) -> bool {
-    backend::remove(key)
-}
-
-pub fn exists(key: &str) -> bool {
-    backend::exists(key)
-}
-
-/// Lists logical keys sharing `prefix`, without the prefix itself.
-/// Example: prefix `save/` returns `["world_1", "puzzle_a"]`.
-pub fn list_under_prefix(prefix: &str) -> Vec<String> {
-    backend::list_under_prefix(prefix)
-}
-
-pub fn save_storage_key(name: &str) -> String {
-    format!("{SAVE_PREFIX}{name}")
+    backend::write_config(key, value)
 }
 
 pub fn config_key() -> &'static str {
     CONFIG_KEY
 }
 
+pub fn read_save_bytes(save_name: &str, file: &str) -> Option<Vec<u8>> {
+    backend::read_save_bytes(save_name, file)
+}
+
+pub fn write_save_bytes(save_name: &str, file: &str, value: &[u8]) -> bool {
+    backend::write_save_bytes(save_name, file, value)
+}
+
+pub fn read_save_text(save_name: &str, file: &str) -> Option<String> {
+    backend::read_save_text(save_name, file)
+}
+
+pub fn write_save_text(save_name: &str, file: &str, value: &str) -> bool {
+    backend::write_save_text(save_name, file, value)
+}
+
+pub fn save_exists(save_name: &str) -> bool {
+    backend::save_exists(save_name)
+}
+
+pub fn remove_save_folder(save_name: &str) -> bool {
+    backend::remove_save_folder(save_name)
+}
+
+pub fn rename_save_folder(old_name: &str, new_name: &str) -> bool {
+    backend::rename_save_folder(old_name, new_name)
+}
+
+pub fn list_saves() -> Vec<String> {
+    backend::list_saves()
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 mod backend {
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
-    const CONFIG_FILE: &str = "config.ron";
-
-    use super::{CONFIG_KEY, SAVE_PREFIX};
+    use super::{CONFIG_KEY, META_FILE};
     use crate::shared::platform::saves_directory;
 
-    fn file_path(key: &str) -> PathBuf {
-        if key == CONFIG_KEY {
-            saves_directory().join(CONFIG_FILE)
-        } else if let Some(name) = key.strip_prefix(SAVE_PREFIX) {
-            saves_directory().join(format!("{name}.ron"))
-        } else {
-            saves_directory().join(format!("{key}.ron"))
+    fn config_path() -> PathBuf {
+        saves_directory().join("config.ron")
+    }
+
+    fn save_dir(save_name: &str) -> PathBuf {
+        saves_directory().join(save_name)
+    }
+
+    pub fn read_config(key: &str) -> Option<String> {
+        if key != CONFIG_KEY {
+            return None;
         }
+        fs::read_to_string(config_path()).ok()
     }
 
-    pub fn read(key: &str) -> Option<String> {
-        fs::read_to_string(file_path(key)).ok()
-    }
-
-    pub fn write(key: &str, value: &str) -> bool {
-        let path = file_path(key);
+    pub fn write_config(key: &str, value: &str) -> bool {
+        if key != CONFIG_KEY {
+            return false;
+        }
+        let path = config_path();
         if let Some(parent) = path.parent() {
             if let Err(error) = fs::create_dir_all(parent) {
                 bevy::log::warn!("Failed to create storage directory: {error}");
@@ -71,90 +86,203 @@ mod backend {
         match fs::write(path, value) {
             Ok(()) => true,
             Err(error) => {
-                bevy::log::warn!("Failed to write storage key {key}: {error}");
+                bevy::log::warn!("Failed to write config: {error}");
                 false
             }
         }
     }
 
-    pub fn remove(key: &str) -> bool {
-        match fs::remove_file(file_path(key)) {
+    pub fn read_save_bytes(save_name: &str, file: &str) -> Option<Vec<u8>> {
+        fs::read(save_dir(save_name).join(file)).ok()
+    }
+
+    pub fn write_save_bytes(save_name: &str, file: &str, value: &[u8]) -> bool {
+        let path = save_dir(save_name).join(file);
+        ensure_save_dir(&path) && fs::write(path, value).is_ok()
+    }
+
+    pub fn read_save_text(save_name: &str, file: &str) -> Option<String> {
+        fs::read_to_string(save_dir(save_name).join(file)).ok()
+    }
+
+    pub fn write_save_text(save_name: &str, file: &str, value: &str) -> bool {
+        let path = save_dir(save_name).join(file);
+        ensure_save_dir(&path) && fs::write(path, value).is_ok()
+    }
+
+    pub fn save_exists(save_name: &str) -> bool {
+        save_dir(save_name).join(META_FILE).is_file()
+    }
+
+    pub fn remove_save_folder(save_name: &str) -> bool {
+        let path = save_dir(save_name);
+        if !path.is_dir() {
+            return false;
+        }
+        match fs::remove_dir_all(path) {
             Ok(()) => true,
             Err(error) => {
-                bevy::log::warn!("Failed to remove storage key {key}: {error}");
+                bevy::log::warn!("Failed to remove save folder {save_name}: {error}");
                 false
             }
         }
     }
 
-    pub fn exists(key: &str) -> bool {
-        file_path(key).is_file()
+    pub fn rename_save_folder(old_name: &str, new_name: &str) -> bool {
+        let from = save_dir(old_name);
+        let to = save_dir(new_name);
+        if !from.is_dir() || to.exists() {
+            return false;
+        }
+        match fs::rename(from, to) {
+            Ok(()) => true,
+            Err(error) => {
+                bevy::log::warn!("Failed to rename save {old_name} -> {new_name}: {error}");
+                false
+            }
+        }
     }
 
-    pub fn list_under_prefix(prefix: &str) -> Vec<String> {
-        if prefix != SAVE_PREFIX {
-            return Vec::new();
-        }
-
+    pub fn list_saves() -> Vec<String> {
         let dir = saves_directory();
         let Ok(entries) = fs::read_dir(dir) else {
             return Vec::new();
         };
 
-        let mut keys = Vec::new();
+        let mut names = Vec::new();
         for entry in entries.filter_map(Result::ok) {
             let path = entry.path();
-            if path.extension().and_then(|ext| ext.to_str()) != Some("ron") {
+            if !path.is_dir() {
                 continue;
             }
-            let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
-                continue;
-            };
-            if stem == CONFIG_KEY {
-                continue;
+            if path.join(META_FILE).is_file() {
+                if let Some(name) = path.file_name().and_then(|stem| stem.to_str()) {
+                    names.push(name.to_string());
+                }
             }
-            keys.push(stem.to_string());
         }
-        keys.sort();
-        keys
+        names.sort();
+        names
+    }
+
+    fn ensure_save_dir(path: &Path) -> bool {
+        if let Some(parent) = path.parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                bevy::log::warn!("Failed to create save directory: {error}");
+                return false;
+            }
+        }
+        true
     }
 }
 
 #[cfg(target_arch = "wasm32")]
 mod backend {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+    use super::{META_FILE, SAVE_PREFIX};
+
     const STORAGE_PREFIX: &str = "open_infinifactory:";
 
     fn storage() -> Option<web_sys::Storage> {
         web_sys::window()?.local_storage().ok()?
     }
 
-    fn full_key(key: &str) -> String {
-        format!("{STORAGE_PREFIX}{key}")
+    fn full_key(relative: &str) -> String {
+        format!("{STORAGE_PREFIX}{relative}")
     }
 
-    pub fn read(key: &str) -> Option<String> {
+    fn save_key(save_name: &str, file: &str) -> String {
+        full_key(&format!("{SAVE_PREFIX}{save_name}/{file}"))
+    }
+
+    fn is_binary_file(file: &str) -> bool {
+        file.ends_with(".bin") || file.ends_with(".png")
+    }
+
+    pub fn read_config(key: &str) -> Option<String> {
         storage()?.get_item(&full_key(key)).ok()?
     }
 
-    pub fn write(key: &str, value: &str) -> bool {
+    pub fn write_config(key: &str, value: &str) -> bool {
         match storage() {
             Some(storage) => storage.set_item(&full_key(key), value).is_ok(),
             None => false,
         }
     }
 
-    pub fn remove(key: &str) -> bool {
-        match storage() {
-            Some(storage) => storage.remove_item(&full_key(key)).is_ok(),
-            None => false,
+    pub fn read_save_bytes(save_name: &str, file: &str) -> Option<Vec<u8>> {
+        let text = storage()?.get_item(&save_key(save_name, file)).ok()??;
+        STANDARD.decode(text).ok()
+    }
+
+    pub fn write_save_bytes(save_name: &str, file: &str, value: &[u8]) -> bool {
+        let encoded = STANDARD.encode(value);
+        storage()
+            .and_then(|storage| storage.set_item(&save_key(save_name, file), &encoded).ok())
+            .is_some()
+    }
+
+    pub fn read_save_text(save_name: &str, file: &str) -> Option<String> {
+        storage()?.get_item(&save_key(save_name, file)).ok()?
+    }
+
+    pub fn write_save_text(save_name: &str, file: &str, value: &str) -> bool {
+        storage()
+            .and_then(|storage| storage.set_item(&save_key(save_name, file), value).ok())
+            .is_some()
+    }
+
+    pub fn save_exists(save_name: &str) -> bool {
+        read_save_text(save_name, META_FILE).is_some()
+    }
+
+    pub fn remove_save_folder(save_name: &str) -> bool {
+        let Some(storage) = storage() else {
+            return false;
+        };
+        let prefix = full_key(&format!("{SAVE_PREFIX}{save_name}/"));
+        let Ok(length) = storage.length() else {
+            return false;
+        };
+
+        let mut keys = Vec::new();
+        for index in 0..length {
+            let Ok(Some(key)) = storage.key(index) else {
+                continue;
+            };
+            if key.starts_with(&prefix) {
+                keys.push(key);
+            }
         }
+        keys.iter()
+            .all(|key| storage.remove_item(key).unwrap_or(false))
     }
 
-    pub fn exists(key: &str) -> bool {
-        read(key).is_some()
+    pub fn rename_save_folder(old_name: &str, new_name: &str) -> bool {
+        if save_exists(new_name) {
+            return false;
+        }
+        let files = list_save_files(old_name);
+        if files.is_empty() {
+            return false;
+        }
+        for file in &files {
+            let key = save_key(old_name, file);
+            let Some(storage) = storage() else {
+                return false;
+            };
+            let Ok(Some(value)) = storage.get_item(&key) else {
+                return false;
+            };
+            if !write_value(new_name, file, &value) {
+                return false;
+            }
+        }
+        remove_save_folder(old_name)
     }
 
-    pub fn list_under_prefix(prefix: &str) -> Vec<String> {
+    pub fn list_saves() -> Vec<String> {
         let Some(storage) = storage() else {
             return Vec::new();
         };
@@ -162,19 +290,55 @@ mod backend {
             return Vec::new();
         };
 
-        let mut keys = Vec::new();
+        let prefix = full_key(SAVE_PREFIX);
+        let mut names = Vec::new();
         for index in 0..length {
-            let Ok(Some(full_key)) = storage.key(index) else {
+            let Ok(Some(key)) = storage.key(index) else {
                 continue;
             };
-            let Some(relative) = full_key.strip_prefix(STORAGE_PREFIX) else {
+            let Some(relative) = key.strip_prefix(&prefix) else {
                 continue;
             };
-            if let Some(name) = relative.strip_prefix(prefix) {
-                keys.push(name.to_string());
+            let Some((save_name, file)) = relative.split_once('/') else {
+                continue;
+            };
+            if file == META_FILE && !names.iter().any(|name| name == save_name) {
+                names.push(save_name.to_string());
             }
         }
-        keys.sort();
-        keys
+        names.sort();
+        names
+    }
+
+    fn list_save_files(save_name: &str) -> Vec<String> {
+        let Some(storage) = storage() else {
+            return Vec::new();
+        };
+        let Ok(length) = storage.length() else {
+            return Vec::new();
+        };
+        let prefix = full_key(&format!("{SAVE_PREFIX}{save_name}/"));
+        let mut files = Vec::new();
+        for index in 0..length {
+            let Ok(Some(key)) = storage.key(index) else {
+                continue;
+            };
+            let Some(relative) = key.strip_prefix(&prefix) else {
+                continue;
+            };
+            files.push(relative.to_string());
+        }
+        files
+    }
+
+    fn write_value(save_name: &str, file: &str, value: &str) -> bool {
+        if is_binary_file(file) {
+            STANDARD
+                .decode(value)
+                .map(|bytes| write_save_bytes(save_name, file, &bytes))
+                .unwrap_or(false)
+        } else {
+            write_save_text(save_name, file, value)
+        }
     }
 }

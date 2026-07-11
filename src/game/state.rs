@@ -255,6 +255,11 @@ pub enum WorldEntryMode {
     PlaySolution,
 }
 
+use crate::shared::save::PlayerSave;
+
+#[derive(Resource, Default)]
+pub struct PendingPlayerSpawn(pub Option<PlayerSave>);
+
 #[derive(Resource)]
 pub struct GameSettings {
     pub fov_degrees: f32,

@@ -1,4 +1,5 @@
 use bevy::anti_alias::taa::TemporalAntiAliasing;
+use bevy::camera::{Hdr, RenderTarget};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
 use bevy::input::mouse::MouseMotion;
@@ -6,10 +7,12 @@ use bevy::light::ShadowFilteringMethod;
 use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
 use bevy::prelude::*;
 use bevy::render::camera::TemporalJitter;
-use bevy::camera::Hdr;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
-use crate::game::cameras::{GameplayCamera, MENU_CLEAR};
+use crate::game::cameras::{
+    gameplay_view_size, new_gameplay_view_image, GameplayCamera, GameplayViewImage,
+    PlayingUiCamera, MENU_CLEAR,
+};
 use crate::game::simulation::movement::PusherState;
 use crate::game::state::{GameMode, GameSettings, PlayingUiState};
 use crate::game::ui::UiRuntime;
@@ -41,7 +44,18 @@ pub struct FlyCamera {
     sensitivity: f32,
 }
 
-pub fn spawn_player(mut commands: Commands) {
+pub fn spawn_player(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    window: Query<&Window, With<PrimaryWindow>>,
+) {
+    let (width, height) = window
+        .single()
+        .map(gameplay_view_size)
+        .unwrap_or((1280, 720));
+    let image_handle = images.add(new_gameplay_view_image(width, height));
+    commands.insert_resource(GameplayViewImage(image_handle.clone()));
+
     commands
         .spawn((
             Camera3d::default(),
@@ -50,6 +64,7 @@ pub fn spawn_player(mut commands: Commands) {
                 clear_color: ClearColorConfig::Custom(MENU_CLEAR),
                 ..default()
             },
+            RenderTarget::Image(image_handle.into()),
             Transform::from_xyz(0.5, SPAWN_EYE_Y + 1.2, 10.5)
                 .looking_at(Vec3::new(0.5, 0.8, 0.5), Vec3::Y),
             FlyCamera {
@@ -61,7 +76,6 @@ pub fn spawn_player(mut commands: Commands) {
                 last_space_press: -10.0,
                 sensitivity: 0.0025,
             },
-            IsDefaultUiCamera,
             GameplayCamera,
             GameplayScene,
         ))
@@ -81,6 +95,57 @@ pub fn spawn_player(mut commands: Commands) {
             MotionVectorPrepass,
             ShadowFilteringMethod::Temporal,
         ));
+
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 1,
+            clear_color: ClearColorConfig::None,
+            ..default()
+        },
+        Msaa::Off,
+        IsDefaultUiCamera,
+        PlayingUiCamera,
+        GameplayScene,
+    ));
+}
+
+use crate::shared::save::PlayerSave;
+
+pub fn capture_player_save(camera: &FlyCamera, transform: &Transform) -> PlayerSave {
+    PlayerSave {
+        x: transform.translation.x,
+        y: transform.translation.y,
+        z: transform.translation.z,
+        yaw: camera.yaw,
+        pitch: camera.pitch,
+        flying: camera.flying,
+    }
+}
+
+pub fn apply_player_save(camera: &mut FlyCamera, transform: &mut Transform, save: &PlayerSave) {
+    transform.translation = Vec3::new(save.x, save.y, save.z);
+    camera.yaw = save.yaw;
+    camera.pitch = save.pitch;
+    camera.flying = save.flying;
+    camera.velocity_y = 0.0;
+    camera.grounded = false;
+    camera.last_space_press = -10.0;
+    transform.rotation =
+        Quat::from_axis_angle(Vec3::Y, camera.yaw) * Quat::from_axis_angle(Vec3::X, camera.pitch);
+}
+
+pub fn apply_pending_player_spawn(
+    mut pending: ResMut<crate::game::state::PendingPlayerSpawn>,
+    mut player: Query<(&mut FlyCamera, &mut Transform)>,
+) {
+    let Some(save) = pending.0.take() else {
+        return;
+    };
+    let Ok((mut camera, mut transform)) = player.single_mut() else {
+        return;
+    };
+    apply_player_save(&mut camera, &mut transform, &save);
 }
 
 pub fn camera_move(

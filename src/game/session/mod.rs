@@ -1,3 +1,4 @@
+mod cover;
 mod dispatch;
 mod load;
 mod messages;
@@ -23,8 +24,13 @@ pub use messages::LoadWorld;
 pub use world_access::PlayingWorldParams;
 pub use world_ops::SaveCurrentWorldResult;
 
+use cover::{on_screenshot_saved_for_exit, PendingMainMenuExit};
+#[cfg(not(target_arch = "wasm32"))]
+use cover::CoverScreenshotComplete;
+
 use bevy::prelude::*;
 
+use crate::game::cameras::GameplayViewImage;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{PlayingUiState, StartMenuScreen, UiPanelId};
 use crate::game::systems::debug::DebugPanel;
@@ -53,7 +59,8 @@ pub struct SessionPlugin;
 
 impl Plugin for SessionPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<SaveCurrentWorld>()
+        app.init_resource::<PendingMainMenuExit>()
+            .add_message::<SaveCurrentWorld>()
             .add_message::<SaveCurrentWorldInvalidateSolutions>()
             .add_message::<SaveWorldAsNewPuzzle>()
             .add_message::<ExitToMainMenu>()
@@ -61,8 +68,11 @@ impl Plugin for SessionPlugin {
             .add_message::<SwitchToEditMode>()
             .add_message::<LoadWorld>()
             .add_message::<CreateNewPuzzle>()
-            .add_message::<CreateNewSolution>()
-            .add_systems(
+            .add_message::<CreateNewSolution>();
+        #[cfg(not(target_arch = "wasm32"))]
+        app.add_message::<CoverScreenshotComplete>()
+            .add_observer(on_screenshot_saved_for_exit);
+        app.add_systems(
                 Update,
                 (
                     handle_save_current_world,
@@ -79,6 +89,13 @@ impl Plugin for SessionPlugin {
                     .after(PerfScope::Menus)
                     .before(PerfScope::Simulation),
             );
+        #[cfg(not(target_arch = "wasm32"))]
+        app.add_systems(
+            Update,
+            navigation::finish_pending_main_menu_exit
+                .after(navigation::handle_exit_to_main_menu)
+                .before(PerfScope::Simulation),
+        );
     }
 }
 
@@ -138,4 +155,5 @@ pub fn on_exit_playing(
     commands.remove_resource::<PlayingUiRootEntity>();
 
     teardown_playing_scene(&mut commands);
+    commands.remove_resource::<GameplayViewImage>();
 }

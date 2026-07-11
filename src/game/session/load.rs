@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 
 use crate::game::state::{
-    BuilderMode, GameMode, PlacementState, SimulationState, SolutionState, WorldEntryMode,
+    BuilderMode, GameMode, PendingPlayerSpawn, PlacementState, SimulationState, SolutionState,
+    WorldEntryMode,
 };
 use crate::game::ui::{CarriedItem, InventoryItems};
 use crate::game::world::grid::seed_demo_world;
@@ -21,6 +22,7 @@ pub fn handle_load_world(
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
     mut simulation: ResMut<SimulationState>,
+    mut pending_player: ResMut<PendingPlayerSpawn>,
     mode: Res<State<GameMode>>,
     mut next_state: ResMut<NextState<GameMode>>,
 ) {
@@ -44,6 +46,7 @@ pub fn handle_load_world(
             &mut world.structure_state,
             &mut world.movement_influence,
             &mut world.pusher_state,
+            &mut pending_player,
             *mode.get(),
             &mut next_state,
             &mut world.block_index,
@@ -61,6 +64,7 @@ pub fn handle_create_new_puzzle(
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
     mut simulation: ResMut<SimulationState>,
+    mut pending_player: ResMut<PendingPlayerSpawn>,
     mode: Res<State<GameMode>>,
     mut next_state: ResMut<NextState<GameMode>>,
 ) {
@@ -68,7 +72,7 @@ pub fn handle_create_new_puzzle(
         world.world.clear();
         seed_demo_world(&mut world.world);
         *inventory = InventoryItems::for_mode(BuilderMode::Edit);
-        if save_puzzle(&world.world, &request.name, &inventory) {
+        if save_puzzle(&world.world, &request.name, &inventory, None) {
             save_state.refresh();
             load_world_into_session(
                 &request.name,
@@ -89,6 +93,7 @@ pub fn handle_create_new_puzzle(
                 &mut world.structure_state,
                 &mut world.movement_influence,
                 &mut world.pusher_state,
+                &mut pending_player,
                 *mode.get(),
                 &mut next_state,
                 &mut world.block_index,
@@ -107,6 +112,7 @@ pub fn handle_create_new_solution(
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
     mut simulation: ResMut<SimulationState>,
+    mut pending_player: ResMut<PendingPlayerSpawn>,
     mode: Res<State<GameMode>>,
     mut next_state: ResMut<NextState<GameMode>>,
 ) {
@@ -121,6 +127,7 @@ pub fn handle_create_new_solution(
             &request.name,
             &request.puzzle,
             &inventory,
+            None,
         ) {
             save_state.refresh();
             load_world_into_session(
@@ -142,6 +149,7 @@ pub fn handle_create_new_solution(
                 &mut world.structure_state,
                 &mut world.movement_influence,
                 &mut world.pusher_state,
+                &mut pending_player,
                 *mode.get(),
                 &mut next_state,
                 &mut world.block_index,
