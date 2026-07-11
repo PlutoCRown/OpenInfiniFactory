@@ -147,6 +147,11 @@ pub const GAMEPLAY_SETTINGS: &[SettingsItem] = &[
     },
 ];
 
+pub const GRAPHICS_SETTINGS: &[SettingsItem] = &[SettingsItem {
+    label_key: "settings.shadows",
+    control: SettingsControl::Dropdown(SettingsDropdown::Shadows),
+}];
+
 impl SettingsField {
     pub fn slider(self) -> Option<SettingsSliderConfig> {
         GAMEPLAY_SETTINGS
@@ -256,6 +261,7 @@ pub enum SettingsDropdown {
     Language,
     PlaceSelectionMode,
     DeleteSelectionMode,
+    Shadows,
 }
 
 impl SettingsDropdown {
@@ -266,6 +272,11 @@ impl SettingsDropdown {
             Self::Language => i18n.language().native_name().to_string(),
             Self::PlaceSelectionMode => i18n.t(config.place_selection_mode.label_key()),
             Self::DeleteSelectionMode => i18n.t(config.delete_selection_mode.label_key()),
+            Self::Shadows => i18n.t(if config.shadows_enabled {
+                "settings.option_on"
+            } else {
+                "settings.option_off"
+            }),
         }
     }
 }
@@ -273,11 +284,13 @@ impl SettingsDropdown {
 #[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SettingsAction {
     TabGameplay,
+    TabGraphics,
     TabKeyBindings,
     Field(SettingsField),
     SetPlaceSelectionMode(ConfigSelectionMode),
     SetDeleteSelectionMode(ConfigSelectionMode),
     SetLanguage(Language),
+    SetShadowsEnabled(bool),
     ToggleDropdown(SettingsDropdown),
     Bind(ActionKeyName),
     ResetDefaults,
@@ -290,6 +303,7 @@ impl UiActionLabel for SettingsAction {
     fn label_key(self) -> &'static str {
         match self {
             Self::TabGameplay => "button.gameplay",
+            Self::TabGraphics => "button.graphics",
             Self::TabKeyBindings => "button.key_bindings",
             Self::Bind(action) => action.label_key(),
             Self::ResetDefaults => "button.reset_defaults",
@@ -300,6 +314,7 @@ impl UiActionLabel for SettingsAction {
             | Self::SetPlaceSelectionMode(_)
             | Self::SetDeleteSelectionMode(_)
             | Self::SetLanguage(_)
+            | Self::SetShadowsEnabled(_)
             | Self::ToggleDropdown(_) => "",
         }
     }
@@ -310,12 +325,16 @@ impl SettingsAction {
         matches!(
             (self, tab),
             (Self::TabGameplay, SettingsTab::Gameplay)
+                | (Self::TabGraphics, SettingsTab::Graphics)
                 | (Self::TabKeyBindings, SettingsTab::KeyBindings)
         )
     }
 
     pub fn is_tab(self) -> bool {
-        matches!(self, Self::TabGameplay | Self::TabKeyBindings)
+        matches!(
+            self,
+            Self::TabGameplay | Self::TabGraphics | Self::TabKeyBindings
+        )
     }
 }
 
@@ -325,6 +344,7 @@ pub struct ActiveSettingsSlider(pub Option<SettingsField>);
 #[derive(Resource, Clone, Copy, Eq, PartialEq)]
 pub enum SettingsTab {
     Gameplay,
+    Graphics,
     KeyBindings,
 }
 

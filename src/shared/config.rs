@@ -35,6 +35,7 @@ pub const DEFAULT_CONFIG: GameConfig = GameConfig {
     gravity_scale: 1.2,
     mouse_sensitivity_x: 1.0,
     mouse_sensitivity_y: 1.0,
+    shadows_enabled: true,
     language: None,
     place_selection_mode: ConfigSelectionMode::Point,
     delete_selection_mode: ConfigSelectionMode::Point,
@@ -52,6 +53,8 @@ pub struct GameConfig {
     pub mouse_sensitivity_x: f32,
     #[serde(default = "default_mouse_sensitivity")]
     pub mouse_sensitivity_y: f32,
+    #[serde(default = "default_shadows_enabled")]
+    pub shadows_enabled: bool,
     #[serde(default)]
     pub language: Option<Language>,
     #[serde(default)]
@@ -78,6 +81,10 @@ fn default_gravity_scale() -> f32 {
 
 fn default_mouse_sensitivity() -> f32 {
     DEFAULT_CONFIG.mouse_sensitivity_x
+}
+
+fn default_shadows_enabled() -> bool {
+    DEFAULT_CONFIG.shadows_enabled
 }
 
 fn default_key_bindings() -> KeyBindings {

@@ -111,14 +111,46 @@ fn language_from_tag(tag: String) -> Option<Language> {
 
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 fn platform_language_tag() -> Option<String> {
-    std::env::var("LC_ALL")
-        .ok()
-        .or_else(|| std::env::var("LC_MESSAGES").ok())
-        .or_else(|| std::env::var("LANG").ok())
-        .filter(|value| !value.is_empty() && value != "C")
+    env_language_tag().or_else(system_ui_language_tag)
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 fn platform_language_tag() -> Option<String> {
+    None
+}
+
+fn env_language_tag() -> Option<String> {
+    for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Ok(value) = std::env::var(key) {
+            if is_meaningful_locale(&value) {
+                return Some(value);
+            }
+        }
+    }
+    None
+}
+
+fn is_meaningful_locale(value: &str) -> bool {
+    let value = value.trim();
+    !value.is_empty()
+        && !value.eq_ignore_ascii_case("C")
+        && !value.eq_ignore_ascii_case("C.UTF-8")
+        && !value.to_ascii_lowercase().starts_with("c.")
+}
+
+#[cfg(target_os = "macos")]
+fn system_ui_language_tag() -> Option<String> {
+    // Agent/Cursor shell 常是 LANG=C.UTF-8，回退读系统界面语言
+    std::process::Command::new("defaults")
+        .args(["read", "-g", "AppleLocale"])
+        .output()
+        .ok()
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn system_ui_language_tag() -> Option<String> {
     None
 }

@@ -128,6 +128,7 @@ pub fn setup_scene(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    config: Res<crate::shared::config::GameConfig>,
 ) {
     commands.spawn((
         PointLight {
@@ -145,7 +146,7 @@ pub fn setup_scene(
     commands.spawn((
         DirectionalLight {
             illuminance: 9500.0,
-            shadow_maps_enabled: true,
+            shadow_maps_enabled: config.shadows_enabled,
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -1.05, -0.55, -0.28)),
@@ -243,6 +244,21 @@ pub fn teardown_playing_scene(commands: &mut Commands) {
     commands.remove_resource::<WorldRenderAssets>();
     commands.remove_resource::<BlockIconAssets>();
     commands.remove_resource::<BlockIconRenderState>();
+}
+
+/// 把配置里的阴影开关同步到场景平行光
+pub fn sync_shadow_settings(
+    config: Res<crate::shared::config::GameConfig>,
+    mut lights: Query<&mut DirectionalLight, With<GameplayScene>>,
+) {
+    if !config.is_changed() {
+        return;
+    }
+    for mut light in &mut lights {
+        if light.shadow_maps_enabled != config.shadows_enabled {
+            light.shadow_maps_enabled = config.shadows_enabled;
+        }
+    }
 }
 
 pub fn setup_block_icons(

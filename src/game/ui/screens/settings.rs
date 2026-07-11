@@ -8,7 +8,7 @@ use super::super::components::{
 };
 use super::super::types::{
     PanelVisibility, SettingsAction, SettingsControl, SettingsDropdown, SettingsDropdownRow,
-    SettingsItem, SettingsTab, UiPanelBinding, GAMEPLAY_SETTINGS,
+    SettingsItem, SettingsTab, UiPanelBinding, GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS,
 };
 use super::super::widgets::{
     spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_dropdown_list,
@@ -27,6 +27,7 @@ pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands, settings: &GameSett
         |panel| {
             spawn_settings_tabs(panel);
             spawn_gameplay_settings(panel, settings);
+            spawn_graphics_settings(panel, settings);
             spawn_key_bindings(panel);
         },
     );
@@ -44,6 +45,7 @@ fn spawn_settings_tabs(panel: &mut ChildSpawnerCommands) {
         }))
         .with_children(|tabs| {
             spawn_settings_tab(tabs, SettingsAction::TabGameplay);
+            spawn_settings_tab(tabs, SettingsAction::TabGraphics);
             spawn_settings_tab(tabs, SettingsAction::TabKeyBindings);
         });
 }
@@ -52,11 +54,12 @@ fn spawn_settings_dropdown_row(
     panel: &mut ChildSpawnerCommands,
     label_key: &'static str,
     dropdown: SettingsDropdown,
+    tab: SettingsTab,
 ) {
     panel
         .spawn((
             settings_row_node(),
-            PanelVisibility::SettingsTab(SettingsTab::Gameplay),
+            PanelVisibility::SettingsTab(tab),
             SettingsDropdownRow(dropdown),
             ZIndex(300),
         ))
@@ -79,6 +82,7 @@ fn spawn_settings_dropdown_layers(root: &mut ChildSpawnerCommands) {
         SettingsDropdown::Language,
         SettingsDropdown::PlaceSelectionMode,
         SettingsDropdown::DeleteSelectionMode,
+        SettingsDropdown::Shadows,
     ] {
         spawn_settings_dropdown_list(root, dropdown, settings_dropdown_options(dropdown));
     }
@@ -89,10 +93,11 @@ fn spawn_settings_slider_row(
     label_key: &'static str,
     item: SettingsItem,
     settings: &GameSettings,
+    tab: SettingsTab,
 ) {
     panel
         .spawn(settings_row_node())
-        .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
+        .insert(PanelVisibility::SettingsTab(tab))
         .with_children(|row| {
             spawn_settings_label(row, label_key);
             row.spawn(transparent_node({
@@ -156,13 +161,14 @@ fn spawn_settings_item(
     panel: &mut ChildSpawnerCommands,
     item: SettingsItem,
     settings: &GameSettings,
+    tab: SettingsTab,
 ) {
     match item.control {
         SettingsControl::Slider { .. } => {
-            spawn_settings_slider_row(panel, item.label_key, item, settings)
+            spawn_settings_slider_row(panel, item.label_key, item, settings, tab)
         }
         SettingsControl::Dropdown(dropdown) => {
-            spawn_settings_dropdown_row(panel, item.label_key, dropdown)
+            spawn_settings_dropdown_row(panel, item.label_key, dropdown, tab)
         }
     }
 }
@@ -190,10 +196,23 @@ fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, settings: &GameSett
                 ))
                 .with_children(|content| {
                     for item in GAMEPLAY_SETTINGS {
-                        spawn_settings_item(content, *item, settings);
+                        spawn_settings_item(content, *item, settings, SettingsTab::Gameplay);
                     }
                     spawn_settings_footer(content);
                 });
+        });
+}
+
+fn spawn_graphics_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
+    panel
+        .spawn(scroll_container(200.0))
+        .insert(PanelVisibility::SettingsTab(SettingsTab::Graphics))
+        .with_children(|container| {
+            container.spawn(scroll_content()).with_children(|content| {
+                for item in GRAPHICS_SETTINGS {
+                    spawn_settings_item(content, *item, settings, SettingsTab::Graphics);
+                }
+            });
         });
 }
 
@@ -300,5 +319,15 @@ fn settings_dropdown_options(dropdown: SettingsDropdown) -> Vec<(String, Setting
                 )
             })
             .collect(),
+        SettingsDropdown::Shadows => vec![
+            (
+                i18n.t("settings.option_on"),
+                SettingsAction::SetShadowsEnabled(true),
+            ),
+            (
+                i18n.t("settings.option_off"),
+                SettingsAction::SetShadowsEnabled(false),
+            ),
+        ],
     }
 }

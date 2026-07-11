@@ -19,6 +19,8 @@ use bevy::ui_widgets::slider_self_update;
 use crate::scene::BlockEntityIndex;
 use crate::shared::config::load_config;
 use crate::shared::i18n::{resolve_language, I18n};
+use crate::shared::launch::LaunchOptions;
+use crate::shared::persistent_storage;
 use crate::shared::save::SaveState;
 use crate::sim_core::{SimulationWorker, TurnCache};
 
@@ -58,7 +60,18 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         blocks::assert_registry_consistent();
 
+        let launch = app.world().get_resource::<LaunchOptions>().cloned();
+        if let Some(path) = launch
+            .as_ref()
+            .and_then(|options| options.config_path.clone())
+        {
+            persistent_storage::set_config_path_override(path);
+        }
+
         let mut config = load_config();
+        if let Some(language) = launch.as_ref().and_then(|options| options.language) {
+            config.language = Some(language);
+        }
         config.ui_scale = config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX);
         config.gravity_scale = config
             .gravity_scale
@@ -124,6 +137,7 @@ impl Plugin for GamePlugin {
                 (
                     spawn_ui_camera,
                     refresh_saves_on_startup,
+                    apply_launch_load_save,
                     ui::load_ui_font,
                     systems::debug::load_debug_font,
                     ui::setup_menu_ui,
@@ -156,6 +170,7 @@ impl Plugin for GamePlugin {
                     .before(PerfScope::Input),
             )
             .add_systems(Update, sync_gameplay_view_image_size)
+            .add_systems(Update, world::rendering::sync_shadow_settings)
             .add_systems(Update, gameplay_input.before(PerfScope::Input))
             .add_systems(
                 Update,
@@ -217,4 +232,20 @@ impl Plugin for GamePlugin {
 
 fn refresh_saves_on_startup(mut save_state: ResMut<SaveState>) {
     save_state.refresh();
+}
+
+/// 启动参数 `--load-save`：主菜单阶段排队加载并存入 Playing
+fn apply_launch_load_save(launch: Res<LaunchOptions>, mut commands: Commands) {
+    let Some(raw) = launch.load_save.as_deref() else {
+        return;
+    };
+    let Some(slot) = crate::shared::launch::resolve_launch_save_slot(raw) else {
+        bevy::log::warn!("--load-save ignored: save `{raw}` not found or path invalid");
+        return;
+    };
+    let entry = match slot.kind() {
+        crate::shared::save::SaveKind::Puzzle => state::WorldEntryMode::EditPuzzle,
+        crate::shared::save::SaveKind::Solution => state::WorldEntryMode::PlaySolution,
+    };
+    session::load_world(&mut commands, slot, entry);
 }

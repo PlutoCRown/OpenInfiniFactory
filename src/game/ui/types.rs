@@ -16,11 +16,11 @@ pub use crate::game::ui::features::settings::types::{
     OpenSettingsDropdown, PendingKeyBind, SettingsAction, SettingsControl, SettingsDropdown,
     SettingsDropdownLabel, SettingsDropdownList, SettingsDropdownRow, SettingsField, SettingsItem,
     SettingsSliderFill, SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind,
-    SettingsValueText, GAMEPLAY_SETTINGS,
+    SettingsValueText, GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS,
 };
 
-use crate::game::state::BuilderMode;
 use crate::game::blocks::{edit_blocks, BlockKind, PLAY_BLOCKS};
+use crate::game::state::BuilderMode;
 use crate::shared::config::ActionKeyName;
 
 pub const HOTBAR_SLOTS: usize = 9;

@@ -2,6 +2,8 @@ use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 use bevy::ui_widgets::{Slider, SliderDragState, SliderRange, SliderValue};
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::debug_http::PendingDebugHttpStart;
 use crate::game::state::{GameSettings, UiPanelId};
 use crate::game::ui::access::{i18n, ui, UiMainThread};
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
@@ -9,9 +11,9 @@ use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::settings::confirm::{on_reset_defaults, reset_defaults_spec};
 use crate::list_ui_config;
-use crate::shared::config::{chord_from_input, input_from_buttons, open_config_folder, save_config, GameConfig};
-#[cfg(not(target_arch = "wasm32"))]
-use crate::debug_http::PendingDebugHttpStart;
+use crate::shared::config::{
+    chord_from_input, input_from_buttons, open_config_folder, save_config, GameConfig,
+};
 
 use super::types::{
     ActiveSettingsSlider, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
@@ -173,6 +175,10 @@ pub fn dispatch_settings_actions(
                 *settings_tab = SettingsTab::Gameplay;
                 open_dropdown.0 = None;
             }
+            SettingsAction::TabGraphics => {
+                *settings_tab = SettingsTab::Graphics;
+                open_dropdown.0 = None;
+            }
             SettingsAction::TabKeyBindings => {
                 *settings_tab = SettingsTab::KeyBindings;
                 open_dropdown.0 = None;
@@ -196,6 +202,11 @@ pub fn dispatch_settings_actions(
                 open_dropdown.0 = None;
                 save_config(&config);
             }
+            SettingsAction::SetShadowsEnabled(enabled) => {
+                config.shadows_enabled = enabled;
+                open_dropdown.0 = None;
+                save_config(&config);
+            }
             SettingsAction::ToggleDropdown(dropdown) => {
                 open_dropdown.0 = if open_dropdown.0 == Some(dropdown) {
                     None
@@ -206,7 +217,10 @@ pub fn dispatch_settings_actions(
             SettingsAction::Bind(action) => {
                 pending_key_bind.0 = Some(action);
             }
-            SettingsAction::ResetDefaults | SettingsAction::OpenFolder | SettingsAction::StartDebugHttp | SettingsAction::Back => {}
+            SettingsAction::ResetDefaults
+            | SettingsAction::OpenFolder
+            | SettingsAction::StartDebugHttp
+            | SettingsAction::Back => {}
         }
     }
 }

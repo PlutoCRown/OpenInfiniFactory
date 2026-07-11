@@ -59,16 +59,34 @@ pub fn list_solution_names(puzzle: &str) -> Vec<String> {
     backend::list_solution_names(puzzle)
 }
 
+/// 启动参数 `--config` 覆盖默认 `saves/config.ron`（须在首次读写配置前调用）
+pub fn set_config_path_override(path: impl Into<std::path::PathBuf>) {
+    #[cfg(not(target_arch = "wasm32"))]
+    backend::set_config_path_override(path.into());
+    #[cfg(target_arch = "wasm32")]
+    let _ = path.into();
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 mod backend {
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::sync::OnceLock;
 
     use super::{CONFIG_KEY, META_FILE};
     use crate::shared::platform::saves_directory;
 
+    static CONFIG_PATH_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
+
+    pub fn set_config_path_override(path: PathBuf) {
+        let _ = CONFIG_PATH_OVERRIDE.set(path);
+    }
+
     fn config_path() -> PathBuf {
-        saves_directory().join("config.ron")
+        CONFIG_PATH_OVERRIDE
+            .get()
+            .cloned()
+            .unwrap_or_else(|| saves_directory().join("config.ron"))
     }
 
     fn save_dir(save_name: &str) -> PathBuf {
