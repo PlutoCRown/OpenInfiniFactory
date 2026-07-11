@@ -395,7 +395,12 @@ impl StructureState {
             .map(|structure| &structure.positions)
     }
 
-    pub fn gravity_support_valid(&self, id: StructureId, world: &WorldBlocks) -> bool {
+    pub fn gravity_support_valid(
+        &self,
+        id: StructureId,
+        world: &WorldBlocks,
+        hard_pusher_head_occupancy: &HashSet<IVec3>,
+    ) -> bool {
         let Some(structure) = self.structures.get(&id) else {
             return false;
         };
@@ -406,16 +411,23 @@ impl StructureState {
                     let support = *member + *dir;
                     support.y >= 0
                         && !structure.positions.contains(&support)
-                        && !world.can_move_into(support)
+                        && (!world.can_move_into(support)
+                            || hard_pusher_head_occupancy.contains(&support))
                 }
             })
     }
 
-    pub fn record_gravity_support(&mut self, id: StructureId, world: &WorldBlocks) {
+    pub fn record_gravity_support(
+        &mut self,
+        id: StructureId,
+        world: &WorldBlocks,
+        hard_pusher_head_occupancy: &HashSet<IVec3>,
+    ) {
         let Some(structure) = self.structures.get_mut(&id) else {
             return;
         };
-        structure.gravity_support = collect_gravity_support(world, &structure.positions);
+        structure.gravity_support =
+            collect_gravity_support(world, &structure.positions, hard_pusher_head_occupancy);
     }
 
     pub fn clear_gravity_support(&mut self, id: StructureId) {
@@ -587,13 +599,16 @@ pub fn query_factory_structure(world: &WorldBlocks, pos: IVec3) -> Option<HashSe
 fn collect_gravity_support(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> Vec<GravitySupportContact> {
     structure
         .iter()
         .filter_map(|pos| {
             let below = *pos + IVec3::NEG_Y;
-            (below.y >= 0 && !structure.contains(&below) && !world.can_move_into(below))
-                .then_some((*pos, IVec3::NEG_Y))
+            (below.y >= 0
+                && !structure.contains(&below)
+                && (!world.can_move_into(below) || hard_pusher_head_occupancy.contains(&below)))
+            .then_some((*pos, IVec3::NEG_Y))
         })
         .collect()
 }
@@ -754,8 +769,8 @@ mod tests {
 
         let mut state = rebuild_for_simulation_standalone(&world);
         let id = state.structure_id_at(IVec3::Y).unwrap();
-        state.record_gravity_support(id, &world);
-        assert!(state.gravity_support_valid(id, &world));
+        state.record_gravity_support(id, &world, &HashSet::new());
+        assert!(state.gravity_support_valid(id, &world, &HashSet::new()));
     }
 
     #[test]

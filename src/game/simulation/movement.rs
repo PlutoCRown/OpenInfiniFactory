@@ -124,7 +124,7 @@ pub(super) fn mark_structure_movement_phase(
     powered_devices: &HashSet<IVec3>,
     structures: &StructureState,
     pusher_state: &mut PusherState,
-) -> (Vec<StructureMove>, HashMap<IVec3, PusherAnimation>) {
+) -> Vec<StructureMove> {
     let mut movers: Vec<(IVec3, BlockKind, MovementRule)> = world
         .blocks
         .iter()
@@ -138,7 +138,6 @@ pub(super) fn mark_structure_movement_phase(
     // 空头争夺同一格时按坐标稳定决出胜者
     movers.sort_by_key(|(pos, _, _)| (pos.x, pos.y, pos.z));
     let mut moves = Vec::new();
-    let mut bare_pusher_animations = HashMap::new();
     let mut claimed_heads = pusher_state.hard_head_occupancy(world);
 
     for (pos, kind, mover) in movers {
@@ -182,7 +181,6 @@ pub(super) fn mark_structure_movement_phase(
                         source,
                         offset,
                         desired_extended,
-                        &mut bare_pusher_animations,
                         &mut claimed_heads,
                     ) {
                         moves.push(movement);
@@ -204,7 +202,7 @@ pub(super) fn mark_structure_movement_phase(
             }
         }
     }
-    (moves, bare_pusher_animations)
+    moves
 }
 
 fn mark_conveyor_movement(
@@ -250,7 +248,6 @@ fn mark_pusher_movement(
     source: IVec3,
     offset: IVec3,
     desired_extended: bool,
-    bare_pusher_animations: &mut HashMap<IVec3, PusherAnimation>,
     claimed_heads: &mut HashSet<IVec3>,
 ) -> Option<StructureMove> {
     let id = world.blocks.get(&pos)?.id;
@@ -291,18 +288,13 @@ fn mark_pusher_movement(
         None
     };
 
-    let (from_extension, to_extension) = if desired_extended {
-        (0.0, 1.0)
-    } else {
-        (1.0, 0.0)
-    };
     let animation = if desired_extended {
         PusherAnimationKind::Extend
     } else {
         PusherAnimationKind::Retract
     };
 
-    // 粘了方块的伸出/收回：状态等执行成功后再提交，避免推失败却伸出
+    // 粘了方块的伸出/收回：状态等执行成功后再提交
     if let Some(movement) = movement {
         return Some(
             movement
@@ -316,24 +308,26 @@ fn mark_pusher_movement(
         if world.is_occupied(head) || !claimed_heads.insert(head) {
             return None;
         }
-        entry.extended = true;
     } else if entry.bound_front {
         // 粘着方块却推不动：保持伸出
         return None;
     } else {
         claimed_heads.remove(&head);
-        entry.extended = false;
     }
 
-    bare_pusher_animations.insert(
-        pos,
-        PusherAnimation {
-            duration: None,
-            from_extension,
-            to_extension,
-        },
-    );
-    None
+    // 空头伸出/收回：对本结构发 Push 零位移标签，执行时优先于重力并抑制自身下落 fallback
+    let structure_id = structures.id_at(pos)?;
+    let structure = structures.structure_positions(structure_id)?.clone();
+    Some(
+        StructureMove::translate_by_pusher_actor(
+            structure_id,
+            structure,
+            IVec3::ZERO,
+            PusherActor { pos, animation },
+            MovementMark::Push,
+        )
+        .with_source(id, pos),
+    )
 }
 
 trait StructureMoveActorExt {
@@ -515,13 +509,31 @@ mod tests {
         structures.rebuild_for_simulation(&world);
         let mut pusher_state = PusherState::rebuild_from_world(&world);
         let powered = HashSet::new();
-        let (_moves, bare) =
+        let device_moves =
             mark_structure_movement_phase(&world, &powered, &structures, &mut pusher_state);
+        assert_eq!(device_moves.len(), 1, "only one bare extend may be marked");
+        assert!(pusher_state.entries.values().all(|e| !e.extended));
+
+        let mut cache = MovementInfluenceCache::default();
+        let plan =
+            merge_structure_movement_plan(vec![], device_moves, &mut cache, &structures, &world);
+        let heads = HashSet::new();
+        let (_anims, pusher_anims) = execute_structure_moves_with_pushers(
+            &mut world,
+            plan,
+            &mut structures,
+            &mut cache,
+            &heads,
+        );
+        for (pos, animation) in &pusher_anims {
+            if let Some(block) = world.blocks.get(pos) {
+                pusher_state.set_extended(block.id, animation.to_extension > 0.5);
+            }
+        }
 
         let heads = pusher_state.hard_head_occupancy(&world);
         assert_eq!(heads.len(), 1, "only one head may occupy the shared cell");
         assert!(heads.contains(&IVec3::new(1, 1, 0)));
-        assert_eq!(bare.len(), 1);
         // 坐标更小的西侧先处理，应胜出
         let west_id = world.blocks.get(&west).unwrap().id;
         let east_id = world.blocks.get(&east).unwrap().id;
@@ -584,9 +596,8 @@ mod tests {
         structures.rebuild_for_simulation(&world);
         let mut pusher_state = PusherState::rebuild_from_world(&world);
         let powered = HashSet::new();
-        let (device_moves, bare) =
+        let device_moves =
             mark_structure_movement_phase(&world, &powered, &structures, &mut pusher_state);
-        assert!(bare.is_empty());
         assert_eq!(device_moves.len(), 2);
         // 标记阶段尚未提交伸出
         assert!(pusher_state.entries.values().all(|e| !e.extended));
@@ -594,8 +605,14 @@ mod tests {
         let mut cache = MovementInfluenceCache::default();
         let plan =
             merge_structure_movement_plan(vec![], device_moves, &mut cache, &structures, &world);
-        let (_anims, pusher_anims) =
-            execute_structure_moves_with_pushers(&mut world, plan, &mut structures, &mut cache);
+        let heads = HashSet::new();
+        let (_anims, pusher_anims) = execute_structure_moves_with_pushers(
+            &mut world,
+            plan,
+            &mut structures,
+            &mut cache,
+            &heads,
+        );
         for (pos, animation) in &pusher_anims {
             if let Some(block) = world.blocks.get(pos) {
                 pusher_state.set_extended(block.id, animation.to_extension > 0.5);
@@ -642,10 +659,9 @@ mod tests {
         structures.rebuild_for_simulation(&world);
         let mut pusher_state = PusherState::rebuild_from_world(&world);
         let powered = HashSet::new();
-        let (_moves, bare) =
-            mark_structure_movement_phase(&world, &powered, &structures, &mut pusher_state);
+        let moves = mark_structure_movement_phase(&world, &powered, &structures, &mut pusher_state);
 
-        assert!(bare.is_empty());
+        assert!(moves.is_empty());
         let blocker_id = world.blocks.get(&blocker).unwrap().id;
         assert!(pusher_state
             .entries
@@ -659,21 +675,16 @@ mod tests {
         pusher_state: &mut PusherState,
         powered: &HashSet<IVec3>,
     ) {
-        let (device_moves, bare) =
-            mark_structure_movement_phase(world, powered, structures, pusher_state);
-        for (pos, animation) in bare {
-            if let Some(block) = world.blocks.get(&pos) {
-                pusher_state.set_extended(block.id, animation.to_extension > 0.5);
-            }
-        }
+        let device_moves = mark_structure_movement_phase(world, powered, structures, pusher_state);
         if device_moves.is_empty() {
             return;
         }
         let mut cache = MovementInfluenceCache::default();
+        let heads = pusher_state.hard_head_occupancy(world);
         let plan =
             merge_structure_movement_plan(vec![], device_moves, &mut cache, structures, world);
         let (_anims, pusher_anims) =
-            execute_structure_moves_with_pushers(world, plan, structures, &mut cache);
+            execute_structure_moves_with_pushers(world, plan, structures, &mut cache, &heads);
         for (pos, animation) in &pusher_anims {
             if let Some(block) = world.blocks.get(pos) {
                 pusher_state.set_extended(block.id, animation.to_extension > 0.5);

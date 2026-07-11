@@ -51,7 +51,7 @@ pub(super) fn gravity_moves(
             structures.clear_gravity_support(id);
             continue;
         }
-        if structures.gravity_support_valid(id, world) {
+        if structures.gravity_support_valid(id, world, hard_pusher_head_occupancy) {
             continue;
         }
         // 整块结构一起下落；不可拆开，否则焊接材料会被撕开并丢掉焊缝
@@ -64,7 +64,7 @@ pub(super) fn gravity_moves(
                 MovementMark::Vertical,
             ));
         } else {
-            structures.record_gravity_support(id, world);
+            structures.record_gravity_support(id, world, hard_pusher_head_occupancy);
         }
     }
     moves
@@ -258,6 +258,13 @@ impl StructureMove {
             Self::Translate { structure, .. } | Self::Rotate { structure, .. } => structure,
         }
     }
+
+    pub(super) fn pusher_actor_pos(&self) -> Option<IVec3> {
+        match self {
+            Self::Translate { actor, .. } => actor.as_ref().map(|actor| actor.pos),
+            Self::Rotate { .. } => None,
+        }
+    }
 }
 
 /// 合并重力与设备运动标签：保留全部重叠标签，按优先级排序，执行时再 fallback
@@ -378,12 +385,14 @@ fn structure_supported_by_lifter(world: &WorldBlocks, structure: &HashSet<IVec3>
     })
 }
 
-/// 按序执行运动标签：失败则试下一个；种子判占用，成功后标记展开后的格子
+/// 按序执行运动标签：失败则试下一个；种子判占用，成功后标记展开后的格子。
+/// `hard_pusher_head_occupancy` 为本回合开始时已伸出的头；执行中随 Push 伸出/收回更新。
 pub(super) fn execute_structure_moves_with_pushers(
     world: &mut WorldBlocks,
     moves: Vec<StructureMove>,
     structures: &mut StructureState,
     influence_cache: &mut MovementInfluenceCache,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> (
     HashMap<IVec3, BlockAnimation>,
     HashMap<IVec3, PusherAnimation>,
@@ -392,6 +401,7 @@ pub(super) fn execute_structure_moves_with_pushers(
     let mut animations = HashMap::new();
     let mut pusher_animations = HashMap::new();
     let mut executed = Vec::new();
+    let mut heads = hard_pusher_head_occupancy.clone();
     for movement in moves {
         match movement {
             StructureMove::Translate {
@@ -407,6 +417,16 @@ pub(super) fn execute_structure_moves_with_pushers(
                 if structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
                 }
+                // 收回标签检查时忽略自己的头，否则粘头拉回会撞上尚未释放的头占位
+                let mut heads_for_check = heads.clone();
+                if let Some(actor) = &actor {
+                    if matches!(actor.animation, PusherAnimationKind::Retract) {
+                        if let Some(block) = world.blocks.get(&actor.pos) {
+                            heads_for_check.remove(&(actor.pos + block.facing.forward_ivec3()));
+                        }
+                    }
+                }
+                let seed = structure.clone();
                 let Some(structure) = expanded_move_structure(
                     world,
                     &structure,
@@ -420,22 +440,44 @@ pub(super) fn execute_structure_moves_with_pushers(
                 if structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
                 }
-                for pos in &structure {
-                    if let Some(block) = world.blocks.get(pos) {
-                        animations.insert(
-                            *pos + offset,
-                            BlockAnimation {
-                                block_id: block.id,
-                                from_pos: *pos,
-                                to_pos: *pos + offset,
-                                from_facing: block.facing,
-                                to_facing: block.facing,
-                                kind: BlockAnimationKind::Move,
-                                duration: None,
-                                progress: None,
-                            },
-                        );
+                // 活塞头是实体：本回合已提交的头会挡住后续更低优先级移动
+                if offset != IVec3::ZERO
+                    && hard_pusher_head_blocks_move(&structure, offset, &heads_for_check)
+                {
+                    continue;
+                }
+                if offset == IVec3::NEG_Y
+                    && hard_pusher_head_blocked_below(world, &seed, &heads_for_check)
+                {
+                    continue;
+                }
+                if offset != IVec3::ZERO {
+                    for pos in &structure {
+                        if let Some(block) = world.blocks.get(pos) {
+                            animations.insert(
+                                *pos + offset,
+                                BlockAnimation {
+                                    block_id: block.id,
+                                    from_pos: *pos,
+                                    to_pos: *pos + offset,
+                                    from_facing: block.facing,
+                                    to_facing: block.facing,
+                                    kind: BlockAnimationKind::Move,
+                                    duration: None,
+                                    progress: None,
+                                },
+                            );
+                        }
                     }
+                    moved.extend(structure.iter().copied());
+                    move_structure(world, &structure, offset);
+                    structures.move_positions(&structure, offset);
+                    let target_structure: HashSet<IVec3> =
+                        structure.iter().map(|pos| *pos + offset).collect();
+                    moved.extend(target_structure);
+                } else {
+                    // 空头伸出/收回：零位移 Push，只占位并抑制本结构重力 fallback
+                    moved.extend(structure.iter().copied());
                 }
                 if let Some(actor) = actor {
                     let (from_extension, to_extension) = match actor.animation {
@@ -450,19 +492,30 @@ pub(super) fn execute_structure_moves_with_pushers(
                             to_extension,
                         },
                     );
+                    if let Some(block) = world.blocks.get(&actor.pos) {
+                        let head = actor.pos + block.facing.forward_ivec3();
+                        match actor.animation {
+                            PusherAnimationKind::Extend => {
+                                heads.insert(head);
+                            }
+                            PusherAnimationKind::Retract => {
+                                heads.remove(&head);
+                            }
+                        }
+                    }
+                    // 粘头推动的是前方结构：活塞本体也算本回合已动作，抑制自身重力
+                    if let Some(actor_id) = structures.id_at(actor.pos) {
+                        if let Some(actor_structure) = structures.structure_positions(actor_id) {
+                            moved.extend(actor_structure.iter().copied());
+                        }
+                    }
                 }
-                moved.extend(structure.iter().copied());
-                move_structure(world, &structure, offset);
-                structures.move_positions(&structure, offset);
-                let target_structure: HashSet<IVec3> =
-                    structure.into_iter().map(|pos| pos + offset).collect();
                 if let Some(source) = source {
                     executed.push(ExecutedMovement {
                         structure_id,
                         source,
                     });
                 }
-                moved.extend(target_structure);
             }
             StructureMove::Rotate {
                 structure_id,
@@ -558,7 +611,10 @@ fn hard_pusher_head_blocked_below(
             return false;
         }
         let target = head + IVec3::NEG_Y;
-        target.y < 0 || (!structure.contains(&target) && !world.can_move_into(target))
+        // 活塞头是实体：下方有方块或其它活塞头都算挡住
+        target.y < 0
+            || (!structure.contains(&target)
+                && (!world.can_move_into(target) || hard_pusher_head_occupancy.contains(&target)))
     })
 }
 
@@ -835,7 +891,13 @@ mod tests {
             &structures,
             &world,
         );
-        execute_structure_moves_with_pushers(&mut world, plan, &mut structures, &mut cache);
+        execute_structure_moves_with_pushers(
+            &mut world,
+            plan,
+            &mut structures,
+            &mut cache,
+            &HashSet::new(),
+        );
 
         assert!(!world.is_material_at(material));
         assert!(world.is_material_at(IVec3::new(2, 1, 0)));
@@ -866,7 +928,13 @@ mod tests {
             &structures,
             &world,
         );
-        execute_structure_moves_with_pushers(&mut world, plan, &mut structures, &mut cache);
+        execute_structure_moves_with_pushers(
+            &mut world,
+            plan,
+            &mut structures,
+            &mut cache,
+            &HashSet::new(),
+        );
 
         assert!(!world.is_material_at(a));
         assert!(world.is_material_at(IVec3::new(1, 1, 0)));
@@ -898,7 +966,13 @@ mod tests {
             &structures,
             &world,
         );
-        execute_structure_moves_with_pushers(&mut world, plan, &mut structures, &mut cache);
+        execute_structure_moves_with_pushers(
+            &mut world,
+            plan,
+            &mut structures,
+            &mut cache,
+            &HashSet::new(),
+        );
 
         assert!(!world.is_material_at(a));
         assert!(world.is_material_at(b));

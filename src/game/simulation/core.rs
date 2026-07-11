@@ -106,11 +106,13 @@ pub fn simulate_turn(
             );
         }
     }
+
+    // 重力与设备都只做标记；空头伸出是 Push 零位移标签，执行时按优先级压过重力
     let hard_pusher_head_occupancy = pusher_state.hard_head_occupancy(world);
     let mut movement_plan = mark_gravity_phase(
         world,
         structure_state,
-        &actuating_devices,
+        &HashSet::new(),
         &hard_pusher_head_occupancy,
     );
     sample.gravity_ms = mark_elapsed_ms(&mut mark);
@@ -120,19 +122,18 @@ pub fn simulate_turn(
 
     sample.marker_before_move_ms = mark_elapsed_ms(&mut mark);
 
-    let (device_movement_plan, bare_pusher_animations) =
+    let device_movement_plan =
         mark_structure_movement_phase(world, &powered_devices, structure_state, pusher_state);
     if let Some(sim_log) = sim_log.as_mut() {
         log_movement_plan(turn, sim_log, world, "devices", &device_movement_plan);
     }
-    movement_plan =
-        merge_structure_movement_plan(
-            movement_plan,
-            device_movement_plan,
-            movement_influence,
-            structure_state,
-            world,
-        );
+    movement_plan = merge_structure_movement_plan(
+        movement_plan,
+        device_movement_plan,
+        movement_influence,
+        structure_state,
+        world,
+    );
     if let Some(sim_log) = sim_log.as_mut() {
         log_movement_plan(turn, sim_log, world, "merged", &movement_plan);
     }
@@ -143,18 +144,16 @@ pub fn simulate_turn(
         movement_plan,
         structure_state,
         movement_influence,
+        &hard_pusher_head_occupancy,
     );
-    // 粘头推动只有执行成功才提交伸出/收回，避免推失败却叠头
+    // 粘头/空头推动只有执行成功才提交伸出/收回
     for (pos, animation) in &pusher_animations {
         if let Some(block) = world.blocks.get(pos) {
             pusher_state.set_extended(block.id, animation.to_extension > 0.5);
         }
     }
     merge_generated_animations(&mut animations, generated_animations);
-    let mut pusher_animations = pusher_animations
-        .into_iter()
-        .chain(bare_pusher_animations)
-        .collect::<HashMap<_, _>>();
+    let mut pusher_animations = pusher_animations;
     for (pos, animation) in pusher_state.sustained_animations(world) {
         pusher_animations.entry(pos).or_insert(animation);
     }
@@ -517,5 +516,168 @@ mod tests {
         assert!(pusher_state
             .sustained_animations(&world)
             .contains_key(&IVec3::new(0, 3, 0)));
+    }
+
+    fn sim_world(
+        world: WorldBlocks,
+    ) -> (
+        WorldBlocks,
+        PendingGeneratedMaterials,
+        SignalNetworkCache,
+        StructureState,
+        MovementInfluenceCache,
+        PusherState,
+    ) {
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let pusher_state = PusherState::rebuild_from_world(&world);
+        (
+            world,
+            PendingGeneratedMaterials::default(),
+            SignalNetworkCache::default(),
+            structures,
+            MovementInfluenceCache::default(),
+            pusher_state,
+        )
+    }
+
+    #[test]
+    fn extending_head_blocks_falling_block_same_cell() {
+        // 阻拦器伸出头优先于上方方块下落，二者不得重叠
+        let mut world = WorldBlocks::default();
+        world.insert(
+            IVec3::new(0, 0, 0),
+            BlockData::new(BlockKind::Stone, Facing::North),
+        );
+        world.insert(
+            IVec3::new(0, 1, 0),
+            BlockData::new(BlockKind::Blocker, Facing::East),
+        );
+        world.insert(
+            IVec3::new(1, 2, 0),
+            BlockData::new(BlockKind::Platform, Facing::North),
+        );
+
+        let (mut world, mut pending, mut signals, mut structures, mut influence, mut pushers) =
+            sim_world(world);
+        simulate_turn(
+            &mut world,
+            &mut pending,
+            &mut signals,
+            1,
+            &mut structures,
+            &mut influence,
+            &mut pushers,
+            None,
+            None,
+        );
+
+        assert!(
+            pushers
+                .sustained_animations(&world)
+                .contains_key(&IVec3::new(0, 1, 0)),
+            "阻拦器应成功伸出"
+        );
+        assert!(
+            world.is_factory_at(IVec3::new(1, 2, 0)),
+            "上方平台不应落到头所在格"
+        );
+        assert!(
+            !world.blocks.contains_key(&IVec3::new(1, 1, 0)),
+            "头格不应被下落方块占用"
+        );
+    }
+
+    #[test]
+    fn failed_head_contest_falls_same_turn() {
+        // 面对面争夺同一头格：胜者本回合伸出，败者本回合下落
+        let mut world = WorldBlocks::default();
+        world.insert(
+            IVec3::new(0, 2, 0),
+            BlockData::new(BlockKind::Blocker, Facing::East),
+        );
+        world.insert(
+            IVec3::new(2, 2, 0),
+            BlockData::new(BlockKind::Blocker, Facing::West),
+        );
+
+        let (mut world, mut pending, mut signals, mut structures, mut influence, mut pushers) =
+            sim_world(world);
+        simulate_turn(
+            &mut world,
+            &mut pending,
+            &mut signals,
+            1,
+            &mut structures,
+            &mut influence,
+            &mut pushers,
+            None,
+            None,
+        );
+
+        let at_y2 = [IVec3::new(0, 2, 0), IVec3::new(2, 2, 0)]
+            .iter()
+            .filter(|pos| world.is_factory_at(**pos))
+            .count();
+        let at_y1 = [IVec3::new(0, 1, 0), IVec3::new(2, 1, 0)]
+            .iter()
+            .filter(|pos| world.is_factory_at(**pos))
+            .count();
+        assert_eq!(at_y2, 1, "胜者留在原高度并伸出");
+        assert_eq!(at_y1, 1, "败者同回合下落");
+        assert_eq!(
+            pushers.hard_head_occupancy(&world).len(),
+            1,
+            "只有胜者头占位"
+        );
+    }
+
+    #[test]
+    fn extended_head_supports_another_extended_head() {
+        // 伸出的头是实体，可垫住另一伸出结构的头
+        let mut world = WorldBlocks::default();
+        world.insert(
+            IVec3::new(2, 0, 0),
+            BlockData::new(BlockKind::Stone, Facing::North),
+        );
+        world.insert(
+            IVec3::new(2, 1, 0),
+            BlockData::new(BlockKind::Blocker, Facing::West),
+        );
+        world.insert(
+            IVec3::new(0, 3, 0),
+            BlockData::new(BlockKind::Blocker, Facing::East),
+        );
+
+        let (mut world, mut pending, mut signals, mut structures, mut influence, mut pushers) =
+            sim_world(world);
+        let support_id = world.blocks[&IVec3::new(2, 1, 0)].id;
+        let falling_id = world.blocks[&IVec3::new(0, 3, 0)].id;
+        pushers.set_extended(support_id, true);
+        pushers.set_extended(falling_id, true);
+
+        for turn in 1..=5 {
+            simulate_turn(
+                &mut world,
+                &mut pending,
+                &mut signals,
+                turn,
+                &mut structures,
+                &mut influence,
+                &mut pushers,
+                None,
+                None,
+            );
+        }
+
+        assert!(
+            world.is_factory_at(IVec3::new(0, 2, 0)),
+            "下落阻拦器应被下方头垫住，身子停在 y=2"
+        );
+        assert!(
+            !world.is_factory_at(IVec3::new(0, 1, 0)),
+            "不应穿过下方活塞头继续下落"
+        );
+        assert!(world.is_factory_at(IVec3::new(2, 1, 0)));
     }
 }
