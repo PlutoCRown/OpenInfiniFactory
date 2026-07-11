@@ -15,6 +15,7 @@ impl BlockMeta for StamperBlock {
             self.id(),
             "block.stamper",
             "short.stamper",
+            "desc.stamper",
             rgb(0.82, 0.26, 0.58),
         )
         .no_collision()

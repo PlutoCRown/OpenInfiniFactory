@@ -15,6 +15,7 @@ impl BlockMeta for ConverterBlock {
             self.id(),
             "block.converter",
             "short.converter",
+            "desc.converter",
             rgb(0.50, 0.36, 0.78),
         )
         .no_collision()

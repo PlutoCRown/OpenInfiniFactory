@@ -13,6 +13,7 @@ impl BlockMeta for SuctionCupBlock {
             self.id(),
             "block.suction_cup",
             "short.suction_cup",
+            "desc.suction_cup",
             rgb(0.82, 0.84, 0.82),
         )
     }

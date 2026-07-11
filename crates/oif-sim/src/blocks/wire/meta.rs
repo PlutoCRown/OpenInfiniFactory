@@ -13,6 +13,7 @@ impl BlockMeta for WireBlock {
             self.id(),
             "block.wire",
             "short.wire",
+            "desc.wire",
             rgb(0.95, 0.72, 0.18),
         )
         .node()

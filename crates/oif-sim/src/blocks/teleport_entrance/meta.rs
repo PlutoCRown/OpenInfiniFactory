@@ -15,6 +15,7 @@ impl BlockMeta for TeleportEntranceBlock {
             self.id(),
             "block.teleport_entrance",
             "short.teleport_entrance",
+            "desc.teleport_entrance",
             rgb(0.12, 0.62, 0.92),
         )
         .no_collision()

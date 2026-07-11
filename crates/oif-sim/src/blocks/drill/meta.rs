@@ -13,6 +13,7 @@ impl BlockMeta for DrillBlock {
             self.id(),
             "block.drill",
             "short.drill",
+            "desc.drill",
             rgb(0.32, 0.36, 0.40),
         )
     }

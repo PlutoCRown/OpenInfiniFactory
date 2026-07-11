@@ -13,6 +13,7 @@ impl BlockMeta for ReverseConveyorBlock {
             self.id(),
             "block.reverse_conveyor",
             "short.reverse_conveyor",
+            "desc.reverse_conveyor",
             rgb(0.86, 0.46, 0.14),
         )
     }

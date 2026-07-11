@@ -9,6 +9,7 @@ impl BasicBlockDef for IronMaterial {
     const LAYER: BasicBlockLayer = BasicBlockLayer::Material(MaterialKind::Iron);
     const NAME_KEY: &'static str = "block.iron_material";
     const SHORT_NAME_KEY: &'static str = "short.iron_material";
+    const DESCRIPTION_KEY: &'static str = "desc.iron_material";
     const COLOR: ColorSpec = rgb(0.62, 0.64, 0.66);
 }
 

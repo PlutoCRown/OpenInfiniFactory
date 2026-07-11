@@ -13,6 +13,7 @@ impl BlockMeta for WelderBlock {
             self.id(),
             "block.welder",
             "short.welder",
+            "desc.welder",
             rgb(0.14, 0.38, 0.74),
         )
     }

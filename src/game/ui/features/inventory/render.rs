@@ -5,8 +5,8 @@ use crate::game::state::{BuilderMode, PlacementState};
 use crate::game::ui::access::{i18n, I18nRevision, UiMainThread};
 use crate::game::ui::components::{hover_border, inset_border};
 use crate::game::ui::types::{
-    CarriedItem, CarriedItemPreview, InventoryItems, InventorySlot, InventoryTooltip, SlotArea,
-    UiHoverState,
+    CarriedItem, CarriedItemPreview, InventoryItems, InventorySlot, InventoryTooltip,
+    InventoryTooltipDescription, InventoryTooltipName, SlotArea, UiHoverState,
 };
 use crate::game::ui::widgets::{short_item_name, slot_color};
 use crate::game::world::rendering::BlockIconAssets;
@@ -54,13 +54,31 @@ pub fn update_inventory_slots(
         ),
         (With<Button>, Without<InventoryTooltip>),
     >,
-    mut texts: ParamSet<(
-        Query<&mut Text, Without<CarriedItemPreview>>,
-        Query<&mut Text, Without<CarriedItemPreview>>,
-    )>,
+    mut slot_texts: Query<
+        &mut Text,
+        (
+            Without<CarriedItemPreview>,
+            Without<InventoryTooltipName>,
+            Without<InventoryTooltipDescription>,
+        ),
+    >,
     mut icons: Query<&mut ImageNode>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut tooltip: Query<(&mut Node, &Children), (With<InventoryTooltip>, Without<Button>)>,
+    mut tooltip: Query<&mut Node, (With<InventoryTooltip>, Without<Button>)>,
+    mut tooltip_name: Query<
+        &mut Text,
+        (
+            With<InventoryTooltipName>,
+            Without<InventoryTooltipDescription>,
+        ),
+    >,
+    mut tooltip_desc: Query<
+        &mut Text,
+        (
+            With<InventoryTooltipDescription>,
+            Without<InventoryTooltipName>,
+        ),
+    >,
 ) {
     let mut hovered_item = None;
     for (entity, slot, children, mut node, mut background, mut border) in &mut slot_query {
@@ -114,7 +132,7 @@ pub fn update_inventory_slots(
         };
 
         for child in children.iter() {
-            if let Ok(mut text) = texts.p0().get_mut(child) {
+            if let Ok(mut text) = slot_texts.get_mut(child) {
                 text.0 = if has_icon {
                     String::new()
                 } else {
@@ -128,7 +146,7 @@ pub fn update_inventory_slots(
         }
     }
 
-    let Ok((mut tooltip_node, tooltip_children)) = tooltip.single_mut() else {
+    let Ok(mut tooltip_node) = tooltip.single_mut() else {
         return;
     };
     let Some(item) = hovered_item else {
@@ -147,10 +165,11 @@ pub fn update_inventory_slots(
     tooltip_node.display = Display::Flex;
     tooltip_node.left = Val::Px(cursor.x + 16.0);
     tooltip_node.top = Val::Px(cursor.y + 16.0);
-    for child in tooltip_children.iter() {
-        if let Ok(mut text) = texts.p1().get_mut(child) {
-            text.0 = i18n.t(item.name_key());
-        }
+    if let Ok(mut text) = tooltip_name.single_mut() {
+        text.0 = i18n.t(item.name_key());
+    }
+    if let Ok(mut text) = tooltip_desc.single_mut() {
+        text.0 = i18n.t(item.description_key());
     }
 }
 

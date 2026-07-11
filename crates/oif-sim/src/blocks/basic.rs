@@ -13,6 +13,7 @@ pub trait BasicBlockDef {
     const LAYER: BasicBlockLayer;
     const NAME_KEY: &'static str;
     const SHORT_NAME_KEY: &'static str;
+    const DESCRIPTION_KEY: &'static str;
     const COLOR: ColorSpec;
 }
 
@@ -23,12 +24,20 @@ impl<T: BasicBlockDef + Send + Sync> BlockMeta for T {
 
     fn definition(&self) -> BlockDefinition {
         match T::LAYER {
-            BasicBlockLayer::Scene => {
-                BlockDefinition::scene(self.id(), T::NAME_KEY, T::SHORT_NAME_KEY, T::COLOR)
-            }
-            BasicBlockLayer::Material(_) => {
-                BlockDefinition::material(self.id(), T::NAME_KEY, T::SHORT_NAME_KEY, T::COLOR)
-            }
+            BasicBlockLayer::Scene => BlockDefinition::scene(
+                self.id(),
+                T::NAME_KEY,
+                T::SHORT_NAME_KEY,
+                T::DESCRIPTION_KEY,
+                T::COLOR,
+            ),
+            BasicBlockLayer::Material(_) => BlockDefinition::material(
+                self.id(),
+                T::NAME_KEY,
+                T::SHORT_NAME_KEY,
+                T::DESCRIPTION_KEY,
+                T::COLOR,
+            ),
         }
     }
 

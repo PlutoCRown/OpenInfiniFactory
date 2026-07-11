@@ -13,6 +13,7 @@ impl BlockMeta for CounterRotatorBlock {
             self.id(),
             "block.counter_rotator",
             "short.counter_rotator",
+            "desc.counter_rotator",
             rgb(0.62, 0.28, 0.78),
         )
     }

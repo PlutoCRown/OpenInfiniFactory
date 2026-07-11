@@ -13,6 +13,7 @@ impl BlockMeta for MirrorBlock {
             self.id(),
             "block.mirror",
             "short.mirror",
+            "desc.mirror",
             rgb(0.45, 0.88, 1.0),
         )
         .transparent()

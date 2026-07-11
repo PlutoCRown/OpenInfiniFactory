@@ -13,6 +13,7 @@ impl BlockMeta for RotatorBlock {
             self.id(),
             "block.rotator",
             "short.rotator",
+            "desc.rotator",
             rgb(0.48, 0.32, 0.72),
         )
     }

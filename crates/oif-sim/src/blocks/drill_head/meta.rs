@@ -13,6 +13,7 @@ impl BlockMeta for DrillHeadBlock {
             self.id(),
             "block.drill_head",
             "short.drill_head",
+            "desc.drill_head",
             rgb(0.12, 0.14, 0.16),
         )
         .node()

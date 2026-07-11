@@ -13,6 +13,7 @@ impl BlockMeta for SplitterBlock {
             self.id(),
             "block.splitter",
             "short.splitter",
+            "desc.splitter",
             rgb(0.45, 0.88, 1.0),
         )
         .transparent()

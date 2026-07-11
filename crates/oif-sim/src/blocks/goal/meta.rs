@@ -15,6 +15,7 @@ impl BlockMeta for GoalBlock {
             self.id(),
             "block.goal",
             "short.goal",
+            "desc.goal",
             rgba(0.35, 0.72, 0.42, 0.30),
         )
         .no_collision()

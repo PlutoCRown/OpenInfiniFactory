@@ -9,6 +9,7 @@ impl BasicBlockDef for Dirt {
     const LAYER: BasicBlockLayer = BasicBlockLayer::Scene;
     const NAME_KEY: &'static str = "block.dirt";
     const SHORT_NAME_KEY: &'static str = "short.dirt";
+    const DESCRIPTION_KEY: &'static str = "desc.dirt";
     const COLOR: ColorSpec = rgb(0.40, 0.27, 0.16);
 }
 

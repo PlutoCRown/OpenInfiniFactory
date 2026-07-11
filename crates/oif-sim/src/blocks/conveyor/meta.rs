@@ -13,6 +13,7 @@ impl BlockMeta for ConveyorBlock {
             self.id(),
             "block.conveyor",
             "short.conveyor",
+            "desc.conveyor",
             rgb(0.86, 0.46, 0.14),
         )
     }

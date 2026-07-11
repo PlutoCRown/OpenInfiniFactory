@@ -13,6 +13,7 @@ impl BlockMeta for LifterBlock {
             self.id(),
             "block.lifter",
             "short.lifter",
+            "desc.lifter",
             rgb(0.25, 0.58, 0.72),
         )
     }

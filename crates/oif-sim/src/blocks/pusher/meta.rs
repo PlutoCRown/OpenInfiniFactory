@@ -13,6 +13,7 @@ impl BlockMeta for PusherBlock {
             self.id(),
             "block.pusher",
             "short.pusher",
+            "desc.pusher",
             rgb(0.54, 0.56, 0.54),
         )
     }

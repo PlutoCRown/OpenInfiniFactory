@@ -13,6 +13,7 @@ impl BlockMeta for BlockerBlock {
             self.id(),
             "block.blocker",
             "short.blocker",
+            "desc.blocker",
             rgb(0.54, 0.56, 0.54),
         )
     }

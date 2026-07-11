@@ -9,6 +9,7 @@ impl BasicBlockDef for Planks {
     const LAYER: BasicBlockLayer = BasicBlockLayer::Scene;
     const NAME_KEY: &'static str = "block.planks";
     const SHORT_NAME_KEY: &'static str = "short.planks";
+    const DESCRIPTION_KEY: &'static str = "desc.planks";
     const COLOR: ColorSpec = rgb(0.66, 0.45, 0.25);
 }
 

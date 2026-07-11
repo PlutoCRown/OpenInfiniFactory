@@ -9,6 +9,7 @@ impl BasicBlockDef for Stone {
     const LAYER: BasicBlockLayer = BasicBlockLayer::Scene;
     const NAME_KEY: &'static str = "block.stone";
     const SHORT_NAME_KEY: &'static str = "short.stone";
+    const DESCRIPTION_KEY: &'static str = "desc.stone";
     const COLOR: ColorSpec = rgb(0.43, 0.43, 0.42);
 }
 

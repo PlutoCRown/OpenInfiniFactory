@@ -9,6 +9,7 @@ impl BasicBlockDef for Grass {
     const LAYER: BasicBlockLayer = BasicBlockLayer::Scene;
     const NAME_KEY: &'static str = "block.grass";
     const SHORT_NAME_KEY: &'static str = "short.grass";
+    const DESCRIPTION_KEY: &'static str = "desc.grass";
     const COLOR: ColorSpec = rgb(0.34, 0.62, 0.24);
 }
 

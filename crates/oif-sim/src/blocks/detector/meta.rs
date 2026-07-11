@@ -13,6 +13,7 @@ impl BlockMeta for DetectorBlock {
             self.id(),
             "block.detector",
             "short.detector",
+            "desc.detector",
             rgb(0.15, 0.45, 0.72),
         )
     }

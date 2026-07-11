@@ -15,6 +15,7 @@ impl BlockMeta for GeneratorBlock {
             self.id(),
             "block.generator",
             "short.generator",
+            "desc.generator",
             rgba(0.42, 0.62, 1.0, 0.30),
         )
         .no_collision()

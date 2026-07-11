@@ -13,6 +13,7 @@ impl BlockMeta for LaserBlock {
             self.id(),
             "block.laser",
             "short.laser",
+            "desc.laser",
             rgb(0.85, 0.20, 0.34),
         )
     }

@@ -67,6 +67,7 @@ pub struct BlockDefinition {
     pub kind: BlockKind,
     pub name_key: &'static str,
     pub short_name_key: &'static str,
+    pub description_key: &'static str,
     color: ColorSpec,
     class: BlockClass,
     persistence: Option<PersistentLayer>,
@@ -168,9 +169,16 @@ pub enum MaterialSource {
 /// 材料移动规则：传送带 / 升降 / 旋转 / 通电伸缩
 #[derive(Clone, Copy)]
 pub enum MovementRule {
-    Translate { source: IVec3, offset: IVec3 },
-    Lift { range: i32 },
-    Rotate { clockwise: bool },
+    Translate {
+        source: IVec3,
+        offset: IVec3,
+    },
+    Lift {
+        range: i32,
+    },
+    Rotate {
+        clockwise: bool,
+    },
     /// 通电伸缩：`extend_when_powered` 为真则通电伸出，为假则通电收回
     PoweredTranslate {
         source: IVec3,
@@ -245,12 +253,14 @@ impl BlockDefinition {
         kind: BlockKind,
         name_key: &'static str,
         short_name_key: &'static str,
+        description_key: &'static str,
         color: ColorSpec,
     ) -> Self {
         Self::new(
             kind,
             name_key,
             short_name_key,
+            description_key,
             color,
             BlockClass::Scene,
             Some(PersistentLayer::Puzzle),
@@ -261,12 +271,14 @@ impl BlockDefinition {
         kind: BlockKind,
         name_key: &'static str,
         short_name_key: &'static str,
+        description_key: &'static str,
         color: ColorSpec,
     ) -> Self {
         Self::new(
             kind,
             name_key,
             short_name_key,
+            description_key,
             color,
             BlockClass::Factory,
             Some(PersistentLayer::SolutionFactory),
@@ -277,12 +289,14 @@ impl BlockDefinition {
         kind: BlockKind,
         name_key: &'static str,
         short_name_key: &'static str,
+        description_key: &'static str,
         color: ColorSpec,
     ) -> Self {
         Self::new(
             kind,
             name_key,
             short_name_key,
+            description_key,
             color,
             BlockClass::Material,
             None,
@@ -293,12 +307,14 @@ impl BlockDefinition {
         kind: BlockKind,
         name_key: &'static str,
         short_name_key: &'static str,
+        description_key: &'static str,
         color: ColorSpec,
     ) -> Self {
         Self::new(
             kind,
             name_key,
             short_name_key,
+            description_key,
             color,
             BlockClass::Virtual,
             None,
@@ -309,12 +325,14 @@ impl BlockDefinition {
         kind: BlockKind,
         name_key: &'static str,
         short_name_key: &'static str,
+        description_key: &'static str,
         color: ColorSpec,
     ) -> Self {
         Self::new(
             kind,
             name_key,
             short_name_key,
+            description_key,
             color,
             BlockClass::System,
             Some(PersistentLayer::Puzzle),
@@ -325,6 +343,7 @@ impl BlockDefinition {
         kind: BlockKind,
         name_key: &'static str,
         short_name_key: &'static str,
+        description_key: &'static str,
         color: ColorSpec,
         class: BlockClass,
         persistence: Option<PersistentLayer>,
@@ -333,6 +352,7 @@ impl BlockDefinition {
             kind,
             name_key,
             short_name_key,
+            description_key,
             color,
             class,
             persistence,
@@ -569,6 +589,10 @@ impl BlockKind {
         self.definition().short_name_key
     }
 
+    pub fn description_key(self) -> &'static str {
+        self.definition().description_key
+    }
+
     pub fn shape(self) -> BlockShape {
         self.definition().shape()
     }
@@ -692,5 +716,4 @@ impl BlockKind {
     pub fn non_connection_face(self, facing: Facing) -> Option<IVec3> {
         self.block().non_connection_face(facing)
     }
-
 }

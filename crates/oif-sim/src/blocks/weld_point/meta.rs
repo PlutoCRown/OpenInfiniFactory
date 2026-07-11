@@ -13,6 +13,7 @@ impl BlockMeta for WeldPointBlock {
             self.id(),
             "block.weld_point",
             "short.weld_point",
+            "desc.weld_point",
             rgba(1.0, 0.28, 0.18, 0.45),
         )
         .node()

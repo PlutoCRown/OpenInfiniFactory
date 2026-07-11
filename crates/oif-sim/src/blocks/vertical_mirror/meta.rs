@@ -13,6 +13,7 @@ impl BlockMeta for VerticalMirrorBlock {
             self.id(),
             "block.vertical_mirror",
             "short.vertical_mirror",
+            "desc.vertical_mirror",
             rgb(0.45, 0.88, 1.0),
         )
         .transparent()

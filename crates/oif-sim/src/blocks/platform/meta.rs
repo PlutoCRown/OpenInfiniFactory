@@ -13,6 +13,7 @@ impl BlockMeta for PlatformBlock {
             self.id(),
             "block.platform",
             "short.platform",
+            "desc.platform",
             rgb(0.36, 0.47, 0.58),
         )
     }

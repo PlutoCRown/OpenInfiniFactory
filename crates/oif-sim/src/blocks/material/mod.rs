@@ -9,6 +9,7 @@ impl BasicBlockDef for BasicMaterial {
     const LAYER: BasicBlockLayer = BasicBlockLayer::Material(MaterialKind::Basic);
     const NAME_KEY: &'static str = "block.material";
     const SHORT_NAME_KEY: &'static str = "short.material";
+    const DESCRIPTION_KEY: &'static str = "desc.material";
     const COLOR: ColorSpec = rgb(0.82, 0.82, 0.86);
 }
 

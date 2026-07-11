@@ -15,6 +15,7 @@ impl BlockMeta for TeleportExitBlock {
             self.id(),
             "block.teleport_exit",
             "short.teleport_exit",
+            "desc.teleport_exit",
             rgb(0.72, 0.34, 0.96),
         )
         .no_collision()

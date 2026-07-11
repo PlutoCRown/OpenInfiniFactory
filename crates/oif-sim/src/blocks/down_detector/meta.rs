@@ -13,6 +13,7 @@ impl BlockMeta for DownDetectorBlock {
             self.id(),
             "block.down_detector",
             "short.down_detector",
+            "desc.down_detector",
             rgb(0.18, 0.52, 0.78),
         )
     }

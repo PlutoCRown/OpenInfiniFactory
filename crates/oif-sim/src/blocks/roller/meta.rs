@@ -15,6 +15,7 @@ impl BlockMeta for RollerBlock {
             self.id(),
             "block.roller",
             "short.roller",
+            "desc.roller",
             rgb(0.18, 0.62, 0.78),
         )
         .no_collision()
