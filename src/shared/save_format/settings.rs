@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game::blocks::{AcceptorId, BlockKind, MaterialKind, StampColor};
+use crate::game::blocks::{BlockKind, MaterialKind, StampColor};
 use crate::game::world::grid::{
     BlockSettings, ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, GoalSettings,
     LabelerSettings, TeleportSettings,
@@ -48,9 +48,16 @@ fn write_generator(out: &mut Vec<u8>, settings: GeneratorSettings) {
             out.extend_from_slice(&period.to_le_bytes());
             out.extend_from_slice(&offset.to_le_bytes());
         }
-        GeneratorMode::Link { acceptor } => {
+        GeneratorMode::Link { anchor } => {
             out.push(1);
-            out.extend_from_slice(&acceptor.0.to_le_bytes());
+            if let Some(pos) = anchor {
+                out.push(1);
+                out.extend_from_slice(&pos.x.to_le_bytes());
+                out.extend_from_slice(&pos.y.to_le_bytes());
+                out.extend_from_slice(&pos.z.to_le_bytes());
+            } else {
+                out.push(0);
+            }
         }
     }
     out.push(encode_material(settings.material));
@@ -64,7 +71,15 @@ fn read_generator(cursor: &mut Cursor<'_>) -> Result<GeneratorSettings, SaveForm
             offset: cursor.read_u64()?,
         },
         1 => GeneratorMode::Link {
-            acceptor: AcceptorId(cursor.read_u64()?),
+            anchor: if cursor.read_u8()? == 1 {
+                Some(IVec3::new(
+                    cursor.read_i32()?,
+                    cursor.read_i32()?,
+                    cursor.read_i32()?,
+                ))
+            } else {
+                None
+            },
         },
         _ => return Err(SaveFormatError::InvalidSettings),
     };

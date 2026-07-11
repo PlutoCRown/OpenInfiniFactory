@@ -6,7 +6,7 @@ use crate::game::state::{
 };
 use crate::game::ui::{CarriedItem, InventoryItems};
 use crate::game::world::grid::seed_demo_world;
-use crate::shared::save::{load_world, save_puzzle, save_solution, SaveState};
+use crate::shared::save::{load_world, save_puzzle, save_solution, SaveSlot, SaveState};
 
 use super::messages::{CreateNewPuzzle, CreateNewSolution, LoadWorld};
 use super::world_access::PlayingWorldParams;
@@ -28,7 +28,7 @@ pub fn handle_load_world(
 ) {
     for request in requests.read() {
         load_world_into_session(
-            &request.name,
+            &request.slot,
             request.entry,
             &mut world.world,
             &mut builder_mode,
@@ -72,10 +72,10 @@ pub fn handle_create_new_puzzle(
         world.world.clear();
         seed_demo_world(&mut world.world);
         *inventory = InventoryItems::for_mode(BuilderMode::Edit);
-        if save_puzzle(&world.world, &request.name, &inventory, None) {
+        if save_puzzle(&world.world, &SaveSlot::puzzle(&request.name), &inventory, None) {
             save_state.refresh();
             load_world_into_session(
-                &request.name,
+                &SaveSlot::puzzle(&request.name),
                 WorldEntryMode::EditPuzzle,
                 &mut world.world,
                 &mut builder_mode,
@@ -117,21 +117,22 @@ pub fn handle_create_new_solution(
     mut next_state: ResMut<NextState<GameMode>>,
 ) {
     for request in requests.read() {
-        let Some(loaded) = load_world(&mut world.world, &request.puzzle) else {
+        let puzzle_slot = SaveSlot::puzzle(&request.puzzle);
+        let Some(loaded) = load_world(&mut world.world, &puzzle_slot) else {
             continue;
         };
         *world.world = loaded.world;
         *inventory = InventoryItems::for_mode(BuilderMode::Play);
+        let solution_slot = SaveSlot::solution(&request.puzzle, &request.name);
         if save_solution(
             &world.world,
-            &request.name,
-            &request.puzzle,
+            &solution_slot,
             &inventory,
             None,
         ) {
             save_state.refresh();
             load_world_into_session(
-                &request.name,
+                &solution_slot,
                 WorldEntryMode::PlaySolution,
                 &mut world.world,
                 &mut builder_mode,

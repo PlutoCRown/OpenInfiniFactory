@@ -4,7 +4,7 @@ use crate::game::player::controller::{capture_player_save, FlyCamera};
 use crate::game::state::{SimulationState, SolutionState};
 use crate::game::ui::InventoryItems;
 use crate::game::world::grid::WorldBlocks;
-use crate::shared::save::{save_puzzle, SaveKind, SaveState};
+use crate::shared::save::{save_puzzle, SaveKind, SaveSlot, SaveState};
 
 use super::messages::{
     SaveCurrentWorld, SaveCurrentWorldInvalidateSolutions, SaveWorldAsNewPuzzle,
@@ -76,8 +76,8 @@ pub fn handle_save_world_as_new_puzzle(
             .ok()
             .map(|(camera, transform)| capture_player_save(camera, transform));
         let snapshot = simulation.authoring_world(&world);
-        if save_puzzle(snapshot, &request.name, &inventory, player_save) {
-            save_state.current = Some(request.name.clone());
+        if save_puzzle(snapshot, &SaveSlot::puzzle(&request.name), &inventory, player_save) {
+            save_state.current = Some(SaveSlot::puzzle(&request.name));
             save_state.current_kind = Some(SaveKind::Puzzle);
             solution_state.dirty = false;
             solution_state.puzzle_id = None;

@@ -5,7 +5,7 @@ use crate::game::blocks::{all_blocks, BlockData, BlockKind};
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::WorldBlocks;
-use crate::shared::save::load_world;
+use crate::shared::save::{load_world, SaveSlot};
 use crate::sim_core::SimCoreWorld;
 
 pub fn parse_block_kind(name: &str) -> Option<BlockKind> {
@@ -48,7 +48,9 @@ pub fn place_block(
 pub fn load_save_into_session(core: &mut SimCoreWorld<'_>, name: &str) -> Result<(), String> {
     reset_session(core);
     let mut world = core.world_blocks_mut();
-    load_world(&mut world, name).ok_or_else(|| format!("save `{name}` not found"))?;
+    let slot = SaveSlot::from_storage_path(name)
+        .ok_or_else(|| format!("invalid save path `{name}`"))?;
+    load_world(&mut world, &slot).ok_or_else(|| format!("save `{name}` not found"))?;
     refresh_static_generated_markers(&mut world);
     Ok(())
 }

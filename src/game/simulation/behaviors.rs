@@ -159,8 +159,10 @@ pub(super) fn material_source_generation(
                 let period = period.max(1);
                 turn % period == offset % period
             }
-            GeneratorMode::Link { acceptor } => {
-                !acceptor.is_none() && accepted_acceptors.contains(&acceptor)
+            GeneratorMode::Link { anchor } => {
+                anchor
+                    .and_then(|pos| world.acceptor_id_at(pos))
+                    .is_some_and(|id| accepted_acceptors.contains(&id))
             }
         };
         if !should_spawn {
@@ -954,7 +956,9 @@ mod tests {
         world.set_generator_settings(
             gen,
             crate::game::world::grid::GeneratorSettings {
-                mode: GeneratorMode::Link { acceptor },
+                mode: GeneratorMode::Link {
+                    anchor: Some(IVec3::ZERO),
+                },
                 material: MaterialKind::Iron,
             },
         );

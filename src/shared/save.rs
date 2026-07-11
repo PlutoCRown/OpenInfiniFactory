@@ -2,21 +2,79 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::game::blocks::{BlockData, PersistentLayer};
-use crate::game::world::grid::{BlockSettings, StoredAcceptorStructure, WorldBlocks};
+use crate::game::world::grid::{BlockSettings, WorldBlocks};
 use crate::game::{
     state::BuilderMode,
     ui::{HotbarItems, InventoryItems},
 };
 use crate::shared::persistent_storage;
-use crate::shared::save_format::{
-    self, SavedBlock, SaveBlocksData, BLOCKS_FILE, META_FILE,
-};
+use crate::shared::save_format::{self, SaveBlocksData, SavedBlock, BLOCKS_FILE, META_FILE};
 
 const SAVE_VERSION: u32 = 1;
 
+/// 存档寻址：Puzzle 为顶层目录，Solution 在其 `solutions/` 子目录下
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct SaveSlot {
+    pub puzzle: String,
+    pub solution: Option<String>,
+}
+
+impl SaveSlot {
+    pub fn puzzle(name: impl Into<String>) -> Self {
+        Self {
+            puzzle: normalized_save_name(&name.into()),
+            solution: None,
+        }
+    }
+
+    pub fn solution(puzzle: impl Into<String>, solution: impl Into<String>) -> Self {
+        Self {
+            puzzle: normalized_save_name(&puzzle.into()),
+            solution: Some(normalized_save_name(&solution.into())),
+        }
+    }
+
+    pub fn kind(&self) -> SaveKind {
+        if self.solution.is_some() {
+            SaveKind::Solution
+        } else {
+            SaveKind::Puzzle
+        }
+    }
+
+    pub fn storage_path(&self) -> String {
+        match &self.solution {
+            None => sanitize_save_name(&self.puzzle),
+            Some(solution) => format!(
+                "{}/solutions/{}",
+                sanitize_save_name(&self.puzzle),
+                sanitize_save_name(solution)
+            ),
+        }
+    }
+
+    pub fn display_name(&self) -> String {
+        self.solution
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| self.puzzle.clone())
+    }
+
+    pub fn from_storage_path(path: &str) -> Option<Self> {
+        let parts: Vec<&str> = path.split('/').collect();
+        match parts.as_slice() {
+            [puzzle] => Some(Self::puzzle(*puzzle)),
+            [puzzle, "solutions", solution] if !puzzle.is_empty() && !solution.is_empty() => {
+                Some(Self::solution(*puzzle, *solution))
+            }
+            _ => None,
+        }
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct SaveState {
-    pub current: Option<String>,
+    pub current: Option<SaveSlot>,
     pub current_kind: Option<SaveKind>,
     pub entries: Vec<SaveEntry>,
     pub selected_puzzle: Option<String>,
@@ -54,7 +112,7 @@ impl SaveState {
                 .entries
                 .iter()
                 .filter(|entry| {
-                    entry.kind == SaveKind::Solution && entry.puzzle_id.as_deref() == Some(puzzle)
+                    entry.kind == SaveKind::Solution && entry.slot.puzzle == puzzle
                 })
                 .cloned()
                 .collect(),
@@ -65,9 +123,15 @@ impl SaveState {
 
 #[derive(Clone)]
 pub struct SaveEntry {
+    pub slot: SaveSlot,
     pub name: String,
     pub kind: SaveKind,
-    pub puzzle_id: Option<String>,
+}
+
+impl SaveEntry {
+    pub fn puzzle_id(&self) -> Option<&str> {
+        (self.kind == SaveKind::Solution).then_some(self.slot.puzzle.as_str())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -93,10 +157,6 @@ struct SaveMeta {
     hotbar: Option<HotbarItems>,
     #[serde(default)]
     player: Option<PlayerSave>,
-    #[serde(default)]
-    next_acceptor_id: u64,
-    #[serde(default)]
-    acceptor_structures: Vec<StoredAcceptorStructure>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -116,27 +176,35 @@ struct SaveFile {
 
 pub fn save_puzzle(
     world: &WorldBlocks,
-    name: &str,
+    slot: &SaveSlot,
     inventory: &InventoryItems,
     player: Option<PlayerSave>,
 ) -> bool {
+    if slot.solution.is_some() {
+        return false;
+    }
     write_save(
-        name,
+        slot,
         &SaveFile::puzzle(capture_puzzle_layer(world, inventory), player),
     )
 }
 
 pub fn save_solution(
     world: &WorldBlocks,
-    name: &str,
-    puzzle_id: &str,
+    slot: &SaveSlot,
     inventory: &InventoryItems,
     player: Option<PlayerSave>,
 ) -> bool {
+    let Some(solution) = slot.solution.as_deref() else {
+        return false;
+    };
+    if solution.is_empty() {
+        return false;
+    }
     write_save(
-        name,
+        slot,
         &SaveFile::solution(
-            puzzle_id,
+            &slot.puzzle,
             capture_factory_blocks(world),
             inventory,
             player,
@@ -144,84 +212,57 @@ pub fn save_solution(
     )
 }
 
-pub fn load_world(world: &mut WorldBlocks, name: &str) -> Option<LoadedSave> {
-    let save = read_save(name)?;
-    let loaded = save.into_loaded()?;
+pub fn load_world(world: &mut WorldBlocks, slot: &SaveSlot) -> Option<LoadedSave> {
+    let save = read_save(slot)?;
+    let loaded = save.into_loaded(slot)?;
     *world = loaded.world.clone();
     Some(loaded)
 }
 
-pub fn save_kind(name: &str) -> Option<SaveKind> {
-    let save = read_save(name)?;
+pub fn save_kind(slot: &SaveSlot) -> Option<SaveKind> {
+    let save = read_save(slot)?;
     Some(save.meta_kind())
 }
 
-pub fn puzzle_id_for_solution(name: &str) -> Option<String> {
-    let save = read_save(name)?;
-    if !matches!(save.meta.kind, SaveMetaKind::Solution) {
-        return None;
-    }
-    save.meta.puzzle_id.clone().filter(|id| !id.is_empty())
+pub fn has_solutions_for_puzzle(puzzle: &str) -> bool {
+    !persistent_storage::list_solution_names(puzzle).is_empty()
 }
 
-pub fn has_solutions_for_puzzle(puzzle_id: &str) -> bool {
-    list_save_entries()
+pub fn invalidate_solutions_for_puzzle(puzzle: &str) -> usize {
+    persistent_storage::list_solution_names(puzzle)
         .into_iter()
-        .any(|entry| entry.puzzle_id.as_deref() == Some(puzzle_id))
+        .filter(|name| delete_save(&SaveSlot::solution(puzzle, name)))
+        .count()
 }
 
-pub fn invalidate_solutions_for_puzzle(puzzle_id: &str) -> usize {
-    let solutions: Vec<String> = list_save_entries()
-        .into_iter()
-        .filter(|entry| entry.puzzle_id.as_deref() == Some(puzzle_id))
-        .map(|entry| entry.name)
-        .collect();
-    solutions.iter().filter(|name| delete_save(name)).count()
+pub fn delete_save(slot: &SaveSlot) -> bool {
+    persistent_storage::remove_save_folder(&slot.storage_path())
 }
 
-pub fn delete_save(name: &str) -> bool {
-    persistent_storage::remove_save_folder(&sanitize_save_name(name))
-}
-
-pub fn rename_save(old_name: &str, new_name: &str) -> bool {
-    let old_name = sanitize_save_name(old_name);
-    let new_name = normalized_save_name(new_name);
-    if new_name.is_empty() || old_name == new_name {
+pub fn rename_save(old: &SaveSlot, new: &SaveSlot) -> bool {
+    if old.kind() != new.kind() {
         return false;
     }
-    if persistent_storage::save_exists(&new_name) {
-        warn!("Cannot rename save {old_name} to {new_name}: target already exists");
+    if old.solution.is_some() && old.puzzle != new.puzzle {
         return false;
     }
-    if !persistent_storage::save_exists(&old_name) {
-        warn!("Cannot rename save {old_name}: source missing");
+    let old_path = old.storage_path();
+    let new_path = new.storage_path();
+    if old_path == new_path {
+        return true;
+    }
+    if new.puzzle.is_empty() || new.solution.as_deref().is_some_and(str::is_empty) {
         return false;
     }
-    if !persistent_storage::rename_save_folder(&old_name, &new_name) {
+    if persistent_storage::save_exists(&new_path) {
+        warn!("Cannot rename save {old_path} to {new_path}: target already exists");
         return false;
     }
-    if save_kind(&new_name) == Some(SaveKind::Puzzle) {
-        update_solution_puzzle_ids(&old_name, &new_name);
+    if !persistent_storage::save_exists(&old_path) {
+        warn!("Cannot rename save {old_path}: source missing");
+        return false;
     }
-    true
-}
-
-fn update_solution_puzzle_ids(old_puzzle_id: &str, new_puzzle_id: &str) {
-    let solutions: Vec<String> = list_save_entries()
-        .into_iter()
-        .filter(|entry| entry.puzzle_id.as_deref() == Some(old_puzzle_id))
-        .map(|entry| entry.name)
-        .collect();
-    for name in solutions {
-        let Some(mut save) = read_save(&name) else {
-            continue;
-        };
-        if !matches!(save.meta.kind, SaveMetaKind::Solution) {
-            continue;
-        }
-        save.meta.puzzle_id = Some(new_puzzle_id.to_string());
-        write_save(&name, &save);
-    }
+    persistent_storage::rename_save_folder(&old_path, &new_path)
 }
 
 pub fn reset_solution_world(world: &mut WorldBlocks, puzzle_snapshot: &WorldBlocks) {
@@ -246,8 +287,6 @@ impl SaveFile {
                 puzzle_id: None,
                 hotbar: layer.hotbar,
                 player,
-                next_acceptor_id: layer.next_acceptor_id,
-                acceptor_structures: layer.acceptor_structures,
             },
             blocks: SaveBlocksData {
                 scene_blocks: layer.scene_blocks,
@@ -270,8 +309,6 @@ impl SaveFile {
                 puzzle_id: Some(puzzle_id.to_string()),
                 hotbar: Some(inventory.hotbar),
                 player,
-                next_acceptor_id: 0,
-                acceptor_structures: Vec::new(),
             },
             blocks: SaveBlocksData {
                 factory_blocks,
@@ -287,10 +324,25 @@ impl SaveFile {
         }
     }
 
-    fn into_loaded(self) -> Option<LoadedSave> {
+    fn into_loaded(self, slot: &SaveSlot) -> Option<LoadedSave> {
         match self.meta.kind {
             SaveMetaKind::Solution => {
-                let puzzle_id = self.meta.puzzle_id.filter(|id| !id.is_empty())?;
+                if slot.solution.is_none() {
+                    return None;
+                }
+                let puzzle_id = slot.puzzle.clone();
+                if self
+                    .meta
+                    .puzzle_id
+                    .as_deref()
+                    .filter(|id| !id.is_empty())
+                    .is_some_and(|id| id != puzzle_id)
+                {
+                    warn!(
+                        "Solution save path puzzle `{puzzle_id}` disagrees with meta puzzle_id"
+                    );
+                    return None;
+                }
                 let hotbar = self
                     .meta
                     .hotbar
@@ -307,12 +359,10 @@ impl SaveFile {
                 })
             }
             SaveMetaKind::Puzzle => {
-                let layer = PuzzleLayer::from_blocks(
-                    self.blocks,
-                    self.meta.hotbar,
-                    self.meta.next_acceptor_id,
-                    self.meta.acceptor_structures,
-                );
+                if slot.solution.is_some() {
+                    return None;
+                }
+                let layer = PuzzleLayer::from_blocks(self.blocks, self.meta.hotbar);
                 let hotbar = layer
                     .hotbar
                     .or_else(|| Some(InventoryItems::for_mode(BuilderMode::Edit).hotbar));
@@ -333,48 +383,35 @@ impl SaveFile {
 struct PuzzleLayer {
     scene_blocks: Vec<SavedBlock>,
     system_blocks: Vec<SavedBlock>,
-    next_acceptor_id: u64,
-    acceptor_structures: Vec<StoredAcceptorStructure>,
     hotbar: Option<HotbarItems>,
 }
 
 impl PuzzleLayer {
-    fn from_blocks(
-        blocks: SaveBlocksData,
-        hotbar: Option<HotbarItems>,
-        next_acceptor_id: u64,
-        acceptor_structures: Vec<StoredAcceptorStructure>,
-    ) -> Self {
+    fn from_blocks(blocks: SaveBlocksData, hotbar: Option<HotbarItems>) -> Self {
         Self {
             scene_blocks: blocks.scene_blocks,
             system_blocks: blocks.system_blocks,
-            next_acceptor_id,
-            acceptor_structures,
             hotbar,
         }
     }
 }
 
-fn load_puzzle_world(puzzle_id: &str) -> Option<WorldBlocks> {
-    let save = read_save(puzzle_id)?;
+fn load_puzzle_world(puzzle: &str) -> Option<WorldBlocks> {
+    let slot = SaveSlot::puzzle(puzzle);
+    let save = read_save(&slot)?;
     if !matches!(save.meta.kind, SaveMetaKind::Puzzle) {
         return None;
     }
     let mut world = WorldBlocks::default();
     apply_layer(
         &mut world,
-        PuzzleLayer::from_blocks(
-            save.blocks,
-            save.meta.hotbar,
-            save.meta.next_acceptor_id,
-            save.meta.acceptor_structures,
-        ),
+        PuzzleLayer::from_blocks(save.blocks, save.meta.hotbar),
     );
     Some(world)
 }
 
-fn write_save(name: &str, save: &SaveFile) -> bool {
-    let name = sanitize_save_name(name);
+fn write_save(slot: &SaveSlot, save: &SaveFile) -> bool {
+    let path = slot.storage_path();
     let meta = match serde_json::to_string_pretty(&save.meta) {
         Ok(serialized) => serialized,
         Err(error) => {
@@ -382,18 +419,18 @@ fn write_save(name: &str, save: &SaveFile) -> bool {
             return false;
         }
     };
-    if !persistent_storage::write_save_text(&name, META_FILE, &meta) {
+    if !persistent_storage::write_save_text(&path, META_FILE, &meta) {
         return false;
     }
     let blocks = save_format::encode_blocks(&save.blocks);
-    persistent_storage::write_save_bytes(&name, BLOCKS_FILE, &blocks)
+    persistent_storage::write_save_bytes(&path, BLOCKS_FILE, &blocks)
 }
 
-fn read_save(name: &str) -> Option<SaveFile> {
-    let name = sanitize_save_name(name);
-    let meta_text = persistent_storage::read_save_text(&name, META_FILE)?;
+fn read_save(slot: &SaveSlot) -> Option<SaveFile> {
+    let path = slot.storage_path();
+    let meta_text = persistent_storage::read_save_text(&path, META_FILE)?;
     let meta = serde_json::from_str::<SaveMeta>(&meta_text).ok()?;
-    let blocks_bytes = persistent_storage::read_save_bytes(&name, BLOCKS_FILE)?;
+    let blocks_bytes = persistent_storage::read_save_bytes(&path, BLOCKS_FILE)?;
     let blocks = save_format::decode_blocks(&blocks_bytes).ok()?;
     Some(SaveFile { meta, blocks })
 }
@@ -421,8 +458,6 @@ fn capture_puzzle_layer(world: &WorldBlocks, inventory: &InventoryItems) -> Puzz
     PuzzleLayer {
         scene_blocks,
         system_blocks,
-        next_acceptor_id: world.next_acceptor_id,
-        acceptor_structures: world.acceptor_structures.clone(),
         hotbar: Some(inventory.hotbar),
     }
 }
@@ -448,7 +483,7 @@ fn apply_layer(world: &mut WorldBlocks, layer: PuzzleLayer) {
             world.set_block_settings(saved.pos(), settings.clone());
         }
     }
-    world.restore_acceptor_structures(layer.next_acceptor_id, layer.acceptor_structures);
+    world.resync_acceptor_structures();
 }
 
 fn apply_factory_blocks(world: &mut WorldBlocks, factory_blocks: Vec<SavedBlock>) {
@@ -470,24 +505,39 @@ pub fn list_saves() -> Vec<String> {
 }
 
 pub fn list_save_entries() -> Vec<SaveEntry> {
-    let mut entries: Vec<SaveEntry> = list_saves()
-        .into_iter()
-        .filter_map(|name| {
-            let kind = save_kind(&name)?;
-            let puzzle_id = if kind == SaveKind::Solution {
-                puzzle_id_for_solution(&name)
-            } else {
-                None
-            };
-            Some(SaveEntry {
-                name,
-                kind,
-                puzzle_id,
-            })
-        })
-        .collect();
-    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    let mut entries = Vec::new();
+    for puzzle in persistent_storage::list_puzzles() {
+        entries.push(SaveEntry {
+            slot: SaveSlot::puzzle(&puzzle),
+            name: puzzle.clone(),
+            kind: SaveKind::Puzzle,
+        });
+        for solution in persistent_storage::list_solution_names(&puzzle) {
+            entries.push(SaveEntry {
+                slot: SaveSlot::solution(&puzzle, &solution),
+                name: solution,
+                kind: SaveKind::Solution,
+            });
+        }
+    }
+    entries.sort_by(|a, b| a.name.cmp(&b.name).then(a.slot.puzzle.cmp(&b.slot.puzzle)));
     entries
+}
+
+pub fn puzzle_names(entries: &[SaveEntry]) -> Vec<String> {
+    entries
+        .iter()
+        .filter(|entry| entry.kind == SaveKind::Puzzle)
+        .map(|entry| entry.slot.puzzle.clone())
+        .collect()
+}
+
+pub fn solution_names_for_puzzle(entries: &[SaveEntry], puzzle: &str) -> Vec<String> {
+    entries
+        .iter()
+        .filter(|entry| entry.kind == SaveKind::Solution && entry.slot.puzzle == puzzle)
+        .map(|entry| entry.name.clone())
+        .collect()
 }
 
 pub fn next_world_name(existing: &[String]) -> String {
@@ -616,7 +666,7 @@ mod tests {
 
         let inventory = InventoryItems::for_mode(BuilderMode::Edit);
         let loaded = SaveFile::puzzle(capture_puzzle_layer(&world, &inventory), None)
-            .into_loaded()
+            .into_loaded(&SaveSlot::puzzle("round_trip"))
             .unwrap();
         let round_trip = loaded.world;
 
@@ -674,7 +724,7 @@ mod tests {
             capture_puzzle_layer(&WorldBlocks::default(), &puzzle_inventory),
             None,
         )
-        .into_loaded()
+        .into_loaded(&SaveSlot::puzzle("hotbar_puzzle"))
         .unwrap();
         assert_eq!(puzzle_loaded.hotbar, Some(puzzle_inventory.hotbar));
 
@@ -691,20 +741,21 @@ mod tests {
 
     #[test]
     fn solution_loads_factory_blocks_from_puzzle_reference() {
+        let puzzle_slot = SaveSlot::puzzle("test_puzzle_ref");
+        let solution_slot = SaveSlot::solution("test_puzzle_ref", "test_solution_ref");
+
         let mut puzzle_world = WorldBlocks::default();
         puzzle_world.insert(IVec3::ZERO, BlockData::new(BlockKind::Stone, Facing::North));
         let puzzle_inventory = InventoryItems::for_mode(BuilderMode::Edit);
-        let puzzle_save = SaveFile::puzzle(
-            capture_puzzle_layer(&puzzle_world, &puzzle_inventory),
-            None,
-        );
-        write_save("test_puzzle_ref", &puzzle_save);
+        let puzzle_save =
+            SaveFile::puzzle(capture_puzzle_layer(&puzzle_world, &puzzle_inventory), None);
+        write_save(&puzzle_slot, &puzzle_save);
 
         let mut solution_world = puzzle_world.clone();
         solution_world.insert(IVec3::X, BlockData::new(BlockKind::Platform, Facing::North));
         let solution_inventory = InventoryItems::for_mode(BuilderMode::Play);
         write_save(
-            "test_solution_ref",
+            &solution_slot,
             &SaveFile::solution(
                 "test_puzzle_ref",
                 capture_factory_blocks(&solution_world),
@@ -714,14 +765,13 @@ mod tests {
         );
 
         let mut loaded_world = WorldBlocks::default();
-        let loaded = load_world(&mut loaded_world, "test_solution_ref").unwrap();
+        let loaded = load_world(&mut loaded_world, &solution_slot).unwrap();
         assert_eq!(loaded.puzzle_id.as_deref(), Some("test_puzzle_ref"));
         assert!(loaded_world.blocks.contains_key(&IVec3::ZERO));
         assert!(loaded_world.blocks.contains_key(&IVec3::X));
         assert!(!loaded_world.blocks.contains_key(&IVec3::NEG_X));
 
-        delete_save("test_puzzle_ref");
-        delete_save("test_solution_ref");
+        delete_save(&puzzle_slot);
     }
 
     #[test]
@@ -735,22 +785,74 @@ mod tests {
             flying: true,
         };
         let inventory = InventoryItems::for_mode(BuilderMode::Edit);
+        let puzzle_slot = SaveSlot::puzzle("test_player_pose");
         write_save(
-            "test_player_pose",
-            &SaveFile::puzzle(capture_puzzle_layer(&WorldBlocks::default(), &inventory), Some(player.clone())),
+            &puzzle_slot,
+            &SaveFile::puzzle(
+                capture_puzzle_layer(&WorldBlocks::default(), &inventory),
+                Some(player.clone()),
+            ),
         );
-        let loaded = read_save("test_player_pose").unwrap();
+        let loaded = read_save(&puzzle_slot).unwrap();
         assert_eq!(loaded.meta.player, Some(player));
-        delete_save("test_player_pose");
+        delete_save(&puzzle_slot);
+    }
+
+    #[test]
+    fn generator_link_anchor_round_trips_through_blocks_bin() {
+        let goal = IVec3::new(-10, 10, 5);
+        let generator = IVec3::new(1, 1, 0);
+
+        let mut world = WorldBlocks::default();
+        world.insert(goal, BlockData::new(BlockKind::Goal, Facing::North));
+        world.insert(
+            generator,
+            BlockData::new(BlockKind::Generator, Facing::North),
+        );
+        world.resync_acceptor_structures();
+        world.set_generator_settings(
+            generator,
+            GeneratorSettings {
+                mode: GeneratorMode::Link { anchor: Some(goal) },
+                material: MaterialKind::Copper,
+            },
+        );
+
+        let inventory = InventoryItems::for_mode(BuilderMode::Edit);
+        let puzzle_slot = SaveSlot::puzzle("test_generator_link_anchor");
+        write_save(
+            &puzzle_slot,
+            &SaveFile::puzzle(capture_puzzle_layer(&world, &inventory), None),
+        );
+
+        let mut loaded_world = WorldBlocks::default();
+        load_world(&mut loaded_world, &puzzle_slot).unwrap();
+        assert_eq!(
+            loaded_world.generator_settings(generator),
+            GeneratorSettings {
+                mode: GeneratorMode::Link { anchor: Some(goal) },
+                material: MaterialKind::Copper,
+            }
+        );
+        assert_eq!(
+            loaded_world.acceptor_id_at(goal),
+            loaded_world.acceptor_id_at(goal)
+        );
+
+        delete_save(&puzzle_slot);
     }
 
     #[test]
     fn binary_blocks_round_trip_on_disk() {
+        let solution_slot = SaveSlot::solution("missing_puzzle", "test_binary_round_trip");
         let mut world = WorldBlocks::default();
-        world.insert(IVec3::ZERO, BlockData::new(BlockKind::Conveyor, Facing::East));
+        world.insert(
+            IVec3::ZERO,
+            BlockData::new(BlockKind::Conveyor, Facing::East),
+        );
         let inventory = InventoryItems::for_mode(BuilderMode::Play);
         write_save(
-            "test_binary_round_trip",
+            &solution_slot,
             &SaveFile::solution(
                 "missing_puzzle",
                 capture_factory_blocks(&world),
@@ -759,13 +861,14 @@ mod tests {
             ),
         );
 
-        let bytes = persistent_storage::read_save_bytes("test_binary_round_trip", BLOCKS_FILE)
-            .expect("blocks.bin should exist");
+        let bytes =
+            persistent_storage::read_save_bytes(&solution_slot.storage_path(), BLOCKS_FILE)
+                .expect("blocks.bin should exist");
         let decoded = save_format::decode_blocks(&bytes).unwrap();
         assert_eq!(decoded.factory_blocks.len(), 1);
         assert_eq!(decoded.factory_blocks[0].kind, BlockKind::Conveyor);
         assert_eq!(decoded.factory_blocks[0].facing, Some(Facing::East));
 
-        delete_save("test_binary_round_trip");
+        delete_save(&solution_slot);
     }
 }

@@ -6,7 +6,7 @@ use crate::game::state::{GameMode, SolutionState, StartMenuScreen, WorldEntryMod
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
 use crate::game::ui::core::text_input::primary_click;
 use crate::list_ui_config;
-use crate::shared::save::SaveState;
+use crate::shared::save::{SaveSlot, SaveState};
 
 use crate::game::ui::access::UiMainThread;
 
@@ -139,7 +139,7 @@ fn dispatch_save_list_row_action(
                     return;
                 }
                 load_requests.write(LoadWorld {
-                    name: name.clone(),
+                    slot: SaveSlot::puzzle(name.clone()),
                     entry: WorldEntryMode::EditPuzzle,
                 });
             } else if ctx
@@ -158,6 +158,9 @@ fn dispatch_save_list_row_action(
             if ctx.save_state.selected_puzzle.is_none() {
                 return;
             }
+            let Some(puzzle) = ctx.save_state.selected_puzzle.clone() else {
+                return;
+            };
             if !ctx
                 .save_state
                 .selected_puzzle_solutions()
@@ -167,7 +170,7 @@ fn dispatch_save_list_row_action(
                 return;
             }
             load_requests.write(LoadWorld {
-                name: name.clone(),
+                slot: SaveSlot::solution(puzzle, name.clone()),
                 entry: WorldEntryMode::PlaySolution,
             });
         }
@@ -194,7 +197,10 @@ fn dispatch_save_list_row_action(
                 .iter()
                 .any(|entry| entry.name == *name)
             {
-                open_rename_solution_prompt(name.clone());
+                let Some(puzzle) = ctx.save_state.selected_puzzle.clone() else {
+                    return;
+                };
+                open_rename_solution_prompt(puzzle, name.clone());
             }
         }
         SaveListAction::DeletePuzzle(name) => {
@@ -207,7 +213,7 @@ fn dispatch_save_list_row_action(
                 .iter()
                 .any(|entry| entry.name == *name)
             {
-                open_delete_confirm(name.clone());
+                open_delete_confirm(SaveSlot::puzzle(name.clone()));
             }
         }
         SaveListAction::DeleteSolution(name) => {
@@ -217,7 +223,10 @@ fn dispatch_save_list_row_action(
                 .iter()
                 .any(|entry| entry.name == *name)
             {
-                open_delete_confirm(name.clone());
+                let Some(puzzle) = ctx.save_state.selected_puzzle.clone() else {
+                    return;
+                };
+                open_delete_confirm(SaveSlot::solution(puzzle, name.clone()));
             }
         }
         SaveListAction::NewPuzzle | SaveListAction::NewSolution | SaveListAction::Back => {}

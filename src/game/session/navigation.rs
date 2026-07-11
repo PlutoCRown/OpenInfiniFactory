@@ -46,7 +46,7 @@ pub fn handle_exit_to_main_menu(
                 player_save.clone(),
             );
         }
-        if should_capture_cover(save_state.current.as_deref()) {
+        if should_capture_cover(save_state.current.as_ref()) {
             #[cfg(not(target_arch = "wasm32"))]
             if let Some(view_image) = view_image.as_ref() {
                 begin_cover_capture(

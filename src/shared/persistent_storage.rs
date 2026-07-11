@@ -46,7 +46,17 @@ pub fn rename_save_folder(old_name: &str, new_name: &str) -> bool {
 }
 
 pub fn list_saves() -> Vec<String> {
-    backend::list_saves()
+    list_puzzles()
+}
+
+/// 顶层 Puzzle 存档名（不含 solutions 子目录）
+pub fn list_puzzles() -> Vec<String> {
+    backend::list_puzzles()
+}
+
+/// 某 Puzzle 下已存的 Solution 名
+pub fn list_solution_names(puzzle: &str) -> Vec<String> {
+    backend::list_solution_names(puzzle)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -143,7 +153,7 @@ mod backend {
         }
     }
 
-    pub fn list_saves() -> Vec<String> {
+    pub fn list_puzzles() -> Vec<String> {
         let dir = saves_directory();
         let Ok(entries) = fs::read_dir(dir) else {
             return Vec::new();
@@ -155,14 +165,51 @@ mod backend {
             if !path.is_dir() {
                 continue;
             }
-            if path.join(META_FILE).is_file() {
-                if let Some(name) = path.file_name().and_then(|stem| stem.to_str()) {
-                    names.push(name.to_string());
-                }
+            if !path.join(META_FILE).is_file() {
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|stem| stem.to_str()) else {
+                continue;
+            };
+            if save_meta_kind(name) == Some("puzzle") {
+                names.push(name.to_string());
             }
         }
         names.sort();
         names
+    }
+
+    pub fn list_solution_names(puzzle: &str) -> Vec<String> {
+        let solutions_dir = save_dir(puzzle).join("solutions");
+        let Ok(entries) = fs::read_dir(solutions_dir) else {
+            return Vec::new();
+        };
+
+        let mut names = Vec::new();
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if !path.is_dir() || !path.join(META_FILE).is_file() {
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|stem| stem.to_str()) else {
+                continue;
+            };
+            if save_meta_kind(&format!("{puzzle}/solutions/{name}")) == Some("solution") {
+                names.push(name.to_string());
+            }
+        }
+        names.sort();
+        names
+    }
+
+    fn save_meta_kind(storage_path: &str) -> Option<&'static str> {
+        let text = fs::read_to_string(save_dir(storage_path).join(META_FILE)).ok()?;
+        let meta: serde_json::Value = serde_json::from_str(&text).ok()?;
+        match meta.get("kind")?.as_str()? {
+            "puzzle" => Some("puzzle"),
+            "solution" => Some("solution"),
+            _ => None,
+        }
     }
 
     fn ensure_save_dir(path: &Path) -> bool {
@@ -282,7 +329,7 @@ mod backend {
         remove_save_folder(old_name)
     }
 
-    pub fn list_saves() -> Vec<String> {
+    pub fn list_puzzles() -> Vec<String> {
         let Some(storage) = storage() else {
             return Vec::new();
         };
@@ -302,8 +349,42 @@ mod backend {
             let Some((save_name, file)) = relative.split_once('/') else {
                 continue;
             };
+            if save_name.contains('/') {
+                continue;
+            }
             if file == META_FILE && !names.iter().any(|name| name == save_name) {
                 names.push(save_name.to_string());
+            }
+        }
+        names.sort();
+        names
+    }
+
+    pub fn list_solution_names(puzzle: &str) -> Vec<String> {
+        let Some(storage) = storage() else {
+            return Vec::new();
+        };
+        let Ok(length) = storage.length() else {
+            return Vec::new();
+        };
+
+        let prefix = full_key(&format!("{SAVE_PREFIX}{puzzle}/solutions/"));
+        let mut names = Vec::new();
+        for index in 0..length {
+            let Ok(Some(key)) = storage.key(index) else {
+                continue;
+            };
+            let Some(relative) = key.strip_prefix(&prefix) else {
+                continue;
+            };
+            let Some((solution_name, file)) = relative.split_once('/') else {
+                continue;
+            };
+            if solution_name.contains('/') {
+                continue;
+            }
+            if file == META_FILE && !names.iter().any(|name| name == solution_name) {
+                names.push(solution_name.to_string());
             }
         }
         names.sort();

@@ -35,8 +35,8 @@ pub struct WorldBlocks {
     pub next_acceptor_id: u64,
 }
 
-/// 世界中持久保存的验收结构（无验收计数）
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+/// 编辑态派生的验收结构（无验收计数，不写入存档）
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredAcceptorStructure {
     pub id: AcceptorId,
     pub positions: Vec<IVec3>,
@@ -64,11 +64,11 @@ impl BlockSettings {
     }
 }
 
-/// 生成器触发模式：周期或连接验收结构
+/// 生成器触发模式：周期或连接验收结构（Link 存代表 Goal 坐标，加载时由连通性解析）
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum GeneratorMode {
     Period { period: u64, offset: u64 },
-    Link { acceptor: AcceptorId },
+    Link { anchor: Option<IVec3> },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -278,8 +278,7 @@ impl WorldBlocks {
             let id = block.id;
             if !id.is_none() {
                 self.material_welds.retain(|weld| !weld.contains(id));
-                self.material_face_marks
-                    .retain(|face, _| face.block != id);
+                self.material_face_marks.retain(|face, _| face.block != id);
             }
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
@@ -342,9 +341,9 @@ impl WorldBlocks {
         if moves.is_empty() {
             return;
         }
-        let touches_signals = moves.iter().any(|(_, _, block)| {
-            block.kind.signal_behavior(block.facing).is_some()
-        });
+        let touches_signals = moves
+            .iter()
+            .any(|(_, _, block)| block.kind.signal_behavior(block.facing).is_some());
         for (from, _, _) in &moves {
             self.blocks.remove(from);
         }
@@ -453,28 +452,6 @@ impl WorldBlocks {
         self.invalidate_stale_generator_links(&alive);
     }
 
-    /// 加载存档后恢复验收结构；无数据时按 Goal 重算
-    pub fn restore_acceptor_structures(
-        &mut self,
-        next_acceptor_id: u64,
-        structures: Vec<StoredAcceptorStructure>,
-    ) {
-        if structures.is_empty() && next_acceptor_id == 0 {
-            self.resync_acceptor_structures();
-            return;
-        }
-        self.next_acceptor_id = next_acceptor_id.max(
-            structures
-                .iter()
-                .map(|structure| structure.id.0.saturating_add(1))
-                .max()
-                .unwrap_or(1),
-        );
-        self.acceptor_structures = structures;
-        // 与当前 Goal 对齐，保留已恢复的 ID
-        self.resync_acceptor_structures();
-    }
-
     fn connected_goal_positions(&self, start: IVec3) -> Vec<IVec3> {
         let mut structure = Vec::new();
         let mut queue = std::collections::VecDeque::from([start]);
@@ -505,17 +482,23 @@ impl WorldBlocks {
             .iter()
             .filter_map(|(pos, settings)| match settings {
                 BlockSettings::Generator(GeneratorSettings {
-                    mode: GeneratorMode::Link { acceptor },
+                    mode: GeneratorMode::Link { anchor },
                     ..
-                }) if !acceptor.is_none() && !alive.contains(acceptor) => Some(*pos),
+                }) => {
+                    let broken = match anchor {
+                        None => false,
+                        Some(anchor) => self
+                            .acceptor_id_at(*anchor)
+                            .is_none_or(|id| !alive.contains(&id)),
+                    };
+                    broken.then_some(*pos)
+                }
                 _ => None,
             })
             .collect();
         for pos in stale {
             let mut settings = self.generator_settings(pos);
-            settings.mode = GeneratorMode::Link {
-                acceptor: AcceptorId::NONE,
-            };
+            settings.mode = GeneratorMode::Link { anchor: None };
             self.block_settings
                 .insert(pos, BlockSettings::Generator(settings));
         }

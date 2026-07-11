@@ -28,7 +28,7 @@ pub struct SwitchToEditMode {
 
 #[derive(Clone, Message)]
 pub struct LoadWorld {
-    pub name: String,
+    pub slot: crate::shared::save::SaveSlot,
     pub entry: WorldEntryMode,
 }
 

@@ -19,7 +19,7 @@ use crate::game::ui::menu_button::{
 use crate::game::ui::types::{CarriedItem, InventoryItems};
 use crate::game::world::grid::WorldBlocks;
 use crate::list_ui_config;
-use crate::shared::save::{next_named_save, SaveKind, SaveState};
+use crate::shared::save::{next_named_save, solution_names_for_puzzle, SaveKind, SaveSlot, SaveState};
 
 use confirm::{
     on_reset_solution, on_return_to_main, on_save_before_edit, reset_solution_spec,
@@ -74,15 +74,22 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
                     ctx.simulation.start_snapshot = None;
                     ctx.simulation.start_structures = None;
                     ctx.solution_state.puzzle_snapshot = Some(ctx.world.clone());
-                    ctx.solution_state.puzzle_id = ctx.save_state.current.clone();
-                    ctx.save_state.current = Some(next_named_save(
-                        &ctx.save_state
-                            .entries
-                            .iter()
-                            .map(|entry| entry.name.clone())
-                            .collect::<Vec<_>>(),
-                        ctx.save_state.current.as_deref().unwrap_or("solution"),
-                    ));
+                    ctx.solution_state.puzzle_id = ctx
+                        .save_state
+                        .current
+                        .as_ref()
+                        .map(|slot| slot.puzzle.clone());
+                    let puzzle_id = ctx
+                        .save_state
+                        .current
+                        .as_ref()
+                        .map(|slot| slot.puzzle.clone())
+                        .unwrap_or_else(|| "solution".to_string());
+                    let solution_name = next_named_save(
+                        &solution_names_for_puzzle(&ctx.save_state.entries, &puzzle_id),
+                        "solution",
+                    );
+                    ctx.save_state.current = Some(SaveSlot::solution(&puzzle_id, &solution_name));
                     ctx.save_state.current_kind = Some(SaveKind::Solution);
                     BuilderMode::Play
                 }

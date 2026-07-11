@@ -12,7 +12,7 @@ use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::{BlockEditContext, OpenBlockPanelDropdown};
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::blocks::{AcceptorId, MaterialKind};
+use crate::game::blocks::MaterialKind;
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::access::{i18n, UiMainThread};
@@ -251,18 +251,18 @@ fn dispatch_action(
 ) {
     let mut ctx = BlockEditContext::new(pos, &mut world.world, solution_state, open_dropdown);
     let mut settings = ctx.world.generator_settings(pos);
-    let acceptor_ids: Vec<AcceptorId> = ctx
+    let acceptor_anchors: Vec<IVec3> = ctx
         .world
         .acceptor_structures
         .iter()
-        .map(|structure| structure.id)
+        .filter_map(|structure| structure.positions.first().copied())
         .collect();
 
     let changed = match action {
         GeneratorAction::ToggleMode => {
             settings.mode = match settings.mode {
                 GeneratorMode::Period { .. } => GeneratorMode::Link {
-                    acceptor: acceptor_ids.first().copied().unwrap_or(AcceptorId::NONE),
+                    anchor: acceptor_anchors.first().copied(),
                 },
                 GeneratorMode::Link { .. } => GeneratorMode::Period {
                     period: crate::game::blocks::DEFAULT_GENERATOR_PERIOD,
@@ -300,14 +300,14 @@ fn dispatch_action(
             true
         }
         GeneratorAction::AcceptorPrev => {
-            if let GeneratorMode::Link { acceptor } = &mut settings.mode {
-                *acceptor = cycle_acceptor(*acceptor, &acceptor_ids, false);
+            if let GeneratorMode::Link { anchor } = &mut settings.mode {
+                *anchor = cycle_anchor(*anchor, &acceptor_anchors, false);
             }
             true
         }
         GeneratorAction::AcceptorNext => {
-            if let GeneratorMode::Link { acceptor } = &mut settings.mode {
-                *acceptor = cycle_acceptor(*acceptor, &acceptor_ids, true);
+            if let GeneratorMode::Link { anchor } = &mut settings.mode {
+                *anchor = cycle_anchor(*anchor, &acceptor_anchors, true);
             }
             true
         }
@@ -329,17 +329,20 @@ fn dispatch_action(
     }
 }
 
-fn cycle_acceptor(current: AcceptorId, ids: &[AcceptorId], forward: bool) -> AcceptorId {
-    if ids.is_empty() {
-        return AcceptorId::NONE;
+fn cycle_anchor(current: Option<IVec3>, anchors: &[IVec3], forward: bool) -> Option<IVec3> {
+    if anchors.is_empty() {
+        return None;
     }
-    let Some(index) = ids.iter().position(|id| *id == current) else {
-        return ids[0];
+    let Some(current) = current else {
+        return Some(anchors[0]);
+    };
+    let Some(index) = anchors.iter().position(|pos| *pos == current) else {
+        return Some(anchors[0]);
     };
     if forward {
-        ids[(index + 1) % ids.len()]
+        Some(anchors[(index + 1) % anchors.len()])
     } else {
-        ids[(index + ids.len() - 1) % ids.len()]
+        Some(anchors[(index + anchors.len() - 1) % anchors.len()])
     }
 }
 
@@ -419,15 +422,14 @@ fn update_panel(
                 text.0 = offset.to_string();
             }
         }
-        GeneratorMode::Link { acceptor } => {
+        GeneratorMode::Link { anchor } => {
             for mut text in &mut mode_text {
                 text.0 = i18n.t("generator.mode_link");
             }
             for mut text in &mut acceptor_text {
-                text.0 = if acceptor.is_none() {
-                    "-".to_string()
-                } else {
-                    format!("#{}", acceptor.0)
+                text.0 = match anchor.and_then(|pos| world.acceptor_id_at(pos)) {
+                    None => "-".to_string(),
+                    Some(id) => format!("#{}", id.0),
                 };
             }
         }

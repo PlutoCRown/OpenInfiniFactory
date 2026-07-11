@@ -8,6 +8,8 @@ use crate::game::cameras::GameplayViewImage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::shared::platform::saves_directory;
 #[cfg(not(target_arch = "wasm32"))]
+use crate::shared::save::SaveSlot;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::shared::save_format::COVER_FILE;
 
 /// 等待封面截图完成后回到主菜单
@@ -19,22 +21,22 @@ pub struct PendingMainMenuExit(pub bool);
 pub struct CoverScreenshotComplete;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn should_capture_cover(save_name: Option<&str>) -> bool {
-    save_name.is_some()
+pub fn should_capture_cover(save_slot: Option<&SaveSlot>) -> bool {
+    save_slot.is_some()
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn should_capture_cover(_save_name: Option<&str>) -> bool {
+pub fn should_capture_cover(_save_slot: Option<&crate::shared::save::SaveSlot>) -> bool {
     false
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn begin_cover_capture(
     commands: &mut Commands,
-    save_name: &str,
+    slot: &crate::shared::save::SaveSlot,
     view_image: &GameplayViewImage,
 ) {
-    let path = saves_directory().join(save_name).join(COVER_FILE);
+    let path = saves_directory().join(slot.storage_path()).join(COVER_FILE);
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }

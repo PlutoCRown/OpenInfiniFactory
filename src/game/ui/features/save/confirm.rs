@@ -3,18 +3,17 @@ use bevy::prelude::*;
 use crate::game::session::{exit_to_main_menu_in_world, save_current_world_invalidate_in_world};
 use crate::game::ui::access::{i18n, ui};
 use crate::game::ui::core::confirm_dialog::{ConfirmExtraButton, ConfirmProps, ConfirmResult};
-use crate::shared::save::{
-    delete_save, invalidate_solutions_for_puzzle, save_kind, SaveKind, SaveState,
-};
+use crate::shared::save::{delete_save, invalidate_solutions_for_puzzle, SaveSlot, SaveState};
 
 use super::prompt::open_save_as_new_puzzle_prompt;
 
 pub const EXTRA_SAVE_AS: u32 = 1;
 
-pub fn open_delete_confirm(name: String) {
+pub fn open_delete_confirm(slot: SaveSlot) {
+    let display = slot.display_name();
     let spec = ConfirmProps {
         title: i18n.t("confirm.title"),
-        message: i18n.fmt("save.confirm_delete", &[("name", name.clone())]),
+        message: i18n.fmt("save.confirm_delete", &[("name", display)]),
         confirm_text: i18n.t("button.delete"),
         cancel_text: i18n.t("button.cancel"),
         extra: None,
@@ -23,15 +22,21 @@ pub fn open_delete_confirm(name: String) {
         if !matches!(result, ConfirmResult::Confirmed) {
             return;
         }
-        if save_kind(&name) == Some(SaveKind::Puzzle) {
-            invalidate_solutions_for_puzzle(&name);
+        if slot.solution.is_none() {
+            invalidate_solutions_for_puzzle(&slot.puzzle);
         }
-        delete_save(&name);
+        delete_save(&slot);
         let mut save_state = world.resource_mut::<SaveState>();
-        save_state.refresh();
-        if save_state.selected_puzzle.as_deref() == Some(name.as_str()) {
+        if save_state.current.as_ref() == Some(&slot) {
+            save_state.current = None;
+            save_state.current_kind = None;
+        }
+        if slot.solution.is_none()
+            && save_state.selected_puzzle.as_deref() == Some(slot.puzzle.as_str())
+        {
             save_state.select_puzzle(None);
         }
+        save_state.refresh();
     });
 }
 

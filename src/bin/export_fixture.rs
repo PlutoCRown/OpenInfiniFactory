@@ -13,7 +13,7 @@ use bevy::prelude::IVec3;
 use open_infinifactory::debug_http::snapshot::block_layer;
 use open_infinifactory::game::blocks::BlockData;
 use open_infinifactory::game::world::grid::WorldBlocks;
-use open_infinifactory::shared::save::load_world;
+use open_infinifactory::shared::save::{load_world, SaveSlot};
 use serde::Serialize;
 use std::env;
 use std::fs;
@@ -117,7 +117,9 @@ fn run() -> Result<(), String> {
     let origin = if normalize { min_corner } else { IVec3::ZERO };
 
     let mut world = WorldBlocks::default();
-    load_world(&mut world, &save).ok_or_else(|| format!("failed to load save `{save}`"))?;
+    let slot = SaveSlot::from_storage_path(&save)
+        .ok_or_else(|| format!("invalid save path `{save}`"))?;
+    load_world(&mut world, &slot).ok_or_else(|| format!("failed to load save `{save}`"))?;
 
     let mut setup = collect_blocks(&world, min_corner, max_corner, origin);
     setup.sort_by(|left, right| {

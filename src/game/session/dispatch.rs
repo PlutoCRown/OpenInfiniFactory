@@ -7,7 +7,7 @@ use crate::game::state::WorldEntryMode;
 use crate::game::state::{SimulationState, SolutionState};
 use crate::game::ui::InventoryItems;
 use crate::game::world::grid::WorldBlocks;
-use crate::shared::save::SaveState;
+use crate::shared::save::{SaveSlot, SaveState};
 
 use super::messages::{
     CreateNewPuzzle, CreateNewSolution, ExitToMainMenu, LoadWorld, ResetSolution,
@@ -54,10 +54,9 @@ pub fn switch_to_edit_mode(commands: &mut Commands, save_first: bool) {
     });
 }
 
-pub fn load_world(commands: &mut Commands, name: impl Into<String>, entry: WorldEntryMode) {
-    let name = name.into();
+pub fn load_world(commands: &mut Commands, slot: SaveSlot, entry: WorldEntryMode) {
     commands.queue(move |world: &mut World| {
-        load_world_in_world(world, name, entry);
+        load_world_in_world(world, slot, entry);
     });
 }
 
@@ -102,8 +101,8 @@ pub fn switch_to_edit_mode_in_world(world: &mut World, save_first: bool) {
     world.write_message(SwitchToEditMode { save_first });
 }
 
-pub fn load_world_in_world(world: &mut World, name: String, entry: WorldEntryMode) {
-    world.write_message(LoadWorld { name, entry });
+pub fn load_world_in_world(world: &mut World, slot: SaveSlot, entry: WorldEntryMode) {
+    world.write_message(LoadWorld { slot, entry });
 }
 
 pub fn create_new_puzzle_in_world(world: &mut World, name: String) {

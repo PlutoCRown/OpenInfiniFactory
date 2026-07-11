@@ -61,7 +61,7 @@ fn status_text_value(
         StatusTextKind::CurrentSave => save_state
             .current
             .as_ref()
-            .map(|name| i18n.fmt("save.world", &[("name", name.clone())]))
+            .map(|slot| i18n.fmt("save.world", &[("name", slot.display_name())]))
             .unwrap_or_else(|| i18n.t("save.no_world_loaded")),
         StatusTextKind::Simulation => i18n.fmt(
             "status.simulation",

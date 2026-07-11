@@ -17,7 +17,8 @@ use crate::game::world::rendering::{
 use crate::scene::BlockEntityIndex;
 use crate::shared::save::{
     has_solutions_for_puzzle, invalidate_solutions_for_puzzle, load_world, next_named_save,
-    reset_solution_world, save_puzzle, save_solution, PlayerSave, SaveKind, SaveState,
+    puzzle_names, reset_solution_world, save_puzzle, save_solution, solution_names_for_puzzle,
+    PlayerSave, SaveKind, SaveSlot, SaveState,
 };
 
 pub enum SaveCurrentWorldResult {
@@ -30,8 +31,8 @@ pub fn puzzle_save_needs_confirm(save_state: &SaveState) -> bool {
     save_state.current_kind == Some(SaveKind::Puzzle)
         && save_state
             .current
-            .as_deref()
-            .is_some_and(has_solutions_for_puzzle)
+            .as_ref()
+            .is_some_and(|slot| has_solutions_for_puzzle(&slot.puzzle))
 }
 
 pub fn save_current_world(
@@ -90,36 +91,41 @@ fn commit_save_current_world(
 ) -> bool {
     let world = simulation.authoring_world(world);
     let kind = save_state.current_kind.unwrap_or(SaveKind::Puzzle);
-    let name = save_state.current.clone().unwrap_or_else(|| {
-        next_named_save(
-            &save_state
-                .entries
-                .iter()
-                .map(|entry| entry.name.clone())
-                .collect::<Vec<_>>(),
+    let mut slot = save_state.current.clone().unwrap_or_else(|| {
+        SaveSlot::puzzle(next_named_save(
+            &puzzle_names(&save_state.entries),
             "world",
-        )
+        ))
     });
     let saved = match kind {
         SaveKind::Puzzle => {
             if invalidate_solutions {
-                invalidate_solutions_for_puzzle(&name);
+                invalidate_solutions_for_puzzle(&slot.puzzle);
             }
-            save_puzzle(world, &name, inventory, player)
+            save_puzzle(world, &slot, inventory, player)
         }
         SaveKind::Solution => {
-            let Some(puzzle_id) = solution_state
-                .puzzle_id
-                .clone()
-                .or_else(|| save_state.current.clone())
-            else {
-                return false;
-            };
-            save_solution(world, &name, &puzzle_id, inventory, player)
+            if slot.solution.is_none() {
+                let Some(puzzle_id) = solution_state
+                    .puzzle_id
+                    .clone()
+                    .or_else(|| Some(slot.puzzle.clone()))
+                else {
+                    return false;
+                };
+                slot = SaveSlot::solution(
+                    &puzzle_id,
+                    &next_named_save(
+                        &solution_names_for_puzzle(&save_state.entries, &puzzle_id),
+                        "solution",
+                    ),
+                );
+            }
+            save_solution(world, &slot, inventory, player)
         }
     };
     if saved {
-        save_state.current = Some(name);
+        save_state.current = Some(slot);
         save_state.current_kind = Some(kind);
         solution_state.dirty = false;
         save_state.refresh();
@@ -253,7 +259,7 @@ pub fn exit_to_main_menu(
 }
 
 pub fn load_world_into_session(
-    name: &str,
+    slot: &SaveSlot,
     entry: WorldEntryMode,
     world: &mut WorldBlocks,
     builder_mode: &mut BuilderMode,
@@ -276,7 +282,7 @@ pub fn load_world_into_session(
     next_state: &mut NextState<GameMode>,
     block_index: &mut BlockEntityIndex,
 ) {
-    let Some(loaded) = load_world(world, name) else {
+    let Some(loaded) = load_world(world, slot) else {
         return;
     };
 
@@ -300,7 +306,7 @@ pub fn load_world_into_session(
     }
     placement.selected = 0;
 
-    save_state.current = Some(name.to_string());
+    save_state.current = Some(slot.clone());
     save_state.current_kind = Some(match entry {
         WorldEntryMode::EditPuzzle => SaveKind::Puzzle,
         WorldEntryMode::PlaySolution => SaveKind::Solution,
