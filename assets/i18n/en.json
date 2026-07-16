@@ -195,6 +195,7 @@
   "settings.place_selection_mode": "Place selection",
   "settings.rebind_hint": "Click a key binding to rebind it.",
   "settings.shadows": "Shadows",
+  "settings.skybox": "Skybox",
   "settings.vsync": "VSync",
   "settings.title": "Settings",
   "settings.ui_scale_label": "UI scale",

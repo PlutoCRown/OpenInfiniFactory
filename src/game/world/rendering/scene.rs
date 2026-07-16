@@ -2,6 +2,7 @@ use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 
 use super::components::{AimFaceHighlight, GameplayScene, HoverMarker, PlacementPreview};
+use super::skybox::{spawn_sky_dome, sunlight_rotation, SkyMaterial};
 use crate::game::world::render_assets::WorldRenderAssets;
 
 /// 初始化游玩场景灯光、渲染资源与准星/预览实体
@@ -9,6 +10,7 @@ pub fn setup_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut sky_materials: ResMut<Assets<SkyMaterial>>,
     mut images: ResMut<Assets<Image>>,
     config: Res<crate::shared::config::GameConfig>,
 ) {
@@ -28,10 +30,11 @@ pub fn setup_scene(
     commands.spawn((
         DirectionalLight {
             illuminance: 9500.0,
+            color: Color::srgb(1.0, 0.97, 0.92),
             shadow_maps_enabled: config.shadows_enabled,
             ..default()
         },
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -1.05, -0.55, -0.28)),
+        Transform::from_rotation(sunlight_rotation()),
         CascadeShadowConfigBuilder {
             num_cascades: 3,
             minimum_distance: 0.15,
@@ -42,6 +45,13 @@ pub fn setup_scene(
         .build(),
         GameplayScene,
     ));
+
+    spawn_sky_dome(
+        &mut commands,
+        &mut meshes,
+        &mut sky_materials,
+        config.skybox_enabled,
+    );
 
     let render_assets = WorldRenderAssets::new(&mut meshes, &mut materials, &mut images);
     commands.insert_resource(render_assets);

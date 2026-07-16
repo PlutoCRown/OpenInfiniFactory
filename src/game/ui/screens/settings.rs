@@ -84,6 +84,7 @@ fn spawn_settings_dropdown_layers(root: &mut ChildSpawnerCommands) {
         SettingsDropdown::DeleteSelectionMode,
         SettingsDropdown::Shadows,
         SettingsDropdown::Vsync,
+        SettingsDropdown::Skybox,
     ] {
         spawn_settings_dropdown_list(root, dropdown, settings_dropdown_options(dropdown));
     }
@@ -335,6 +336,16 @@ fn settings_dropdown_options(dropdown: SettingsDropdown) -> Vec<(String, Setting
             (
                 i18n.t("settings.option_off"),
                 SettingsAction::SetVsyncEnabled(false),
+            ),
+        ],
+        SettingsDropdown::Skybox => vec![
+            (
+                i18n.t("settings.option_on"),
+                SettingsAction::SetSkyboxEnabled(true),
+            ),
+            (
+                i18n.t("settings.option_off"),
+                SettingsAction::SetSkyboxEnabled(false),
             ),
         ],
     }

@@ -37,6 +37,7 @@ pub const DEFAULT_CONFIG: GameConfig = GameConfig {
     mouse_sensitivity_y: 1.0,
     shadows_enabled: true,
     vsync_enabled: true,
+    skybox_enabled: false,
     language: None,
     place_selection_mode: ConfigSelectionMode::Point,
     delete_selection_mode: ConfigSelectionMode::Point,
@@ -59,6 +60,8 @@ pub struct GameConfig {
     pub shadows_enabled: bool,
     #[serde(default = "default_vsync_enabled")]
     pub vsync_enabled: bool,
+    #[serde(default = "default_skybox_enabled")]
+    pub skybox_enabled: bool,
     #[serde(default)]
     pub language: Option<Language>,
     #[serde(default)]
@@ -95,6 +98,10 @@ fn default_shadows_enabled() -> bool {
 
 fn default_vsync_enabled() -> bool {
     DEFAULT_CONFIG.vsync_enabled
+}
+
+fn default_skybox_enabled() -> bool {
+    DEFAULT_CONFIG.skybox_enabled
 }
 
 fn default_key_bindings() -> KeyBindings {

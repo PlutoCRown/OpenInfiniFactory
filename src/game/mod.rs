@@ -45,7 +45,7 @@ use systems::simulation_controls::simulation_controls;
 use ui::{GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
-use world::rendering::{retire_block_icon_renderers, HoverStructureBounds};
+use world::rendering::{retire_block_icon_renderers, HoverStructureBounds, SkyboxPlugin};
 
 pub struct GamePlugin;
 
@@ -133,7 +133,8 @@ impl Plugin for GamePlugin {
             .add_plugins(input::GameplayInputPlugin)
             .add_plugins(SessionPlugin)
             .add_plugins(GameUiPlugin)
-            .add_plugins(PerfPlugin);
+            .add_plugins(PerfPlugin)
+            .add_plugins(SkyboxPlugin);
         #[cfg(not(target_arch = "wasm32"))]
         app.add_plugins(DebugToolsPlugin);
         app.add_observer(slider_self_update)
@@ -149,10 +150,7 @@ impl Plugin for GamePlugin {
             )
             .add_systems(
                 Update,
-                (
-                    apply_storage_ready,
-                    apply_launch_load_save_when_ready,
-                )
+                (apply_storage_ready, apply_launch_load_save_when_ready)
                     .chain()
                     .before(PerfScope::Menus),
             )

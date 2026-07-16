@@ -195,6 +195,7 @@
   "settings.place_selection_mode": "放置选区",
   "settings.rebind_hint": "点击一个按键绑定来重新绑定。",
   "settings.shadows": "阴影",
+  "settings.skybox": "天空盒",
   "settings.vsync": "垂直同步",
   "settings.title": "设置",
   "settings.ui_scale_label": "界面缩放",

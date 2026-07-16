@@ -17,6 +17,7 @@ use crate::game::state::{GameMode, GameSettings, PlayingUiState};
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::{grid_to_world, WorldBlocks};
 use crate::game::world::rendering::GameplayScene;
+use crate::shared::config::GameConfig;
 
 pub const EYE_HEIGHT: f32 = 1.7;
 pub const PLAYER_RADIUS: f32 = 0.28;
@@ -47,6 +48,7 @@ pub fn spawn_player(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     window: Query<&Window, With<PrimaryWindow>>,
+    config: Res<GameConfig>,
 ) {
     let (width, height) = window
         .single()
@@ -55,12 +57,18 @@ pub fn spawn_player(
     let image_handle = images.add(new_gameplay_view_image(width, height));
     commands.insert_resource(GameplayViewImage(image_handle.clone()));
 
+    let clear_color = if config.skybox_enabled {
+        ClearColorConfig::Custom(Color::BLACK)
+    } else {
+        ClearColorConfig::Custom(MENU_CLEAR)
+    };
+
     commands
         .spawn((
             Camera3d::default(),
             Camera {
                 order: 0,
-                clear_color: ClearColorConfig::Custom(MENU_CLEAR),
+                clear_color,
                 ..default()
             },
             RenderTarget::Image(image_handle.into()),

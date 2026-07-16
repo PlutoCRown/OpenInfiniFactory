@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 
 use crate::game::state::GameSettings;
-use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, MOUSE_SENSITIVITY_MAX, MOUSE_SENSITIVITY_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
+use crate::game::{
+    GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, MOUSE_SENSITIVITY_MAX, MOUSE_SENSITIVITY_MIN,
+    UI_SCALE_MAX, UI_SCALE_MIN,
+};
 use crate::shared::config::{ActionKeyName, ConfigSelectionMode};
 use crate::shared::i18n::Language;
 
@@ -156,6 +159,10 @@ pub const GRAPHICS_SETTINGS: &[SettingsItem] = &[
         label_key: "settings.vsync",
         control: SettingsControl::Dropdown(SettingsDropdown::Vsync),
     },
+    SettingsItem {
+        label_key: "settings.skybox",
+        control: SettingsControl::Dropdown(SettingsDropdown::Skybox),
+    },
 ];
 
 impl SettingsField {
@@ -269,6 +276,7 @@ pub enum SettingsDropdown {
     DeleteSelectionMode,
     Shadows,
     Vsync,
+    Skybox,
 }
 
 impl SettingsDropdown {
@@ -289,6 +297,11 @@ impl SettingsDropdown {
             } else {
                 "settings.option_off"
             }),
+            Self::Skybox => i18n.t(if config.skybox_enabled {
+                "settings.option_on"
+            } else {
+                "settings.option_off"
+            }),
         }
     }
 }
@@ -304,6 +317,7 @@ pub enum SettingsAction {
     SetLanguage(Language),
     SetShadowsEnabled(bool),
     SetVsyncEnabled(bool),
+    SetSkyboxEnabled(bool),
     ToggleDropdown(SettingsDropdown),
     Bind(ActionKeyName),
     ResetDefaults,
@@ -329,6 +343,7 @@ impl UiActionLabel for SettingsAction {
             | Self::SetLanguage(_)
             | Self::SetShadowsEnabled(_)
             | Self::SetVsyncEnabled(_)
+            | Self::SetSkyboxEnabled(_)
             | Self::ToggleDropdown(_) => "",
         }
     }
