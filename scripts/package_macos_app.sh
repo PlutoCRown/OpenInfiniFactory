@@ -12,13 +12,18 @@ MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 
 cd "$ROOT_DIR"
-"$CARGO_BIN" build --release
+"$CARGO_BIN" build --release -p open_infinifactory --bin "$BIN_NAME"
 
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
-cp "$ROOT_DIR/target/release/$BIN_NAME" "$MACOS_DIR/$APP_NAME"
+BIN_PATH="$ROOT_DIR/target/release/$BIN_NAME"
+cp "$BIN_PATH" "$MACOS_DIR/$APP_NAME"
 cp -R "$ROOT_DIR/assets" "$RESOURCES_DIR/assets"
+
+# cargo strip=true 已去符号；再跑一遍系统 strip 兜底（幂等）
+strip "$MACOS_DIR/$APP_NAME" 2>/dev/null || true
+echo "binary: $(du -h "$MACOS_DIR/$APP_NAME" | awk '{print $1}') (was built with profile.release size opts)"
 
 cat > "$CONTENTS_DIR/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

@@ -33,13 +33,8 @@ impl UiInstanceId {
     pub const INVENTORY: Self = Self(u64::MAX - 4);
     pub const PAUSE_MENU: Self = Self(u64::MAX - 5);
 
-    #[allow(dead_code)]
-    pub fn raw(self) -> u64 {
-        self.0
-    }
 }
 
-#[allow(dead_code)]
 #[derive(Clone)]
 pub enum ViewSpec {
     Confirm(ConfirmProps),
@@ -52,7 +47,6 @@ pub struct UiAction {
     pub kind: UiActionKind,
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UiActionKind {
     SaveList(SaveListAction),
@@ -96,16 +90,6 @@ pub(crate) struct UiHostCommands<'w> {
 }
 
 impl UiHostCommands<'_> {
-    #[allow(dead_code)]
-    pub fn modal_open(&self) -> bool {
-        self.host.modal_open()
-    }
-
-    #[allow(dead_code)]
-    pub fn is_settings_open(&self) -> bool {
-        self.runtime.is_settings_open()
-    }
-
     pub fn mount_settings(
         &mut self,
         commands: &mut Commands,

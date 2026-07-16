@@ -1,3 +1,4 @@
+use crate::game::blocks::BlockPresent;
 pub fn dismiss_active_panel(
     ui_runtime: &mut UiRuntime,
     ui_host: &mut UiHost,
@@ -326,6 +327,7 @@ fn reset_panel_centering(style: &mut Node) {
 pub fn update_ui_layers(
     ui_runtime: Res<UiRuntime>,
     ui_host: Res<UiHost>,
+    editor_open: Option<Res<crate::game::ui::features::virtual_remote::VirtualLayoutEditorOpen>>,
     mut layered_nodes: Query<(
         &mut GlobalZIndex,
         Option<&UiPanelBinding>,
@@ -333,13 +335,18 @@ pub fn update_ui_layers(
     )>,
 ) {
     const BASE_LAYER: i32 = 100;
+    const LAYOUT_EDITOR_CONFIRM_Z: i32 = 60_000;
 
     let top_panel_z = ui_runtime
         .top_modal_layer()
         .map(panel_layer_z)
         .unwrap_or(PANEL_LAYER_BASE);
     let confirm_z = if ui_host.confirm_open() {
-        top_panel_z + CONFIRM_LAYER_STEP
+        if editor_open.is_some_and(|open| open.0) {
+            LAYOUT_EDITOR_CONFIRM_Z
+        } else {
+            top_panel_z + CONFIRM_LAYER_STEP
+        }
     } else {
         PANEL_LAYER_BASE
     };

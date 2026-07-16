@@ -16,8 +16,8 @@ pub type UiMainThread = NonSendMarker;
 
 use crate::game::state::{GameSettings, UiPanelId};
 use crate::game::ui::core::confirm_dialog::{ConfirmProps, ConfirmResult};
-use crate::game::ui::core::host::{UiHost, UiHostCommands, UiInstanceId};
-use crate::game::ui::core::runtime::{UiPanelContext, UiRuntime};
+use crate::game::ui::core::host::{UiHostCommands, UiInstanceId};
+use crate::game::ui::core::runtime::UiPanelContext;
 use crate::game::ui::core::text_prompt::{TextPromptProps, TextPromptResult};
 use crate::shared::i18n::{I18n, Language};
 
@@ -110,16 +110,6 @@ pub const ui: UiAccess = UiAccess;
 pub struct UiAccess;
 
 impl UiAccess {
-    #[allow(dead_code)]
-    pub fn modal_open(self) -> bool {
-        with_world_immut(|world| world.resource::<UiHost>().modal_open())
-    }
-
-    #[allow(dead_code)]
-    pub fn is_settings_open(self) -> bool {
-        with_world_immut(|world| world.resource::<UiRuntime>().is_settings_open())
-    }
-
     pub fn mount_settings(
         self,
         commands: &mut Commands,

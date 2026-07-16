@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
-use crate::game::session::{exit_to_main_menu_in_world, save_current_world_invalidate_in_world};
+use crate::game::session::exit_to_main_menu_in_world;
+use crate::game::session::save_current_world_invalidate_in_world;
 use crate::game::ui::access::{i18n, ui};
 use crate::game::ui::core::confirm_dialog::{ConfirmExtraButton, ConfirmProps, ConfirmResult};
 use crate::shared::save::{delete_save, invalidate_solutions_for_puzzle, SaveSlot, SaveState};
@@ -79,8 +80,7 @@ pub fn open_save_puzzle_confirm_before_exit() {
 pub fn on_save_puzzle_confirm_before_exit(result: ConfirmResult, world: &mut World) {
     match result {
         ConfirmResult::Confirmed => {
-            save_current_world_invalidate_in_world(world);
-            exit_to_main_menu_in_world(world, false);
+            exit_to_main_menu_in_world(world, true, true);
         }
         ConfirmResult::Extra(EXTRA_SAVE_AS) => open_save_as_new_puzzle_prompt(),
         ConfirmResult::Cancelled | ConfirmResult::Extra(_) => {}

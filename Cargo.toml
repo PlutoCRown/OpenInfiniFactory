@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/oif-sim-core"]
+members = [".", "crates/oif-sim"]
 resolver = "2"
 
 [package]
@@ -19,10 +19,12 @@ path = "src/main.rs"
 [[bin]]
 name = "oif-debug-http"
 path = "src/bin/oif-debug-http.rs"
+required-features = ["native-tools"]
 
 [[bin]]
 name = "export_fixture"
 path = "src/bin/export_fixture.rs"
+required-features = ["native-tools"]
 
 [dependencies]
 bevy = { version = "0.19" }
@@ -30,6 +32,7 @@ bevy = { version = "0.19" }
 # 见 https://github.com/bevyengine/bevy/issues/24094
 icu_provider = { version = "2.2", features = ["logging"] }
 inventory = "0.3"
+oif-sim = { path = "crates/oif-sim" }
 paste = "1"
 ron = "0.8"
 serde = { version = "1", features = ["derive"] }
@@ -37,7 +40,24 @@ serde_json = "1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 base64 = "0.22"
-web-sys = { version = "0.3", features = ["Storage", "Window"] }
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Navigator",
+    "Storage",
+    "IdbFactory",
+    "IdbDatabase",
+    "IdbOpenDbRequest",
+    "IdbTransaction",
+    "IdbTransactionMode",
+    "IdbObjectStore",
+    "IdbRequest",
+    "IdbCursor",
+    "IdbCursorWithValue",
+    "DomStringList",
+    "Event",
+] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["game-activity"] }
@@ -46,9 +66,10 @@ android-activity = { version = "0.6", features = ["game-activity"] }
 tiny_http = "0.12"
 
 [features]
-default = []
+# native-tools：无头调试 / fixture 导出（wasm 打包用 --no-default-features）
+default = ["native-tools"]
+native-tools = []
 webgpu = ["bevy/webgpu"]
 
 [profile.release]
 strip = "debuginfo"
-

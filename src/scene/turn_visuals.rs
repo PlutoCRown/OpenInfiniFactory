@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use crate::game::systems::debug::DebugState;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::WorldRenderAssets;
-use crate::sim_core::TurnOutput;
+use crate::sim_bridge::TurnOutput;
 
 use super::entity_index::BlockEntityIndex;
 use super::incremental::apply_turn_output_incremental;
@@ -21,7 +21,7 @@ pub fn apply_turn_output(
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &crate::game::simulation::structure_state::StructureState,
-    stats: &mut crate::game::simulation::runtime::SimulationStepStats,
+    stats: &mut crate::game::simulation::stats::SimulationStepStats,
 ) {
     apply_turn_output_incremental(
         before,

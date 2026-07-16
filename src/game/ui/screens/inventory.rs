@@ -5,8 +5,9 @@ use super::super::components::{
     inventory_tray_row_bundle, localized_text, spawn_panel_with_title_marker, text, PanelOptions,
 };
 use super::super::types::{
-    CarriedItemPreview, GameplayHudVisibility, InGameHudStyle, InventoryTooltip, PanelVisibility,
-    SlotArea, BACKPACK_SLOTS, HOTBAR_SLOTS,
+    CarriedItemPreview, GameplayHudVisibility, InGameHudStyle, InventoryTooltip,
+    InventoryTooltipDescription, InventoryTooltipName, PanelVisibility, SlotArea, BACKPACK_SLOTS,
+    HOTBAR_SLOTS,
 };
 use super::super::widgets::spawn_slot;
 use crate::game::ui::features::inventory::InventoryTitleText;
@@ -125,12 +126,17 @@ pub fn spawn_carried_label(root: &mut ChildSpawnerCommands) {
 }
 
 pub fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
+    // 约十余汉字宽，超出换行
+    const MAX_WIDTH: f32 = 252.0;
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
             left: Val::Px(0.0),
             top: Val::Px(0.0),
             display: Display::None,
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(4.0),
+            max_width: Val::Px(MAX_WIDTH),
             padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
             border: UiRect::all(Val::Px(1.0)),
             ..default()
@@ -145,8 +151,21 @@ pub fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
     .with_children(|tooltip| {
         tooltip.spawn((
             text("", 14.0, Color::WHITE),
+            InventoryTooltipName,
             Pickable::IGNORE,
-            TextLayout::justify(Justify::Center),
+            Node {
+                max_width: Val::Percent(100.0),
+                ..default()
+            },
+        ));
+        tooltip.spawn((
+            text("", 12.0, Color::srgb(0.62, 0.62, 0.60)),
+            InventoryTooltipDescription,
+            Pickable::IGNORE,
+            Node {
+                max_width: Val::Percent(100.0),
+                ..default()
+            },
         ));
     });
 }

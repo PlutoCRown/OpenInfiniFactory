@@ -16,6 +16,8 @@ pub struct SaveWorldAsNewPuzzle {
 #[derive(Clone, Message)]
 pub struct ExitToMainMenu {
     pub save_first: bool,
+    /// 保存谜题时使关联方案失效（退出前专用）
+    pub invalidate_solutions: bool,
 }
 
 #[derive(Clone, Message)]

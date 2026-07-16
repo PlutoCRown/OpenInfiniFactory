@@ -54,14 +54,26 @@ const START_MENU_BUTTONS: &[StartMenuButton] = list_ui_config!(
                 UiPanelContext::SettingsFromStartMenu,
             );
         }
-    };
-    {
-        key: "button.quit_game"
-        on_click(_ctx, _commands) {
-            std::process::exit(0);
-        }
     }
 );
+
+#[cfg(not(target_arch = "wasm32"))]
+const START_MENU_QUIT: StartMenuButton = StartMenuButton {
+    label_key: "button.quit_game",
+    on_click: {
+        fn on_click(_ctx: &mut StartMenuCtx<'_>, _commands: &mut Commands) {
+            std::process::exit(0);
+        }
+        on_click
+    },
+};
+
+fn start_menu_buttons() -> Vec<&'static StartMenuButton> {
+    let mut buttons: Vec<&'static StartMenuButton> = START_MENU_BUTTONS.iter().collect();
+    #[cfg(not(target_arch = "wasm32"))]
+    buttons.push(&START_MENU_QUIT);
+    buttons
+}
 
 impl Plugin for StartMenuPlugin {
     fn build(&self, app: &mut App) {
@@ -76,7 +88,7 @@ impl Plugin for StartMenuPlugin {
 }
 
 pub fn spawn_start_menu_buttons(panel: &mut ChildSpawnerCommands) {
-    for (index, button) in START_MENU_BUTTONS.iter().enumerate() {
+    for (index, button) in start_menu_buttons().into_iter().enumerate() {
         spawn_menu_button(
             panel,
             MenuButtonSet::StartMenu,
@@ -100,11 +112,12 @@ fn dispatch_start_menu_clicks(
         return;
     }
     let ui_root = ui_root.as_deref().map(|root| root.0);
+    let buttons = start_menu_buttons();
     for click in clicks.read() {
         if click.set != MenuButtonSet::StartMenu {
             continue;
         }
-        let Some(button) = START_MENU_BUTTONS.get(click.index as usize) else {
+        let Some(button) = buttons.get(click.index as usize) else {
             continue;
         };
         let mut ctx = StartMenuCtx {

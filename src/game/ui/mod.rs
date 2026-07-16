@@ -13,7 +13,6 @@ mod widgets;
 
 use bevy::prelude::*;
 
-#[allow(unused_imports)]
 pub use access::{bind_ui_scope, i18n, ui, I18nRevision, UiAccessScope};
 pub use layout::{setup_menu_ui, setup_playing_ui_system};
 pub use systems::{

@@ -9,8 +9,9 @@ pub use crate::game::ui::core::{
     UiHost, UiHoverState, UiPanelBinding, UiRuntime,
 };
 pub use crate::game::ui::features::save::types::{
-    SaveListAction, SaveListCloseButton, SaveListPanel, SaveListPrompt, SaveListPuzzleColumn,
-    SaveListRenderState, SaveListSolutionColumn, SaveListTitleText,
+    SaveListAction, SaveListCloseButton, SaveListCreateButton, SaveListPanel, SaveListPrompt,
+    SaveListPuzzleColumn, SaveListPuzzleRows, SaveListRenderState, SaveListSolutionColumn,
+    SaveListSolutionRows, SaveListTitleText,
 };
 pub use crate::game::ui::features::settings::types::{
     OpenSettingsDropdown, PendingKeyBind, SettingsAction, SettingsControl, SettingsDropdown,
@@ -76,6 +77,14 @@ pub struct LocalizedText {
 #[derive(Component)]
 pub struct InventoryTooltip;
 
+/// 背包悬停标签的名称文字
+#[derive(Component)]
+pub struct InventoryTooltipName;
+
+/// 背包悬停标签的描述文字
+#[derive(Component)]
+pub struct InventoryTooltipDescription;
+
 #[derive(Component)]
 pub struct CarriedItemPreview;
 
@@ -96,6 +105,12 @@ impl AreaKind {
             Self::Selection => "area.selection",
         }
     }
+
+    pub fn description_key(self) -> &'static str {
+        match self {
+            Self::Selection => "desc.area.selection",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -109,6 +124,13 @@ impl InventoryItem {
         match self {
             Self::Block(kind) => kind.name_key(),
             Self::Area(kind) => kind.name_key(),
+        }
+    }
+
+    pub fn description_key(self) -> &'static str {
+        match self {
+            Self::Block(kind) => kind.description_key(),
+            Self::Area(kind) => kind.description_key(),
         }
     }
 

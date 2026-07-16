@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use crate::game::blocks::BlockPresent;
 use crate::game::blocks::{BlockData, BlockKind};
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::systems::debug::DebugState;
@@ -12,7 +13,7 @@ use crate::game::world::rendering::{
     signal_neighbor_offsets, spawn_acceptance_sparks, spawn_laser_beams, spawn_weld_sparks,
     spawn_world_block_entity, BlockEntity, BlockEntityLayer, WorldRenderAssets,
 };
-use crate::sim_core::TurnOutput;
+use crate::sim_bridge::TurnOutput;
 
 use super::entity_index::BlockEntityIndex;
 
@@ -472,16 +473,21 @@ pub fn apply_turn_output_incremental(
     assets: &WorldRenderAssets,
     debug: &DebugState,
     structure_state: &StructureState,
-    stats: &mut crate::game::simulation::runtime::SimulationStepStats,
+    stats: &mut crate::game::simulation::stats::SimulationStepStats,
 ) {
     let render_start = bevy::platform::time::Instant::now();
     let timing = AnimationTiming::simulation(animation_duration);
-    // 与方块动画一致：时长只在放映时按当前倍速填写
-    let pusher_animations: HashMap<_, _> = output
+    // DTO → 放映动画：时长只在放映时按当前倍速填写
+    let animations: HashMap<_, BlockAnimation> = output
+        .animations
+        .iter()
+        .map(|(&pos, motion)| (pos, BlockAnimation::from(*motion)))
+        .collect();
+    let pusher_animations: HashMap<_, PusherAnimation> = output
         .pusher_animations
         .iter()
-        .map(|(&pos, animation)| {
-            let mut animation = *animation;
+        .map(|(&pos, motion)| {
+            let mut animation = PusherAnimation::from(*motion);
             if animation.from_extension != animation.to_extension {
                 animation.duration = Some(animation_duration);
             }
@@ -497,7 +503,7 @@ pub fn apply_turn_output_incremental(
         debug,
         structure_state,
         &output.render_powered_wires,
-        &output.animations,
+        &animations,
         &pusher_animations,
         timing,
     );

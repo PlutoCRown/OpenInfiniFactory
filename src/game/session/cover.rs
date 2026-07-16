@@ -1,4 +1,3 @@
-#[cfg(not(target_arch = "wasm32"))]
 use bevy::prelude::*;
 #[cfg(not(target_arch = "wasm32"))]
 use bevy::render::view::screenshot::{save_to_disk, Screenshot, ScreenshotCaptured};
@@ -12,15 +11,28 @@ use crate::shared::save::SaveSlot;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::shared::save_format::COVER_FILE;
 
-/// 等待封面截图完成后回到主菜单
+/// 延后一帧再执行的退出请求（先画出「保存中」）
+#[derive(Clone, Copy, Debug)]
+pub struct DeferredMainMenuExit {
+    pub save_first: bool,
+    pub invalidate_solutions: bool,
+    /// 剩余等待帧；收到请求时置 1，减到 0 后再真正存档/退出
+    pub hold_frames: u8,
+}
+
+/// 退出主菜单的排队与封面截图等待
 #[derive(Resource, Default)]
-pub struct PendingMainMenuExit(pub bool);
+pub struct PendingMainMenuExit {
+    pub waiting_cover: bool,
+    pub deferred: Option<DeferredMainMenuExit>,
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Message)]
 pub struct CoverScreenshotComplete;
 
 #[cfg(not(target_arch = "wasm32"))]
+/// 有当前存档槽时才写封面（调用方须保证本次已经写过档）
 pub fn should_capture_cover(save_slot: Option<&SaveSlot>) -> bool {
     save_slot.is_some()
 }
@@ -51,7 +63,7 @@ pub fn on_screenshot_saved_for_exit(
     pending: Res<PendingMainMenuExit>,
     mut complete: MessageWriter<CoverScreenshotComplete>,
 ) {
-    if pending.0 {
+    if pending.waiting_cover {
         complete.write(CoverScreenshotComplete);
     }
 }

@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use serde_json::{json, Value};
 
 use crate::game::blocks::BlockKind;
-use crate::game::simulation::runtime::SimulationStepStats;
+use crate::game::simulation::stats::SimulationStepStats;
 use crate::game::state::{
     BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
     WorldEntryMode,
@@ -12,9 +12,9 @@ use crate::game::ui::UiRuntime;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{TargetHit, WorldBlocks};
 use crate::shared::save::{SaveKind, SaveState};
-use crate::sim_core::SimulationControl;
+use oif_sim::SimulationControl;
 
-pub fn block_json(world: &WorldBlocks, pos: IVec3) -> Value {
+pub fn block_json(world: &oif_sim::WorldBlocks, pos: IVec3) -> Value {
     if let Some(block) = world.blocks.get(&pos) {
         json!({
             "layer": block_layer(block.kind),

@@ -1,102 +1,79 @@
 # 系统架构（四层）
 
-OpenInfiniFactory 按依赖关系分为四层。后三层都依赖 **模拟核心**，可以单独演进。
+OpenInfiniFactory 按依赖向下分层。模拟核心在独立 crate（无 Bevy）；主 crate 只做表现、UI 与调试接入。
 
 ```
 ┌─────────────────────────────────────────┐
-│  UI 系统 (game/ui, game/systems)        │
+│  UI / gameplay（game/ui, systems）      │
 ├─────────────────────────────────────────┤
-│  场景渲染 (scene/, game/world/render)   │
+│  场景渲染（scene/, game/world/render）  │
 ├─────────────────────────────────────────┤
-│  HTTP Debug (debug_http/)               │
+│  表现桥接 + 预取（sim_bridge）          │
 ├─────────────────────────────────────────┤
-│  模拟核心 (sim_core/, game/simulation)  │
+│  模拟核心 crates/oif-sim（glam/serde）  │
 └─────────────────────────────────────────┘
 ```
 
-## 双 Bevy 运行时
+## 1. 模拟核心（`crates/oif-sim`）
 
-模拟核心**使用 Bevy ECS**（Resource / System），但不等于完整游戏客户端。项目里有两个独立的 Bevy `App`：
-
-| App | 入口 | 插件 | 窗口 / 渲染 |
-|-----|------|------|-------------|
-| 游戏客户端 | `cargo run` | `DefaultPlugins` + `GamePlugin` | 有 |
-| 无头模拟 | `cargo run --bin oif-debug-http` | `MinimalPlugins`（无窗口）+ `SimCorePlugin` | 无 |
-
-两者注册相同的模拟 Resource（`WorldBlocks`、`StructureState`、`PusherState` 等），回合逻辑统一走 `simulate_turn()`。无头 App 由 HTTP 线程直接读写 `World`，不跑渲染系统。
-
-## 1. 模拟核心
-
-**职责**：回合逻辑运算；通过 ECS Resource 持有状态，不创建场景实体、不重建网格。
+主 crate 依赖 `oif-sim`。职责：世界状态、方块 Meta/Behavior、`simulate_turn()`、自有 `SimSession`（无 Bevy App）。
 
 | 模块 | 说明 |
 |------|------|
-| `game/simulation/core.rs` | `simulate_turn()` → `TurnOutput` |
-| `sim_core/ecs.rs` | `SimCoreWorld`：在无头 App 上操作模拟 Resource |
-| `sim_core/control.rs` | `SimulationControl`：回合 / 运行 / 回滚控制 |
-| `sim_core/plugin.rs` | `SimCorePlugin`：注册无头模拟 Resource |
-| `sim_core/headless.rs` | `build_headless_sim_app()` |
-| `sim_core/cache.rs` | `TurnCache`：预计算下一回合（游戏客户端） |
-| `sim_core/log.rs` | `SimulationDebugLog` |
+| `world/` | 网格、朝向等纯世界数据（glam） |
+| `blocks/` | `BlockMeta` / `BlockBehavior` + 各方块声明 |
+| `simulation/` | 四阶段 `simulate_turn` → `TurnOutput`（含运动 / 激光等纯数据 DTO） |
+| `session/` | 自有 `SimSession`、控制面与日志 |
 
-**游戏内回合流程**：
+回合四阶段：信号探测 → 运动标记 → 执行运动 → 结构后处理。细节见 [`simulation_turn_phases.md`](simulation_turn_phases.md)。
 
-1. `SimulationWorker`（独立线程）预计算未来 **2** 回合，结果写入 `TurnCache`（含 `TurnOutput` + `SimSnapshot`）
-2. `poll_simulation_worker`：每帧同步 worker 意图并 ingest 预计算结果
-3. `tick_simulation`：从缓存取出回合，**增量**调用 `apply_turn_output`（不再全量 despawn/rebuild）
-4. 编辑期放置/删除：`scene/incremental` 只刷新改动位置及邻接连通区域
+游戏侧通过 `Deref` Resource 包装（如 `game::world::grid::WorldBlocks`）把同一数据挂进 Bevy。
 
-**渲染增量规则**（`scene/incremental.rs`）：
+## 2. 表现桥接与预取（`src/sim_bridge/`）
 
-- 场景方块：刷新自身 + 六邻域（AO 网格）
-- 工厂/系统/导线：刷新自身 + 六邻域连接件；导线删除时沿网络 BFS 扩展
-- 模拟期：仅结构动画 + 本回合 diff 涉及的静态块；固定工厂/地形不参与全图重建
+`sim_bridge` 同时负责表现编排与预取：把 `SimSnapshot` / `TurnOutput` 增量应用到 Bevy，并用 `SimulationWorker` / `TurnCache` 预计算未来回合；会话类型 re-export 自 `oif_sim`。
 
-## 2. UI 系统
+| 模块 | 说明 |
+|------|------|
+| `present.rs` | 把快照 / 回合输出应用到 Bevy 世界与渲染 |
+| `cache.rs` / `worker.rs` / `snapshot.rs` | 预取缓存、后台 worker、`SimSnapshot` / `CachedTurn` |
 
-**职责**：菜单、HUD、输入、建造模式。通过 Bevy Resource（`WorldBlocks`、`SimulationState` 等）读写模拟状态，不直接操作渲染实体。
+游戏内回合流程：
+
+1. `SimulationWorker` 预计算未来回合，写入 `TurnCache`
+2. `poll_simulation_worker` 同步意图并 ingest
+3. `tick_simulation` 从缓存取出回合，增量 `apply_turn_output`
+4. 编辑期放置/删除：`scene/incremental` 只刷改动邻域
 
 ## 3. HTTP Debug
 
-**两种入口**：
-
 | 入口 | 命令 | 说明 |
 |------|------|------|
-| 嵌入游戏 | `cargo run -- --debug-http` | 完整 Bevy 主循环 + `poll_debug_http` |
-| 独立无头 | `cargo run --bin oif-debug-http` | 无头 Bevy ECS App + HTTP，无窗口 |
+| 嵌入游戏 | `cargo run -- --debug-http` | 主循环 + `poll_debug_http` |
+| 独立无头 | `cargo run --bin oif-debug-http` | 自有 `SimSession` + HTTP（无 Bevy App） |
 
-共享协议：`debug_http/protocol.rs`（`/getPosBlock`、`/status`、`/runOneTurn`、`/logs` 等）。
+协议：`debug_http/protocol.rs`。无头模式直接驱动 `SimSession`，不复制模拟逻辑。
 
-无头模式通过 `SimCoreWorld::simulate_next_turn()` 驱动回合，适合自动化测试与脚本调试。
+## 4. UI 与场景
 
-## 4. 场景渲染
-
-**职责**：把模拟结果可视化。
-
-| 模块 | 说明 |
-|------|------|
-| `scene/turn_visuals.rs` | `apply_turn_output()`：despawn + rebuild + 特效 |
-| `game/world/rendering.rs` | 网格、材质、动画组件 |
+- **UI**：菜单、HUD、建造；经 Resource / session API 读写世界，不直接改模拟阶段。
+- **场景**：`scene/` + `game/world/rendering` 可视化 `TurnOutput` 与编辑 diff。
+- **表现类型**：`RenderBehavior` / `BlockModel` 等在 `game/blocks/render_types.rs`，不进入 `oif-sim`。
 
 ## 依赖规则
 
-- `simulate_turn` **不得** import `Commands` / `WorldRenderAssets`
-- UI / HTTP 通过 `SimulationState` 或 `SimCoreWorld` 触发模拟，不复制回合逻辑
-- 回滚时同步清空 `TurnCache`（`simulation_controls`）
+- `simulate_turn` 不得依赖 `Commands`、渲染资产或 UI 类型
+- UI / HTTP 只触发会话或消费 `TurnOutput`，不复制回合逻辑
+- 回滚时清空 `TurnCache`
+- `oif-sim` 不得依赖 Bevy
 
-## 后续方向
+## 已知剩余债务
 
-- 将 `WorldBlocks` 类型逐步迁出 Bevy（`bevy_math` / `glam`）
-- 无头 binary 支持批量跑存档 puzzle/solution 回归
-- 游戏内 `TurnCache` 深度为 **2**（worker 线程）；回滚/读档等路径仍可能触发局部全量 rebuild
+无架构债务。
 
-## E2E 测试
-
-目录：`e2e/`
+## E2E
 
 ```bash
 cargo build --bin oif-debug-http
 cd e2e && bun run generate-fixtures && bun test
 ```
-
-通过 Debug HTTP 驱动无头 Bevy ECS App，覆盖全部 32 种 `BlockKind` 的放置/派生 marker 用例。

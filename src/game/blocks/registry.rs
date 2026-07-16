@@ -1,5 +1,5 @@
 use super::traits::PlaceableBlock;
-use super::{Block, BlockKind, EditableBlock, MaterialKind};
+use super::{Block, BlockKind, EditableBlock};
 
 pub fn edit_blocks() -> Vec<BlockKind> {
     let mut blocks: Vec<_> = registrations()
@@ -17,7 +17,7 @@ pub fn all_blocks() -> Vec<BlockKind> {
     blocks
 }
 
-pub const PLAY_BLOCKS: [BlockKind; 18] = [
+pub const PLAY_BLOCKS: [BlockKind; 19] = [
     BlockKind::Platform,
     BlockKind::Welder,
     BlockKind::DownWelder,
@@ -36,6 +36,7 @@ pub const PLAY_BLOCKS: [BlockKind; 18] = [
     BlockKind::Mirror,
     BlockKind::VerticalMirror,
     BlockKind::Splitter,
+    BlockKind::SuctionCup,
 ];
 
 pub fn get(kind: BlockKind) -> &'static (dyn Block + Send + Sync) {
@@ -45,12 +46,7 @@ pub fn get(kind: BlockKind) -> &'static (dyn Block + Send + Sync) {
 }
 
 pub fn save_stores_facing(kind: BlockKind) -> bool {
-    match kind {
-        BlockKind::Platform | BlockKind::Wire | BlockKind::DownWelder | BlockKind::DownDetector => {
-            false
-        }
-        kind => get(kind).is_directional(),
-    }
+    oif_sim::blocks::save_stores_facing(kind)
 }
 
 pub fn is_editable(kind: BlockKind) -> bool {
@@ -73,13 +69,8 @@ pub fn placeable(kind: BlockKind) -> Option<&'static (dyn PlaceableBlock + Send 
     })
 }
 
-pub fn material_block_kind(material: MaterialKind) -> Option<BlockKind> {
-    registrations().find_map(|registration| {
-        (registration.block.material_kind() == Some(material)).then_some(registration.kind)
-    })
-}
-
 pub fn assert_registry_consistent() {
+    oif_sim::blocks::assert_registry_consistent();
     for registration in registrations() {
         let definition = registration.block.definition();
         debug_assert_eq!(definition.kind, registration.kind);
@@ -140,15 +131,16 @@ fn block_order(kind: BlockKind) -> usize {
         BlockKind::Mirror => 21,
         BlockKind::VerticalMirror => 22,
         BlockKind::Splitter => 23,
-        BlockKind::Stamper => 24,
-        BlockKind::Roller => 25,
-        BlockKind::Converter => 26,
-        BlockKind::TeleportEntrance => 27,
-        BlockKind::TeleportExit => 28,
-        BlockKind::Material => 29,
-        BlockKind::IronMaterial => 30,
-        BlockKind::CopperMaterial => 31,
-        BlockKind::WeldPoint => 32,
-        BlockKind::DrillHead => 33,
+        BlockKind::SuctionCup => 24,
+        BlockKind::Stamper => 25,
+        BlockKind::Roller => 26,
+        BlockKind::Converter => 27,
+        BlockKind::TeleportEntrance => 28,
+        BlockKind::TeleportExit => 29,
+        BlockKind::Material => 30,
+        BlockKind::IronMaterial => 31,
+        BlockKind::CopperMaterial => 32,
+        BlockKind::WeldPoint => 33,
+        BlockKind::DrillHead => 34,
     }
 }

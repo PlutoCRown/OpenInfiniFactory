@@ -26,6 +26,9 @@ use crate::game::ui::core::host::{PlayingUiRootEntity, UiRootEntity};
 use crate::game::ui::core::text_prompt::{
     TextPromptButtonId, TextPromptInput, TextPromptRoot, TextPromptTitle,
 };
+use crate::game::ui::features::session_busy::spawn_session_busy_overlay;
+use crate::game::ui::features::virtual_remote::spawn_virtual_remote;
+use crate::shared::touch_profile::TouchProfile;
 
 pub fn setup_menu_ui(world: &mut World) {
     bind_ui_scope(world);
@@ -37,6 +40,7 @@ pub fn setup_menu_ui(world: &mut World) {
             spawn_text_prompt(root);
             spawn_main_menu(root);
             spawn_save_list(root);
+            spawn_session_busy_overlay(root);
         })
         .id();
     commands.insert_resource(UiRootEntity(root));
@@ -56,7 +60,21 @@ fn spawn_gameplay_view_backdrop(root: &mut ChildSpawnerCommands, image: Handle<I
     ));
 }
 
-pub fn setup_playing_ui(commands: &mut Commands, view_image: Handle<Image>) {
+pub fn setup_playing_ui_system(world: &mut World) {
+    bind_ui_scope(world);
+    let Some(view) = world.get_resource::<GameplayViewImage>() else {
+        return;
+    };
+    let image = view.0.clone();
+    let touch = world
+        .get_resource::<TouchProfile>()
+        .copied()
+        .unwrap_or(TouchProfile { enabled: false });
+    let mut commands = world.commands();
+    setup_playing_ui(&mut commands, image, touch);
+}
+
+pub fn setup_playing_ui(commands: &mut Commands, view_image: Handle<Image>, touch: TouchProfile) {
     let root = commands
         .spawn((root_node(), PlayingUiRoot))
         .with_children(|root| {
@@ -69,19 +87,11 @@ pub fn setup_playing_ui(commands: &mut Commands, view_image: Handle<Image>) {
             spawn_carried_label(root);
             spawn_inventory_tooltip(root);
             spawn_all_overlays(root);
+            spawn_session_busy_overlay(root);
+            spawn_virtual_remote(root, &touch, false);
         })
         .id();
     commands.insert_resource(PlayingUiRootEntity(root));
-}
-
-pub fn setup_playing_ui_system(world: &mut World) {
-    bind_ui_scope(world);
-    let Some(view) = world.get_resource::<GameplayViewImage>() else {
-        return;
-    };
-    let image = view.0.clone();
-    let mut commands = world.commands();
-    setup_playing_ui(&mut commands, image);
 }
 
 const CROSSHAIR_ARM: f32 = 12.0;

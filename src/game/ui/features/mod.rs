@@ -2,8 +2,10 @@ pub mod block_panels;
 pub mod inventory;
 pub mod pause_menu;
 pub mod save;
+pub mod session_busy;
 pub mod settings;
 pub mod start_menu;
+pub mod virtual_remote;
 
 use bevy::prelude::*;
 
@@ -17,7 +19,9 @@ pub use inventory::InventoryPlugin;
 pub use pause_menu::PauseMenuPlugin;
 pub use start_menu::StartMenuPlugin;
 pub use save::SavePlugin;
+pub use session_busy::SessionBusyUiPlugin;
 pub use settings::SettingsPlugin;
+pub use virtual_remote::VirtualRemotePlugin;
 
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::UiAccessScope;
@@ -33,6 +37,8 @@ impl Plugin for UiFeaturesPlugin {
             SettingsPlugin,
             BlockPanelsPlugin,
             InventoryPlugin,
+            SessionBusyUiPlugin,
+            VirtualRemotePlugin,
         ))
         .add_systems(
             Update,

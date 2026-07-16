@@ -1,8 +1,0 @@
-[package]
-name = "oif-sim-core"
-version = "0.1.0"
-edition = "2021"
-description = "Headless simulation core facade for OpenInfiniFactory"
-
-[dependencies]
-open_infinifactory = { path = "../.." }

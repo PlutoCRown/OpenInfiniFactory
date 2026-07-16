@@ -4,7 +4,9 @@ use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
+use crate::game::blocks::ColorSpecExt;
 use crate::game::blocks::pusher::texture;
+use crate::game::blocks::BlockPresent;
 use crate::game::blocks::{
     all_blocks, BlockKind, BlockShape, ModelMaterial, ModelMesh, StampColor, BLOCK_SIZE,
 };
@@ -39,6 +41,7 @@ pub struct WorldRenderAssets {
     part_mirror_face: Handle<Mesh>,
     part_vertical_mirror_face: Handle<Mesh>,
     part_splitter_face: Handle<Mesh>,
+    part_suction_cup: Handle<Mesh>,
     part_pusher_body: Handle<Mesh>,
     part_pusher_head: Handle<Mesh>,
     block_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
@@ -121,7 +124,7 @@ impl WorldRenderAssets {
                 (
                     color,
                     materials.add(StandardMaterial {
-                        base_color: color.color().with_alpha(0.82),
+                        base_color: color.color().color().with_alpha(0.82),
                         alpha_mode: AlphaMode::Blend,
                         unlit: true,
                         ..default()
@@ -224,6 +227,7 @@ impl WorldRenderAssets {
                 ModelMaterial::TeleportOut,
                 emissive_material(1.0, 0.54, 0.18, 0.34, 0.10, 0.02),
             ),
+            (ModelMaterial::SuctionCup, srgb_material(0.82, 0.84, 0.82)),
         ]
         .into_iter()
         .map(|(kind, material)| (kind, materials.add(material)))
@@ -289,6 +293,8 @@ impl WorldRenderAssets {
             ])),
             // 分光镜：x+y+z=0 六边形再烘焙 -180° yaw
             part_splitter_face: meshes.add(thick_splitter_hexagon_mesh()),
+            // 吸盘：工作面在 -Z，顶点在格子中心
+            part_suction_cup: meshes.add(suction_cup_pyramid_mesh()),
             part_pusher_body: meshes.add(cover_cuboid_mesh(Vec3::new(1.0, 1.0, 0.80))),
             part_pusher_head: meshes.add(cover_cuboid_mesh(Vec3::new(1.0, 1.0, 0.20))),
             block_materials,
@@ -444,6 +450,7 @@ impl WorldRenderAssets {
             ModelMesh::MirrorFace => self.part_mirror_face.clone(),
             ModelMesh::VerticalMirrorFace => self.part_vertical_mirror_face.clone(),
             ModelMesh::SplitterFace => self.part_splitter_face.clone(),
+            ModelMesh::SuctionCup => self.part_suction_cup.clone(),
             ModelMesh::PusherBody => self.part_pusher_body.clone(),
             ModelMesh::PusherHead => self.part_pusher_head.clone(),
         }
@@ -541,6 +548,58 @@ fn textured_model_material(base_color: Color, texture: Handle<Image>) -> Standar
 
 fn block_corner(v: [u8; 3]) -> Vec3 {
     Vec3::new(v[0] as f32 - 0.5, v[1] as f32 - 0.5, v[2] as f32 - 0.5)
+}
+
+/// 吸盘四棱锥：工作面为局部 -Z 的 1×1 面，顶点在格子中心
+fn suction_cup_pyramid_mesh() -> Mesh {
+    let base = [
+        block_corner([0, 0, 0]),
+        block_corner([1, 0, 0]),
+        block_corner([1, 1, 0]),
+        block_corner([0, 1, 0]),
+    ];
+    let apex = Vec3::ZERO;
+
+    let mut positions = Vec::new();
+    let mut normals = Vec::new();
+    let mut uvs = Vec::new();
+    let mut indices = Vec::new();
+
+    // 工作面（外法线 -Z）
+    push_face(
+        &mut positions,
+        &mut normals,
+        &mut uvs,
+        &mut indices,
+        &base,
+        Vec3::NEG_Z,
+        &[[0, 3, 2], [0, 2, 1]],
+    );
+
+    // 四个侧面：从底边到顶点
+    for i in 0..4 {
+        let next = (i + 1) % 4;
+        let tri = [base[i], base[next], apex];
+        let normal = (tri[1] - tri[0]).cross(tri[2] - tri[0]).normalize_or_zero();
+        push_face(
+            &mut positions,
+            &mut normals,
+            &mut uvs,
+            &mut indices,
+            &tri,
+            normal,
+            &[[0, 1, 2]],
+        );
+    }
+
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+    .with_inserted_indices(Indices::U32(indices))
 }
 
 const MIRROR_FACE_THICKNESS: f32 = 0.06;

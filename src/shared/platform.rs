@@ -8,6 +8,40 @@ pub const SAVE_DIR: &str = "saves";
 #[cfg(not(target_arch = "wasm32"))]
 const ASSET_DIR_ENV: &str = "OPEN_INFINIFACTORY_ASSET_DIR";
 
+/// 运行时平台类别（存储 / 沙盒路径分流）
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StoragePlatform {
+    Desktop,
+    Android,
+    Ios,
+    Web,
+}
+
+impl StoragePlatform {
+    pub fn current() -> Self {
+        #[cfg(target_arch = "wasm32")]
+        {
+            Self::Web
+        }
+        #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
+        {
+            Self::Android
+        }
+        #[cfg(all(not(target_arch = "wasm32"), target_os = "ios"))]
+        {
+            Self::Ios
+        }
+        #[cfg(all(
+            not(target_arch = "wasm32"),
+            not(target_os = "android"),
+            not(target_os = "ios")
+        ))]
+        {
+            Self::Desktop
+        }
+    }
+}
+
 pub fn asset_path() -> String {
     // wasm 和 Android 的 assets 都不在文件系统上，直接返回目录名
     #[cfg(any(target_arch = "wasm32", target_os = "android"))]
@@ -71,38 +105,55 @@ fn app_bundle_resource_path(exe_dir: &std::path::Path) -> PathBuf {
     exe_dir.join(ASSET_DIR_NAME)
 }
 
-/// 桌面端：优先 cwd 下的 saves，其次从 exe 目录向上搜索
-#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+/// 存档根目录。桌面优先 `./saves`；Android 使用 app 内部数据目录
+#[cfg(not(target_arch = "wasm32"))]
 pub fn saves_directory() -> &'static Path {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
-    DIR.get_or_init(|| {
-        let cwd_dir = PathBuf::from(SAVE_DIR);
-        if cwd_dir.is_dir() {
-            return cwd_dir.canonicalize().unwrap_or(cwd_dir);
-        }
-
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(exe_dir) = exe.parent() {
-                for ancestor in exe_dir.ancestors().take(6) {
-                    let candidate = ancestor.join(SAVE_DIR);
-                    if candidate.is_dir() {
-                        return candidate.canonicalize().unwrap_or(candidate);
-                    }
-                }
-            }
-        }
-
-        cwd_dir
+    DIR.get_or_init(|| match StoragePlatform::current() {
+        StoragePlatform::Android | StoragePlatform::Ios => mobile_saves_directory(),
+        StoragePlatform::Desktop => desktop_saves_directory(),
+        StoragePlatform::Web => PathBuf::from(SAVE_DIR),
     })
 }
 
-/// Android：使用 app 内部数据目录（/data/data/<package>/files/saves）
-#[cfg(target_os = "android")]
-pub fn saves_directory() -> &'static Path {
-    static DIR: OnceLock<PathBuf> = OnceLock::new();
-    DIR.get_or_init(|| {
+#[cfg(not(target_arch = "wasm32"))]
+fn desktop_saves_directory() -> PathBuf {
+    let cwd_dir = PathBuf::from(SAVE_DIR);
+    if cwd_dir.is_dir() {
+        return cwd_dir.canonicalize().unwrap_or(cwd_dir);
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            for ancestor in exe_dir.ancestors().take(6) {
+                let candidate = ancestor.join(SAVE_DIR);
+                if candidate.is_dir() {
+                    return candidate.canonicalize().unwrap_or(candidate);
+                }
+            }
+        }
+    }
+
+    cwd_dir
+}
+
+/// 移动端沙盒存档根：Android 使用 app 内部数据目录，其他平台回退到桌面逻辑
+#[cfg(not(target_arch = "wasm32"))]
+fn mobile_saves_directory() -> PathBuf {
+    #[cfg(target_os = "android")]
+    {
         let dir = PathBuf::from("/data/data/dev.openinfinifactory.prototype/files/saves");
         let _ = std::fs::create_dir_all(&dir);
-        dir
-    })
+        return dir;
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        if let Ok(override_dir) = std::env::var("OPEN_INFINIFACTORY_SAVES_DIR") {
+            let path = PathBuf::from(override_dir);
+            if !path.as_os_str().is_empty() {
+                return path;
+            }
+        }
+        desktop_saves_directory()
+    }
 }

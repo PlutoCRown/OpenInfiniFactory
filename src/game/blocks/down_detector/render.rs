@@ -1,9 +1,12 @@
 use super::DownDetectorBlock;
 
 use crate::game::blocks::traits::BlockRender;
-use crate::game::blocks::{BlockModel, BlockModelPart, ModelMaterial, ModelMesh, RenderBehavior, WireConnectorBehavior};
-use bevy::prelude::{IVec3};
-use crate::game::world::direction::{Facing};
+use crate::game::blocks::{
+    render_directional_wire_device, BlockModel, BlockModelPart, ModelMaterial, ModelMesh,
+    RenderBehavior,
+};
+use bevy::prelude::IVec3;
+use crate::game::world::direction::Facing;
 
 const MODEL: &[BlockModelPart] = &[
     BlockModelPart::new(ModelMesh::Medium, ModelMaterial::Signal, [0.0, 0.30, 0.0]),
@@ -14,12 +17,7 @@ const MODEL: &[BlockModelPart] = &[
 
 impl BlockRender for DownDetectorBlock {
     fn render_behavior(&self, _facing: Facing) -> RenderBehavior {
-        RenderBehavior {
-            wire_connector: Some(WireConnectorBehavior::Device {
-                blocked_offset: IVec3::NEG_Y,
-            }),
-            ..Default::default()
-        }
+        render_directional_wire_device(IVec3::NEG_Y)
     }
 
     fn model(&self) -> BlockModel {

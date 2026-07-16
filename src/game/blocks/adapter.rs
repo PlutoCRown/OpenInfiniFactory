@@ -4,19 +4,22 @@ use crate::game::state::UiPanelId;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::BlockSettings;
 
-use super::traits::{BlockBehavior, BlockMeta, BlockRender, BlockUi, PlaceableBlock};
-use super::{
-    Block, BlockDefinition, BlockKind, BlockModel, EditableBlock, MarkerBehavior,
-    MaterialDestroyer, MaterialKind, MaterialLabeler, MaterialSource, MovementRule,
-    PersistentLayer, RenderBehavior, SignalBehavior, WeldBehavior,
+use oif_sim::blocks::traits::{BlockBehavior, BlockMeta};
+use oif_sim::blocks::{
+    BlockDefinition, BlockKind, LaserOpticsBehavior, MarkerBehavior, MaterialDestroyer,
+    MaterialKind, MaterialLabeler, MaterialProcessor, MaterialSource, MovementRule, PersistentLayer,
+    SignalBehavior, WeldBehavior,
 };
 
-/// Wraps a block type so sub-trait impls in separate files compose into [`Block`].
+use super::traits::{BlockRender, BlockUi, PlaceableBlock};
+use super::{BlockModel, RenderBehavior};
+
+/// 包装各方块类型，使分文件的 sub-trait impl 能注册进 inventory
 pub struct BlockImpl<T>(pub T);
 
-impl<T> Block for BlockImpl<T>
+impl<T> BlockMeta for BlockImpl<T>
 where
-    T: BlockMeta + BlockBehavior + BlockRender + Send + Sync,
+    T: BlockMeta + Send + Sync,
 {
     fn id(&self) -> BlockKind {
         self.0.id()
@@ -26,6 +29,27 @@ where
         self.0.definition()
     }
 
+    fn alternate(&self) -> Option<BlockKind> {
+        self.0.alternate()
+    }
+
+    fn material_kind(&self) -> Option<MaterialKind> {
+        self.0.material_kind()
+    }
+
+    fn persistent_layer(&self) -> Option<PersistentLayer> {
+        self.0.persistent_layer()
+    }
+
+    fn default_settings(&self, pos: IVec3) -> Option<BlockSettings> {
+        self.0.default_settings(pos)
+    }
+}
+
+impl<T> BlockBehavior for BlockImpl<T>
+where
+    T: BlockBehavior + Send + Sync,
+{
     fn is_directional(&self) -> bool {
         self.0.is_directional()
     }
@@ -42,18 +66,6 @@ where
         self.0.material_source(facing)
     }
 
-    fn material_kind(&self) -> Option<MaterialKind> {
-        self.0.material_kind()
-    }
-
-    fn persistent_layer(&self) -> Option<PersistentLayer> {
-        self.0.persistent_layer()
-    }
-
-    fn default_settings(&self, pos: IVec3) -> Option<BlockSettings> {
-        self.0.default_settings(pos)
-    }
-
     fn movement_rule(&self, facing: Facing) -> Option<MovementRule> {
         self.0.movement_rule(facing)
     }
@@ -66,6 +78,14 @@ where
         self.0.material_labeler(facing)
     }
 
+    fn material_processor(&self) -> Option<MaterialProcessor> {
+        self.0.material_processor()
+    }
+
+    fn laser_optics(&self) -> Option<LaserOpticsBehavior> {
+        self.0.laser_optics()
+    }
+
     fn weld_behavior(&self) -> Option<WeldBehavior> {
         self.0.weld_behavior()
     }
@@ -73,7 +93,12 @@ where
     fn signal_behavior(&self, facing: Facing) -> Option<SignalBehavior> {
         self.0.signal_behavior(facing)
     }
+}
 
+impl<T> BlockRender for BlockImpl<T>
+where
+    T: BlockRender + Send + Sync,
+{
     fn render_behavior(&self, facing: Facing) -> RenderBehavior {
         self.0.render_behavior(facing)
     }
@@ -85,15 +110,11 @@ where
     fn block_texture(&self) -> Option<Image> {
         self.0.block_texture()
     }
-
-    fn alternate(&self) -> Option<BlockKind> {
-        self.0.alternate()
-    }
 }
 
-impl<T> EditableBlock for BlockImpl<T>
+impl<T> BlockUi for BlockImpl<T>
 where
-    T: BlockMeta + BlockBehavior + BlockRender + BlockUi + Send + Sync,
+    T: BlockUi + Send + Sync,
 {
     fn ui_panel(&self) -> Option<UiPanelId> {
         self.0.ui_panel()

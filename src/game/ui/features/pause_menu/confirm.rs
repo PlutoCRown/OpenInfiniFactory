@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::game::session::{
     exit_to_main_menu_in_world, puzzle_save_needs_confirm, reset_solution_in_world,
-    save_current_world_in_world, switch_to_edit_mode_in_world,
+    switch_to_edit_mode_in_world,
 };
 use crate::game::ui::access::i18n;
 use crate::game::ui::core::confirm_dialog::{ConfirmExtraButton, ConfirmProps, ConfirmResult};
@@ -59,11 +59,10 @@ pub fn on_return_to_main(result: ConfirmResult, world: &mut World) {
             if puzzle_save_needs_confirm(world.resource::<SaveState>()) {
                 open_save_puzzle_confirm_before_exit();
             } else {
-                save_current_world_in_world(world);
-                exit_to_main_menu_in_world(world, false);
+                exit_to_main_menu_in_world(world, true, false);
             }
         }
-        ConfirmResult::Extra(EXTRA_DISCARD) => exit_to_main_menu_in_world(world, false),
+        ConfirmResult::Extra(EXTRA_DISCARD) => exit_to_main_menu_in_world(world, false, false),
         ConfirmResult::Cancelled | ConfirmResult::Extra(_) => {}
     }
 }

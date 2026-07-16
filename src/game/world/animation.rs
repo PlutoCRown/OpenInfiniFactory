@@ -1,3 +1,4 @@
+use crate::game::simulation::motion::{BlockMotion, BlockMotionKind, PusherMotion};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::grid_to_world;
 use bevy::prelude::*;
@@ -33,6 +34,7 @@ impl AnimationTiming {
     }
 }
 
+/// 放映用方块动画参数（可由 BlockMotion 转换；duration/progress 仅表现层填写）
 #[derive(Clone, Copy)]
 pub struct BlockAnimation {
     pub block_id: crate::game::blocks::BlockId,
@@ -45,11 +47,39 @@ pub struct BlockAnimation {
     pub progress: Option<f32>,
 }
 
+/// 放映用方块动画种类
 #[derive(Clone, Copy)]
 pub enum BlockAnimationKind {
     Move,
     Rotate { pivot: IVec3, clockwise: bool },
     SpawnScale,
+}
+
+/// 将模拟侧 BlockMotionKind 转为放映侧种类
+impl From<BlockMotionKind> for BlockAnimationKind {
+    fn from(kind: BlockMotionKind) -> Self {
+        match kind {
+            BlockMotionKind::Move => Self::Move,
+            BlockMotionKind::Rotate { pivot, clockwise } => Self::Rotate { pivot, clockwise },
+            BlockMotionKind::SpawnScale => Self::SpawnScale,
+        }
+    }
+}
+
+/// 将模拟侧 BlockMotion 转为放映侧 BlockAnimation
+impl From<BlockMotion> for BlockAnimation {
+    fn from(motion: BlockMotion) -> Self {
+        Self {
+            block_id: motion.block_id,
+            from_pos: motion.from_pos,
+            to_pos: motion.to_pos,
+            from_facing: motion.from_facing,
+            to_facing: motion.to_facing,
+            kind: motion.kind.into(),
+            duration: None,
+            progress: None,
+        }
+    }
 }
 
 #[derive(Component)]
@@ -65,12 +95,24 @@ pub struct AnimatedBlock {
     timing: AnimationTiming,
 }
 
+/// 放映用推杆动画参数（可由 PusherMotion 转换；duration 仅表现层填写）
 #[derive(Clone, Copy)]
 pub struct PusherAnimation {
     /// 仅放映时填写；模拟输出保持 None
     pub duration: Option<f32>,
     pub from_extension: f32,
     pub to_extension: f32,
+}
+
+/// 将模拟侧 PusherMotion 转为放映侧 PusherAnimation
+impl From<PusherMotion> for PusherAnimation {
+    fn from(motion: PusherMotion) -> Self {
+        Self {
+            duration: None,
+            from_extension: motion.from_extension,
+            to_extension: motion.to_extension,
+        }
+    }
 }
 
 #[derive(Component)]

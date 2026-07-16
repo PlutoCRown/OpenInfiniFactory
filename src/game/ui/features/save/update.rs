@@ -3,13 +3,13 @@ use bevy::prelude::*;
 use crate::game::state::{GameMode, SolutionState, StartMenuScreen, WorldEntryMode};
 use crate::game::ui::access::{i18n, UiMainThread};
 use crate::game::ui::components::{
-    full_width_button, hover_border, inset_border, pressed_border, raised_border, text, BUTTON_BG,
-    BUTTON_HOVER_BG,
+    hover_border, inset_border, pressed_border, raised_border, BUTTON_BG, BUTTON_HOVER_BG,
 };
 use crate::game::ui::screens::{spawn_save_management_row, spawn_save_select_row};
 use crate::game::ui::types::{
-    SaveListAction, SaveListCloseButton, SaveListPrompt, SaveListPuzzleColumn, SaveListRenderState,
-    SaveListSolutionColumn, SaveListTitleText, UiHoverState,
+    SaveListAction, SaveListCloseButton, SaveListCreateButton, SaveListPrompt,
+    SaveListPuzzleColumn, SaveListPuzzleRows, SaveListRenderState, SaveListSolutionColumn,
+    SaveListSolutionRows, SaveListTitleText, UiHoverState,
 };
 use crate::shared::save::SaveState;
 
@@ -29,14 +29,21 @@ pub fn update_save_list_ui(
         Query<&mut Text, (Without<SaveListTitleText>, Without<SaveListPrompt>)>,
         Query<&mut Text, With<SaveListPrompt>>,
     )>,
-    mut puzzle_columns: Query<
-        (Entity, &mut Node, &Children),
-        (With<SaveListPuzzleColumn>, Without<SaveListSolutionColumn>),
-    >,
-    mut solution_columns: Query<
-        (Entity, &mut Node, &Children),
-        (With<SaveListSolutionColumn>, Without<SaveListPuzzleColumn>),
-    >,
+    mut column_nodes: ParamSet<(
+        Query<&mut Node, (With<SaveListPuzzleColumn>, Without<SaveListSolutionColumn>)>,
+        Query<&mut Node, (With<SaveListSolutionColumn>, Without<SaveListPuzzleColumn>)>,
+        Query<
+            (&SaveListAction, &mut Node),
+            (
+                With<SaveListCreateButton>,
+                With<Button>,
+                Without<SaveListPuzzleColumn>,
+                Without<SaveListSolutionColumn>,
+            ),
+        >,
+    )>,
+    puzzle_rows_query: Query<Entity, (With<SaveListPuzzleRows>, Without<SaveListSolutionRows>)>,
+    solution_rows_query: Query<Entity, (With<SaveListSolutionRows>, Without<SaveListPuzzleRows>)>,
     mut buttons: Query<
         (
             Entity,
@@ -45,7 +52,14 @@ pub fn update_save_list_ui(
             &mut BackgroundColor,
             &mut BorderColor,
         ),
-        (With<Button>, Without<SaveListCloseButton>),
+        (
+            With<Button>,
+            Without<SaveListCloseButton>,
+            Without<SaveListPuzzleColumn>,
+            Without<SaveListSolutionColumn>,
+            Without<SaveListPuzzleRows>,
+            Without<SaveListSolutionRows>,
+        ),
     >,
 ) {
     let play_flow = solution_state.save_list_entry == WorldEntryMode::PlaySolution;
@@ -66,17 +80,61 @@ pub fn update_save_list_ui(
         );
     }
 
-    update_save_list_columns(
-        &mut commands,
-        &mut render_state,
-        &mut puzzle_columns,
-        &mut solution_columns,
-        &puzzle_rows,
-        &solution_rows,
-        solution_state.save_list_entry,
-        edit_flow,
-        show_solutions,
-    );
+    for mut node in &mut column_nodes.p0() {
+        node.display = Display::Flex;
+    }
+    for mut node in &mut column_nodes.p1() {
+        node.display = if show_solutions {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    for (action, mut node) in &mut column_nodes.p2() {
+        node.display = match action {
+            SaveListAction::NewPuzzle => {
+                if edit_flow {
+                    Display::Flex
+                } else {
+                    Display::None
+                }
+            }
+            SaveListAction::NewSolution => {
+                if show_solutions {
+                    Display::Flex
+                } else {
+                    Display::None
+                }
+            }
+            _ => node.display,
+        };
+    }
+
+    let entry = solution_state.save_list_entry;
+    let puzzle_column = if edit_flow {
+        SaveListColumn::PuzzleEdit
+    } else {
+        SaveListColumn::PuzzlePlay
+    };
+
+    if render_state.entry != Some(entry) || render_state.puzzle_keys != puzzle_rows {
+        for entity in &puzzle_rows_query {
+            rebuild_rows(&mut commands, entity, puzzle_column, &puzzle_rows);
+        }
+        render_state.puzzle_keys = puzzle_rows.clone();
+    }
+    if render_state.entry != Some(entry) || render_state.solution_keys != solution_rows {
+        for entity in &solution_rows_query {
+            rebuild_rows(
+                &mut commands,
+                entity,
+                SaveListColumn::Solution,
+                &solution_rows,
+            );
+        }
+        render_state.solution_keys = solution_rows;
+    }
+    render_state.entry = Some(entry);
 
     for mut text in &mut texts.p2() {
         text.0 = if play_flow && save_state.selected_puzzle.is_none() {
@@ -122,72 +180,15 @@ pub fn update_save_list_ui(
     }
 }
 
-fn update_save_list_columns(
+fn rebuild_rows(
     commands: &mut Commands,
-    render_state: &mut SaveListRenderState,
-    puzzle_columns: &mut Query<
-        (Entity, &mut Node, &Children),
-        (With<SaveListPuzzleColumn>, Without<SaveListSolutionColumn>),
-    >,
-    solution_columns: &mut Query<
-        (Entity, &mut Node, &Children),
-        (With<SaveListSolutionColumn>, Without<SaveListPuzzleColumn>),
-    >,
-    puzzle_rows: &[String],
-    solution_rows: &[String],
-    entry: WorldEntryMode,
-    edit_flow: bool,
-    show_solutions: bool,
-) {
-    let puzzle_column = if edit_flow {
-        SaveListColumn::PuzzleEdit
-    } else {
-        SaveListColumn::PuzzlePlay
-    };
-
-    for (entity, mut node, children) in puzzle_columns {
-        node.display = Display::Flex;
-        if render_state.entry != Some(entry) || render_state.puzzle_keys != puzzle_rows {
-            rebuild_column(commands, entity, children, puzzle_column, puzzle_rows);
-        }
-    }
-    if render_state.entry != Some(entry) || render_state.puzzle_keys != puzzle_rows {
-        render_state.puzzle_keys = puzzle_rows.to_vec();
-    }
-
-    for (entity, mut node, children) in solution_columns {
-        node.display = if show_solutions {
-            Display::Flex
-        } else {
-            Display::None
-        };
-        if render_state.entry != Some(entry) || render_state.solution_keys != solution_rows {
-            rebuild_column(
-                commands,
-                entity,
-                children,
-                SaveListColumn::Solution,
-                solution_rows,
-            );
-        }
-    }
-    if render_state.entry != Some(entry) || render_state.solution_keys != solution_rows {
-        render_state.solution_keys = solution_rows.to_vec();
-    }
-    render_state.entry = Some(entry);
-}
-
-fn rebuild_column(
-    commands: &mut Commands,
-    column_entity: Entity,
-    children: &Children,
+    rows_entity: Entity,
     column: SaveListColumn,
     names: &[String],
 ) {
-    for child in children.iter() {
-        commands.entity(child).despawn();
-    }
-    commands.entity(column_entity).with_children(|parent| {
+    // 空行容器可能尚无 Children，重建时直接清子树再挂行
+    commands.entity(rows_entity).despawn_related::<Children>();
+    commands.entity(rows_entity).with_children(|parent| {
         for name in names {
             if column.is_management() {
                 spawn_save_management_row(
@@ -199,13 +200,6 @@ fn rebuild_column(
             } else {
                 spawn_save_select_row(parent, column.load(name.clone()));
             }
-        }
-        if let Some(create_action) = column.create_action() {
-            parent
-                .spawn((full_width_button(34.0), create_action))
-                .with_children(|button| {
-                    button.spawn(text("", 15.0, Color::WHITE));
-                });
         }
     });
 }
