@@ -4,3 +4,11 @@
 .DS_Store
 /dist
 /logs
+
+# Android
+/mobile/android/local.properties
+/mobile/android/app/src/main/jniLibs/
+/mobile/android/app/release.keystore
+/mobile/android/.gradle
+/mobile/android/app/build
+keystore/

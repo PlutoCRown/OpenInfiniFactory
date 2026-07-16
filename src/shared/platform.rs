@@ -9,11 +9,12 @@ pub const SAVE_DIR: &str = "saves";
 const ASSET_DIR_ENV: &str = "OPEN_INFINIFACTORY_ASSET_DIR";
 
 pub fn asset_path() -> String {
-    #[cfg(target_arch = "wasm32")]
+    // wasm 和 Android 的 assets 都不在文件系统上，直接返回目录名
+    #[cfg(any(target_arch = "wasm32", target_os = "android"))]
     {
         ASSET_DIR_NAME.to_string()
     }
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
     resolve_asset_path().to_string_lossy().into_owned()
 }
 
@@ -70,9 +71,8 @@ fn app_bundle_resource_path(exe_dir: &std::path::Path) -> PathBuf {
     exe_dir.join(ASSET_DIR_NAME)
 }
 
-/// Resolved save directory. Prefers `./saves` under cwd, then walks up from the
-/// executable (covers `cargo run` launching from `target/debug/`).
-#[cfg(not(target_arch = "wasm32"))]
+/// 桌面端：优先 cwd 下的 saves，其次从 exe 目录向上搜索
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
 pub fn saves_directory() -> &'static Path {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {
@@ -93,5 +93,16 @@ pub fn saves_directory() -> &'static Path {
         }
 
         cwd_dir
+    })
+}
+
+/// Android：使用 app 内部数据目录（/data/data/<package>/files/saves）
+#[cfg(target_os = "android")]
+pub fn saves_directory() -> &'static Path {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let dir = PathBuf::from("/data/data/dev.openinfinifactory.prototype/files/saves");
+        let _ = std::fs::create_dir_all(&dir);
+        dir
     })
 }

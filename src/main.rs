@@ -7,7 +7,14 @@ use bevy::asset::AssetMetaCheck;
 use bevy::log::{LogPlugin, DEFAULT_FILTER};
 use bevy::prelude::*;
 
-#[bevy_main]
+/// Android 入口：android-activity 通过 extern "Rust" 调用此函数
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub fn android_main(android_app: bevy::android::android_activity::AndroidApp) {
+    let _ = bevy::android::ANDROID_APP.set(android_app);
+    main();
+}
+
 fn main() {
     App::new()
         .insert_resource(LaunchOptions::from_args())
