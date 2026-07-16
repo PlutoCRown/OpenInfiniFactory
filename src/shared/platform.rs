@@ -43,11 +43,12 @@ impl StoragePlatform {
 }
 
 pub fn asset_path() -> String {
-    #[cfg(target_arch = "wasm32")]
+    // wasm 和 Android 的 assets 都不在文件系统上，直接返回目录名
+    #[cfg(any(target_arch = "wasm32", target_os = "android"))]
     {
         ASSET_DIR_NAME.to_string()
     }
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
     resolve_asset_path().to_string_lossy().into_owned()
 }
 
@@ -104,7 +105,7 @@ fn app_bundle_resource_path(exe_dir: &std::path::Path) -> PathBuf {
     exe_dir.join(ASSET_DIR_NAME)
 }
 
-/// 存档根目录。桌面优先 `./saves`；Android/iOS 预留应用沙盒路径（打包时再接到系统 API）。
+/// 存档根目录。桌面优先 `./saves`；Android 使用 app 内部数据目录
 #[cfg(not(target_arch = "wasm32"))]
 pub fn saves_directory() -> &'static Path {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
@@ -136,14 +137,23 @@ fn desktop_saves_directory() -> PathBuf {
     cwd_dir
 }
 
-/// 移动端沙盒存档根：当前回退到 `saves/`，接入 Bevy 移动打包后再换成系统 Documents / files 目录
+/// 移动端沙盒存档根：Android 使用 app 内部数据目录，其他平台回退到桌面逻辑
 #[cfg(not(target_arch = "wasm32"))]
 fn mobile_saves_directory() -> PathBuf {
-    if let Ok(override_dir) = std::env::var("OPEN_INFINIFACTORY_SAVES_DIR") {
-        let path = PathBuf::from(override_dir);
-        if !path.as_os_str().is_empty() {
-            return path;
-        }
+    #[cfg(target_os = "android")]
+    {
+        let dir = PathBuf::from("/data/data/dev.openinfinifactory.prototype/files/saves");
+        let _ = std::fs::create_dir_all(&dir);
+        return dir;
     }
-    desktop_saves_directory()
+    #[cfg(not(target_os = "android"))]
+    {
+        if let Ok(override_dir) = std::env::var("OPEN_INFINIFACTORY_SAVES_DIR") {
+            let path = PathBuf::from(override_dir);
+            if !path.as_os_str().is_empty() {
+                return path;
+            }
+        }
+        desktop_saves_directory()
+    }
 }

@@ -10,6 +10,7 @@ default-run = "open_infinifactory"
 
 [lib]
 path = "src/lib.rs"
+crate-type = ["lib", "cdylib"]
 
 [[bin]]
 name = "open_infinifactory"
@@ -58,6 +59,9 @@ web-sys = { version = "0.3", features = [
     "Event",
 ] }
 
+[target.'cfg(target_os = "android")'.dependencies]
+android-activity = { version = "0.6", features = ["game-activity"] }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tiny_http = "0.12"
 
@@ -67,22 +71,5 @@ default = ["native-tools"]
 native-tools = []
 webgpu = ["bevy/webgpu"]
 
-[package.metadata.android]
-package = "dev.openinfinifactory.prototype"
-apk_name = "OpenInfiniFactory"
-assets = "assets"
-build_targets = ["aarch64-linux-android"]
-runtime_libs = "target/android-libs"
-
-[package.metadata.android.application]
-label = "OpenInfiniFactory"
-theme = "@android:style/Theme.NoTitleBar.Fullscreen"
-debuggable = false
-
-# 体积优先的 Release：桌面包明显缩小；全量 LTO 会拉长编译时间
 [profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-strip = true
-panic = "abort"
+strip = "debuginfo"
