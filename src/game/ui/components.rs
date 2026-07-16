@@ -19,8 +19,8 @@ pub use panel::{
     panel_title_label, spawn_panel, spawn_panel_with_title_marker, PanelOptions, STATUS_TEXT,
 };
 pub use scroll::{
-    fix_scroll_clip_picking, scroll_container, scroll_content, update_scroll_containers,
-    ScrollContent,
+    fix_scroll_clip_picking, scroll_container, scroll_content, scroll_dragged,
+    update_scroll_containers, ScrollContent,
 };
 pub use slider::{slider_bundle, slider_fill, slider_knob};
 pub use text::{default_button_size, default_font_size, localized_text, text};

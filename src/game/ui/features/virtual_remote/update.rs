@@ -19,8 +19,8 @@ use super::spawn::{
     set_control_pressed_style, set_knob_pressed_style, window_short_edge,
 };
 use super::{
-    VirtualBlockConfigButton, VirtualEditOnly, VirtualJoystickKnob, VirtualLandscapeOverlay,
-    VirtualLayoutPreview, VirtualLookZone, VirtualPointerBinding, VirtualPointerKind,
+    VirtualBlockConfigButton, VirtualJoystickKnob, VirtualLandscapeOverlay, VirtualLayoutPreview,
+    VirtualLookZone, VirtualPlayOnly, VirtualPointerBinding, VirtualPointerKind,
     VirtualRemoteControl, VirtualRemoteHud, VirtualRemoteRuntime, VirtualSimOnly,
 };
 
@@ -247,6 +247,7 @@ pub fn on_virtual_press(
             | VirtualControlId::SimStep
             | VirtualControlId::Rotate
             | VirtualControlId::Alternate
+            | VirtualControlId::Inventory
             | VirtualControlId::BlockConfig => return,
             _ => {}
         }
@@ -437,6 +438,7 @@ pub fn on_virtual_click(
     click.propagate(false);
     match control.0 {
         VirtualControlId::Pause => input.virtual_pause = true,
+        VirtualControlId::Inventory => input.virtual_inventory = true,
         VirtualControlId::Simulate => input.virtual_simulate = true,
         // 暂停模拟：回滚并退出模拟态（与 R 回滚一致，回到可编辑的非模拟 HUD）
         VirtualControlId::SimPause => input.virtual_rollback = true,
@@ -519,7 +521,7 @@ pub fn sync_virtual_remote_visibility(
         &VirtualRemoteControl,
         &mut Visibility,
         Option<&VirtualSimOnly>,
-        Option<&VirtualEditOnly>,
+        Option<&VirtualPlayOnly>,
         Option<&VirtualBlockConfigButton>,
     )>,
     mut roots: Query<
@@ -559,6 +561,7 @@ pub fn sync_virtual_remote_visibility(
         && playing_ui.active_play()
         && !ui_runtime.blocks_gameplay();
     let sim_active = simulation.is_active();
+    let play_mode = *builder_mode == BuilderMode::Play;
     let show_config = show
         && *builder_mode == BuilderMode::Edit
         && !sim_active
@@ -577,13 +580,13 @@ pub fn sync_virtual_remote_visibility(
         *visibility = root_vis;
     }
 
-    for (_, control, mut visibility, sim_only, edit_only, block_config) in &mut controls {
+    for (_, control, mut visibility, sim_only, play_only, block_config) in &mut controls {
         let visible = if block_config.is_some() {
             show_config
         } else if sim_only.is_some() {
-            show && sim_active
-        } else if edit_only.is_some() {
-            show && !sim_active
+            show && play_mode && sim_active
+        } else if play_only.is_some() {
+            show && play_mode && !sim_active
         } else {
             let _ = control;
             show

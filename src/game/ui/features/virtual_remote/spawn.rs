@@ -10,8 +10,8 @@ use crate::shared::config::{
 use crate::shared::touch_profile::TouchProfile;
 
 use super::{
-    VirtualBlockConfigButton, VirtualEditOnly, VirtualJoystickKnob, VirtualLandscapeOverlay,
-    VirtualLayoutPreview, VirtualLookZone, VirtualRemoteControl, VirtualRemoteHud, VirtualSimOnly,
+    VirtualBlockConfigButton, VirtualJoystickKnob, VirtualLandscapeOverlay, VirtualLayoutPreview,
+    VirtualLookZone, VirtualPlayOnly, VirtualRemoteControl, VirtualRemoteHud, VirtualSimOnly,
 };
 
 /// 虚拟遥感 HUD 根节点
@@ -137,6 +137,7 @@ pub fn spawn_virtual_remote(
         );
         spawn_control(hud, VirtualControlId::Rotate, Some("R"), for_editor);
         spawn_control(hud, VirtualControlId::Alternate, Some("C"), for_editor);
+        spawn_control(hud, VirtualControlId::Inventory, Some("E"), for_editor);
         spawn_control(
             hud,
             VirtualControlId::BlockConfig,
@@ -199,7 +200,7 @@ fn spawn_control(
 
     match id {
         VirtualControlId::Simulate => {
-            entity.insert(VirtualEditOnly);
+            entity.insert(VirtualPlayOnly);
         }
         VirtualControlId::SimPause | VirtualControlId::SimFast | VirtualControlId::SimStep => {
             entity.insert(VirtualSimOnly);

@@ -315,5 +315,6 @@ pub fn absolute_text_bundle(
             bottom: bottom.unwrap_or(Val::Auto),
             ..default()
         },
+        Pickable::IGNORE,
     )
 }

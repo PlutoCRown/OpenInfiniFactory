@@ -49,7 +49,7 @@ use world::rendering::{retire_block_icon_renderers, HoverStructureBounds, Skybox
 
 pub struct GamePlugin;
 
-pub const UI_SCALE_MIN: f32 = 1.0;
+pub const UI_SCALE_MIN: f32 = 0.5;
 pub const UI_SCALE_MAX: f32 = 3.0;
 pub const GRAVITY_SCALE_MIN: f32 = 1.0;
 pub const GRAVITY_SCALE_MAX: f32 = 2.0;

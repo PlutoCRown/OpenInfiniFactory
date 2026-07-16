@@ -4,7 +4,7 @@ use crate::shared::config::{ActionKeyName, ConfigSelectionMode};
 
 use super::super::components::{
     default_button_size, flex_row, localized_text, scroll_container, scroll_content, spawn_panel,
-    transparent_node, PanelOptions, ScrollContent,
+    transparent_node, PanelOptions,
 };
 use super::super::types::{
     PanelVisibility, SettingsAction, SettingsControl, SettingsDropdown, SettingsDropdownRow,
@@ -16,6 +16,9 @@ use super::super::widgets::{
 };
 use crate::game::state::{GameSettings, UiPanelId};
 use crate::game::ui::access::i18n;
+
+/// 标题栏 + Tab + 面板边距/间距，滚动区高度不超过窗口剩余空间
+const SETTINGS_SCROLL_CHROME: f32 = 168.0;
 
 pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands, settings: &GameSettings) {
     spawn_panel(
@@ -177,37 +180,21 @@ fn spawn_settings_item(
 
 fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
     panel
-        .spawn(scroll_container(500.0))
+        .spawn(scroll_container(SETTINGS_SCROLL_CHROME))
         .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
         .with_children(|container| {
-            container
-                .spawn((
-                    ScrollContent,
-                    Node {
-                        width: Val::Percent(100.0),
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(0.0),
-                        top: Val::Px(0.0),
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(8.0),
-                        flex_shrink: 0.0,
-                        overflow: Overflow::clip(),
-                        ..default()
-                    },
-                    BackgroundColor(Color::NONE),
-                ))
-                .with_children(|content| {
-                    for item in GAMEPLAY_SETTINGS {
-                        spawn_settings_item(content, *item, settings, SettingsTab::Gameplay);
-                    }
-                    spawn_settings_footer(content);
-                });
+            container.spawn(scroll_content()).with_children(|content| {
+                for item in GAMEPLAY_SETTINGS {
+                    spawn_settings_item(content, *item, settings, SettingsTab::Gameplay);
+                }
+                spawn_settings_footer(content);
+            });
         });
 }
 
 fn spawn_graphics_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
     panel
-        .spawn(scroll_container(200.0))
+        .spawn(scroll_container(SETTINGS_SCROLL_CHROME))
         .insert(PanelVisibility::SettingsTab(SettingsTab::Graphics))
         .with_children(|container| {
             container.spawn(scroll_content()).with_children(|content| {
@@ -220,7 +207,7 @@ fn spawn_graphics_settings(panel: &mut ChildSpawnerCommands, settings: &GameSett
 
 fn spawn_key_bindings(panel: &mut ChildSpawnerCommands) {
     panel
-        .spawn(scroll_container(360.0))
+        .spawn(scroll_container(SETTINGS_SCROLL_CHROME))
         .insert(PanelVisibility::SettingsTab(SettingsTab::KeyBindings))
         .with_children(|container| {
             container.spawn(scroll_content()).with_children(|content| {

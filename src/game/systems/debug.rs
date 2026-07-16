@@ -62,6 +62,7 @@ pub fn setup_debug_ui(
                 ..default()
             },
             GlobalZIndex(25_000),
+            Pickable::IGNORE,
             DebugPanel,
             DebugText,
         ));

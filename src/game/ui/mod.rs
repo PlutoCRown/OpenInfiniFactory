@@ -33,7 +33,7 @@ use crate::game::ui::core::text_prompt::{
 use access::unbind_ui_scope;
 use components::{
     button_hovered, button_pressed, button_released, button_unhovered, fix_scroll_clip_picking,
-    update_scroll_containers,
+    scroll_dragged, update_scroll_containers,
 };
 use features::UiFeaturesPlugin;
 use menu_button::register_menu_button_clicks;
@@ -68,6 +68,7 @@ impl Plugin for GameUiPlugin {
             .add_observer(button_released)
             .add_observer(ui_hovered)
             .add_observer(ui_unhovered)
+            .add_observer(scroll_dragged)
             .add_observer(emit_confirm_dialog_actions)
             .add_observer(emit_text_prompt_actions)
             .add_systems(

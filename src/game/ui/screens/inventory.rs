@@ -30,12 +30,16 @@ pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
         GameplayHudVisibility,
     ))
     .with_children(|anchor| {
+        // 高于视角层(0)、低于虚拟按键(10)，触屏才能点到快捷栏
         anchor
-            .spawn(compact_raised_panel(Node {
-                border: UiRect::all(Val::Px(3.0)),
-                padding: UiRect::all(Val::Px(3.0)),
-                ..default()
-            }))
+            .spawn((
+                compact_raised_panel(Node {
+                    border: UiRect::all(Val::Px(3.0)),
+                    padding: UiRect::all(Val::Px(3.0)),
+                    ..default()
+                }),
+                GlobalZIndex(5),
+            ))
             .with_children(|outer| {
                 outer
                     .spawn(inventory_tray_row_bundle())

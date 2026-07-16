@@ -155,6 +155,12 @@ pub struct VirtualControlsLayout {
     pub rotate: VirtualControlTransform,
     pub alternate: VirtualControlTransform,
     pub block_config: VirtualControlTransform,
+    #[serde(default = "default_virtual_inventory")]
+    pub inventory: VirtualControlTransform,
+}
+
+fn default_virtual_inventory() -> VirtualControlTransform {
+    VirtualControlTransform::new(24.0, 282.0, 1.0)
 }
 
 impl VirtualControlsLayout {
@@ -172,6 +178,7 @@ impl VirtualControlsLayout {
         rotate: VirtualControlTransform::new(24.0, 196.0, 1.0),
         alternate: VirtualControlTransform::new(24.0, 110.0, 1.0),
         block_config: VirtualControlTransform::new(58.625, 268.75, 1.0),
+        inventory: VirtualControlTransform::new(24.0, 282.0, 1.0),
     };
 
     pub fn transform(&self, id: VirtualControlId) -> VirtualControlTransform {
@@ -188,6 +195,7 @@ impl VirtualControlsLayout {
             VirtualControlId::Rotate => self.rotate,
             VirtualControlId::Alternate => self.alternate,
             VirtualControlId::BlockConfig => self.block_config,
+            VirtualControlId::Inventory => self.inventory,
         }
     }
 
@@ -205,6 +213,7 @@ impl VirtualControlsLayout {
             VirtualControlId::Rotate => self.rotate = transform,
             VirtualControlId::Alternate => self.alternate = transform,
             VirtualControlId::BlockConfig => self.block_config = transform,
+            VirtualControlId::Inventory => self.inventory = transform,
         }
     }
 }
@@ -224,6 +233,7 @@ pub enum VirtualControlId {
     Rotate,
     Alternate,
     BlockConfig,
+    Inventory,
 }
 
 impl VirtualControlId {
@@ -240,6 +250,7 @@ impl VirtualControlId {
         Self::Rotate,
         Self::Alternate,
         Self::BlockConfig,
+        Self::Inventory,
     ];
 
     pub fn anchor(self) -> VirtualControlAnchor {
@@ -249,7 +260,7 @@ impl VirtualControlId {
             Self::Pause | Self::Simulate | Self::SimPause | Self::SimFast | Self::SimStep => {
                 VirtualControlAnchor::TopRight
             }
-            Self::Rotate | Self::Alternate => VirtualControlAnchor::TopRightColumn,
+            Self::Rotate | Self::Alternate | Self::Inventory => VirtualControlAnchor::TopRightColumn,
             Self::BlockConfig => VirtualControlAnchor::BottomCenter,
         }
     }
@@ -268,6 +279,7 @@ impl VirtualControlId {
             Self::Rotate => "action.rotate_or_rollback",
             Self::Alternate => "action.alternate",
             Self::BlockConfig => "virtual.block_config",
+            Self::Inventory => "action.inventory",
         }
     }
 }

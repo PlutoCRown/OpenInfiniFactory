@@ -15,12 +15,16 @@ pub fn emit_inventory_slot_actions(
     playing_ui: Res<PlayingUiState>,
     ui_host: Res<UiHost>,
 ) {
-    if ui_host.modal_open() || *mode.get() != GameMode::Playing || !playing_ui.inventory_open {
+    if ui_host.modal_open() || *mode.get() != GameMode::Playing {
         return;
     }
     let Ok(slot) = slots.get(click.entity) else {
         return;
     };
+    // 背包关闭时只接受快捷栏点击（触屏切换选中）
+    if !playing_ui.inventory_open && slot.area != SlotArea::Hotbar {
+        return;
+    }
     let button = click.event.button;
     click.propagate(false);
     writer.write(UiAction {
@@ -39,6 +43,7 @@ pub fn dispatch_inventory_slot_actions(
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mut solution_state: ResMut<SolutionState>,
+    playing_ui: Res<PlayingUiState>,
 ) {
     for action in actions.read() {
         if action.instance != UiInstanceId::INVENTORY {
@@ -50,6 +55,7 @@ pub fn dispatch_inventory_slot_actions(
         dispatch_inventory_slot_action(
             slot,
             button,
+            playing_ui.inventory_open,
             &config,
             &mut inventory,
             &mut carried,
@@ -62,12 +68,25 @@ pub fn dispatch_inventory_slot_actions(
 fn dispatch_inventory_slot_action(
     slot: InventorySlot,
     clicked_button: PointerButton,
+    inventory_open: bool,
     config: &GameConfig,
     inventory: &mut InventoryItems,
     carried: &mut CarriedItem,
     placement: &mut PlacementState,
     solution_state: &mut SolutionState,
 ) {
+    // 背包关闭：快捷栏左键只切换当前选中格（等同数字键）
+    if !inventory_open {
+        if slot.area == SlotArea::Hotbar && clicked_button == PointerButton::Primary {
+            if placement.selected != slot.index {
+                placement.selection.clear();
+                placement.edit_gesture = None;
+                placement.selected = slot.index;
+            }
+        }
+        return;
+    }
+
     let pick_button = config
         .input(ActionKeyName::Pick)
         .mouse_button()

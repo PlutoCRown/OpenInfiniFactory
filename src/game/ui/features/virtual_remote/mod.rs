@@ -80,8 +80,9 @@ pub struct VirtualRemoteHud;
 #[derive(Component)]
 pub struct VirtualSimOnly;
 
+/// 仅 Play 建造模式、且未在模拟中显示（如开始模拟）
 #[derive(Component)]
-pub struct VirtualEditOnly;
+pub struct VirtualPlayOnly;
 
 #[derive(Component)]
 pub struct VirtualBlockConfigButton;

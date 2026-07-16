@@ -58,6 +58,7 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
         .with_children(|slot| {
             slot.spawn((
                 ImageNode::default(),
+                Pickable::IGNORE,
                 Node {
                     width: Val::Px(default_button_size(64.0)),
                     height: Val::Px(default_button_size(64.0)),
@@ -74,6 +75,7 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
             ));
             slot.spawn((
                 label_text("", 12.0, Color::WHITE),
+                Pickable::IGNORE,
                 TextLayout::justify(Justify::Center),
                 Node {
                     margin: UiRect::all(Val::Px(2.0)),
