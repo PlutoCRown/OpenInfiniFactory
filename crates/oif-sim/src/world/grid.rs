@@ -728,6 +728,10 @@ impl WorldBlocks {
         self.system_blocks
             .get(&pos)
             .is_some_and(|block| block.kind.is_generated_marker())
+            || self
+                .blocks
+                .get(&pos)
+                .is_some_and(|block| block.kind.is_generated_marker())
     }
 
     pub fn blocks_factory_or_scene_at(&self, pos: IVec3) -> bool {
@@ -989,7 +993,7 @@ pub fn raycast_blocks(origin: Vec3, dir: Vec3, world: &WorldBlocks) -> Option<Ta
     let mut best: Option<(f32, TargetHit)> = None;
 
     for (pos, block) in &world.blocks {
-        if !block.kind.has_collision() {
+        if !block.kind.has_collision() || block.kind.is_generated_marker() {
             continue;
         }
 

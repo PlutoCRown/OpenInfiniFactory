@@ -23,7 +23,7 @@
 |----|------|------|
 | L0 | 面能力核；删 `MaterialFaceMark` 占位 | 进行中 |
 | L1 | 脆弱碎裂回合；`Glass` 材料 | 已完成 |
-| L2 | `RollerBody` / `StamperBody` | 待做 |
+| L2 | `RollerBody` / `StamperBody` 同格占位（有碰撞、无模型；写入 blocks，可与宿主 System 共存） | 已完成 |
 | L3 | 装饰漆 + 灯面板隔断 | 待做 |
 | L4 | 印花占格附着 | 待做 |
 | L5 | 告示牌 | 待做 |

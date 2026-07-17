@@ -31,9 +31,11 @@ pub mod platform;
 pub mod pusher;
 pub mod reverse_conveyor;
 pub mod roller;
+pub mod roller_body;
 pub mod rotator;
 pub mod splitter;
 pub mod stamper;
+pub mod stamper_body;
 pub mod stone;
 pub mod suction_cup;
 pub mod teleport_entrance;
@@ -153,6 +155,10 @@ pub enum SystemBlock {
 pub enum VirtualBlock {
     WeldPoint,
     DrillHead,
+    /// 滚刷机实体占格（有碰撞，写入 blocks 层）
+    RollerBody,
+    /// 印花机实体占格（有碰撞，写入 blocks 层；朝向与宿主同步）
+    StamperBody,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -165,6 +171,10 @@ pub enum BlockShape {
 pub enum MarkerBehavior {
     WeldPoint { offset: IVec3, facing: Facing },
     DrillHead { offset: IVec3, facing: Facing },
+    /// 滚刷机同格实体占位
+    RollerBody { facing: Facing },
+    /// 印花机同格实体占位（朝向与宿主一致，供 L4 透传）
+    StamperBody { facing: Facing },
 }
 
 #[derive(Clone, Copy)]
@@ -540,6 +550,8 @@ pub enum BlockKind {
     GlassMaterial,
     WeldPoint,
     DrillHead,
+    RollerBody,
+    StamperBody,
 }
 
 impl BlockKind {
@@ -585,6 +597,8 @@ impl BlockKind {
             BlockKind::TeleportExit => BlockLayer::System(SystemBlock::TeleportExit),
             BlockKind::WeldPoint => BlockLayer::Virtual(VirtualBlock::WeldPoint),
             BlockKind::DrillHead => BlockLayer::Virtual(VirtualBlock::DrillHead),
+            BlockKind::RollerBody => BlockLayer::Virtual(VirtualBlock::RollerBody),
+            BlockKind::StamperBody => BlockLayer::Virtual(VirtualBlock::StamperBody),
         }
     }
 
@@ -673,8 +687,9 @@ impl BlockKind {
         matches!(self.layer(), BlockLayer::System(_))
     }
 
+    /// 写入 system_blocks：系统方块，或无碰撞虚拟 marker（可与材料同格）
     pub fn is_system_layer(self) -> bool {
-        self.is_system_block() || self.is_generated_marker()
+        self.is_system_block() || (self.is_generated_marker() && !self.has_collision())
     }
 
     pub fn accepts_material(self) -> bool {
