@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::blocks::{BlockData, BlockId, MovementRule};
 use crate::world::direction::Facing;
-use crate::world::grid::{MaterialFace, WorldBlocks};
+use crate::world::grid::WorldBlocks;
 
 use super::motion::{BlockMotion, BlockMotionKind, PusherMotion};
 use super::structure_state::{StructureId, StructureState};
@@ -779,10 +779,6 @@ pub(super) fn rotate_structure(
     pivot: IVec3,
     clockwise: bool,
 ) {
-    let structure_ids: HashSet<BlockId> = structure
-        .iter()
-        .filter_map(|pos| world.blocks.get(pos).map(|block| block.id))
-        .collect();
     let moves: Vec<(IVec3, IVec3, BlockData)> = structure
         .iter()
         .filter_map(|pos| {
@@ -793,26 +789,6 @@ pub(super) fn rotate_structure(
         })
         .collect();
     world.relocate_blocks(moves);
-
-    // 焊接按 BlockId 无需改写；旋转只更新面标记法线
-    let updated_marks: HashMap<_, _> = world
-        .material_face_marks
-        .iter()
-        .map(|(face, mark)| {
-            if structure_ids.contains(&face.block) {
-                (
-                    MaterialFace {
-                        block: face.block,
-                        normal: rotate_offset_y(face.normal, clockwise),
-                    },
-                    *mark,
-                )
-            } else {
-                (*face, *mark)
-            }
-        })
-        .collect();
-    world.material_face_marks = updated_marks;
 }
 
 pub(super) fn rotate_pos_y(pos: IVec3, pivot: IVec3, clockwise: bool) -> IVec3 {

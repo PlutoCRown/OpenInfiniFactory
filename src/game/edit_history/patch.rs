@@ -4,9 +4,7 @@ use bevy::prelude::*;
 
 use crate::game::blocks::{BlockData, BlockId, BlockKind};
 use crate::game::world::direction::Facing;
-use crate::game::world::grid::{
-    BlockSettings, MaterialFace, MaterialFaceMark, MaterialWeld, WorldBlocks,
-};
+use crate::game::world::grid::{BlockSettings, MaterialWeld, WorldBlocks};
 
 /// 方块所在层：工厂/材料或系统层
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -31,14 +29,6 @@ pub struct CellDelta {
     pub after: Option<CellSnapshot>,
 }
 
-/// 面标记前后差异
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct FaceMarkDelta {
-    pub face: MaterialFace,
-    pub before: Option<MaterialFaceMark>,
-    pub after: Option<MaterialFaceMark>,
-}
-
 /// 系统方块设置前后差异
 #[derive(Clone, Debug, PartialEq)]
 pub struct SettingsDelta {
@@ -53,7 +43,6 @@ pub struct WorldPatch {
     pub cells: Vec<CellDelta>,
     pub welds_add: Vec<MaterialWeld>,
     pub welds_remove: Vec<MaterialWeld>,
-    pub face_marks: Vec<FaceMarkDelta>,
     pub settings: Vec<SettingsDelta>,
 }
 
@@ -62,7 +51,6 @@ impl WorldPatch {
         self.cells.is_empty()
             && self.welds_add.is_empty()
             && self.welds_remove.is_empty()
-            && self.face_marks.is_empty()
             && self.settings.is_empty()
     }
 
@@ -153,22 +141,6 @@ impl WorldPatch {
             }
         }
 
-        for delta in &self.face_marks {
-            let value = if forward {
-                delta.after
-            } else {
-                delta.before
-            };
-            match value {
-                Some(mark) => {
-                    world.material_face_marks.insert(delta.face, mark);
-                }
-                None => {
-                    world.material_face_marks.remove(&delta.face);
-                }
-            }
-        }
-
         if self.touches_goal_or_generator() {
             world.resync_acceptor_structures();
         }
@@ -204,26 +176,6 @@ pub fn capture_welds_for_ids(world: &WorldBlocks, ids: &HashSet<BlockId>) -> Vec
         .collect()
 }
 
-/// 从补丁涉及的方块实例收集面标记
-pub fn capture_face_marks_for_ids(
-    world: &WorldBlocks,
-    ids: &HashSet<BlockId>,
-) -> Vec<FaceMarkDelta> {
-    if ids.is_empty() {
-        return Vec::new();
-    }
-    world
-        .material_face_marks
-        .iter()
-        .filter(|(face, _)| ids.contains(&face.block))
-        .map(|(face, mark)| FaceMarkDelta {
-            face: *face,
-            before: Some(*mark),
-            after: Some(*mark),
-        })
-        .collect()
-}
-
 pub fn weld_diff(before: &[MaterialWeld], after: &[MaterialWeld]) -> (Vec<MaterialWeld>, Vec<MaterialWeld>) {
     let before_set: HashSet<_> = before.iter().copied().collect();
     let after_set: HashSet<_> = after.iter().copied().collect();
@@ -238,34 +190,6 @@ pub fn weld_diff(before: &[MaterialWeld], after: &[MaterialWeld]) -> (Vec<Materi
         .copied()
         .collect();
     (add, remove)
-}
-
-pub fn face_mark_diff(
-    before: &[FaceMarkDelta],
-    after: &[FaceMarkDelta],
-) -> Vec<FaceMarkDelta> {
-    let before_map: HashMap<MaterialFace, Option<MaterialFaceMark>> = before
-        .iter()
-        .map(|delta| (delta.face, delta.before))
-        .collect();
-    let after_map: HashMap<MaterialFace, Option<MaterialFaceMark>> = after
-        .iter()
-        .map(|delta| (delta.face, delta.after))
-        .collect();
-    let mut faces: HashSet<MaterialFace> = before_map.keys().copied().collect();
-    faces.extend(after_map.keys().copied());
-    faces
-        .into_iter()
-        .filter_map(|face| {
-            let b = before_map.get(&face).copied().flatten();
-            let a = after_map.get(&face).copied().flatten();
-            (b != a).then_some(FaceMarkDelta {
-                face,
-                before: b,
-                after: a,
-            })
-        })
-        .collect()
 }
 
 pub fn block_ids_from_snapshots(snapshots: impl Iterator<Item = Option<CellSnapshot>>) -> HashSet<BlockId> {
@@ -287,7 +211,6 @@ pub fn build_cell_patch(
         .collect();
     let before_ids = block_ids_from_snapshots(before_cells.values().cloned());
     let welds_before = capture_welds_for_ids(world, &before_ids);
-    let face_marks_before = capture_face_marks_for_ids(world, &before_ids);
 
     mutate(world);
 
@@ -300,7 +223,7 @@ pub fn build_cell_patch(
                 after_ids.insert(snap.block.id);
             }
         }
-            cells.push(CellDelta {
+        cells.push(CellDelta {
             pos: *pos,
             before: before_cells[pos].clone(),
             after,
@@ -308,15 +231,12 @@ pub fn build_cell_patch(
     }
     after_ids.extend(before_ids);
     let welds_after = capture_welds_for_ids(world, &after_ids);
-    let face_marks_after = capture_face_marks_for_ids(world, &after_ids);
     let (welds_add, welds_remove) = weld_diff(&welds_before, &welds_after);
-    let face_marks = face_mark_diff(&face_marks_before, &face_marks_after);
 
     WorldPatch {
         cells,
         welds_add,
         welds_remove,
-        face_marks,
         settings: Vec::new(),
     }
 }
@@ -353,7 +273,6 @@ pub fn build_relocate_patch(world: &WorldBlocks, moves: &[(IVec3, IVec3)]) -> Wo
         cells,
         welds_add: Vec::new(),
         welds_remove: Vec::new(),
-        face_marks: Vec::new(),
         settings: Vec::new(),
     }
 }

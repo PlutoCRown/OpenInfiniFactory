@@ -2,6 +2,7 @@ mod adapter;
 #[macro_use]
 mod register;
 mod basic;
+mod material_props;
 mod registry;
 pub mod traits;
 
@@ -44,6 +45,9 @@ pub mod wire;
 use glam::IVec3;
 use serde::{Deserialize, Serialize};
 
+pub use self::material_props::{
+    local_face_index, material_face_connectable, MaterialProps,
+};
 pub use self::registry::{assert_registry_consistent, material_block_kind, save_stores_facing};
 pub use crate::world::direction::Facing;
 use crate::world::grid::BlockSettings;
@@ -462,6 +466,8 @@ impl MaterialKind {
     pub const ALL: [Self; 3] = [Self::Basic, Self::Iron, Self::Copper];
 }
 
+// MaterialKind::props 见 material_props.rs
+
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum StampColor {
     #[default]
@@ -602,7 +608,32 @@ impl BlockKind {
     }
 
     pub fn is_directional(self) -> bool {
+        if let Some(kind) = self.material_kind() {
+            return kind.props().directional;
+        }
         self.block().is_directional()
+    }
+
+    /// 材料静态属性；非材料返回 None
+    pub fn material_props(self) -> Option<MaterialProps> {
+        self.material_kind().map(MaterialKind::props)
+    }
+
+    /// 材料世界法线面是否 Connectable
+    pub fn material_face_connectable(self, facing: Facing, world_normal: IVec3) -> bool {
+        self.material_props()
+            .is_some_and(|props| material_face_connectable(props, facing, world_normal))
+    }
+
+    /// 工厂可贴面：非 `non_connection_face`；场景任意面可贴
+    pub fn face_attachable(self, facing: Facing, world_normal: IVec3) -> bool {
+        if self.is_scene() {
+            return true;
+        }
+        if self.is_factory() {
+            return self.non_connection_face(facing) != Some(world_normal);
+        }
+        false
     }
 
     pub fn has_collision(self) -> bool {

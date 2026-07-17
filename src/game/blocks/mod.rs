@@ -60,8 +60,8 @@ pub use oif_sim::blocks::{
     rgb, rgba, AcceptorId, BlockClass, BlockData, BlockDefinition, BlockId, BlockKind, BlockLayer,
     BlockShape, ColorSpec, Facing, FactoryBlock, LaserOpticsBehavior, MarkerBehavior,
     MaterialBlock, MaterialDestroyer, MaterialKind, MaterialLabeler, MaterialProcessor,
-    MaterialSource, MovementRule, PersistentLayer, SceneBlock, SignalBehavior, StampColor,
-    SystemBlock, VirtualBlock, WeldBehavior, BLOCK_SIZE, DEFAULT_GENERATOR_PERIOD,
+    MaterialProps, MaterialSource, MovementRule, PersistentLayer, SceneBlock, SignalBehavior,
+    StampColor, SystemBlock, VirtualBlock, WeldBehavior, BLOCK_SIZE, DEFAULT_GENERATOR_PERIOD,
 };
 use crate::game::state::UiPanelId;
 

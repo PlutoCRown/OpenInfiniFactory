@@ -6,8 +6,7 @@ use super::components::{
     FactoryDebugOverlay, PendingGeneratedPreview,
 };
 use super::connectors::{
-    face_mark_transform, local_connector_offset, signal_neighbor_offsets, weld_neighbor_connects_to,
-    wire_connects_to,
+    local_connector_offset, signal_neighbor_offsets, weld_neighbor_connects_to, wire_connects_to,
 };
 use super::scene_mesh::scene_block_mesh;
 use crate::game::blocks::BlockPresent;
@@ -465,23 +464,6 @@ pub(super) fn spawn_block_model(
             if data.kind == crate::game::blocks::BlockKind::Wire && connected_offsets.is_empty() {
                 let mut child =
                     parent.spawn((Mesh3d(assets.wire_node_mesh()), MeshMaterial3d(material)));
-                if let Some((_, icon_layer)) = icon_render {
-                    child.insert((icon_layer.clone(), BlockIconRenderEntity));
-                }
-            }
-        }
-
-        if data.kind.is_material() {
-            for (face, mark) in world
-                .material_face_marks
-                .iter()
-                .filter(|(face, _)| face.block == data.id)
-            {
-                let mut child = parent.spawn((
-                    Mesh3d(assets.face_mark.clone()),
-                    MeshMaterial3d(assets.face_mark_material(mark.color)),
-                    face_mark_transform(face.normal),
-                ));
                 if let Some((_, icon_layer)) = icon_render {
                     child.insert((icon_layer.clone(), BlockIconRenderEntity));
                 }

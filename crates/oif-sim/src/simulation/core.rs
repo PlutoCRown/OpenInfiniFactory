@@ -7,7 +7,7 @@ use crate::world::grid::WorldBlocks;
 
 use super::behaviors::{
     destroy_powered_lasers, material_source_generation, probe_lasers, run_drill_destroy_phase,
-    run_material_acceptance_phase, run_material_conversion_phase, run_material_label_phase,
+    run_material_acceptance_phase, run_material_conversion_phase,
     run_material_teleport_phase, run_weld_behavior_phase, LaserBeam,
 };
 use super::gravity::mark_gravity_phase;
@@ -173,14 +173,13 @@ pub fn simulate_turn(
     run_static_marker_phase(world);
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
-    // —— 阶段 4 结构后处理（销毁 → 传送 → 印花 → 转换 → 验收 → 生成 → 焊）——
+    // —— 阶段 4 结构后处理（销毁 → 传送 → 转换 → 验收 → 生成 → 焊）——
     let mut behavior_sparks = laser_probe_sparks;
     behavior_sparks.extend(run_drill_destroy_phase(world));
     // 与阶段 1 探测同一批通电激光；移动后按新布局再 trace 并销毁
     behavior_sparks.extend(destroy_powered_lasers(world, &laser_devices));
 
     run_material_teleport_phase(world);
-    run_material_label_phase(world);
     run_material_conversion_phase(world);
 
     let (accepted_acceptors, acceptance_sparks) =

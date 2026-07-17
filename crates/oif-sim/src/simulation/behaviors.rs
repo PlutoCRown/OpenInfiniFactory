@@ -2,14 +2,10 @@ use glam::IVec3;
 use std::collections::HashSet;
 
 use crate::blocks::{
-    AcceptorId, BlockData, BlockKind, MaterialDestroyer, MaterialLabeler, MaterialProcessor,
-    SignalBehavior,
+    AcceptorId, BlockData, BlockKind, MaterialDestroyer, MaterialProcessor, SignalBehavior,
 };
 use crate::world::direction::Facing;
-use crate::world::grid::{
-    ConverterMode, GeneratorMode, MaterialFace, MaterialFaceMark, MaterialFaceMarkSource,
-    WorldBlocks,
-};
+use crate::world::grid::{ConverterMode, GeneratorMode, WorldBlocks};
 
 use super::mirror;
 use super::signal_offsets;
@@ -217,52 +213,6 @@ pub(super) fn material_source_generation(
         }
     }
     generated
-}
-
-/// 阶段 4 印花：给材料面打标记
-pub(super) fn run_material_label_phase(world: &mut WorldBlocks) {
-    let labelers: Vec<(IVec3, MaterialLabeler)> = world
-        .system_blocks
-        .iter()
-        .filter_map(|(pos, block)| {
-            block
-                .kind
-                .material_labeler(block.facing)
-                .map(|labeler| (*pos, labeler))
-        })
-        .collect();
-
-    for (pos, labeler) in labelers {
-        let (target_offset, source) = match labeler {
-            MaterialLabeler::Stamper { target } => (target, MaterialFaceMarkSource::Stamper),
-            MaterialLabeler::Roller { target } => (target, MaterialFaceMarkSource::Roller),
-        };
-        let target = pos + target_offset;
-        if !world.is_material_at(target) {
-            continue;
-        }
-        let Some(target_id) = world.blocks.get(&target).map(|block| block.id) else {
-            continue;
-        };
-
-        let face = MaterialFace::new(target_id, -target_offset);
-        if world
-            .material_face_marks
-            .get(&face)
-            .is_some_and(|mark| mark.source == MaterialFaceMarkSource::Stamper)
-        {
-            continue;
-        }
-
-        let settings = world.labeler_settings(pos);
-        world.set_material_face_mark(
-            face,
-            MaterialFaceMark {
-                color: settings.color,
-                source,
-            },
-        );
-    }
 }
 
 /// 阶段 4 转换：转换器格上的材料立刻变成输出种类
