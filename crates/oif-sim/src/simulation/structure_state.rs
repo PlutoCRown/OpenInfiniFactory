@@ -411,7 +411,7 @@ impl StructureState {
                     let support = *member + *dir;
                     support.y >= 0
                         && !structure.positions.contains(&support)
-                        && (!world.can_move_into(support)
+                        && (!world.can_move_into_yielding_fragile(support)
                             || hard_pusher_head_occupancy.contains(&support))
                 }
             })
@@ -611,7 +611,8 @@ fn collect_gravity_support(
             let below = *pos + IVec3::NEG_Y;
             (below.y >= 0
                 && !structure.contains(&below)
-                && (!world.can_move_into(below) || hard_pusher_head_occupancy.contains(&below)))
+                && (!world.can_move_into_yielding_fragile(below)
+                    || hard_pusher_head_occupancy.contains(&below)))
             .then_some((*pos, IVec3::NEG_Y))
         })
         .collect()

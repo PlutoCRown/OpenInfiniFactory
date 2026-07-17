@@ -37,6 +37,7 @@ pub fn encode_kind(kind: BlockKind) -> u8 {
         BlockKind::Material => 29,
         BlockKind::IronMaterial => 30,
         BlockKind::CopperMaterial => 31,
+        BlockKind::GlassMaterial => 35,
         BlockKind::WeldPoint => 32,
         BlockKind::DrillHead => 33,
     }
@@ -79,6 +80,7 @@ pub fn decode_kind(id: u8) -> Result<BlockKind, SaveFormatError> {
         32 => BlockKind::WeldPoint,
         33 => BlockKind::DrillHead,
         34 => BlockKind::SuctionCup,
+        35 => BlockKind::GlassMaterial,
         _ => return Err(SaveFormatError::UnknownBlockKind(id)),
     })
 }

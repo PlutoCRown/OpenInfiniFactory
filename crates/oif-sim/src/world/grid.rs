@@ -777,6 +777,18 @@ impl WorldBlocks {
         !self.is_occupied(pos)
     }
 
+    /// 格上是否为脆弱材料（运动冲突时让出并碎裂）
+    pub fn is_fragile_material_at(&self, pos: IVec3) -> bool {
+        self.blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind.material_props().is_some_and(|props| props.fragile))
+    }
+
+    /// 运动规划时该格是否可让出（空或脆弱材料）
+    pub fn can_move_into_yielding_fragile(&self, pos: IVec3) -> bool {
+        self.can_move_into(pos) || self.is_fragile_material_at(pos)
+    }
+
     pub fn is_material_at(&self, pos: IVec3) -> bool {
         self.blocks
             .get(&pos)

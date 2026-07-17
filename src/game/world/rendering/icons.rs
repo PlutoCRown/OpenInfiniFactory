@@ -105,6 +105,7 @@ fn block_icon_kinds() -> Vec<BlockKind> {
         BlockKind::Material,
         BlockKind::IronMaterial,
         BlockKind::CopperMaterial,
+        BlockKind::GlassMaterial,
     ]) {
         if !kinds.contains(&kind) {
             kinds.push(kind);

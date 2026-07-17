@@ -47,6 +47,7 @@ impl MaterialKind {
     pub fn props(self) -> MaterialProps {
         match self {
             Self::Basic | Self::Iron | Self::Copper => MaterialProps::DEFAULT,
+            Self::Glass => MaterialProps::FRAGILE,
         }
     }
 }
@@ -95,5 +96,13 @@ mod tests {
         assert!(props.is_stamp);
         assert!(props.directional);
         assert!(!material_face_connectable(props, Facing::North, IVec3::NEG_Z));
+    }
+
+    #[test]
+    fn glass_is_fragile() {
+        let props = MaterialKind::Glass.props();
+        assert!(props.fragile);
+        assert!(!props.is_stamp);
+        assert!(!props.directional);
     }
 }

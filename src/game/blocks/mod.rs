@@ -20,6 +20,7 @@ pub mod down_welder;
 pub mod drill;
 pub mod drill_head;
 pub mod generator;
+pub mod glass_material;
 pub mod goal;
 pub mod grass;
 pub mod iron_material;

@@ -400,6 +400,81 @@ fn structure_supported_by_lifter(world: &WorldBlocks, structure: &HashSet<IVec3>
     })
 }
 
+/// 运动执行前：按计划压碎/让出冲突的脆弱材料（与钻头/激光销毁分离）
+pub(super) fn apply_fragile_shatter_before_execute(
+    world: &mut WorldBlocks,
+    moves: &mut [StructureMove],
+    structures: &mut StructureState,
+) {
+    let mut shatter = HashSet::new();
+    for movement in moves.iter() {
+        match movement {
+            StructureMove::Translate {
+                structure,
+                offset,
+                actor,
+                ..
+            } => {
+                if let Some(actor) = actor {
+                    if matches!(actor.animation, PusherAnimationKind::Extend) {
+                        if let Some(block) = world.blocks.get(&actor.pos) {
+                            let head = actor.pos + block.facing.forward_ivec3();
+                            if world.is_fragile_material_at(head) {
+                                shatter.insert(head);
+                            }
+                        }
+                    }
+                }
+                if *offset == IVec3::ZERO {
+                    continue;
+                }
+                for pos in structure {
+                    let target = *pos + *offset;
+                    if !structure.contains(&target) && world.is_fragile_material_at(target) {
+                        shatter.insert(target);
+                    }
+                    if world.is_fragile_material_at(*pos)
+                        && target.y >= 0
+                        && !structure.contains(&target)
+                        && !world.can_move_into(target)
+                        && !world.is_fragile_material_at(target)
+                    {
+                        shatter.insert(*pos);
+                    }
+                }
+            }
+            StructureMove::Rotate { .. } => {}
+        }
+    }
+    if shatter.is_empty() {
+        return;
+    }
+
+    let mut affected: HashMap<StructureId, HashSet<IVec3>> = HashMap::new();
+    for pos in &shatter {
+        if let Some(id) = structures.id_at(*pos) {
+            affected.entry(id).or_default().insert(*pos);
+        }
+        world.remove(pos);
+    }
+    for (id, removed) in affected {
+        let Some(old) = structures.structure_positions(id).cloned() else {
+            continue;
+        };
+        let new_positions: HashSet<IVec3> = old.difference(&removed).copied().collect();
+        structures.replace_structure_positions(&old, new_positions);
+    }
+    for movement in moves.iter_mut() {
+        match movement {
+            StructureMove::Translate { structure, .. } | StructureMove::Rotate { structure, .. } => {
+                for pos in &shatter {
+                    structure.remove(pos);
+                }
+            }
+        }
+    }
+}
+
 /// 按序执行运动标签：失败则试下一个；种子判占用，成功后标记展开后的格子。
 /// `hard_pusher_head_occupancy` 为本回合开始时已伸出的头；执行中随 Push 伸出/收回更新。
 pub(super) fn execute_structure_moves_with_pushers(
@@ -628,7 +703,8 @@ fn hard_pusher_head_blocked_below(
         // 活塞头是实体：下方有方块或其它活塞头都算挡住
         target.y < 0
             || (!structure.contains(&target)
-                && (!world.can_move_into(target) || hard_pusher_head_occupancy.contains(&target)))
+                && (!world.can_move_into_yielding_fragile(target)
+                    || hard_pusher_head_occupancy.contains(&target)))
     })
 }
 
@@ -666,7 +742,7 @@ fn expanded_move_structure(
         if target.y < 0 || expanded.contains(&target) {
             continue;
         }
-        if world.can_move_into(target) {
+        if world.can_move_into_yielding_fragile(target) {
             continue;
         }
 
@@ -743,7 +819,14 @@ fn can_move_structure_without_push(
 ) -> bool {
     structure.iter().all(|pos| {
         let target = *pos + offset;
-        target.y >= 0 && (structure.contains(&target) || world.can_move_into(target))
+        if target.y < 0 {
+            return false;
+        }
+        if structure.contains(&target) || world.can_move_into_yielding_fragile(target) {
+            return true;
+        }
+        // 结构内脆弱撞实心：碎裂后放行
+        world.is_fragile_material_at(*pos)
     })
 }
 

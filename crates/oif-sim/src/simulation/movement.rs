@@ -278,17 +278,22 @@ fn mark_pusher_movement(
     }
 
     let head = pos + source;
+    let front_is_fragile = world.is_fragile_material_at(head);
     let movement = if desired_extended {
-        // 伸出：面前有结构就推（与是否粘头无关）
-        mark_structure_translate(
-            world,
-            structures,
-            pos,
-            pos + source,
-            offset,
-            MovementMark::Push,
-            suction,
-        )
+        // 前方脆弱：压碎而非推动其所在结构
+        if front_is_fragile {
+            None
+        } else {
+            mark_structure_translate(
+                world,
+                structures,
+                pos,
+                pos + source,
+                offset,
+                MovementMark::Push,
+                suction,
+            )
+        }
     } else if entry.bound_front {
         // 收回：仅开局已粘的才拉回头前一格的结构
         mark_structure_translate(
@@ -320,8 +325,12 @@ fn mark_pusher_movement(
     }
 
     if desired_extended {
-        // 空头伸出：格被占或已被其他头占用则失败
-        if world.is_occupied(head) || !claimed_heads.insert(head) {
+        // 空头伸出：脆弱格视为可压碎让出；实心占用或头格争用则失败
+        if front_is_fragile {
+            if !claimed_heads.insert(head) {
+                return None;
+            }
+        } else if world.is_occupied(head) || !claimed_heads.insert(head) {
             return None;
         }
     } else if entry.bound_front {

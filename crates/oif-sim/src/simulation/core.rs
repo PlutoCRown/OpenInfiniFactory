@@ -19,8 +19,8 @@ use super::signals::SignalNetworkCache;
 use super::stats::SimulationStepStats;
 use super::structure_state::StructureState;
 use super::structures::{
-    execute_structure_moves_with_pushers, merge_structure_movement_plan, MovementInfluenceCache,
-    StructureMove,
+    apply_fragile_shatter_before_execute, execute_structure_moves_with_pushers,
+    merge_structure_movement_plan, MovementInfluenceCache, StructureMove,
 };
 use super::suction::SuctionLinks;
 
@@ -38,7 +38,7 @@ pub struct TurnOutput {
     pub stats: SimulationStepStats,
 }
 
-/// 执行一整回合四阶段模拟并产出表现数据
+/// 执行一整回合模拟（信号 → 运动标记 → 脆弱碎裂 → 执行运动 → 结构后处理）并产出表现数据
 pub fn simulate_turn(
     world: &mut WorldBlocks,
     pending_generated: &mut PendingGeneratedMaterials,
@@ -149,7 +149,10 @@ pub fn simulate_turn(
     }
     sample.movement_mark_ms = mark_elapsed_ms(&mut mark);
 
-    // —— 阶段 3 执行运动：位姿/推杆，再重生静态 marker ——
+    // —— 阶段 3a 脆弱碎裂：按运动计划移除冲突脆弱材料，再执行位姿 ——
+    apply_fragile_shatter_before_execute(world, &mut movement_plan, structure_state);
+
+    // —— 阶段 3b 执行运动：位姿/推杆，再重生静态 marker ——
     let (mut animations, pusher_animations) = execute_structure_moves_with_pushers(
         world,
         movement_plan,
@@ -716,6 +719,115 @@ mod tests {
         assert!(
             world.is_material_at(IVec3::new(0, 1, 0)),
             "下一回合材料才应下落一格"
+        );
+    }
+
+    #[test]
+    fn pusher_extends_into_fragile_glass_without_pushing_welded_neighbor() {
+        // 阻拦器空头伸入玻璃：玻璃碎裂，焊着的铁不被推动
+        let mut world = WorldBlocks::default();
+        world.insert(
+            IVec3::new(0, 0, 0),
+            BlockData::new(BlockKind::Stone, Facing::North),
+        );
+        world.insert(
+            IVec3::new(1, 0, 0),
+            BlockData::new(BlockKind::Stone, Facing::North),
+        );
+        world.insert(
+            IVec3::new(1, 0, 1),
+            BlockData::new(BlockKind::Stone, Facing::North),
+        );
+        world.insert(
+            IVec3::new(0, 1, 0),
+            BlockData::new(BlockKind::Blocker, Facing::East),
+        );
+        let glass = IVec3::new(1, 1, 0);
+        let iron = IVec3::new(1, 1, 1);
+        world.insert(
+            glass,
+            BlockData::new(BlockKind::GlassMaterial, Facing::North),
+        );
+        world.insert(iron, BlockData::new(BlockKind::IronMaterial, Facing::North));
+        world.weld_materials(glass, iron);
+
+        let (mut world, mut pending, mut signals, mut structures, mut influence, mut pushers) =
+            sim_world(world);
+        let out = simulate_turn(
+            &mut world,
+            &mut pending,
+            &mut signals,
+            1,
+            &mut structures,
+            &mut influence,
+            &mut pushers,
+            None,
+            None,
+        );
+
+        assert!(
+            !world.is_material_at(glass),
+            "玻璃应被活塞头压碎"
+        );
+        assert!(
+            world
+                .blocks
+                .get(&iron)
+                .is_some_and(|b| b.kind == BlockKind::IronMaterial),
+            "焊着的铁不应被推动"
+        );
+        assert!(
+            out.pusher_animations
+                .get(&IVec3::new(0, 1, 0))
+                .is_some_and(|a| a.to_extension > 0.5),
+            "阻拦器应成功伸出"
+        );
+    }
+
+    #[test]
+    fn falling_structure_shatters_fragile_below() {
+        // 铁下落压到下方玻璃：玻璃碎裂，铁落到原玻璃格
+        let mut world = WorldBlocks::default();
+        world.insert(
+            IVec3::new(0, 0, 0),
+            BlockData::new(BlockKind::Stone, Facing::North),
+        );
+        let glass = IVec3::new(0, 1, 0);
+        let iron = IVec3::new(0, 2, 0);
+        world.insert(
+            glass,
+            BlockData::new(BlockKind::GlassMaterial, Facing::North),
+        );
+        world.insert(iron, BlockData::new(BlockKind::IronMaterial, Facing::North));
+
+        let (mut world, mut pending, mut signals, mut structures, mut influence, mut pushers) =
+            sim_world(world);
+        simulate_turn(
+            &mut world,
+            &mut pending,
+            &mut signals,
+            1,
+            &mut structures,
+            &mut influence,
+            &mut pushers,
+            None,
+            None,
+        );
+
+        assert!(!world.is_material_at(IVec3::new(0, 2, 0)), "铁应已下落");
+        assert!(
+            !world
+                .blocks
+                .get(&IVec3::new(0, 1, 0))
+                .is_some_and(|b| b.kind == BlockKind::GlassMaterial),
+            "玻璃应碎裂"
+        );
+        assert!(
+            world
+                .blocks
+                .get(&IVec3::new(0, 1, 0))
+                .is_some_and(|b| b.kind == BlockKind::IronMaterial),
+            "铁应落到原玻璃格"
         );
     }
 }

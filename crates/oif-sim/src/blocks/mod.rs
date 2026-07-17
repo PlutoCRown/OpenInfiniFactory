@@ -20,6 +20,7 @@ pub mod drill_head;
 pub mod generator;
 pub mod goal;
 pub mod grass;
+pub mod glass_material;
 pub mod iron_material;
 pub mod laser;
 pub mod lifter;
@@ -111,6 +112,7 @@ pub enum MaterialBlock {
     Material,
     IronMaterial,
     CopperMaterial,
+    GlassMaterial,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -460,10 +462,11 @@ pub enum MaterialKind {
     Basic,
     Iron,
     Copper,
+    Glass,
 }
 
 impl MaterialKind {
-    pub const ALL: [Self; 3] = [Self::Basic, Self::Iron, Self::Copper];
+    pub const ALL: [Self; 4] = [Self::Basic, Self::Iron, Self::Copper, Self::Glass];
 }
 
 // MaterialKind::props 见 material_props.rs
@@ -534,6 +537,7 @@ pub enum BlockKind {
     Material,
     IronMaterial,
     CopperMaterial,
+    GlassMaterial,
     WeldPoint,
     DrillHead,
 }
@@ -552,6 +556,7 @@ impl BlockKind {
             BlockKind::Material => BlockLayer::Material(MaterialBlock::Material),
             BlockKind::IronMaterial => BlockLayer::Material(MaterialBlock::IronMaterial),
             BlockKind::CopperMaterial => BlockLayer::Material(MaterialBlock::CopperMaterial),
+            BlockKind::GlassMaterial => BlockLayer::Material(MaterialBlock::GlassMaterial),
             BlockKind::Platform => BlockLayer::Factory(FactoryBlock::Platform),
             BlockKind::Welder => BlockLayer::Factory(FactoryBlock::Welder),
             BlockKind::DownWelder => BlockLayer::Factory(FactoryBlock::DownWelder),
