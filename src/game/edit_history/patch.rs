@@ -174,6 +174,9 @@ impl WorldPatch {
         if self.touches_goal_or_generator() {
             world.resync_acceptor_structures();
         }
+        if !self.cells.is_empty() {
+            world.rebuild_factory_attachments();
+        }
     }
 }
 
@@ -189,7 +192,7 @@ pub fn capture_cell(world: &WorldBlocks, pos: IVec3) -> Option<CellSnapshot> {
     world.blocks.get(&pos).copied().map(|block| CellSnapshot {
         block,
         layer: BlockLayer::Factory,
-        settings: None,
+        settings: world.block_settings.get(&pos).cloned(),
     })
 }
 
@@ -393,6 +396,26 @@ fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<Cel
         if !block.id.is_none() {
             world.material_paints.retain(|face, _| face.block != block.id);
             world.wire_face_panels.retain(|face| face.block != block.id);
+            world.material_attachments.remove(&block.id);
+            world.factory_attachments.remove(&block.id);
+            let factory_children: Vec<_> = world
+                .factory_attachments
+                .iter()
+                .filter(|(_, att)| att.parent == block.id)
+                .map(|(child, _)| *child)
+                .collect();
+            for child_id in factory_children {
+                world.factory_attachments.remove(&child_id);
+                if let Some(child_pos) = world
+                    .blocks
+                    .iter()
+                    .find(|(_, b)| b.id == child_id)
+                    .map(|(p, _)| *p)
+                {
+                    world.blocks.remove(&child_pos);
+                    world.block_settings.remove(&child_pos);
+                }
+            }
         }
     }
     if removed_factory.is_some() || world.block_settings.contains_key(&pos) {
@@ -409,6 +432,11 @@ fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<Cel
     match snapshot.layer {
         BlockLayer::Factory => {
             world.blocks.insert(pos, block);
+            if let Some(settings) = snapshot.settings {
+                world.block_settings.insert(pos, settings);
+            } else if let Some(default_settings) = block.kind.default_settings(pos) {
+                world.block_settings.insert(pos, default_settings);
+            }
         }
         BlockLayer::System => {
             world.system_blocks.insert(pos, block);

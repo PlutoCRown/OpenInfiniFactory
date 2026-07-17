@@ -40,6 +40,7 @@ pub mod stamp_material;
 pub mod stamper;
 pub mod stamper_body;
 pub mod stone;
+pub mod sign;
 pub mod suction_cup;
 pub mod teleport_entrance;
 pub mod teleport_exit;

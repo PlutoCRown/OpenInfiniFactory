@@ -477,8 +477,9 @@ fn capture_factory_blocks(world: &WorldBlocks) -> Vec<SavedBlock> {
         .blocks
         .iter()
         .filter_map(|(pos, data)| {
-            (data.kind.persistent_layer() == Some(PersistentLayer::SolutionFactory))
-                .then_some(saved_block(*pos, *data, None))
+            (data.kind.persistent_layer() == Some(PersistentLayer::SolutionFactory)).then_some(
+                saved_block(*pos, *data, world.block_settings.get(pos).cloned()),
+            )
         })
         .collect()
 }
@@ -523,8 +524,12 @@ fn apply_factory_blocks(world: &mut WorldBlocks, factory_blocks: Vec<SavedBlock>
     for saved in factory_blocks {
         if saved.kind.persistent_layer() == Some(PersistentLayer::SolutionFactory) {
             world.insert(saved.pos(), saved.to_block_data());
+            if let Some(settings) = &saved.settings {
+                world.set_block_settings(saved.pos(), settings.clone());
+            }
         }
     }
+    world.rebuild_factory_attachments();
 }
 
 fn apply_wire_face_panels(world: &mut WorldBlocks, panels: Vec<save_format::SavedWireFacePanel>) {

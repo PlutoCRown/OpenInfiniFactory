@@ -15,6 +15,7 @@ pub(super) fn can_place_block_at(
     builder_mode: BuilderMode,
     world: &WorldBlocks,
     player_pos: Option<Vec3>,
+    face_normal: Option<IVec3>,
 ) -> bool {
     if place_at.y < 0 {
         return false;
@@ -26,6 +27,15 @@ pub(super) fn can_place_block_at(
 
     if !can_place_in_mode(block.kind, builder_mode) {
         return false;
+    }
+
+    if block.kind == BlockKind::Sign {
+        let Some(normal) = face_normal.filter(|n| n.abs().element_sum() == 1) else {
+            return false;
+        };
+        if !world.can_place_sign_on_face(place_at - normal, normal) {
+            return false;
+        }
     }
 
     if let Some(position) = player_pos {

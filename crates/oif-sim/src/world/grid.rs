@@ -300,7 +300,10 @@ impl WorldBlocks {
         let removed = self.blocks.remove(pos);
         if let Some(ref block) = removed {
             let id = block.id;
-            self.block_settings.remove(pos);
+            // 材料可与系统块同格；有系统宿主时保留其 settings（如传送门配对）
+            if !self.system_blocks.contains_key(pos) {
+                self.block_settings.remove(pos);
+            }
             if !id.is_none() {
                 self.material_welds.retain(|weld| !weld.contains(id));
                 self.material_paints.retain(|face, _| face.block != id);
@@ -441,8 +444,12 @@ impl WorldBlocks {
         let touches_signals = moves
             .iter()
             .any(|(_, _, block)| block.kind.signal_behavior(block.facing).is_some());
+        // 仅搬迁 blocks 层自有 settings（如告示）；同格系统块（传送门）的 settings 不动
         let mut moved_settings = Vec::new();
         for (from, to, _) in &moves {
+            if self.system_blocks.contains_key(from) {
+                continue;
+            }
             if let Some(settings) = self.block_settings.remove(from) {
                 moved_settings.push((*to, settings));
             }
@@ -454,6 +461,9 @@ impl WorldBlocks {
             self.blocks.insert(to, block);
         }
         for (to, settings) in moved_settings {
+            if self.system_blocks.contains_key(&to) {
+                continue;
+            }
             self.block_settings.insert(to, settings);
         }
         if touches_signals {

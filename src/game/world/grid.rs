@@ -4,7 +4,7 @@ pub use oif_sim::world::grid::{
     grid_to_world, raycast_blocks, raycast_infinite_plane, seed_demo_world, world_to_grid,
     BlockSettings, ConverterMode, ConverterSettings, EditSelectionMode, FLOOR_RADIUS,
     GeneratorMode, GeneratorSettings, GoalSettings, LabelerSettings, MaterialFace, MaterialWeld,
-    REACH, StoredAcceptorStructure, TargetHit, TeleportSettings,
+    REACH, SignDisplay, SignSettings, StoredAcceptorStructure, TargetHit, TeleportSettings,
 };
 
 use bevy::prelude::*;

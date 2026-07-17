@@ -218,6 +218,7 @@ pub fn update_hover(
                     *preview_deps.builder_mode,
                     &world,
                     player_pos,
+                    Some(target.normal),
                 ) {
                     let preview_world = preview_world(&world, &[place_at], block);
                     spawn_block_preview(

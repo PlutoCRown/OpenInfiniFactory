@@ -165,6 +165,7 @@ pub enum UiPanelId {
     Labeler,
     Converter,
     Teleport,
+    Sign,
 }
 
 impl UiPanelId {
@@ -181,6 +182,7 @@ impl UiPanelId {
                 | Self::Labeler
                 | Self::Converter
                 | Self::Teleport
+                | Self::Sign
         )
     }
 

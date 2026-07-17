@@ -16,6 +16,7 @@ use crate::game::state::{
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{AreaKind, InventoryItems, UiRuntime};
+use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, WorldBlocks};
 use crate::game::world::rendering::{
     despawn_edit_previews, spawn_block_preview, spawn_delete_bounds_preview, BlockEntity,
@@ -501,21 +502,24 @@ fn try_player_teleport(
     true
 }
 
-/// 编辑模式下点击可配置方块时打开方块 UI
+/// 点击可配置方块时打开方块 UI（编辑态系统块，或玩法/编辑态告示等）
 fn open_target_block_ui(
     target: Option<IVec3>,
     world: &WorldBlocks,
     builder_mode: BuilderMode,
     ui_runtime: &mut UiRuntime,
 ) -> bool {
-    if builder_mode != BuilderMode::Edit {
-        return false;
-    }
-
     let Some(pos) = target else {
         return false;
     };
-    let Some(block) = world.system_blocks.get(&pos) else {
+    let block = match builder_mode {
+        BuilderMode::Edit => world
+            .system_blocks
+            .get(&pos)
+            .or_else(|| world.blocks.get(&pos)),
+        BuilderMode::Play => world.blocks.get(&pos),
+    };
+    let Some(block) = block else {
         return false;
     };
 
@@ -570,14 +574,49 @@ fn commit_edit_gesture(
             );
             let positions: Vec<IVec3> = positions
                 .into_iter()
-                .filter(|pos| can_place_block_at(*pos, block, builder_mode, world, player_pos))
+                .filter(|pos| {
+                    can_place_block_at(
+                        *pos,
+                        block,
+                        builder_mode,
+                        world,
+                        player_pos,
+                        Some(gesture.plane_normal),
+                    )
+                })
                 .collect();
             if positions.is_empty() {
                 return false;
             }
             build_cell_patch(world, &positions, |world| {
                 for pos in &positions {
-                    world.insert(*pos, block);
+                    let mut placed = block;
+                    // 侧贴：朝向取贴面法线；顶立：保留预览朝向
+                    if block.kind == BlockKind::Sign {
+                        let normal = gesture.plane_normal;
+                        if normal.y == 0 {
+                            placed.facing = match (normal.x, normal.z) {
+                                (1, 0) => Facing::East,
+                                (-1, 0) => Facing::West,
+                                (0, 1) => Facing::South,
+                                (0, -1) => Facing::North,
+                                _ => placed.facing,
+                            };
+                        }
+                    }
+                    world.insert(*pos, placed);
+                    if block.kind == BlockKind::Sign {
+                        let host_pos = *pos - gesture.plane_normal;
+                        if let Some(host) = world.blocks.get(&host_pos).copied() {
+                            if let Some(sign) = world.blocks.get(pos).copied() {
+                                world.attach_factory_child(
+                                    sign.id,
+                                    host.id,
+                                    gesture.plane_normal,
+                                );
+                            }
+                        }
+                    }
                 }
             })
         }
@@ -642,7 +681,16 @@ fn spawn_gesture_previews(
             );
             let positions: Vec<IVec3> = positions
                 .into_iter()
-                .filter(|pos| can_place_block_at(*pos, block, builder_mode, world, player_pos))
+                .filter(|pos| {
+                    can_place_block_at(
+                        *pos,
+                        block,
+                        builder_mode,
+                        world,
+                        player_pos,
+                        Some(gesture.plane_normal),
+                    )
+                })
                 .collect();
             let preview_world = preview_world(world, &positions, block);
             for pos in positions {

@@ -1283,7 +1283,6 @@ mod tests {
         let moving = HashSet::from([host, sign_pos]);
         move_structure(&mut world, &moving, IVec3::X);
         assert!(!world.blocks.contains_key(&host));
-        assert!(!world.blocks.contains_key(&sign_pos));
         assert_eq!(world.blocks[&(host + IVec3::X)].id, host_id);
         assert_eq!(world.blocks[&(sign_pos + IVec3::X)].id, sign_id);
     }

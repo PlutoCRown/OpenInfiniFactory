@@ -290,6 +290,7 @@ fn active_block_has_panel(
     world
         .system_blocks
         .get(&pos)
+        .or_else(|| world.blocks.get(&pos))
         .and_then(|block| block.kind.ui_panel())
         == active_panel
 }

@@ -26,7 +26,7 @@
 | L2 | `RollerBody` / `StamperBody` 同格占位（有碰撞、无模型） | 已完成（L4 起写入 `machine_bodies`） |
 | L3 | 装饰漆 + 灯面板隔断 | 已完成 |
 | L4 | 印花占格附着 | 已完成 |
-| L5 | 告示牌 | 待做 |
+| L5 | 告示牌 | 已完成 |
 
 ## L2 / L4 机身占格
 
@@ -78,3 +78,18 @@
 - 非对齐：非脆弱阻挡；脆弱走碎裂阶段
 
 详见 `simulation_turn_phases.md`。
+
+## L5 细节
+
+### 告示牌（`BlockKind::Sign`）
+
+- 玩法工厂方块，占宿主面邻格（侧贴 / 顶立）
+- 面门禁：场景任意面；工厂 `face_attachable`；材料 `material_face_connectable`
+- `factory_attachments`：子工厂 BlockId → `{ parent, parent_face_normal }`；宿主销毁级联删子；结构移动时并入附着子格
+- 设置：`BlockSettings::Sign`（文字与材料图标互斥）；面板可配；瞄准 billboard / 不可破坏为后续
+
+### 后续
+
+- 瞄准告示时的 billboard / 状态栏文字
+- 不可破坏（unbreakable）层
+- 印花色（`StampColor`）图标选择 UI（数据层已支持 `SignDisplay::StampColor`）

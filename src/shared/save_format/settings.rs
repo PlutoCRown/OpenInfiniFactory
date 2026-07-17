@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::game::blocks::{BlockKind, MaterialKind, StampColor};
 use crate::game::world::grid::{
     BlockSettings, ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, GoalSettings,
-    LabelerSettings, TeleportSettings,
+    LabelerSettings, SignDisplay, SignSettings, TeleportSettings,
 };
 
 use super::Cursor;
@@ -21,6 +21,7 @@ pub fn write_settings(out: &mut Vec<u8>, kind: BlockKind, settings: &BlockSettin
             BlockKind::TeleportEntrance | BlockKind::TeleportExit,
             BlockSettings::Teleport(value),
         ) => write_teleport(out, value),
+        (BlockKind::Sign, BlockSettings::Sign(value)) => write_sign(out, value),
         _ => {}
     }
 }
@@ -37,6 +38,7 @@ pub fn read_settings(
         BlockKind::TeleportEntrance | BlockKind::TeleportExit => {
             BlockSettings::Teleport(read_teleport(cursor)?)
         }
+        BlockKind::Sign => BlockSettings::Sign(read_sign(cursor)?),
         _ => return Err(SaveFormatError::InvalidSettings),
     })
 }
@@ -162,6 +164,51 @@ fn read_teleport(cursor: &mut Cursor<'_>) -> Result<TeleportSettings, SaveFormat
         None
     };
     Ok(TeleportSettings { name, pair })
+}
+
+fn write_sign(out: &mut Vec<u8>, settings: &SignSettings) {
+    match &settings.text {
+        Some(text) => {
+            out.push(1);
+            let bytes = text.as_bytes();
+            let len = bytes.len().min(u16::MAX as usize) as u16;
+            out.extend_from_slice(&len.to_le_bytes());
+            out.extend_from_slice(&bytes[..len as usize]);
+        }
+        None => out.push(0),
+    }
+    match settings.display {
+        Some(SignDisplay::Material(material)) => {
+            out.push(1);
+            out.push(encode_material(material));
+        }
+        Some(SignDisplay::StampColor(color)) => {
+            out.push(2);
+            out.push(encode_stamp_color(color));
+        }
+        None => out.push(0),
+    }
+}
+
+fn read_sign(cursor: &mut Cursor<'_>) -> Result<SignSettings, SaveFormatError> {
+    let text = if cursor.read_u8()? == 1 {
+        let len = cursor.read_u16()? as usize;
+        let bytes = cursor.read_bytes(len)?;
+        Some(
+            std::str::from_utf8(bytes)
+                .map(|s| s.to_string())
+                .map_err(|_| SaveFormatError::InvalidSettings)?,
+        )
+    } else {
+        None
+    };
+    let display = match cursor.read_u8()? {
+        0 => None,
+        1 => Some(SignDisplay::Material(decode_material(cursor.read_u8()?)?)),
+        2 => Some(SignDisplay::StampColor(decode_stamp_color(cursor.read_u8()?)?)),
+        _ => return Err(SaveFormatError::InvalidSettings),
+    };
+    Ok(SignSettings { text, display })
 }
 
 fn encode_material(material: MaterialKind) -> u8 {

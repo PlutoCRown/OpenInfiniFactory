@@ -28,6 +28,7 @@ pub fn encode_kind(kind: BlockKind) -> u8 {
         BlockKind::VerticalMirror => 21,
         BlockKind::Splitter => 22,
         BlockKind::SuctionCup => 34,
+        BlockKind::Sign => 39,
         BlockKind::Stamper => 23,
         BlockKind::Roller => 24,
         BlockKind::Converter => 25,
@@ -87,6 +88,7 @@ pub fn decode_kind(id: u8) -> Result<BlockKind, SaveFormatError> {
         36 => BlockKind::RollerBody,
         37 => BlockKind::StamperBody,
         38 => BlockKind::StampMaterial,
+        39 => BlockKind::Sign,
         _ => return Err(SaveFormatError::UnknownBlockKind(id)),
     })
 }
