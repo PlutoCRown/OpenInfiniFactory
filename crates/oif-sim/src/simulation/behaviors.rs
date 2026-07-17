@@ -1210,4 +1210,82 @@ mod tests {
         assert_eq!(world.blocks[&stamper].id, stamp_id);
         assert_eq!(world.material_attachments.len(), 1);
     }
+
+    #[test]
+    fn sign_cannot_place_on_conveyor_top() {
+        let mut world = WorldBlocks::default();
+        let host = IVec3::new(0, 1, 0);
+        world.insert(host, BlockData::new(BlockKind::Conveyor, Facing::North));
+        assert!(!world.can_place_sign_on_face(host, IVec3::Y));
+        assert!(world.can_place_sign_on_face(host, Facing::North.forward_ivec3()));
+    }
+
+    #[test]
+    fn sign_can_place_on_scene_stone_side() {
+        let mut world = WorldBlocks::default();
+        let host = IVec3::new(0, 1, 0);
+        world.insert(host, BlockData::new(BlockKind::Stone, Facing::North));
+        assert!(world.can_place_sign_on_face(host, IVec3::X));
+        assert!(world.can_place_sign_on_face(host, IVec3::Y));
+    }
+
+    #[test]
+    fn sign_can_place_on_platform_side() {
+        let mut world = WorldBlocks::default();
+        let host = IVec3::new(0, 1, 0);
+        world.insert(host, BlockData::new(BlockKind::Platform, Facing::North));
+        assert!(world.can_place_sign_on_face(host, IVec3::X));
+        assert!(world.can_place_sign_on_face(host, IVec3::Y));
+    }
+
+    #[test]
+    fn sign_attachment_destroyed_with_host() {
+        let mut world = WorldBlocks::default();
+        let host = IVec3::new(0, 1, 0);
+        let sign_pos = IVec3::new(1, 1, 0);
+        world.insert(host, BlockData::new(BlockKind::Platform, Facing::North));
+        world.insert(sign_pos, BlockData::new(BlockKind::Sign, Facing::East));
+        let host_id = world.blocks[&host].id;
+        let sign_id = world.blocks[&sign_pos].id;
+        world.attach_factory_child(sign_id, host_id, IVec3::X);
+        world.remove(&host);
+        assert!(!world.blocks.contains_key(&sign_pos));
+        assert!(world.factory_attachments.is_empty());
+    }
+
+    #[test]
+    fn sign_moves_with_material_host() {
+        use crate::simulation::structures::{can_translate_structure, move_structure};
+        use crate::simulation::structure_state::StructureState;
+        use crate::simulation::suction::SuctionLinks;
+
+        let mut world = WorldBlocks::default();
+        let host = IVec3::new(0, 1, 0);
+        let sign_pos = IVec3::new(1, 1, 0);
+        place_material(&mut world, host, MaterialKind::Basic);
+        world.insert(sign_pos, BlockData::new(BlockKind::Sign, Facing::East));
+        let host_id = world.blocks[&host].id;
+        let sign_id = world.blocks[&sign_pos].id;
+        world.attach_factory_child(sign_id, host_id, IVec3::X);
+
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let seed = HashSet::from([host]);
+        let suction = SuctionLinks::default();
+        assert!(can_translate_structure(
+            &world,
+            &seed,
+            IVec3::X,
+            &structures,
+            &suction
+        ));
+        // 展开应把告示并入；此处直接搬迁宿主+附着子格
+        let moving = HashSet::from([host, sign_pos]);
+        move_structure(&mut world, &moving, IVec3::X);
+        assert!(!world.blocks.contains_key(&host));
+        assert!(!world.blocks.contains_key(&sign_pos));
+        assert_eq!(world.blocks[&(host + IVec3::X)].id, host_id);
+        assert_eq!(world.blocks[&(sign_pos + IVec3::X)].id, sign_id);
+    }
 }
+

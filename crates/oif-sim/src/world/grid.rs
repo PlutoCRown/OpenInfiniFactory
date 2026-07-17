@@ -29,6 +29,8 @@ pub struct WorldBlocks {
     pub material_paints: HashMap<MaterialFace, StampColor>,
     /// 印花占格附着：子 BlockId → (父 BlockId, 父面法线)
     pub material_attachments: HashMap<BlockId, MaterialAttachment>,
+    /// 告示等工厂占格附着：子工厂 BlockId → (父 BlockId, 父面法线)
+    pub factory_attachments: HashMap<BlockId, MaterialAttachment>,
     /// 电线面灯面板：隔断该面信号连通，不占邻格
     pub wire_face_panels: HashSet<MaterialFace>,
     /// 系统层方块设置：按格子键控（系统块无 BlockId、不参与模拟移动）
@@ -67,6 +69,7 @@ pub enum BlockSettings {
     Labeler(LabelerSettings),
     Converter(ConverterSettings),
     Teleport(TeleportSettings),
+    Sign(SignSettings),
 }
 
 impl BlockSettings {
@@ -78,6 +81,7 @@ impl BlockSettings {
                 | (Self::Labeler(_), Self::Labeler(_))
                 | (Self::Converter(_), Self::Converter(_))
                 | (Self::Teleport(_), Self::Teleport(_))
+                | (Self::Sign(_), Self::Sign(_))
         )
     }
 }
@@ -125,6 +129,20 @@ pub struct GoalSettings {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct LabelerSettings {
     pub color: StampColor,
+}
+
+/// 告示牌展示图标：材料或印花色（与文本互斥）
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum SignDisplay {
+    Material(MaterialKind),
+    StampColor(StampColor),
+}
+
+/// 告示牌设置：文本或图标二选一
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct SignSettings {
+    pub text: Option<String>,
+    pub display: Option<SignDisplay>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -282,19 +300,21 @@ impl WorldBlocks {
         let removed = self.blocks.remove(pos);
         if let Some(ref block) = removed {
             let id = block.id;
+            self.block_settings.remove(pos);
             if !id.is_none() {
                 self.material_welds.retain(|weld| !weld.contains(id));
                 self.material_paints.retain(|face, _| face.block != id);
                 self.wire_face_panels.retain(|face| face.block != id);
                 self.material_attachments.remove(&id);
-                // 宿主销毁时一并拆掉附着子块
-                let child_ids: Vec<BlockId> = self
+                self.factory_attachments.remove(&id);
+                // 宿主销毁时一并拆掉附着子块（印花材料 / 告示工厂）
+                let material_children: Vec<BlockId> = self
                     .material_attachments
                     .iter()
                     .filter(|(_, att)| att.parent == id)
                     .map(|(child, _)| *child)
                     .collect();
-                for child_id in child_ids {
+                for child_id in material_children {
                     self.material_attachments.remove(&child_id);
                     self.material_paints
                         .retain(|face, _| face.block != child_id);
@@ -305,6 +325,25 @@ impl WorldBlocks {
                         .map(|(p, _)| *p)
                     {
                         self.blocks.remove(&child_pos);
+                        self.block_settings.remove(&child_pos);
+                    }
+                }
+                let factory_children: Vec<BlockId> = self
+                    .factory_attachments
+                    .iter()
+                    .filter(|(_, att)| att.parent == id)
+                    .map(|(child, _)| *child)
+                    .collect();
+                for child_id in factory_children {
+                    self.factory_attachments.remove(&child_id);
+                    if let Some(child_pos) = self
+                        .blocks
+                        .iter()
+                        .find(|(_, b)| b.id == child_id)
+                        .map(|(p, _)| *p)
+                    {
+                        self.blocks.remove(&child_pos);
+                        self.block_settings.remove(&child_pos);
                     }
                 }
             }
@@ -342,6 +381,7 @@ impl WorldBlocks {
             || !self.acceptor_structures.is_empty()
             || !self.material_paints.is_empty()
             || !self.material_attachments.is_empty()
+            || !self.factory_attachments.is_empty()
             || !self.wire_face_panels.is_empty()
         {
             self.blocks.clear();
@@ -350,6 +390,7 @@ impl WorldBlocks {
             self.material_welds.clear();
             self.material_paints.clear();
             self.material_attachments.clear();
+            self.factory_attachments.clear();
             self.wire_face_panels.clear();
             self.block_settings.clear();
             self.acceptor_structures.clear();
@@ -371,6 +412,10 @@ impl WorldBlocks {
                 .retain(|face| alive.contains(&face.block));
             self.material_attachments
                 .retain(|child, att| alive.contains(child) && alive.contains(&att.parent));
+            self.factory_attachments
+                .retain(|child, att| alive.contains(child) && alive.contains(&att.parent));
+            self.block_settings
+                .retain(|pos, _| self.blocks.contains_key(pos) || self.system_blocks.contains_key(pos));
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -396,14 +441,112 @@ impl WorldBlocks {
         let touches_signals = moves
             .iter()
             .any(|(_, _, block)| block.kind.signal_behavior(block.facing).is_some());
+        let mut moved_settings = Vec::new();
+        for (from, to, _) in &moves {
+            if let Some(settings) = self.block_settings.remove(from) {
+                moved_settings.push((*to, settings));
+            }
+        }
         for (from, _, _) in &moves {
             self.blocks.remove(from);
         }
         for (_, to, block) in moves {
             self.blocks.insert(to, block);
         }
+        for (to, settings) in moved_settings {
+            self.block_settings.insert(to, settings);
+        }
         if touches_signals {
             self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+    }
+
+    /// 宿主面是否允许贴告示：场景任意面；工厂非 non_connection；材料 Connectable
+    pub fn host_face_accepts_sign(host: &BlockData, face_normal: IVec3) -> bool {
+        if host.kind.is_scene() {
+            return true;
+        }
+        if host.kind.is_factory() {
+            return host.kind.face_attachable(host.facing, face_normal);
+        }
+        if host.kind.is_material() {
+            return host
+                .kind
+                .material_face_connectable(host.facing, face_normal);
+        }
+        false
+    }
+
+    /// 在 host 面邻格放置告示是否合法（格空 + 面门禁）
+    pub fn can_place_sign_on_face(&self, host_pos: IVec3, face_normal: IVec3) -> bool {
+        if face_normal == IVec3::ZERO || face_normal.abs().element_sum() != 1 {
+            return false;
+        }
+        let Some(host) = self.blocks.get(&host_pos) else {
+            return false;
+        };
+        if !Self::host_face_accepts_sign(host, face_normal) {
+            return false;
+        }
+        let place_at = host_pos + face_normal;
+        place_at.y >= 0 && self.can_place_block_kind_at(place_at, BlockKind::Sign)
+    }
+
+    /// 写入告示工厂附着（父须有 BlockId；场景宿主不记附着）
+    pub fn attach_factory_child(
+        &mut self,
+        child_id: BlockId,
+        parent_id: BlockId,
+        parent_face_normal: IVec3,
+    ) {
+        if child_id.is_none() || parent_id.is_none() {
+            return;
+        }
+        self.factory_attachments.insert(
+            child_id,
+            MaterialAttachment {
+                parent: parent_id,
+                parent_face_normal,
+            },
+        );
+    }
+
+    /// 按几何重建告示附着（加载后调用）
+    pub fn rebuild_factory_attachments(&mut self) {
+        self.factory_attachments.clear();
+        let signs: Vec<(IVec3, BlockData)> = self
+            .blocks
+            .iter()
+            .filter(|(_, block)| block.kind == BlockKind::Sign && !block.id.is_none())
+            .map(|(pos, block)| (*pos, *block))
+            .collect();
+        for (pos, sign) in signs {
+            let candidates = [
+                pos - sign.facing.forward_ivec3(),
+                pos + IVec3::NEG_Y,
+                pos + IVec3::X,
+                pos + IVec3::NEG_X,
+                pos + IVec3::Z,
+                pos + IVec3::NEG_Z,
+                pos + IVec3::Y,
+            ];
+            for host_pos in candidates {
+                let Some(host) = self.blocks.get(&host_pos).copied() else {
+                    continue;
+                };
+                if host.id.is_none() {
+                    continue;
+                }
+                let normal = pos - host_pos;
+                if normal.abs().element_sum() != 1 {
+                    continue;
+                }
+                if !Self::host_face_accepts_sign(&host, normal) {
+                    continue;
+                }
+                self.attach_factory_child(sign.id, host.id, normal);
+                break;
+            }
         }
     }
 
@@ -415,7 +558,12 @@ impl WorldBlocks {
     }
 
     pub fn set_block_settings(&mut self, pos: IVec3, settings: BlockSettings) {
-        let Some(block) = self.system_blocks.get(&pos).copied() else {
+        let block = self
+            .system_blocks
+            .get(&pos)
+            .copied()
+            .or_else(|| self.blocks.get(&pos).copied());
+        let Some(block) = block else {
             return;
         };
         let Some(default_settings) = block.kind.default_settings(pos) else {
@@ -428,6 +576,17 @@ impl WorldBlocks {
             self.block_settings.insert(pos, settings);
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
+    }
+
+    pub fn sign_settings(&self, pos: IVec3) -> SignSettings {
+        match self.block_settings.get(&pos) {
+            Some(BlockSettings::Sign(settings)) => settings.clone(),
+            _ => SignSettings::default(),
+        }
+    }
+
+    pub fn set_sign_settings(&mut self, pos: IVec3, settings: SignSettings) {
+        self.set_block_settings(pos, BlockSettings::Sign(settings));
     }
 
     pub fn set_generator_settings(&mut self, pos: IVec3, settings: GeneratorSettings) {

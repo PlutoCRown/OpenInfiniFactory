@@ -614,6 +614,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                 source,
                 source_pos: _,
             } => {
+                let structure = with_factory_attachment_children(world, &structure);
                 if structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
                 }
@@ -729,6 +730,7 @@ fn expanded_move_structure(
 ) -> Option<HashSet<IVec3>> {
     // 先经吸盘并集；种子内已有结构 id 不膨胀，只并入其它粘连结构
     let structure = structures.linked_expand_pusher_subset(suction, structure, offset)?;
+    let structure = with_factory_attachment_children(world, &structure);
 
     if offset.abs().element_sum() != 1 {
         return can_move_structure_without_push(world, &structure, offset)
@@ -747,6 +749,7 @@ fn expanded_move_structure(
         }
 
         let pushed = pushable_structure_at(world, structures, target, offset, suction)?;
+        let pushed = with_factory_attachment_children(world, &pushed);
         if mode == MovementExpansionMode::Gravity && structure_supported_by_lifter(world, &pushed) {
             return None;
         }
@@ -764,6 +767,37 @@ fn expanded_move_structure(
                 .iter()
                 .any(|pos| world.anchors_material_at_teleport_entrance(*pos))
         })
+}
+
+/// 把工厂附着子格（告示等）并入待移动集合
+fn with_factory_attachment_children(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+) -> HashSet<IVec3> {
+    if world.factory_attachments.is_empty() {
+        return structure.clone();
+    }
+    let id_to_pos: HashMap<BlockId, IVec3> = world
+        .blocks
+        .iter()
+        .filter(|(_, block)| !block.id.is_none())
+        .map(|(pos, block)| (block.id, *pos))
+        .collect();
+    let parent_ids: HashSet<BlockId> = structure
+        .iter()
+        .filter_map(|pos| world.blocks.get(pos).map(|block| block.id))
+        .filter(|id| !id.is_none())
+        .collect();
+    let mut expanded = structure.clone();
+    for (child_id, att) in &world.factory_attachments {
+        if !parent_ids.contains(&att.parent) {
+            continue;
+        }
+        if let Some(&child_pos) = id_to_pos.get(child_id) {
+            expanded.insert(child_pos);
+        }
+    }
+    expanded
 }
 
 pub(super) fn can_translate_structure(
@@ -899,6 +933,11 @@ pub(super) fn rotate_structure(
 
     // 附着法线随结构绕 Y 旋转
     for att in world.material_attachments.values_mut() {
+        if structure_ids.contains(&att.parent) {
+            att.parent_face_normal = rotate_offset_y(att.parent_face_normal, clockwise);
+        }
+    }
+    for att in world.factory_attachments.values_mut() {
         if structure_ids.contains(&att.parent) {
             att.parent_face_normal = rotate_offset_y(att.parent_face_normal, clockwise);
         }

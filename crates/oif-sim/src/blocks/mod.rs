@@ -38,6 +38,7 @@ pub mod stamp_material;
 pub mod stamper;
 pub mod stamper_body;
 pub mod stone;
+pub mod sign;
 pub mod suction_cup;
 pub mod teleport_entrance;
 pub mod teleport_exit;
@@ -140,6 +141,7 @@ pub enum FactoryBlock {
     VerticalMirror,
     Splitter,
     SuctionCup,
+    Sign,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -543,6 +545,7 @@ pub enum BlockKind {
     VerticalMirror,
     Splitter,
     SuctionCup,
+    Sign,
     Stamper,
     Roller,
     Converter,
@@ -595,6 +598,7 @@ impl BlockKind {
             BlockKind::VerticalMirror => BlockLayer::Factory(FactoryBlock::VerticalMirror),
             BlockKind::Splitter => BlockLayer::Factory(FactoryBlock::Splitter),
             BlockKind::SuctionCup => BlockLayer::Factory(FactoryBlock::SuctionCup),
+            BlockKind::Sign => BlockLayer::Factory(FactoryBlock::Sign),
             BlockKind::Generator => BlockLayer::System(SystemBlock::Generator),
             BlockKind::Goal => BlockLayer::System(SystemBlock::Goal),
             BlockKind::Stamper => BlockLayer::System(SystemBlock::Stamper),
