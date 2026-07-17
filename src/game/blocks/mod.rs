@@ -36,6 +36,7 @@ pub mod roller;
 pub mod roller_body;
 pub mod rotator;
 pub mod splitter;
+pub mod stamp_material;
 pub mod stamper;
 pub mod stamper_body;
 pub mod stone;

@@ -436,7 +436,7 @@ pub(super) fn apply_fragile_shatter_before_execute(
                     if world.is_fragile_material_at(*pos)
                         && target.y >= 0
                         && !structure.contains(&target)
-                        && !world.can_move_into(target)
+                        && !world.cell_accepts_move_from(*pos, target)
                         && !world.is_fragile_material_at(target)
                     {
                         shatter.insert(*pos);
@@ -742,7 +742,7 @@ fn expanded_move_structure(
         if target.y < 0 || expanded.contains(&target) {
             continue;
         }
-        if world.can_move_into_yielding_fragile(target) {
+        if world.cell_accepts_move_from(pos, target) {
             continue;
         }
 
@@ -822,7 +822,7 @@ fn can_move_structure_without_push(
         if target.y < 0 {
             return false;
         }
-        if structure.contains(&target) || world.can_move_into_yielding_fragile(target) {
+        if structure.contains(&target) || world.cell_accepts_move_from(*pos, target) {
             return true;
         }
         // 结构内脆弱撞实心：碎裂后放行
@@ -896,6 +896,13 @@ pub(super) fn rotate_structure(
         })
         .collect();
     world.material_paints = updated_paints;
+
+    // 附着法线随结构绕 Y 旋转
+    for att in world.material_attachments.values_mut() {
+        if structure_ids.contains(&att.parent) {
+            att.parent_face_normal = rotate_offset_y(att.parent_face_normal, clockwise);
+        }
+    }
 
     let updated_panels: HashSet<_> = world
         .wire_face_panels

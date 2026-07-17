@@ -48,6 +48,7 @@ impl MaterialKind {
         match self {
             Self::Basic | Self::Iron | Self::Copper => MaterialProps::DEFAULT,
             Self::Glass => MaterialProps::FRAGILE,
+            Self::Stamp => MaterialProps::STAMP,
         }
     }
 }
@@ -104,5 +105,13 @@ mod tests {
         assert!(props.fragile);
         assert!(!props.is_stamp);
         assert!(!props.directional);
+    }
+
+    #[test]
+    fn stamp_kind_uses_stamp_props() {
+        let props = MaterialKind::Stamp.props();
+        assert!(props.is_stamp);
+        assert!(props.directional);
+        assert!(!props.fragile);
     }
 }

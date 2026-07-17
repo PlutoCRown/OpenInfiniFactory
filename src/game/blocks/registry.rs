@@ -141,6 +141,7 @@ fn block_order(kind: BlockKind) -> usize {
         BlockKind::IronMaterial => 31,
         BlockKind::CopperMaterial => 32,
         BlockKind::GlassMaterial => 33,
+        BlockKind::StampMaterial => 38,
         BlockKind::WeldPoint => 34,
         BlockKind::DrillHead => 35,
         BlockKind::RollerBody => 36,

@@ -47,17 +47,22 @@ fn place_generated_marker(world: &mut WorldBlocks, origin: IVec3, marker: Marker
     };
 
     let pos = origin + offset;
-    // 无碰撞 marker 进 system_blocks；有碰撞机身进 blocks，仅要求平台层可放（可与宿主 System 同格）
-    let can_place = match marker {
+    match marker {
+        // 无碰撞 marker 进 system_blocks
         MarkerBehavior::WeldPoint { .. } | MarkerBehavior::DrillHead { .. } => {
-            world.can_place_virtual_block_at(pos)
+            if world.can_place_virtual_block_at(pos) {
+                world.insert(pos, BlockData::new(kind, facing));
+            }
         }
+        // 有碰撞机身进 machine_bodies：可与 System 宿主、印花材料同格
         MarkerBehavior::RollerBody { .. } | MarkerBehavior::StamperBody { .. } => {
-            pos.y >= 0 && world.can_place_platform_at(pos)
+            if pos.y >= 0 && !world.blocks_factory_or_scene_at(pos) {
+                world
+                    .machine_bodies
+                    .insert(pos, BlockData::new(kind, facing));
+                world.topology_revision = world.topology_revision.wrapping_add(1);
+            }
         }
-    };
-    if can_place {
-        world.insert(pos, BlockData::new(kind, facing));
     }
 }
 
@@ -73,10 +78,14 @@ mod tests {
         world.insert(pos, BlockData::new(BlockKind::Stamper, Facing::East));
         refresh_static_generated_markers(&mut world);
 
-        let body = world.blocks.get(&pos).expect("StamperBody in blocks layer");
+        let body = world
+            .machine_bodies
+            .get(&pos)
+            .expect("StamperBody in machine_bodies");
         assert_eq!(body.kind, BlockKind::StamperBody);
         assert_eq!(body.facing, Facing::East);
         assert!(body.kind.has_collision());
+        assert!(!world.blocks.contains_key(&pos));
 
         assert!(world.is_occupied(pos));
         assert!(!world.can_move_into(pos));
@@ -91,10 +100,29 @@ mod tests {
         world.insert(pos, BlockData::new(BlockKind::Roller, Facing::North));
         refresh_static_generated_markers(&mut world);
 
-        let body = world.blocks.get(&pos).expect("RollerBody in blocks layer");
+        let body = world
+            .machine_bodies
+            .get(&pos)
+            .expect("RollerBody in machine_bodies");
         assert_eq!(body.kind, BlockKind::RollerBody);
         assert!(world.is_occupied(pos));
         assert!(!world.can_move_into(pos));
         assert!(!world.can_place_block_kind_at(pos, BlockKind::Material));
+    }
+
+    #[test]
+    fn stamper_body_coexists_with_stamp_material_in_blocks() {
+        let pos = IVec3::new(1, 1, 0);
+        let mut world = WorldBlocks::default();
+        world.insert(pos, BlockData::new(BlockKind::Stamper, Facing::West));
+        world.insert(pos, BlockData::new(BlockKind::StampMaterial, Facing::East));
+        refresh_static_generated_markers(&mut world);
+
+        assert!(world.machine_bodies.contains_key(&pos));
+        assert_eq!(
+            world.blocks.get(&pos).map(|b| b.kind),
+            Some(BlockKind::StampMaterial)
+        );
+        assert!(world.is_occupied(pos));
     }
 }

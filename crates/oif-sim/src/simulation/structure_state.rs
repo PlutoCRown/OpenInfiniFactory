@@ -589,6 +589,24 @@ pub fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
             structure.insert(neighbor);
             queue.push_back(other_id);
         }
+        // 附着边：父↔子双向并入同一材料结构
+        for (child_id, att) in &world.material_attachments {
+            let other_id = if *child_id == id {
+                att.parent
+            } else if att.parent == id {
+                *child_id
+            } else {
+                continue;
+            };
+            if !seen_ids.insert(other_id) {
+                continue;
+            }
+            let Some(&neighbor) = id_to_pos.get(&other_id) else {
+                continue;
+            };
+            structure.insert(neighbor);
+            queue.push_back(other_id);
+        }
     }
 
     structure

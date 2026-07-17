@@ -198,6 +198,111 @@ pub(super) fn run_material_paint_phase(world: &mut WorldBlocks) {
     }
 }
 
+/// 阶段 4 印花：面前宿主可 Connectable 时在机身格生成/替换印花附着
+pub(super) fn run_material_stamp_phase(world: &mut WorldBlocks) {
+    let stampers: Vec<(IVec3, Facing)> = world
+        .system_blocks
+        .iter()
+        .filter_map(|(pos, block)| match block.kind.material_labeler(block.facing) {
+            Some(MaterialLabeler::Stamper { .. }) => Some((*pos, block.facing)),
+            Some(MaterialLabeler::Roller { .. }) | None => None,
+        })
+        .collect();
+
+    for (stamper_pos, facing) in stampers {
+        let forward = facing.forward_ivec3();
+        let host_pos = stamper_pos + forward;
+        let Some(host) = world.blocks.get(&host_pos).copied() else {
+            continue;
+        };
+        if !host.kind.is_material()
+            || host
+                .kind
+                .material_props()
+                .is_some_and(|props| props.is_stamp)
+        {
+            continue;
+        }
+        let face_normal = -forward;
+        let connectable = {
+            #[cfg(test)]
+            if world
+                .test_unconnectable_faces
+                .contains(&MaterialFace::new(host.id, face_normal))
+            {
+                false
+            } else {
+                host.kind
+                    .material_face_connectable(host.facing, face_normal)
+            }
+            #[cfg(not(test))]
+            host.kind
+                .material_face_connectable(host.facing, face_normal)
+        };
+        if !connectable {
+            continue;
+        }
+
+        // 该面已有附着印花：非脆弱则跳过；脆弱则碎旧换新
+        let existing_child = world
+            .material_attachments
+            .iter()
+            .find(|(_, att)| att.parent == host.id && att.parent_face_normal == face_normal)
+            .map(|(child, _)| *child);
+        if let Some(child_id) = existing_child {
+            let Some((child_pos, child_block)) = world
+                .blocks
+                .iter()
+                .find(|(_, b)| b.id == child_id)
+                .map(|(p, b)| (*p, *b))
+            else {
+                world.material_attachments.remove(&child_id);
+                continue;
+            };
+            let fragile = child_block
+                .kind
+                .material_props()
+                .is_some_and(|props| props.fragile);
+            if !fragile {
+                continue;
+            }
+            world.remove(&child_pos);
+        }
+
+        // 印花占宿主面向机身的邻格 = 印花机格；该格 blocks 须空（机身在 machine_bodies）
+        if world.blocks.contains_key(&stamper_pos) {
+            continue;
+        }
+
+        let stamp_facing = match (face_normal.x, face_normal.y, face_normal.z) {
+            (1, 0, 0) => Facing::East,
+            (-1, 0, 0) => Facing::West,
+            (0, 0, 1) => Facing::South,
+            (0, 0, -1) => Facing::North,
+            _ => facing,
+        };
+        let color = world.labeler_settings(stamper_pos).color;
+        world.insert(
+            stamper_pos,
+            BlockData::new(BlockKind::StampMaterial, stamp_facing),
+        );
+        let Some(stamp) = world.blocks.get(&stamper_pos).copied() else {
+            continue;
+        };
+        world.material_attachments.insert(
+            stamp.id,
+            crate::world::grid::MaterialAttachment {
+                parent: host.id,
+                parent_face_normal: face_normal,
+            },
+        );
+        // 朝向宿主的面存色，渲染为薄面片
+        world
+            .material_paints
+            .insert(MaterialFace::new(stamp.id, -face_normal), color);
+    }
+}
+
 /// 本回合生成判定用的材料源结果
 #[derive(Clone, Copy)]
 pub(super) struct GeneratedMaterial {
@@ -948,7 +1053,7 @@ mod tests {
     }
 
     #[test]
-    fn stamper_does_not_paint_in_l3() {
+    fn stamper_does_not_paint() {
         let mut world = WorldBlocks::default();
         let stamper = IVec3::ZERO;
         let material = IVec3::X;
@@ -958,5 +1063,151 @@ mod tests {
         run_material_paint_phase(&mut world);
 
         assert!(world.material_paints.is_empty());
+    }
+
+    #[test]
+    fn stamper_spawns_stamp_attachment_on_connectable_face() {
+        let mut world = WorldBlocks::default();
+        let stamper = IVec3::new(1, 1, 0);
+        let host = IVec3::new(2, 1, 0);
+        world.insert(stamper, BlockData::new(BlockKind::Stamper, Facing::East));
+        place_material(&mut world, host, MaterialKind::Basic);
+        let host_id = world.blocks[&host].id;
+        crate::simulation::markers::refresh_static_generated_markers(&mut world);
+
+        run_material_stamp_phase(&mut world);
+
+        let stamp = world.blocks.get(&stamper).expect("stamp in stamper cell");
+        assert_eq!(stamp.kind, BlockKind::StampMaterial);
+        let att = world.material_attachments.get(&stamp.id).unwrap();
+        assert_eq!(att.parent, host_id);
+        assert_eq!(att.parent_face_normal, IVec3::NEG_X);
+        assert!(world.machine_bodies.contains_key(&stamper));
+    }
+
+    #[test]
+    fn stamper_skips_non_connectable_host_face() {
+        let mut world = WorldBlocks::default();
+        let stamper = IVec3::new(1, 1, 0);
+        let host = IVec3::new(2, 1, 0);
+        world.insert(stamper, BlockData::new(BlockKind::Stamper, Facing::East));
+        place_material(&mut world, host, MaterialKind::Basic);
+        let host_id = world.blocks[&host].id;
+        world
+            .test_unconnectable_faces
+            .insert(MaterialFace::new(host_id, IVec3::NEG_X));
+
+        run_material_stamp_phase(&mut world);
+
+        assert!(!world.blocks.contains_key(&stamper));
+        assert!(world.material_attachments.is_empty());
+    }
+
+    #[test]
+    fn stamp_attachment_joins_host_material_structure() {
+        let mut world = WorldBlocks::default();
+        let host = IVec3::new(0, 1, 0);
+        let stamp_pos = IVec3::new(1, 1, 0);
+        place_material(&mut world, host, MaterialKind::Basic);
+        world.insert(
+            stamp_pos,
+            BlockData::new(BlockKind::StampMaterial, Facing::West),
+        );
+        let host_id = world.blocks[&host].id;
+        let stamp_id = world.blocks[&stamp_pos].id;
+        world.material_attachments.insert(
+            stamp_id,
+            crate::world::grid::MaterialAttachment {
+                parent: host_id,
+                parent_face_normal: IVec3::X,
+            },
+        );
+
+        let structure = material_structure(&world, host);
+        assert!(structure.contains(&host));
+        assert!(structure.contains(&stamp_pos));
+    }
+
+    #[test]
+    fn aligned_stamp_can_enter_stamper_body_cell() {
+        let mut world = WorldBlocks::default();
+        let stamper = IVec3::new(1, 0, 0);
+        let stamp_pos = IVec3::new(1, 1, 0);
+        let host = IVec3::new(0, 1, 0);
+        world.insert(stamper, BlockData::new(BlockKind::Stamper, Facing::West));
+        place_material(&mut world, host, MaterialKind::Basic);
+        world.insert(
+            stamp_pos,
+            BlockData::new(BlockKind::StampMaterial, Facing::West),
+        );
+        let host_id = world.blocks[&host].id;
+        let stamp_id = world.blocks[&stamp_pos].id;
+        world.material_attachments.insert(
+            stamp_id,
+            crate::world::grid::MaterialAttachment {
+                parent: host_id,
+                parent_face_normal: IVec3::X,
+            },
+        );
+        crate::simulation::markers::refresh_static_generated_markers(&mut world);
+
+        assert!(world.stamper_body_allows_stamp(stamper, &world.blocks[&stamp_pos]));
+        assert!(world.cell_accepts_move_from(stamp_pos, stamper));
+    }
+
+    #[test]
+    fn misaligned_stamper_blocks_non_fragile_stamp() {
+        let mut world = WorldBlocks::default();
+        let stamper = IVec3::new(1, 0, 0);
+        let stamp_pos = IVec3::new(1, 1, 0);
+        let host = IVec3::new(0, 1, 0);
+        // 朝北：与印花附着（东向）不对齐
+        world.insert(stamper, BlockData::new(BlockKind::Stamper, Facing::North));
+        place_material(&mut world, host, MaterialKind::Basic);
+        world.insert(
+            stamp_pos,
+            BlockData::new(BlockKind::StampMaterial, Facing::West),
+        );
+        let host_id = world.blocks[&host].id;
+        let stamp_id = world.blocks[&stamp_pos].id;
+        world.material_attachments.insert(
+            stamp_id,
+            crate::world::grid::MaterialAttachment {
+                parent: host_id,
+                parent_face_normal: IVec3::X,
+            },
+        );
+        crate::simulation::markers::refresh_static_generated_markers(&mut world);
+
+        assert!(!world.stamper_body_allows_stamp(stamper, &world.blocks[&stamp_pos]));
+        assert!(!world.cell_accepts_move_from(stamp_pos, stamper));
+        assert!(!world.can_move_into(stamper));
+    }
+
+    #[test]
+    fn stamper_skips_when_non_fragile_stamp_already_on_face() {
+        let mut world = WorldBlocks::default();
+        let stamper = IVec3::new(1, 1, 0);
+        let host = IVec3::new(2, 1, 0);
+        world.insert(stamper, BlockData::new(BlockKind::Stamper, Facing::East));
+        place_material(&mut world, host, MaterialKind::Basic);
+        let host_id = world.blocks[&host].id;
+        world.insert(
+            stamper,
+            BlockData::new(BlockKind::StampMaterial, Facing::West),
+        );
+        let stamp_id = world.blocks[&stamper].id;
+        world.material_attachments.insert(
+            stamp_id,
+            crate::world::grid::MaterialAttachment {
+                parent: host_id,
+                parent_face_normal: IVec3::NEG_X,
+            },
+        );
+
+        run_material_stamp_phase(&mut world);
+
+        assert_eq!(world.blocks[&stamper].id, stamp_id);
+        assert_eq!(world.material_attachments.len(), 1);
     }
 }

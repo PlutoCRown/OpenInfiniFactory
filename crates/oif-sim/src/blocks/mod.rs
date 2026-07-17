@@ -34,6 +34,7 @@ pub mod roller;
 pub mod roller_body;
 pub mod rotator;
 pub mod splitter;
+pub mod stamp_material;
 pub mod stamper;
 pub mod stamper_body;
 pub mod stone;
@@ -115,6 +116,7 @@ pub enum MaterialBlock {
     IronMaterial,
     CopperMaterial,
     GlassMaterial,
+    StampMaterial,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -155,9 +157,9 @@ pub enum SystemBlock {
 pub enum VirtualBlock {
     WeldPoint,
     DrillHead,
-    /// 滚刷机实体占格（有碰撞，写入 blocks 层）
+    /// 滚刷机实体占格（有碰撞，写入 machine_bodies）
     RollerBody,
-    /// 印花机实体占格（有碰撞，写入 blocks 层；朝向与宿主同步）
+    /// 印花机实体占格（有碰撞，写入 machine_bodies；朝向与宿主同步）
     StamperBody,
 }
 
@@ -473,9 +475,12 @@ pub enum MaterialKind {
     Iron,
     Copper,
     Glass,
+    /// 印花材料（占格附着，不在生成器/验收可选列表）
+    Stamp,
 }
 
 impl MaterialKind {
+    /// 玩法可选材料（不含印花）
     pub const ALL: [Self; 4] = [Self::Basic, Self::Iron, Self::Copper, Self::Glass];
 }
 
@@ -548,6 +553,7 @@ pub enum BlockKind {
     IronMaterial,
     CopperMaterial,
     GlassMaterial,
+    StampMaterial,
     WeldPoint,
     DrillHead,
     RollerBody,
@@ -569,6 +575,7 @@ impl BlockKind {
             BlockKind::IronMaterial => BlockLayer::Material(MaterialBlock::IronMaterial),
             BlockKind::CopperMaterial => BlockLayer::Material(MaterialBlock::CopperMaterial),
             BlockKind::GlassMaterial => BlockLayer::Material(MaterialBlock::GlassMaterial),
+            BlockKind::StampMaterial => BlockLayer::Material(MaterialBlock::StampMaterial),
             BlockKind::Platform => BlockLayer::Factory(FactoryBlock::Platform),
             BlockKind::Welder => BlockLayer::Factory(FactoryBlock::Welder),
             BlockKind::DownWelder => BlockLayer::Factory(FactoryBlock::DownWelder),

@@ -22,9 +22,13 @@ const ACCEPTOR_NEIGHBOR_OFFSETS: [IVec3; 6] = [
 pub struct WorldBlocks {
     pub blocks: HashMap<IVec3, BlockData>,
     pub system_blocks: HashMap<IVec3, BlockData>,
+    /// 有碰撞机身占位（StamperBody/RollerBody）：与 System 宿主同格，不占 blocks 材料槽
+    pub machine_bodies: HashMap<IVec3, BlockData>,
     pub material_welds: HashSet<MaterialWeld>,
     /// 材料面装饰漆：按 BlockId+法线键控，移动无需改写
     pub material_paints: HashMap<MaterialFace, StampColor>,
+    /// 印花占格附着：子 BlockId → (父 BlockId, 父面法线)
+    pub material_attachments: HashMap<BlockId, MaterialAttachment>,
     /// 电线面灯面板：隔断该面信号连通，不占邻格
     pub wire_face_panels: HashSet<MaterialFace>,
     /// 系统层方块设置：按格子键控（系统块无 BlockId、不参与模拟移动）
@@ -39,6 +43,14 @@ pub struct WorldBlocks {
     /// 测试用：强制视为不可 Connectable 的材料面
     #[cfg(test)]
     pub test_unconnectable_faces: HashSet<MaterialFace>,
+}
+
+/// 印花等占格附着：子材料挂在父材料的某一面上
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct MaterialAttachment {
+    pub parent: BlockId,
+    /// 从父指向子的世界法线（子占父+normal 格）
+    pub parent_face_normal: IVec3,
 }
 
 /// 编辑态派生的验收结构（无验收计数，不写入存档）
@@ -274,6 +286,27 @@ impl WorldBlocks {
                 self.material_welds.retain(|weld| !weld.contains(id));
                 self.material_paints.retain(|face, _| face.block != id);
                 self.wire_face_panels.retain(|face| face.block != id);
+                self.material_attachments.remove(&id);
+                // 宿主销毁时一并拆掉附着子块
+                let child_ids: Vec<BlockId> = self
+                    .material_attachments
+                    .iter()
+                    .filter(|(_, att)| att.parent == id)
+                    .map(|(child, _)| *child)
+                    .collect();
+                for child_id in child_ids {
+                    self.material_attachments.remove(&child_id);
+                    self.material_paints
+                        .retain(|face, _| face.block != child_id);
+                    if let Some(child_pos) = self
+                        .blocks
+                        .iter()
+                        .find(|(_, b)| b.id == child_id)
+                        .map(|(p, _)| *p)
+                    {
+                        self.blocks.remove(&child_pos);
+                    }
+                }
             }
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
@@ -305,14 +338,18 @@ impl WorldBlocks {
     pub fn clear(&mut self) {
         if !self.blocks.is_empty()
             || !self.system_blocks.is_empty()
+            || !self.machine_bodies.is_empty()
             || !self.acceptor_structures.is_empty()
             || !self.material_paints.is_empty()
+            || !self.material_attachments.is_empty()
             || !self.wire_face_panels.is_empty()
         {
             self.blocks.clear();
             self.system_blocks.clear();
+            self.machine_bodies.clear();
             self.material_welds.clear();
             self.material_paints.clear();
+            self.material_attachments.clear();
             self.wire_face_panels.clear();
             self.block_settings.clear();
             self.acceptor_structures.clear();
@@ -332,6 +369,8 @@ impl WorldBlocks {
                 .retain(|face, _| alive.contains(&face.block));
             self.wire_face_panels
                 .retain(|face| alive.contains(&face.block));
+            self.material_attachments
+                .retain(|child, att| alive.contains(child) && alive.contains(&att.parent));
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -736,12 +775,20 @@ impl WorldBlocks {
                 .blocks
                 .get(&pos)
                 .is_some_and(|block| block.kind.has_collision())
+            || self
+                .machine_bodies
+                .get(&pos)
+                .is_some_and(|block| block.kind.has_collision())
     }
 
     pub fn is_platform_occupied(&self, pos: IVec3) -> bool {
         self.blocks
             .get(&pos)
             .is_some_and(|block| block.kind.has_collision())
+            || self
+                .machine_bodies
+                .get(&pos)
+                .is_some_and(|block| block.kind.has_collision())
     }
 
     pub fn can_place_platform_at(&self, pos: IVec3) -> bool {
@@ -762,6 +809,7 @@ impl WorldBlocks {
                 .blocks
                 .get(&pos)
                 .is_some_and(|block| block.kind.is_generated_marker())
+            || self.machine_bodies.contains_key(&pos)
     }
 
     pub fn blocks_factory_or_scene_at(&self, pos: IVec3) -> bool {
@@ -809,6 +857,38 @@ impl WorldBlocks {
 
     pub fn can_move_into(&self, pos: IVec3) -> bool {
         !self.is_occupied(pos)
+    }
+
+    /// 印花机身是否允许该印花材料沿工作朝向进入本格
+    pub fn stamper_body_allows_stamp(&self, pos: IVec3, stamp: &BlockData) -> bool {
+        let Some(body) = self.machine_bodies.get(&pos) else {
+            return false;
+        };
+        if body.kind != BlockKind::StamperBody {
+            return false;
+        }
+        if !stamp
+            .kind
+            .material_props()
+            .is_some_and(|props| props.is_stamp)
+        {
+            return false;
+        }
+        let Some(att) = self.material_attachments.get(&stamp.id) else {
+            return false;
+        };
+        // 附着法线从宿主指向印花；机身 facing 指向宿主，故两者反向
+        att.parent_face_normal == -body.facing.forward_ivec3()
+    }
+
+    /// 从 from 格移入 target 时是否可进入（含印花对 StamperBody 透传、脆弱让出）
+    pub fn cell_accepts_move_from(&self, from: IVec3, target: IVec3) -> bool {
+        if self.can_move_into(target) || self.is_fragile_material_at(target) {
+            return true;
+        }
+        self.blocks
+            .get(&from)
+            .is_some_and(|mover| self.stamper_body_allows_stamp(target, mover))
     }
 
     /// 格上是否为脆弱材料（运动冲突时让出并碎裂）
@@ -876,7 +956,12 @@ impl WorldBlocks {
         let system_before = self.system_blocks.len();
         self.system_blocks
             .retain(|_, block| !block.kind.is_generated_marker());
-        if self.blocks.len() != blocks_before || self.system_blocks.len() != system_before {
+        let bodies_before = self.machine_bodies.len();
+        self.machine_bodies.clear();
+        if self.blocks.len() != blocks_before
+            || self.system_blocks.len() != system_before
+            || bodies_before != 0
+        {
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }

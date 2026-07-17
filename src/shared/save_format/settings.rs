@@ -170,6 +170,7 @@ fn encode_material(material: MaterialKind) -> u8 {
         MaterialKind::Iron => 1,
         MaterialKind::Copper => 2,
         MaterialKind::Glass => 3,
+        MaterialKind::Stamp => 4,
     }
 }
 
@@ -179,6 +180,7 @@ fn decode_material(value: u8) -> Result<MaterialKind, SaveFormatError> {
         1 => MaterialKind::Iron,
         2 => MaterialKind::Copper,
         3 => MaterialKind::Glass,
+        4 => MaterialKind::Stamp,
         _ => return Err(SaveFormatError::InvalidSettings),
     })
 }

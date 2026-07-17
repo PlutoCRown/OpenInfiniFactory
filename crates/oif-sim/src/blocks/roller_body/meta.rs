@@ -9,7 +9,7 @@ impl BlockMeta for RollerBodyBlock {
     }
 
     fn definition(&self) -> BlockDefinition {
-        // 有碰撞：写入 blocks 层，阻挡材料进入；无模型由游戏侧 PartsOnly 空表处理
+        // 有碰撞：写入 machine_bodies，阻挡材料进入；无模型由游戏侧 PartsOnly 空表处理
         BlockDefinition::marker(
             self.id(),
             "block.roller_body",

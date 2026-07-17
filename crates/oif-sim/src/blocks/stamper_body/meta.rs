@@ -9,7 +9,7 @@ impl BlockMeta for StamperBodyBlock {
     }
 
     fn definition(&self) -> BlockDefinition {
-        // 有碰撞：写入 blocks 层；朝向与宿主同步，L4 再按朝向做印花透传
+        // 有碰撞：写入 machine_bodies；朝向与宿主同步，对对齐印花透传
         BlockDefinition::marker(
             self.id(),
             "block.stamper_body",

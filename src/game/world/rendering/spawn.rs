@@ -304,7 +304,16 @@ pub(super) fn spawn_block_model(
             BlockAnimationKind::SpawnScale => Vec3::splat(eased),
         };
     } else {
-        transform.rotation = render_rotation(data, data.facing);
+        transform.rotation = if data
+            .kind
+            .material_props()
+            .is_some_and(|props| props.is_stamp)
+        {
+            // 印花面片用法线定位，不受 facing yaw 影响
+            Quat::IDENTITY
+        } else {
+            render_rotation(data, data.facing)
+        };
     }
     if let Some((origin, _)) = icon_render {
         transform.translation += origin;
