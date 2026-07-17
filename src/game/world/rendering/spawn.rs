@@ -6,7 +6,8 @@ use super::components::{
     FactoryDebugOverlay, PendingGeneratedPreview,
 };
 use super::connectors::{
-    local_connector_offset, signal_neighbor_offsets, weld_neighbor_connects_to, wire_connects_to,
+    face_mark_transform, local_connector_offset, signal_neighbor_offsets, weld_neighbor_connects_to,
+    wire_connects_to,
 };
 use super::scene_mesh::scene_block_mesh;
 use crate::game::blocks::BlockPresent;
@@ -19,7 +20,7 @@ use crate::game::world::animation::{
     rotate_world_pos_y, AnimatedBlock, AnimationEasing, AnimationTiming, BlockAnimation,
     BlockAnimationKind, PusherAnimation,
 };
-use crate::game::world::grid::{grid_to_world, WorldBlocks};
+use crate::game::world::grid::{grid_to_world, MaterialFace, WorldBlocks};
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::scene::BlockEntityIndex;
 
@@ -437,13 +438,28 @@ pub(super) fn spawn_block_model(
                 if blocked_offset == Some(offset) {
                     continue;
                 }
+                if data.kind == BlockKind::Wire
+                    && world
+                        .wire_face_panels
+                        .contains(&MaterialFace::new(data.id, offset))
+                {
+                    continue;
+                }
                 let neighbor = pos + offset;
-                if world
+                let neighbor_block = world
                     .blocks
                     .get(&neighbor)
-                    .or_else(|| world.system_blocks.get(&neighbor))
-                    .is_some_and(|block| wire_connects_to(block, -offset))
-                {
+                    .or_else(|| world.system_blocks.get(&neighbor));
+                if neighbor_block.is_some_and(|block| {
+                    if block.kind == BlockKind::Wire
+                        && world
+                            .wire_face_panels
+                            .contains(&MaterialFace::new(block.id, -offset))
+                    {
+                        return false;
+                    }
+                    wire_connects_to(block, -offset)
+                }) {
                     connected_offsets.push(offset);
                     let local_offset = local_connector_offset(data, offset);
                     let mut child = parent.spawn((
@@ -462,8 +478,50 @@ pub(super) fn spawn_block_model(
             }
 
             if data.kind == crate::game::blocks::BlockKind::Wire && connected_offsets.is_empty() {
-                let mut child =
-                    parent.spawn((Mesh3d(assets.wire_node_mesh()), MeshMaterial3d(material)));
+                let mut child = parent.spawn((
+                    Mesh3d(assets.wire_node_mesh()),
+                    MeshMaterial3d(material.clone()),
+                ));
+                if let Some((_, icon_layer)) = icon_render {
+                    child.insert((icon_layer.clone(), BlockIconRenderEntity));
+                }
+            }
+
+            if data.kind == BlockKind::Wire {
+                let panel_lit = material == assets.active_wire_material;
+                for face in world
+                    .wire_face_panels
+                    .iter()
+                    .filter(|face| face.block == data.id)
+                {
+                    let panel_material = if panel_lit {
+                        assets.light_panel_lit_material.clone()
+                    } else {
+                        assets.light_panel_material.clone()
+                    };
+                    let mut child = parent.spawn((
+                        Mesh3d(assets.face_mark.clone()),
+                        MeshMaterial3d(panel_material),
+                        face_mark_transform(face.normal),
+                    ));
+                    if let Some((_, icon_layer)) = icon_render {
+                        child.insert((icon_layer.clone(), BlockIconRenderEntity));
+                    }
+                }
+            }
+        }
+
+        if data.kind.is_material() {
+            for (face, color) in world
+                .material_paints
+                .iter()
+                .filter(|(face, _)| face.block == data.id)
+            {
+                let mut child = parent.spawn((
+                    Mesh3d(assets.face_mark.clone()),
+                    MeshMaterial3d(assets.face_mark_material(*color)),
+                    face_mark_transform(face.normal),
+                ));
                 if let Some((_, icon_layer)) = icon_render {
                     child.insert((icon_layer.clone(), BlockIconRenderEntity));
                 }

@@ -7,7 +7,7 @@ use crate::world::grid::WorldBlocks;
 
 use super::behaviors::{
     destroy_powered_lasers, material_source_generation, probe_lasers, run_drill_destroy_phase,
-    run_material_acceptance_phase, run_material_conversion_phase,
+    run_material_acceptance_phase, run_material_conversion_phase, run_material_paint_phase,
     run_material_teleport_phase, run_weld_behavior_phase, LaserBeam,
 };
 use super::gravity::mark_gravity_phase;
@@ -196,6 +196,7 @@ pub fn simulate_turn(
     prepare_upcoming_generation(world, pending_generated, turn + 1, &accepted_acceptors);
 
     let weld_sparks = run_weld_behavior_phase(world);
+    run_material_paint_phase(world);
     structure_state.refresh_material_structures(world);
     sample.behavior_ms = mark_elapsed_ms(&mut mark);
 

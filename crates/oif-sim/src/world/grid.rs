@@ -23,6 +23,10 @@ pub struct WorldBlocks {
     pub blocks: HashMap<IVec3, BlockData>,
     pub system_blocks: HashMap<IVec3, BlockData>,
     pub material_welds: HashSet<MaterialWeld>,
+    /// 材料面装饰漆：按 BlockId+法线键控，移动无需改写
+    pub material_paints: HashMap<MaterialFace, StampColor>,
+    /// 电线面灯面板：隔断该面信号连通，不占邻格
+    pub wire_face_panels: HashSet<MaterialFace>,
     /// 系统层方块设置：按格子键控（系统块无 BlockId、不参与模拟移动）
     pub block_settings: HashMap<IVec3, BlockSettings>,
     /// 编辑态维护的验收结构（含持久 ID）
@@ -32,6 +36,9 @@ pub struct WorldBlocks {
     pub next_block_id: u64,
     /// 下一个可分配的验收结构 ID
     pub next_acceptor_id: u64,
+    /// 测试用：强制视为不可 Connectable 的材料面
+    #[cfg(test)]
+    pub test_unconnectable_faces: HashSet<MaterialFace>,
 }
 
 /// 编辑态派生的验收结构（无验收计数，不写入存档）
@@ -265,6 +272,8 @@ impl WorldBlocks {
             let id = block.id;
             if !id.is_none() {
                 self.material_welds.retain(|weld| !weld.contains(id));
+                self.material_paints.retain(|face, _| face.block != id);
+                self.wire_face_panels.retain(|face| face.block != id);
             }
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
@@ -297,10 +306,14 @@ impl WorldBlocks {
         if !self.blocks.is_empty()
             || !self.system_blocks.is_empty()
             || !self.acceptor_structures.is_empty()
+            || !self.material_paints.is_empty()
+            || !self.wire_face_panels.is_empty()
         {
             self.blocks.clear();
             self.system_blocks.clear();
             self.material_welds.clear();
+            self.material_paints.clear();
+            self.wire_face_panels.clear();
             self.block_settings.clear();
             self.acceptor_structures.clear();
             self.next_acceptor_id = 0;
@@ -315,11 +328,28 @@ impl WorldBlocks {
             let alive: HashSet<BlockId> = self.blocks.values().map(|block| block.id).collect();
             self.material_welds
                 .retain(|weld| alive.contains(&weld.a) && alive.contains(&weld.b));
+            self.material_paints
+                .retain(|face, _| alive.contains(&face.block));
+            self.wire_face_panels
+                .retain(|face| alive.contains(&face.block));
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
 
-    /// 批量搬迁方块：保留 BlockId，不改焊接；信号相关方块移动时只 bump 一次 topology
+    /// 在电线指定面放置/移除灯面板；变更时 bump 信号拓扑
+    pub fn set_wire_face_panel(&mut self, face: MaterialFace, present: bool) -> bool {
+        let changed = if present {
+            self.wire_face_panels.insert(face)
+        } else {
+            self.wire_face_panels.remove(&face)
+        };
+        if changed {
+            self.topology_revision = self.topology_revision.wrapping_add(1);
+        }
+        changed
+    }
+
+    /// 批量搬迁方块：保留 BlockId，不改焊接/面附着；信号相关方块移动时只 bump 一次 topology
     pub fn relocate_blocks(&mut self, moves: Vec<(IVec3, IVec3, BlockData)>) {
         if moves.is_empty() {
             return;

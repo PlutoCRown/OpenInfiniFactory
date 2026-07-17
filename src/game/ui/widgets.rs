@@ -317,6 +317,7 @@ where
 pub(super) fn slot_color(item: InventoryItem) -> Color {
     match item {
         InventoryItem::Area(AreaKind::Selection) => Color::srgb(0.22, 0.66, 0.62),
+        InventoryItem::LightPanel => Color::srgb(0.92, 0.82, 0.28),
         InventoryItem::Block(kind) => kind.item_slot_color(),
     }
 }
@@ -324,6 +325,7 @@ pub(super) fn slot_color(item: InventoryItem) -> Color {
 pub(super) fn short_item_name(item: InventoryItem) -> &'static str {
     match item {
         InventoryItem::Area(AreaKind::Selection) => "short.area.selection",
+        InventoryItem::LightPanel => "short.item.light_panel",
         InventoryItem::Block(kind) => kind.short_name_key(),
     }
 }

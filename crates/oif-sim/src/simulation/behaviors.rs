@@ -2,10 +2,11 @@ use glam::IVec3;
 use std::collections::HashSet;
 
 use crate::blocks::{
-    AcceptorId, BlockData, BlockKind, MaterialDestroyer, MaterialProcessor, SignalBehavior,
+    AcceptorId, BlockData, BlockKind, MaterialDestroyer, MaterialLabeler, MaterialProcessor,
+    SignalBehavior,
 };
 use crate::world::direction::Facing;
-use crate::world::grid::{ConverterMode, GeneratorMode, WorldBlocks};
+use crate::world::grid::{ConverterMode, GeneratorMode, MaterialFace, WorldBlocks};
 
 use super::mirror;
 use super::signal_offsets;
@@ -152,6 +153,49 @@ pub(super) fn run_weld_behavior_phase(world: &mut WorldBlocks) -> Vec<IVec3> {
         }
     }
     sparks
+}
+
+/// 阶段 4 装饰漆：滚刷机朝向可 Connectable 材料面写入油漆（印花机 L4 再处理）
+pub(super) fn run_material_paint_phase(world: &mut WorldBlocks) {
+    let rollers: Vec<(IVec3, IVec3)> = world
+        .system_blocks
+        .iter()
+        .filter_map(|(pos, block)| match block.kind.material_labeler(block.facing) {
+            Some(MaterialLabeler::Roller { target }) => Some((*pos, target)),
+            Some(MaterialLabeler::Stamper { .. }) | None => None,
+        })
+        .collect();
+
+    for (pos, target_offset) in rollers {
+        let target = pos + target_offset;
+        let Some(target_block) = world.blocks.get(&target).copied() else {
+            continue;
+        };
+        if !target_block.kind.is_material() {
+            continue;
+        }
+        let face_normal = -target_offset;
+        let face = MaterialFace::new(target_block.id, face_normal);
+        let connectable = {
+            #[cfg(test)]
+            if world.test_unconnectable_faces.contains(&face) {
+                false
+            } else {
+                target_block
+                    .kind
+                    .material_face_connectable(target_block.facing, face_normal)
+            }
+            #[cfg(not(test))]
+            target_block
+                .kind
+                .material_face_connectable(target_block.facing, face_normal)
+        };
+        if !connectable {
+            continue;
+        }
+        let color = world.labeler_settings(pos).color;
+        world.material_paints.insert(face, color);
+    }
 }
 
 /// 本回合生成判定用的材料源结果
@@ -369,7 +413,7 @@ fn teleport_entrance_material(world: &mut WorldBlocks, entrance: IVec3, exit: IV
 
     detach_material_block(world, entrance);
 
-    // 面标记按 BlockId，搬迁无需改写；用 relocate 避免 remove 清掉标记
+    // 面附着按 BlockId，搬迁无需改写；用 relocate 避免 remove 清掉附着
     let Some(block) = world.blocks.get(&entrance).copied() else {
         return false;
     };
@@ -867,5 +911,52 @@ mod tests {
 
         assert!(!world.is_material_at(material));
         assert_eq!(sparks, vec![material]);
+    }
+
+    #[test]
+    fn roller_paints_connectable_material_face() {
+        let mut world = WorldBlocks::default();
+        let roller = IVec3::ZERO;
+        let material = IVec3::X;
+        world.insert(roller, BlockData::new(BlockKind::Roller, Facing::East));
+        place_material(&mut world, material, MaterialKind::Basic);
+        let material_id = world.blocks[&material].id;
+
+        run_material_paint_phase(&mut world);
+
+        let face = MaterialFace::new(material_id, IVec3::NEG_X);
+        assert_eq!(
+            world.material_paints.get(&face).copied(),
+            Some(crate::blocks::StampColor::Red)
+        );
+    }
+
+    #[test]
+    fn roller_skips_non_connectable_face() {
+        let mut world = WorldBlocks::default();
+        let roller = IVec3::ZERO;
+        let material = IVec3::X;
+        world.insert(roller, BlockData::new(BlockKind::Roller, Facing::East));
+        place_material(&mut world, material, MaterialKind::Basic);
+        let material_id = world.blocks[&material].id;
+        let face = MaterialFace::new(material_id, IVec3::NEG_X);
+        world.test_unconnectable_faces.insert(face);
+
+        run_material_paint_phase(&mut world);
+
+        assert!(world.material_paints.is_empty());
+    }
+
+    #[test]
+    fn stamper_does_not_paint_in_l3() {
+        let mut world = WorldBlocks::default();
+        let stamper = IVec3::ZERO;
+        let material = IVec3::X;
+        world.insert(stamper, BlockData::new(BlockKind::Stamper, Facing::East));
+        place_material(&mut world, material, MaterialKind::Basic);
+
+        run_material_paint_phase(&mut world);
+
+        assert!(world.material_paints.is_empty());
     }
 }

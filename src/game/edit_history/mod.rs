@@ -4,7 +4,7 @@ mod patch;
 pub use input::edit_history_input;
 pub use patch::{
     build_cell_patch, build_relocate_patch, build_rotation_patch, build_settings_patch,
-    capture_cell, capture_welds_for_ids, weld_diff, WorldPatch,
+    capture_cell, capture_welds_for_ids, weld_diff, FacePanelDelta, WorldPatch,
 };
 
 use std::collections::{HashMap, HashSet};

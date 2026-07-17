@@ -48,6 +48,10 @@ pub struct WorldRenderAssets {
     preview_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     scene_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     face_mark_materials: HashMap<StampColor, Handle<StandardMaterial>>,
+    /// 灯面板未通电材质
+    pub(crate) light_panel_material: Handle<StandardMaterial>,
+    /// 灯面板通电发光材质
+    pub(crate) light_panel_lit_material: Handle<StandardMaterial>,
     model_materials: HashMap<ModelMaterial, Handle<StandardMaterial>>,
     model_preview_materials: HashMap<ModelMaterial, Handle<StandardMaterial>>,
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
@@ -301,6 +305,17 @@ impl WorldRenderAssets {
             preview_materials,
             scene_materials: scene_block_materials,
             face_mark_materials,
+            light_panel_material: materials.add(StandardMaterial {
+                base_color: Color::srgb(0.55, 0.58, 0.62),
+                unlit: true,
+                ..default()
+            }),
+            light_panel_lit_material: materials.add(StandardMaterial {
+                base_color: Color::srgb(1.0, 0.92, 0.45),
+                emissive: Color::srgb(0.55, 0.42, 0.08).into(),
+                unlit: true,
+                ..default()
+            }),
             model_materials,
             model_preview_materials,
             wire_connector_material: materials.add(StandardMaterial {

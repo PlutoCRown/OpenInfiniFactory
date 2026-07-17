@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use crate::game::blocks::{BlockData, BlockId, BlockKind};
 use crate::game::world::direction::Facing;
-use crate::game::world::grid::{BlockSettings, MaterialWeld, WorldBlocks};
+use crate::game::world::grid::{BlockSettings, MaterialFace, MaterialWeld, WorldBlocks};
 
 /// 方块所在层：工厂/材料或系统层
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -37,12 +37,23 @@ pub struct SettingsDelta {
     pub after: Option<BlockSettings>,
 }
 
+/// 电线面灯面板前后差异
+#[derive(Clone, Debug, PartialEq)]
+pub struct FacePanelDelta {
+    /// 电线所在格（用于编辑刷新）
+    pub pos: IVec3,
+    pub face: MaterialFace,
+    pub before: bool,
+    pub after: bool,
+}
+
 /// 可正向/反向应用的世界补丁
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WorldPatch {
     pub cells: Vec<CellDelta>,
     pub welds_add: Vec<MaterialWeld>,
     pub welds_remove: Vec<MaterialWeld>,
+    pub face_panels: Vec<FacePanelDelta>,
     pub settings: Vec<SettingsDelta>,
 }
 
@@ -51,6 +62,7 @@ impl WorldPatch {
         self.cells.is_empty()
             && self.welds_add.is_empty()
             && self.welds_remove.is_empty()
+            && self.face_panels.is_empty()
             && self.settings.is_empty()
     }
 
@@ -69,6 +81,19 @@ impl WorldPatch {
         }
         for delta in &self.settings {
             positions.insert(delta.pos);
+        }
+        for delta in &self.face_panels {
+            positions.insert(delta.pos);
+            for offset in [
+                IVec3::X,
+                IVec3::NEG_X,
+                IVec3::Y,
+                IVec3::NEG_Y,
+                IVec3::Z,
+                IVec3::NEG_Z,
+            ] {
+                positions.insert(delta.pos + offset);
+            }
         }
         positions
     }
@@ -141,6 +166,11 @@ impl WorldPatch {
             }
         }
 
+        for delta in &self.face_panels {
+            let present = if forward { delta.after } else { delta.before };
+            world.set_wire_face_panel(delta.face, present);
+        }
+
         if self.touches_goal_or_generator() {
             world.resync_acceptor_structures();
         }
@@ -174,6 +204,58 @@ pub fn capture_welds_for_ids(world: &WorldBlocks, ids: &HashSet<BlockId>) -> Vec
         .filter(|weld| ids.contains(&weld.a) || ids.contains(&weld.b))
         .copied()
         .collect()
+}
+
+/// 从补丁涉及的方块实例收集灯面板（含电线坐标）
+pub fn capture_face_panels_for_ids(
+    world: &WorldBlocks,
+    ids: &HashSet<BlockId>,
+) -> HashMap<MaterialFace, IVec3> {
+    if ids.is_empty() {
+        return HashMap::new();
+    }
+    let id_to_pos: HashMap<BlockId, IVec3> = world
+        .blocks
+        .iter()
+        .map(|(pos, block)| (block.id, *pos))
+        .collect();
+    world
+        .wire_face_panels
+        .iter()
+        .filter_map(|face| {
+            ids.contains(&face.block)
+                .then(|| id_to_pos.get(&face.block).map(|pos| (*face, *pos)))
+                .flatten()
+        })
+        .collect()
+}
+
+pub fn face_panel_diff(
+    before: &HashMap<MaterialFace, IVec3>,
+    after: &HashMap<MaterialFace, IVec3>,
+) -> Vec<FacePanelDelta> {
+    let mut deltas = Vec::new();
+    for (face, pos) in before {
+        if !after.contains_key(face) {
+            deltas.push(FacePanelDelta {
+                pos: *pos,
+                face: *face,
+                before: true,
+                after: false,
+            });
+        }
+    }
+    for (face, pos) in after {
+        if !before.contains_key(face) {
+            deltas.push(FacePanelDelta {
+                pos: *pos,
+                face: *face,
+                before: false,
+                after: true,
+            });
+        }
+    }
+    deltas
 }
 
 pub fn weld_diff(before: &[MaterialWeld], after: &[MaterialWeld]) -> (Vec<MaterialWeld>, Vec<MaterialWeld>) {
@@ -211,6 +293,7 @@ pub fn build_cell_patch(
         .collect();
     let before_ids = block_ids_from_snapshots(before_cells.values().cloned());
     let welds_before = capture_welds_for_ids(world, &before_ids);
+    let panels_before = capture_face_panels_for_ids(world, &before_ids);
 
     mutate(world);
 
@@ -232,11 +315,14 @@ pub fn build_cell_patch(
     after_ids.extend(before_ids);
     let welds_after = capture_welds_for_ids(world, &after_ids);
     let (welds_add, welds_remove) = weld_diff(&welds_before, &welds_after);
+    let panels_after = capture_face_panels_for_ids(world, &after_ids);
+    let face_panels = face_panel_diff(&panels_before, &panels_after);
 
     WorldPatch {
         cells,
         welds_add,
         welds_remove,
+        face_panels,
         settings: Vec::new(),
     }
 }
@@ -271,9 +357,7 @@ pub fn build_relocate_patch(world: &WorldBlocks, moves: &[(IVec3, IVec3)]) -> Wo
     }
     WorldPatch {
         cells,
-        welds_add: Vec::new(),
-        welds_remove: Vec::new(),
-        settings: Vec::new(),
+        ..Default::default()
     }
 }
 
@@ -305,6 +389,12 @@ pub fn build_rotation_patch(
 fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<CellSnapshot>) {
     let _ = world.system_blocks.remove(&pos);
     let removed_factory = world.blocks.remove(&pos);
+    if let Some(block) = removed_factory {
+        if !block.id.is_none() {
+            world.material_paints.retain(|face, _| face.block != block.id);
+            world.wire_face_panels.retain(|face| face.block != block.id);
+        }
+    }
     if removed_factory.is_some() || world.block_settings.contains_key(&pos) {
         world.block_settings.remove(&pos);
     }

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::game::blocks::{BlockData, PersistentLayer};
+use crate::game::blocks::{BlockData, BlockKind, PersistentLayer};
 use crate::game::world::grid::{BlockSettings, WorldBlocks};
 use crate::game::{
     state::BuilderMode,
@@ -206,6 +206,7 @@ pub fn save_solution(
         &SaveFile::solution(
             &slot.puzzle,
             capture_factory_blocks(world),
+            capture_wire_face_panels(world),
             inventory,
             player,
         ),
@@ -297,6 +298,7 @@ impl SaveFile {
                 scene_blocks: layer.scene_blocks,
                 system_blocks: layer.system_blocks,
                 factory_blocks: Vec::new(),
+                wire_face_panels: Vec::new(),
             },
         }
     }
@@ -304,6 +306,7 @@ impl SaveFile {
     fn solution(
         puzzle_id: &str,
         factory_blocks: Vec<SavedBlock>,
+        wire_face_panels: Vec<save_format::SavedWireFacePanel>,
         inventory: &InventoryItems,
         player: Option<PlayerSave>,
     ) -> Self {
@@ -317,6 +320,7 @@ impl SaveFile {
             },
             blocks: SaveBlocksData {
                 factory_blocks,
+                wire_face_panels,
                 ..Default::default()
             },
         }
@@ -355,6 +359,7 @@ impl SaveFile {
                 let puzzle_world = load_puzzle_world(&puzzle_id)?;
                 let mut world = puzzle_world.clone();
                 apply_factory_blocks(&mut world, self.blocks.factory_blocks);
+                apply_wire_face_panels(&mut world, self.blocks.wire_face_panels);
                 Some(LoadedSave {
                     world,
                     puzzle_snapshot: Some(puzzle_world),
@@ -478,6 +483,29 @@ fn capture_factory_blocks(world: &WorldBlocks) -> Vec<SavedBlock> {
         .collect()
 }
 
+fn capture_wire_face_panels(world: &WorldBlocks) -> Vec<save_format::SavedWireFacePanel> {
+    let id_to_pos: std::collections::HashMap<_, _> = world
+        .blocks
+        .iter()
+        .map(|(pos, block)| (block.id, *pos))
+        .collect();
+    world
+        .wire_face_panels
+        .iter()
+        .filter_map(|face| {
+            let pos = id_to_pos.get(&face.block)?;
+            Some(save_format::SavedWireFacePanel {
+                x: pos.x,
+                y: pos.y,
+                z: pos.z,
+                nx: face.normal.x,
+                ny: face.normal.y,
+                nz: face.normal.z,
+            })
+        })
+        .collect()
+}
+
 fn apply_layer(world: &mut WorldBlocks, layer: PuzzleLayer) {
     for saved in layer.scene_blocks {
         world.insert(saved.pos(), saved.to_block_data());
@@ -496,6 +524,22 @@ fn apply_factory_blocks(world: &mut WorldBlocks, factory_blocks: Vec<SavedBlock>
         if saved.kind.persistent_layer() == Some(PersistentLayer::SolutionFactory) {
             world.insert(saved.pos(), saved.to_block_data());
         }
+    }
+}
+
+fn apply_wire_face_panels(world: &mut WorldBlocks, panels: Vec<save_format::SavedWireFacePanel>) {
+    for panel in panels {
+        let pos = panel.pos();
+        let Some(block) = world.blocks.get(&pos).copied() else {
+            continue;
+        };
+        if block.kind != BlockKind::Wire {
+            continue;
+        }
+        world.set_wire_face_panel(
+            crate::game::world::grid::MaterialFace::new(block.id, panel.normal()),
+            true,
+        );
     }
 }
 
@@ -738,7 +782,7 @@ mod tests {
         solution_inventory.set_hotbar_block(1, BlockKind::Pusher);
         solution_inventory.hotbar[2] = None;
 
-        let solution_file = SaveFile::solution("puzzle", Vec::new(), &solution_inventory, None);
+        let solution_file = SaveFile::solution("puzzle", Vec::new(), Vec::new(), &solution_inventory, None);
         assert_eq!(solution_file.meta.puzzle_id.as_deref(), Some("puzzle"));
         assert!(solution_file.blocks.scene_blocks.is_empty());
         assert!(solution_file.blocks.system_blocks.is_empty());
@@ -764,6 +808,7 @@ mod tests {
             &SaveFile::solution(
                 "test_puzzle_ref",
                 capture_factory_blocks(&solution_world),
+                capture_wire_face_panels(&solution_world),
                 &solution_inventory,
                 None,
             ),
@@ -861,6 +906,7 @@ mod tests {
             &SaveFile::solution(
                 "missing_puzzle",
                 capture_factory_blocks(&world),
+                capture_wire_face_panels(&world),
                 &inventory,
                 None,
             ),

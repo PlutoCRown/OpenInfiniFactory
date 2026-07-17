@@ -2,10 +2,11 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use std::collections::HashSet;
 
 use crate::game::blocks::BlockPresent;
 use crate::game::blocks::{BlockData, BlockKind};
-use crate::game::edit_history::{build_cell_patch, EditHistory};
+use crate::game::edit_history::{build_cell_patch, EditHistory, FacePanelDelta, WorldPatch};
 use crate::game::player::controller::{teleport_player_preserve_offset, FlyCamera};
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structure_state::StructureState;
@@ -15,7 +16,7 @@ use crate::game::state::{
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{AreaKind, InventoryItems, UiRuntime};
-use crate::game::world::grid::WorldBlocks;
+use crate::game::world::grid::{MaterialFace, WorldBlocks};
 use crate::game::world::rendering::{
     despawn_edit_previews, spawn_block_preview, spawn_delete_bounds_preview, BlockEntity,
     EditPreview, WorldRenderAssets,
@@ -257,6 +258,51 @@ pub fn placement_input(
             despawn_edit_previews(&mut commands, &edit_previews);
             return;
         }
+        // 优先卸下瞄准面的灯面板（不占格，点对面删除）
+        if let Some(target) = placement.target.filter(|target| target.normal != IVec3::ZERO) {
+            if let Some(block) = world.blocks.get(&target.pos).copied() {
+                if block.kind == BlockKind::Wire {
+                    let face = MaterialFace::new(block.id, target.normal);
+                    if world.wire_face_panels.contains(&face) {
+                        edit_history.flush_pending_rotation();
+                        let patch = WorldPatch {
+                            face_panels: vec![FacePanelDelta {
+                                pos: target.pos,
+                                face,
+                                before: true,
+                                after: false,
+                            }],
+                            ..Default::default()
+                        };
+                        patch.apply_forward(&mut world);
+                        edit_history.record(patch);
+                        refresh_static_generated_markers(&mut world);
+                        refresh_edit_changes(
+                            &mut commands,
+                            &mut meshes,
+                            &mut block_index,
+                            &world,
+                            &render_assets,
+                            &debug,
+                            &mut structure_state,
+                            &HashSet::from([
+                                target.pos,
+                                target.pos + IVec3::X,
+                                target.pos + IVec3::NEG_X,
+                                target.pos + IVec3::Y,
+                                target.pos + IVec3::NEG_Y,
+                                target.pos + IVec3::Z,
+                                target.pos + IVec3::NEG_Z,
+                            ]),
+                        );
+                        solution_state.dirty = true;
+                        placement.edit_gesture = None;
+                        despawn_edit_previews(&mut commands, &edit_previews);
+                        return;
+                    }
+                }
+            }
+        }
         match placement.edit_gesture.as_mut() {
             Some(gesture) if matches!(gesture.kind, EditGestureKind::Place { .. }) => {
                 gesture.canceled = true;
@@ -280,6 +326,52 @@ pub fn placement_input(
     }
 
     if input.place.just_pressed {
+        // 灯面板：点在电线表面即时粘贴，不走占格手势
+        if inventory.hotbar[placement.selected].is_some_and(|item| item.is_light_panel()) {
+            if let Some(target) = placement.target.filter(|target| target.normal != IVec3::ZERO) {
+                if let Some(block) = world.blocks.get(&target.pos).copied() {
+                    if block.kind == BlockKind::Wire {
+                        let face = MaterialFace::new(block.id, target.normal);
+                        if !world.wire_face_panels.contains(&face) {
+                            edit_history.flush_pending_rotation();
+                            let patch = WorldPatch {
+                                face_panels: vec![FacePanelDelta {
+                                    pos: target.pos,
+                                    face,
+                                    before: false,
+                                    after: true,
+                                }],
+                                ..Default::default()
+                            };
+                            patch.apply_forward(&mut world);
+                            edit_history.record(patch);
+                            refresh_edit_changes(
+                                &mut commands,
+                                &mut meshes,
+                                &mut block_index,
+                                &world,
+                                &render_assets,
+                                &debug,
+                                &mut structure_state,
+                                &HashSet::from([
+                                    target.pos,
+                                    target.pos + IVec3::X,
+                                    target.pos + IVec3::NEG_X,
+                                    target.pos + IVec3::Y,
+                                    target.pos + IVec3::NEG_Y,
+                                    target.pos + IVec3::Z,
+                                    target.pos + IVec3::NEG_Z,
+                                ]),
+                            );
+                            solution_state.dirty = true;
+                        }
+                    }
+                }
+            }
+            placement.edit_gesture = None;
+            despawn_edit_previews(&mut commands, &edit_previews);
+            return;
+        }
         match placement.edit_gesture.as_mut() {
             Some(gesture) if matches!(gesture.kind, EditGestureKind::Delete) => {
                 gesture.canceled = true;

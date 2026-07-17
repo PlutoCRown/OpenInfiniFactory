@@ -80,6 +80,10 @@ fn spawn_and_index(
 
 // 无连接件的工厂/材料实例可原地保留，避免对向移动时未动方块被刷新闪烁
 fn can_preserve_animatable(data: BlockData) -> bool {
+    // 材料子实体含装饰漆，BlockData 不变时也可能需重建
+    if data.kind.is_material() {
+        return false;
+    }
     let behavior = data.kind.render_behavior(data.facing);
     behavior.wire_connector.is_none() && behavior.weld_connector.is_none()
 }
@@ -210,6 +214,24 @@ pub fn collect_sim_refresh_positions(
     expand_wire_connectivity(after, &changed, &mut refresh);
     // 空头伸出/收回只改 PusherState 动画，世界格子不变；必须单独纳入刷新
     refresh.extend(output.pusher_animations.keys().copied());
+
+    // 装饰漆变化：材料格未动也要重建
+    let id_to_pos: HashMap<crate::game::blocks::BlockId, IVec3> = after
+        .blocks
+        .iter()
+        .map(|(pos, block)| (block.id, *pos))
+        .collect();
+    for face in before
+        .material_paints
+        .keys()
+        .chain(after.material_paints.keys())
+    {
+        if before.material_paints.get(face) != after.material_paints.get(face) {
+            if let Some(&pos) = id_to_pos.get(&face.block) {
+                refresh.insert(pos);
+            }
+        }
+    }
     refresh
 }
 

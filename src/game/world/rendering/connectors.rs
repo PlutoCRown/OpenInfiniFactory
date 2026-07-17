@@ -5,7 +5,7 @@ use crate::game::blocks::{BlockData, WeldConnectorBehavior, WireConnectorBehavio
 use crate::game::world::grid::WorldBlocks;
 
 /// 面标记贴在方块表面的局部 Transform
-pub(super) fn face_mark_transform(normal: IVec3) -> Transform {
+pub(crate) fn face_mark_transform(normal: IVec3) -> Transform {
     let normal_vec = normal.as_vec3();
     let rotation = if normal.x != 0 {
         Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)

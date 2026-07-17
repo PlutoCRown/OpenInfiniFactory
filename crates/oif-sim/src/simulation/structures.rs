@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::blocks::{BlockData, BlockId, MovementRule};
 use crate::world::direction::Facing;
-use crate::world::grid::WorldBlocks;
+use crate::world::grid::{MaterialFace, WorldBlocks};
 
 use super::motion::{BlockMotion, BlockMotionKind, PusherMotion};
 use super::structure_state::{StructureId, StructureState};
@@ -862,6 +862,10 @@ pub(super) fn rotate_structure(
     pivot: IVec3,
     clockwise: bool,
 ) {
+    let structure_ids: HashSet<BlockId> = structure
+        .iter()
+        .filter_map(|pos| world.blocks.get(pos).map(|block| block.id))
+        .collect();
     let moves: Vec<(IVec3, IVec3, BlockData)> = structure
         .iter()
         .filter_map(|pos| {
@@ -872,6 +876,45 @@ pub(super) fn rotate_structure(
         })
         .collect();
     world.relocate_blocks(moves);
+
+    // 焊接按 BlockId 无需改写；旋转只更新面附着法线
+    let updated_paints: HashMap<_, _> = world
+        .material_paints
+        .iter()
+        .map(|(face, color)| {
+            if structure_ids.contains(&face.block) {
+                (
+                    MaterialFace {
+                        block: face.block,
+                        normal: rotate_offset_y(face.normal, clockwise),
+                    },
+                    *color,
+                )
+            } else {
+                (*face, *color)
+            }
+        })
+        .collect();
+    world.material_paints = updated_paints;
+
+    let updated_panels: HashSet<_> = world
+        .wire_face_panels
+        .iter()
+        .map(|face| {
+            if structure_ids.contains(&face.block) {
+                MaterialFace {
+                    block: face.block,
+                    normal: rotate_offset_y(face.normal, clockwise),
+                }
+            } else {
+                *face
+            }
+        })
+        .collect();
+    if updated_panels != world.wire_face_panels {
+        world.wire_face_panels = updated_panels;
+        world.topology_revision = world.topology_revision.wrapping_add(1);
+    }
 }
 
 pub(super) fn rotate_pos_y(pos: IVec3, pivot: IVec3, clockwise: bool) -> IVec3 {

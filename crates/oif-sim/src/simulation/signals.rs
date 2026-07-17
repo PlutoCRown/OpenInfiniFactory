@@ -2,7 +2,7 @@ use glam::IVec3;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::blocks::{BlockId, SignalBehavior};
-use crate::world::grid::WorldBlocks;
+use crate::world::grid::{MaterialFace, WorldBlocks};
 
 use super::signal_offsets;
 
@@ -47,7 +47,16 @@ impl SignalNetworkCache {
             self.wire_components.insert(block.id, component);
 
             while let Some(wire_pos) = queue.pop_front() {
+                let Some(wire_block) = world.blocks.get(&wire_pos).copied() else {
+                    continue;
+                };
                 for offset in signal_offsets() {
+                    if world
+                        .wire_face_panels
+                        .contains(&MaterialFace::new(wire_block.id, offset))
+                    {
+                        continue;
+                    }
                     let neighbor = wire_pos + offset;
                     let Some(neighbor_block) = world.blocks.get(&neighbor) else {
                         continue;
@@ -56,6 +65,12 @@ impl SignalNetworkCache {
                         neighbor_block.kind.signal_behavior(neighbor_block.facing),
                         Some(SignalBehavior::Wire)
                     ) {
+                        continue;
+                    }
+                    if world
+                        .wire_face_panels
+                        .contains(&MaterialFace::new(neighbor_block.id, -offset))
+                    {
                         continue;
                     }
                     if self
@@ -333,5 +348,47 @@ mod tests {
         assert!(cache
             .powered_wires(&world, &powered)
             .contains(&(wire + IVec3::Y)));
+    }
+
+    #[test]
+    fn wire_face_panel_splits_signal_components() {
+        let mut world = WorldBlocks::default();
+        let a = IVec3::ZERO;
+        let b = IVec3::X;
+        place_factory(&mut world, a, BlockKind::Wire);
+        place_factory(&mut world, b, BlockKind::Wire);
+        let a_id = world.blocks[&a].id;
+        world.set_wire_face_panel(MaterialFace::new(a_id, IVec3::X), true);
+
+        let mut cache = SignalNetworkCache::default();
+        cache.refresh(&world);
+        let comp_a = cache.wire_components[&a_id];
+        let comp_b = cache.wire_components[&world.blocks[&b].id];
+        assert_ne!(comp_a, comp_b);
+
+        world.set_wire_face_panel(MaterialFace::new(a_id, IVec3::X), false);
+        cache.refresh(&world);
+        assert_eq!(
+            cache.wire_components[&a_id],
+            cache.wire_components[&world.blocks[&b].id]
+        );
+    }
+
+    #[test]
+    fn neighbor_panel_also_blocks_signal() {
+        let mut world = WorldBlocks::default();
+        let a = IVec3::ZERO;
+        let b = IVec3::X;
+        place_factory(&mut world, a, BlockKind::Wire);
+        place_factory(&mut world, b, BlockKind::Wire);
+        let b_id = world.blocks[&b].id;
+        world.set_wire_face_panel(MaterialFace::new(b_id, IVec3::NEG_X), true);
+
+        let mut cache = SignalNetworkCache::default();
+        cache.refresh(&world);
+        assert_ne!(
+            cache.wire_components[&world.blocks[&a].id],
+            cache.wire_components[&b_id]
+        );
     }
 }

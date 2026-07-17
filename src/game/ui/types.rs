@@ -117,6 +117,8 @@ impl AreaKind {
 pub enum InventoryItem {
     Block(BlockKind),
     Area(AreaKind),
+    /// 灯面板：贴在电线表面，不占邻格
+    LightPanel,
 }
 
 impl InventoryItem {
@@ -124,6 +126,7 @@ impl InventoryItem {
         match self {
             Self::Block(kind) => kind.name_key(),
             Self::Area(kind) => kind.name_key(),
+            Self::LightPanel => "item.light_panel",
         }
     }
 
@@ -131,21 +134,26 @@ impl InventoryItem {
         match self {
             Self::Block(kind) => kind.description_key(),
             Self::Area(kind) => kind.description_key(),
+            Self::LightPanel => "desc.item.light_panel",
         }
     }
 
     pub fn block(self) -> Option<BlockKind> {
         match self {
             Self::Block(kind) => Some(kind),
-            Self::Area(_) => None,
+            Self::Area(_) | Self::LightPanel => None,
         }
     }
 
     pub fn area(self) -> Option<AreaKind> {
         match self {
             Self::Area(kind) => Some(kind),
-            Self::Block(_) => None,
+            Self::Block(_) | Self::LightPanel => None,
         }
+    }
+
+    pub fn is_light_panel(self) -> bool {
+        matches!(self, Self::LightPanel)
     }
 }
 
@@ -186,6 +194,8 @@ impl InventoryItems {
             if let Some(slot) = backpack.iter_mut().find(|slot| slot.is_none()) {
                 *slot = Some(InventoryItem::Area(AreaKind::Selection));
             }
+        } else if let Some(slot) = backpack.iter_mut().find(|slot| slot.is_none()) {
+            *slot = Some(InventoryItem::LightPanel);
         }
 
         Self { hotbar, backpack }

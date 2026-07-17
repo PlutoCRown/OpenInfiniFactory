@@ -20,7 +20,7 @@ pub use components::{
     GameplayScene, HoverMarker, HoverStructureBounds, PendingGeneratedPreview, PlacementPreview,
     StructureBounds,
 };
-pub(crate) use connectors::signal_neighbor_offsets;
+pub(crate) use connectors::{face_mark_transform, signal_neighbor_offsets};
 pub use fx::{spawn_acceptance_sparks, spawn_laser_beams, spawn_weld_sparks};
 pub use icons::{retire_block_icon_renderers, setup_block_icons};
 pub use previews::{

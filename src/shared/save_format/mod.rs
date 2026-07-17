@@ -12,7 +12,7 @@ pub use block_kind::{decode_kind, encode_kind};
 pub use settings::{read_settings, write_settings};
 
 pub const MAGIC: &[u8; 4] = b"OIF\0";
-pub const VERSION: u16 = 1;
+pub const VERSION: u16 = 2;
 
 pub const META_FILE: &str = "meta.json";
 pub const BLOCKS_FILE: &str = "blocks.bin";
@@ -133,11 +133,32 @@ impl SavedBlock {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct SavedWireFacePanel {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub nx: i32,
+    pub ny: i32,
+    pub nz: i32,
+}
+
+impl SavedWireFacePanel {
+    pub fn pos(&self) -> IVec3 {
+        IVec3::new(self.x, self.y, self.z)
+    }
+
+    pub fn normal(&self) -> IVec3 {
+        IVec3::new(self.nx, self.ny, self.nz)
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SaveBlocksData {
     pub scene_blocks: Vec<SavedBlock>,
     pub system_blocks: Vec<SavedBlock>,
     pub factory_blocks: Vec<SavedBlock>,
+    pub wire_face_panels: Vec<SavedWireFacePanel>,
 }
 
 pub fn encode_blocks(data: &SaveBlocksData) -> Vec<u8> {
@@ -147,6 +168,7 @@ pub fn encode_blocks(data: &SaveBlocksData) -> Vec<u8> {
     write_section(&mut out, &data.scene_blocks);
     write_section(&mut out, &data.system_blocks);
     write_section(&mut out, &data.factory_blocks);
+    write_panel_section(&mut out, &data.wire_face_panels);
     out
 }
 
@@ -162,6 +184,7 @@ pub fn decode_blocks(bytes: &[u8]) -> Result<SaveBlocksData, SaveFormatError> {
     let scene_blocks = read_section(&mut cursor)?;
     let system_blocks = read_section(&mut cursor)?;
     let factory_blocks = read_section(&mut cursor)?;
+    let wire_face_panels = read_panel_section(&mut cursor)?;
     if !cursor.remaining().is_empty() {
         return Err(SaveFormatError::UnexpectedEof);
     }
@@ -169,6 +192,7 @@ pub fn decode_blocks(bytes: &[u8]) -> Result<SaveBlocksData, SaveFormatError> {
         scene_blocks,
         system_blocks,
         factory_blocks,
+        wire_face_panels,
     })
 }
 
@@ -176,6 +200,18 @@ fn write_section(out: &mut Vec<u8>, blocks: &[SavedBlock]) {
     out.extend_from_slice(&(blocks.len() as u32).to_le_bytes());
     for block in blocks {
         write_block(out, block);
+    }
+}
+
+fn write_panel_section(out: &mut Vec<u8>, panels: &[SavedWireFacePanel]) {
+    out.extend_from_slice(&(panels.len() as u32).to_le_bytes());
+    for panel in panels {
+        out.extend_from_slice(&panel.x.to_le_bytes());
+        out.extend_from_slice(&panel.y.to_le_bytes());
+        out.extend_from_slice(&panel.z.to_le_bytes());
+        out.extend_from_slice(&panel.nx.to_le_bytes());
+        out.extend_from_slice(&panel.ny.to_le_bytes());
+        out.extend_from_slice(&panel.nz.to_le_bytes());
     }
 }
 
@@ -202,6 +238,22 @@ fn read_section(cursor: &mut Cursor<'_>) -> Result<Vec<SavedBlock>, SaveFormatEr
         blocks.push(read_block(cursor)?);
     }
     Ok(blocks)
+}
+
+fn read_panel_section(cursor: &mut Cursor<'_>) -> Result<Vec<SavedWireFacePanel>, SaveFormatError> {
+    let count = cursor.read_u32()? as usize;
+    let mut panels = Vec::with_capacity(count);
+    for _ in 0..count {
+        panels.push(SavedWireFacePanel {
+            x: cursor.read_i32()?,
+            y: cursor.read_i32()?,
+            z: cursor.read_i32()?,
+            nx: cursor.read_i32()?,
+            ny: cursor.read_i32()?,
+            nz: cursor.read_i32()?,
+        });
+    }
+    Ok(panels)
 }
 
 fn read_block(cursor: &mut Cursor<'_>) -> Result<SavedBlock, SaveFormatError> {
@@ -300,6 +352,14 @@ mod tests {
                 IVec3::new(0, 0, 1),
                 BlockData::new(BlockKind::Conveyor, Facing::South),
             )],
+            wire_face_panels: vec![SavedWireFacePanel {
+                x: 0,
+                y: 0,
+                z: 1,
+                nx: 0,
+                ny: 1,
+                nz: 0,
+            }],
         };
 
         let encoded = encode_blocks(&data);
