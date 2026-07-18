@@ -117,24 +117,26 @@ fn dispatch_inventory_slot_action(
     };
 
     if slot.area == SlotArea::Hotbar {
+        // 物品栏（背包打开）：空手拿起并清空格，有手持则覆盖放下（不交换）
         let before = inventory.hotbar;
         if let Some(item) = carried.take() {
-            let previous = inventory.hotbar[slot.index].replace(item);
-            carried.set(previous);
+            inventory.hotbar[slot.index] = Some(item);
+            placement.selected = slot.index;
+        } else if let Some(item) = clicked_item {
+            inventory.hotbar[slot.index] = None;
+            carried.set(Some(item));
             placement.selected = slot.index;
         } else {
-            if let Some(item) = clicked_item {
-                inventory.hotbar[slot.index] = None;
-                carried.set(Some(item));
-            } else {
-                carried.clear();
-            }
             placement.selected = slot.index;
         }
         if inventory.hotbar != before {
             solution_state.dirty = true;
         }
+    } else if carried.item().is_some() {
+        // 背包格：有手持则取消手里的东西
+        carried.clear();
     } else if let Some(item) = clicked_item {
+        // 背包格：空手则拿起（目录不移除）
         carried.set(Some(item));
     }
     placement.selection.clear();

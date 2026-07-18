@@ -253,7 +253,7 @@ impl CarriedItem {
         self.0.take()
     }
 
-    pub(super) fn item(&self) -> Option<InventoryItem> {
+    pub fn item(&self) -> Option<InventoryItem> {
         self.0
     }
 }

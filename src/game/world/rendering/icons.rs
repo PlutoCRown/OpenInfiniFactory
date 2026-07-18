@@ -9,7 +9,7 @@ use super::components::{
 };
 use super::spawn::spawn_block_model;
 use crate::game::blocks::{BlockData, BlockKind, PLAY_BLOCKS, edit_blocks};
-use crate::game::material_blocks::{MaterialBlockRegistry, StampMaterialRegistry};
+use crate::game::material_blocks::{MaterialBlockRegistry, PaintMaterialRegistry, StampMaterialRegistry};
 use crate::game::scene_blocks::{SceneBlockRegistry, load_icon_png};
 use crate::game::world::animation::AnimationTiming;
 use crate::game::world::grid::WorldBlocks;
@@ -34,6 +34,7 @@ pub fn setup_block_icons(
     scene_registry: Res<SceneBlockRegistry>,
     material_registry: Res<MaterialBlockRegistry>,
     stamp_registry: Res<StampMaterialRegistry>,
+    paint_registry: Res<PaintMaterialRegistry>,
 ) {
     let icon_layer = RenderLayers::layer(ICON_RENDER_LAYER);
     let mut icon_assets = BlockIconAssets::default();
@@ -89,6 +90,21 @@ pub fn setup_block_icons(
             }
             None => {
                 bevy::log::warn!("failed to load icon {}", icon_path.display());
+            }
+        }
+    }
+
+    // 滚刷漆：用 texture.png 作选择格图标
+    for presentation in paint_registry.ordered() {
+        match load_icon_png(&presentation.texture_path, &mut images) {
+            Some(handle) => {
+                icon_assets.paints.insert(presentation.id, handle);
+            }
+            None => {
+                bevy::log::warn!(
+                    "failed to load paint texture {}",
+                    presentation.texture_path.display()
+                );
             }
         }
     }

@@ -7,8 +7,8 @@ use super::GeneratorBlock;
 use crate::game::edit_history::{apply_block_settings_with_history, EditHistory};
 
 use crate::game::block_editing::widgets::{
-    position_dropdown_from_trigger, spawn_labeled_panel_button, spawn_material_icon_list,
-    spawn_material_icon_toggle, update_material_icon,
+    click_material_slot, spawn_labeled_panel_button, spawn_material_icon_list,
+    spawn_material_icon_toggle, sync_dropdown_overlay, update_material_icon,
 };
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::OpenBlockPanelDropdown;
@@ -26,7 +26,7 @@ use crate::game::ui::core::host::UiHost;
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::block_panels::BlockPanelSystems;
-use crate::game::ui::types::{UiActionLabel, UiPanelBinding};
+use crate::game::ui::types::{CarriedItem, UiActionLabel, UiPanelBinding};
 use crate::game::world::grid::{GeneratorMode, WorldBlocks};
 use crate::game::world::rendering::BlockIconAssets;
 
@@ -218,6 +218,7 @@ fn on_click(
     ui_host: Res<UiHost>,
     ui_runtime: Res<UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
+    mut carried: ResMut<CarriedItem>,
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
     mut world: PlayingWorldParams,
@@ -242,6 +243,7 @@ fn on_click(
         &mut world,
         &mut solution_state,
         &mut open_dropdown,
+        &mut carried,
         &mut edit_history,
     );
 }
@@ -252,6 +254,7 @@ fn dispatch_action(
     world: &mut PlayingWorldParams,
     solution_state: &mut SolutionState,
     open_dropdown: &mut OpenBlockPanelDropdown,
+    carried: &mut CarriedItem,
     edit_history: &mut EditHistory,
 ) {
     let mut settings = world.world.generator_settings(pos);
@@ -316,8 +319,14 @@ fn dispatch_action(
             true
         }
         GeneratorAction::ToggleMaterial => {
-            open_dropdown.toggle(UiPanelId::Generator, MATERIAL_SLOT);
-            return;
+            if let Some(material) =
+                click_material_slot(UiPanelId::Generator, MATERIAL_SLOT, carried, open_dropdown)
+            {
+                settings.material = material;
+                true
+            } else {
+                return;
+            }
         }
         GeneratorAction::SetMaterial(material) => {
             settings.material = material;
@@ -449,49 +458,53 @@ fn update_dropdowns(
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    mut option_icons_filled: Local<bool>,
+    mut last_slot_material: Local<Option<Option<MaterialBlockId>>>,
     mut material_slots: Query<(&GeneratorMaterialSlot, &Children)>,
     mut material_options: Query<(&GeneratorMaterialOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
     mut lists: Query<(&GeneratorMaterialList, &mut Node, &ComputedNode)>,
     triggers: Query<(&GeneratorAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
-    let active_pos = ui_runtime.active_block_pos();
     let panel = UiPanelId::Generator;
-
-    if let Some(block_icons) = block_icons.as_deref() {
-        let material = active_pos.map(|pos| world.generator_settings(pos).material);
-        for (slot, children) in &mut material_slots {
-            let _ = slot;
-            update_material_icon(children, material, block_icons, &mut material_icons);
-        }
-        for (option, children) in &mut material_options {
-            update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
-        }
-    }
+    let panel_active = ui_runtime.active_panel() == Some(panel);
+    let open = panel_active && open_dropdown.is_open(panel, MATERIAL_SLOT);
 
     let window = windows.single().ok();
     let viewport = window
         .map(|window| Vec2::new(window.width(), window.height()))
         .unwrap_or(Vec2::ZERO);
-
-    for (list, mut style, list_node) in &mut lists {
-        let _ = list;
-        let open = open_dropdown.is_open(panel, MATERIAL_SLOT);
-        style.display = if open { Display::Flex } else { Display::None };
-        if !open {
-            continue;
-        }
+    for (_, mut style, list_node) in &mut lists {
         let trigger = triggers.iter().find_map(|(action, node, transform)| {
             (*action == GeneratorAction::ToggleMaterial && !node.is_empty())
                 .then_some((node, transform))
         });
-        if let Some((trigger_node, transform)) = trigger {
-            if let Some((left, top)) =
-                position_dropdown_from_trigger(trigger_node, transform, list_node, viewport)
-            {
-                style.left = Val::Px(left);
-                style.top = Val::Px(top);
-            }
+        sync_dropdown_overlay(open, &mut style, list_node, trigger, viewport);
+    }
+
+    let Some(icons) = block_icons.as_ref() else {
+        return;
+    };
+    let icons_changed = icons.is_changed();
+    let block_icons = icons.as_ref();
+    if !*option_icons_filled || icons_changed {
+        for (option, children) in &mut material_options {
+            update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
         }
+        *option_icons_filled = true;
+    }
+
+    if !panel_active {
+        *last_slot_material = None;
+        return;
+    }
+    let material = ui_runtime
+        .active_block_pos()
+        .map(|pos| world.generator_settings(pos).material);
+    if last_slot_material.as_ref() != Some(&material) || icons_changed {
+        for (_, children) in &mut material_slots {
+            update_material_icon(children, material, block_icons, &mut material_icons);
+        }
+        *last_slot_material = Some(material);
     }
 }

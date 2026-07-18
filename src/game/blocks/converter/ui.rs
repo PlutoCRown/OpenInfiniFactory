@@ -4,28 +4,28 @@ use bevy::window::PrimaryWindow;
 
 use super::ConverterBlock;
 
-use crate::game::edit_history::{apply_block_settings_with_history, EditHistory};
+use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
-    position_dropdown_from_trigger, spawn_material_icon_list, spawn_material_icon_toggle,
-    update_material_icon,
+    click_material_slot, spawn_material_icon_list, spawn_material_icon_toggle,
+    sync_dropdown_overlay, update_material_icon,
 };
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
-use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::blocks::{material_catalog, MaterialBlockId};
+use crate::game::blocks::{MaterialBlockId, material_catalog};
+use crate::game::edit_history::{EditHistory, apply_block_settings_with_history};
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::access::UiMainThread;
 use crate::game::ui::components::{
-    default_button_size, localized_text, spawn_panel as spawn_ui_panel, transparent_node,
-    PanelOptions,
+    PanelOptions, default_button_size, localized_text, spawn_panel as spawn_ui_panel,
+    transparent_node,
 };
 use crate::game::ui::core::host::UiHost;
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::block_panels::BlockPanelSystems;
-use crate::game::ui::types::{UiActionLabel, UiPanelBinding};
+use crate::game::ui::types::{CarriedItem, UiActionLabel, UiPanelBinding};
 use crate::game::world::grid::{ConverterMode, WorldBlocks};
 use crate::game::world::rendering::BlockIconAssets;
 
@@ -180,6 +180,7 @@ fn on_click(
     ui_host: Res<UiHost>,
     ui_runtime: Res<UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
+    mut carried: ResMut<CarriedItem>,
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
     mut world: PlayingWorldParams,
@@ -203,12 +204,31 @@ fn on_click(
 
     let changed = match action {
         ConverterAction::ToggleInput => {
-            open_dropdown.toggle(UiPanelId::Converter, INPUT_SLOT);
-            return;
+            if let Some(material) = click_material_slot(
+                UiPanelId::Converter,
+                INPUT_SLOT,
+                &mut carried,
+                &mut open_dropdown,
+            ) {
+                settings.input = material;
+                settings.mode = ConverterMode::SpecificInput;
+                true
+            } else {
+                return;
+            }
         }
         ConverterAction::ToggleOutput => {
-            open_dropdown.toggle(UiPanelId::Converter, OUTPUT_SLOT);
-            return;
+            if let Some(material) = click_material_slot(
+                UiPanelId::Converter,
+                OUTPUT_SLOT,
+                &mut carried,
+                &mut open_dropdown,
+            ) {
+                settings.output = material;
+                true
+            } else {
+                return;
+            }
         }
         ConverterAction::SetInput(material) => {
             settings.input = material;
@@ -237,7 +257,9 @@ fn show_input_row(ui_runtime: Res<UiRuntime>, mut rows: Query<&mut Node, With<Co
         return;
     }
     for mut style in &mut rows {
-        style.display = Display::Flex;
+        if style.display != Display::Flex {
+            style.display = Display::Flex;
+        }
     }
 }
 
@@ -248,6 +270,8 @@ fn update_dropdowns(
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    mut option_icons_filled: Local<bool>,
+    mut last_slot_materials: Local<Option<(Option<MaterialBlockId>, Option<MaterialBlockId>)>>,
     mut material_slots: Query<(&ConverterInputSlot, &Children)>,
     mut output_slots: Query<(&ConverterOutputSlot, &Children)>,
     mut material_options: Query<(&ConverterMaterialOption, &Children)>,
@@ -258,33 +282,10 @@ fn update_dropdowns(
     )>,
     triggers: Query<(&ConverterAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
-    let active_pos = ui_runtime.active_block_pos();
     let panel = UiPanelId::Converter;
-
-    if let Some(block_icons) = block_icons.as_deref() {
-        if let Some(pos) = active_pos {
-            let settings = world.converter_settings(pos);
-            for (_, children) in &mut material_slots {
-                update_material_icon(
-                    children,
-                    Some(settings.input),
-                    block_icons,
-                    &mut material_icons,
-                );
-            }
-            for (_, children) in &mut output_slots {
-                update_material_icon(
-                    children,
-                    Some(settings.output),
-                    block_icons,
-                    &mut material_icons,
-                );
-            }
-        }
-        for (option, children) in &mut material_options {
-            update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
-        }
-    }
+    let panel_active = ui_runtime.active_panel() == Some(panel);
+    let input_open = panel_active && open_dropdown.is_open(panel, INPUT_SLOT);
+    let output_open = panel_active && open_dropdown.is_open(panel, OUTPUT_SLOT);
 
     let window = windows.single().ok();
     let viewport = window
@@ -292,29 +293,56 @@ fn update_dropdowns(
         .unwrap_or(Vec2::ZERO);
 
     update_material_list(
-        &open_dropdown,
-        panel,
-        INPUT_SLOT,
+        input_open,
         ConverterAction::ToggleInput,
         &mut list_queries.p0(),
         &triggers,
         viewport,
     );
     update_material_list(
-        &open_dropdown,
-        panel,
-        OUTPUT_SLOT,
+        output_open,
         ConverterAction::ToggleOutput,
         &mut list_queries.p1(),
         &triggers,
         viewport,
     );
+
+    let Some(icons) = block_icons.as_ref() else {
+        return;
+    };
+    let icons_changed = icons.is_changed();
+    let block_icons = icons.as_ref();
+    if !*option_icons_filled || icons_changed {
+        for (option, children) in &mut material_options {
+            update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
+        }
+        *option_icons_filled = true;
+    }
+
+    if !panel_active {
+        *last_slot_materials = None;
+        return;
+    }
+    let slot_materials = ui_runtime
+        .active_block_pos()
+        .map(|pos| {
+            let settings = world.converter_settings(pos);
+            (Some(settings.input), Some(settings.output))
+        })
+        .unwrap_or((None, None));
+    if last_slot_materials.as_ref() != Some(&slot_materials) || icons_changed {
+        for (_, children) in &mut material_slots {
+            update_material_icon(children, slot_materials.0, block_icons, &mut material_icons);
+        }
+        for (_, children) in &mut output_slots {
+            update_material_icon(children, slot_materials.1, block_icons, &mut material_icons);
+        }
+        *last_slot_materials = Some(slot_materials);
+    }
 }
 
 fn update_material_list<L>(
-    open_dropdown: &OpenBlockPanelDropdown,
-    panel: UiPanelId,
-    slot: u8,
+    open: bool,
     toggle: ConverterAction,
     lists: &mut Query<(&L, &mut Node, &ComputedNode)>,
     triggers: &Query<(&ConverterAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
@@ -323,21 +351,9 @@ fn update_material_list<L>(
     L: Component,
 {
     for (_, mut style, list_node) in lists.iter_mut() {
-        let open = open_dropdown.is_open(panel, slot);
-        style.display = if open { Display::Flex } else { Display::None };
-        if !open {
-            continue;
-        }
         let trigger = triggers.iter().find_map(|(action, node, transform)| {
             (*action == toggle && !node.is_empty()).then_some((node, transform))
         });
-        if let Some((trigger_node, transform)) = trigger {
-            if let Some((left, top)) =
-                position_dropdown_from_trigger(trigger_node, transform, list_node, viewport)
-            {
-                style.left = Val::Px(left);
-                style.top = Val::Px(top);
-            }
-        }
+        sync_dropdown_overlay(open, &mut style, list_node, trigger, viewport);
     }
 }

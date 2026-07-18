@@ -5,8 +5,8 @@ use bevy::window::PrimaryWindow;
 use super::SignBlock;
 
 use crate::game::block_editing::widgets::{
-    position_dropdown_from_trigger, spawn_labeled_panel_button, spawn_material_icon_list,
-    spawn_material_icon_toggle, update_material_icon,
+    click_material_slot, spawn_labeled_panel_button, spawn_material_icon_list,
+    spawn_material_icon_toggle, sync_dropdown_overlay, update_material_icon,
 };
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::OpenBlockPanelDropdown;
@@ -26,7 +26,7 @@ use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::core::text_prompt::{TextPromptProps, TextPromptResult};
 use crate::game::ui::features::block_panels::BlockPanelSystems;
-use crate::game::ui::types::{UiActionLabel, UiPanelBinding};
+use crate::game::ui::types::{CarriedItem, UiActionLabel, UiPanelBinding};
 use crate::game::world::grid::{SignDisplay, WorldBlocks};
 use crate::game::world::rendering::BlockIconAssets;
 
@@ -155,6 +155,7 @@ fn on_click(
     ui_host: Res<UiHost>,
     ui_runtime: Res<UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
+    mut carried: ResMut<CarriedItem>,
     mut pending_text: ResMut<PendingSignTextEdit>,
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
@@ -188,8 +189,15 @@ fn on_click(
             true
         }
         SignAction::ToggleDisplay => {
-            open_dropdown.toggle(UiPanelId::Sign, DISPLAY_SLOT);
-            return;
+            if let Some(material) =
+                click_material_slot(UiPanelId::Sign, DISPLAY_SLOT, &mut carried, &mut open_dropdown)
+            {
+                settings.display = Some(SignDisplay::Material(material));
+                settings.text = None;
+                true
+            } else {
+                return;
+            }
         }
         SignAction::SetMaterial(material) => {
             settings.display = Some(SignDisplay::Material(material));
@@ -286,7 +294,9 @@ fn update_panel(
         .filter(|text| !text.is_empty())
         .unwrap_or("-");
     for mut text in &mut preview {
-        text.0 = label.to_string();
+        if text.0 != label {
+            text.0 = label.to_string();
+        }
     }
 }
 
@@ -297,49 +307,55 @@ fn update_dropdowns(
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    mut option_icons_filled: Local<bool>,
+    mut last_slot_material: Local<Option<Option<MaterialBlockId>>>,
     mut display_slots: Query<(&SignDisplaySlot, &Children)>,
     mut material_options: Query<(&SignMaterialOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
     mut lists: Query<(&SignDisplayList, &mut Node, &ComputedNode)>,
     triggers: Query<(&SignAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
-    let active_pos = ui_runtime.active_block_pos();
     let panel = UiPanelId::Sign;
-
-    if let Some(block_icons) = block_icons.as_deref() {
-        let material = active_pos.and_then(|pos| match world.sign_settings(pos).display {
-            Some(SignDisplay::Material(material)) => Some(material),
-            _ => None,
-        });
-        for (_, children) in &mut display_slots {
-            update_material_icon(children, material, block_icons, &mut material_icons);
-        }
-        for (option, children) in &mut material_options {
-            update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
-        }
-    }
+    let panel_active = ui_runtime.active_panel() == Some(panel);
+    let open = panel_active && open_dropdown.is_open(panel, DISPLAY_SLOT);
 
     let window = windows.single().ok();
     let viewport = window
         .map(|w| Vec2::new(w.width(), w.height()))
         .unwrap_or(Vec2::ZERO);
-
     for (_, mut style, list_node) in &mut lists {
-        let open = open_dropdown.is_open(panel, DISPLAY_SLOT);
-        style.display = if open { Display::Flex } else { Display::None };
-        if !open {
-            continue;
-        }
         let trigger = triggers.iter().find_map(|(action, node, transform)| {
             (*action == SignAction::ToggleDisplay && !node.is_empty()).then_some((node, transform))
         });
-        if let Some((trigger_node, transform)) = trigger {
-            if let Some((left, top)) =
-                position_dropdown_from_trigger(trigger_node, transform, list_node, viewport)
-            {
-                style.left = Val::Px(left);
-                style.top = Val::Px(top);
-            }
+        sync_dropdown_overlay(open, &mut style, list_node, trigger, viewport);
+    }
+
+    let Some(icons) = block_icons.as_ref() else {
+        return;
+    };
+    let icons_changed = icons.is_changed();
+    let block_icons = icons.as_ref();
+    if !*option_icons_filled || icons_changed {
+        for (option, children) in &mut material_options {
+            update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
         }
+        *option_icons_filled = true;
+    }
+
+    if !panel_active {
+        *last_slot_material = None;
+        return;
+    }
+    let material = ui_runtime.active_block_pos().and_then(|pos| {
+        match world.sign_settings(pos).display {
+            Some(SignDisplay::Material(material)) => Some(material),
+            _ => None,
+        }
+    });
+    if last_slot_material.as_ref() != Some(&material) || icons_changed {
+        for (_, children) in &mut display_slots {
+            update_material_icon(children, material, block_icons, &mut material_icons);
+        }
+        *last_slot_material = Some(material);
     }
 }

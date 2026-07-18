@@ -1,12 +1,20 @@
 use bevy::prelude::*;
 
 use crate::game::blocks::{BlockKind, MaterialBlockId};
+use crate::game::state::UiPanelId;
+use crate::game::ui::access::UiMainThread;
 use crate::game::ui::components::{
-    default_button_size, default_font_size, localized_text, menu_button, styled_button,
-    ui_logical_bounds,
+    default_button_size, default_font_size, hover_border, inset_border, localized_text,
+    menu_button, styled_button, ui_logical_bounds,
 };
-use crate::game::ui::types::UiActionLabel;
+use crate::game::ui::types::{CarriedItem, UiActionLabel};
 use crate::game::world::rendering::BlockIconAssets;
+
+use super::OpenBlockPanelDropdown;
+
+/// 材料图标凹槽：面板当前格与悬浮选项共用，靠 Interaction 刷 hover，不挂 HoverButton
+#[derive(Component, Clone, Copy)]
+pub struct MaterialIconSlot;
 
 pub fn spawn_labeled_panel_button<A>(parent: &mut ChildSpawnerCommands, action: A)
 where
@@ -105,70 +113,31 @@ pub fn spawn_material_icon_toggle<A, S>(
     S: Component + Copy,
 {
     parent
-        .spawn((
-            styled_button(
-                Node {
-                    width: Val::Px(default_button_size(54.0)),
-                    height: Val::Px(default_button_size(54.0)),
-                    border: UiRect {
-                        left: Val::Px(4.0),
-                        right: Val::Px(4.0),
-                        top: Val::Px(5.0),
-                        bottom: Val::Px(5.0),
-                    },
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },
-                Color::srgb(0.255, 0.251, 0.251),
-                Color::srgba(0.0, 0.0, 0.0, 0.35),
-            ),
-            slot_marker,
-            toggle_action,
-        ))
+        .spawn((material_slot_button(), slot_marker, toggle_action))
         .with_children(|slot| {
             slot.spawn(material_icon_node());
         });
 }
 
-pub fn spawn_material_icon_list<A, O, L>(
+pub fn spawn_material_icon_list<A, O, L, Id>(
     parent: &mut ChildSpawnerCommands,
     list_marker: L,
-    options: impl IntoIterator<Item = (MaterialBlockId, A)>,
-    option_marker: fn(MaterialBlockId) -> O,
+    options: impl IntoIterator<Item = (Id, A)>,
+    option_marker: fn(Id) -> O,
 ) where
     A: Component + Copy,
     O: Component + Copy,
     L: Component + Copy,
+    Id: Copy,
 {
     parent
         .spawn((icon_dropdown_list_node(), GlobalZIndex(20_000), list_marker))
         .with_children(|list| {
             for (material, action) in options {
-                list.spawn((
-                    styled_button(
-                        Node {
-                            width: Val::Px(default_button_size(54.0)),
-                            height: Val::Px(default_button_size(54.0)),
-                            border: UiRect {
-                                left: Val::Px(4.0),
-                                right: Val::Px(4.0),
-                                top: Val::Px(5.0),
-                                bottom: Val::Px(5.0),
-                            },
-                            align_items: AlignItems::Center,
-                            justify_content: JustifyContent::Center,
-                            ..default()
-                        },
-                        Color::srgb(0.255, 0.251, 0.251),
-                        Color::srgba(0.0, 0.0, 0.0, 0.35),
-                    ),
-                    option_marker(material),
-                    action,
-                ))
-                .with_children(|slot| {
-                    slot.spawn(material_icon_node());
-                });
+                list.spawn((material_slot_button(), option_marker(material), action))
+                    .with_children(|slot| {
+                        slot.spawn(material_icon_node());
+                    });
             }
         });
 }
@@ -182,11 +151,57 @@ pub fn update_material_icon(
     let icon = material
         .map(BlockKind::material_block_kind)
         .and_then(|kind| block_icons.get(kind));
+    update_slot_icon(children, icon, icon_query);
+}
+
+/// 更新格子子节点上的图标贴图
+pub fn update_slot_icon(
+    children: &Children,
+    icon: Option<Handle<Image>>,
+    icon_query: &mut Query<&mut ImageNode>,
+) {
+    let next = icon.map(ImageNode::new).unwrap_or_default();
     for child in children.iter() {
         if let Ok(mut image) = icon_query.get_mut(child) {
-            *image = icon.clone().map(ImageNode::new).unwrap_or_default();
+            *image = next.clone();
         }
     }
+}
+
+/// 材料选择格点击：与背包/物品栏统一手持逻辑，并处理悬浮菜单。
+/// - 悬浮菜单开着：无论手上有没有东西都关闭，不写入
+/// - 手持材料：写入该材料并清空手持
+/// - 手持非材料：取消手里的东西
+/// - 空手：打开悬浮菜单
+/// 返回 Some 表示要把该材料写入方块设置。
+pub fn click_material_slot(
+    panel: UiPanelId,
+    slot: u8,
+    carried: &mut CarriedItem,
+    open_dropdown: &mut OpenBlockPanelDropdown,
+) -> Option<MaterialBlockId> {
+    if open_dropdown.is_open(panel, slot) {
+        open_dropdown.close();
+        return None;
+    }
+
+    let hand_material = carried
+        .item()
+        .and_then(|item| item.block())
+        .and_then(BlockKind::material_id);
+
+    if let Some(id) = hand_material {
+        carried.clear();
+        return Some(id);
+    }
+
+    if carried.item().is_some() {
+        carried.clear();
+        return None;
+    }
+
+    open_dropdown.toggle(panel, slot);
+    None
 }
 
 pub fn position_dropdown_from_trigger(
@@ -212,10 +227,69 @@ pub fn position_dropdown_from_trigger(
     Some((left, top))
 }
 
+/// 同步下拉层显隐与锚点；Display 有变化才写，打开时再跟 trigger 定位
+pub fn sync_dropdown_overlay(
+    open: bool,
+    style: &mut Node,
+    list_node: &ComputedNode,
+    trigger: Option<(&ComputedNode, &UiGlobalTransform)>,
+    viewport: Vec2,
+) {
+    let next = if open { Display::Flex } else { Display::None };
+    if style.display != next {
+        style.display = next;
+    }
+    if !open {
+        return;
+    }
+    let Some((trigger_node, transform)) = trigger else {
+        return;
+    };
+    if let Some((left, top)) =
+        position_dropdown_from_trigger(trigger_node, transform, list_node, viewport)
+    {
+        let left = Val::Px(left);
+        let top = Val::Px(top);
+        if style.left != left {
+            style.left = left;
+        }
+        if style.top != top {
+            style.top = top;
+        }
+    }
+}
+
+fn material_slot_button() -> impl Bundle {
+    // 与背包物品槽同款凹槽样式；不挂 HoverButton，避免移出后被恢复成凸起按钮边框
+    const SLOT_BORDER: f32 = 3.0;
+    (
+        Button,
+        MaterialIconSlot,
+        Node {
+            width: Val::Px(default_button_size(54.0)),
+            height: Val::Px(default_button_size(54.0)),
+            border: UiRect::all(Val::Px(SLOT_BORDER)),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        inset_border(),
+        BackgroundColor(Color::srgb(0.255, 0.251, 0.251)),
+        BoxShadow::new(
+            Color::srgba(0.0, 0.0, 0.0, 0.50),
+            Val::Px(0.0),
+            Val::Px(0.0),
+            Val::Px(0.0),
+            Val::Px(3.0),
+        ),
+    )
+}
+
 fn material_icon_node() -> impl Bundle {
     const ICON_INSET: f32 = 4.0;
     (
         ImageNode::default(),
+        Pickable::IGNORE,
         Node {
             position_type: PositionType::Absolute,
             left: Val::Px(ICON_INSET),
@@ -225,6 +299,29 @@ fn material_icon_node() -> impl Bundle {
             ..default()
         },
     )
+}
+
+/// 材料凹槽悬停：亮一点背景 + hover 边框，移出恢复凹槽
+pub fn update_material_slot_hover(
+    _ui_thread: UiMainThread,
+    mut slots: Query<
+        (&Interaction, &mut BackgroundColor, &mut BorderColor),
+        (With<MaterialIconSlot>, Changed<Interaction>),
+    >,
+) {
+    for (interaction, mut background, mut border) in &mut slots {
+        let hovered = *interaction == Interaction::Hovered;
+        *background = if hovered {
+            Color::srgb(0.32, 0.31, 0.31).into()
+        } else {
+            Color::srgb(0.255, 0.251, 0.251).into()
+        };
+        *border = if hovered {
+            hover_border()
+        } else {
+            inset_border()
+        };
+    }
 }
 
 fn dropdown_list_node(width: f32) -> impl Bundle {
@@ -245,18 +342,24 @@ fn dropdown_list_node(width: f32) -> impl Bundle {
 }
 
 fn icon_dropdown_list_node() -> impl Bundle {
+    // 一行 5 格：5×槽宽 + 4×间距 + 两侧 padding
+    const SLOTS_PER_ROW: f32 = 5.0;
+    const SLOT_GAP: f32 = 4.0;
+    const LIST_PADDING: f32 = 4.0;
+    let slot = default_button_size(54.0);
+    let width = SLOTS_PER_ROW * slot + (SLOTS_PER_ROW - 1.0) * SLOT_GAP + LIST_PADDING * 2.0;
     (
         Node {
-            width: Val::Px(192.0),
+            width: Val::Px(width),
             display: Display::None,
             position_type: PositionType::Absolute,
             left: Val::Px(0.0),
             top: Val::Px(0.0),
             flex_direction: FlexDirection::Row,
             flex_wrap: FlexWrap::Wrap,
-            row_gap: Val::Px(4.0),
-            column_gap: Val::Px(4.0),
-            padding: UiRect::all(Val::Px(4.0)),
+            row_gap: Val::Px(SLOT_GAP),
+            column_gap: Val::Px(SLOT_GAP),
+            padding: UiRect::all(Val::Px(LIST_PADDING)),
             ..default()
         },
         BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),

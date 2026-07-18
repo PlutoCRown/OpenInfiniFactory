@@ -4,7 +4,7 @@ use bevy::window::PrimaryWindow;
 
 use crate::game::state::GameSettings;
 use crate::game::ui::components::{
-    hover_border, pressed_border, raised_border, ui_logical_bounds, BUTTON_BG, BUTTON_HOVER_BG,
+    BUTTON_BG, BUTTON_HOVER_BG, hover_border, pressed_border, raised_border, ui_logical_bounds,
 };
 use crate::game::ui::types::{KeyBindingButton, UiHoverState};
 
@@ -13,9 +13,10 @@ use super::types::{
     SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
     SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind, SettingsValueText,
 };
-use crate::game::ui::access::UiMainThread;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::debug_http::DebugHttpBridge;
+use crate::game::ui::access::UiMainThread;
+use crate::game::ui::core::runtime::UiRuntime;
 use crate::shared::config::{ActionKeyName, ConfigChord, ConfigInput, GameConfig};
 
 pub fn localized_chord_display(chord: ConfigChord) -> String {
@@ -268,8 +269,10 @@ fn dropdown_position(
 }
 
 pub fn update_settings_tabs_ui(
+    ui_runtime: Res<UiRuntime>,
     settings_tab: Res<SettingsTab>,
     hover: Res<UiHoverState>,
+    mut initialized: Local<bool>,
     mut tab_buttons: Query<
         (
             Entity,
@@ -280,6 +283,16 @@ pub fn update_settings_tabs_ui(
         With<Button>,
     >,
 ) {
+    if !ui_runtime.is_settings_open() {
+        *initialized = false;
+        return;
+    }
+    if *initialized && !settings_tab.is_changed() && !hover.is_changed() && !ui_runtime.is_changed()
+    {
+        return;
+    }
+    *initialized = true;
+
     for (entity, action, mut background, mut border) in &mut tab_buttons {
         let selected = action.tab_selected(*settings_tab);
         let hovered = hover.entity == Some(entity);

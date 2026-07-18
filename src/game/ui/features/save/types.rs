@@ -45,6 +45,8 @@ pub struct SaveListRenderState {
     pub entry: Option<crate::game::state::WorldEntryMode>,
     pub puzzle_keys: Vec<String>,
     pub solution_keys: Vec<String>,
+    /// 行重建后下一帧再刷按钮样式/标签（Commands 延迟生效）
+    pub paint_buttons: bool,
 }
 
 #[derive(Component)]

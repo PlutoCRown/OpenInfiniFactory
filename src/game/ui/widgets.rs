@@ -6,7 +6,7 @@ use crate::game::state::GameSettings;
 use super::components::{
     BUTTON_BG, default_button_size, default_font_size, full_width_button, inset_border,
     localized_text, menu_button, raised_border, slider_bundle, slider_fill, slider_knob,
-    styled_button, text_button,
+    text_button,
 };
 use super::types::{
     AreaKind, InventoryItem, InventorySlot, KeyBindingButton, SettingsAction, SettingsDropdown,
@@ -30,22 +30,22 @@ fn plain_node(style: Node) -> impl Bundle {
 }
 
 pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, index: usize) {
+    // 凹槽物品格：不挂 HoverButton，避免移出后被全局按钮逻辑改成凸起边框
     const SLOT_BORDER: f32 = 3.0;
 
     parent
         .spawn((
-            styled_button(
-                Node {
-                    width: Val::Px(default_button_size(54.0)),
-                    height: Val::Px(default_button_size(54.0)),
-                    border: UiRect::all(Val::Px(SLOT_BORDER)),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },
-                inset_border(),
-                Color::srgb(0.255, 0.251, 0.251),
-            ),
+            Button,
+            Node {
+                width: Val::Px(default_button_size(54.0)),
+                height: Val::Px(default_button_size(54.0)),
+                border: UiRect::all(Val::Px(SLOT_BORDER)),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            inset_border(),
+            BackgroundColor(Color::srgb(0.255, 0.251, 0.251)),
             BoxShadow::new(
                 Color::srgba(0.0, 0.0, 0.0, 0.50),
                 Val::Px(0.0),

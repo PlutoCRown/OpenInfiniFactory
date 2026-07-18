@@ -10,8 +10,8 @@ use crate::game::world::animation::{
 };
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    signal_neighbor_offsets, spawn_acceptance_sparks, spawn_laser_beams, spawn_weld_sparks,
-    spawn_world_block_entity, BlockEntity, BlockEntityLayer, WorldRenderAssets,
+    BlockEntity, BlockEntityLayer, WorldRenderAssets, signal_neighbor_offsets,
+    spawn_acceptance_sparks, spawn_laser_beams, spawn_weld_sparks, spawn_world_block_entity,
 };
 use crate::sim_bridge::TurnOutput;
 
@@ -467,6 +467,13 @@ pub fn refresh_edit_changes(
     changed: &HashSet<IVec3>,
 ) {
     let refresh = collect_edit_refresh_positions(world, changed);
+    // 编辑常只改 block_settings（材料预览等），BlockData 不变；
+    // refresh_positions 对已存在的系统实体会跳过，这里先拆掉再重建。
+    for &pos in &refresh {
+        if world.system_blocks.contains_key(&pos) {
+            despawn_system_at(commands, index, pos);
+        }
+    }
     refresh_positions(
         commands,
         meshes,

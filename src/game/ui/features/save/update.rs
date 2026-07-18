@@ -62,6 +62,11 @@ pub fn update_save_list_ui(
         ),
     >,
 ) {
+    // 存档列表未显示时不刷
+    if *mode.get() != GameMode::StartMenu || *start_menu_screen != StartMenuScreen::SaveList {
+        return;
+    }
+
     let play_flow = solution_state.save_list_entry == WorldEntryMode::PlaySolution;
     let edit_flow = solution_state.save_list_entry == WorldEntryMode::EditPuzzle;
     let puzzle_rows = save_list_puzzle_rows(&save_state);
@@ -72,76 +77,114 @@ pub fn update_save_list_ui(
         .collect::<Vec<_>>();
     let show_solutions = play_flow && save_state.selected_puzzle.is_some();
 
-    for mut text in &mut texts.p0() {
-        text.0 = save_list_title(
+    let structure_changed = mode.is_changed()
+        || start_menu_screen.is_changed()
+        || save_state.is_changed()
+        || solution_state.is_changed();
+    let mut rebuilt_rows = false;
+
+    if structure_changed {
+        let title = save_list_title(
             *mode.get(),
             *start_menu_screen,
             solution_state.save_list_entry,
         );
-    }
+        for mut text in &mut texts.p0() {
+            if text.0 != title {
+                text.0 = title.clone();
+            }
+        }
 
-    for mut node in &mut column_nodes.p0() {
-        node.display = Display::Flex;
-    }
-    for mut node in &mut column_nodes.p1() {
-        node.display = if show_solutions {
+        for mut node in &mut column_nodes.p0() {
+            if node.display != Display::Flex {
+                node.display = Display::Flex;
+            }
+        }
+        let solution_display = if show_solutions {
             Display::Flex
         } else {
             Display::None
         };
-    }
-    for (action, mut node) in &mut column_nodes.p2() {
-        node.display = match action {
-            SaveListAction::NewPuzzle => {
-                if edit_flow {
-                    Display::Flex
-                } else {
-                    Display::None
-                }
+        for mut node in &mut column_nodes.p1() {
+            if node.display != solution_display {
+                node.display = solution_display;
             }
-            SaveListAction::NewSolution => {
-                if show_solutions {
-                    Display::Flex
-                } else {
-                    Display::None
+        }
+        for (action, mut node) in &mut column_nodes.p2() {
+            let next = match action {
+                SaveListAction::NewPuzzle => {
+                    if edit_flow {
+                        Display::Flex
+                    } else {
+                        Display::None
+                    }
                 }
+                SaveListAction::NewSolution => {
+                    if show_solutions {
+                        Display::Flex
+                    } else {
+                        Display::None
+                    }
+                }
+                _ => node.display,
+            };
+            if node.display != next {
+                node.display = next;
             }
-            _ => node.display,
+        }
+
+        let entry = solution_state.save_list_entry;
+        let puzzle_column = if edit_flow {
+            SaveListColumn::PuzzleEdit
+        } else {
+            SaveListColumn::PuzzlePlay
         };
-    }
 
-    let entry = solution_state.save_list_entry;
-    let puzzle_column = if edit_flow {
-        SaveListColumn::PuzzleEdit
-    } else {
-        SaveListColumn::PuzzlePlay
-    };
-
-    if render_state.entry != Some(entry) || render_state.puzzle_keys != puzzle_rows {
-        for entity in &puzzle_rows_query {
-            rebuild_rows(&mut commands, entity, puzzle_column, &puzzle_rows);
+        if render_state.entry != Some(entry) || render_state.puzzle_keys != puzzle_rows {
+            for entity in &puzzle_rows_query {
+                rebuild_rows(&mut commands, entity, puzzle_column, &puzzle_rows);
+            }
+            render_state.puzzle_keys = puzzle_rows.clone();
+            rebuilt_rows = true;
         }
-        render_state.puzzle_keys = puzzle_rows.clone();
-    }
-    if render_state.entry != Some(entry) || render_state.solution_keys != solution_rows {
-        for entity in &solution_rows_query {
-            rebuild_rows(
-                &mut commands,
-                entity,
-                SaveListColumn::Solution,
-                &solution_rows,
-            );
+        if render_state.entry != Some(entry) || render_state.solution_keys != solution_rows {
+            for entity in &solution_rows_query {
+                rebuild_rows(
+                    &mut commands,
+                    entity,
+                    SaveListColumn::Solution,
+                    &solution_rows,
+                );
+            }
+            render_state.solution_keys = solution_rows;
+            rebuilt_rows = true;
         }
-        render_state.solution_keys = solution_rows;
-    }
-    render_state.entry = Some(entry);
+        render_state.entry = Some(entry);
+        if rebuilt_rows {
+            render_state.paint_buttons = true;
+        }
 
-    for mut text in &mut texts.p2() {
-        text.0 = if play_flow && save_state.selected_puzzle.is_none() {
+        let prompt = if play_flow && save_state.selected_puzzle.is_none() {
             i18n.t("save.choose_puzzle_prompt")
         } else {
             String::new()
         };
+        for mut text in &mut texts.p2() {
+            if text.0 != prompt {
+                text.0 = prompt.clone();
+            }
+        }
+    }
+
+    let style_changed =
+        structure_changed || hover.is_changed() || render_state.paint_buttons;
+    if !style_changed {
+        return;
+    }
+    let paint_labels = structure_changed || render_state.paint_buttons;
+    // 本帧刚排队重建时实体尚未生成，留到下一帧再清标记
+    if !rebuilt_rows {
+        render_state.paint_buttons = false;
     }
 
     let ctx = SaveListViewCtx {
@@ -172,9 +215,13 @@ pub fn update_save_list_ui(
             inset_border()
         };
 
-        for child in children.iter() {
-            if let Ok(mut text) = texts.p1().get_mut(child) {
-                text.0 = view.label.clone();
+        if paint_labels {
+            for child in children.iter() {
+                if let Ok(mut text) = texts.p1().get_mut(child) {
+                    if text.0 != view.label {
+                        text.0 = view.label.clone();
+                    }
+                }
             }
         }
     }

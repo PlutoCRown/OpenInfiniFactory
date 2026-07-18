@@ -4,21 +4,21 @@ use bevy::window::PrimaryWindow;
 
 use super::RollerBlock;
 
+use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
-    position_dropdown_from_trigger, spawn_text_dropdown_list, spawn_text_dropdown_toggle,
+    spawn_material_icon_list, spawn_material_icon_toggle, sync_dropdown_overlay, update_slot_icon,
 };
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
-use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::blocks::{paint_catalog, paint_def, PaintMaterialId};
-use crate::game::edit_history::{apply_block_settings_with_history, EditHistory};
+use crate::game::blocks::{PaintMaterialId, paint_catalog};
+use crate::game::edit_history::{EditHistory, apply_block_settings_with_history};
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
-use crate::game::ui::access::{i18n, UiMainThread};
+use crate::game::ui::access::{UiMainThread, i18n};
 use crate::game::ui::components::{
-    default_button_size, localized_text, spawn_panel_with_title_marker, transparent_node,
-    PanelOptions,
+    PanelOptions, default_button_size, localized_text, spawn_panel_with_title_marker,
+    transparent_node,
 };
 use crate::game::ui::core::host::UiHost;
 use crate::game::ui::core::runtime::UiRuntime;
@@ -26,6 +26,7 @@ use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{UiActionLabel, UiPanelBinding};
 use crate::game::world::grid::WorldBlocks;
+use crate::game::world::rendering::BlockIconAssets;
 
 const COLOR_SLOT: u8 = 0;
 
@@ -39,10 +40,13 @@ pub enum RollerAction {
 pub struct RollerPanelTitle;
 
 #[derive(Component, Clone, Copy)]
-struct RollerPaintLabel;
+struct RollerPaintSlot;
 
 #[derive(Component, Clone, Copy)]
 struct RollerPaintList;
+
+#[derive(Component, Clone, Copy)]
+struct RollerPaintOption(PaintMaterialId);
 
 impl UiActionLabel for RollerAction {
     fn label_key(self) -> &'static str {
@@ -66,22 +70,20 @@ pub fn spawn_panel(root: &mut ChildSpawnerCommands) {
         RollerPanelTitle,
         |panel| {
             spawn_row(panel, "panel.color", |row| {
-                spawn_text_dropdown_toggle(row, RollerAction::TogglePaint, RollerPaintLabel);
+                spawn_material_icon_toggle(row, RollerPaintSlot, RollerAction::TogglePaint);
             });
         },
     );
 }
 
 pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
-    spawn_text_dropdown_list(
+    spawn_material_icon_list(
         root,
         RollerPaintList,
-        paint_catalog().iter().map(|(id, def)| {
-            (
-                i18n.t(def.name_key),
-                RollerAction::SetPaint(id),
-            )
-        }),
+        paint_catalog()
+            .iter()
+            .map(|(id, _)| (id, RollerAction::SetPaint(id))),
+        RollerPaintOption,
     );
 }
 
@@ -183,8 +185,11 @@ fn update_title(
     if ui_runtime.active_panel() != Some(UiPanelId::Roller) {
         return;
     }
+    let title = i18n.t("roller.title");
     for mut text in &mut titles {
-        text.0 = i18n.t("roller.title");
+        if text.0 != title {
+            text.0 = title.clone();
+        }
     }
 }
 
@@ -193,41 +198,58 @@ fn update_dropdowns(
     ui_runtime: Res<UiRuntime>,
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
+    block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut labels: Query<(&RollerPaintLabel, &mut Text)>,
+    mut option_icons_filled: Local<bool>,
+    mut last_slot_paint: Local<Option<Option<PaintMaterialId>>>,
+    mut paint_slots: Query<(&RollerPaintSlot, &Children)>,
+    mut paint_options: Query<(&RollerPaintOption, &Children)>,
+    mut icons: Query<&mut ImageNode>,
     mut lists: Query<(&RollerPaintList, &mut Node, &ComputedNode)>,
     triggers: Query<(&RollerAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     let panel = UiPanelId::Roller;
-
-    if let Some(pos) = ui_runtime.active_block_pos() {
-        let label = i18n.t(paint_def(world.roller_settings(pos).paint).name_key);
-        for (_, mut text) in &mut labels {
-            text.0 = label.clone();
-        }
-    }
+    let panel_active = ui_runtime.active_panel() == Some(panel);
+    let open = panel_active && open_dropdown.is_open(panel, COLOR_SLOT);
 
     let window = windows.single().ok();
     let viewport = window
         .map(|w| Vec2::new(w.width(), w.height()))
         .unwrap_or(Vec2::ZERO);
-
     for (_, mut style, list_node) in &mut lists {
-        let open = open_dropdown.is_open(panel, COLOR_SLOT);
-        style.display = if open { Display::Flex } else { Display::None };
-        if !open {
-            continue;
-        }
         let trigger = triggers.iter().find_map(|(action, node, transform)| {
             (*action == RollerAction::TogglePaint && !node.is_empty()).then_some((node, transform))
         });
-        if let Some((trigger_node, transform)) = trigger {
-            if let Some((left, top)) =
-                position_dropdown_from_trigger(trigger_node, transform, list_node, viewport)
-            {
-                style.left = Val::Px(left);
-                style.top = Val::Px(top);
-            }
+        sync_dropdown_overlay(open, &mut style, list_node, trigger, viewport);
+    }
+
+    let Some(block_icons_res) = block_icons.as_ref() else {
+        return;
+    };
+    let icons_changed = block_icons_res.is_changed();
+    let block_icons = block_icons_res.as_ref();
+    if !*option_icons_filled || icons_changed {
+        for (option, children) in &mut paint_options {
+            update_slot_icon(children, block_icons.paint(option.0), &mut icons);
         }
+        *option_icons_filled = true;
+    }
+
+    if !panel_active {
+        *last_slot_paint = None;
+        return;
+    }
+    let paint = ui_runtime
+        .active_block_pos()
+        .map(|pos| world.roller_settings(pos).paint);
+    if last_slot_paint.as_ref() != Some(&paint) || icons_changed {
+        for (_, children) in &mut paint_slots {
+            update_slot_icon(
+                children,
+                paint.and_then(|id| block_icons.paint(id)),
+                &mut icons,
+            );
+        }
+        *last_slot_paint = Some(paint);
     }
 }

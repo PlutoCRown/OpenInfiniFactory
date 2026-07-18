@@ -1,13 +1,13 @@
 use bevy::prelude::*;
 
 use super::super::components::{
-    compact_raised_panel, default_button_size, default_font_size, inventory_tray_bundle,
-    inventory_tray_row_bundle, localized_text, spawn_panel_with_title_marker, text, PanelOptions,
+    PanelOptions, compact_raised_panel, default_button_size, default_font_size,
+    inventory_tray_bundle, inventory_tray_row_bundle, localized_text,
+    spawn_panel_with_title_marker, text,
 };
 use super::super::types::{
-    CarriedItemPreview, GameplayHudVisibility, InGameHudStyle, InventoryTooltip,
-    InventoryTooltipDescription, InventoryTooltipName, PanelVisibility, SlotArea, BACKPACK_SLOTS,
-    HOTBAR_SLOTS,
+    BACKPACK_SLOTS, CarriedItemPreview, GameplayHudVisibility, HOTBAR_SLOTS, InGameHudStyle,
+    InventoryTooltip, InventoryTooltipDescription, InventoryTooltipName, PanelVisibility, SlotArea,
 };
 use super::super::widgets::spawn_slot;
 use crate::game::ui::features::inventory::InventoryTitleText;
@@ -143,8 +143,8 @@ pub fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
         },
         BorderColor::all(Color::srgba(0.72, 0.82, 0.88, 0.75)),
         BackgroundColor(Color::srgba(0.05, 0.06, 0.07, 0.92)),
-        ZIndex(10_001),
-        GlobalZIndex(10_001),
+        GlobalZIndex(30_000),
+        Visibility::Hidden,
         Pickable::IGNORE,
         InventoryTooltip,
     ))
