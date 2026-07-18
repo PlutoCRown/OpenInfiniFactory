@@ -1,0 +1,10 @@
+{
+  "json.schemas": [
+    {
+      "fileMatch": [
+        "**/scene_blocks/*/meta.json"
+      ],
+      "url": "./schemas/scene_block.meta.schema.json"
+    }
+  ]
+}

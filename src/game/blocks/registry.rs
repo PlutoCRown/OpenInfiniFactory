@@ -1,10 +1,12 @@
 use super::traits::PlaceableBlock;
 use super::{Block, BlockKind, EditableBlock};
+use oif_sim::blocks::scene_catalog;
 
 pub fn edit_blocks() -> Vec<BlockKind> {
     let mut blocks: Vec<_> = registrations()
         .filter_map(|registration| registration.editable.then_some(registration.kind))
         .collect();
+    blocks.extend(scene_kinds());
     sort_blocks(&mut blocks);
     blocks
 }
@@ -13,8 +15,16 @@ pub fn all_blocks() -> Vec<BlockKind> {
     let mut blocks: Vec<_> = registrations()
         .map(|registration| registration.kind)
         .collect();
+    blocks.extend(scene_kinds());
     sort_blocks(&mut blocks);
     blocks
+}
+
+fn scene_kinds() -> Vec<BlockKind> {
+    scene_catalog()
+        .iter()
+        .map(|(id, _)| BlockKind::Scene(id))
+        .collect()
 }
 
 pub const PLAY_BLOCKS: [BlockKind; 20] = [
@@ -51,6 +61,10 @@ pub fn save_stores_facing(kind: BlockKind) -> bool {
 }
 
 pub fn is_editable(kind: BlockKind) -> bool {
+    // 场景块不走 inventory 注册，但编辑热键栏可放置
+    if matches!(kind, BlockKind::Scene(_)) {
+        return true;
+    }
     registrations().any(|registration| registration.kind == kind && registration.editable)
 }
 
@@ -90,6 +104,10 @@ pub fn assert_registry_consistent() {
 
     for kind in edit_blocks() {
         debug_assert!(is_editable(kind));
+        // 场景块没有 EditableBlock 实现（无设置面板），只校验可编辑标记
+        if matches!(kind, BlockKind::Scene(_)) {
+            continue;
+        }
         debug_assert!(editable(kind).is_some());
     }
 
@@ -108,45 +126,42 @@ fn sort_blocks(blocks: &mut [BlockKind]) {
 
 fn block_order(kind: BlockKind) -> usize {
     match kind {
-        BlockKind::Grass => 0,
-        BlockKind::Stone => 1,
-        BlockKind::Dirt => 2,
-        BlockKind::Planks => 3,
-        BlockKind::Generator => 4,
-        BlockKind::Goal => 5,
-        BlockKind::Platform => 6,
-        BlockKind::Welder => 7,
-        BlockKind::DownWelder => 8,
-        BlockKind::Conveyor => 9,
-        BlockKind::ReverseConveyor => 10,
-        BlockKind::Detector => 11,
-        BlockKind::DownDetector => 12,
-        BlockKind::Wire => 13,
-        BlockKind::Pusher => 14,
-        BlockKind::Lifter => 15,
-        BlockKind::Rotator => 16,
-        BlockKind::CounterRotator => 17,
-        BlockKind::Blocker => 18,
-        BlockKind::Drill => 19,
-        BlockKind::Laser => 20,
-        BlockKind::Mirror => 21,
-        BlockKind::VerticalMirror => 22,
-        BlockKind::Splitter => 23,
-        BlockKind::SuctionCup => 24,
-        BlockKind::Sign => 25,
-        BlockKind::Stamper => 26,
-        BlockKind::Roller => 27,
-        BlockKind::Converter => 28,
-        BlockKind::TeleportEntrance => 29,
-        BlockKind::TeleportExit => 30,
-        BlockKind::Material => 31,
-        BlockKind::IronMaterial => 32,
-        BlockKind::CopperMaterial => 33,
-        BlockKind::GlassMaterial => 34,
-        BlockKind::StampMaterial => 39,
-        BlockKind::WeldPoint => 35,
-        BlockKind::DrillHead => 36,
-        BlockKind::RollerBody => 37,
-        BlockKind::StamperBody => 38,
+        BlockKind::Scene(id) => id.0 as usize,
+        BlockKind::Generator => 100,
+        BlockKind::Goal => 101,
+        BlockKind::Platform => 102,
+        BlockKind::Welder => 103,
+        BlockKind::DownWelder => 104,
+        BlockKind::Conveyor => 105,
+        BlockKind::ReverseConveyor => 106,
+        BlockKind::Detector => 107,
+        BlockKind::DownDetector => 108,
+        BlockKind::Wire => 109,
+        BlockKind::Pusher => 110,
+        BlockKind::Lifter => 111,
+        BlockKind::Rotator => 112,
+        BlockKind::CounterRotator => 113,
+        BlockKind::Blocker => 114,
+        BlockKind::Drill => 115,
+        BlockKind::Laser => 116,
+        BlockKind::Mirror => 117,
+        BlockKind::VerticalMirror => 118,
+        BlockKind::Splitter => 119,
+        BlockKind::SuctionCup => 120,
+        BlockKind::Sign => 121,
+        BlockKind::Stamper => 122,
+        BlockKind::Roller => 123,
+        BlockKind::Converter => 124,
+        BlockKind::TeleportEntrance => 125,
+        BlockKind::TeleportExit => 126,
+        BlockKind::Material => 127,
+        BlockKind::IronMaterial => 128,
+        BlockKind::CopperMaterial => 129,
+        BlockKind::GlassMaterial => 130,
+        BlockKind::StampMaterial => 135,
+        BlockKind::WeldPoint => 131,
+        BlockKind::DrillHead => 132,
+        BlockKind::RollerBody => 133,
+        BlockKind::StamperBody => 134,
     }
 }

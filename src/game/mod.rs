@@ -5,6 +5,7 @@ pub mod debug;
 pub mod edit_history;
 pub mod input;
 pub mod player;
+pub mod scene_blocks;
 pub mod session;
 pub mod simulation;
 pub mod state;
@@ -18,8 +19,8 @@ use bevy::prelude::*;
 use bevy::ui_widgets::slider_self_update;
 
 use crate::scene::BlockEntityIndex;
-use crate::shared::config::{load_config, GameConfig};
-use crate::shared::i18n::{resolve_language, I18n};
+use crate::shared::config::{GameConfig, load_config};
+use crate::shared::i18n::{I18n, resolve_language};
 use crate::shared::launch::LaunchOptions;
 use crate::shared::persistent_storage::{self, StoragePlugin, StorageReady};
 use crate::shared::save::SaveState;
@@ -28,11 +29,11 @@ use crate::sim_bridge::{SimulationWorker, TurnCache};
 use cameras::{spawn_ui_camera, sync_gameplay_view_image_size};
 #[cfg(not(target_arch = "wasm32"))]
 use debug::DebugToolsPlugin;
-use edit_history::{edit_history_input, EditHistory};
+use edit_history::{EditHistory, edit_history_input};
 use player::controller::{
     apply_pending_player_spawn, camera_look, camera_move, spawn_player, sync_cursor_grab,
 };
-use session::{on_exit_playing, prepare_playing_session, rebuild_playing_world, SessionPlugin};
+use session::{SessionPlugin, on_exit_playing, prepare_playing_session, rebuild_playing_world};
 use state::{
     BuilderMode, GameMode, GameSettings, PendingPlayerSpawn, PlacementState, PlayingUiState,
     SimulationState, SolutionState, StartMenuScreen,
@@ -45,7 +46,7 @@ use systems::simulation_controls::simulation_controls;
 use ui::{GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
-use world::rendering::{retire_block_icon_renderers, HoverStructureBounds, SkyboxPlugin};
+use world::rendering::{HoverStructureBounds, SkyboxPlugin, retire_block_icon_renderers};
 
 pub struct GamePlugin;
 
@@ -128,6 +129,7 @@ impl Plugin for GamePlugin {
             .insert_resource(SaveState::default())
             .init_resource::<EditHistory>()
             .init_resource::<PendingPlayerSpawn>()
+            .init_resource::<scene_blocks::SceneBlockRegistry>()
             .insert_resource(systems::debug::DebugState::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(input::GameplayInputPlugin)
@@ -141,6 +143,7 @@ impl Plugin for GamePlugin {
             .add_systems(
                 Startup,
                 (
+                    load_scene_blocks_on_startup,
                     spawn_ui_camera,
                     ui::load_ui_font,
                     systems::debug::load_debug_font,
@@ -310,4 +313,26 @@ fn apply_launch_load_save_when_ready(
         crate::shared::save::SaveKind::Solution => state::WorldEntryMode::PlaySolution,
     };
     session::load_world(&mut commands, slot, entry);
+}
+
+/// 启动时加载全局场景方块资源包
+fn load_scene_blocks_on_startup(mut registry: ResMut<scene_blocks::SceneBlockRegistry>) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        oif_sim::blocks::ensure_fallback_scene_catalog();
+        let _ = registry;
+        bevy::log::info!("scene blocks: wasm uses builtin catalog (no directory scan)");
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    match scene_blocks::load_global_scene_blocks(&mut registry) {
+        Ok(()) => bevy::log::info!(
+            "loaded {} scene block packs",
+            registry.ordered_kinds().len()
+        ),
+        Err(err) => {
+            bevy::log::error!("failed to load scene blocks: {err}; using fallback catalog");
+            oif_sim::blocks::ensure_fallback_scene_catalog();
+        }
+    }
 }

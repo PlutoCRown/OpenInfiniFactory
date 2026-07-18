@@ -771,7 +771,7 @@ mod tests {
     #[test]
     fn hotbar_round_trips_for_puzzle_and_solution() {
         let mut puzzle_inventory = InventoryItems::for_mode(BuilderMode::Edit);
-        puzzle_inventory.set_hotbar_block(0, BlockKind::Stone);
+        puzzle_inventory.set_hotbar_block(0, BlockKind::scene("stone"));
         puzzle_inventory.set_hotbar_block(1, BlockKind::TeleportEntrance);
 
         let puzzle_loaded = SaveFile::puzzle(
@@ -799,7 +799,7 @@ mod tests {
         let solution_slot = SaveSlot::solution("test_puzzle_ref", "test_solution_ref");
 
         let mut puzzle_world = WorldBlocks::default();
-        puzzle_world.insert(IVec3::ZERO, BlockData::new(BlockKind::Stone, Facing::North));
+        puzzle_world.insert(IVec3::ZERO, BlockData::new(BlockKind::scene("stone"), Facing::North));
         let puzzle_inventory = InventoryItems::for_mode(BuilderMode::Edit);
         let puzzle_save =
             SaveFile::puzzle(capture_puzzle_layer(&puzzle_world, &puzzle_inventory), None);

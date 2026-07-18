@@ -49,7 +49,12 @@ pub struct WorldRenderAssets {
     part_pusher_head: Handle<Mesh>,
     block_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     preview_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
+    /// 场景块材质（从 model.glb 加载）
     scene_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
+    /// 场景块网格（从 model.glb 加载，图标/非立方体用）
+    scene_meshes: HashMap<BlockKind, Handle<Mesh>>,
+    /// 立方体 24 顶点 UV 模板（世界 AO 网格复用 glb UV）
+    scene_face_uvs: HashMap<BlockKind, [[f32; 2]; 24]>,
     face_mark_materials: HashMap<PaintColor, Handle<StandardMaterial>>,
     stamp_face_materials: HashMap<StampColor, Handle<StandardMaterial>>,
     /// 灯面板未通电材质
@@ -79,6 +84,7 @@ impl WorldRenderAssets {
         meshes: &mut Assets<Mesh>,
         materials: &mut Assets<StandardMaterial>,
         images: &mut Assets<Image>,
+        scene_registry: &crate::game::scene_blocks::SceneBlockRegistry,
     ) -> Self {
         let block_textures: HashMap<_, _> = all_blocks()
             .into_iter()
@@ -88,16 +94,14 @@ impl WorldRenderAssets {
             .get(&BlockKind::Platform)
             .expect("platform defines a texture")
             .clone();
-        let stone_texture = block_textures
-            .get(&BlockKind::Stone)
-            .expect("stone defines a texture")
-            .clone();
-        let wood_texture = block_textures
-            .get(&BlockKind::Planks)
-            .expect("planks define a texture")
-            .clone();
+        let stone_texture = images.add(crate::game::world::procedural_textures::from_fn(|x, y| {
+            crate::game::world::procedural_textures::material_pixel(x, y, [124, 128, 132], 89)
+        }));
+        let wood_texture = images.add(crate::game::world::procedural_textures::from_fn(
+            crate::game::world::procedural_textures::wood_pixel,
+        ));
         let bordered_wood_texture = images.add(texture::bordered_wood());
-        let block_materials = all_blocks()
+        let block_materials: HashMap<BlockKind, Handle<StandardMaterial>> = all_blocks()
             .into_iter()
             .map(|kind| {
                 let texture = block_textures.get(&kind).cloned();
@@ -107,25 +111,49 @@ impl WorldRenderAssets {
                 (kind, materials.add(material))
             })
             .collect();
-        let preview_materials = all_blocks()
+        let preview_materials: HashMap<BlockKind, Handle<StandardMaterial>> = all_blocks()
             .into_iter()
             .map(|kind| {
                 let texture = block_textures.get(&kind).cloned();
                 (kind, materials.add(preview_block_material(kind, texture)))
             })
             .collect();
-        let scene_block_materials = all_blocks()
-            .into_iter()
-            .filter(|kind| kind.is_scene())
-            .filter_map(|kind| {
-                block_textures.get(&kind).map(|texture| {
-                    (
-                        kind,
-                        materials.add(textured_scene_material(kind.material(), texture.clone())),
-                    )
-                })
-            })
-            .collect();
+        // 场景块：外观全部来自 model.glb（网格 / UV / 材质 / 内嵌贴图）
+        let mut scene_meshes = HashMap::new();
+        let mut scene_face_uvs = HashMap::new();
+        let mut scene_block_materials = HashMap::new();
+        let mut block_materials = block_materials;
+        let mut preview_materials = preview_materials;
+        for kind in all_blocks().into_iter().filter(|kind| kind.is_scene()) {
+            let Some(presentation) = scene_registry.get_kind(kind) else {
+                continue;
+            };
+            match crate::game::scene_blocks::load_scene_glb(
+                &presentation.model_path,
+                meshes,
+                materials,
+                images,
+            ) {
+                Ok(loaded) => {
+                    if let Some(uvs) = loaded.face_uvs {
+                        scene_face_uvs.insert(kind, uvs);
+                    }
+                    scene_meshes.insert(kind, loaded.mesh);
+                    // 预览半透明版（复用同一贴图句柄）
+                    if let Some(base) = materials.get(&loaded.material).cloned() {
+                        preview_materials.insert(kind, materials.add(preview_model_material(base)));
+                    }
+                    scene_block_materials.insert(kind, loaded.material.clone());
+                    block_materials.insert(kind, loaded.material);
+                }
+                Err(err) => {
+                    bevy::log::error!("scene block glb load failed: {err}");
+                    let fallback = materials.add(scene_color_material(kind.material()));
+                    scene_block_materials.insert(kind, fallback.clone());
+                    block_materials.insert(kind, fallback);
+                }
+            }
+        }
         let face_mark_materials = PaintColor::ALL
             .into_iter()
             .map(|color| {
@@ -329,6 +357,8 @@ impl WorldRenderAssets {
             block_materials,
             preview_materials,
             scene_materials: scene_block_materials,
+            scene_meshes,
+            scene_face_uvs,
             face_mark_materials,
             stamp_face_materials,
             light_panel_material: materials.add(StandardMaterial {
@@ -445,6 +475,14 @@ impl WorldRenderAssets {
 
     pub(crate) fn scene_material(&self, kind: BlockKind) -> Option<Handle<StandardMaterial>> {
         self.scene_materials.get(&kind).cloned()
+    }
+
+    pub(crate) fn scene_mesh(&self, kind: BlockKind) -> Option<Handle<Mesh>> {
+        self.scene_meshes.get(&kind).cloned()
+    }
+
+    pub(crate) fn scene_face_uvs(&self, kind: BlockKind) -> Option<&[[f32; 2]; 24]> {
+        self.scene_face_uvs.get(&kind)
     }
 
     pub(crate) fn connector_mesh(&self, offset: IVec3) -> Handle<Mesh> {
@@ -578,10 +616,9 @@ fn preview_model_material(material: StandardMaterial) -> StandardMaterial {
     }
 }
 
-fn textured_scene_material(base_color: Color, texture: Handle<Image>) -> StandardMaterial {
+fn scene_color_material(base_color: Color) -> StandardMaterial {
     StandardMaterial {
         base_color,
-        base_color_texture: Some(texture),
         perceptual_roughness: 0.96,
         reflectance: 0.08,
         ..default()

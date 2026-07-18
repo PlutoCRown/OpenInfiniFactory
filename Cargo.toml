@@ -26,11 +26,22 @@ name = "export_fixture"
 path = "src/bin/export_fixture.rs"
 required-features = ["native-tools"]
 
+[[bin]]
+name = "migrate_scene_blocks"
+path = "src/bin/migrate_scene_blocks.rs"
+required-features = ["native-tools"]
+
+[[bin]]
+name = "bake_scene_icons"
+path = "src/bin/bake_scene_icons.rs"
+required-features = ["native-tools"]
+
 [dependencies]
 bevy = { version = "0.19" }
 # Bevy 0.19 / parley 0.9 缺 CJK 分词字典，会刷 ICU4X stderr；logging 特征把 eprintln 转成 log，再过滤掉。
 # 见 https://github.com/bevyengine/bevy/issues/24094
 icu_provider = { version = "2.2", features = ["logging"] }
+gltf = "1.4"
 inventory = "0.3"
 oif-sim = { path = "crates/oif-sim" }
 paste = "1"
@@ -63,6 +74,7 @@ web-sys = { version = "0.3", features = [
 android-activity = { version = "0.6", features = ["game-activity"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
 tiny_http = "0.12"
 
 [features]

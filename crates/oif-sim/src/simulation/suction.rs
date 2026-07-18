@@ -212,9 +212,9 @@ mod tests {
     fn fixed_suction_holds_material_from_gravity() {
         let mut world = WorldBlocks::default();
         // 地面锚定
-        place(&mut world, IVec3::new(0, 0, 0), BlockKind::Stone, Facing::North);
-        place(&mut world, IVec3::new(1, 0, 0), BlockKind::Stone, Facing::North);
-        place(&mut world, IVec3::new(2, 0, 0), BlockKind::Stone, Facing::North);
+        place(&mut world, IVec3::new(0, 0, 0), BlockKind::scene("stone"), Facing::North);
+        place(&mut world, IVec3::new(1, 0, 0), BlockKind::scene("stone"), Facing::North);
+        place(&mut world, IVec3::new(2, 0, 0), BlockKind::scene("stone"), Facing::North);
         // 固定工厂：平台 + 朝东吸盘
         place(
             &mut world,
@@ -271,7 +271,7 @@ mod tests {
     fn movable_suction_pushed_moves_adsorbed_material() {
         let mut world = WorldBlocks::default();
         // 阻拦器立柱（场景锚定）；不通电时阻拦器伸出推前方
-        place(&mut world, IVec3::new(0, 0, 0), BlockKind::Stone, Facing::North);
+        place(&mut world, IVec3::new(0, 0, 0), BlockKind::scene("stone"), Facing::North);
         place(
             &mut world,
             IVec3::new(0, 1, 0),
@@ -352,7 +352,7 @@ mod tests {
     fn conveyor_moves_material_and_suction_factory_together() {
         let mut world = WorldBlocks::default();
         // 传送带（场景锚定）
-        place(&mut world, IVec3::new(0, 0, 0), BlockKind::Stone, Facing::North);
+        place(&mut world, IVec3::new(0, 0, 0), BlockKind::scene("stone"), Facing::North);
         place(
             &mut world,
             IVec3::new(0, 1, 0),
@@ -379,7 +379,7 @@ mod tests {
             Facing::North,
         );
         // 供电：固定平台作检测目标；导线 Detector(2,1,1)-Wire(1,2,1)-Suction(0,2,1)
-        place(&mut world, IVec3::new(2, 0, 0), BlockKind::Stone, Facing::North);
+        place(&mut world, IVec3::new(2, 0, 0), BlockKind::scene("stone"), Facing::North);
         place(
             &mut world,
             IVec3::new(2, 1, 0),
@@ -433,7 +433,7 @@ mod tests {
     #[test]
     fn unpowered_suction_does_not_hold_material() {
         let mut world = WorldBlocks::default();
-        place(&mut world, IVec3::new(0, 0, 0), BlockKind::Stone, Facing::North);
+        place(&mut world, IVec3::new(0, 0, 0), BlockKind::scene("stone"), Facing::North);
         place(
             &mut world,
             IVec3::new(0, 1, 0),

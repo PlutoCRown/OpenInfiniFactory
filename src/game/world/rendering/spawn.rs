@@ -271,7 +271,7 @@ pub(crate) fn spawn_world_block_entity(
 }
 
 /// 核心：按数据生成方块模型、连接器与子部件
-pub(super) fn spawn_block_model(
+pub(crate) fn spawn_block_model(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     assets: &WorldRenderAssets,
@@ -354,9 +354,15 @@ pub(super) fn spawn_block_model(
         match assets.scene_material(data.kind) {
             Some(scene_material) => {
                 let mesh = if icon_render.is_some() {
-                    assets.block_mesh(data.kind)
+                    assets
+                        .scene_mesh(data.kind)
+                        .unwrap_or_else(|| assets.block_mesh(data.kind))
+                } else if let Some(face_uvs) = assets.scene_face_uvs(data.kind) {
+                    meshes.add(scene_block_mesh(pos, world, face_uvs))
                 } else {
-                    meshes.add(scene_block_mesh(pos, world))
+                    assets
+                        .scene_mesh(data.kind)
+                        .unwrap_or_else(|| assets.block_mesh(data.kind))
                 };
                 commands.spawn((
                     Mesh3d(mesh),

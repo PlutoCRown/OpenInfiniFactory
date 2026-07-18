@@ -790,7 +790,7 @@ mod tests {
     #[test]
     fn gravity_support_cache_survives_lookup_after_recorded() {
         let mut world = WorldBlocks::default();
-        world.insert(IVec3::ZERO, BlockData::new(BlockKind::Stone, Facing::North));
+        world.insert(IVec3::ZERO, BlockData::new(BlockKind::scene("stone"), Facing::North));
         world.insert(IVec3::Y, platform(IVec3::Y));
 
         let mut state = rebuild_for_simulation_standalone(&world);
@@ -802,7 +802,7 @@ mod tests {
     #[test]
     fn pusher_target_structure_allows_front_subset_when_whole_structure_is_scene_anchored() {
         let mut world = WorldBlocks::default();
-        world.insert(IVec3::ZERO, BlockData::new(BlockKind::Stone, Facing::North));
+        world.insert(IVec3::ZERO, BlockData::new(BlockKind::scene("stone"), Facing::North));
         world.insert(IVec3::Y, platform(IVec3::Y));
         world.insert(
             IVec3::new(0, 2, 0),
@@ -827,7 +827,7 @@ mod tests {
         let mut world = WorldBlocks::default();
         world.insert(
             IVec3::new(1, 0, 0),
-            BlockData::new(BlockKind::Stone, Facing::North),
+            BlockData::new(BlockKind::scene("stone"), Facing::North),
         );
         world.insert(IVec3::new(1, 1, 0), platform(IVec3::new(1, 1, 0)));
         world.insert(

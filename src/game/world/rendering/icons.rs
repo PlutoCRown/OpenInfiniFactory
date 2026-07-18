@@ -8,39 +8,71 @@ use super::components::{
     BlockIconRenderState,
 };
 use super::spawn::spawn_block_model;
-use crate::game::blocks::{edit_blocks, BlockData, BlockKind, PLAY_BLOCKS};
+use crate::game::blocks::{BlockData, BlockKind, PLAY_BLOCKS, edit_blocks};
+use crate::game::scene_blocks::{SceneBlockRegistry, load_icon_png};
 use crate::game::world::animation::AnimationTiming;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::render_assets::WorldRenderAssets;
 
+/// 工厂等仍走离屏渲染的图标尺寸
 const ICON_TEXTURE_SIZE: u32 = 256;
 const ICON_RENDER_LAYER: usize = 3;
 const ICON_SPACING: f32 = 4.0;
 const ICON_RENDER_FRAMES: u8 = 3;
 
-/// 为 UI 离屏渲染各编辑/游玩方块图标
+/// 为 UI 准备方块图标：场景块读预烘焙 icon.png，其余离屏渲
 pub fn setup_block_icons(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     assets: Res<WorldRenderAssets>,
+    scene_registry: Res<SceneBlockRegistry>,
 ) {
     let icon_layer = RenderLayers::layer(ICON_RENDER_LAYER);
     let mut icon_assets = BlockIconAssets::default();
     let icon_world = WorldBlocks::default();
-    let icon_kinds = block_icon_kinds();
 
-    commands.spawn((
-        DirectionalLight {
-            illuminance: 7800.0,
-            shadow_maps_enabled: false,
-            ..default()
-        },
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.85, -0.55, -0.25)),
-        icon_layer.clone(),
-        BlockIconRenderEntity,
-        BlockIconRenderRoot,
-    ));
+    // 场景块：只加载 bake 好的 icon.png，不在启动时离屏渲染
+    for kind in scene_registry.ordered_kinds() {
+        let Some(presentation) = scene_registry.get_kind(kind) else {
+            continue;
+        };
+        let Some(icon_path) = presentation.icon_path.as_ref() else {
+            bevy::log::warn!(
+                "scene block `{}` missing icon.png (run bake_scene_icons)",
+                presentation.string_id
+            );
+            continue;
+        };
+        match load_icon_png(icon_path, &mut images) {
+            Some(handle) => {
+                icon_assets.icons.insert(kind, handle);
+            }
+            None => {
+                bevy::log::warn!("failed to load icon {}", icon_path.display());
+            }
+        }
+    }
+
+    let icon_kinds: Vec<BlockKind> = block_icon_kinds()
+        .into_iter()
+        .filter(|kind| !kind.is_scene())
+        .collect();
+    let has_offscreen = !icon_kinds.is_empty();
+
+    if has_offscreen {
+        commands.spawn((
+            DirectionalLight {
+                illuminance: 7800.0,
+                shadow_maps_enabled: false,
+                ..default()
+            },
+            Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.85, -0.55, -0.25)),
+            icon_layer.clone(),
+            BlockIconRenderEntity,
+            BlockIconRenderRoot,
+        ));
+    }
 
     for (index, kind) in icon_kinds.into_iter().enumerate() {
         let image = Image::new_target_texture(
@@ -93,12 +125,14 @@ pub fn setup_block_icons(
     }
 
     commands.insert_resource(icon_assets);
-    commands.insert_resource(BlockIconRenderState {
-        frames_remaining: ICON_RENDER_FRAMES,
-    });
+    if has_offscreen {
+        commands.insert_resource(BlockIconRenderState {
+            frames_remaining: ICON_RENDER_FRAMES,
+        });
+    }
 }
 
-/// 需要生成图标的方块种类列表（去重）
+/// 需要离屏生成图标的方块种类（不含场景块）
 fn block_icon_kinds() -> Vec<BlockKind> {
     let mut kinds = Vec::new();
     for kind in edit_blocks().into_iter().chain(PLAY_BLOCKS).chain([
@@ -108,6 +142,9 @@ fn block_icon_kinds() -> Vec<BlockKind> {
         BlockKind::GlassMaterial,
         BlockKind::StampMaterial,
     ]) {
+        if kind.is_scene() {
+            continue;
+        }
         if !kinds.contains(&kind) {
             kinds.push(kind);
         }

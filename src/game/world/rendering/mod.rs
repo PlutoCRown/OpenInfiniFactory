@@ -8,7 +8,7 @@ mod previews;
 mod scene;
 mod scene_mesh;
 mod skybox;
-mod spawn;
+pub(crate) mod spawn;
 mod world_rebuild;
 
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};

@@ -5,10 +5,17 @@ use super::SaveFormatError;
 pub fn encode_kind(kind: BlockKind) -> u8 {
     match kind {
         BlockKind::Platform => 0,
-        BlockKind::Grass => 1,
-        BlockKind::Stone => 2,
-        BlockKind::Dirt => 3,
-        BlockKind::Planks => 4,
+        // 场景方块 v3 走字符串段；此处仅兼容旧 u8 表里的四种
+        BlockKind::Scene(id) => match oif_sim::blocks::scene_catalog().string_id(id) {
+            Some("grass") => 1,
+            Some("stone") => 2,
+            Some("dirt") => 3,
+            Some("planks") => 4,
+            other => panic!(
+                "encode_kind: scene block {:?} must use string id section",
+                other
+            ),
+        },
         BlockKind::Generator => 5,
         BlockKind::Welder => 6,
         BlockKind::DownWelder => 7,
@@ -50,10 +57,10 @@ pub fn encode_kind(kind: BlockKind) -> u8 {
 pub fn decode_kind(id: u8) -> Result<BlockKind, SaveFormatError> {
     Ok(match id {
         0 => BlockKind::Platform,
-        1 => BlockKind::Grass,
-        2 => BlockKind::Stone,
-        3 => BlockKind::Dirt,
-        4 => BlockKind::Planks,
+        1 => BlockKind::scene("grass"),
+        2 => BlockKind::scene("stone"),
+        3 => BlockKind::scene("dirt"),
+        4 => BlockKind::scene("planks"),
         5 => BlockKind::Generator,
         6 => BlockKind::Welder,
         7 => BlockKind::DownWelder,

@@ -438,7 +438,7 @@ mod tests {
         let mut world = WorldBlocks::default();
         world.insert(
             IVec3::new(0, 0, 0),
-            BlockData::new(BlockKind::Stone, Facing::North),
+            BlockData::new(BlockKind::scene("stone"), Facing::North),
         );
         world.insert(
             IVec3::new(0, 5, 0),
@@ -550,7 +550,7 @@ mod tests {
         let mut world = WorldBlocks::default();
         world.insert(
             IVec3::new(0, 0, 0),
-            BlockData::new(BlockKind::Stone, Facing::North),
+            BlockData::new(BlockKind::scene("stone"), Facing::North),
         );
         world.insert(
             IVec3::new(0, 1, 0),
@@ -641,7 +641,7 @@ mod tests {
         let mut world = WorldBlocks::default();
         world.insert(
             IVec3::new(2, 0, 0),
-            BlockData::new(BlockKind::Stone, Facing::North),
+            BlockData::new(BlockKind::scene("stone"), Facing::North),
         );
         world.insert(
             IVec3::new(2, 1, 0),
@@ -741,15 +741,15 @@ mod tests {
         let mut world = WorldBlocks::default();
         world.insert(
             IVec3::new(0, 0, 0),
-            BlockData::new(BlockKind::Stone, Facing::North),
+            BlockData::new(BlockKind::scene("stone"), Facing::North),
         );
         world.insert(
             IVec3::new(1, 0, 0),
-            BlockData::new(BlockKind::Stone, Facing::North),
+            BlockData::new(BlockKind::scene("stone"), Facing::North),
         );
         world.insert(
             IVec3::new(1, 0, 1),
-            BlockData::new(BlockKind::Stone, Facing::North),
+            BlockData::new(BlockKind::scene("stone"), Facing::North),
         );
         world.insert(
             IVec3::new(0, 1, 0),
@@ -800,7 +800,7 @@ mod tests {
         let mut world = WorldBlocks::default();
         world.insert(
             IVec3::new(0, 0, 0),
-            BlockData::new(BlockKind::Stone, Facing::North),
+            BlockData::new(BlockKind::scene("stone"), Facing::North),
         );
         let glass = IVec3::new(0, 1, 0);
         let iron = IVec3::new(0, 2, 0);

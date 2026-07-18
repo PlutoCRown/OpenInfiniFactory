@@ -12,7 +12,10 @@ pub use block_kind::{decode_kind, encode_kind};
 pub use settings::{read_settings, write_settings};
 
 pub const MAGIC: &[u8; 4] = b"OIF\0";
-pub const VERSION: u16 = 2;
+/// v3：场景段改为字符串 id；系统/工厂段仍为 u8 kind
+pub const VERSION: u16 = 3;
+pub const VERSION_V2: u16 = 2;
+pub const VERSION_V1: u16 = 1;
 
 pub const META_FILE: &str = "meta.json";
 pub const BLOCKS_FILE: &str = "blocks.bin";
@@ -24,6 +27,7 @@ pub enum SaveFormatError {
     InvalidMagic,
     UnsupportedVersion(u16),
     UnknownBlockKind(u8),
+    UnknownSceneBlockId(String),
     InvalidSettings,
     InvalidFacing(u8),
 }
@@ -37,6 +41,7 @@ impl std::fmt::Display for SaveFormatError {
                 write!(f, "unsupported blocks.bin version {version}")
             }
             Self::UnknownBlockKind(id) => write!(f, "unknown block kind id {id}"),
+            Self::UnknownSceneBlockId(id) => write!(f, "unknown scene block id '{id}'"),
             Self::InvalidSettings => write!(f, "invalid block settings payload"),
             Self::InvalidFacing(value) => write!(f, "invalid facing value {value}"),
         }
@@ -98,6 +103,12 @@ impl<'a> Cursor<'a> {
         let slice = &self.data[self.pos..self.pos + len];
         self.pos += len;
         Ok(slice)
+    }
+
+    pub fn read_string(&mut self) -> Result<String, SaveFormatError> {
+        let len = self.read_u16()? as usize;
+        let bytes = self.read_bytes(len)?;
+        String::from_utf8(bytes.to_vec()).map_err(|_| SaveFormatError::InvalidSettings)
     }
 }
 
@@ -165,7 +176,7 @@ pub fn encode_blocks(data: &SaveBlocksData) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(MAGIC);
     out.extend_from_slice(&VERSION.to_le_bytes());
-    write_section(&mut out, &data.scene_blocks);
+    write_scene_section(&mut out, &data.scene_blocks);
     write_section(&mut out, &data.system_blocks);
     write_section(&mut out, &data.factory_blocks);
     write_panel_section(&mut out, &data.wire_face_panels);
@@ -178,13 +189,41 @@ pub fn decode_blocks(bytes: &[u8]) -> Result<SaveBlocksData, SaveFormatError> {
         return Err(SaveFormatError::InvalidMagic);
     }
     let version = cursor.read_u16()?;
-    if version != VERSION {
-        return Err(SaveFormatError::UnsupportedVersion(version));
-    }
-    let scene_blocks = read_section(&mut cursor)?;
-    let system_blocks = read_section(&mut cursor)?;
-    let factory_blocks = read_section(&mut cursor)?;
-    let wire_face_panels = read_panel_section(&mut cursor)?;
+    let (scene_blocks, system_blocks, factory_blocks, wire_face_panels) = match version {
+        VERSION => {
+            let scene_blocks = read_scene_section(&mut cursor)?;
+            let system_blocks = read_section(&mut cursor)?;
+            let factory_blocks = read_section(&mut cursor)?;
+            let wire_face_panels = read_panel_section(&mut cursor)?;
+            (
+                scene_blocks,
+                system_blocks,
+                factory_blocks,
+                wire_face_panels,
+            )
+        }
+        VERSION_V2 => {
+            // 漏刷兜底：v2 场景段仍为 u8 kind
+            let scene_blocks = read_section(&mut cursor)?;
+            let system_blocks = read_section(&mut cursor)?;
+            let factory_blocks = read_section(&mut cursor)?;
+            let wire_face_panels = read_panel_section(&mut cursor)?;
+            (
+                scene_blocks,
+                system_blocks,
+                factory_blocks,
+                wire_face_panels,
+            )
+        }
+        VERSION_V1 => {
+            // v1：无 wire_face_panels 段；场景仍为 u8 kind
+            let scene_blocks = read_section(&mut cursor)?;
+            let system_blocks = read_section(&mut cursor)?;
+            let factory_blocks = read_section(&mut cursor)?;
+            (scene_blocks, system_blocks, factory_blocks, Vec::new())
+        }
+        other => return Err(SaveFormatError::UnsupportedVersion(other)),
+    };
     if !cursor.remaining().is_empty() {
         return Err(SaveFormatError::UnexpectedEof);
     }
@@ -194,6 +233,67 @@ pub fn decode_blocks(bytes: &[u8]) -> Result<SaveBlocksData, SaveFormatError> {
         factory_blocks,
         wire_face_panels,
     })
+}
+
+fn write_scene_section(out: &mut Vec<u8>, blocks: &[SavedBlock]) {
+    out.extend_from_slice(&(blocks.len() as u32).to_le_bytes());
+    for block in blocks {
+        write_scene_block(out, block);
+    }
+}
+
+fn write_scene_block(out: &mut Vec<u8>, block: &SavedBlock) {
+    out.extend_from_slice(&block.x.to_le_bytes());
+    out.extend_from_slice(&block.y.to_le_bytes());
+    out.extend_from_slice(&block.z.to_le_bytes());
+    let string_id = scene_string_id(block.kind);
+    let bytes = string_id.as_bytes();
+    out.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
+    out.extend_from_slice(bytes);
+}
+
+fn scene_string_id(kind: BlockKind) -> String {
+    match kind {
+        BlockKind::Scene(id) => oif_sim::blocks::scene_catalog()
+            .string_id(id)
+            .unwrap_or("unknown")
+            .to_string(),
+        // 防御：不应出现
+        other => format!("{other:?}").to_ascii_lowercase(),
+    }
+}
+
+fn read_scene_section(cursor: &mut Cursor<'_>) -> Result<Vec<SavedBlock>, SaveFormatError> {
+    let count = cursor.read_u32()? as usize;
+    let mut blocks = Vec::with_capacity(count);
+    for _ in 0..count {
+        blocks.push(read_scene_block(cursor)?);
+    }
+    Ok(blocks)
+}
+
+fn read_scene_block(cursor: &mut Cursor<'_>) -> Result<SavedBlock, SaveFormatError> {
+    let x = cursor.read_i32()?;
+    let y = cursor.read_i32()?;
+    let z = cursor.read_i32()?;
+    let string_id = cursor.read_string()?;
+    let kind = resolve_scene_kind(&string_id)?;
+    Ok(SavedBlock {
+        x,
+        y,
+        z,
+        kind,
+        facing: None,
+        settings: None,
+    })
+}
+
+fn resolve_scene_kind(string_id: &str) -> Result<BlockKind, SaveFormatError> {
+    oif_sim::blocks::ensure_fallback_scene_catalog();
+    oif_sim::blocks::scene_catalog()
+        .id_by_string(string_id)
+        .map(BlockKind::Scene)
+        .ok_or_else(|| SaveFormatError::UnknownSceneBlockId(string_id.to_string()))
 }
 
 fn write_section(out: &mut Vec<u8>, blocks: &[SavedBlock]) {
@@ -317,7 +417,7 @@ mod tests {
                 x: 1,
                 y: 2,
                 z: 3,
-                kind: BlockKind::Platform,
+                kind: BlockKind::scene("stone"),
                 facing: None,
                 settings: None,
             }],

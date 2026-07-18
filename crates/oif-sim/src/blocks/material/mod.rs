@@ -1,12 +1,12 @@
 use crate::blocks::adapter::BlockImpl;
-use crate::blocks::basic::{BasicBlockDef, BasicBlockLayer};
+use crate::blocks::basic::BasicBlockDef;
 use crate::blocks::{BlockKind, ColorSpec, MaterialKind, rgb};
 
 pub struct BasicMaterial;
 
 impl BasicBlockDef for BasicMaterial {
     const KIND: BlockKind = BlockKind::Material;
-    const LAYER: BasicBlockLayer = BasicBlockLayer::Material(MaterialKind::Basic);
+    const MATERIAL: MaterialKind = MaterialKind::Basic;
     const NAME_KEY: &'static str = "block.material";
     const SHORT_NAME_KEY: &'static str = "short.material";
     const DESCRIPTION_KEY: &'static str = "desc.material";

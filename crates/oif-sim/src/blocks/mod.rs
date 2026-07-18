@@ -4,6 +4,7 @@ mod register;
 mod basic;
 mod material_props;
 mod registry;
+mod scene_catalog;
 pub mod traits;
 
 pub mod blocker;
@@ -12,21 +13,18 @@ pub mod conveyor;
 pub mod copper_material;
 pub mod counter_rotator;
 pub mod detector;
-pub mod dirt;
 pub mod down_detector;
 pub mod down_welder;
 pub mod drill;
 pub mod drill_head;
 pub mod generator;
 pub mod goal;
-pub mod grass;
 pub mod glass_material;
 pub mod iron_material;
 pub mod laser;
 pub mod lifter;
 pub mod material;
 pub mod mirror;
-pub mod planks;
 pub mod platform;
 pub mod pusher;
 pub mod reverse_conveyor;
@@ -37,7 +35,6 @@ pub mod splitter;
 pub mod stamp_material;
 pub mod stamper;
 pub mod stamper_body;
-pub mod stone;
 pub mod sign;
 pub mod suction_cup;
 pub mod teleport_entrance;
@@ -54,6 +51,10 @@ pub use self::material_props::{
     local_face_index, material_face_connectable, MaterialProps,
 };
 pub use self::registry::{assert_registry_consistent, material_block_kind, save_stores_facing};
+pub use self::scene_catalog::{
+    ensure_fallback_scene_catalog, install_scene_catalog, leak_str, scene_catalog, scene_def,
+    SceneBlockCatalog, SceneBlockDef, SceneBlockId,
+};
 pub use crate::world::direction::Facing;
 use crate::world::grid::BlockSettings;
 
@@ -96,19 +97,11 @@ pub enum BlockClass {
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum BlockLayer {
-    Scene(SceneBlock),
+    Scene(SceneBlockId),
     Material(MaterialBlock),
     Factory(FactoryBlock),
     System(SystemBlock),
     Virtual(VirtualBlock),
-}
-
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub enum SceneBlock {
-    Grass,
-    Stone,
-    Dirt,
-    Planks,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -252,7 +245,7 @@ pub enum SignalBehavior {
 }
 
 /// 方块目录用 RGBA 颜色规格（表现层再转 Bevy Color）
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct ColorSpec {
     pub r: f32,
     pub g: f32,
@@ -389,6 +382,11 @@ impl BlockDefinition {
 
     pub const fn no_collision(mut self) -> Self {
         self.collision = false;
+        self
+    }
+
+    pub const fn with_collision(mut self, collision: bool) -> Self {
+        self.collision = collision;
         self
     }
 
@@ -553,11 +551,9 @@ impl PaintColor {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum BlockKind {
+    /// 配置式场景方块（内置 grass/stone/dirt/planks 的 id 固定为 0..=3）
+    Scene(SceneBlockId),
     Platform,
-    Grass,
-    Stone,
-    Dirt,
-    Planks,
     Generator,
     Welder,
     DownWelder,
@@ -596,16 +592,25 @@ pub enum BlockKind {
 }
 
 impl BlockKind {
+    /// 按资源包字符串 id 解析场景方块（依赖已安装的 catalog）
+    pub fn scene(string_id: &str) -> Self {
+        ensure_fallback_scene_catalog();
+        let id = scene_catalog()
+            .id_by_string(string_id)
+            .unwrap_or_else(|| panic!("unknown scene block id `{string_id}`"));
+        Self::Scene(id)
+    }
+
     fn block(self) -> &'static (dyn Block + Send + Sync) {
-        registry::get(self)
+        match self {
+            BlockKind::Scene(_) => panic!("Scene blocks are not inventory-registered"),
+            other => registry::get(other),
+        }
     }
 
     pub fn layer(self) -> BlockLayer {
         match self {
-            BlockKind::Grass => BlockLayer::Scene(SceneBlock::Grass),
-            BlockKind::Stone => BlockLayer::Scene(SceneBlock::Stone),
-            BlockKind::Dirt => BlockLayer::Scene(SceneBlock::Dirt),
-            BlockKind::Planks => BlockLayer::Scene(SceneBlock::Planks),
+            BlockKind::Scene(id) => BlockLayer::Scene(id),
             BlockKind::Material => BlockLayer::Material(MaterialBlock::Material),
             BlockKind::IronMaterial => BlockLayer::Material(MaterialBlock::IronMaterial),
             BlockKind::CopperMaterial => BlockLayer::Material(MaterialBlock::CopperMaterial),
@@ -646,6 +651,17 @@ impl BlockKind {
     }
 
     pub fn definition(self) -> BlockDefinition {
+        if let BlockKind::Scene(id) = self {
+            let def = scene_def(id);
+            return BlockDefinition::scene(
+                self,
+                def.name_key,
+                def.short_name_key,
+                def.description_key,
+                def.color,
+            )
+            .with_collision(def.collision);
+        }
         self.block().definition()
     }
 
@@ -670,6 +686,9 @@ impl BlockKind {
     }
 
     pub fn is_directional(self) -> bool {
+        if matches!(self, BlockKind::Scene(_)) {
+            return false;
+        }
         if let Some(kind) = self.material_kind() {
             return kind.props().directional;
         }
@@ -687,10 +706,12 @@ impl BlockKind {
             .is_some_and(|props| material_face_connectable(props, facing, world_normal))
     }
 
-    /// 工厂可贴面：非 `non_connection_face`；场景任意面可贴
+    /// 工厂可贴面：非 `non_connection_face`；场景读 catalog.connectable
     pub fn face_attachable(self, facing: Facing, world_normal: IVec3) -> bool {
-        if self.is_scene() {
-            return true;
+        if let BlockKind::Scene(id) = self {
+            let def = scene_def(id);
+            let local = facing.inverse_rotate_offset(world_normal);
+            return local_face_index(local).is_some_and(|i| def.connectable[i]);
         }
         if self.is_factory() {
             return self.non_connection_face(facing) != Some(world_normal);
@@ -699,6 +720,9 @@ impl BlockKind {
     }
 
     pub fn has_collision(self) -> bool {
+        if let BlockKind::Scene(id) = self {
+            return scene_def(id).collision;
+        }
         self.definition().collision
     }
 
@@ -752,18 +776,30 @@ impl BlockKind {
     }
 
     pub fn alternate(self) -> Option<Self> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return None;
+        }
         self.block().alternate()
     }
 
     pub fn marker_behavior(self, facing: Facing) -> Option<MarkerBehavior> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return None;
+        }
         self.block().marker_behavior(facing)
     }
 
     pub fn material_source(self, facing: Facing) -> Option<MaterialSource> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return None;
+        }
         self.block().material_source(facing)
     }
 
     pub fn material_kind(self) -> Option<MaterialKind> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return None;
+        }
         self.block().material_kind()
     }
 
@@ -772,42 +808,72 @@ impl BlockKind {
     }
 
     pub fn persistent_layer(self) -> Option<PersistentLayer> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return Some(PersistentLayer::Puzzle);
+        }
         self.block().persistent_layer()
     }
 
     pub fn default_settings(self, pos: IVec3) -> Option<BlockSettings> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return None;
+        }
         self.block().default_settings(pos)
     }
 
     pub fn movement_rule(self, facing: Facing) -> Option<MovementRule> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return None;
+        }
         self.block().movement_rule(facing)
     }
 
     pub fn material_destroyer(self, facing: Facing) -> Option<MaterialDestroyer> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return None;
+        }
         self.block().material_destroyer(facing)
     }
 
     pub fn material_labeler(self, facing: Facing) -> Option<MaterialLabeler> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return None;
+        }
         self.block().material_labeler(facing)
     }
 
     pub fn material_processor(self) -> Option<MaterialProcessor> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return None;
+        }
         self.block().material_processor()
     }
 
     pub fn laser_optics(self) -> Option<LaserOpticsBehavior> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return None;
+        }
         self.block().laser_optics()
     }
 
     pub fn weld_behavior(self) -> Option<WeldBehavior> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return None;
+        }
         self.block().weld_behavior()
     }
 
     pub fn signal_behavior(self, facing: Facing) -> Option<SignalBehavior> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return None;
+        }
         self.block().signal_behavior(facing)
     }
 
     pub fn non_connection_face(self, facing: Facing) -> Option<IVec3> {
+        if matches!(self, BlockKind::Scene(_)) {
+            return None;
+        }
         self.block().non_connection_face(facing)
     }
 }

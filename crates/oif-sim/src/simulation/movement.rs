@@ -528,13 +528,13 @@ mod tests {
         place(
             &mut world,
             IVec3::new(0, 0, 0),
-            BlockKind::Stone,
+            BlockKind::scene("stone"),
             Facing::North,
         );
         place(
             &mut world,
             IVec3::new(2, 0, 0),
-            BlockKind::Stone,
+            BlockKind::scene("stone"),
             Facing::North,
         );
         let west = IVec3::new(0, 1, 0);
@@ -592,7 +592,7 @@ mod tests {
         place(
             &mut world,
             IVec3::new(0, 0, 0),
-            BlockKind::Stone,
+            BlockKind::scene("stone"),
             Facing::North,
         );
         place(
@@ -604,7 +604,7 @@ mod tests {
         place(
             &mut world,
             IVec3::new(4, 0, 0),
-            BlockKind::Stone,
+            BlockKind::scene("stone"),
             Facing::North,
         );
         place(
@@ -675,13 +675,13 @@ mod tests {
         place(
             &mut world,
             IVec3::new(0, 0, 0),
-            BlockKind::Stone,
+            BlockKind::scene("stone"),
             Facing::North,
         );
         place(
             &mut world,
             IVec3::new(1, 0, 0),
-            BlockKind::Stone,
+            BlockKind::scene("stone"),
             Facing::North,
         );
         let blocker = IVec3::new(0, 1, 0);
@@ -690,7 +690,7 @@ mod tests {
         place(
             &mut world,
             IVec3::new(1, 1, 0),
-            BlockKind::Stone,
+            BlockKind::scene("stone"),
             Facing::North,
         );
 
@@ -737,7 +737,7 @@ mod tests {
         place(
             &mut world,
             IVec3::new(0, 0, 0),
-            BlockKind::Stone,
+            BlockKind::scene("stone"),
             Facing::North,
         );
         let pusher = IVec3::new(0, 1, 0);
@@ -785,7 +785,7 @@ mod tests {
         place(
             &mut world,
             IVec3::new(0, 0, 0),
-            BlockKind::Stone,
+            BlockKind::scene("stone"),
             Facing::North,
         );
         let pusher = IVec3::new(0, 1, 0);

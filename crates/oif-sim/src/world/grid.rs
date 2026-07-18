@@ -1302,7 +1302,7 @@ pub fn seed_demo_world(world: &mut WorldBlocks) {
         for z in -FLOOR_RADIUS..=FLOOR_RADIUS {
             world.insert(
                 IVec3::new(x, 0, z),
-                BlockData::new(BlockKind::Stone, Facing::North),
+                BlockData::new(BlockKind::scene("stone"), Facing::North),
             );
         }
     }

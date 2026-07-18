@@ -1063,7 +1063,7 @@ mod tests {
         let material = IVec3::new(1, 1, 0);
         place_material(&mut world, material);
         // 顺时针转到 (0,1,1)，用障碍挡住旋转
-        place(&mut world, IVec3::new(0, 1, 1), BlockKind::Stone);
+        place(&mut world, IVec3::new(0, 1, 1), BlockKind::scene("stone"));
 
         let mut structures = structures_for(&world);
         let id = structures.id_at(material).unwrap();
@@ -1139,7 +1139,7 @@ mod tests {
         place_material(&mut world, a);
         place_material(&mut world, b);
         // 挡住 B 的活塞方向
-        place(&mut world, IVec3::new(1, 1, 1), BlockKind::Stone);
+        place(&mut world, IVec3::new(1, 1, 1), BlockKind::scene("stone"));
 
         let mut structures = structures_for(&world);
         let id_a = structures.id_at(a).unwrap();

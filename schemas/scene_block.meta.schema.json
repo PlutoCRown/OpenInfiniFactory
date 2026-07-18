@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openinfinifactory.local/schemas/scene_block.meta.schema.json",
+  "title": "SceneBlockMeta",
+  "description": "场景方块资源包元数据（与 model.glb 同目录的 meta.json）。外观（网格/UV/材质/贴图）全部以 model.glb 为准。UI 图标为同目录预烘焙 icon.png（用 bake_scene_icons 生成，默认 128×128）。可选 collision.glb。游戏加载时忽略 $schema。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "指向本 schema 的相对路径，仅供编辑器智能提示；运行时忽略。"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "全局唯一字符串 ID。显示名走 i18n key `block.<id>`；未翻译时 UI 直接显示该 key。"
+    },
+    "collision": {
+      "type": "boolean",
+      "default": true,
+      "description": "是否参与碰撞。false 时整格无碰撞（忽略 collision.glb）。true 且无 collision.glb 时默认单位正方体；有 collision.glb 时用该网格（玩家精细碰撞后续接入）。"
+    },
+    "connectable": {
+      "type": "array",
+      "description": "局部六面是否可粘贴告示/装饰（face_attachable），顺序为 +X -X +Y -Y +Z -Z（相对 facing=North 的局部系）。不是连续贴图，也不是材料焊接。",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "boolean"
+      },
+      "default": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    "connected_textures": {
+      "type": "object",
+      "description": "连续贴图（CTM）规则占位。第一期游戏可不实现换贴图，但字段可先写好。",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "是否启用连续贴图。"
+        },
+        "match": {
+          "type": "string",
+          "enum": [
+            "same_id",
+            "group"
+          ],
+          "description": "same_id：仅与同 id 邻格连通；group：与同 group 字符串的场景方块连通。"
+        },
+        "group": {
+          "type": "string",
+          "description": "当 match 为 group 时的连通组名。"
+        },
+        "faces": {
+          "type": "array",
+          "description": "哪些面参与连通判定，顺序同 connectable。",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

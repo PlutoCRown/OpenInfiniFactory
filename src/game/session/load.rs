@@ -58,6 +58,7 @@ pub fn poll_pending_world_load(
     mut simulation: ResMut<SimulationState>,
     mut pending_player: ResMut<PendingPlayerSpawn>,
     mut busy: ResMut<SessionBusy>,
+    mut scene_registry: ResMut<crate::game::scene_blocks::SceneBlockRegistry>,
     mode: Res<State<GameMode>>,
     mut next_state: ResMut<NextState<GameMode>>,
 ) {
@@ -89,6 +90,21 @@ pub fn poll_pending_world_load(
         *busy = SessionBusy::None;
         return;
     };
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use crate::shared::platform::SAVE_DIR;
+        let puzzle_dir = std::path::PathBuf::from(SAVE_DIR).join(&slot.puzzle);
+        if let Err(err) =
+            crate::game::scene_blocks::merge_puzzle_scene_blocks(&mut scene_registry, &puzzle_dir)
+        {
+            bevy::log::error!("puzzle scene blocks: {err}");
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = &mut scene_registry;
+    }
 
     load_world_into_session(
         &slot,

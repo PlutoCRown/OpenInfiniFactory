@@ -1,5 +1,5 @@
 use crate::blocks::adapter::BlockImpl;
-use crate::blocks::basic::{BasicBlockDef, BasicBlockLayer};
+use crate::blocks::basic::BasicBlockDef;
 use crate::blocks::{rgba, BlockKind, ColorSpec, MaterialKind};
 
 /// 玻璃材料：脆弱，运动冲突时碎裂
@@ -7,7 +7,7 @@ pub struct GlassMaterial;
 
 impl BasicBlockDef for GlassMaterial {
     const KIND: BlockKind = BlockKind::GlassMaterial;
-    const LAYER: BasicBlockLayer = BasicBlockLayer::Material(MaterialKind::Glass);
+    const MATERIAL: MaterialKind = MaterialKind::Glass;
     const NAME_KEY: &'static str = "block.glass_material";
     const SHORT_NAME_KEY: &'static str = "short.glass_material";
     const DESCRIPTION_KEY: &'static str = "desc.glass_material";

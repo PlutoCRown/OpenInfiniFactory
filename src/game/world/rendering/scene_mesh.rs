@@ -66,12 +66,12 @@ const SCENE_FACE_AO: [[(IVec3, IVec3, IVec3); 4]; 6] = [
     ],
 ];
 
-/// 生成带顶点 AO 的场景方块网格
-pub(super) fn scene_block_mesh(pos: IVec3, world: &WorldBlocks) -> Mesh {
+/// 生成带顶点 AO 的场景方块网格；UV 来自 model.glb 的 24 顶点模板
+pub(super) fn scene_block_mesh(pos: IVec3, world: &WorldBlocks, face_uvs: &[[f32; 2]; 24]) -> Mesh {
     let min = Vec3::splat(-0.5);
     let max = Vec3::splat(0.5);
-    let world_min = pos.as_vec3();
-    let world_max = world_min + Vec3::ONE;
+
+    // 面顺序与 bake 脚本 / glb 约定一致：+Z -Z +X -X +Y -Y
     let faces = [
         (
             [
@@ -81,12 +81,6 @@ pub(super) fn scene_block_mesh(pos: IVec3, world: &WorldBlocks) -> Mesh {
                 [min.x, max.y, max.z],
             ],
             [0.0, 0.0, 1.0],
-            [
-                [world_min.x, world_min.y],
-                [world_max.x, world_min.y],
-                [world_max.x, world_max.y],
-                [world_min.x, world_max.y],
-            ],
         ),
         (
             [
@@ -96,12 +90,6 @@ pub(super) fn scene_block_mesh(pos: IVec3, world: &WorldBlocks) -> Mesh {
                 [max.x, max.y, min.z],
             ],
             [0.0, 0.0, -1.0],
-            [
-                [world_max.x, world_min.y],
-                [world_min.x, world_min.y],
-                [world_min.x, world_max.y],
-                [world_max.x, world_max.y],
-            ],
         ),
         (
             [
@@ -111,12 +99,6 @@ pub(super) fn scene_block_mesh(pos: IVec3, world: &WorldBlocks) -> Mesh {
                 [max.x, max.y, max.z],
             ],
             [1.0, 0.0, 0.0],
-            [
-                [world_max.z, world_min.y],
-                [world_min.z, world_min.y],
-                [world_min.z, world_max.y],
-                [world_max.z, world_max.y],
-            ],
         ),
         (
             [
@@ -126,12 +108,6 @@ pub(super) fn scene_block_mesh(pos: IVec3, world: &WorldBlocks) -> Mesh {
                 [min.x, max.y, min.z],
             ],
             [-1.0, 0.0, 0.0],
-            [
-                [world_min.z, world_min.y],
-                [world_max.z, world_min.y],
-                [world_max.z, world_max.y],
-                [world_min.z, world_max.y],
-            ],
         ),
         (
             [
@@ -141,12 +117,6 @@ pub(super) fn scene_block_mesh(pos: IVec3, world: &WorldBlocks) -> Mesh {
                 [min.x, max.y, min.z],
             ],
             [0.0, 1.0, 0.0],
-            [
-                [world_min.x, world_max.z],
-                [world_max.x, world_max.z],
-                [world_max.x, world_min.z],
-                [world_min.x, world_min.z],
-            ],
         ),
         (
             [
@@ -156,12 +126,6 @@ pub(super) fn scene_block_mesh(pos: IVec3, world: &WorldBlocks) -> Mesh {
                 [min.x, min.y, max.z],
             ],
             [0.0, -1.0, 0.0],
-            [
-                [world_min.x, world_min.z],
-                [world_max.x, world_min.z],
-                [world_max.x, world_max.z],
-                [world_min.x, world_max.z],
-            ],
         ),
     ];
 
@@ -170,11 +134,11 @@ pub(super) fn scene_block_mesh(pos: IVec3, world: &WorldBlocks) -> Mesh {
     let mut uvs = Vec::with_capacity(24);
     let mut colors = Vec::with_capacity(24);
     let mut indices = Vec::with_capacity(36);
-    for (face_index, (face_positions, normal, face_uvs)) in faces.into_iter().enumerate() {
+    for (face_index, (face_positions, normal)) in faces.into_iter().enumerate() {
         let base = (face_index * 4) as u32;
         positions.extend_from_slice(&face_positions);
         normals.extend_from_slice(&[normal; 4]);
-        uvs.extend_from_slice(&face_uvs);
+        uvs.extend_from_slice(&face_uvs[face_index * 4..face_index * 4 + 4]);
         for (side1, side2, corner) in SCENE_FACE_AO[face_index] {
             let ao = scene_vertex_ao(
                 scene_block_occludes(world, pos + side1),

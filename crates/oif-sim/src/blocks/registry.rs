@@ -16,6 +16,9 @@ pub fn material_block_kind(material: MaterialKind) -> Option<BlockKind> {
 
 /// 存档是否需要持久化朝向
 pub fn save_stores_facing(kind: BlockKind) -> bool {
+    if matches!(kind, BlockKind::Scene(_)) {
+        return false;
+    }
     match kind {
         BlockKind::Platform | BlockKind::Wire | BlockKind::DownWelder | BlockKind::DownDetector => {
             false

@@ -8,11 +8,17 @@ use crate::game::world::grid::WorldBlocks;
 use crate::shared::save::{load_world, SaveSlot};
 use oif_sim::SimSession;
 
-/// 解析方块种类名
+/// 解析方块种类名（含场景字符串 id）
 pub fn parse_block_kind(name: &str) -> Option<BlockKind> {
+    let name = name.trim();
+    let lower = name.to_ascii_lowercase();
+    oif_sim::blocks::ensure_fallback_scene_catalog();
+    if let Some(id) = oif_sim::blocks::scene_catalog().id_by_string(&lower) {
+        return Some(BlockKind::Scene(id));
+    }
     all_blocks()
         .into_iter()
-        .find(|kind| format!("{:?}", kind).eq_ignore_ascii_case(name.trim()))
+        .find(|kind| format!("{:?}", kind).eq_ignore_ascii_case(name))
 }
 
 /// 解析朝向名

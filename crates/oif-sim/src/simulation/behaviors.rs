@@ -1045,7 +1045,7 @@ mod tests {
         // 支撑，避免重力先把材料挪开再刷漆
         world.insert(
             IVec3::new(1, 0, 0),
-            BlockData::new(BlockKind::Stone, Facing::North),
+            BlockData::new(BlockKind::scene("stone"), Facing::North),
         );
         world.insert(roller, BlockData::new(BlockKind::Roller, Facing::East));
         place_material(&mut world, material, MaterialKind::Basic);
@@ -1284,7 +1284,7 @@ mod tests {
     fn sign_can_place_on_scene_stone_side() {
         let mut world = WorldBlocks::default();
         let host = IVec3::new(0, 1, 0);
-        world.insert(host, BlockData::new(BlockKind::Stone, Facing::North));
+        world.insert(host, BlockData::new(BlockKind::scene("stone"), Facing::North));
         assert!(world.can_place_sign_on_face(host, IVec3::X));
         assert!(world.can_place_sign_on_face(host, IVec3::Y));
     }
