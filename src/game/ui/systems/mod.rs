@@ -9,7 +9,7 @@ use crate::game::state::{
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::save::SaveState;
 
-use crate::game::ui::access::{I18nRevision, UiMainThread, i18n};
+use crate::game::ui::access::{UiMainThread, i18n};
 use crate::game::ui::components::ui_logical_bounds;
 
 use super::types::{

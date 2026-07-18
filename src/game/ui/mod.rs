@@ -13,7 +13,7 @@ mod widgets;
 
 use bevy::prelude::*;
 
-pub use access::{I18nRevision, UiAccessScope, bind_ui_scope, i18n, ui};
+pub use access::{UiAccessScope, bind_ui_scope, i18n, ui};
 pub use layout::{setup_menu_ui, setup_playing_ui_system};
 pub use systems::{
     apply_ui_font, dismiss_playing_overlay, load_ui_font, panel_close_clicked, panel_drag_ended,
@@ -47,7 +47,6 @@ impl Plugin for GameUiPlugin {
             .add_systems(Update, unbind_ui_scope.after(UiAccessScope))
             .add_message::<UiAction>()
             .insert_resource(UiRuntime::default())
-            .insert_resource(I18nRevision::default())
             .insert_resource(crate::game::ui::core::host::UiHost::default())
             .insert_resource(crate::game::ui::core::text_prompt::TextPromptState::default())
             .insert_resource(crate::game::ui::core::confirm_dialog::ConfirmDialogState::default())

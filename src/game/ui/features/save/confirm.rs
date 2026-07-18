@@ -14,7 +14,7 @@ pub fn open_delete_confirm(slot: SaveSlot) {
     let display = slot.display_name();
     let spec = ConfirmProps {
         title: i18n.t("confirm.title"),
-        message: i18n.fmt("save.confirm_delete", &[("name", display)]),
+        message: i18n.fmt("save.confirm_delete", &[("name", display.as_str())]),
         confirm_text: i18n.t("button.delete"),
         cancel_text: i18n.t("button.cancel"),
         extra: None,

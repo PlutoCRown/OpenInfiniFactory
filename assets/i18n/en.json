@@ -296,6 +296,7 @@
   "settings.group.mouse": "Mouse",
   "settings.group.simulation": "Simulation",
   "settings.language": "Language",
+  "settings.language_pending_restart": "{lang} (restart required)",
   "settings.mouse_sensitivity_value": "Sensitivity {scale}x",
   "settings.mouse_sensitivity_x": "Mouse sensitivity (horizontal)",
   "settings.mouse_sensitivity_y": "Mouse sensitivity (vertical)",

@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use crate::game::session::SessionBusy;
 use crate::game::systems::perf::PerfScope;
-use crate::game::ui::access::{i18n, I18nRevision, UiAccessScope, UiMainThread};
+use crate::game::ui::access::{i18n, UiAccessScope, UiMainThread};
 use crate::game::ui::components::text;
 
 /// 全屏忙碌遮罩根节点
@@ -54,12 +54,11 @@ pub fn spawn_session_busy_overlay(root: &mut ChildSpawnerCommands, busy: Session
 pub fn update_session_busy_overlay(
     _ui_thread: UiMainThread,
     busy: Res<SessionBusy>,
-    i18n_rev: Res<I18nRevision>,
     mut overlays: Query<&mut Node, With<SessionBusyOverlay>>,
     mut labels: Query<&mut Text, With<SessionBusyLabel>>,
     added: Query<(), Added<SessionBusyOverlay>>,
 ) {
-    if !(busy.is_changed() || i18n_rev.is_changed() || !added.is_empty()) {
+    if !(busy.is_changed() || !added.is_empty()) {
         return;
     }
 

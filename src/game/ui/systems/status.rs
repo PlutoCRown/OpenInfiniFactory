@@ -1,13 +1,13 @@
 use std::fmt::Write;
 
 use crate::game::blocks::BlockKind;
-use crate::game::ui::types::InventoryItem;
 use crate::game::world::direction::Facing;
 use crate::shared::config::{ActionKeyName, GameConfig};
+use crate::shared::i18n::{I18n, subst_template};
 use crate::shared::save::SaveKind;
 
 /// 游戏状态栏缓存：世界/手持很少变，瞄准行才跟视角每帧变
-pub(crate) struct GameplayStatusCache {
+pub struct GameplayStatusCache {
     world_line: String,
     held_line: String,
     aim_tpl: String,
@@ -22,6 +22,10 @@ pub(crate) struct GameplayStatusCache {
     num_x: String,
     num_y: String,
     num_z: String,
+    /// 模拟 overlay 嵌套模板缓冲
+    overlay_controls: String,
+    overlay_out: String,
+    turn_buf: String,
 }
 
 impl Default for GameplayStatusCache {
@@ -41,12 +45,16 @@ impl Default for GameplayStatusCache {
             num_x: String::new(),
             num_y: String::new(),
             num_z: String::new(),
+            overlay_controls: String::new(),
+            overlay_out: String::new(),
+            turn_buf: String::new(),
         }
     }
 }
 
 pub fn update_status_ui(
     _ui_thread: UiMainThread,
+    locale: Res<I18n>,
     placement: Res<PlacementState>,
     world: Res<WorldBlocks>,
     inventory: Res<InventoryItems>,
@@ -54,7 +62,6 @@ pub fn update_status_ui(
     simulation: Res<SimulationState>,
     save_state: Res<SaveState>,
     config: Res<GameConfig>,
-    i18n_revision: Res<crate::game::ui::access::I18nRevision>,
     mut primed: Local<bool>,
     mut last_gameplay_sig: Local<(usize, Option<(IVec3, IVec3)>)>,
     mut gameplay_cache: Local<GameplayStatusCache>,
@@ -64,20 +71,14 @@ pub fn update_status_ui(
         placement.selected,
         placement.target.as_ref().map(|hit| (hit.pos, hit.normal)),
     );
-    let i18n_dirty = i18n_revision.is_changed();
     let headers_dirty = !*primed
         || inventory.is_changed()
         || save_state.is_changed()
-        || i18n_dirty
         || placement.selected != last_gameplay_sig.0;
-    let target_dirty =
-        !*primed || *last_gameplay_sig != gameplay_sig || world.is_changed() || i18n_dirty;
+    let target_dirty = !*primed || *last_gameplay_sig != gameplay_sig || world.is_changed();
     let gameplay_dirty = headers_dirty || target_dirty;
-    let simulation_dirty = !*primed
-        || builder_mode.is_changed()
-        || simulation.is_changed()
-        || config.is_changed()
-        || i18n_dirty;
+    let simulation_dirty =
+        !*primed || builder_mode.is_changed() || simulation.is_changed() || config.is_changed();
     let force = !*primed;
     *primed = true;
     *last_gameplay_sig = gameplay_sig;
@@ -89,14 +90,15 @@ pub fn update_status_ui(
         if headers_dirty {
             refresh_gameplay_headers(
                 &mut gameplay_cache,
+                &locale,
                 &placement,
                 &inventory,
                 &save_state,
-                i18n_dirty || force,
+                force,
             );
         }
         if target_dirty {
-            refresh_gameplay_target(&mut gameplay_cache, &placement, &world);
+            refresh_gameplay_target(&mut gameplay_cache, &locale, &placement, &world);
         }
         compose_gameplay_status(&mut gameplay_cache);
     }
@@ -114,13 +116,16 @@ pub fn update_status_ui(
                 if !force && !simulation_dirty {
                     continue;
                 }
-                let next = if *builder_mode != BuilderMode::Play {
-                    String::new()
+                let next_empty = *builder_mode != BuilderMode::Play;
+                if next_empty {
+                    if !text.0.is_empty() {
+                        text.0.clear();
+                    }
                 } else {
-                    simulation_overlay_text(&simulation, &config)
-                };
-                if text.0 != next {
-                    text.0 = next;
+                    write_simulation_overlay(&mut gameplay_cache, &locale, &simulation, &config);
+                    if text.0 != gameplay_cache.overlay_out {
+                        text.0.clone_from(&gameplay_cache.overlay_out);
+                    }
                 }
             }
         }
@@ -129,24 +134,34 @@ pub fn update_status_ui(
 
 fn refresh_gameplay_headers(
     cache: &mut GameplayStatusCache,
+    locale: &I18n,
     placement: &PlacementState,
     inventory: &InventoryItems,
     save_state: &SaveState,
     refresh_templates: bool,
 ) {
     if refresh_templates {
-        cache.aim_tpl = i18n.t("status.gameplay.aim");
-        cache.place_tpl = i18n.t("status.gameplay.place");
-        cache.aim_none = i18n.t("status.gameplay.aim_none");
-        cache.scene_label = i18n.t("status.gameplay.scene");
+        cache.aim_tpl.clear();
+        cache.aim_tpl.push_str(locale.t("status.gameplay.aim"));
+        cache.place_tpl.clear();
+        cache.place_tpl.push_str(locale.t("status.gameplay.place"));
+        cache.aim_none.clear();
+        cache
+            .aim_none
+            .push_str(locale.t("status.gameplay.aim_none"));
+        cache.scene_label.clear();
+        cache
+            .scene_label
+            .push_str(locale.t("status.gameplay.scene"));
         cache.last_block_kind = None;
     }
-    cache.world_line = world_status_line(save_state);
-    cache.held_line = held_status_line(inventory, placement);
+    write_world_status_line(&mut cache.world_line, locale, save_state);
+    write_held_status_line(&mut cache.held_line, locale, inventory, placement);
 }
 
 fn refresh_gameplay_target(
     cache: &mut GameplayStatusCache,
+    locale: &I18n,
     placement: &PlacementState,
     world: &WorldBlocks,
 ) {
@@ -166,7 +181,8 @@ fn refresh_gameplay_target(
         cache.last_block_kind = Some(kind);
         match block {
             Some(block) => {
-                cache.block_label = i18n.t(block.kind.name_key());
+                cache.block_label.clear();
+                cache.block_label.push_str(locale.t(block.kind.name_key()));
             }
             None => cache.block_label.clone_from(&cache.scene_label),
         }
@@ -213,80 +229,90 @@ fn compose_gameplay_status(cache: &mut GameplayStatusCache) {
     }
 }
 
-fn simulation_overlay_text(simulation: &SimulationState, config: &GameConfig) -> String {
-    let start = config.input(ActionKeyName::Simulate).name().to_string();
-    let fast = config
-        .input(ActionKeyName::SimulationFast)
-        .name()
-        .to_string();
-    let step = config
-        .input(ActionKeyName::SimulationStep)
-        .name()
-        .to_string();
-    let rollback = config
-        .input(ActionKeyName::SimulationRollback)
-        .name()
-        .to_string();
-    let (state_key, controls_key, controls_args): (&str, &str, Vec<(&str, String)>) =
+fn write_simulation_overlay(
+    cache: &mut GameplayStatusCache,
+    locale: &I18n,
+    simulation: &SimulationState,
+    config: &GameConfig,
+) {
+    let start = config.input(ActionKeyName::Simulate).name();
+    let fast = config.input(ActionKeyName::SimulationFast).name();
+    let step = config.input(ActionKeyName::SimulationStep).name();
+    let rollback = config.input(ActionKeyName::SimulationRollback).name();
+    let (state_key, controls_key, controls_args): (&str, &str, &[(&str, &str)]) =
         if !simulation.is_active() {
             (
                 "simulation_state.ready",
                 "simulation_controls.ready",
-                vec![("start", start)],
+                &[("start", start)],
             )
         } else if simulation.running && simulation.speed > 1.0 {
             (
                 "simulation_state.fast",
                 "simulation_controls.fast",
-                vec![("fast", fast), ("step", step), ("rollback", rollback)],
+                &[("fast", fast), ("step", step), ("rollback", rollback)],
             )
         } else if simulation.running {
             (
                 "simulation_state.playing",
                 "simulation_controls.playing",
-                vec![("step", step), ("fast", fast), ("rollback", rollback)],
+                &[("step", step), ("fast", fast), ("rollback", rollback)],
             )
         } else {
             (
                 "simulation_state.paused",
                 "simulation_controls.paused",
-                vec![("step", step), ("start", start), ("rollback", rollback)],
+                &[("step", step), ("start", start), ("rollback", rollback)],
             )
         };
-    i18n.fmt(
-        "status.simulation_overlay",
+    subst_template(
+        locale.t(controls_key),
+        controls_args,
+        &mut cache.overlay_controls,
+    );
+    write_u64(&mut cache.turn_buf, simulation.turn);
+    let state = locale.t(state_key);
+    subst_template(
+        locale.t("status.simulation_overlay"),
         &[
-            ("state", i18n.t(state_key)),
-            ("turns", simulation.turn.to_string()),
-            ("controls", i18n.fmt(controls_key, &controls_args)),
+            ("state", state),
+            ("turns", cache.turn_buf.as_str()),
+            ("controls", cache.overlay_controls.as_str()),
         ],
-    )
+        &mut cache.overlay_out,
+    );
 }
 
-fn world_status_line(save_state: &SaveState) -> String {
+fn write_world_status_line(out: &mut String, locale: &I18n, save_state: &SaveState) {
     let Some(slot) = save_state.current.as_ref() else {
-        return i18n.t("status.gameplay.no_world");
+        out.clear();
+        out.push_str(locale.t("status.gameplay.no_world"));
+        return;
     };
     let kind = save_state.current_kind.unwrap_or_else(|| slot.kind());
-    let kind_label = i18n.t(match kind {
+    let kind_label = locale.t(match kind {
         SaveKind::Puzzle => "save.kind.puzzle",
         SaveKind::Solution => "save.kind.solution",
     });
-    i18n.fmt(
+    let name = slot.display_name();
+    locale.fmt_into(
+        out,
         "status.gameplay.world",
-        &[("name", slot.display_name()), ("kind", kind_label)],
-    )
+        &[("name", name.as_str()), ("kind", kind_label)],
+    );
 }
 
-fn held_status_line(inventory: &InventoryItems, placement: &PlacementState) -> String {
-    let item_label = inventory.hotbar[placement.selected]
-        .map(inventory_item_label)
-        .unwrap_or_else(|| i18n.t("empty"));
-    i18n.fmt("status.gameplay.held", &[("item", item_label)])
-}
-
-fn inventory_item_label(item: InventoryItem) -> String {
-    i18n.t(item.name_key())
+fn write_held_status_line(
+    out: &mut String,
+    locale: &I18n,
+    inventory: &InventoryItems,
+    placement: &PlacementState,
+) {
+    let item_label = match inventory.hotbar[placement.selected] {
+        Some(item) => locale.t(item.name_key()),
+        None => locale.t("empty"),
+    };
+    locale.fmt_into(out, "status.gameplay.held", &[("item", item_label)]);
 }
 
 fn facing_label(facing: Facing) -> &'static str {
@@ -303,26 +329,7 @@ fn write_i32(buf: &mut String, value: i32) {
     let _ = write!(buf, "{value}");
 }
 
-/// 把 `{name}` 模板填进 out，避免 i18n.fmt 每帧多次 String::replace
-fn subst_template(template: &str, values: &[(&str, &str)], out: &mut String) {
-    out.clear();
-    let mut rest = template;
-    while let Some(start) = rest.find('{') {
-        out.push_str(&rest[..start]);
-        let after = &rest[start + 1..];
-        let Some(end) = after.find('}') else {
-            out.push_str(&rest[start..]);
-            return;
-        };
-        let key = &after[..end];
-        if let Some((_, value)) = values.iter().find(|(name, _)| *name == key) {
-            out.push_str(value);
-        } else {
-            out.push('{');
-            out.push_str(key);
-            out.push('}');
-        }
-        rest = &after[end + 1..];
-    }
-    out.push_str(rest);
+fn write_u64(buf: &mut String, value: u64) {
+    buf.clear();
+    let _ = write!(buf, "{value}");
 }

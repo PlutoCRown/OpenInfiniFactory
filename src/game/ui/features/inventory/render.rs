@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::game::state::{BuilderMode, PlacementState};
-use crate::game::ui::access::{I18nRevision, UiMainThread, i18n};
+use crate::game::ui::access::{UiMainThread, i18n};
 use crate::game::ui::components::{hover_border, inset_border};
 use crate::game::ui::types::{
     AreaKind, CarriedItem, CarriedItemPreview, InventoryItem, InventoryItems, InventorySlot,
@@ -13,28 +13,25 @@ use crate::game::world::rendering::BlockIconAssets;
 
 use super::types::InventoryTitleText;
 
-fn builder_mode_name(mode: BuilderMode) -> String {
-    i18n.t(match mode {
+fn builder_mode_key(mode: BuilderMode) -> &'static str {
+    match mode {
         BuilderMode::Edit => "mode.edit",
         BuilderMode::Play => "mode.play",
-    })
+    }
 }
 
 pub fn update_inventory_title(
     _ui_thread: UiMainThread,
     builder_mode: Res<BuilderMode>,
-    i18n_revision: Res<I18nRevision>,
     mut titles: Query<&mut Text, With<InventoryTitleText>>,
     added: Query<(), Added<InventoryTitleText>>,
 ) {
-    if !builder_mode.is_changed() && !i18n_revision.is_changed() && added.is_empty() {
+    if !builder_mode.is_changed() && added.is_empty() {
         return;
     }
+    let mode = i18n.t(builder_mode_key(*builder_mode));
     for mut text in &mut titles {
-        text.0 = i18n.fmt(
-            "inventory.title",
-            &[("mode", builder_mode_name(*builder_mode))],
-        );
+        text.0 = i18n.fmt("inventory.title", &[("mode", mode.as_str())]);
     }
 }
 
@@ -43,7 +40,6 @@ pub fn update_inventory_slots(
     _ui_thread: UiMainThread,
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
-    i18n_revision: Res<I18nRevision>,
     block_icons: Option<Res<BlockIconAssets>>,
     mut initialized: Local<bool>,
     mut last_selected: Local<usize>,
@@ -79,7 +75,6 @@ pub fn update_inventory_slots(
     // PlacementState.target 几乎每帧变化，只跟踪快捷栏选中下标
     let selected_changed = !*initialized || placement.selected != *last_selected;
     let inventory_changed = !*initialized || inventory.is_changed();
-    let i18n_changed = !*initialized || i18n_revision.is_changed();
     let slot_count = slot_query.iter().len();
     // 背包按需挂载后 Slot 实体会增减，必须重新灌内容
     let slots_changed = !*initialized || slot_count != *last_slot_count;
@@ -92,7 +87,6 @@ pub fn update_inventory_slots(
     if !inventory_changed
         && !selected_changed
         && !hover_changed
-        && !i18n_changed
         && !icons_changed
         && !icons_became_ready
         && !slots_changed
@@ -105,7 +99,7 @@ pub fn update_inventory_slots(
     *last_slot_count = slot_count;
 
     let refresh_content =
-        inventory_changed || icons_changed || icons_became_ready || i18n_changed || slots_changed;
+        inventory_changed || icons_changed || icons_became_ready || slots_changed;
 
     for (_, slot, interaction, children, mut node, mut background, mut border) in &mut slot_query {
         let item = match slot.area {

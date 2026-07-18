@@ -242,12 +242,11 @@ fn sync_pause_menu_buttons(
     _ui_thread: UiMainThread,
     save_state: Res<SaveState>,
     solution_state: Res<SolutionState>,
-    i18n_revision: Res<crate::game::ui::access::I18nRevision>,
     mut buttons: Query<(&MenuButtonMarker, &Children, &mut Node), With<Button>>,
     mut texts: Query<&mut Text>,
     added: Query<(), Added<MenuButtonMarker>>,
 ) {
-    let labels_dirty = i18n_revision.is_changed() || save_state.is_changed() || !added.is_empty();
+    let labels_dirty = save_state.is_changed() || !added.is_empty();
     for (marker, children, mut node) in &mut buttons {
         if marker.set != MenuButtonSet::PauseMenu {
             continue;

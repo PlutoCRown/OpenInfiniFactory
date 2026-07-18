@@ -187,22 +187,28 @@ impl SettingsField {
 
         match self {
             Self::Fov => format!("FOV {:.0}", settings.fov_degrees),
-            Self::UiScale => i18n.fmt(
-                "settings.ui_scale",
-                &[("scale", format!("{:.1}", settings.ui_scale))],
-            ),
-            Self::Gravity => i18n.fmt(
-                "settings.gravity_value",
-                &[("scale", format!("{:.1}", settings.gravity_scale))],
-            ),
-            Self::MouseSensitivityX => i18n.fmt(
-                "settings.mouse_sensitivity_value",
-                &[("scale", format!("{:.1}", settings.mouse_sensitivity_x))],
-            ),
-            Self::MouseSensitivityY => i18n.fmt(
-                "settings.mouse_sensitivity_value",
-                &[("scale", format!("{:.1}", settings.mouse_sensitivity_y))],
-            ),
+            Self::UiScale => {
+                let scale = format!("{:.1}", settings.ui_scale);
+                i18n.fmt("settings.ui_scale", &[("scale", scale.as_str())])
+            }
+            Self::Gravity => {
+                let scale = format!("{:.1}", settings.gravity_scale);
+                i18n.fmt("settings.gravity_value", &[("scale", scale.as_str())])
+            }
+            Self::MouseSensitivityX => {
+                let scale = format!("{:.1}", settings.mouse_sensitivity_x);
+                i18n.fmt(
+                    "settings.mouse_sensitivity_value",
+                    &[("scale", scale.as_str())],
+                )
+            }
+            Self::MouseSensitivityY => {
+                let scale = format!("{:.1}", settings.mouse_sensitivity_y);
+                i18n.fmt(
+                    "settings.mouse_sensitivity_value",
+                    &[("scale", scale.as_str())],
+                )
+            }
         }
     }
 
@@ -284,7 +290,18 @@ impl SettingsDropdown {
         use crate::game::ui::access::i18n;
 
         match self {
-            Self::Language => i18n.language().native_name().to_string(),
+            Self::Language => {
+                let pending = config.language.unwrap_or_else(|| i18n.language());
+                let active = i18n.language();
+                if pending != active {
+                    i18n.fmt(
+                        "settings.language_pending_restart",
+                        &[("lang", pending.native_name())],
+                    )
+                } else {
+                    pending.native_name().to_string()
+                }
+            }
             Self::PlaceSelectionMode => i18n.t(config.place_selection_mode.label_key()),
             Self::DeleteSelectionMode => i18n.t(config.delete_selection_mode.label_key()),
             Self::Shadows => i18n.t(if config.shadows_enabled {

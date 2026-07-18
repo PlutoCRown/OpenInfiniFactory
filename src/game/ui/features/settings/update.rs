@@ -3,7 +3,7 @@ use bevy::ui_widgets::{Slider, SliderDragState, SliderRange, SliderValue};
 use bevy::window::PrimaryWindow;
 
 use crate::game::state::GameSettings;
-use crate::game::ui::access::{I18nRevision, UiMainThread};
+use crate::game::ui::access::UiMainThread;
 use crate::game::ui::components::{
     BUTTON_BG, BUTTON_HOVER_BG, hover_border, pressed_border, raised_border, ui_logical_bounds,
 };
@@ -28,10 +28,10 @@ pub fn localized_chord_display(chord: ConfigChord) -> String {
         parts.push(primary_modifier_label().to_string());
     }
     if chord.shift {
-        parts.push(i18n.t("input.modifier_shift").to_string());
+        parts.push(i18n.t("input.modifier_shift"));
     }
     if chord.alt {
-        parts.push(i18n.t("input.modifier_alt").to_string());
+        parts.push(i18n.t("input.modifier_alt"));
     }
     parts.push(chord.key.name().to_string());
     parts.join("+")
@@ -44,9 +44,9 @@ pub fn localized_binding_display(config: &GameConfig, action: ActionKeyName) -> 
         return localized_chord_display(config.chord(action));
     }
     match config.input(action) {
-        ConfigInput::MouseLeft => i18n.t("input.mouse_left").to_string(),
-        ConfigInput::MouseRight => i18n.t("input.mouse_right").to_string(),
-        ConfigInput::MouseMiddle => i18n.t("input.mouse_middle").to_string(),
+        ConfigInput::MouseLeft => i18n.t("input.mouse_left"),
+        ConfigInput::MouseRight => i18n.t("input.mouse_right"),
+        ConfigInput::MouseMiddle => i18n.t("input.mouse_middle"),
         ConfigInput::Key(key) => key.name().to_string(),
     }
 }
@@ -56,7 +56,6 @@ pub fn update_settings_text_ui(
     ui_runtime: Res<UiRuntime>,
     config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
-    i18n_revision: Res<I18nRevision>,
     #[cfg(not(target_arch = "wasm32"))] bridge: Option<Res<DebugHttpBridge>>,
     mut primed: Local<bool>,
     mut last_bridge: Local<bool>,
@@ -85,7 +84,6 @@ pub fn update_settings_text_ui(
     let dirty = !*primed
         || config.is_changed()
         || pending_key_bind.is_changed()
-        || i18n_revision.is_changed()
         || bridge_changed
         || !added.is_empty();
     if !dirty {
@@ -113,9 +111,10 @@ pub fn update_settings_text_ui(
                 #[cfg(not(target_arch = "wasm32"))]
                 {
                     if let Some(bridge) = bridge.as_ref() {
+                        let port = bridge.port.to_string();
                         i18n.fmt(
                             "settings.debug_http_running",
-                            &[("port", bridge.port.to_string())],
+                            &[("port", port.as_str())],
                         )
                     } else {
                         i18n.t("button.start_debug_http")
@@ -240,7 +239,6 @@ pub fn update_settings_dropdowns_ui(
     config: Res<GameConfig>,
     settings: Res<GameSettings>,
     open_dropdown: Res<OpenSettingsDropdown>,
-    i18n_revision: Res<I18nRevision>,
     windows: Query<&Window, With<PrimaryWindow>>,
     changed_windows: Query<(), (With<PrimaryWindow>, Changed<Window>)>,
     mut primed: Local<bool>,
@@ -267,14 +265,8 @@ pub fn update_settings_dropdowns_ui(
         return;
     }
 
-    let labels_dirty = !*primed
-        || config.is_changed()
-        || i18n_revision.is_changed()
-        || !added_labels.is_empty();
-    let values_dirty = !*primed
-        || settings.is_changed()
-        || i18n_revision.is_changed()
-        || !added_values.is_empty();
+    let labels_dirty = !*primed || config.is_changed() || !added_labels.is_empty();
+    let values_dirty = !*primed || settings.is_changed() || !added_values.is_empty();
     let lists_dirty =
         !*primed || open_dropdown.is_changed() || !changed_windows.is_empty();
     if !labels_dirty && !values_dirty && !lists_dirty {

@@ -296,6 +296,7 @@
   "settings.group.mouse": "鼠标",
   "settings.group.simulation": "模拟",
   "settings.language": "语言",
+  "settings.language_pending_restart": "{lang}（重启后生效）",
   "settings.mouse_sensitivity_value": "灵敏度 {scale}x",
   "settings.mouse_sensitivity_x": "鼠标灵敏度（水平）",
   "settings.mouse_sensitivity_y": "鼠标灵敏度（垂直）",

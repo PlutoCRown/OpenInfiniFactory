@@ -5,7 +5,6 @@ use crate::game::ui::access::i18n;
 use crate::game::ui::core::confirm_dialog::{ConfirmProps, ConfirmResult};
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, MOUSE_SENSITIVITY_MAX, MOUSE_SENSITIVITY_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{save_config, GameConfig};
-use crate::shared::i18n::resolve_language;
 
 use super::types::{OpenSettingsDropdown, PendingKeyBind};
 
@@ -26,7 +25,7 @@ pub fn on_reset_defaults(result: ConfirmResult, world: &mut World) {
 
     *world.resource_mut::<GameConfig>() = GameConfig::default();
 
-    let (fov, ui_scale, gravity, mouse_sensitivity_x, mouse_sensitivity_y, language) = {
+    let (fov, ui_scale, gravity, mouse_sensitivity_x, mouse_sensitivity_y) = {
         let config = world.resource::<GameConfig>();
         (
             config.fov_degrees,
@@ -40,7 +39,6 @@ pub fn on_reset_defaults(result: ConfirmResult, world: &mut World) {
             config
                 .mouse_sensitivity_y
                 .clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX),
-            config.language,
         )
     };
 
@@ -54,7 +52,6 @@ pub fn on_reset_defaults(result: ConfirmResult, world: &mut World) {
     }
 
     world.resource_mut::<UiScale>().0 = ui_scale;
-    i18n.set_language(resolve_language(language));
     world.resource_mut::<OpenSettingsDropdown>().0 = None;
     world.resource_mut::<PendingKeyBind>().0 = None;
     save_config(world.resource::<GameConfig>());

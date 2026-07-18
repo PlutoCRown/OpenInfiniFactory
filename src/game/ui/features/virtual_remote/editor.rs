@@ -6,21 +6,21 @@ use bevy::picking::prelude::{Click, Drag, Pointer, Press, Release};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::game::ui::components::{localized_text, raised_border, ui_logical_bounds, BUTTON_BG};
+use crate::game::ui::components::{BUTTON_BG, localized_text, raised_border, ui_logical_bounds};
 use crate::game::ui::core::confirm_dialog::{
     ConfirmDialogState, ConfirmExtraButton, ConfirmProps, ConfirmResult, PendingConfirmHandler,
 };
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost, UiRootEntity};
 use crate::game::ui::core::text_prompt::TextPromptState;
 use crate::shared::config::{
-    save_config, GameConfig, VirtualControlAnchor, VirtualControlId, VirtualControlsLayout,
+    GameConfig, VirtualControlAnchor, VirtualControlId, VirtualControlsLayout, save_config,
 };
 use crate::shared::i18n::I18n;
 use crate::shared::touch_profile::TouchProfile;
 
 use super::spawn::{
-    apply_knob_node, apply_layout_to_node, control_pixel_size, layout_height_unit,
-    spawn_virtual_remote, window_short_edge, CTRL_BG,
+    CTRL_BG, apply_knob_node, apply_layout_to_node, control_pixel_size, layout_height_unit,
+    spawn_virtual_remote, window_short_edge,
 };
 use super::{VirtualJoystickKnob, VirtualLayoutPreview, VirtualRemoteControl};
 
@@ -445,12 +445,12 @@ pub fn on_editor_control_click(
             }
             let i18n = world.resource::<I18n>();
             let props = ConfirmProps {
-                title: i18n.text("confirm.title"),
-                message: i18n.text("virtual.layout_unsaved_exit"),
-                confirm_text: i18n.text("virtual.layout_save_and_exit"),
-                cancel_text: i18n.text("button.cancel"),
+                title: i18n.t("confirm.title").to_owned(),
+                message: i18n.t("virtual.layout_unsaved_exit").to_owned(),
+                confirm_text: i18n.t("virtual.layout_save_and_exit").to_owned(),
+                cancel_text: i18n.t("button.cancel").to_owned(),
                 extra: Some(ConfirmExtraButton {
-                    text: i18n.text("virtual.layout_discard_and_exit"),
+                    text: i18n.t("virtual.layout_discard_and_exit").to_owned(),
                     tag: EXTRA_DISCARD,
                 }),
             };
@@ -479,10 +479,10 @@ pub fn on_editor_control_click(
         commands.queue(|world: &mut World| {
             let i18n = world.resource::<I18n>();
             let props = ConfirmProps {
-                title: i18n.text("confirm.title"),
-                message: i18n.text("virtual.layout_reset_confirm"),
-                confirm_text: i18n.text("virtual.layout_reset"),
-                cancel_text: i18n.text("button.cancel"),
+                title: i18n.t("confirm.title").to_owned(),
+                message: i18n.t("virtual.layout_reset_confirm").to_owned(),
+                confirm_text: i18n.t("virtual.layout_reset").to_owned(),
+                cancel_text: i18n.t("button.cancel").to_owned(),
                 extra: None,
             };
             open_layout_confirm(world, props, |result, world| {

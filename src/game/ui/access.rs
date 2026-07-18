@@ -25,9 +25,6 @@ thread_local! {
     static UI_WORLD: Cell<Option<NonNull<World>>> = const { Cell::new(None) };
 }
 
-#[derive(Resource, Default, Debug, Clone, Copy)]
-pub struct I18nRevision(pub u32);
-
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UiAccessScope;
 
@@ -70,11 +67,7 @@ fn with_ui<R>(f: impl FnOnce(&mut UiHostCommands) -> R) -> R {
     })
 }
 
-fn bump_i18n_revision(world: &mut World) {
-    world.resource_mut::<I18nRevision>().0 += 1;
-}
-
-/// 全局 i18n 访问点。用法：`i18n.t("button.save")`
+/// 全局 i18n 访问点（spawn/低频）。热路径请用 `Res<I18n>` + `t`/`fmt_into`。
 #[allow(non_upper_case_globals)]
 pub const i18n: I18nAccess = I18nAccess;
 
@@ -82,23 +75,18 @@ pub const i18n: I18nAccess = I18nAccess;
 pub struct I18nAccess;
 
 impl I18nAccess {
+    /// 低频/spawn：返回拥有的 String（内部一次 to_owned）
     pub fn t(self, key: &'static str) -> String {
-        with_world_immut(|world| world.resource::<I18n>().text(key))
+        with_world_immut(|world| world.resource::<I18n>().t(key).to_owned())
     }
 
-    pub fn fmt(self, key: &'static str, values: &[(&str, String)]) -> String {
+    /// 低频：模板替换；热路径用 `I18n::fmt_into`
+    pub fn fmt(self, key: &'static str, values: &[(&str, &str)]) -> String {
         with_world_immut(|world| world.resource::<I18n>().fmt(key, values))
     }
 
     pub fn language(self) -> Language {
         with_world_immut(|world| world.resource::<I18n>().language())
-    }
-
-    pub fn set_language(self, language: Language) {
-        with_world(|world| {
-            world.resource_mut::<I18n>().set_language(language);
-            bump_i18n_revision(world);
-        });
     }
 }
 

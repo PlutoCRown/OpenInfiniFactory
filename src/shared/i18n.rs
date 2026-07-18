@@ -28,6 +28,7 @@ impl Language {
     }
 }
 
+/// 启动时按配置加载的文案表；会话内语言不变，热路径用 `t`/`fmt_into` 避免多余分配
 #[derive(Resource)]
 pub struct I18n {
     language: Language,
@@ -46,28 +47,49 @@ impl I18n {
         self.language
     }
 
-    pub fn set_language(&mut self, language: Language) {
-        if self.language == language {
-            return;
-        }
-        self.language = language;
-        self.messages = load_messages(language);
-    }
-
-    pub fn text(&self, key: &'static str) -> String {
+    /// 查表返回借用，不 clone；缺失时回退为 key 本身
+    pub fn t(&self, key: &'static str) -> &str {
         self.messages
             .get(key)
-            .cloned()
-            .unwrap_or_else(|| fallback_text(key).to_string())
+            .map(String::as_str)
+            .unwrap_or(key)
     }
 
-    pub fn fmt(&self, key: &'static str, values: &[(&str, String)]) -> String {
-        let mut text = self.text(key);
-        for (name, value) in values {
-            text = text.replace(&format!("{{{name}}}"), value);
-        }
-        text
+    /// 低频：拼出新 String；热路径请用 `fmt_into`
+    pub fn fmt(&self, key: &'static str, values: &[(&str, &str)]) -> String {
+        let mut out = String::new();
+        self.fmt_into(&mut out, key, values);
+        out
     }
+
+    /// 把模板填进 `out`（会先 clear），占位符为 `{name}`，不做中间 String::replace
+    pub fn fmt_into(&self, out: &mut String, key: &'static str, values: &[(&str, &str)]) {
+        subst_template(self.t(key), values, out);
+    }
+}
+
+/// 扫描 `{name}` 占位符写入 out
+pub fn subst_template(template: &str, values: &[(&str, &str)], out: &mut String) {
+    out.clear();
+    let mut rest = template;
+    while let Some(start) = rest.find('{') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        let Some(end) = after.find('}') else {
+            out.push_str(&rest[start..]);
+            return;
+        };
+        let name = &after[..end];
+        if let Some((_, value)) = values.iter().find(|(n, _)| *n == name) {
+            out.push_str(value);
+        } else {
+            out.push('{');
+            out.push_str(name);
+            out.push('}');
+        }
+        rest = &after[end + 1..];
+    }
+    out.push_str(rest);
 }
 
 fn load_messages(language: Language) -> HashMap<String, String> {
@@ -82,10 +104,6 @@ fn language_json(language: Language) -> &'static str {
         Language::English => include_str!("../../assets/i18n/en.json"),
         Language::ChineseSimplified => include_str!("../../assets/i18n/zh-CN.json"),
     }
-}
-
-fn fallback_text(key: &str) -> &str {
-    key
 }
 
 pub fn resolve_language(user_language: Option<Language>) -> Language {

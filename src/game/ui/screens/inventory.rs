@@ -55,16 +55,13 @@ pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
 }
 
 pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, builder_mode: BuilderMode) {
-    let title = i18n.fmt(
-        "inventory.title",
-        &[(
-            "mode",
-            i18n.t(match builder_mode {
-                BuilderMode::Edit => "mode.edit",
-                BuilderMode::Play => "mode.play",
-            }),
-        )],
-    );
+    let title = {
+        let mode = i18n.t(match builder_mode {
+            BuilderMode::Edit => "mode.edit",
+            BuilderMode::Play => "mode.play",
+        });
+        i18n.fmt("inventory.title", &[("mode", mode.as_str())])
+    };
     spawn_panel_with_title(
         root,
         PanelOptions::new(640.0, "inventory.title").start_hidden(),

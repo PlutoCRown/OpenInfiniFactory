@@ -5,7 +5,7 @@ use bevy::ui_widgets::{Slider, SliderDragState, SliderRange, SliderValue};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::debug_http::PendingDebugHttpStart;
 use crate::game::state::GameSettings;
-use crate::game::ui::access::{UiMainThread, i18n, ui};
+use crate::game::ui::access::{UiMainThread, ui};
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
@@ -191,7 +191,6 @@ pub fn dispatch_settings_actions(
                 save_config(&config);
             }
             SettingsAction::SetLanguage(language) => {
-                i18n.set_language(language);
                 config.language = Some(language);
                 open_dropdown.0 = None;
                 save_config(&config);

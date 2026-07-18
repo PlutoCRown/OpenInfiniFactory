@@ -74,17 +74,17 @@ impl SaveListAction {
                 let name = puzzle_display_name(save_state, storage);
                 if *play_flow {
                     if save_state.selected_puzzle.as_deref() == Some(storage.as_str()) {
-                        i18n.fmt("save.selected_puzzle", &[("name", name)])
+                        i18n.fmt("save.selected_puzzle", &[("name", name.as_str())])
                     } else {
-                        i18n.fmt("save.select_puzzle", &[("name", name)])
+                        i18n.fmt("save.select_puzzle", &[("name", name.as_str())])
                     }
                 } else {
-                    i18n.fmt("save.load_puzzle", &[("name", name)])
+                    i18n.fmt("save.load_puzzle", &[("name", name.as_str())])
                 }
             }
             Self::LoadSolution(storage) => {
                 let name = solution_display_name(save_state, storage);
-                i18n.fmt("save.load_solution", &[("name", name)])
+                i18n.fmt("save.load_solution", &[("name", name.as_str())])
             }
             Self::RenamePuzzle(_) | Self::RenameSolution(_) => i18n.t("button.rename"),
             Self::DeletePuzzle(_) | Self::DeleteSolution(_) => i18n.t("button.delete"),
