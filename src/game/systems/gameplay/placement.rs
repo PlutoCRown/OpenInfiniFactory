@@ -16,6 +16,7 @@ use crate::game::state::{
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{AreaKind, InventoryItems, UiRuntime};
+use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, WorldBlocks};
 use crate::game::world::rendering::{
@@ -46,6 +47,8 @@ pub struct PlacementQueries<'w, 's> {
     block_index: ResMut<'w, BlockEntityIndex>,
     input: Res<'w, crate::game::input::GameplayInputState>,
     touch: Res<'w, crate::shared::touch_profile::TouchProfile>,
+    ui_host: ResMut<'w, UiHost>,
+    playing_ui_root: Option<Res<'w, PlayingUiRootEntity>>,
 }
 
 /// 处理放置/删除手势、取块、旋转与框选入口
@@ -77,6 +80,8 @@ pub fn placement_input(
         mut block_index,
         input,
         touch,
+        mut ui_host,
+        playing_ui_root,
     } = queries;
 
     if *mode.get() != GameMode::Playing || !playing_ui.active_play() {
@@ -112,9 +117,18 @@ pub fn placement_input(
         }
     }
 
+    let playing_root = playing_ui_root.as_ref().map(|root| root.0);
     if input.open_block_config {
         let current_target_pos = placement.target.map(|target| target.pos);
-        if open_target_block_ui(current_target_pos, &world, *builder_mode, &mut ui_runtime) {
+        if open_target_block_ui(
+            current_target_pos,
+            &world,
+            *builder_mode,
+            &mut ui_host,
+            &mut ui_runtime,
+            &mut commands,
+            playing_root,
+        ) {
             placement.edit_gesture = None;
             placement.selection.clear();
             despawn_edit_previews(&mut commands, &edit_previews);
@@ -144,7 +158,15 @@ pub fn placement_input(
     if input.place.just_pressed
         && !force_place
         && !touch.enabled
-        && open_target_block_ui(current_target_pos, &world, *builder_mode, &mut ui_runtime)
+        && open_target_block_ui(
+            current_target_pos,
+            &world,
+            *builder_mode,
+            &mut ui_host,
+            &mut ui_runtime,
+            &mut commands,
+            playing_root,
+        )
     {
         placement.edit_gesture = None;
         placement.selection.clear();
@@ -531,7 +553,10 @@ fn open_target_block_ui(
     target: Option<IVec3>,
     world: &WorldBlocks,
     builder_mode: BuilderMode,
+    ui_host: &mut UiHost,
     ui_runtime: &mut UiRuntime,
+    commands: &mut Commands,
+    playing_root: Option<Entity>,
 ) -> bool {
     let Some(pos) = target else {
         return false;
@@ -551,7 +576,7 @@ fn open_target_block_ui(
         return false;
     };
 
-    ui_runtime.open_block(panel, pos);
+    ui_host.mount_block_panel(commands, playing_root, ui_runtime, panel, pos);
     true
 }
 

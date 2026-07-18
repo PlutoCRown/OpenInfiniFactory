@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 
 use crate::game::state::{GameMode, SolutionState, StartMenuScreen, WorldEntryMode};
-use crate::game::ui::access::{i18n, UiMainThread};
+use crate::game::ui::access::{UiMainThread, i18n};
 use crate::game::ui::components::{
-    hover_border, inset_border, pressed_border, raised_border, BUTTON_BG, BUTTON_HOVER_BG,
+    BUTTON_BG, BUTTON_HOVER_BG, hover_border, inset_border, pressed_border, raised_border,
 };
 use crate::game::ui::screens::{spawn_save_management_row, spawn_save_select_row};
 use crate::game::ui::types::{
@@ -13,7 +13,7 @@ use crate::game::ui::types::{
 };
 use crate::shared::save::SaveState;
 
-use super::view::{save_list_puzzle_rows, save_list_title, SaveListColumn, SaveListViewCtx};
+use super::view::{SaveListColumn, SaveListViewCtx, save_list_puzzle_rows, save_list_title};
 
 pub fn update_save_list_ui(
     _ui_thread: UiMainThread,
@@ -176,8 +176,7 @@ pub fn update_save_list_ui(
         }
     }
 
-    let style_changed =
-        structure_changed || hover.is_changed() || render_state.paint_buttons;
+    let style_changed = structure_changed || hover.is_changed() || render_state.paint_buttons;
     if !style_changed {
         return;
     }
@@ -192,6 +191,40 @@ pub fn update_save_list_ui(
         edit_flow,
         play_flow,
     };
+    let hover_only = !structure_changed && !paint_labels && hover.is_changed();
+    if hover_only {
+        let prev = render_state.last_hover;
+        let next = hover.entity;
+        render_state.last_hover = next;
+        for entity in [prev, next].into_iter().flatten() {
+            let Ok((_, action, _, mut background, mut border)) = buttons.get_mut(entity) else {
+                continue;
+            };
+            let view = action.button_view(&ctx);
+            let hovered = view.enabled && next == Some(entity);
+            *background = if view.enabled && view.selected {
+                Color::srgba(0.22, 0.35, 0.32, 0.96).into()
+            } else if hovered {
+                BUTTON_HOVER_BG.into()
+            } else if view.enabled {
+                BUTTON_BG.into()
+            } else {
+                Color::srgba(0.12, 0.12, 0.13, 0.82).into()
+            };
+            *border = if view.selected {
+                pressed_border()
+            } else if hovered {
+                hover_border()
+            } else if view.enabled {
+                raised_border()
+            } else {
+                inset_border()
+            };
+        }
+        return;
+    }
+
+    render_state.last_hover = hover.entity;
     for (entity, action, children, mut background, mut border) in &mut buttons {
         let view = action.button_view(&ctx);
         let hovered = view.enabled && hover.entity == Some(entity);

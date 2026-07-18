@@ -75,6 +75,10 @@ pub fn update_scroll_containers(
         (With<ScrollContent>, Without<ScrollContainer>),
     >,
 ) {
+    if containers.is_empty() {
+        mouse_wheel.clear();
+        return;
+    }
     let wheel_delta: f32 = mouse_wheel.read().map(|event| event.y).sum();
     let scale = ui_scale.0.max(0.01);
     let window_h = windows

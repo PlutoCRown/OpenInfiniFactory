@@ -3,24 +3,24 @@ mod confirm;
 use bevy::prelude::*;
 
 use crate::game::session;
-use crate::game::session::{puzzle_save_needs_confirm, SessionBusy};
+use crate::game::session::{SessionBusy, puzzle_save_needs_confirm};
 use crate::game::state::{
     BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
     WorldEntryMode,
 };
 use crate::game::systems::perf::PerfScope;
-use crate::game::ui::access::{i18n, ui, UiAccessScope, UiMainThread};
+use crate::game::ui::access::{UiAccessScope, UiMainThread, i18n, ui};
 use crate::game::ui::core::host::PlayingUiRootEntity;
 use crate::game::ui::core::runtime::UiPanelContext;
 use crate::game::ui::features::save::{open_save_as_new_puzzle_prompt, open_save_puzzle_confirm};
 use crate::game::ui::menu_button::{
-    spawn_menu_button, MenuButtonClick, MenuButtonMarker, MenuButtonSet,
+    MenuButtonClick, MenuButtonMarker, MenuButtonSet, spawn_menu_button,
 };
 use crate::game::ui::types::{CarriedItem, InventoryItems};
 use crate::game::world::grid::WorldBlocks;
 use crate::list_ui_config;
 use crate::shared::save::{
-    next_named_save, solution_names_for_puzzle, SaveKind, SaveSlot, SaveState,
+    SaveKind, SaveSlot, SaveState, next_named_save, solution_names_for_puzzle,
 };
 
 use confirm::{
@@ -172,6 +172,7 @@ impl Plugin for PauseMenuPlugin {
                     .after(PerfScope::Input)
                     .before(PerfScope::Menus),
                 sync_pause_menu_buttons
+                    .run_if(|playing_ui: Res<PlayingUiState>| playing_ui.paused)
                     .in_set(UiAccessScope)
                     .after(crate::game::ui::update_localized_ui)
                     .after(PerfScope::Animation)
@@ -244,8 +245,9 @@ fn sync_pause_menu_buttons(
     i18n_revision: Res<crate::game::ui::access::I18nRevision>,
     mut buttons: Query<(&MenuButtonMarker, &Children, &mut Node), With<Button>>,
     mut texts: Query<&mut Text>,
+    added: Query<(), Added<MenuButtonMarker>>,
 ) {
-    let labels_dirty = i18n_revision.is_changed() || save_state.is_changed();
+    let labels_dirty = i18n_revision.is_changed() || save_state.is_changed() || !added.is_empty();
     for (marker, children, mut node) in &mut buttons {
         if marker.set != MenuButtonSet::PauseMenu {
             continue;

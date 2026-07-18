@@ -1,48 +1,23 @@
 use bevy::prelude::*;
-use bevy::text::{EditableText, TextCursorStyle};
-use bevy::ui::widget::TextScroll;
 
 use crate::game::ui::access::bind_ui_scope;
 
-use super::components::{
-    absolute_text_bundle, auto_width_button, default_button_size, default_font_size, flex_row_auto,
-    panel_bundle_auto, panel_content, panel_title_bar, panel_title_label, raised_border, root_node,
-    text, BUTTON_BG, STATUS_TEXT,
-};
-use super::screens::{
-    spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_inventory_tooltip,
-    spawn_main_menu, spawn_pause_panel, spawn_save_list,
-};
+use super::components::{STATUS_TEXT, absolute_text_bundle, root_node};
+use super::screens::{spawn_carried_label, spawn_hotbar, spawn_inventory_tooltip};
 use super::types::{
-    Crosshair, InGameHudVisibility, PanelVisibility, PlayingUiRoot, StatusText, StatusTextKind,
-    UiRoot,
+    Crosshair, InGameHudVisibility, PlayingUiRoot, StatusText, StatusTextKind, UiRoot,
 };
-use crate::game::blocks::panels::{spawn_all_overlays, spawn_all_panels};
 use crate::game::cameras::{GameplayViewBackdrop, GameplayViewImage};
-use crate::game::ui::core::confirm_dialog::{
-    ConfirmButtonId, ConfirmMessageText, ConfirmTitleText,
-};
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiRootEntity};
-use crate::game::ui::core::text_prompt::{
-    TextPromptButtonId, TextPromptInput, TextPromptRoot, TextPromptTitle,
-};
 use crate::game::ui::features::session_busy::spawn_session_busy_overlay;
 use crate::game::ui::features::virtual_remote::spawn_virtual_remote;
 use crate::shared::touch_profile::TouchProfile;
 
+/// 启动时只建空菜单根；主菜单/存档列表/对话框按需挂载
 pub fn setup_menu_ui(world: &mut World) {
     bind_ui_scope(world);
     let mut commands = world.commands();
-    let root = commands
-        .spawn((root_node(), UiRoot))
-        .with_children(|root| {
-            spawn_confirm_dialog(root);
-            spawn_text_prompt(root);
-            spawn_main_menu(root);
-            spawn_save_list(root);
-            spawn_session_busy_overlay(root);
-        })
-        .id();
+    let root = commands.spawn((root_node(), UiRoot)).id();
     commands.insert_resource(UiRootEntity(root));
 }
 
@@ -81,12 +56,8 @@ pub fn setup_playing_ui(commands: &mut Commands, view_image: Handle<Image>, touc
             spawn_gameplay_view_backdrop(root, view_image);
             spawn_status_overlays(root);
             spawn_hotbar(root);
-            spawn_inventory_panel(root);
-            spawn_all_panels(root);
-            spawn_pause_panel(root);
             spawn_carried_label(root);
             spawn_inventory_tooltip(root);
-            spawn_all_overlays(root);
             spawn_session_busy_overlay(root);
             spawn_virtual_remote(root, &touch, false);
         })
@@ -112,12 +83,15 @@ fn spawn_crosshair(root: &mut ChildSpawnerCommands) {
         },
         Crosshair,
         InGameHudVisibility,
+        // 高于 3D 底图，低于热栏(5) / 面板，避免被后挂载的全屏透明层盖住
+        GlobalZIndex(1),
         Pickable {
             should_block_lower: false,
             is_hoverable: false,
         },
     ))
     .with_children(|overlay| {
+        // 先放一个被 Flex 居中的锚点，再在其内画十字（绝对定位相对锚点）
         overlay
             .spawn(Node {
                 width: Val::Px(CROSSHAIR_ARM),
@@ -134,7 +108,8 @@ fn spawn_crosshair(root: &mut ChildSpawnerCommands) {
                         height: Val::Px(CROSSHAIR_THICKNESS),
                         ..default()
                     },
-                    BackgroundColor(Color::WHITE),
+                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.85)),
+                    Pickable::IGNORE,
                 ));
                 mark.spawn((
                     Node {
@@ -145,7 +120,8 @@ fn spawn_crosshair(root: &mut ChildSpawnerCommands) {
                         height: Val::Px(CROSSHAIR_ARM),
                         ..default()
                     },
-                    BackgroundColor(Color::WHITE),
+                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.85)),
+                    Pickable::IGNORE,
                 ));
             });
     });
@@ -180,118 +156,5 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
         TextLayout::no_wrap(),
         StatusText(StatusTextKind::SimulationOverlay),
         InGameHudVisibility,
-    ));
-}
-
-fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {
-    root.spawn((
-        panel_bundle_auto(560.0),
-        GlobalZIndex(0),
-        PanelVisibility::ConfirmDialog,
-        children![
-            (
-                panel_title_bar(),
-                children![(panel_title_label("", 24.0), ConfirmTitleText)]
-            ),
-            (
-                panel_content(),
-                children![
-                    (
-                        text("", 15.0, STATUS_TEXT),
-                        TextLayout::justify(Justify::Center),
-                        Node {
-                            width: Val::Auto,
-                            max_width: Val::Px(520.0),
-                            min_height: Val::Px(54.0),
-                            align_self: AlignSelf::Center,
-                            ..default()
-                        },
-                        ConfirmMessageText,
-                    ),
-                    (
-                        flex_row_auto(34.0, 8.0),
-                        children![
-                            (
-                                auto_width_button(34.0),
-                                ConfirmButtonId::Confirm,
-                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
-                            ),
-                            (
-                                auto_width_button(34.0),
-                                ConfirmButtonId::Extra,
-                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
-                            ),
-                            (
-                                auto_width_button(34.0),
-                                ConfirmButtonId::Cancel,
-                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
-                            ),
-                        ]
-                    ),
-                ]
-            ),
-        ],
-    ));
-}
-
-fn spawn_text_prompt(root: &mut ChildSpawnerCommands) {
-    root.spawn((
-        panel_bundle_auto(420.0),
-        GlobalZIndex(30_000),
-        TextPromptRoot,
-        children![
-            (
-                panel_title_bar(),
-                children![(panel_title_label("", 20.0), TextPromptTitle)]
-            ),
-            (
-                panel_content(),
-                children![
-                    (
-                        Node {
-                            width: Val::Percent(100.0),
-                            min_height: Val::Px(default_button_size(38.0)),
-                            padding: UiRect::horizontal(Val::Px(12.0)),
-                            border: UiRect::all(Val::Px(1.0)),
-                            align_items: AlignItems::Center,
-                            overflow: Overflow::clip(),
-                            ..default()
-                        },
-                        raised_border(),
-                        BackgroundColor(BUTTON_BG),
-                        EditableText {
-                            max_characters: Some(24),
-                            allow_newlines: false,
-                            visible_lines: Some(1.0),
-                            ..EditableText::new("")
-                        },
-                        TextScroll::default(),
-                        TextFont {
-                            font_size: default_font_size(16.0),
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                        TextLayout::no_wrap(),
-                        TextCursorStyle::default(),
-                        TextPromptInput,
-                    ),
-                    (
-                        flex_row_auto(34.0, 8.0),
-                        children![
-                            (
-                                auto_width_button(34.0),
-                                TextPromptButtonId::Save,
-                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
-                            ),
-                            (
-                                auto_width_button(34.0),
-                                TextPromptButtonId::Cancel,
-                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
-                            ),
-                        ]
-                    ),
-                ]
-            ),
-        ],
     ));
 }

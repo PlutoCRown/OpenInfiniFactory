@@ -381,15 +381,32 @@ fn open_layout_confirm(
     props: ConfirmProps,
     on_complete: impl FnOnce(ConfirmResult, &mut World) + Send + 'static,
 ) {
+    let root = world
+        .get_resource::<PlayingUiRootEntity>()
+        .map(|root| root.0)
+        .or_else(|| world.get_resource::<UiRootEntity>().map(|root| root.0));
     let mut state = SystemState::<(
         ResMut<UiHost>,
         ResMut<ConfirmDialogState>,
         ResMut<TextPromptState>,
         NonSendMut<PendingConfirmHandler>,
+        Commands,
     )>::new(world);
     {
-        let (mut host, mut dialog, mut prompt, mut pending) = state.get_mut(world).unwrap();
-        host.open_confirm_then(props, &mut dialog, &mut prompt, &mut pending, on_complete);
+        let Ok((mut host, mut dialog, mut prompt, mut pending, mut commands)) =
+            state.get_mut(world)
+        else {
+            return;
+        };
+        host.open_confirm_then(
+            &mut commands,
+            root,
+            props,
+            &mut dialog,
+            &mut prompt,
+            &mut pending,
+            on_complete,
+        );
     }
     state.apply(world);
 }

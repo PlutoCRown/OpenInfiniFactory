@@ -3,9 +3,14 @@ use bevy::input::ButtonState;
 use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
-use bevy::text::{EditableText, TextEdit};
+use bevy::text::{EditableText, TextCursorStyle, TextEdit};
+use bevy::ui::widget::TextScroll;
 use bevy::window::PrimaryWindow;
 
+use crate::game::ui::components::{
+    auto_width_button, default_button_size, default_font_size, flex_row_auto, panel_bundle_auto,
+    panel_content, panel_title_bar, panel_title_label, raised_border, text, BUTTON_BG,
+};
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost};
 use crate::game::ui::core::text_input::primary_click;
 
@@ -100,6 +105,70 @@ impl TextPromptState {
     pub fn take_result(&mut self) -> Option<TextPromptResult> {
         self.result.take()
     }
+}
+
+/// 按需生成文本输入对话框
+pub fn spawn_text_prompt(root: &mut ChildSpawnerCommands) -> Entity {
+    root.spawn((
+        panel_bundle_auto(420.0),
+        GlobalZIndex(30_000),
+        TextPromptRoot,
+        children![
+            (
+                panel_title_bar(),
+                children![(panel_title_label("", 20.0), TextPromptTitle)]
+            ),
+            (
+                panel_content(),
+                children![
+                    (
+                        Node {
+                            width: Val::Percent(100.0),
+                            min_height: Val::Px(default_button_size(38.0)),
+                            padding: UiRect::horizontal(Val::Px(12.0)),
+                            border: UiRect::all(Val::Px(1.0)),
+                            align_items: AlignItems::Center,
+                            overflow: Overflow::clip(),
+                            ..default()
+                        },
+                        raised_border(),
+                        BackgroundColor(BUTTON_BG),
+                        EditableText {
+                            max_characters: Some(24),
+                            allow_newlines: false,
+                            visible_lines: Some(1.0),
+                            ..EditableText::new("")
+                        },
+                        TextScroll::default(),
+                        TextFont {
+                            font_size: default_font_size(16.0),
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                        TextLayout::no_wrap(),
+                        TextCursorStyle::default(),
+                        TextPromptInput,
+                    ),
+                    (
+                        flex_row_auto(34.0, 8.0),
+                        children![
+                            (
+                                auto_width_button(34.0),
+                                TextPromptButtonId::Save,
+                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
+                            ),
+                            (
+                                auto_width_button(34.0),
+                                TextPromptButtonId::Cancel,
+                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+        ],
+    ))
+    .id()
 }
 
 fn input_value(inputs: &Query<&EditableText, With<TextPromptInput>>, fallback: &str) -> String {

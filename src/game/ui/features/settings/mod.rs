@@ -41,6 +41,9 @@ impl Plugin for SettingsPlugin {
                     update_settings_dropdowns_ui,
                     update_settings_tabs_ui,
                 )
+                    .run_if(|ui_runtime: Res<crate::game::ui::core::runtime::UiRuntime>| {
+                        ui_runtime.is_settings_open()
+                    })
                     .in_set(UiAccessScope)
                     .after(PerfScope::Animation)
                     .before(PerfScope::Ui),

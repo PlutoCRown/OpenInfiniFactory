@@ -137,12 +137,30 @@ impl UiAccess {
         with_ui(|host| host.unmount_panel(panel, commands));
     }
 
+    pub fn mount_block_panel(
+        self,
+        commands: &mut Commands,
+        root: Option<Entity>,
+        panel: UiPanelId,
+        pos: IVec3,
+    ) -> UiInstanceId {
+        with_ui(|host| host.mount_block_panel(commands, root, panel, pos))
+    }
+
     pub fn open_confirm_then(
         self,
         props: ConfirmProps,
         on_complete: impl FnOnce(ConfirmResult, &mut World) + Send + 'static,
     ) -> UiInstanceId {
-        with_ui(|host| host.open_confirm_then(props, on_complete))
+        with_world(|world| {
+            let mut state = SystemState::<(UiHostCommands, Commands)>::new(world);
+            let Ok((mut host, mut commands)) = state.get_mut(world) else {
+                panic!("ui open_confirm_then params unavailable");
+            };
+            let id = host.open_confirm_then(&mut commands, props, on_complete);
+            state.apply(world);
+            id
+        })
     }
 
     pub fn open_text_prompt_then(
@@ -150,6 +168,14 @@ impl UiAccess {
         props: TextPromptProps,
         on_complete: impl FnOnce(TextPromptResult, &mut World) + Send + 'static,
     ) -> UiInstanceId {
-        with_ui(|host| host.open_text_prompt_then(props, on_complete))
+        with_world(|world| {
+            let mut state = SystemState::<(UiHostCommands, Commands)>::new(world);
+            let Ok((mut host, mut commands)) = state.get_mut(world) else {
+                panic!("ui open_text_prompt_then params unavailable");
+            };
+            let id = host.open_text_prompt_then(&mut commands, props, on_complete);
+            state.apply(world);
+            id
+        })
     }
 }

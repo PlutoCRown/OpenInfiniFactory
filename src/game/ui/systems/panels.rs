@@ -19,11 +19,7 @@ pub fn dismiss_active_panel(
     }
     open_block_dropdown.0 = None;
     inline_edit.clear();
-    if panel == UiPanelId::Settings {
-        ui_host.unmount_panel(UiPanelId::Settings, ui_runtime, Some(commands));
-    } else {
-        ui_runtime.close_active();
-    }
+    ui_host.unmount_panel(panel, ui_runtime, Some(commands));
     drag.clear();
     true
 }
@@ -102,6 +98,10 @@ pub fn update_panel_visibility(
     ui_host: Res<UiHost>,
     world: Res<WorldBlocks>,
     mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
+    mut primed: Local<bool>,
+    added_visibility: Query<(), Added<PanelVisibility>>,
+    added_binding: Query<(), Added<UiPanelBinding>>,
+    added_window: Query<(), Added<PanelWindow>>,
     mut nodes: ParamSet<(
         Query<(&PanelVisibility, &mut Node)>,
         Query<(&UiPanelBinding, &mut Node)>,
@@ -112,6 +112,26 @@ pub fn update_panel_visibility(
     )>,
 ) {
     let active_panel = ui_runtime.active_panel();
+    if open_block_dropdown.0.is_some() && !active_block_has_panel(&ui_runtime, &world, active_panel)
+    {
+        open_block_dropdown.0 = None;
+    }
+
+    let dirty = !*primed
+        || mode.is_changed()
+        || start_menu_screen.is_changed()
+        || playing_ui.is_changed()
+        || settings_tab.is_changed()
+        || ui_runtime.is_changed()
+        || ui_host.is_changed()
+        || !added_visibility.is_empty()
+        || !added_binding.is_empty()
+        || !added_window.is_empty();
+    if !dirty {
+        return;
+    }
+    *primed = true;
+
     let mode = mode.get();
     for (visibility, mut style) in &mut nodes.p0() {
         let next = display_for(panel_visible(
@@ -128,10 +148,6 @@ pub fn update_panel_visibility(
         }
     }
 
-    if open_block_dropdown.0.is_some() && !active_block_has_panel(&ui_runtime, &world, active_panel)
-    {
-        open_block_dropdown.0 = None;
-    }
     for (binding, mut style) in &mut nodes.p1() {
         let next = display_for(active_panel == Some(binding.0));
         if style.display != next {
@@ -329,6 +345,10 @@ pub fn update_ui_layers(
     ui_runtime: Res<UiRuntime>,
     ui_host: Res<UiHost>,
     editor_open: Option<Res<crate::game::ui::features::virtual_remote::VirtualLayoutEditorOpen>>,
+    mut primed: Local<bool>,
+    mut last_editor_open: Local<bool>,
+    // 不能用 Added<GlobalZIndex>：会与下面的 &mut GlobalZIndex 触发 B0001
+    added: Query<(), Or<(Added<UiPanelBinding>, Added<PanelVisibility>)>>,
     mut layered_nodes: Query<(
         &mut GlobalZIndex,
         Option<&UiPanelBinding>,
@@ -338,12 +358,25 @@ pub fn update_ui_layers(
     const BASE_LAYER: i32 = 100;
     const LAYOUT_EDITOR_CONFIRM_Z: i32 = 60_000;
 
+    let editor_flag = editor_open.as_ref().is_some_and(|open| open.0);
+    let dirty = !*primed
+        || ui_runtime.is_changed()
+        || ui_host.is_changed()
+        || editor_flag != *last_editor_open
+        || editor_open.as_ref().is_some_and(|open| open.is_changed())
+        || !added.is_empty();
+    *last_editor_open = editor_flag;
+    if !dirty {
+        return;
+    }
+    *primed = true;
+
     let top_panel_z = ui_runtime
         .top_modal_layer()
         .map(panel_layer_z)
         .unwrap_or(PANEL_LAYER_BASE);
     let confirm_z = if ui_host.confirm_open() {
-        if editor_open.is_some_and(|open| open.0) {
+        if editor_flag {
             LAYOUT_EDITOR_CONFIRM_Z
         } else {
             top_panel_z + CONFIRM_LAYER_STEP
@@ -352,7 +385,7 @@ pub fn update_ui_layers(
         PANEL_LAYER_BASE
     };
     for (mut z, binding, visibility) in &mut layered_nodes {
-        z.0 = if visibility == Some(&PanelVisibility::ConfirmDialog) {
+        let next = if visibility == Some(&PanelVisibility::ConfirmDialog) {
             confirm_z
         } else if let Some(binding) = binding {
             ui_runtime
@@ -362,8 +395,11 @@ pub fn update_ui_layers(
         } else if visibility.is_some() {
             BASE_LAYER
         } else {
-            z.0
+            continue;
         };
+        if z.0 != next {
+            z.0 = next;
+        }
     }
 }
 

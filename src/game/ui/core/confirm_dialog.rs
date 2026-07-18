@@ -1,7 +1,12 @@
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
+use crate::game::ui::components::{
+    auto_width_button, flex_row_auto, panel_bundle_auto, panel_content, panel_title_bar,
+    panel_title_label, text, STATUS_TEXT,
+};
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost};
+use crate::game::ui::core::panel::PanelVisibility;
 use crate::game::ui::core::text_input::primary_click;
 
 type ConfirmHandler = Box<dyn FnOnce(ConfirmResult, &mut World) + Send>;
@@ -93,6 +98,59 @@ impl ConfirmDialogState {
     }
 }
 
+/// 按需生成确认对话框实体
+pub fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) -> Entity {
+    root.spawn((
+        panel_bundle_auto(560.0),
+        GlobalZIndex(0),
+        PanelVisibility::ConfirmDialog,
+        children![
+            (
+                panel_title_bar(),
+                children![(panel_title_label("", 24.0), ConfirmTitleText)]
+            ),
+            (
+                panel_content(),
+                children![
+                    (
+                        text("", 15.0, STATUS_TEXT),
+                        TextLayout::justify(Justify::Center),
+                        Node {
+                            width: Val::Auto,
+                            max_width: Val::Px(520.0),
+                            min_height: Val::Px(54.0),
+                            align_self: AlignSelf::Center,
+                            ..default()
+                        },
+                        ConfirmMessageText,
+                    ),
+                    (
+                        flex_row_auto(34.0, 8.0),
+                        children![
+                            (
+                                auto_width_button(34.0),
+                                ConfirmButtonId::Confirm,
+                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
+                            ),
+                            (
+                                auto_width_button(34.0),
+                                ConfirmButtonId::Extra,
+                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
+                            ),
+                            (
+                                auto_width_button(34.0),
+                                ConfirmButtonId::Cancel,
+                                children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+        ],
+    ))
+    .id()
+}
+
 pub fn emit_confirm_dialog_actions(
     mut click: On<Pointer<Click>>,
     host: Res<UiHost>,
@@ -149,17 +207,22 @@ pub fn update_confirm_dialog_ui(
                 .map(|extra| (true, extra.text.clone()))
                 .unwrap_or((false, String::new())),
         };
-        node.display = if visible {
+        let next = if visible {
             Display::Flex
         } else {
             Display::None
         };
+        if node.display != next {
+            node.display = next;
+        }
         button_labels.push((children.iter().collect::<Vec<_>>(), label));
     }
     for (children, label) in button_labels {
         for child in children {
             if let Ok(mut text) = texts.p2().get_mut(child) {
-                text.0 = label.clone();
+                if text.0 != label {
+                    text.0 = label.clone();
+                }
             }
         }
     }

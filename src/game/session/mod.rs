@@ -29,7 +29,7 @@ use bevy::prelude::*;
 
 use crate::game::cameras::GameplayViewImage;
 use crate::game::simulation::structure_state::StructureState;
-use crate::game::state::{PlayingUiState, StartMenuScreen, UiPanelId};
+use crate::game::state::{PlayingUiState, StartMenuScreen};
 use crate::game::systems::debug::DebugState;
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost};
@@ -152,7 +152,8 @@ pub fn on_exit_playing(
     for entity in &playing_ui_roots {
         commands.entity(entity).despawn();
     }
-    ui_host.unmount_panel(UiPanelId::Settings, &mut ui_runtime, None);
+    ui_host.unmount_all_panels(&mut ui_runtime, None);
+    commands.insert_resource(crate::game::ui::features::playing_overlays::PlayingOverlayMounts::default());
     commands.remove_resource::<PlayingUiRootEntity>();
 
     teardown_playing_scene(&mut commands);

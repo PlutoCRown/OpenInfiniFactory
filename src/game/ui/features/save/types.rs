@@ -47,6 +47,8 @@ pub struct SaveListRenderState {
     pub solution_keys: Vec<String>,
     /// 行重建后下一帧再刷按钮样式/标签（Commands 延迟生效）
     pub paint_buttons: bool,
+    /// 上次悬停按钮，用于 hover 时只重绘两个实体
+    pub last_hover: Option<Entity>,
 }
 
 #[derive(Component)]

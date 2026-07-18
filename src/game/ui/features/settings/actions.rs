@@ -4,15 +4,15 @@ use bevy::ui_widgets::{Slider, SliderDragState, SliderRange, SliderValue};
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::debug_http::PendingDebugHttpStart;
-use crate::game::state::{GameSettings, UiPanelId};
-use crate::game::ui::access::{i18n, ui, UiMainThread};
+use crate::game::state::GameSettings;
+use crate::game::ui::access::{UiMainThread, i18n, ui};
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::settings::confirm::{on_reset_defaults, reset_defaults_spec};
 use crate::list_ui_config;
 use crate::shared::config::{
-    chord_from_input, input_from_buttons, open_config_folder, save_config, GameConfig,
+    GameConfig, chord_from_input, input_from_buttons, open_config_folder, save_config,
 };
 
 use super::types::{
@@ -20,19 +20,16 @@ use super::types::{
     SettingsSliderTrigger, SettingsTab,
 };
 
-struct SettingsFooterCtx<'w> {
-    open_dropdown: &'w mut OpenSettingsDropdown,
-    pending_key_bind: &'w mut PendingKeyBind,
-}
+struct SettingsFooterCtx;
 
 struct SettingsFooterButton {
     action: SettingsAction,
-    on_click: fn(&mut SettingsFooterCtx<'_>, &mut Commands),
+    on_click: fn(&mut SettingsFooterCtx, &mut Commands),
 }
 
 const SETTINGS_FOOTER: &[SettingsFooterButton] = list_ui_config!(
     SettingsFooterButton,
-    ctx: SettingsFooterCtx<'_>,
+    ctx: SettingsFooterCtx,
     {
         for SettingsAction::ResetDefaults =>
         on_click(_ctx, _commands) {
@@ -50,14 +47,6 @@ const SETTINGS_FOOTER: &[SettingsFooterButton] = list_ui_config!(
         on_click(_ctx, commands) {
             #[cfg(not(target_arch = "wasm32"))]
             commands.insert_resource(PendingDebugHttpStart(true));
-        }
-    };
-    {
-        for SettingsAction::Back =>
-        on_click(ctx, commands) {
-            ctx.open_dropdown.0 = None;
-            ctx.pending_key_bind.0 = None;
-            ui.unmount_panel(UiPanelId::Settings, commands);
         }
     }
 );
@@ -164,11 +153,7 @@ pub fn dispatch_settings_actions(
         let UiActionKind::Settings(action) = action.kind.clone() else {
             continue;
         };
-        let mut footer_ctx = SettingsFooterCtx {
-            open_dropdown: &mut open_dropdown,
-            pending_key_bind: &mut pending_key_bind,
-        };
-        if dispatch_settings_footer(action, &mut footer_ctx, &mut commands) {
+        if dispatch_settings_footer(action, &mut SettingsFooterCtx, &mut commands) {
             continue;
         }
         match action {
@@ -238,15 +223,14 @@ pub fn dispatch_settings_actions(
             }
             SettingsAction::ResetDefaults
             | SettingsAction::OpenFolder
-            | SettingsAction::StartDebugHttp
-            | SettingsAction::Back => {}
+            | SettingsAction::StartDebugHttp => {}
         }
     }
 }
 
 fn dispatch_settings_footer(
     action: SettingsAction,
-    ctx: &mut SettingsFooterCtx<'_>,
+    ctx: &mut SettingsFooterCtx,
     commands: &mut Commands,
 ) -> bool {
     for entry in SETTINGS_FOOTER {

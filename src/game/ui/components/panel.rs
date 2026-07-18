@@ -6,7 +6,6 @@ use super::super::types::{
 use super::button::{raised_border, HoverButton};
 use super::icon::spawn_close_icon;
 use super::text::default_font_size;
-use crate::game::ui::access::i18n;
 
 pub const PANEL_BG: Color = Color::srgb(0.192, 0.188, 0.192);
 pub const PANEL_LIGHT_EDGE: Color = Color::srgb(0.40, 0.38, 0.36);
@@ -73,7 +72,8 @@ pub fn spawn_panel_with_title_marker(
         .with_children(|panel| {
             panel.spawn(panel_title_bar()).with_children(|title| {
                 title.spawn((
-                    panel_title_label(i18n.t(options.title_key), options.title_size),
+                    // 文案由 LocalizedText / 各面板 update_title 填充，避免 spawn 时依赖 ui scope
+                    panel_title_label("", options.title_size),
                     title_marker,
                 ));
                 if options.show_close {
@@ -184,7 +184,8 @@ fn panel_window_bundle(width: Val, max_width: Val) -> impl Bundle {
             margin: UiRect::all(Val::Auto),
             padding: UiRect::all(Val::Px(8.0)),
             border: UiRect::all(Val::Px(4.0)),
-            display: Display::None,
+            // 按需挂载：实体只在打开时存在，默认就显示
+            display: Display::Flex,
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(12.0),
             overflow: Overflow::clip(),
@@ -192,7 +193,7 @@ fn panel_window_bundle(width: Val, max_width: Val) -> impl Bundle {
         },
         PanelWindow,
         PanelPosition::default(),
-        Visibility::Hidden,
+        Visibility::Visible,
         BackgroundColor(PANEL_BG),
         panel_raised_border(),
         BoxShadow::new(

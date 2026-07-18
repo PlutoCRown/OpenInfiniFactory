@@ -25,8 +25,9 @@ pub fn update_inventory_title(
     builder_mode: Res<BuilderMode>,
     i18n_revision: Res<I18nRevision>,
     mut titles: Query<&mut Text, With<InventoryTitleText>>,
+    added: Query<(), Added<InventoryTitleText>>,
 ) {
-    if !builder_mode.is_changed() && !i18n_revision.is_changed() {
+    if !builder_mode.is_changed() && !i18n_revision.is_changed() && added.is_empty() {
         return;
     }
     for mut text in &mut titles {
@@ -47,6 +48,7 @@ pub fn update_inventory_slots(
     mut initialized: Local<bool>,
     mut last_selected: Local<usize>,
     mut had_block_icons: Local<bool>,
+    mut last_slot_count: Local<usize>,
     mut last_hovered: Local<Option<Entity>>,
     mut slot_query: Query<
         (
@@ -78,6 +80,9 @@ pub fn update_inventory_slots(
     let selected_changed = !*initialized || placement.selected != *last_selected;
     let inventory_changed = !*initialized || inventory.is_changed();
     let i18n_changed = !*initialized || i18n_revision.is_changed();
+    let slot_count = slot_query.iter().len();
+    // 背包按需挂载后 Slot 实体会增减，必须重新灌内容
+    let slots_changed = !*initialized || slot_count != *last_slot_count;
 
     let hovered_entity = slot_query.iter().find_map(|(entity, _, interaction, ..)| {
         (*interaction == Interaction::Hovered).then_some(entity)
@@ -90,14 +95,17 @@ pub fn update_inventory_slots(
         && !i18n_changed
         && !icons_changed
         && !icons_became_ready
+        && !slots_changed
     {
         return;
     }
     *initialized = true;
     *last_selected = placement.selected;
     *last_hovered = hovered_entity;
+    *last_slot_count = slot_count;
 
-    let refresh_content = inventory_changed || icons_changed || icons_became_ready || i18n_changed;
+    let refresh_content =
+        inventory_changed || icons_changed || icons_became_ready || i18n_changed || slots_changed;
 
     for (_, slot, interaction, children, mut node, mut background, mut border) in &mut slot_query {
         let item = match slot.area {

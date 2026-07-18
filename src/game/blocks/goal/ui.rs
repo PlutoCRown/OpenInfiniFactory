@@ -257,6 +257,7 @@ fn update_dropdowns(
     }
 
     if !panel_active {
+        *option_icons_filled = false;
         *last_slot_material = None;
         return;
     }

@@ -1,10 +1,12 @@
 pub mod block_panels;
 pub mod inventory;
 pub mod pause_menu;
+pub mod playing_overlays;
 pub mod save;
 pub mod session_busy;
 pub mod settings;
 pub mod start_menu;
+pub mod start_menu_mounts;
 pub mod virtual_remote;
 
 use bevy::prelude::*;
@@ -17,7 +19,9 @@ use crate::game::ui::core::host::{dispatch_ui_action, dispatch_ui_host_completio
 pub use block_panels::BlockPanelsPlugin;
 pub use inventory::InventoryPlugin;
 pub use pause_menu::PauseMenuPlugin;
+pub use playing_overlays::PlayingOverlaysPlugin;
 pub use start_menu::StartMenuPlugin;
+pub use start_menu_mounts::StartMenuMountsPlugin;
 pub use save::SavePlugin;
 pub use session_busy::SessionBusyUiPlugin;
 pub use settings::SettingsPlugin;
@@ -32,7 +36,9 @@ impl Plugin for UiFeaturesPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             StartMenuPlugin,
+            StartMenuMountsPlugin,
             PauseMenuPlugin,
+            PlayingOverlaysPlugin,
             SavePlugin,
             SettingsPlugin,
             BlockPanelsPlugin,

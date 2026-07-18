@@ -323,7 +323,6 @@ pub enum SettingsAction {
     ResetDefaults,
     OpenFolder,
     StartDebugHttp,
-    Back,
 }
 
 impl UiActionLabel for SettingsAction {
@@ -336,7 +335,6 @@ impl UiActionLabel for SettingsAction {
             Self::ResetDefaults => "button.reset_defaults",
             Self::OpenFolder => "button.open_config_folder",
             Self::StartDebugHttp => "button.start_debug_http",
-            Self::Back => "button.back",
             Self::Field(_)
             | Self::SetPlaceSelectionMode(_)
             | Self::SetDeleteSelectionMode(_)

@@ -258,7 +258,6 @@ fn spawn_settings_footer(panel: &mut ChildSpawnerCommands) {
         {
             actions.push(SettingsAction::OpenFolder);
         }
-        actions.push(SettingsAction::Back);
         for action in actions {
             spawn_localized_settings_button(row, action);
         }

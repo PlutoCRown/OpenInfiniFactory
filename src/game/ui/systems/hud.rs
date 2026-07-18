@@ -4,13 +4,35 @@ pub fn update_hud_visibility(
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
     save_state: Res<SaveState>,
+    mut primed: Local<bool>,
+    added_hud: Query<
+        (),
+        Or<(
+            Added<InGameHudStyle>,
+            Added<Crosshair>,
+            Added<InGameHudVisibility>,
+            Added<GameplayHudVisibility>,
+        )>,
+    >,
     mut hud_style: Query<&mut Node, With<InGameHudStyle>>,
     mut visibility_sets: ParamSet<(
         Query<&mut Visibility, With<Crosshair>>,
-        Query<&mut Visibility, With<InGameHudVisibility>>,
+        Query<&mut Visibility, (With<InGameHudVisibility>, Without<Crosshair>)>,
         Query<&mut Visibility, With<GameplayHudVisibility>>,
     )>,
 ) {
+    let dirty = !*primed
+        || mode.is_changed()
+        || playing_ui.is_changed()
+        || builder_mode.is_changed()
+        || simulation.is_changed()
+        || save_state.is_changed()
+        || !added_hud.is_empty();
+    if !dirty {
+        return;
+    }
+    *primed = true;
+
     let has_world = save_state.current.is_some();
     let hide_gameplay_hud = *builder_mode == BuilderMode::Play && simulation.is_active();
     let active_play = playing_ui.active_play();

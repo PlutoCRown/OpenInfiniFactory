@@ -29,10 +29,9 @@ pub fn localized_text(
     font_size: f32,
     color: Color,
 ) -> (impl Bundle, LocalizedText) {
-    use crate::game::ui::access::i18n;
-
+    // 不在 spawn 时查 i18n：挂载可能发生在任意系统/线程，留给 update_localized_ui 填文案
     (
-        text(i18n.t(key), font_size, color),
+        text("", font_size, color),
         LocalizedText { key },
     )
 }

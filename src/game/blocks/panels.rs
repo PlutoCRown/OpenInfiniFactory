@@ -11,18 +11,9 @@ pub struct BlockPanelHooks {
 
 inventory::collect!(BlockPanelHooks);
 
-pub fn spawn_all_panels(root: &mut ChildSpawnerCommands) {
-    let mut panels = inventory::iter::<BlockPanelHooks>.into_iter().collect::<Vec<_>>();
-    panels.sort_by_key(|hooks| hooks.panel as u8);
-    for hooks in panels {
-        (hooks.spawn_panel)(root);
-    }
-}
-
-pub fn spawn_all_overlays(root: &mut ChildSpawnerCommands) {
-    for hooks in inventory::iter::<BlockPanelHooks> {
-        (hooks.spawn_overlays)(root);
-    }
+/// 按面板 id 查找方块面板挂载钩子
+pub fn find_block_panel_hooks(panel: UiPanelId) -> Option<&'static BlockPanelHooks> {
+    inventory::iter::<BlockPanelHooks>.into_iter().find(|hooks| hooks.panel == panel)
 }
 
 pub fn register_all_panels(app: &mut App) {

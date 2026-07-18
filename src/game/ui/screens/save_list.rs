@@ -1,12 +1,11 @@
 use bevy::prelude::*;
 
 use crate::game::state::StartMenuScreen;
-use crate::game::ui::access::i18n;
 
 use super::super::components::{
-    default_button_size, flex_row, full_width_button, panel_bundle_responsive, panel_content,
-    panel_title_bar, panel_title_button, panel_title_label, raised_border, spawn_close_icon,
-    styled_button, text, text_button, transparent_node, BUTTON_BG,
+    BUTTON_BG, default_button_size, flex_row, full_width_button, panel_bundle_responsive,
+    panel_content, panel_title_bar, panel_title_button, panel_title_label, raised_border,
+    spawn_close_icon, styled_button, text, text_button, transparent_node,
 };
 use super::super::types::{
     PanelVisibility, SaveListAction, SaveListCloseButton, SaveListCreateButton, SaveListPanel,
@@ -27,10 +26,7 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands) {
     ))
     .with_children(|panel| {
         panel.spawn(panel_title_bar()).with_children(|title| {
-            title.spawn((
-                panel_title_label(i18n.t("save.title.default"), 26.0),
-                SaveListTitleText,
-            ));
+            title.spawn((panel_title_label("", 26.0), SaveListTitleText));
             title
                 .spawn((
                     panel_title_button(),
@@ -95,11 +91,7 @@ fn spawn_save_column(
         .with_children(|column| {
             // 新建按钮固定在列顶，重建存档行时不会被清掉
             column
-                .spawn((
-                    create_list_button(34.0),
-                    create,
-                    SaveListCreateButton,
-                ))
+                .spawn((create_list_button(34.0), create, SaveListCreateButton))
                 .with_children(|button| {
                     button.spawn(text("", 15.0, Color::WHITE));
                 });

@@ -13,14 +13,48 @@ pub fn update_status_ui(
     simulation: Res<SimulationState>,
     save_state: Res<SaveState>,
     config: Res<GameConfig>,
+    i18n_revision: Res<crate::game::ui::access::I18nRevision>,
+    mut primed: Local<bool>,
+    mut last_gameplay_sig: Local<(usize, Option<(IVec3, IVec3)>)>,
     mut texts: Query<(&StatusText, &mut Text)>,
 ) {
+    let gameplay_sig = (
+        placement.selected,
+        placement
+            .target
+            .as_ref()
+            .map(|hit| (hit.pos, hit.normal)),
+    );
+    let gameplay_dirty = !*primed
+        || *last_gameplay_sig != gameplay_sig
+        || world.is_changed()
+        || inventory.is_changed()
+        || save_state.is_changed()
+        || i18n_revision.is_changed();
+    let simulation_dirty = !*primed
+        || builder_mode.is_changed()
+        || simulation.is_changed()
+        || config.is_changed()
+        || i18n_revision.is_changed();
+    let force = !*primed;
+    *primed = true;
+    *last_gameplay_sig = gameplay_sig;
+    if !force && !gameplay_dirty && !simulation_dirty {
+        return;
+    }
+
     for (status, mut text) in &mut texts {
         let next = match status.0 {
             StatusTextKind::Gameplay => {
+                if !force && !gameplay_dirty {
+                    continue;
+                }
                 gameplay_status_text(&placement, &world, &inventory, &save_state)
             }
             StatusTextKind::SimulationOverlay => {
+                if !force && !simulation_dirty {
+                    continue;
+                }
                 if *builder_mode != BuilderMode::Play {
                     String::new()
                 } else {
@@ -100,9 +134,7 @@ fn world_status_line(save_state: &SaveState) -> String {
     let Some(slot) = save_state.current.as_ref() else {
         return i18n.t("status.gameplay.no_world");
     };
-    let kind = save_state
-        .current_kind
-        .unwrap_or_else(|| slot.kind());
+    let kind = save_state.current_kind.unwrap_or_else(|| slot.kind());
     let kind_label = i18n.t(match kind {
         SaveKind::Puzzle => "save.kind.puzzle",
         SaveKind::Solution => "save.kind.solution",
@@ -136,9 +168,7 @@ fn target_status_lines(placement: &PlacementState, world: &WorldBlocks) -> Vec<S
     let block_label = block
         .map(block_label)
         .unwrap_or_else(|| i18n.t("status.gameplay.scene"));
-    let facing = block
-        .map(|block| facing_label(block.facing))
-        .unwrap_or("-");
+    let facing = block.map(|block| facing_label(block.facing)).unwrap_or("-");
     vec![
         i18n.fmt(
             "status.gameplay.aim",
