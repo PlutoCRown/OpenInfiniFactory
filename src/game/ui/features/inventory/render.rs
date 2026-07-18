@@ -5,8 +5,8 @@ use crate::game::state::{BuilderMode, PlacementState};
 use crate::game::ui::access::{i18n, I18nRevision, UiMainThread};
 use crate::game::ui::components::{hover_border, inset_border};
 use crate::game::ui::types::{
-    CarriedItem, CarriedItemPreview, InventoryItems, InventorySlot, InventoryTooltip,
-    InventoryTooltipDescription, InventoryTooltipName, SlotArea, UiHoverState,
+    AreaKind, CarriedItem, CarriedItemPreview, InventoryItem, InventoryItems, InventorySlot,
+    InventoryTooltip, InventoryTooltipDescription, InventoryTooltipName, SlotArea, UiHoverState,
 };
 use crate::game::ui::widgets::{short_item_name, slot_color};
 use crate::game::world::rendering::BlockIconAssets;
@@ -94,9 +94,13 @@ pub fn update_inventory_slots(
         if node.display != next {
             node.display = next;
         }
-        let icon_handle = item
-            .and_then(|item| item.block())
-            .and_then(|kind| block_icons.as_deref().and_then(|icons| icons.get(kind)));
+        let icon_handle = item.and_then(|item| match item {
+            InventoryItem::Block(kind) => block_icons.as_deref().and_then(|icons| icons.get(kind)),
+            InventoryItem::Area(AreaKind::Selection) => {
+                block_icons.as_deref().and_then(|icons| icons.selection())
+            }
+            InventoryItem::LightPanel => None,
+        });
         let has_icon = icon_handle.is_some();
         let hovered = hover.entity == Some(entity);
         if hovered {
@@ -213,9 +217,13 @@ pub fn update_carried_item_ui(
     style.top = Val::Px(cursor.y + 4.0);
     *background = slot_color(item).with_alpha(0.9).into();
 
-    let icon_handle = item
-        .block()
-        .and_then(|kind| block_icons.as_deref().and_then(|icons| icons.get(kind)));
+    let icon_handle = match item {
+        InventoryItem::Block(kind) => block_icons.as_deref().and_then(|icons| icons.get(kind)),
+        InventoryItem::Area(AreaKind::Selection) => {
+            block_icons.as_deref().and_then(|icons| icons.selection())
+        }
+        InventoryItem::LightPanel => None,
+    };
     for child in children.iter() {
         if let Ok(mut image) = preview_images.get_mut(child) {
             *image = icon_handle

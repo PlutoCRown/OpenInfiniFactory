@@ -50,9 +50,36 @@ impl SelectionState {
     pub fn clear(&mut self) {
         *self = Self::default();
     }
+
+    /// 是否仍有选区相关状态（可被右键清空）
+    pub fn is_active(&self) -> bool {
+        self.first_corner.is_some() || self.bounds.is_some() || self.drag.is_some()
+    }
 }
 
-#[derive(Clone, Copy)]
+/// 选区状态快照，用于撤销/重做
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SelectionSnapshot {
+    pub first_corner: Option<IVec3>,
+    pub bounds: Option<SelectionBounds>,
+}
+
+impl SelectionSnapshot {
+    pub fn from_state(state: &SelectionState) -> Self {
+        Self {
+            first_corner: state.first_corner,
+            bounds: state.bounds,
+        }
+    }
+
+    pub fn apply_to(&self, state: &mut SelectionState) {
+        state.first_corner = self.first_corner;
+        state.bounds = self.bounds;
+        state.drag = None;
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SelectionBounds {
     pub min: IVec3,
     pub max: IVec3,
@@ -106,7 +133,6 @@ impl SelectionBounds {
 #[derive(Clone, Copy)]
 pub struct SelectionDrag {
     pub start: IVec3,
-    pub axis: Option<SelectionAxis>,
     pub offset: IVec3,
 }
 

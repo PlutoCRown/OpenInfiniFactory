@@ -198,8 +198,13 @@ impl InventoryItems {
             if let Some(slot) = backpack.iter_mut().find(|slot| slot.is_none()) {
                 *slot = Some(InventoryItem::Area(AreaKind::Selection));
             }
-        } else if let Some(slot) = backpack.iter_mut().find(|slot| slot.is_none()) {
-            *slot = Some(InventoryItem::LightPanel);
+        } else {
+            if let Some(slot) = backpack.iter_mut().find(|slot| slot.is_none()) {
+                *slot = Some(InventoryItem::Area(AreaKind::Selection));
+            }
+            if let Some(slot) = backpack.iter_mut().find(|slot| slot.is_none()) {
+                *slot = Some(InventoryItem::LightPanel);
+            }
         }
 
         Self { hotbar, backpack }

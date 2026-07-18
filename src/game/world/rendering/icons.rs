@@ -29,6 +29,7 @@ pub fn setup_block_icons(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     assets: Res<WorldRenderAssets>,
     scene_registry: Res<SceneBlockRegistry>,
     material_registry: Res<MaterialBlockRegistry>,
@@ -108,7 +109,20 @@ pub fn setup_block_icons(
         .into_iter()
         .filter(|kind| !kind.is_scene() && !matches!(kind, BlockKind::Material(_) | BlockKind::Stamp(_)))
         .collect();
-    let has_offscreen = !icon_kinds.is_empty();
+    let selection_glb = {
+        use std::path::PathBuf;
+        PathBuf::from(crate::shared::platform::asset_path())
+            .join("factory_blocks/selection/model.glb")
+    };
+    let selection_handles =
+        crate::game::scene_blocks::load_scene_glb(&selection_glb, &mut meshes, &mut materials, &mut images)
+            .map_err(|err| {
+                bevy::log::warn!("selection icon glb: {err}");
+                err
+            })
+            .ok();
+    let has_offscreen = !icon_kinds.is_empty() || selection_handles.is_some();
+    let selection_origin_index = icon_kinds.len();
 
     if has_offscreen {
         commands.spawn((
@@ -162,6 +176,52 @@ pub fn setup_block_icons(
             }),
             Transform::from_translation(origin + ICON_CAMERA_OFFSET)
                 .looking_at(origin, Vec3::Y),
+            AmbientLight {
+                color: Color::WHITE,
+                brightness: 520.0,
+                ..default()
+            },
+            icon_layer.clone(),
+            BlockIconRenderEntity,
+            BlockIconRenderRoot,
+            BlockIconRenderCamera,
+        ));
+    }
+
+    if let Some(handles) = selection_handles {
+        let image = Image::new_target_texture(
+            ICON_TEXTURE_SIZE,
+            ICON_TEXTURE_SIZE,
+            TextureFormat::Rgba8Unorm,
+            Some(TextureFormat::Rgba8UnormSrgb),
+        );
+        let image_handle = images.add(image);
+        icon_assets.selection = Some(image_handle.clone());
+        let origin = Vec3::new(selection_origin_index as f32 * ICON_SPACING, -100.0, 0.0);
+        commands.spawn((
+            Mesh3d(handles.mesh),
+            MeshMaterial3d(handles.material),
+            Transform::from_translation(origin - Vec3::splat(0.5)),
+            icon_layer.clone(),
+            BlockIconRenderEntity,
+            BlockIconRenderRoot,
+        ));
+        commands.spawn((
+            Camera3d::default(),
+            Camera {
+                order: -2,
+                clear_color: Color::NONE.into(),
+                ..default()
+            },
+            RenderTarget::Image(image_handle.into()),
+            Projection::Orthographic(OrthographicProjection {
+                scaling_mode: ScalingMode::Fixed {
+                    width: ICON_ORTHO_SIZE,
+                    height: ICON_ORTHO_SIZE,
+                },
+                ..OrthographicProjection::default_3d()
+            }),
+            Transform::from_translation(origin + ICON_CAMERA_OFFSET).looking_at(origin, Vec3::Y),
             AmbientLight {
                 color: Color::WHITE,
                 brightness: 520.0,

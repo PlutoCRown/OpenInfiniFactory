@@ -27,6 +27,9 @@ pub const DEFAULT_KEY_BINDINGS: KeyBindings = KeyBindings {
     pick: ConfigInput::MouseMiddle,
     undo: ConfigChord::default_undo(),
     redo: ConfigChord::default_redo(),
+    copy: ConfigChord::default_copy(),
+    paste: ConfigChord::default_paste(),
+    toggle_selection_tool: ConfigChord::default_toggle_selection_tool(),
 };
 
 pub const DEFAULT_CONFIG: GameConfig = GameConfig {
@@ -260,7 +263,9 @@ impl VirtualControlId {
             Self::Pause | Self::Simulate | Self::SimPause | Self::SimFast | Self::SimStep => {
                 VirtualControlAnchor::TopRight
             }
-            Self::Rotate | Self::Alternate | Self::Inventory => VirtualControlAnchor::TopRightColumn,
+            Self::Rotate | Self::Alternate | Self::Inventory => {
+                VirtualControlAnchor::TopRightColumn
+            }
             Self::BlockConfig => VirtualControlAnchor::BottomCenter,
         }
     }
@@ -306,6 +311,18 @@ fn default_redo_chord() -> ConfigChord {
     ConfigChord::default_redo()
 }
 
+fn default_copy_chord() -> ConfigChord {
+    ConfigChord::default_copy()
+}
+
+fn default_paste_chord() -> ConfigChord {
+    ConfigChord::default_paste()
+}
+
+fn default_toggle_selection_tool_chord() -> ConfigChord {
+    ConfigChord::default_toggle_selection_tool()
+}
+
 /// 组合键：修饰键 + 主键（primary_modifier 在 macOS 为 Command，其它平台为 Control）
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ConfigChord {
@@ -330,6 +347,33 @@ impl ConfigChord {
             key: ConfigKey::KeyZ,
             primary_modifier: true,
             shift: true,
+            alt: false,
+        }
+    }
+
+    pub const fn default_copy() -> Self {
+        Self {
+            key: ConfigKey::KeyC,
+            primary_modifier: true,
+            shift: false,
+            alt: false,
+        }
+    }
+
+    pub const fn default_paste() -> Self {
+        Self {
+            key: ConfigKey::KeyV,
+            primary_modifier: true,
+            shift: false,
+            alt: false,
+        }
+    }
+
+    pub const fn default_toggle_selection_tool() -> Self {
+        Self {
+            key: ConfigKey::KeyX,
+            primary_modifier: true,
+            shift: false,
             alt: false,
         }
     }
@@ -438,6 +482,12 @@ pub struct KeyBindings {
     pub undo: ConfigChord,
     #[serde(default = "default_redo_chord")]
     pub redo: ConfigChord,
+    #[serde(default = "default_copy_chord")]
+    pub copy: ConfigChord,
+    #[serde(default = "default_paste_chord")]
+    pub paste: ConfigChord,
+    #[serde(default = "default_toggle_selection_tool_chord")]
+    pub toggle_selection_tool: ConfigChord,
 }
 
 impl Default for KeyBindings {
@@ -488,16 +538,25 @@ pub enum ActionKeyName {
     Undo,
     /// 重做编辑
     Redo,
+    /// 复制（选区拖动中立即复制放置；编辑模式为复制系统方块配置）
+    Copy,
+    /// 粘贴系统方块配置
+    Paste,
+    /// 切换选区工具
+    ToggleSelectionTool,
 }
 
 impl ActionKeyName {
-    pub const GENERAL: [ActionKeyName; 14] = [
+    pub const GENERAL: [ActionKeyName; 17] = [
         ActionKeyName::Pause,
         ActionKeyName::Inventory,
         ActionKeyName::Alternate,
         ActionKeyName::RotateOrRollback,
         ActionKeyName::Undo,
         ActionKeyName::Redo,
+        ActionKeyName::Copy,
+        ActionKeyName::Paste,
+        ActionKeyName::ToggleSelectionTool,
         ActionKeyName::Debug,
         ActionKeyName::DebugStructure,
         ActionKeyName::Forward,
@@ -522,7 +581,10 @@ impl ActionKeyName {
     ];
 
     pub fn is_chord(self) -> bool {
-        matches!(self, Self::Undo | Self::Redo)
+        matches!(
+            self,
+            Self::Undo | Self::Redo | Self::Copy | Self::Paste | Self::ToggleSelectionTool
+        )
     }
 
     pub fn label_key(self) -> &'static str {
@@ -533,6 +595,9 @@ impl ActionKeyName {
             ActionKeyName::RotateOrRollback => "action.rotate",
             ActionKeyName::Undo => "action.undo",
             ActionKeyName::Redo => "action.redo",
+            ActionKeyName::Copy => "action.copy",
+            ActionKeyName::Paste => "action.paste",
+            ActionKeyName::ToggleSelectionTool => "action.toggle_selection_tool",
             ActionKeyName::Simulate => "action.simulation_start",
             ActionKeyName::SimulationStep => "action.simulation_step",
             ActionKeyName::SimulationFast => "action.simulation_fast",
@@ -603,7 +668,9 @@ pub enum ConfigKey {
     KeyP,
     KeyR,
     KeyS,
+    KeyV,
     KeyW,
+    KeyX,
     KeyZ,
     Digit1,
     Digit2,
@@ -633,7 +700,9 @@ impl ConfigKey {
             ConfigKey::KeyP => KeyCode::KeyP,
             ConfigKey::KeyR => KeyCode::KeyR,
             ConfigKey::KeyS => KeyCode::KeyS,
+            ConfigKey::KeyV => KeyCode::KeyV,
             ConfigKey::KeyW => KeyCode::KeyW,
+            ConfigKey::KeyX => KeyCode::KeyX,
             ConfigKey::KeyZ => KeyCode::KeyZ,
             ConfigKey::Digit1 => KeyCode::Digit1,
             ConfigKey::Digit2 => KeyCode::Digit2,
@@ -667,7 +736,9 @@ impl ConfigKey {
             ConfigKey::KeyP => "P",
             ConfigKey::KeyR => "R",
             ConfigKey::KeyS => "S",
+            ConfigKey::KeyV => "V",
             ConfigKey::KeyW => "W",
+            ConfigKey::KeyX => "X",
             ConfigKey::KeyZ => "Z",
             ConfigKey::Digit1 => "1",
             ConfigKey::Digit2 => "2",
@@ -687,6 +758,9 @@ impl GameConfig {
         match action {
             ActionKeyName::Undo => self.key_bindings.undo,
             ActionKeyName::Redo => self.key_bindings.redo,
+            ActionKeyName::Copy => self.key_bindings.copy,
+            ActionKeyName::Paste => self.key_bindings.paste,
+            ActionKeyName::ToggleSelectionTool => self.key_bindings.toggle_selection_tool,
             _ => ConfigChord::default_undo(),
         }
     }
@@ -703,6 +777,9 @@ impl GameConfig {
         match action {
             ActionKeyName::Undo => self.key_bindings.undo = chord,
             ActionKeyName::Redo => self.key_bindings.redo = chord,
+            ActionKeyName::Copy => self.key_bindings.copy = chord,
+            ActionKeyName::Paste => self.key_bindings.paste = chord,
+            ActionKeyName::ToggleSelectionTool => self.key_bindings.toggle_selection_tool = chord,
             _ => {}
         }
     }
@@ -727,12 +804,15 @@ impl GameConfig {
             ActionKeyName::FlyDown => self.key_bindings.fly_down,
             ActionKeyName::Undo => self.key_bindings.undo.key,
             ActionKeyName::Redo => self.key_bindings.redo.key,
+            ActionKeyName::Copy => self.key_bindings.copy.key,
+            ActionKeyName::Paste => self.key_bindings.paste.key,
+            ActionKeyName::ToggleSelectionTool => self.key_bindings.toggle_selection_tool.key,
             ActionKeyName::Place | ActionKeyName::Delete | ActionKeyName::Pick => {
                 return self
                     .input(action)
                     .key_code()
                     .map(key_from_code)
-                    .unwrap_or(ConfigKey::KeyI)
+                    .unwrap_or(ConfigKey::KeyI);
             }
         }
     }
@@ -759,7 +839,11 @@ impl GameConfig {
             ActionKeyName::Right => ConfigInput::Key(self.key_bindings.right),
             ActionKeyName::JumpOrFlyUp => ConfigInput::Key(self.key_bindings.jump_or_fly_up),
             ActionKeyName::FlyDown => ConfigInput::Key(self.key_bindings.fly_down),
-            ActionKeyName::Undo | ActionKeyName::Redo => ConfigInput::Key(self.chord(action).key),
+            ActionKeyName::Undo
+            | ActionKeyName::Redo
+            | ActionKeyName::Copy
+            | ActionKeyName::Paste
+            | ActionKeyName::ToggleSelectionTool => ConfigInput::Key(self.chord(action).key),
             ActionKeyName::Place => self.key_bindings.place,
             ActionKeyName::Delete => self.key_bindings.delete,
             ActionKeyName::Pick => self.key_bindings.pick,
@@ -784,7 +868,11 @@ impl GameConfig {
             ActionKeyName::Right => self.key_bindings.right = key,
             ActionKeyName::JumpOrFlyUp => self.key_bindings.jump_or_fly_up = key,
             ActionKeyName::FlyDown => self.key_bindings.fly_down = key,
-            ActionKeyName::Undo | ActionKeyName::Redo => {}
+            ActionKeyName::Undo
+            | ActionKeyName::Redo
+            | ActionKeyName::Copy
+            | ActionKeyName::Paste
+            | ActionKeyName::ToggleSelectionTool => {}
             ActionKeyName::Place | ActionKeyName::Delete | ActionKeyName::Pick => {
                 self.set_input(action, ConfigInput::Key(key));
             }
@@ -856,7 +944,7 @@ pub fn open_config_folder() {
     }
 }
 
-const CONFIG_KEYS: [ConfigKey; 25] = [
+const CONFIG_KEYS: [ConfigKey; 27] = [
     ConfigKey::Escape,
     ConfigKey::Space,
     ConfigKey::ShiftLeft,
@@ -871,7 +959,9 @@ const CONFIG_KEYS: [ConfigKey; 25] = [
     ConfigKey::KeyP,
     ConfigKey::KeyR,
     ConfigKey::KeyS,
+    ConfigKey::KeyV,
     ConfigKey::KeyW,
+    ConfigKey::KeyX,
     ConfigKey::KeyZ,
     ConfigKey::Digit1,
     ConfigKey::Digit2,

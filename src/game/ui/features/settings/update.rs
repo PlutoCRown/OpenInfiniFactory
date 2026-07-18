@@ -20,10 +20,11 @@ use crate::shared::config::{ActionKeyName, ConfigChord, ConfigInput, GameConfig}
 
 pub fn localized_chord_display(chord: ConfigChord) -> String {
     use crate::game::ui::access::i18n;
+    use crate::shared::config::primary_modifier_label;
 
     let mut parts = Vec::new();
     if chord.primary_modifier {
-        parts.push(i18n.t("input.modifier_command").to_string());
+        parts.push(primary_modifier_label().to_string());
     }
     if chord.shift {
         parts.push(i18n.t("input.modifier_shift").to_string());

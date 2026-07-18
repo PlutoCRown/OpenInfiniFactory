@@ -69,7 +69,14 @@ pub struct WorldRenderAssets {
     pub(crate) laser_beam_material: Handle<StandardMaterial>,
     pub(crate) acceptance_spark_material: Handle<StandardMaterial>,
     delete_preview_material: Handle<StandardMaterial>,
-    selection_preview_material: Handle<StandardMaterial>,
+    /// 选区包围盒半透明填充
+    selection_fill_material: Handle<StandardMaterial>,
+    /// 选区包围盒边线 / 角块
+    selection_edge_material: Handle<StandardMaterial>,
+    /// 选区不可放置时的填充
+    selection_invalid_fill_material: Handle<StandardMaterial>,
+    /// 选区不可放置时的边线 / 角块
+    selection_invalid_edge_material: Handle<StandardMaterial>,
     active_factory_debug_material: Handle<StandardMaterial>,
     inactive_factory_debug_material: Handle<StandardMaterial>,
 }
@@ -484,9 +491,32 @@ impl WorldRenderAssets {
                 unlit: true,
                 ..default()
             }),
-            selection_preview_material: materials.add(StandardMaterial {
-                base_color: Color::srgba(0.25, 0.95, 0.88, 0.34),
+            // 配色对齐 assets/factory_blocks/selection_box/face_albedo.png
+            selection_fill_material: materials.add(StandardMaterial {
+                base_color: Color::srgba(150.0 / 255.0, 210.0 / 255.0, 205.0 / 255.0, 58.0 / 255.0),
                 alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                cull_mode: None,
+                ..default()
+            }),
+            selection_edge_material: materials.add(StandardMaterial {
+                base_color: Color::srgb(180.0 / 255.0, 240.0 / 255.0, 225.0 / 255.0),
+                emissive: LinearRgba::new(0.35, 0.55, 0.48, 1.0),
+                alpha_mode: AlphaMode::Opaque,
+                unlit: true,
+                ..default()
+            }),
+            selection_invalid_fill_material: materials.add(StandardMaterial {
+                base_color: Color::srgba(1.0, 0.12, 0.08, 0.38),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                cull_mode: None,
+                ..default()
+            }),
+            selection_invalid_edge_material: materials.add(StandardMaterial {
+                base_color: Color::srgb(1.0, 0.28, 0.18),
+                emissive: LinearRgba::new(0.55, 0.08, 0.04, 1.0),
+                alpha_mode: AlphaMode::Opaque,
                 unlit: true,
                 ..default()
             }),
@@ -534,8 +564,24 @@ impl WorldRenderAssets {
     pub(crate) fn edit_preview_material(&self, kind: EditPreviewKind) -> Handle<StandardMaterial> {
         match kind {
             EditPreviewKind::Delete => self.delete_preview_material.clone(),
-            EditPreviewKind::Selection => self.selection_preview_material.clone(),
+            EditPreviewKind::Selection => self.selection_fill_material.clone(),
         }
+    }
+
+    pub(crate) fn selection_fill_material(&self) -> Handle<StandardMaterial> {
+        self.selection_fill_material.clone()
+    }
+
+    pub(crate) fn selection_edge_material(&self) -> Handle<StandardMaterial> {
+        self.selection_edge_material.clone()
+    }
+
+    pub(crate) fn selection_invalid_fill_material(&self) -> Handle<StandardMaterial> {
+        self.selection_invalid_fill_material.clone()
+    }
+
+    pub(crate) fn selection_invalid_edge_material(&self) -> Handle<StandardMaterial> {
+        self.selection_invalid_edge_material.clone()
     }
 
     pub(crate) fn block_preview_material(&self, kind: BlockKind) -> Handle<StandardMaterial> {

@@ -93,12 +93,19 @@ pub struct PendingGeneratedPreview;
 #[derive(Resource, Default)]
 pub struct BlockIconAssets {
     pub(super) icons: HashMap<BlockKind, Handle<Image>>,
+    /// 选区工具图标（非 BlockKind）
+    pub(super) selection: Option<Handle<Image>>,
 }
 
 impl BlockIconAssets {
     /// 取某种方块的图标句柄
     pub fn get(&self, kind: BlockKind) -> Option<Handle<Image>> {
         self.icons.get(&kind).cloned()
+    }
+
+    /// 选区工具图标
+    pub fn selection(&self) -> Option<Handle<Image>> {
+        self.selection.clone()
     }
 }
 

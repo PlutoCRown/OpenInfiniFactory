@@ -4,7 +4,7 @@ use super::components::{EditPreview, PendingGeneratedPreview};
 use super::spawn::spawn_block_model;
 use crate::game::blocks::BlockData;
 use crate::game::world::animation::AnimationTiming;
-use crate::game::world::grid::{grid_to_world, WorldBlocks};
+use crate::game::world::grid::{WorldBlocks, grid_to_world};
 use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
 
 /// 清除所有编辑预览实体
@@ -39,7 +39,7 @@ pub fn spawn_edit_preview(
     ));
 }
 
-/// 生成删除选区包围盒预览
+/// 生成删除选区包围盒预览（半透明红填充 + 12 条红边，无角块）
 pub fn spawn_delete_bounds_preview(
     commands: &mut Commands,
     assets: &WorldRenderAssets,
@@ -47,14 +47,196 @@ pub fn spawn_delete_bounds_preview(
     max: IVec3,
 ) {
     let center = (grid_to_world(min) + grid_to_world(max)) * 0.5;
-    // 轴向长度 = 选中格数 + 两侧各约 0.03，避免 *1.1 在大选区多出整格
     let size = (max - min + IVec3::ONE).as_vec3() + Vec3::splat(0.06);
+    let half = size * 0.5;
+    let mesh = assets.block.clone();
+    let fill = assets.selection_invalid_fill_material();
+    let edge_mat = assets.selection_invalid_edge_material();
+    let edge_t = 0.034;
+
     commands.spawn((
-        Mesh3d(assets.block.clone()),
-        MeshMaterial3d(assets.edit_preview_material(EditPreviewKind::Delete)),
+        Mesh3d(mesh.clone()),
+        MeshMaterial3d(fill),
         Transform::from_translation(center).with_scale(size),
         EditPreview,
     ));
+
+    let (x0, x1) = (center.x - half.x, center.x + half.x);
+    let (y0, y1) = (center.y - half.y, center.y + half.y);
+    let (z0, z1) = (center.z - half.z, center.z + half.z);
+
+    for (pos, scale) in [
+        (
+            Vec3::new(center.x, y0, z0),
+            Vec3::new(size.x, edge_t, edge_t),
+        ),
+        (
+            Vec3::new(center.x, y0, z1),
+            Vec3::new(size.x, edge_t, edge_t),
+        ),
+        (
+            Vec3::new(center.x, y1, z0),
+            Vec3::new(size.x, edge_t, edge_t),
+        ),
+        (
+            Vec3::new(center.x, y1, z1),
+            Vec3::new(size.x, edge_t, edge_t),
+        ),
+        (
+            Vec3::new(x0, center.y, z0),
+            Vec3::new(edge_t, size.y, edge_t),
+        ),
+        (
+            Vec3::new(x0, center.y, z1),
+            Vec3::new(edge_t, size.y, edge_t),
+        ),
+        (
+            Vec3::new(x1, center.y, z0),
+            Vec3::new(edge_t, size.y, edge_t),
+        ),
+        (
+            Vec3::new(x1, center.y, z1),
+            Vec3::new(edge_t, size.y, edge_t),
+        ),
+        (
+            Vec3::new(x0, y0, center.z),
+            Vec3::new(edge_t, edge_t, size.z),
+        ),
+        (
+            Vec3::new(x0, y1, center.z),
+            Vec3::new(edge_t, edge_t, size.z),
+        ),
+        (
+            Vec3::new(x1, y0, center.z),
+            Vec3::new(edge_t, edge_t, size.z),
+        ),
+        (
+            Vec3::new(x1, y1, center.z),
+            Vec3::new(edge_t, edge_t, size.z),
+        ),
+    ] {
+        commands.spawn((
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(edge_mat.clone()),
+            Transform::from_translation(pos).with_scale(scale),
+            EditPreview,
+        ));
+    }
+}
+
+/// 选区包围盒：半透明填充；可选固定尺寸边线/角块；valid=false 时整框变红
+pub fn spawn_selection_bounds_preview(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    min: IVec3,
+    max: IVec3,
+    include_frame: bool,
+    valid: bool,
+) {
+    let center = (grid_to_world(min) + grid_to_world(max)) * 0.5;
+    let size = (max - min + IVec3::ONE).as_vec3() + Vec3::splat(0.06);
+    let half = size * 0.5;
+    let fill = if valid {
+        assets.selection_fill_material()
+    } else {
+        assets.selection_invalid_fill_material()
+    };
+
+    commands.spawn((
+        Mesh3d(assets.block.clone()),
+        MeshMaterial3d(fill),
+        Transform::from_translation(center).with_scale(size),
+        EditPreview,
+    ));
+
+    if !include_frame {
+        return;
+    }
+
+    let edge_t = 0.034;
+    let corner_s = 0.088;
+    let edge_mat = if valid {
+        assets.selection_edge_material()
+    } else {
+        assets.selection_invalid_edge_material()
+    };
+    let mesh = assets.block.clone();
+
+    let (x0, x1) = (center.x - half.x, center.x + half.x);
+    let (y0, y1) = (center.y - half.y, center.y + half.y);
+    let (z0, z1) = (center.z - half.z, center.z + half.z);
+
+    for (pos, scale) in [
+        (
+            Vec3::new(center.x, y0, z0),
+            Vec3::new(size.x, edge_t, edge_t),
+        ),
+        (
+            Vec3::new(center.x, y0, z1),
+            Vec3::new(size.x, edge_t, edge_t),
+        ),
+        (
+            Vec3::new(center.x, y1, z0),
+            Vec3::new(size.x, edge_t, edge_t),
+        ),
+        (
+            Vec3::new(center.x, y1, z1),
+            Vec3::new(size.x, edge_t, edge_t),
+        ),
+        (
+            Vec3::new(x0, center.y, z0),
+            Vec3::new(edge_t, size.y, edge_t),
+        ),
+        (
+            Vec3::new(x0, center.y, z1),
+            Vec3::new(edge_t, size.y, edge_t),
+        ),
+        (
+            Vec3::new(x1, center.y, z0),
+            Vec3::new(edge_t, size.y, edge_t),
+        ),
+        (
+            Vec3::new(x1, center.y, z1),
+            Vec3::new(edge_t, size.y, edge_t),
+        ),
+        (
+            Vec3::new(x0, y0, center.z),
+            Vec3::new(edge_t, edge_t, size.z),
+        ),
+        (
+            Vec3::new(x0, y1, center.z),
+            Vec3::new(edge_t, edge_t, size.z),
+        ),
+        (
+            Vec3::new(x1, y0, center.z),
+            Vec3::new(edge_t, edge_t, size.z),
+        ),
+        (
+            Vec3::new(x1, y1, center.z),
+            Vec3::new(edge_t, edge_t, size.z),
+        ),
+    ] {
+        commands.spawn((
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(edge_mat.clone()),
+            Transform::from_translation(pos).with_scale(scale),
+            EditPreview,
+        ));
+    }
+
+    for x in [x0, x1] {
+        for y in [y0, y1] {
+            for z in [z0, z1] {
+                commands.spawn((
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(edge_mat.clone()),
+                    Transform::from_translation(Vec3::new(x, y, z))
+                        .with_scale(Vec3::splat(corner_s)),
+                    EditPreview,
+                ));
+            }
+        }
+    }
 }
 
 /// 生成带完整模型的放置预览方块

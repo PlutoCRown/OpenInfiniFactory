@@ -15,17 +15,17 @@ pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
 
 pub(crate) use components::BlockIconRenderEntity;
 pub use components::{
-    block_face_highlight_transform, AimFaceHighlight, BlockEntity, BlockEntityLayer,
-    BlockIconAssets, BlockIconRenderCamera, BlockIconRenderRoot, BlockIconRenderState, EditPreview,
-    GameplayScene, HoverMarker, HoverStructureBounds, PendingGeneratedPreview, PlacementPreview,
-    StructureBounds,
+    AimFaceHighlight, BlockEntity, BlockEntityLayer, BlockIconAssets, BlockIconRenderCamera,
+    BlockIconRenderRoot, BlockIconRenderState, EditPreview, GameplayScene, HoverMarker,
+    HoverStructureBounds, PendingGeneratedPreview, PlacementPreview, StructureBounds,
+    block_face_highlight_transform,
 };
 pub(crate) use connectors::{face_mark_transform, signal_neighbor_offsets};
 pub use fx::{spawn_acceptance_sparks, spawn_laser_beams, spawn_weld_sparks};
 pub use icons::{retire_block_icon_renderers, setup_block_icons};
 pub use previews::{
     despawn_edit_previews, despawn_pending_generated_previews, spawn_block_preview,
-    spawn_delete_bounds_preview, spawn_edit_preview,
+    spawn_delete_bounds_preview, spawn_edit_preview, spawn_selection_bounds_preview,
 };
 pub use scene::{setup_scene, sync_shadow_settings, sync_vsync_settings, teardown_playing_scene};
 pub use skybox::SkyboxPlugin;

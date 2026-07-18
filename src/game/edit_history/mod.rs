@@ -13,6 +13,7 @@ use bevy::prelude::*;
 
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{BlockSettings, WorldBlocks};
+use crate::game::state::{SelectionSnapshot, SelectionState};
 
 use patch::CellSnapshot;
 
@@ -24,6 +25,8 @@ const MAX_UNDO: usize = 128;
 #[derive(Clone, Debug)]
 pub struct EditCommand {
     pub patch: WorldPatch,
+    /// 选区状态前后快照（创建/取消/搬移/复制选区时写入）
+    pub selection: Option<(SelectionSnapshot, SelectionSnapshot)>,
 }
 
 /// 连续旋转合并缓冲
@@ -59,11 +62,32 @@ impl EditHistory {
 
     /// 提交一条补丁；会先冲刷未提交的旋转合并
     pub fn record(&mut self, patch: WorldPatch) {
+        self.record_full(patch, None);
+    }
+
+    /// 提交补丁并附带选区状态变化
+    pub fn record_with_selection(
+        &mut self,
+        patch: WorldPatch,
+        before: SelectionSnapshot,
+        after: SelectionSnapshot,
+    ) {
+        self.record_full(patch, Some((before, after)));
+    }
+
+    fn record_full(
+        &mut self,
+        patch: WorldPatch,
+        selection: Option<(SelectionSnapshot, SelectionSnapshot)>,
+    ) {
         self.flush_pending_rotation();
         if patch.is_empty() {
-            return;
+            match &selection {
+                Some((before, after)) if before != after => {}
+                _ => return,
+            }
         }
-        self.undo.push(EditCommand { patch });
+        self.undo.push(EditCommand { patch, selection });
         if self.undo.len() > MAX_UNDO {
             self.undo.remove(0);
         }
@@ -125,20 +149,34 @@ impl EditHistory {
         }
     }
 
-    pub fn undo(&mut self, world: &mut WorldBlocks) -> Option<WorldPatch> {
+    pub fn undo(
+        &mut self,
+        world: &mut WorldBlocks,
+        selection: &mut SelectionState,
+    ) -> Option<WorldPatch> {
         self.flush_pending_rotation();
         let command = self.undo.pop()?;
         let patch = command.patch.clone();
         patch.apply_inverse(world);
+        if let Some((before, _)) = &command.selection {
+            before.apply_to(selection);
+        }
         self.redo.push(command);
         Some(patch)
     }
 
-    pub fn redo(&mut self, world: &mut WorldBlocks) -> Option<WorldPatch> {
+    pub fn redo(
+        &mut self,
+        world: &mut WorldBlocks,
+        selection: &mut SelectionState,
+    ) -> Option<WorldPatch> {
         self.flush_pending_rotation();
         let command = self.redo.pop()?;
         let patch = command.patch.clone();
         patch.apply_forward(world);
+        if let Some((_, after)) = &command.selection {
+            after.apply_to(selection);
+        }
         self.undo.push(command);
         Some(patch)
     }
@@ -147,7 +185,10 @@ impl EditHistory {
         if patch.is_empty() {
             return;
         }
-        self.undo.push(EditCommand { patch });
+        self.undo.push(EditCommand {
+            patch,
+            selection: None,
+        });
         if self.undo.len() > MAX_UNDO {
             self.undo.remove(0);
         }

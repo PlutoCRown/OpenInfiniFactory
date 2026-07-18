@@ -122,10 +122,6 @@ pub fn placement_input(
         }
     }
 
-    if selected_area(&inventory, &placement) != Some(AreaKind::Selection) {
-        placement.selection.clear();
-    }
-
     let edit_selection_mode = placement
         .edit_gesture
         .as_ref()
@@ -157,10 +153,16 @@ pub fn placement_input(
     }
 
     if selected_area(&inventory, &placement) == Some(AreaKind::Selection) {
+        let copy_chord = config.chord(crate::shared::config::ActionKeyName::Copy);
         if handle_selection_area_input(
             &mouse_buttons,
+            &keys,
             current_target_pos,
             place_button,
+            delete_button,
+            copy_chord,
+            force_place,
+            *builder_mode,
             &mut placement,
             &mut world,
             &mut edit_history,
@@ -175,11 +177,20 @@ pub fn placement_input(
             solution_state.dirty = true;
         }
         despawn_edit_previews(&mut commands, &edit_previews);
-        spawn_selection_previews(&placement, &mut commands, &render_assets);
+        spawn_selection_previews(
+            &placement,
+            &world,
+            *builder_mode,
+            force_place,
+            &mut commands,
+            &render_assets,
+        );
         return;
     }
 
-    placement.selection.clear();
+    if placement.selection.is_active() {
+        placement.selection.clear();
+    }
 
     if input.pick.just_pressed {
         if let Some(pos) = current_target_pos {

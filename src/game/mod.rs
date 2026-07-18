@@ -40,7 +40,8 @@ use state::{
     SimulationState, SolutionState, StartMenuScreen,
 };
 use systems::gameplay::{
-    apply_fov, draw_hover_structure_bounds, gameplay_input, placement_input, update_hover,
+    apply_fov, clipboard_input, draw_hover_structure_bounds, gameplay_input, placement_input,
+    update_hover, BlockSettingsClipboard, SelectionToolSwap,
 };
 use systems::perf::{PerfPlugin, PerfScope};
 use systems::simulation_controls::simulation_controls;
@@ -130,6 +131,8 @@ impl Plugin for GamePlugin {
             .insert_resource(SaveState::default())
             .init_resource::<EditHistory>()
             .init_resource::<PendingPlayerSpawn>()
+            .init_resource::<BlockSettingsClipboard>()
+            .init_resource::<SelectionToolSwap>()
             .init_resource::<scene_blocks::SceneBlockRegistry>()
             .init_resource::<material_blocks::MaterialBlockRegistry>()
             .init_resource::<material_blocks::StampMaterialRegistry>()
@@ -198,6 +201,12 @@ impl Plugin for GamePlugin {
             .add_systems(
                 Update,
                 edit_history_input
+                    .after(gameplay_input)
+                    .before(placement_input),
+            )
+            .add_systems(
+                Update,
+                clipboard_input
                     .after(gameplay_input)
                     .before(placement_input),
             )
