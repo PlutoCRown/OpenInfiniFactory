@@ -19,6 +19,9 @@ const ICON_TEXTURE_SIZE: u32 = 256;
 const ICON_RENDER_LAYER: usize = 3;
 const ICON_SPACING: f32 = 4.0;
 const ICON_RENDER_FRAMES: u8 = 3;
+/// 与 bake_scene_icons 一致的取景，减少四周留白
+const ICON_ORTHO_SIZE: f32 = 1.55;
+const ICON_CAMERA_OFFSET: Vec3 = Vec3::new(2.8, 2.2, 2.8);
 
 /// 为 UI 准备方块图标：场景块读预烘焙 icon.png，其余离屏渲
 pub fn setup_block_icons(
@@ -105,12 +108,12 @@ pub fn setup_block_icons(
             RenderTarget::Image(image_handle.into()),
             Projection::Orthographic(OrthographicProjection {
                 scaling_mode: ScalingMode::Fixed {
-                    width: 2.45,
-                    height: 2.45,
+                    width: ICON_ORTHO_SIZE,
+                    height: ICON_ORTHO_SIZE,
                 },
                 ..OrthographicProjection::default_3d()
             }),
-            Transform::from_translation(origin + Vec3::new(2.8, 2.2, 2.8))
+            Transform::from_translation(origin + ICON_CAMERA_OFFSET)
                 .looking_at(origin, Vec3::Y),
             AmbientLight {
                 color: Color::WHITE,

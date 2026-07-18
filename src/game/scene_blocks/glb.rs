@@ -1,9 +1,9 @@
-//! 同步解析场景方块 model.glb：网格、材质、内嵌贴图
+//! 同步解析场景方块 model.glb / collision.glb
 
 use std::path::Path;
 
 use bevy::asset::RenderAssetUsages;
-use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
+use bevy::image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor};
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
@@ -86,9 +86,23 @@ pub fn load_scene_glb(
     let base_color = Color::srgba(factor[0], factor[1], factor[2], factor[3]);
 
     let base_color_texture = pbr.base_color_texture().and_then(|info| {
-        let image = gltf_images.get(info.texture().source().index())?;
-        Some(images.add(bevy_image_from_gltf(image)?))
+        let texture = info.texture();
+        let image = gltf_images.get(texture.source().index())?;
+        Some(images.add(bevy_image_from_gltf(image, &texture.sampler())?))
     });
+
+    let alpha_mode = match gltf_material.alpha_mode() {
+        gltf::material::AlphaMode::Opaque => AlphaMode::Opaque,
+        gltf::material::AlphaMode::Mask => {
+            AlphaMode::Mask(gltf_material.alpha_cutoff().unwrap_or(0.5))
+        }
+        gltf::material::AlphaMode::Blend => AlphaMode::Blend,
+    };
+    let cull_mode = if gltf_material.double_sided() {
+        None
+    } else {
+        Some(bevy::render::render_resource::Face::Back)
+    };
 
     let material = StandardMaterial {
         base_color,
@@ -96,6 +110,8 @@ pub fn load_scene_glb(
         perceptual_roughness: pbr.roughness_factor(),
         metallic: pbr.metallic_factor(),
         reflectance: 0.08,
+        alpha_mode,
+        cull_mode,
         ..default()
     };
 
@@ -106,7 +122,45 @@ pub fn load_scene_glb(
     })
 }
 
-fn bevy_image_from_gltf(image: &gltf::image::Data) -> Option<Image> {
+/// 从 collision.glb 读出局部空间三角形（与 model 同坐标系，中心在原点）
+pub fn load_collision_triangles(path: &Path) -> Result<Vec<[Vec3; 3]>, String> {
+    let (document, buffers, _) =
+        gltf::import(path).map_err(|e| format!("import {}: {e}", path.display()))?;
+
+    let primitive = document
+        .meshes()
+        .next()
+        .and_then(|mesh| mesh.primitives().next())
+        .ok_or_else(|| format!("{}: no mesh primitive", path.display()))?;
+
+    let reader = primitive.reader(|buffer| Some(buffers.get(buffer.index())?.0.as_slice()));
+    let positions: Vec<[f32; 3]> = reader
+        .read_positions()
+        .ok_or_else(|| format!("{}: missing POSITION", path.display()))?
+        .collect();
+    let indices: Vec<u32> = match reader.read_indices() {
+        Some(iter) => iter.into_u32().collect(),
+        None => (0..positions.len() as u32).collect(),
+    };
+    if indices.len() % 3 != 0 {
+        return Err(format!("{}: index count not multiple of 3", path.display()));
+    }
+
+    let mut tris = Vec::with_capacity(indices.len() / 3);
+    for tri in indices.chunks_exact(3) {
+        let a = positions[tri[0] as usize];
+        let b = positions[tri[1] as usize];
+        let c = positions[tri[2] as usize];
+        tris.push([Vec3::from(a), Vec3::from(b), Vec3::from(c)]);
+    }
+    Ok(tris)
+}
+
+/// 按 glTF sampler 建 Bevy 贴图（NEAREST = 像素锐利，LINEAR = 平滑）
+fn bevy_image_from_gltf(
+    image: &gltf::image::Data,
+    sampler: &gltf::texture::Sampler<'_>,
+) -> Option<Image> {
     let (format, pixels) = match image.format {
         gltf::image::Format::R8G8B8A8 => (TextureFormat::Rgba8UnormSrgb, image.pixels.clone()),
         gltf::image::Format::R8G8B8 => {
@@ -132,8 +186,43 @@ fn bevy_image_from_gltf(image: &gltf::image::Data) -> Option<Image> {
         format,
         RenderAssetUsages::default(),
     );
-    let mut sampler = ImageSamplerDescriptor::linear();
-    sampler.set_address_mode(ImageAddressMode::Repeat);
-    bevy_image.sampler = ImageSampler::Descriptor(sampler);
+    bevy_image.sampler = ImageSampler::Descriptor(sampler_descriptor_from_gltf(sampler));
     Some(bevy_image)
+}
+
+/// 把 glTF sampler 的 mag/min/wrap 映射到 Bevy
+fn sampler_descriptor_from_gltf(sampler: &gltf::texture::Sampler<'_>) -> ImageSamplerDescriptor {
+    use gltf::texture::{MagFilter, MinFilter, WrappingMode};
+
+    let mag_filter = match sampler.mag_filter() {
+        Some(MagFilter::Nearest) => ImageFilterMode::Nearest,
+        Some(MagFilter::Linear) | None => ImageFilterMode::Linear,
+    };
+    let (min_filter, mipmap_filter) = match sampler.min_filter() {
+        Some(MinFilter::Nearest) => (ImageFilterMode::Nearest, ImageFilterMode::Nearest),
+        Some(MinFilter::Linear) => (ImageFilterMode::Linear, ImageFilterMode::Linear),
+        Some(MinFilter::NearestMipmapNearest) => {
+            (ImageFilterMode::Nearest, ImageFilterMode::Nearest)
+        }
+        Some(MinFilter::LinearMipmapNearest) => (ImageFilterMode::Linear, ImageFilterMode::Nearest),
+        Some(MinFilter::NearestMipmapLinear) => (ImageFilterMode::Nearest, ImageFilterMode::Linear),
+        Some(MinFilter::LinearMipmapLinear) | None => {
+            (ImageFilterMode::Linear, ImageFilterMode::Linear)
+        }
+    };
+    let address = |mode: WrappingMode| match mode {
+        WrappingMode::ClampToEdge => ImageAddressMode::ClampToEdge,
+        WrappingMode::MirroredRepeat => ImageAddressMode::MirrorRepeat,
+        WrappingMode::Repeat => ImageAddressMode::Repeat,
+    };
+
+    ImageSamplerDescriptor {
+        mag_filter,
+        min_filter,
+        mipmap_filter,
+        address_mode_u: address(sampler.wrap_s()),
+        address_mode_v: address(sampler.wrap_t()),
+        address_mode_w: address(sampler.wrap_s()),
+        ..default()
+    }
 }

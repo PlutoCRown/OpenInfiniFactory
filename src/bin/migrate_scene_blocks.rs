@@ -1,11 +1,12 @@
-//! 一次性将 saves/**/blocks.bin 从 v2（场景 u8 kind）迁移到 v3（场景字符串 id）
+//! 一次性将 saves/**/blocks.bin 迁移到当前 VERSION（含 v3→v4 场景 facing 段）
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use open_infinifactory::shared::platform::SAVE_DIR;
 use open_infinifactory::shared::save_format::{
-    Cursor, MAGIC, SaveFormatError, VERSION, VERSION_V1, VERSION_V2, decode_blocks, encode_blocks,
+    Cursor, MAGIC, SaveFormatError, VERSION, VERSION_V1, VERSION_V2, VERSION_V3, decode_blocks,
+    encode_blocks,
 };
 
 fn main() {
@@ -66,7 +67,7 @@ fn migrate_file(path: &Path) -> Result<MigrateResult, String> {
     let version = cursor.read_u16().map_err(|e| e.to_string())?;
     match version {
         VERSION => Ok(MigrateResult::Skipped),
-        VERSION_V1 | VERSION_V2 => {
+        VERSION_V1 | VERSION_V2 | VERSION_V3 => {
             let data = decode_blocks(&bytes).map_err(|e| e.to_string())?;
             let bak = path.with_extension("bin.bak");
             fs::copy(path, &bak).map_err(|e| format!("backup: {e}"))?;

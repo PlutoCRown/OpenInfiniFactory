@@ -23,6 +23,9 @@ use crate::shared::platform;
 
 const ICON_RENDER_LAYER: usize = 3;
 const ICON_SPACING: f32 = 4.0;
+/// 正交取景边长；越小方块越满，留白越少（单位立方体斜视约需 ≥1.5）
+const ICON_ORTHO_SIZE: f32 = 1.55;
+const ICON_CAMERA_OFFSET: Vec3 = Vec3::new(2.8, 2.2, 2.8);
 const FRAMES_BEFORE_CAPTURE: u8 = 4;
 
 /// bake 命令行配置
@@ -245,12 +248,12 @@ fn setup_bake(
             RenderTarget::Image(image_handle.into()),
             Projection::Orthographic(OrthographicProjection {
                 scaling_mode: ScalingMode::Fixed {
-                    width: 2.45,
-                    height: 2.45,
+                    width: ICON_ORTHO_SIZE,
+                    height: ICON_ORTHO_SIZE,
                 },
                 ..OrthographicProjection::default_3d()
             }),
-            Transform::from_translation(origin + Vec3::new(2.8, 2.2, 2.8))
+            Transform::from_translation(origin + ICON_CAMERA_OFFSET)
                 .looking_at(origin, Vec3::Y),
             AmbientLight {
                 color: Color::WHITE,

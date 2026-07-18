@@ -14,6 +14,8 @@ pub struct SceneBlockPresentation {
     pub string_id: String,
     pub model_path: PathBuf,
     pub collision_model_path: Option<PathBuf>,
+    /// collision.glb 三角形（局部系，中心原点）；无则玩家按整格 AABB
+    pub collision_tris: Option<Vec<[Vec3; 3]>>,
     /// 预烘焙 UI 图标（同目录 icon.png）；缺省则热键栏无图
     pub icon_path: Option<PathBuf>,
     pub color: ColorSpec,
@@ -58,6 +60,12 @@ impl SceneBlockRegistry {
 
     pub fn string_id(&self, id: SceneBlockId) -> Option<&str> {
         self.by_id.get(&id).map(|p| p.string_id.as_str())
+    }
+
+    /// 场景块自定义碰撞网格（局部三角形）；无则整格立方体
+    pub fn collision_tris(&self, kind: BlockKind) -> Option<&[[Vec3; 3]]> {
+        self.get_kind(kind)
+            .and_then(|p| p.collision_tris.as_deref())
     }
 
     /// 与模拟 catalog 对齐的展示色

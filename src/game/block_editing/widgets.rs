@@ -8,10 +8,8 @@ use crate::game::ui::components::{
 use crate::game::ui::types::UiActionLabel;
 use crate::game::world::rendering::BlockIconAssets;
 
-pub fn spawn_labeled_panel_button<A>(
-    parent: &mut ChildSpawnerCommands,
-    action: A,
-) where
+pub fn spawn_labeled_panel_button<A>(parent: &mut ChildSpawnerCommands, action: A)
+where
     A: Component + Copy + UiActionLabel,
 {
     parent
@@ -90,11 +88,7 @@ pub fn spawn_text_dropdown_list<A, L>(
     L: Component + Copy,
 {
     parent
-        .spawn((
-            dropdown_list_node(230.0),
-            GlobalZIndex(20_000),
-            list_marker,
-        ))
+        .spawn((dropdown_list_node(230.0), GlobalZIndex(20_000), list_marker))
         .with_children(|list| {
             for (label, action) in options {
                 spawn_text_option(list, label, action);
@@ -148,11 +142,7 @@ pub fn spawn_material_icon_list<A, O, L>(
     L: Component + Copy,
 {
     parent
-        .spawn((
-            icon_dropdown_list_node(),
-            GlobalZIndex(20_000),
-            list_marker,
-        ))
+        .spawn((icon_dropdown_list_node(), GlobalZIndex(20_000), list_marker))
         .with_children(|list| {
             for (material, action) in options {
                 list.spawn((
@@ -223,19 +213,15 @@ pub fn position_dropdown_from_trigger(
 }
 
 fn material_icon_node() -> impl Bundle {
+    const ICON_INSET: f32 = 4.0;
     (
         ImageNode::default(),
         Node {
-            width: Val::Px(default_button_size(64.0)),
-            height: Val::Px(default_button_size(64.0)),
             position_type: PositionType::Absolute,
-            left: Val::Percent(50.0),
-            top: Val::Percent(50.0),
-            margin: UiRect {
-                left: Val::Px(-default_button_size(32.0)),
-                top: Val::Px(-default_button_size(32.0)),
-                ..default()
-            },
+            left: Val::Px(ICON_INSET),
+            right: Val::Px(ICON_INSET),
+            top: Val::Px(ICON_INSET),
+            bottom: Val::Px(ICON_INSET),
             ..default()
         },
     )

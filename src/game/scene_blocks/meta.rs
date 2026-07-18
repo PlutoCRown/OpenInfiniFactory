@@ -12,6 +12,9 @@ pub struct SceneBlockMetaFile {
     pub collision: bool,
     #[serde(default = "default_connectable")]
     pub connectable: [bool; 6],
+    /// 有朝向时可 R 旋转，并存档 facing
+    #[serde(default)]
+    pub directional: bool,
 }
 
 fn default_collision() -> bool {

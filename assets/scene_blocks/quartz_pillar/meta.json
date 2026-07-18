@@ -1,0 +1,13 @@
+{
+  "$schema": "../../../schemas/scene_block.meta.schema.json",
+  "id": "quartz_pillar",
+  "collision": true,
+  "connectable": [
+    false,
+    false,
+    true,
+    true,
+    false,
+    false
+  ]
+}

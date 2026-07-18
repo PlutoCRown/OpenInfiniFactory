@@ -1,0 +1,13 @@
+{
+  "$schema": "../../../schemas/scene_block.meta.schema.json",
+  "id": "short_grass",
+  "collision": false,
+  "connectable": [
+    false,
+    false,
+    false,
+    false,
+    false,
+    false
+  ]
+}

@@ -22,7 +22,12 @@
     "collision": {
       "type": "boolean",
       "default": true,
-      "description": "是否参与碰撞。false 时整格无碰撞（忽略 collision.glb）。true 且无 collision.glb 时默认单位正方体；有 collision.glb 时用该网格（玩家精细碰撞后续接入）。"
+      "description": "是否参与碰撞。false 时整格无碰撞（忽略 collision.glb）。true 且无 collision.glb 时默认单位正方体；有 collision.glb 时玩家碰撞使用该网格（与 model 同局部坐标系）。"
+    },
+    "directional": {
+      "type": "boolean",
+      "default": false,
+      "description": "是否有朝向。true：放置时可用 R 旋转，存档会写入 facing；false：无朝向（当前草/石等）。"
     },
     "connectable": {
       "type": "array",

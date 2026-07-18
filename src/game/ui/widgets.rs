@@ -4,9 +4,9 @@ use crate::game::blocks::BlockPresent;
 use crate::game::state::GameSettings;
 
 use super::components::{
-    default_button_size, default_font_size, full_width_button, inset_border, localized_text,
-    menu_button, raised_border, slider_bundle, slider_fill, slider_knob, styled_button,
-    text_button, BUTTON_BG,
+    BUTTON_BG, default_button_size, default_font_size, full_width_button, inset_border,
+    localized_text, menu_button, raised_border, slider_bundle, slider_fill, slider_knob,
+    styled_button, text_button,
 };
 use super::types::{
     AreaKind, InventoryItem, InventorySlot, KeyBindingButton, SettingsAction, SettingsDropdown,
@@ -56,20 +56,17 @@ pub(super) fn spawn_slot(parent: &mut ChildSpawnerCommands, area: SlotArea, inde
             InventorySlot { area, index },
         ))
         .with_children(|slot| {
+            // 绝对定位 + 小边距，避免和文字抢 flex、并保持居中
+            const ICON_INSET: f32 = 4.0;
             slot.spawn((
                 ImageNode::default(),
                 Pickable::IGNORE,
                 Node {
-                    width: Val::Px(default_button_size(64.0)),
-                    height: Val::Px(default_button_size(64.0)),
                     position_type: PositionType::Absolute,
-                    left: Val::Percent(50.0),
-                    top: Val::Percent(50.0),
-                    margin: UiRect {
-                        left: Val::Px(-default_button_size(32.0)),
-                        top: Val::Px(-default_button_size(32.0)),
-                        ..default()
-                    },
+                    left: Val::Px(ICON_INSET),
+                    right: Val::Px(ICON_INSET),
+                    top: Val::Px(ICON_INSET),
+                    bottom: Val::Px(ICON_INSET),
                     ..default()
                 },
             ));

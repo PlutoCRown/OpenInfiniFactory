@@ -1,0 +1,14 @@
+{
+  "$schema": "../../../schemas/scene_block.meta.schema.json",
+  "id": "quartz_slope",
+  "collision": true,
+  "connectable": [
+    true,
+    true,
+    false,
+    true,
+    false,
+    true
+  ],
+  "directional": true
+}

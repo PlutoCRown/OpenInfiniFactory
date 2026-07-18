@@ -686,8 +686,8 @@ impl BlockKind {
     }
 
     pub fn is_directional(self) -> bool {
-        if matches!(self, BlockKind::Scene(_)) {
-            return false;
+        if let BlockKind::Scene(id) = self {
+            return scene_def(id).directional;
         }
         if let Some(kind) = self.material_kind() {
             return kind.props().directional;

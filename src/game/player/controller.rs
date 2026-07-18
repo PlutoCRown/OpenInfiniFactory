@@ -9,13 +9,14 @@ use bevy::render::camera::TemporalJitter;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use crate::game::cameras::{
-    gameplay_view_size, new_gameplay_view_image, GameplayCamera, GameplayViewImage,
-    PlayingUiCamera, MENU_CLEAR,
+    GameplayCamera, GameplayViewImage, MENU_CLEAR, PlayingUiCamera, gameplay_view_size,
+    new_gameplay_view_image,
 };
+use crate::game::scene_blocks::SceneBlockRegistry;
 use crate::game::simulation::movement::PusherState;
 use crate::game::state::{GameMode, GameSettings, PlayingUiState};
 use crate::game::ui::UiRuntime;
-use crate::game::world::grid::{grid_to_world, WorldBlocks};
+use crate::game::world::grid::{WorldBlocks, grid_to_world};
 use crate::game::world::rendering::GameplayScene;
 use crate::shared::config::GameConfig;
 
@@ -163,6 +164,7 @@ pub fn camera_move(
     ui_runtime: Res<UiRuntime>,
     world: Res<WorldBlocks>,
     pusher_state: Res<PusherState>,
+    scene_registry: Res<SceneBlockRegistry>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
     if *mode.get() != GameMode::Playing || !playing_ui.active_play() || ui_runtime.blocks_gameplay()
@@ -204,7 +206,13 @@ pub fn camera_move(
             PLAYER_SPEED
         };
         let delta = horizontal * speed * time.delta_secs();
-        move_with_collision(&mut transform.translation, delta, &world, &pusher_state);
+        move_with_collision(
+            &mut transform.translation,
+            delta,
+            &world,
+            &pusher_state,
+            &scene_registry,
+        );
     }
 
     if camera.flying {
@@ -222,10 +230,16 @@ pub fn camera_move(
                 Vec3::Y * vertical * FLY_SPEED * time.delta_secs(),
                 &world,
                 &pusher_state,
+                &scene_registry,
             );
             if vertical < 0.0
                 && (transform.translation.y == before_y
-                    || is_supported(transform.translation, &world, &pusher_state))
+                    || is_supported(
+                        transform.translation,
+                        &world,
+                        &pusher_state,
+                        &scene_registry,
+                    ))
             {
                 camera.flying = false;
                 camera.grounded = true;
@@ -241,15 +255,26 @@ pub fn camera_move(
             vertical_delta,
             &world,
             &pusher_state,
+            &scene_registry,
         );
 
         if transform.translation.y != before.y && camera.velocity_y > 0.0 {
             camera.grounded = false;
         } else if transform.translation.y == before.y && camera.velocity_y <= 0.0 {
             camera.velocity_y = 0.0;
-            camera.grounded = is_supported(transform.translation, &world, &pusher_state);
+            camera.grounded = is_supported(
+                transform.translation,
+                &world,
+                &pusher_state,
+                &scene_registry,
+            );
         } else {
-            camera.grounded = is_supported(transform.translation, &world, &pusher_state);
+            camera.grounded = is_supported(
+                transform.translation,
+                &world,
+                &pusher_state,
+                &scene_registry,
+            );
         }
     }
 
@@ -361,14 +386,16 @@ fn move_with_collision(
     delta: Vec3,
     world: &WorldBlocks,
     pusher_state: &PusherState,
+    scene_registry: &SceneBlockRegistry,
 ) {
     let mut next = *position;
     next.x += delta.x;
     if can_move_to(
         next,
-        collision_overlap_score(*position, world, pusher_state),
+        collision_overlap_score(*position, world, pusher_state, scene_registry),
         world,
         pusher_state,
+        scene_registry,
     ) {
         position.x = next.x;
     }
@@ -377,9 +404,10 @@ fn move_with_collision(
     next.z += delta.z;
     if can_move_to(
         next,
-        collision_overlap_score(*position, world, pusher_state),
+        collision_overlap_score(*position, world, pusher_state, scene_registry),
         world,
         pusher_state,
+        scene_registry,
     ) {
         position.z = next.z;
     }
@@ -388,26 +416,49 @@ fn move_with_collision(
     next.y += delta.y;
     if can_move_to(
         next,
-        collision_overlap_score(*position, world, pusher_state),
+        collision_overlap_score(*position, world, pusher_state, scene_registry),
         world,
         pusher_state,
+        scene_registry,
     ) {
         position.y = next.y;
     }
 }
 
-fn block_has_collision(world: &WorldBlocks, pusher_state: &PusherState, pos: IVec3) -> bool {
-    if pos.y < 0 {
+fn player_hits_block(
+    player_min: Vec3,
+    player_max: Vec3,
+    block_pos: IVec3,
+    world: &WorldBlocks,
+    pusher_state: &PusherState,
+    scene_registry: &SceneBlockRegistry,
+) -> bool {
+    if pusher_state
+        .extended_head_positions(world)
+        .contains(&block_pos)
+    {
+        let block_min = block_pos.as_vec3();
+        return aabb_intersects(player_min, player_max, block_min, block_min + Vec3::ONE);
+    }
+    let Some(block) = world.blocks.get(&block_pos) else {
+        return false;
+    };
+    if !block.kind.has_collision() {
         return false;
     }
-    world
-        .blocks
-        .get(&pos)
-        .is_some_and(|block| block.kind.has_collision())
-        || pusher_state.extended_head_positions(world).contains(&pos)
+    if let Some(tris) = scene_registry.collision_tris(block.kind) {
+        return aabb_hits_collision_mesh(player_min, player_max, block_pos, block.facing, tris);
+    }
+    let block_min = block_pos.as_vec3();
+    aabb_intersects(player_min, player_max, block_min, block_min + Vec3::ONE)
 }
 
-fn collides(position: Vec3, world: &WorldBlocks, pusher_state: &PusherState) -> bool {
+fn collides(
+    position: Vec3,
+    world: &WorldBlocks,
+    pusher_state: &PusherState,
+    scene_registry: &SceneBlockRegistry,
+) -> bool {
     let (min, max) = player_aabb(position);
 
     let min_block = min.floor().as_ivec3();
@@ -416,7 +467,14 @@ fn collides(position: Vec3, world: &WorldBlocks, pusher_state: &PusherState) -> 
     for x in min_block.x..=max_block.x {
         for y in min_block.y..=max_block.y {
             for z in min_block.z..=max_block.z {
-                if block_has_collision(world, pusher_state, IVec3::new(x, y, z)) {
+                if player_hits_block(
+                    min,
+                    max,
+                    IVec3::new(x, y, z),
+                    world,
+                    pusher_state,
+                    scene_registry,
+                ) {
                     return true;
                 }
             }
@@ -431,15 +489,22 @@ fn can_move_to(
     current_overlap: f32,
     world: &WorldBlocks,
     pusher_state: &PusherState,
+    scene_registry: &SceneBlockRegistry,
 ) -> bool {
-    if !collides(next, world, pusher_state) {
+    if !collides(next, world, pusher_state, scene_registry) {
         return true;
     }
 
-    current_overlap > 0.0 && collision_overlap_score(next, world, pusher_state) < current_overlap
+    current_overlap > 0.0
+        && collision_overlap_score(next, world, pusher_state, scene_registry) < current_overlap
 }
 
-fn collision_overlap_score(position: Vec3, world: &WorldBlocks, pusher_state: &PusherState) -> f32 {
+fn collision_overlap_score(
+    position: Vec3,
+    world: &WorldBlocks,
+    pusher_state: &PusherState,
+    scene_registry: &SceneBlockRegistry,
+) -> f32 {
     let (min, max) = player_aabb(position);
     let min_block = min.floor().as_ivec3();
     let max_block = (max - Vec3::splat(AABB_EPSILON)).floor().as_ivec3();
@@ -449,12 +514,12 @@ fn collision_overlap_score(position: Vec3, world: &WorldBlocks, pusher_state: &P
         for y in min_block.y..=max_block.y {
             for z in min_block.z..=max_block.z {
                 let block_pos = IVec3::new(x, y, z);
-                if !block_has_collision(world, pusher_state, block_pos) {
+                if !player_hits_block(min, max, block_pos, world, pusher_state, scene_registry) {
                     continue;
                 }
 
-                let block_min = block_pos.as_vec3();
-                let block_max = block_min + Vec3::ONE;
+                let (block_min, block_max) =
+                    block_collision_aabb(block_pos, world, pusher_state, scene_registry);
                 let overlap = (max.min(block_max) - min.max(block_min)).max(Vec3::ZERO);
                 score += overlap.x * overlap.y * overlap.z;
             }
@@ -464,28 +529,151 @@ fn collision_overlap_score(position: Vec3, world: &WorldBlocks, pusher_state: &P
     score
 }
 
-fn is_supported(position: Vec3, world: &WorldBlocks, pusher_state: &PusherState) -> bool {
+fn is_supported(
+    position: Vec3,
+    world: &WorldBlocks,
+    pusher_state: &PusherState,
+    scene_registry: &SceneBlockRegistry,
+) -> bool {
     let (min, max) = player_aabb(position);
-    let probe_y = min.y - 0.04;
-    let min_x = min.x.floor() as i32;
-    let max_x = (max.x - AABB_EPSILON).floor() as i32;
-    let min_z = min.z.floor() as i32;
-    let max_z = (max.z - AABB_EPSILON).floor() as i32;
-    let y = probe_y.floor() as i32;
+    let probe_min = Vec3::new(min.x, min.y - 0.04, min.z);
+    let probe_max = Vec3::new(max.x, min.y, max.z);
+    let min_x = probe_min.x.floor() as i32;
+    let max_x = (probe_max.x - AABB_EPSILON).floor() as i32;
+    let min_z = probe_min.z.floor() as i32;
+    let max_z = (probe_max.z - AABB_EPSILON).floor() as i32;
+    let min_y = probe_min.y.floor() as i32;
+    let max_y = (probe_max.y - AABB_EPSILON).floor() as i32;
 
-    if y < 0 {
+    if max_y < 0 {
         return false;
     }
 
     for x in min_x..=max_x {
-        for z in min_z..=max_z {
-            if block_has_collision(world, pusher_state, IVec3::new(x, y, z)) {
-                return true;
+        for y in min_y.max(0)..=max_y {
+            for z in min_z..=max_z {
+                if player_hits_block(
+                    probe_min,
+                    probe_max,
+                    IVec3::new(x, y, z),
+                    world,
+                    pusher_state,
+                    scene_registry,
+                ) {
+                    return true;
+                }
             }
         }
     }
 
     false
+}
+
+/// 碰撞体世界 AABB（网格用顶点外包；否则整格）
+fn block_collision_aabb(
+    block_pos: IVec3,
+    world: &WorldBlocks,
+    pusher_state: &PusherState,
+    scene_registry: &SceneBlockRegistry,
+) -> (Vec3, Vec3) {
+    let full_min = block_pos.as_vec3();
+    let full_max = full_min + Vec3::ONE;
+    if pusher_state
+        .extended_head_positions(world)
+        .contains(&block_pos)
+    {
+        return (full_min, full_max);
+    }
+    let Some(block) = world.blocks.get(&block_pos) else {
+        return (full_min, full_max);
+    };
+    let Some(tris) = scene_registry.collision_tris(block.kind) else {
+        return (full_min, full_max);
+    };
+    let center = grid_to_world(block_pos);
+    let rot = Quat::from_rotation_y(block.facing.yaw());
+    let mut bmin = Vec3::splat(f32::INFINITY);
+    let mut bmax = Vec3::splat(f32::NEG_INFINITY);
+    for tri in tris {
+        for v in tri {
+            let w = center + rot * *v;
+            bmin = bmin.min(w);
+            bmax = bmax.max(w);
+        }
+    }
+    (bmin, bmax)
+}
+
+/// 玩家 AABB 是否碰到局部 collision 网格（含朝向旋转）
+fn aabb_hits_collision_mesh(
+    player_min: Vec3,
+    player_max: Vec3,
+    block_pos: IVec3,
+    facing: crate::game::world::direction::Facing,
+    tris: &[[Vec3; 3]],
+) -> bool {
+    let center = grid_to_world(block_pos);
+    let rot = Quat::from_rotation_y(facing.yaw());
+    for tri in tris {
+        let a = center + rot * tri[0];
+        let b = center + rot * tri[1];
+        let c = center + rot * tri[2];
+        if aabb_intersects_triangle(player_min, player_max, a, b, c) {
+            return true;
+        }
+    }
+    false
+}
+
+/// AABB–三角形相交（分离轴）
+fn aabb_intersects_triangle(amin: Vec3, amax: Vec3, v0: Vec3, v1: Vec3, v2: Vec3) -> bool {
+    let tmin = v0.min(v1).min(v2);
+    let tmax = v0.max(v1).max(v2);
+    if !aabb_intersects(amin, amax, tmin, tmax) {
+        return false;
+    }
+
+    let center = (amin + amax) * 0.5;
+    let extents = (amax - amin) * 0.5;
+    let v0 = v0 - center;
+    let v1 = v1 - center;
+    let v2 = v2 - center;
+    let e0 = v1 - v0;
+    let e1 = v2 - v1;
+    let e2 = v0 - v2;
+
+    let axis_test = |axis: Vec3| -> bool {
+        if axis.length_squared() < 1e-12 {
+            return true;
+        }
+        let p0 = v0.dot(axis);
+        let p1 = v1.dot(axis);
+        let p2 = v2.dot(axis);
+        let r = extents.x * axis.x.abs() + extents.y * axis.y.abs() + extents.z * axis.z.abs();
+        let min_p = p0.min(p1).min(p2);
+        let max_p = p0.max(p1).max(p2);
+        max_p >= -r && min_p <= r
+    };
+
+    // 9 个边叉乘轴
+    for edge in [e0, e1, e2] {
+        if !axis_test(Vec3::new(0.0, -edge.z, edge.y)) {
+            return false;
+        }
+        if !axis_test(Vec3::new(edge.z, 0.0, -edge.x)) {
+            return false;
+        }
+        if !axis_test(Vec3::new(-edge.y, edge.x, 0.0)) {
+            return false;
+        }
+    }
+    // AABB 三轴
+    if !axis_test(Vec3::X) || !axis_test(Vec3::Y) || !axis_test(Vec3::Z) {
+        return false;
+    }
+    // 三角形法线
+    let normal = e0.cross(e1);
+    axis_test(normal)
 }
 
 fn player_aabb(position: Vec3) -> (Vec3, Vec3) {

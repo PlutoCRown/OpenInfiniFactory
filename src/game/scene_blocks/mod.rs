@@ -8,7 +8,7 @@ mod registry;
 #[cfg(all(feature = "native-tools", not(target_arch = "wasm32")))]
 pub mod bake_icons;
 
-pub use glb::{load_scene_glb, SceneGltfHandles};
+pub use glb::{load_collision_triangles, load_scene_glb, SceneGltfHandles};
 pub use load::{load_global_scene_blocks, merge_puzzle_scene_blocks, reload_global_only};
 pub use registry::{SceneBlockPresentation, SceneBlockRegistry};
 

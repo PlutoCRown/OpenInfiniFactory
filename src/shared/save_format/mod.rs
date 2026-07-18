@@ -12,8 +12,9 @@ pub use block_kind::{decode_kind, encode_kind};
 pub use settings::{read_settings, write_settings};
 
 pub const MAGIC: &[u8; 4] = b"OIF\0";
-/// v3：场景段改为字符串 id；系统/工厂段仍为 u8 kind
-pub const VERSION: u16 = 3;
+/// v4：场景段在字符串 id 后可选 facing（与工厂段 flags 同约定）
+pub const VERSION: u16 = 4;
+pub const VERSION_V3: u16 = 3;
 pub const VERSION_V2: u16 = 2;
 pub const VERSION_V1: u16 = 1;
 
@@ -191,7 +192,20 @@ pub fn decode_blocks(bytes: &[u8]) -> Result<SaveBlocksData, SaveFormatError> {
     let version = cursor.read_u16()?;
     let (scene_blocks, system_blocks, factory_blocks, wire_face_panels) = match version {
         VERSION => {
-            let scene_blocks = read_scene_section(&mut cursor)?;
+            let scene_blocks = read_scene_section(&mut cursor, true)?;
+            let system_blocks = read_section(&mut cursor)?;
+            let factory_blocks = read_section(&mut cursor)?;
+            let wire_face_panels = read_panel_section(&mut cursor)?;
+            (
+                scene_blocks,
+                system_blocks,
+                factory_blocks,
+                wire_face_panels,
+            )
+        }
+        VERSION_V3 => {
+            // v3：场景段仅字符串 id，无 facing
+            let scene_blocks = read_scene_section(&mut cursor, false)?;
             let system_blocks = read_section(&mut cursor)?;
             let factory_blocks = read_section(&mut cursor)?;
             let wire_face_panels = read_panel_section(&mut cursor)?;
@@ -250,6 +264,11 @@ fn write_scene_block(out: &mut Vec<u8>, block: &SavedBlock) {
     let bytes = string_id.as_bytes();
     out.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
     out.extend_from_slice(bytes);
+    let has_facing = block.facing.is_some();
+    out.push(has_facing as u8);
+    if let Some(facing) = block.facing {
+        out.push(encode_facing(facing));
+    }
 }
 
 fn scene_string_id(kind: BlockKind) -> String {
@@ -263,27 +282,43 @@ fn scene_string_id(kind: BlockKind) -> String {
     }
 }
 
-fn read_scene_section(cursor: &mut Cursor<'_>) -> Result<Vec<SavedBlock>, SaveFormatError> {
+fn read_scene_section(
+    cursor: &mut Cursor<'_>,
+    with_facing: bool,
+) -> Result<Vec<SavedBlock>, SaveFormatError> {
     let count = cursor.read_u32()? as usize;
     let mut blocks = Vec::with_capacity(count);
     for _ in 0..count {
-        blocks.push(read_scene_block(cursor)?);
+        blocks.push(read_scene_block(cursor, with_facing)?);
     }
     Ok(blocks)
 }
 
-fn read_scene_block(cursor: &mut Cursor<'_>) -> Result<SavedBlock, SaveFormatError> {
+fn read_scene_block(
+    cursor: &mut Cursor<'_>,
+    with_facing: bool,
+) -> Result<SavedBlock, SaveFormatError> {
     let x = cursor.read_i32()?;
     let y = cursor.read_i32()?;
     let z = cursor.read_i32()?;
     let string_id = cursor.read_string()?;
     let kind = resolve_scene_kind(&string_id)?;
+    let facing = if with_facing {
+        let flags = cursor.read_u8()?;
+        if flags & 1 != 0 {
+            Some(decode_facing(cursor.read_u8()?)?)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     Ok(SavedBlock {
         x,
         y,
         z,
         kind,
-        facing: None,
+        facing,
         settings: None,
     })
 }
@@ -413,14 +448,24 @@ mod tests {
     #[test]
     fn blocks_round_trip_preserves_settings_and_facing() {
         let data = SaveBlocksData {
-            scene_blocks: vec![SavedBlock {
-                x: 1,
-                y: 2,
-                z: 3,
-                kind: BlockKind::scene("stone"),
-                facing: None,
-                settings: None,
-            }],
+            scene_blocks: vec![
+                SavedBlock {
+                    x: 1,
+                    y: 2,
+                    z: 3,
+                    kind: BlockKind::scene("stone"),
+                    facing: None,
+                    settings: None,
+                },
+                SavedBlock {
+                    x: 2,
+                    y: 2,
+                    z: 3,
+                    kind: BlockKind::scene("grass"),
+                    facing: Some(Facing::East),
+                    settings: None,
+                },
+            ],
             system_blocks: vec![
                 SavedBlock {
                     x: 4,

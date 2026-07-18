@@ -21,6 +21,8 @@ pub struct SceneBlockDef {
     pub description_key: &'static str,
     pub collision: bool,
     pub connectable: [bool; 6],
+    /// 是否可朝向（放置时 R 旋转，存档持久化 facing）
+    pub directional: bool,
     pub color: ColorSpec,
 }
 
@@ -124,6 +126,7 @@ pub fn ensure_fallback_scene_catalog() {
                     description_key,
                     collision: true,
                     connectable: [true; 6],
+                    directional: false,
                     color: rgb(0.55, 0.55, 0.55),
                 })
                 .expect("fallback scene id unique");

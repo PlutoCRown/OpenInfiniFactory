@@ -1,6 +1,6 @@
 {
   "$schema": "../../../schemas/scene_block.meta.schema.json",
-  "id": "planks",
+  "id": "glass",
   "collision": true,
   "connectable": [
     true,

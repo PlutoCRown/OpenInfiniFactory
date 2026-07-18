@@ -3,10 +3,11 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::glb::load_collision_triangles;
 use super::meta::SceneBlockMetaFile;
 use super::registry::{SceneBlockPresentation, SceneBlockRegistry};
 use crate::game::blocks::{
-    install_scene_catalog, leak_str, rgb, ColorSpec, SceneBlockCatalog, SceneBlockDef,
+    ColorSpec, SceneBlockCatalog, SceneBlockDef, install_scene_catalog, leak_str, rgb,
 };
 use crate::shared::platform;
 
@@ -106,10 +107,10 @@ fn load_one_pack(
         return Err(format!("missing {MODEL_FILE} in {}", dir.display()));
     }
 
-    let text = fs::read_to_string(&meta_path)
-        .map_err(|e| format!("read {}: {e}", meta_path.display()))?;
-    let meta: SceneBlockMetaFile = serde_json::from_str(&text)
-        .map_err(|e| format!("parse {}: {e}", meta_path.display()))?;
+    let text =
+        fs::read_to_string(&meta_path).map_err(|e| format!("read {}: {e}", meta_path.display()))?;
+    let meta: SceneBlockMetaFile =
+        serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", meta_path.display()))?;
 
     if meta.id.is_empty() {
         return Err(format!("{}: id must not be empty", meta_path.display()));
@@ -128,6 +129,7 @@ fn load_one_pack(
         description_key,
         collision: meta.collision,
         connectable: meta.connectable,
+        directional: meta.directional,
         color,
     }) {
         Ok(id) => id,
@@ -142,6 +144,16 @@ fn load_one_pack(
         let path = dir.join(COLLISION_FILE);
         path.is_file().then_some(path)
     };
+    let collision_tris = match &collision_model_path {
+        Some(path) => match load_collision_triangles(path) {
+            Ok(tris) => Some(tris),
+            Err(err) => {
+                bevy::log::error!("scene collision load failed: {err}");
+                None
+            }
+        },
+        None => None,
+    };
     let icon_path = {
         let path = dir.join(ICON_FILE);
         path.is_file().then_some(path)
@@ -152,6 +164,7 @@ fn load_one_pack(
         string_id: meta.id,
         model_path,
         collision_model_path,
+        collision_tris,
         icon_path,
         color,
     });
