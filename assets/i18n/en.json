@@ -357,7 +357,7 @@
   "desc.generator": "Periodically spawns materials",
   "desc.goal": "Defines the material structure required to clear the level",
   "desc.grass": "Grass terrain block for the scene",
-  "desc.short_grass": "Crossed-plane grass with no collision",
+  "desc.short_grass": "X-shaped plane grass with no collision",
   "desc.stone": "Rock terrain block for the scene",
   "desc.dirt": "Dirt terrain block for the scene",
   "desc.quartz": "Quartz block for the scene",

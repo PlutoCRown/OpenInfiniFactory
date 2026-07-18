@@ -32,6 +32,8 @@ const GRAVITY: f32 = 18.0;
 const ONE_BLOCK_JUMP_HEIGHT: f32 = 1.5;
 const DOUBLE_TAP_WINDOW: f32 = 0.28;
 const AABB_EPSILON: f32 = 0.001;
+/// 水平被挡时允许的最大抬升（斜坡/半砖）；整格高墙仍需跳
+const STEP_HEIGHT: f32 = 0.55;
 /// 鼠标视角基础灵敏度，X/Y 轴倍率由设置中的 mouse_sensitivity_x/y 控制。
 const BASE_MOUSE_SENSITIVITY: f32 = 0.0025;
 
@@ -212,6 +214,8 @@ pub fn camera_move(
             &world,
             &pusher_state,
             &scene_registry,
+            true,
+            camera.grounded && !camera.flying,
         );
     }
 
@@ -231,6 +235,8 @@ pub fn camera_move(
                 &world,
                 &pusher_state,
                 &scene_registry,
+                false,
+                false,
             );
             if vertical < 0.0
                 && (transform.translation.y == before_y
@@ -256,6 +262,8 @@ pub fn camera_move(
             &world,
             &pusher_state,
             &scene_registry,
+            false,
+            false,
         );
 
         if transform.translation.y != before.y && camera.velocity_y > 0.0 {
@@ -387,40 +395,104 @@ fn move_with_collision(
     world: &WorldBlocks,
     pusher_state: &PusherState,
     scene_registry: &SceneBlockRegistry,
+    allow_step_up: bool,
+    ground_snap: bool,
 ) {
+    let overlap0 = collision_overlap_score(*position, world, pusher_state, scene_registry);
+
+    // X：可走则走；否则在 STEP_HEIGHT 内二分最小抬升（贴斜面，而非整级蹦）
     let mut next = *position;
     next.x += delta.x;
-    if can_move_to(
-        next,
-        collision_overlap_score(*position, world, pusher_state, scene_registry),
-        world,
-        pusher_state,
-        scene_registry,
-    ) {
+    if can_move_to(next, overlap0, world, pusher_state, scene_registry) {
         position.x = next.x;
+    } else if allow_step_up && delta.x.abs() > AABB_EPSILON {
+        let base_y = position.y;
+        let mut probe = *position;
+        probe.x += delta.x;
+        probe.y = base_y + STEP_HEIGHT;
+        if can_move_to(probe, overlap0, world, pusher_state, scene_registry) {
+            let mut lo = 0.0;
+            let mut hi = STEP_HEIGHT;
+            for _ in 0..12 {
+                let mid = (lo + hi) * 0.5;
+                probe.y = base_y + mid;
+                if can_move_to(probe, overlap0, world, pusher_state, scene_registry) {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            position.x += delta.x;
+            position.y = base_y + hi;
+        }
     }
 
+    let overlap1 = collision_overlap_score(*position, world, pusher_state, scene_registry);
+
+    // Z
     next = *position;
     next.z += delta.z;
-    if can_move_to(
-        next,
-        collision_overlap_score(*position, world, pusher_state, scene_registry),
-        world,
-        pusher_state,
-        scene_registry,
-    ) {
+    if can_move_to(next, overlap1, world, pusher_state, scene_registry) {
         position.z = next.z;
+    } else if allow_step_up && delta.z.abs() > AABB_EPSILON {
+        let base_y = position.y;
+        let mut probe = *position;
+        probe.z += delta.z;
+        probe.y = base_y + STEP_HEIGHT;
+        if can_move_to(probe, overlap1, world, pusher_state, scene_registry) {
+            let mut lo = 0.0;
+            let mut hi = STEP_HEIGHT;
+            for _ in 0..12 {
+                let mid = (lo + hi) * 0.5;
+                probe.y = base_y + mid;
+                if can_move_to(probe, overlap1, world, pusher_state, scene_registry) {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            position.z += delta.z;
+            position.y = base_y + hi;
+        }
     }
 
+    // 贴地：步行着地时把多余抬升收回斜面/地面上，避免一格一格的落差感
+    if ground_snap {
+        let start_y = position.y;
+        let mut probe = *position;
+        probe.y = start_y - STEP_HEIGHT;
+        if collides(*position, world, pusher_state, scene_registry) {
+            // 已陷入则交给 overlap 脱困，不硬拽
+        } else if collides(probe, world, pusher_state, scene_registry)
+            || is_supported(
+                Vec3::new(position.x, start_y - STEP_HEIGHT + 0.02, position.z),
+                world,
+                pusher_state,
+                scene_registry,
+            )
+        {
+            let mut lo = 0.0;
+            let mut hi = STEP_HEIGHT;
+            for _ in 0..12 {
+                let mid = (lo + hi) * 0.5;
+                probe.y = start_y - mid;
+                if collides(probe, world, pusher_state, scene_registry) {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            // lo ≈ 最大不碰撞下沉量；再微抬避免贴面抖动
+            position.y = start_y - lo + AABB_EPSILON * 2.0;
+        }
+    }
+
+    let overlap2 = collision_overlap_score(*position, world, pusher_state, scene_registry);
+
+    // Y（重力 / 飞行竖移）
     next = *position;
     next.y += delta.y;
-    if can_move_to(
-        next,
-        collision_overlap_score(*position, world, pusher_state, scene_registry),
-        world,
-        pusher_state,
-        scene_registry,
-    ) {
+    if can_move_to(next, overlap2, world, pusher_state, scene_registry) {
         position.y = next.y;
     }
 }

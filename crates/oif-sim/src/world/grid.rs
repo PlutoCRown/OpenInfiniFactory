@@ -2,7 +2,9 @@ use glam::{IVec3, Vec3};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::blocks::{AcceptorId, BlockData, BlockId, BlockKind, MaterialKind, PaintColor, StampColor};
+use crate::blocks::{
+    AcceptorId, BlockData, BlockId, BlockKind, MaterialKind, PaintColor, StampColor,
+};
 use crate::world::direction::Facing;
 
 pub const REACH: f32 = 12.0;
@@ -454,8 +456,9 @@ impl WorldBlocks {
                 .retain(|child, att| alive.contains(child) && alive.contains(&att.parent));
             self.factory_attachments
                 .retain(|child, att| alive.contains(child) && alive.contains(&att.parent));
-            self.block_settings
-                .retain(|pos, _| self.blocks.contains_key(pos) || self.system_blocks.contains_key(pos));
+            self.block_settings.retain(|pos, _| {
+                self.blocks.contains_key(pos) || self.system_blocks.contains_key(pos)
+            });
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -976,7 +979,10 @@ impl WorldBlocks {
         {
             return false;
         }
-        if self.material_welds.insert(MaterialWeld::new(block_a.id, block_b.id)) {
+        if self
+            .material_welds
+            .insert(MaterialWeld::new(block_a.id, block_b.id))
+        {
             self.topology_revision = self.topology_revision.wrapping_add(1);
             true
         } else {
@@ -1110,9 +1116,12 @@ impl WorldBlocks {
 
     /// 格上是否为脆弱材料（运动冲突时让出并碎裂）
     pub fn is_fragile_material_at(&self, pos: IVec3) -> bool {
-        self.blocks
-            .get(&pos)
-            .is_some_and(|block| block.kind.material_props().is_some_and(|props| props.fragile))
+        self.blocks.get(&pos).is_some_and(|block| {
+            block
+                .kind
+                .material_props()
+                .is_some_and(|props| props.fragile)
+        })
     }
 
     /// 运动规划时该格是否可让出（空或脆弱材料）
@@ -1324,8 +1333,9 @@ pub fn raycast_blocks(origin: Vec3, dir: Vec3, world: &WorldBlocks) -> Option<Ta
 
     let mut best: Option<(f32, TargetHit)> = None;
 
+    // 无碰撞方块（如面片草）仍可被瞄准删除/取块；玩家物理碰撞另走 has_collision
     for (pos, block) in &world.blocks {
-        if !block.kind.has_collision() || block.kind.is_generated_marker() {
+        if block.kind.is_generated_marker() {
             continue;
         }
 

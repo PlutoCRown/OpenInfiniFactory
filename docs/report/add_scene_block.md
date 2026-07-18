@@ -60,7 +60,7 @@ assets/scene_blocks/<id>/
 
 - 块中心在原点，约占 `[-0.5, 0.5]^3`（与世界格心 `grid_to_world` 对齐）
 - UV：glTF 惯例，**V=0 在贴图上方**
-- 若是标准六面立方体且恰好 24 个顶点 UV，加载器会抽出 `face_uvs`，世界里走带 AO 的立方体网格；非立方体（斜坡、柱、交叉面片）用 GLB 原网格
+- 若是标准六面立方体且恰好 24 个顶点 UV，加载器会抽出 `face_uvs`，世界里走带 AO 的立方体网格；非立方体（斜坡、柱、X 形面片）用 GLB 原网格
 
 ### 贴图与采样
 
@@ -143,7 +143,7 @@ assets/scene_blocks/<id>/
 |----|------|
 | `stone` / `dirt` / `quartz` | 实心立方体，六面可连，整格碰撞 |
 | `grass` | 草方块（地表） |
-| `short_grass` | 交叉面片；无碰撞；六面不可连；MASK + 双面 |
+| `short_grass` | X 形对角面片（MC 风）；无碰撞但可瞄准；六面不可连；MASK + 双面 |
 | `glass` | 透明边框贴图；BLEND；正常碰撞与 connectable |
 | `quartz_slope` | 有朝向；部分面 connectable；带 `collision.glb` |
 | `quartz_pillar` | 非立方体网格；仅上下可连 |

@@ -357,7 +357,7 @@
   "desc.generator": "按设定定时吐出材料",
   "desc.goal": "规定本关要交付的材料结构",
   "desc.grass": "场景用地表草方块",
-  "desc.short_grass": "交叉面片的草，无碰撞",
+  "desc.short_grass": "X 形面片草，无碰撞",
   "desc.stone": "场景用岩石方块",
   "desc.dirt": "场景用泥土方块",
   "desc.quartz": "场景用石英方块",
