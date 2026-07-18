@@ -28,7 +28,8 @@ impl MaterialProps {
     };
 
     pub const STAMP: Self = Self {
-        directional: true,
+        // 朝向由附着面法线表达，不走方块 yaw（否则面片会双重旋转悬空）
+        directional: false,
         fragile: false,
         is_stamp: true,
         connectable: [false; 6],
@@ -95,8 +96,12 @@ mod tests {
     fn stamp_props_block_all_faces() {
         let props = MaterialProps::STAMP;
         assert!(props.is_stamp);
-        assert!(props.directional);
-        assert!(!material_face_connectable(props, Facing::North, IVec3::NEG_Z));
+        assert!(!props.directional);
+        assert!(!material_face_connectable(
+            props,
+            Facing::North,
+            IVec3::NEG_Z
+        ));
     }
 
     #[test]
@@ -111,7 +116,7 @@ mod tests {
     fn stamp_kind_uses_stamp_props() {
         let props = MaterialKind::Stamp.props();
         assert!(props.is_stamp);
-        assert!(props.directional);
+        assert!(!props.directional);
         assert!(!props.fragile);
     }
 }

@@ -9,6 +9,10 @@ pub static BLOCK: BlockImpl<ConverterBlock> = BlockImpl(ConverterBlock);
 mod meta;
 
 impl BlockBehavior for ConverterBlock {
+    fn is_directional(&self) -> bool {
+        true
+    }
+
     fn material_processor(&self) -> Option<MaterialProcessor> {
         Some(MaterialProcessor::Converter)
     }

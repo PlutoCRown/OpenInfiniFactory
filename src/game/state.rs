@@ -162,7 +162,8 @@ pub enum UiPanelId {
     Settings,
     Generator,
     Goal,
-    Labeler,
+    Stamper,
+    Roller,
     Converter,
     Teleport,
     Sign,
@@ -179,7 +180,8 @@ impl UiPanelId {
             Self::Settings
                 | Self::Generator
                 | Self::Goal
-                | Self::Labeler
+                | Self::Stamper
+                | Self::Roller
                 | Self::Converter
                 | Self::Teleport
                 | Self::Sign

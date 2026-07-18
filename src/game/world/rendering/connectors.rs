@@ -4,21 +4,14 @@ use crate::game::blocks::BlockPresent;
 use crate::game::blocks::{BlockData, WeldConnectorBehavior, WireConnectorBehavior};
 use crate::game::world::grid::WorldBlocks;
 
-/// 面标记贴在方块表面的局部 Transform
-pub(crate) fn face_mark_transform(normal: IVec3) -> Transform {
-    let normal_vec = normal.as_vec3();
-    let rotation = if normal.x != 0 {
-        Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)
-    } else if normal.z != 0 {
-        Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)
-    } else {
-        Quat::IDENTITY
-    };
-    Transform {
-        translation: normal_vec * 0.506,
-        rotation,
-        ..default()
-    }
+/// 面标记贴在方块表面：只平移；`surface_outset` 为相对方块表面再外凸的距离
+pub(crate) fn face_mark_transform(normal: IVec3, surface_outset: f32) -> Transform {
+    Transform::from_translation(normal.as_vec3().normalize_or_zero() * (0.5 + surface_outset))
+}
+
+/// 俯视（+Y 向下看）逆时针 90°：把水平法线转到相邻轴向
+pub(crate) fn rotate_y_ccw(normal: IVec3) -> IVec3 {
+    IVec3::new(normal.z, normal.y, -normal.x)
 }
 
 /// 判断方块是否在指定方向接受焊接连接

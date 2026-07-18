@@ -195,7 +195,7 @@ pub(super) fn run_material_paint_phase(world: &mut WorldBlocks) {
         if !connectable {
             continue;
         }
-        let color = world.labeler_settings(pos).color;
+        let color = world.roller_settings(pos).color;
         world.material_paints.insert(face, color);
     }
 }
@@ -285,7 +285,7 @@ pub(super) fn run_material_stamp_phase(world: &mut WorldBlocks) {
             (0, 0, -1) => Facing::North,
             _ => facing,
         };
-        let color = world.labeler_settings(stamper_pos).color;
+        let color = world.stamper_settings(stamper_pos).color;
         world.insert(
             stamper_pos,
             BlockData::new(BlockKind::StampMaterial, stamp_facing),
@@ -300,9 +300,9 @@ pub(super) fn run_material_stamp_phase(world: &mut WorldBlocks) {
                 parent_face_normal: face_normal,
             },
         );
-        // 朝向宿主的面存色，渲染为薄面片
+        // 只画在印花块朝宿主的那一面；渲染时再收进自身格，避免扎进宿主
         world
-            .material_paints
+            .stamp_face_colors
             .insert(MaterialFace::new(stamp.id, -face_normal), color);
     }
 }
@@ -1026,7 +1026,60 @@ mod tests {
         let face = MaterialFace::new(material_id, IVec3::NEG_X);
         assert_eq!(
             world.material_paints.get(&face).copied(),
-            Some(crate::blocks::StampColor::Red)
+            Some(crate::blocks::PaintColor::Red)
+        );
+    }
+
+    #[test]
+    fn roller_paint_survives_full_simulate_turn() {
+        use crate::simulation::core::simulate_turn;
+        use crate::simulation::movement::PusherState;
+        use crate::simulation::pending::PendingGeneratedMaterials;
+        use crate::simulation::signals::SignalNetworkCache;
+        use crate::simulation::structure_state::StructureState;
+        use crate::simulation::structures::MovementInfluenceCache;
+
+        let mut world = WorldBlocks::default();
+        let roller = IVec3::new(0, 1, 0);
+        let material = IVec3::new(1, 1, 0);
+        // 支撑，避免重力先把材料挪开再刷漆
+        world.insert(
+            IVec3::new(1, 0, 0),
+            BlockData::new(BlockKind::Stone, Facing::North),
+        );
+        world.insert(roller, BlockData::new(BlockKind::Roller, Facing::East));
+        place_material(&mut world, material, MaterialKind::Basic);
+        let material_id = world.blocks[&material].id;
+        crate::simulation::markers::refresh_static_generated_markers(&mut world);
+
+        let mut pending = PendingGeneratedMaterials::default();
+        let mut signal_cache = SignalNetworkCache::default();
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut influence = MovementInfluenceCache::default();
+        let mut pusher_state = PusherState::rebuild_from_world(&world);
+
+        simulate_turn(
+            &mut world,
+            &mut pending,
+            &mut signal_cache,
+            1,
+            &mut structures,
+            &mut influence,
+            &mut pusher_state,
+            None,
+            None,
+        );
+
+        let face = MaterialFace::new(material_id, IVec3::NEG_X);
+        assert_eq!(
+            world.material_paints.get(&face).copied(),
+            Some(crate::blocks::PaintColor::Red),
+            "full turn must keep roller paint on the contact face"
+        );
+        assert!(
+            world.is_material_at(material),
+            "supported material must stay in front of roller"
         );
     }
 
@@ -1077,6 +1130,19 @@ mod tests {
         assert_eq!(att.parent, host_id);
         assert_eq!(att.parent_face_normal, IVec3::NEG_X);
         assert!(world.machine_bodies.contains_key(&stamper));
+        assert_eq!(
+            world
+                .stamp_face_colors
+                .get(&MaterialFace::new(stamp.id, IVec3::X))
+                .copied(),
+            Some(world.stamper_settings(stamper).color)
+        );
+        assert!(
+            world
+                .stamp_face_colors
+                .get(&MaterialFace::new(host_id, IVec3::NEG_X))
+                .is_none()
+        );
     }
 
     #[test]

@@ -642,10 +642,10 @@ pub fn normalized_save_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::game::blocks::{BlockKind, Facing, MaterialKind, StampColor};
+    use crate::game::blocks::{BlockKind, Facing, MaterialKind, PaintColor, StampColor};
     use crate::game::world::grid::{
-        ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, LabelerSettings,
-        TeleportSettings,
+        ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, RollerSettings,
+        StamperSettings, TeleportSettings,
     };
 
     #[test]
@@ -683,16 +683,16 @@ mod tests {
                 material: MaterialKind::Copper,
             },
         );
-        world.set_labeler_settings(
+        world.set_stamper_settings(
             stamper,
-            LabelerSettings {
+            StamperSettings {
                 color: StampColor::Blue,
             },
         );
-        world.set_labeler_settings(
+        world.set_roller_settings(
             roller,
-            LabelerSettings {
-                color: StampColor::Yellow,
+            RollerSettings {
+                color: PaintColor::Yellow,
             },
         );
         world.set_converter_settings(
@@ -743,15 +743,15 @@ mod tests {
             }
         );
         assert_eq!(
-            round_trip.labeler_settings(stamper),
-            LabelerSettings {
+            round_trip.stamper_settings(stamper),
+            StamperSettings {
                 color: StampColor::Blue,
             }
         );
         assert_eq!(
-            round_trip.labeler_settings(roller),
-            LabelerSettings {
-                color: StampColor::Yellow,
+            round_trip.roller_settings(roller),
+            RollerSettings {
+                color: PaintColor::Yellow,
             }
         );
         assert_eq!(

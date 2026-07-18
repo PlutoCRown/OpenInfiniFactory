@@ -66,7 +66,7 @@ pub use oif_sim::blocks::{
     BlockShape, ColorSpec, Facing, FactoryBlock, LaserOpticsBehavior, MarkerBehavior,
     MaterialBlock, MaterialDestroyer, MaterialKind, MaterialLabeler, MaterialProcessor,
     MaterialProps, MaterialSource, MovementRule, PersistentLayer, SceneBlock, SignalBehavior,
-    StampColor, SystemBlock, VirtualBlock, WeldBehavior, BLOCK_SIZE, DEFAULT_GENERATOR_PERIOD,
+    StampColor, PaintColor, SystemBlock, VirtualBlock, WeldBehavior, BLOCK_SIZE, DEFAULT_GENERATOR_PERIOD,
 };
 use crate::game::state::UiPanelId;
 

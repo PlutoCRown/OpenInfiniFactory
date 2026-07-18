@@ -3,7 +3,7 @@ use super::RollerBlock;
 use crate::blocks::traits::BlockMeta;
 use crate::blocks::{BlockDefinition, BlockKind, rgb};
 use glam::IVec3;
-use crate::world::grid::{BlockSettings, LabelerSettings};
+use crate::world::grid::{BlockSettings, RollerSettings};
 
 impl BlockMeta for RollerBlock {
     fn id(&self) -> BlockKind {
@@ -22,7 +22,7 @@ impl BlockMeta for RollerBlock {
     }
 
     fn default_settings(&self, _pos: IVec3) -> Option<BlockSettings> {
-        Some(BlockSettings::Labeler(LabelerSettings::default()))
+        Some(BlockSettings::Roller(RollerSettings::default()))
     }
 }
 

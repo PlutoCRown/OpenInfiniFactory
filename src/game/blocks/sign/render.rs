@@ -3,11 +3,11 @@ use super::SignBlock;
 use crate::game::blocks::traits::BlockRender;
 use crate::game::blocks::{BlockModel, BlockModelPart, ModelMaterial, ModelMesh};
 
-// 薄板立于格内靠后，朝向为文字面
+// 竖板贴靠局部 +Z（宿主在背后）；Facing 前向为局部 -Z（文字面朝外）
 const MODEL: &[BlockModelPart] = &[BlockModelPart::new(
-    ModelMesh::Plate,
+    ModelMesh::SignBoard,
     ModelMaterial::Wood,
-    [0.0, 0.05, 0.38],
+    [0.0, 0.0, 0.47],
 )];
 
 impl BlockRender for SignBlock {

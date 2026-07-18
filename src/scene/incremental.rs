@@ -224,9 +224,13 @@ pub fn collect_sim_refresh_positions(
     for face in before
         .material_paints
         .keys()
+        .chain(before.stamp_face_colors.keys())
         .chain(after.material_paints.keys())
+        .chain(after.stamp_face_colors.keys())
     {
-        if before.material_paints.get(face) != after.material_paints.get(face) {
+        if before.material_paints.get(face) != after.material_paints.get(face)
+            || before.stamp_face_colors.get(face) != after.stamp_face_colors.get(face)
+        {
             if let Some(&pos) = id_to_pos.get(&face.block) {
                 refresh.insert(pos);
             }

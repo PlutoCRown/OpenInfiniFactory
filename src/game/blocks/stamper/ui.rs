@@ -4,7 +4,6 @@ use bevy::window::PrimaryWindow;
 
 use super::StamperBlock;
 
-use crate::game::edit_history::{apply_block_settings_with_history, EditHistory};
 use crate::game::block_editing::widgets::{
     position_dropdown_from_trigger, spawn_text_dropdown_list, spawn_text_dropdown_toggle,
 };
@@ -12,7 +11,8 @@ use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::blocks::{BlockKind, StampColor};
+use crate::game::blocks::StampColor;
+use crate::game::edit_history::{apply_block_settings_with_history, EditHistory};
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::access::{i18n, UiMainThread};
@@ -30,21 +30,21 @@ use crate::game::world::grid::WorldBlocks;
 const COLOR_SLOT: u8 = 0;
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LabelerAction {
+pub enum StamperAction {
     ToggleColor,
     SetColor(StampColor),
 }
 
 #[derive(Component, Clone, Copy)]
-pub struct LabelerPanelTitle;
+pub struct StamperPanelTitle;
 
 #[derive(Component, Clone, Copy)]
-struct LabelerColorLabel;
+struct StamperColorLabel;
 
 #[derive(Component, Clone, Copy)]
-struct LabelerColorList;
+struct StamperColorList;
 
-impl UiActionLabel for LabelerAction {
+impl UiActionLabel for StamperAction {
     fn label_key(self) -> &'static str {
         match self {
             Self::ToggleColor | Self::SetColor(_) => "button.next_color",
@@ -54,19 +54,19 @@ impl UiActionLabel for LabelerAction {
 
 impl BlockUi for StamperBlock {
     fn ui_panel(&self) -> Option<UiPanelId> {
-        Some(UiPanelId::Labeler)
+        Some(UiPanelId::Stamper)
     }
 }
 
 pub fn spawn_panel(root: &mut ChildSpawnerCommands) {
     spawn_panel_with_title_marker(
         root,
-        PanelOptions::new(420.0, "labeler.title").closable(),
-        UiPanelBinding(UiPanelId::Labeler),
-        LabelerPanelTitle,
+        PanelOptions::new(420.0, "stamper.title").closable(),
+        UiPanelBinding(UiPanelId::Stamper),
+        StamperPanelTitle,
         |panel| {
             spawn_row(panel, "panel.color", |row| {
-                spawn_text_dropdown_toggle(row, LabelerAction::ToggleColor, LabelerColorLabel);
+                spawn_text_dropdown_toggle(row, StamperAction::ToggleColor, StamperColorLabel);
             });
         },
     );
@@ -75,10 +75,10 @@ pub fn spawn_panel(root: &mut ChildSpawnerCommands) {
 pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
     spawn_text_dropdown_list(
         root,
-        LabelerColorList,
+        StamperColorList,
         StampColor::ALL
             .into_iter()
-            .map(|color| (i18n.t(color.name_key()), LabelerAction::SetColor(color))),
+            .map(|color| (i18n.t(color.name_key()), StamperAction::SetColor(color))),
     );
 }
 
@@ -93,41 +93,10 @@ pub fn register(app: &mut App) {
 
 inventory::submit! {
     BlockPanelHooks {
-        panel: UiPanelId::Labeler,
+        panel: UiPanelId::Stamper,
         spawn_panel: spawn_panel,
         spawn_overlays: spawn_overlays,
         register: register,
-    }
-}
-
-pub fn dispatch_labeler_action(
-    action: LabelerAction,
-    pos: IVec3,
-    world: &mut PlayingWorldParams,
-    solution_state: &mut SolutionState,
-    open_dropdown: &mut OpenBlockPanelDropdown,
-    edit_history: &mut EditHistory,
-) {
-    let mut settings = world.world.labeler_settings(pos);
-
-    let changed = match action {
-        LabelerAction::ToggleColor => {
-            open_dropdown.toggle(UiPanelId::Labeler, COLOR_SLOT);
-            return;
-        }
-        LabelerAction::SetColor(color) => {
-            settings.color = color;
-            open_dropdown.close();
-            true
-        }
-    };
-
-    if changed {
-        apply_block_settings_with_history(edit_history, &mut world.world, pos, |blocks| {
-            blocks.set_labeler_settings(pos, settings);
-        });
-        solution_state.dirty = true;
-        refresh_world_after_edit(world, pos);
     }
 }
 
@@ -165,12 +134,12 @@ fn on_click(
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
     mut world: PlayingWorldParams,
-    actions: Query<&LabelerAction>,
+    actions: Query<&StamperAction>,
 ) {
     if ui_host.modal_open() || !primary_click(&mut click) {
         return;
     }
-    if ui_runtime.active_panel() != Some(UiPanelId::Labeler) {
+    if ui_runtime.active_panel() != Some(UiPanelId::Stamper) {
         return;
     }
     let Ok(action) = actions.get(click.entity).copied() else {
@@ -180,35 +149,39 @@ fn on_click(
     let Some(pos) = ui_runtime.active_block_pos() else {
         return;
     };
-    dispatch_labeler_action(
-        action,
-        pos,
-        &mut world,
-        &mut solution_state,
-        &mut open_dropdown,
-        &mut edit_history,
-    );
+
+    let mut settings = world.world.stamper_settings(pos);
+    let changed = match action {
+        StamperAction::ToggleColor => {
+            open_dropdown.toggle(UiPanelId::Stamper, COLOR_SLOT);
+            return;
+        }
+        StamperAction::SetColor(color) => {
+            settings.color = color;
+            open_dropdown.close();
+            true
+        }
+    };
+
+    if changed {
+        apply_block_settings_with_history(edit_history.as_mut(), &mut world.world, pos, |blocks| {
+            blocks.set_stamper_settings(pos, settings);
+        });
+        solution_state.dirty = true;
+        refresh_world_after_edit(&mut world, pos);
+    }
 }
 
 fn update_title(
     _ui_thread: UiMainThread,
     ui_runtime: Res<UiRuntime>,
-    world: Res<WorldBlocks>,
-    mut titles: Query<&mut Text, With<LabelerPanelTitle>>,
+    mut titles: Query<&mut Text, With<StamperPanelTitle>>,
 ) {
-    if ui_runtime.active_panel() != Some(UiPanelId::Labeler) {
+    if ui_runtime.active_panel() != Some(UiPanelId::Stamper) {
         return;
     }
-    let Some(pos) = ui_runtime.active_block_pos() else {
-        return;
-    };
-    let key = match world.system_blocks.get(&pos).map(|b| b.kind) {
-        Some(BlockKind::Stamper) => "stamper.title",
-        Some(BlockKind::Roller) => "roller.title",
-        _ => "labeler.title",
-    };
     for mut text in &mut titles {
-        text.0 = i18n.t(key);
+        text.0 = i18n.t("stamper.title");
     }
 }
 
@@ -218,15 +191,14 @@ fn update_dropdowns(
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut labels: Query<(&LabelerColorLabel, &mut Text)>,
-    mut lists: Query<(&LabelerColorList, &mut Node, &ComputedNode)>,
-    triggers: Query<(&LabelerAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
+    mut labels: Query<(&StamperColorLabel, &mut Text)>,
+    mut lists: Query<(&StamperColorList, &mut Node, &ComputedNode)>,
+    triggers: Query<(&StamperAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
-    let active_pos = ui_runtime.active_block_pos();
-    let panel = UiPanelId::Labeler;
+    let panel = UiPanelId::Stamper;
 
-    if let Some(pos) = active_pos {
-        let label = i18n.t(world.labeler_settings(pos).color.name_key());
+    if let Some(pos) = ui_runtime.active_block_pos() {
+        let label = i18n.t(world.stamper_settings(pos).color.name_key());
         for (_, mut text) in &mut labels {
             text.0 = label.clone();
         }
@@ -244,7 +216,7 @@ fn update_dropdowns(
             continue;
         }
         let trigger = triggers.iter().find_map(|(action, node, transform)| {
-            (*action == LabelerAction::ToggleColor && !node.is_empty()).then_some((node, transform))
+            (*action == StamperAction::ToggleColor && !node.is_empty()).then_some((node, transform))
         });
         if let Some((trigger_node, transform)) = trigger {
             if let Some((left, top)) =

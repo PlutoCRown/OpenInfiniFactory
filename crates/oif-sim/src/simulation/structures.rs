@@ -931,6 +931,25 @@ pub(super) fn rotate_structure(
         .collect();
     world.material_paints = updated_paints;
 
+    let updated_stamp_colors: HashMap<_, _> = world
+        .stamp_face_colors
+        .iter()
+        .map(|(face, color)| {
+            if structure_ids.contains(&face.block) {
+                (
+                    MaterialFace {
+                        block: face.block,
+                        normal: rotate_offset_y(face.normal, clockwise),
+                    },
+                    *color,
+                )
+            } else {
+                (*face, *color)
+            }
+        })
+        .collect();
+    world.stamp_face_colors = updated_stamp_colors;
+
     // 附着法线随结构绕 Y 旋转
     for att in world.material_attachments.values_mut() {
         if structure_ids.contains(&att.parent) {

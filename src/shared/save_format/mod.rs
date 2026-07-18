@@ -306,7 +306,7 @@ mod tests {
     use super::*;
     use crate::game::blocks::{BlockData, Facing, MaterialKind, StampColor};
     use crate::game::world::grid::{
-        ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, LabelerSettings,
+        ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, StamperSettings,
         TeleportSettings,
     };
 
@@ -385,7 +385,7 @@ mod tests {
     }
 
     #[test]
-    fn labeler_settings_round_trip() {
+    fn stamper_settings_round_trip() {
         let data = SaveBlocksData {
             system_blocks: vec![SavedBlock {
                 x: 0,
@@ -393,7 +393,7 @@ mod tests {
                 z: 0,
                 kind: BlockKind::Stamper,
                 facing: Some(Facing::West),
-                settings: Some(BlockSettings::Labeler(LabelerSettings {
+                settings: Some(BlockSettings::Stamper(StamperSettings {
                     color: StampColor::Blue,
                 })),
             }],

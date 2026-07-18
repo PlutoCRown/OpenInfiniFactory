@@ -261,7 +261,10 @@ pub fn face_panel_diff(
     deltas
 }
 
-pub fn weld_diff(before: &[MaterialWeld], after: &[MaterialWeld]) -> (Vec<MaterialWeld>, Vec<MaterialWeld>) {
+pub fn weld_diff(
+    before: &[MaterialWeld],
+    after: &[MaterialWeld],
+) -> (Vec<MaterialWeld>, Vec<MaterialWeld>) {
     let before_set: HashSet<_> = before.iter().copied().collect();
     let after_set: HashSet<_> = after.iter().copied().collect();
     let add = after
@@ -277,7 +280,9 @@ pub fn weld_diff(before: &[MaterialWeld], after: &[MaterialWeld]) -> (Vec<Materi
     (add, remove)
 }
 
-pub fn block_ids_from_snapshots(snapshots: impl Iterator<Item = Option<CellSnapshot>>) -> HashSet<BlockId> {
+pub fn block_ids_from_snapshots(
+    snapshots: impl Iterator<Item = Option<CellSnapshot>>,
+) -> HashSet<BlockId> {
     snapshots
         .flatten()
         .map(|snap| snap.block.id)
@@ -394,9 +399,21 @@ fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<Cel
     let removed_factory = world.blocks.remove(&pos);
     if let Some(block) = removed_factory {
         if !block.id.is_none() {
-            world.material_paints.retain(|face, _| face.block != block.id);
+            world
+                .material_paints
+                .retain(|face, _| face.block != block.id);
+            if let Some(att) = world.material_attachments.remove(&block.id) {
+                world
+                    .stamp_face_colors
+                    .remove(&crate::game::world::grid::MaterialFace::new(
+                        att.parent,
+                        att.parent_face_normal,
+                    ));
+            }
+            world
+                .stamp_face_colors
+                .retain(|face, _| face.block != block.id);
             world.wire_face_panels.retain(|face| face.block != block.id);
-            world.material_attachments.remove(&block.id);
             world.factory_attachments.remove(&block.id);
             let factory_children: Vec<_> = world
                 .factory_attachments

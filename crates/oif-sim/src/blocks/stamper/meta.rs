@@ -3,7 +3,7 @@ use super::StamperBlock;
 use crate::blocks::traits::BlockMeta;
 use crate::blocks::{BlockDefinition, BlockKind, rgb};
 use glam::IVec3;
-use crate::world::grid::{BlockSettings, LabelerSettings};
+use crate::world::grid::{BlockSettings, StamperSettings};
 
 impl BlockMeta for StamperBlock {
     fn id(&self) -> BlockKind {
@@ -22,7 +22,7 @@ impl BlockMeta for StamperBlock {
     }
 
     fn default_settings(&self, _pos: IVec3) -> Option<BlockSettings> {
-        Some(BlockSettings::Labeler(LabelerSettings::default()))
+        Some(BlockSettings::Stamper(StamperSettings::default()))
     }
 }
 

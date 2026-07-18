@@ -3,23 +3,24 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
+use crate::game::blocks::BlockKind;
 use crate::game::player::controller::FlyCamera;
 use crate::game::simulation::structure_state::{
-    material_structure, query_factory_structure, StructureFreedom, StructureKind, StructureState,
+    StructureFreedom, StructureKind, StructureState, material_structure, query_factory_structure,
 };
 use crate::game::state::{
     BuilderMode, EditGestureKind, GameMode, GameSettings, PlacementState, PlayingUiState,
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{InventoryItems, UiRuntime};
-use crate::game::blocks::BlockKind;
 use crate::game::world::grid::{
-    grid_to_world, raycast_blocks, raycast_edit_drag_grid, TargetHit, WorldBlocks,
+    TargetHit, WorldBlocks, grid_to_world, raycast_blocks, raycast_edit_drag_grid,
 };
 use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
-    block_face_highlight_transform, despawn_edit_previews, face_mark_transform, spawn_block_preview,
     AimFaceHighlight, EditPreview, HoverMarker, HoverStructureBounds, WorldRenderAssets,
+    block_face_highlight_transform, despawn_edit_previews, face_mark_transform,
+    spawn_block_preview,
 };
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
@@ -185,10 +186,10 @@ pub fn update_hover(
                     .get(&target.pos)
                     .is_some_and(|block| block.kind == BlockKind::Wire)
                 {
-                    let mut transform = face_mark_transform(target.normal);
+                    let mut transform = face_mark_transform(target.normal, 0.01);
                     transform.translation += grid_to_world(target.pos);
                     preview_deps.commands.spawn((
-                        Mesh3d(render_assets.face_mark.clone()),
+                        Mesh3d(render_assets.face_mark_mesh(target.normal)),
                         MeshMaterial3d(render_assets.light_panel_material.clone()),
                         transform,
                         EditPreview,

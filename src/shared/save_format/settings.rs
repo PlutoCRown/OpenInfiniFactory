@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 
-use crate::game::blocks::{BlockKind, MaterialKind, StampColor};
+use crate::game::blocks::{BlockKind, MaterialKind, PaintColor, StampColor};
 use crate::game::world::grid::{
     BlockSettings, ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, GoalSettings,
-    LabelerSettings, SignDisplay, SignSettings, TeleportSettings,
+    RollerSettings, SignDisplay, SignSettings, StamperSettings, TeleportSettings,
 };
 
 use super::Cursor;
@@ -13,9 +13,8 @@ pub fn write_settings(out: &mut Vec<u8>, kind: BlockKind, settings: &BlockSettin
     match (kind, settings) {
         (BlockKind::Generator, BlockSettings::Generator(value)) => write_generator(out, *value),
         (BlockKind::Goal, BlockSettings::Goal(value)) => write_goal(out, *value),
-        (BlockKind::Stamper | BlockKind::Roller, BlockSettings::Labeler(value)) => {
-            write_labeler(out, *value)
-        }
+        (BlockKind::Stamper, BlockSettings::Stamper(value)) => write_stamper(out, *value),
+        (BlockKind::Roller, BlockSettings::Roller(value)) => write_roller(out, *value),
         (BlockKind::Converter, BlockSettings::Converter(value)) => write_converter(out, *value),
         (
             BlockKind::TeleportEntrance | BlockKind::TeleportExit,
@@ -33,7 +32,8 @@ pub fn read_settings(
     Ok(match kind {
         BlockKind::Generator => BlockSettings::Generator(read_generator(cursor)?),
         BlockKind::Goal => BlockSettings::Goal(read_goal(cursor)?),
-        BlockKind::Stamper | BlockKind::Roller => BlockSettings::Labeler(read_labeler(cursor)?),
+        BlockKind::Stamper => BlockSettings::Stamper(read_stamper(cursor)?),
+        BlockKind::Roller => BlockSettings::Roller(read_roller(cursor)?),
         BlockKind::Converter => BlockSettings::Converter(read_converter(cursor)?),
         BlockKind::TeleportEntrance | BlockKind::TeleportExit => {
             BlockSettings::Teleport(read_teleport(cursor)?)
@@ -101,13 +101,23 @@ fn read_goal(cursor: &mut Cursor<'_>) -> Result<GoalSettings, SaveFormatError> {
     })
 }
 
-fn write_labeler(out: &mut Vec<u8>, settings: LabelerSettings) {
+fn write_stamper(out: &mut Vec<u8>, settings: StamperSettings) {
     out.push(encode_stamp_color(settings.color));
 }
 
-fn read_labeler(cursor: &mut Cursor<'_>) -> Result<LabelerSettings, SaveFormatError> {
-    Ok(LabelerSettings {
+fn read_stamper(cursor: &mut Cursor<'_>) -> Result<StamperSettings, SaveFormatError> {
+    Ok(StamperSettings {
         color: decode_stamp_color(cursor.read_u8()?)?,
+    })
+}
+
+fn write_roller(out: &mut Vec<u8>, settings: RollerSettings) {
+    out.push(encode_paint_color(settings.color));
+}
+
+fn read_roller(cursor: &mut Cursor<'_>) -> Result<RollerSettings, SaveFormatError> {
+    Ok(RollerSettings {
+        color: decode_paint_color(cursor.read_u8()?)?,
     })
 }
 
@@ -247,6 +257,25 @@ fn decode_stamp_color(value: u8) -> Result<StampColor, SaveFormatError> {
         1 => StampColor::Green,
         2 => StampColor::Blue,
         3 => StampColor::Yellow,
+        _ => return Err(SaveFormatError::InvalidSettings),
+    })
+}
+
+fn encode_paint_color(color: PaintColor) -> u8 {
+    match color {
+        PaintColor::Red => 0,
+        PaintColor::Green => 1,
+        PaintColor::Blue => 2,
+        PaintColor::Yellow => 3,
+    }
+}
+
+fn decode_paint_color(value: u8) -> Result<PaintColor, SaveFormatError> {
+    Ok(match value {
+        0 => PaintColor::Red,
+        1 => PaintColor::Green,
+        2 => PaintColor::Blue,
+        3 => PaintColor::Yellow,
         _ => return Err(SaveFormatError::InvalidSettings),
     })
 }

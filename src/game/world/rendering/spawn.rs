@@ -6,7 +6,7 @@ use super::components::{
     FactoryDebugOverlay, PendingGeneratedPreview,
 };
 use super::connectors::{
-    face_mark_transform, local_connector_offset, signal_neighbor_offsets,
+    face_mark_transform, local_connector_offset, rotate_y_ccw, signal_neighbor_offsets,
     weld_neighbor_connects_to, wire_connects_to,
 };
 use super::scene_mesh::scene_block_mesh;
@@ -43,6 +43,15 @@ fn render_rotation(data: BlockData, facing: crate::game::world::direction::Facin
         Quat::from_rotation_y(facing.yaw())
     } else {
         Quat::IDENTITY
+    }
+}
+
+/// 世界法线 → 方块局部法线（有向块的面片挂在已 yaw 的实体下）
+fn face_mark_local_normal(data: BlockData, world_normal: IVec3) -> IVec3 {
+    if data.kind.is_directional() {
+        data.facing.inverse_rotate_offset(world_normal)
+    } else {
+        world_normal
     }
 }
 
@@ -512,9 +521,9 @@ pub(super) fn spawn_block_model(
                         assets.light_panel_material.clone()
                     };
                     let mut child = parent.spawn((
-                        Mesh3d(assets.face_mark.clone()),
+                        Mesh3d(assets.face_mark_mesh(face.normal)),
                         MeshMaterial3d(panel_material),
-                        face_mark_transform(face.normal),
+                        face_mark_transform(face.normal, 0.01),
                     ));
                     if let Some((_, icon_layer)) = icon_render {
                         child.insert((icon_layer.clone(), BlockIconRenderEntity));
@@ -529,10 +538,28 @@ pub(super) fn spawn_block_model(
                 .iter()
                 .filter(|(face, _)| face.block == data.id)
             {
+                // 与印花一致：俯视逆时针 90°，画在敞露侧，避免夹在滚刷机缝里看不见
+                let local_normal = rotate_y_ccw(face_mark_local_normal(data, face.normal));
                 let mut child = parent.spawn((
-                    Mesh3d(assets.face_mark.clone()),
+                    Mesh3d(assets.face_mark_mesh(local_normal)),
                     MeshMaterial3d(assets.face_mark_material(*color)),
-                    face_mark_transform(face.normal),
+                    face_mark_transform(local_normal, 0.05),
+                ));
+                if let Some((_, icon_layer)) = icon_render {
+                    child.insert((icon_layer.clone(), BlockIconRenderEntity));
+                }
+            }
+            for (face, color) in world
+                .stamp_face_colors
+                .iter()
+                .filter(|(face, _)| face.block == data.id)
+            {
+                // 印花：俯视逆时针 90°；沿法线收回自身格 0.1，避免扎进宿主闪烁
+                let local_normal = rotate_y_ccw(face_mark_local_normal(data, face.normal));
+                let mut child = parent.spawn((
+                    Mesh3d(assets.face_mark_mesh(local_normal)),
+                    MeshMaterial3d(assets.stamp_face_material(*color)),
+                    face_mark_transform(local_normal, -0.1),
                 ));
                 if let Some((_, icon_layer)) = icon_render {
                     child.insert((icon_layer.clone(), BlockIconRenderEntity));

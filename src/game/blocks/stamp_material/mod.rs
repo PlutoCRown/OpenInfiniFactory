@@ -11,7 +11,7 @@ pub static BLOCK: BlockImpl<StampMaterial> = BlockImpl(StampMaterial);
 
 impl BlockRender for StampMaterial {
     fn model(&self) -> BlockModel {
-        // 无实体立方体：薄面片由 spawn 按附着法线+油漆色生成
+        // 无实体立方体：面片由 stamp_face_colors 挂在印花/宿主表面上
         BlockModel::PartsOnly(&[])
     }
 

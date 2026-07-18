@@ -6,7 +6,7 @@ pub mod simulation;
 pub mod world;
 
 pub use blocks::{
-    BlockData, BlockId, BlockKind, MaterialKind, MaterialProps, StampColor,
+    BlockData, BlockId, BlockKind, MaterialKind, MaterialProps, PaintColor, StampColor,
 };
 pub use session::{SimSession, SimulationControl, SimulationDebugLog};
 pub use simulation::core::{prepare_upcoming_generation, simulate_turn, TurnOutput};

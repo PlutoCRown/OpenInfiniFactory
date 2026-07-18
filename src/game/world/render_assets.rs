@@ -4,11 +4,11 @@ use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
+use crate::game::blocks::BlockPresent;
 use crate::game::blocks::ColorSpecExt;
 use crate::game::blocks::pusher::texture;
-use crate::game::blocks::BlockPresent;
 use crate::game::blocks::{
-    all_blocks, BlockKind, BlockShape, ModelMaterial, ModelMesh, StampColor, BLOCK_SIZE,
+    BLOCK_SIZE, BlockKind, BlockShape, ModelMaterial, ModelMesh, PaintColor, StampColor, all_blocks,
 };
 
 #[derive(Resource, Clone)]
@@ -16,7 +16,9 @@ pub struct WorldRenderAssets {
     pub(crate) block: Handle<Mesh>,
     node: Handle<Mesh>,
     wire_node: Handle<Mesh>,
-    pub(crate) face_mark: Handle<Mesh>,
+    pub(crate) face_mark_x: Handle<Mesh>,
+    pub(crate) face_mark_y: Handle<Mesh>,
+    pub(crate) face_mark_z: Handle<Mesh>,
     pub(crate) weld_spark: Handle<Mesh>,
     connector_x: Handle<Mesh>,
     connector_y: Handle<Mesh>,
@@ -32,6 +34,7 @@ pub struct WorldRenderAssets {
     part_medium: Handle<Mesh>,
     part_small: Handle<Mesh>,
     part_plate: Handle<Mesh>,
+    part_sign_board: Handle<Mesh>,
     part_rotator_base: Handle<Mesh>,
     part_rotator_disk: Handle<Mesh>,
     part_rotator_ring: Handle<Mesh>,
@@ -47,7 +50,8 @@ pub struct WorldRenderAssets {
     block_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     preview_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     scene_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
-    face_mark_materials: HashMap<StampColor, Handle<StandardMaterial>>,
+    face_mark_materials: HashMap<PaintColor, Handle<StandardMaterial>>,
+    stamp_face_materials: HashMap<StampColor, Handle<StandardMaterial>>,
     /// 灯面板未通电材质
     pub(crate) light_panel_material: Handle<StandardMaterial>,
     /// 灯面板通电发光材质
@@ -122,15 +126,31 @@ impl WorldRenderAssets {
                 })
             })
             .collect();
-        let face_mark_materials = StampColor::ALL
+        let face_mark_materials = PaintColor::ALL
             .into_iter()
             .map(|color| {
                 (
                     color,
                     materials.add(StandardMaterial {
-                        base_color: color.color().color().with_alpha(0.82),
-                        alpha_mode: AlphaMode::Blend,
+                        base_color: color.color().color(),
+                        emissive: color.color().color().to_linear() * 0.35,
                         unlit: true,
+                        cull_mode: None,
+                        ..default()
+                    }),
+                )
+            })
+            .collect();
+        let stamp_face_materials = StampColor::ALL
+            .into_iter()
+            .map(|color| {
+                (
+                    color,
+                    materials.add(StandardMaterial {
+                        base_color: color.color().color(),
+                        emissive: color.color().color().to_linear() * 0.35,
+                        unlit: true,
+                        cull_mode: None,
                         ..default()
                     }),
                 )
@@ -259,7 +279,10 @@ impl WorldRenderAssets {
                 BLOCK_SIZE * 0.304,
                 BLOCK_SIZE * 0.304,
             )),
-            face_mark: meshes.add(Cuboid::new(0.72, 0.012, 0.72)),
+            // 三轴各一块薄片，spawn 时按法线选用，不旋转
+            face_mark_x: meshes.add(Cuboid::new(0.02, 0.78, 0.78)),
+            face_mark_y: meshes.add(Cuboid::new(0.78, 0.02, 0.78)),
+            face_mark_z: meshes.add(Cuboid::new(0.78, 0.78, 0.02)),
             weld_spark: meshes.add(Cuboid::new(0.24, 0.24, 0.24)),
             connector_x: meshes.add(Cuboid::new(0.55, 0.10, 0.10)),
             connector_y: meshes.add(Cuboid::new(0.10, 0.55, 0.10)),
@@ -275,6 +298,8 @@ impl WorldRenderAssets {
             part_medium: meshes.add(Cuboid::new(0.44, 0.20, 0.44)),
             part_small: meshes.add(Cuboid::new(0.22, 0.22, 0.22)),
             part_plate: meshes.add(Cuboid::new(0.78, 0.06, 0.78)),
+            // 告示竖板：薄在 Z，大面朝 ±Z（局部 +Z 贴宿主）
+            part_sign_board: meshes.add(Cuboid::new(0.78, 0.72, 0.06)),
             part_rotator_base: meshes.add(Cuboid::new(1.0, 0.80, 1.0)),
             part_rotator_disk: meshes.add(Cylinder::new(0.40, 0.20).mesh().resolution(48)),
             part_rotator_ring: meshes.add(rotator_ring_mesh(0.50, 0.40, 0.20, 64)),
@@ -305,15 +330,18 @@ impl WorldRenderAssets {
             preview_materials,
             scene_materials: scene_block_materials,
             face_mark_materials,
+            stamp_face_materials,
             light_panel_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(0.55, 0.58, 0.62),
                 unlit: true,
+                cull_mode: None,
                 ..default()
             }),
             light_panel_lit_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.92, 0.45),
                 emissive: Color::srgb(0.55, 0.42, 0.08).into(),
                 unlit: true,
+                cull_mode: None,
                 ..default()
             }),
             model_materials,
@@ -439,8 +467,25 @@ impl WorldRenderAssets {
         }
     }
 
-    pub(crate) fn face_mark_material(&self, color: StampColor) -> Handle<StandardMaterial> {
+    pub(crate) fn face_mark_mesh(&self, normal: IVec3) -> Handle<Mesh> {
+        if normal.x != 0 {
+            self.face_mark_x.clone()
+        } else if normal.y != 0 {
+            self.face_mark_y.clone()
+        } else {
+            self.face_mark_z.clone()
+        }
+    }
+
+    pub(crate) fn face_mark_material(&self, color: PaintColor) -> Handle<StandardMaterial> {
         self.face_mark_materials
+            .get(&color)
+            .expect("every paint color has a material")
+            .clone()
+    }
+
+    pub(crate) fn stamp_face_material(&self, color: StampColor) -> Handle<StandardMaterial> {
+        self.stamp_face_materials
             .get(&color)
             .expect("every stamp color has a material")
             .clone()
@@ -456,6 +501,7 @@ impl WorldRenderAssets {
             ModelMesh::Medium => self.part_medium.clone(),
             ModelMesh::Small => self.part_small.clone(),
             ModelMesh::Plate => self.part_plate.clone(),
+            ModelMesh::SignBoard => self.part_sign_board.clone(),
             ModelMesh::RotatorBase => self.part_rotator_base.clone(),
             ModelMesh::RotatorDisk => self.part_rotator_disk.clone(),
             ModelMesh::RotatorRing => self.part_rotator_ring.clone(),

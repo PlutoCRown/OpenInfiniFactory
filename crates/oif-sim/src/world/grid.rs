@@ -2,7 +2,7 @@ use glam::{IVec3, Vec3};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::blocks::{AcceptorId, BlockData, BlockId, BlockKind, MaterialKind, StampColor};
+use crate::blocks::{AcceptorId, BlockData, BlockId, BlockKind, MaterialKind, PaintColor, StampColor};
 use crate::world::direction::Facing;
 
 pub const REACH: f32 = 12.0;
@@ -26,7 +26,9 @@ pub struct WorldBlocks {
     pub machine_bodies: HashMap<IVec3, BlockData>,
     pub material_welds: HashSet<MaterialWeld>,
     /// 材料面装饰漆：按 BlockId+法线键控，移动无需改写
-    pub material_paints: HashMap<MaterialFace, StampColor>,
+    pub material_paints: HashMap<MaterialFace, PaintColor>,
+    /// 印花块朝向宿主面的着色（与滚刷漆分离；后期印花会改成薄模型）
+    pub stamp_face_colors: HashMap<MaterialFace, StampColor>,
     /// 印花占格附着：子 BlockId → (父 BlockId, 父面法线)
     pub material_attachments: HashMap<BlockId, MaterialAttachment>,
     /// 告示等工厂占格附着：子工厂 BlockId → (父 BlockId, 父面法线)
@@ -66,7 +68,8 @@ pub struct StoredAcceptorStructure {
 pub enum BlockSettings {
     Generator(GeneratorSettings),
     Goal(GoalSettings),
-    Labeler(LabelerSettings),
+    Stamper(StamperSettings),
+    Roller(RollerSettings),
     Converter(ConverterSettings),
     Teleport(TeleportSettings),
     Sign(SignSettings),
@@ -78,7 +81,8 @@ impl BlockSettings {
             (self, other),
             (Self::Generator(_), Self::Generator(_))
                 | (Self::Goal(_), Self::Goal(_))
-                | (Self::Labeler(_), Self::Labeler(_))
+                | (Self::Stamper(_), Self::Stamper(_))
+                | (Self::Roller(_), Self::Roller(_))
                 | (Self::Converter(_), Self::Converter(_))
                 | (Self::Teleport(_), Self::Teleport(_))
                 | (Self::Sign(_), Self::Sign(_))
@@ -127,8 +131,13 @@ pub struct GoalSettings {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct LabelerSettings {
+pub struct StamperSettings {
     pub color: StampColor,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct RollerSettings {
+    pub color: PaintColor,
 }
 
 /// 告示牌展示图标：材料或印花色（与文本互斥）
@@ -183,10 +192,18 @@ impl TeleportSettings {
     }
 }
 
-impl Default for LabelerSettings {
+impl Default for StamperSettings {
     fn default() -> Self {
         Self {
             color: StampColor::Red,
+        }
+    }
+}
+
+impl Default for RollerSettings {
+    fn default() -> Self {
+        Self {
+            color: PaintColor::Red,
         }
     }
 }
@@ -307,8 +324,13 @@ impl WorldBlocks {
             if !id.is_none() {
                 self.material_welds.retain(|weld| !weld.contains(id));
                 self.material_paints.retain(|face, _| face.block != id);
+                // 印花色画在宿主面上：拆子印花时清宿主对应面
+                if let Some(att) = self.material_attachments.remove(&id) {
+                    self.stamp_face_colors
+                        .remove(&MaterialFace::new(att.parent, att.parent_face_normal));
+                }
+                self.stamp_face_colors.retain(|face, _| face.block != id);
                 self.wire_face_panels.retain(|face| face.block != id);
-                self.material_attachments.remove(&id);
                 self.factory_attachments.remove(&id);
                 // 宿主销毁时一并拆掉附着子块（印花材料 / 告示工厂）
                 let material_children: Vec<BlockId> = self
@@ -321,6 +343,7 @@ impl WorldBlocks {
                     self.material_attachments.remove(&child_id);
                     self.material_paints
                         .retain(|face, _| face.block != child_id);
+                    // 宿主面色已由上面 retain(face.block != id) 清掉
                     if let Some(child_pos) = self
                         .blocks
                         .iter()
@@ -383,6 +406,7 @@ impl WorldBlocks {
             || !self.machine_bodies.is_empty()
             || !self.acceptor_structures.is_empty()
             || !self.material_paints.is_empty()
+            || !self.stamp_face_colors.is_empty()
             || !self.material_attachments.is_empty()
             || !self.factory_attachments.is_empty()
             || !self.wire_face_panels.is_empty()
@@ -392,6 +416,7 @@ impl WorldBlocks {
             self.machine_bodies.clear();
             self.material_welds.clear();
             self.material_paints.clear();
+            self.stamp_face_colors.clear();
             self.material_attachments.clear();
             self.factory_attachments.clear();
             self.wire_face_panels.clear();
@@ -411,8 +436,20 @@ impl WorldBlocks {
                 .retain(|weld| alive.contains(&weld.a) && alive.contains(&weld.b));
             self.material_paints
                 .retain(|face, _| alive.contains(&face.block));
+            self.stamp_face_colors
+                .retain(|face, _| alive.contains(&face.block));
             self.wire_face_panels
                 .retain(|face| alive.contains(&face.block));
+            // 子印花被滤掉时，清掉仍存活宿主上的印花色
+            let orphan_stamp_faces: Vec<MaterialFace> = self
+                .material_attachments
+                .iter()
+                .filter(|(child, _)| !alive.contains(child))
+                .map(|(_, att)| MaterialFace::new(att.parent, att.parent_face_normal))
+                .collect();
+            for face in orphan_stamp_faces {
+                self.stamp_face_colors.remove(&face);
+            }
             self.material_attachments
                 .retain(|child, att| alive.contains(child) && alive.contains(&att.parent));
             self.factory_attachments
@@ -736,15 +773,26 @@ impl WorldBlocks {
         self.set_block_settings(pos, BlockSettings::Goal(settings));
     }
 
-    pub fn labeler_settings(&self, pos: IVec3) -> LabelerSettings {
+    pub fn stamper_settings(&self, pos: IVec3) -> StamperSettings {
         match self.block_settings.get(&pos) {
-            Some(BlockSettings::Labeler(settings)) => *settings,
-            _ => LabelerSettings::default(),
+            Some(BlockSettings::Stamper(settings)) => *settings,
+            _ => StamperSettings::default(),
         }
     }
 
-    pub fn set_labeler_settings(&mut self, pos: IVec3, settings: LabelerSettings) {
-        self.set_block_settings(pos, BlockSettings::Labeler(settings));
+    pub fn set_stamper_settings(&mut self, pos: IVec3, settings: StamperSettings) {
+        self.set_block_settings(pos, BlockSettings::Stamper(settings));
+    }
+
+    pub fn roller_settings(&self, pos: IVec3) -> RollerSettings {
+        match self.block_settings.get(&pos) {
+            Some(BlockSettings::Roller(settings)) => *settings,
+            _ => RollerSettings::default(),
+        }
+    }
+
+    pub fn set_roller_settings(&mut self, pos: IVec3, settings: RollerSettings) {
+        self.set_block_settings(pos, BlockSettings::Roller(settings));
     }
 
     pub fn converter_settings(&self, pos: IVec3) -> ConverterSettings {

@@ -519,6 +519,38 @@ impl StampColor {
     }
 }
 
+/// 滚刷装饰漆颜色（后期会换成 2D 贴图选型；与印花色类型分离）
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub enum PaintColor {
+    #[default]
+    Red,
+    Green,
+    Blue,
+    Yellow,
+}
+
+impl PaintColor {
+    pub const ALL: [Self; 4] = [Self::Red, Self::Green, Self::Blue, Self::Yellow];
+
+    pub fn name_key(self) -> &'static str {
+        match self {
+            Self::Red => "paint_color.red",
+            Self::Green => "paint_color.green",
+            Self::Blue => "paint_color.blue",
+            Self::Yellow => "paint_color.yellow",
+        }
+    }
+
+    pub fn color(self) -> ColorSpec {
+        match self {
+            Self::Red => rgb(0.95, 0.12, 0.10),
+            Self::Green => rgb(0.20, 0.82, 0.28),
+            Self::Blue => rgb(0.18, 0.42, 0.95),
+            Self::Yellow => rgb(1.0, 0.84, 0.18),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum BlockKind {
     Platform,

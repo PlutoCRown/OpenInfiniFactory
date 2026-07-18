@@ -13,6 +13,9 @@ const MODEL: &[BlockModelPart] = &[
         [-0.42, 0.38, -0.40],
     ),
     BlockModelPart::new(ModelMesh::Small, ModelMaterial::Signal, [0.42, 0.38, -0.40]),
+    // 工作端刷头：朝局部 -Z（Facing 前向）
+    BlockModelPart::new(ModelMesh::Plate, ModelMaterial::Belt, [0.0, 0.38, -0.54])
+        .scaled([0.70, 0.55, 0.35]),
 ];
 
 impl BlockRender for RollerBlock {
