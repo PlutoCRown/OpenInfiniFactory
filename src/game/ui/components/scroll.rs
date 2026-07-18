@@ -66,8 +66,14 @@ pub fn update_scroll_containers(
     mut mouse_wheel: MessageReader<MouseWheel>,
     windows: Query<&Window, With<PrimaryWindow>>,
     ui_scale: Res<UiScale>,
-    mut containers: Query<(&mut ScrollContainer, &mut Node, &Children, &ComputedNode)>,
-    mut contents: Query<(&mut Node, &ComputedNode), With<ScrollContent>>,
+    mut containers: Query<
+        (&mut ScrollContainer, &mut Node, &Children, &ComputedNode),
+        Without<ScrollContent>,
+    >,
+    mut contents: Query<
+        (&mut Node, &ComputedNode),
+        (With<ScrollContent>, Without<ScrollContainer>),
+    >,
 ) {
     let wheel_delta: f32 = mouse_wheel.read().map(|event| event.y).sum();
     let scale = ui_scale.0.max(0.01);

@@ -16,7 +16,7 @@ use crate::game::blocks::MaterialKind;
 use crate::game::edit_history::{apply_block_settings_with_history, EditHistory};
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
-use crate::game::ui::access::{i18n, UiMainThread};
+use crate::game::ui::access::{i18n, ui, UiMainThread};
 use crate::game::ui::components::{
     default_button_size, localized_text, spawn_panel as spawn_ui_panel, text, transparent_node,
     PanelOptions,
@@ -25,7 +25,6 @@ use crate::game::ui::core::host::UiHost;
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::core::text_prompt::{TextPromptProps, TextPromptResult};
-use crate::game::ui::access::ui;
 use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{UiActionLabel, UiPanelBinding};
 use crate::game::world::grid::{SignDisplay, WorldBlocks};
@@ -53,6 +52,10 @@ struct SignDisplayList;
 
 #[derive(Component, Clone, Copy)]
 struct SignMaterialOption(MaterialKind);
+
+/// 点击编辑后延迟到 UiAccessScope 内打开文本提示
+#[derive(Resource, Default)]
+struct PendingSignTextEdit(Option<IVec3>);
 
 impl UiActionLabel for SignAction {
     fn label_key(self) -> &'static str {
@@ -102,12 +105,14 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
 }
 
 pub fn register(app: &mut App) {
-    app.add_observer(on_click).add_systems(
-        Update,
-        (update_panel, update_dropdowns)
-            .chain()
-            .in_set(BlockPanelSystems),
-    );
+    app.init_resource::<PendingSignTextEdit>()
+        .add_observer(on_click)
+        .add_systems(
+            Update,
+            (process_sign_text_prompt, update_panel, update_dropdowns)
+                .chain()
+                .in_set(BlockPanelSystems),
+        );
 }
 
 inventory::submit! {
@@ -150,6 +155,7 @@ fn on_click(
     ui_host: Res<UiHost>,
     ui_runtime: Res<UiRuntime>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
+    mut pending_text: ResMut<PendingSignTextEdit>,
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
     mut world: PlayingWorldParams,
@@ -170,52 +176,7 @@ fn on_click(
     };
 
     if matches!(action, SignAction::EditText) {
-        let current = world
-            .world
-            .sign_settings(pos)
-            .text
-            .unwrap_or_default();
-        let spec = TextPromptProps {
-            title: i18n.t("sign.prompt.text"),
-            default_value: current,
-            save_text: i18n.t("button.confirm"),
-            cancel_text: i18n.t("button.cancel"),
-        };
-        ui.open_text_prompt_then(spec, move |result, world| {
-            let TextPromptResult::Saved(requested) = result else {
-                return;
-            };
-            let trimmed = requested.trim();
-            let text = if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.chars().take(64).collect::<String>())
-            };
-            if !world.resource::<WorldBlocks>().blocks.contains_key(&pos) {
-                return;
-            }
-            let mut settings = world.resource::<WorldBlocks>().sign_settings(pos);
-            settings.text = text;
-            settings.display = None;
-            let before = world
-                .resource::<WorldBlocks>()
-                .block_settings
-                .get(&pos)
-                .cloned();
-            {
-                let mut world_blocks = world.resource_mut::<WorldBlocks>();
-                world_blocks.set_sign_settings(pos, settings);
-            }
-            let after = world
-                .resource::<WorldBlocks>()
-                .block_settings
-                .get(&pos)
-                .cloned();
-            if let Some(mut history) = world.get_resource_mut::<EditHistory>() {
-                history.record_settings(pos, before, after);
-            }
-            world.resource_mut::<SolutionState>().dirty = true;
-        });
+        pending_text.0 = Some(pos);
         return;
     }
 
@@ -249,6 +210,61 @@ fn on_click(
         solution_state.dirty = true;
         refresh_world_after_edit(&mut world, pos);
     }
+}
+
+fn process_sign_text_prompt(
+    _ui_thread: UiMainThread,
+    mut pending_text: ResMut<PendingSignTextEdit>,
+    world: Res<WorldBlocks>,
+) {
+    let Some(pos) = pending_text.0.take() else {
+        return;
+    };
+    if !world.blocks.contains_key(&pos) {
+        return;
+    }
+    let current = world.sign_settings(pos).text.unwrap_or_default();
+    let spec = TextPromptProps {
+        title: i18n.t("sign.prompt.text"),
+        default_value: current,
+        save_text: i18n.t("button.confirm"),
+        cancel_text: i18n.t("button.cancel"),
+    };
+    ui.open_text_prompt_then(spec, move |result, world| {
+        let TextPromptResult::Saved(requested) = result else {
+            return;
+        };
+        let trimmed = requested.trim();
+        let text = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.chars().take(64).collect::<String>())
+        };
+        if !world.resource::<WorldBlocks>().blocks.contains_key(&pos) {
+            return;
+        }
+        let mut settings = world.resource::<WorldBlocks>().sign_settings(pos);
+        settings.text = text;
+        settings.display = None;
+        let before = world
+            .resource::<WorldBlocks>()
+            .block_settings
+            .get(&pos)
+            .cloned();
+        {
+            let mut world_blocks = world.resource_mut::<WorldBlocks>();
+            world_blocks.set_sign_settings(pos, settings);
+        }
+        let after = world
+            .resource::<WorldBlocks>()
+            .block_settings
+            .get(&pos)
+            .cloned();
+        if let Some(mut history) = world.get_resource_mut::<EditHistory>() {
+            history.record_settings(pos, before, after);
+        }
+        world.resource_mut::<SolutionState>().dirty = true;
+    });
 }
 
 fn update_panel(
