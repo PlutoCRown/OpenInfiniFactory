@@ -234,7 +234,12 @@ pub fn placement_input(
                 &mut structure_state,
                 &mut block_index,
             ) {
-                if let Some(facing) = world.blocks.get(&pos).map(|block| block.facing) {
+                let facing = world
+                    .blocks
+                    .get(&pos)
+                    .or_else(|| world.system_blocks.get(&pos))
+                    .map(|block| block.facing);
+                if let Some(facing) = facing {
                     edit_history.finish_rotation(pos, facing);
                 }
                 solution_state.dirty = true;

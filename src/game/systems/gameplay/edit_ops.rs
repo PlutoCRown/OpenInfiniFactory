@@ -108,7 +108,12 @@ pub(super) fn rotate_block_at(
     structure_state: &mut StructureState,
     block_index: &mut BlockEntityIndex,
 ) -> bool {
-    let Some(block) = world.blocks.get_mut(&pos) else {
+    let in_system = !world.blocks.contains_key(&pos);
+    let Some(block) = (if in_system {
+        world.system_blocks.get_mut(&pos)
+    } else {
+        world.blocks.get_mut(&pos)
+    }) else {
         return false;
     };
     if !block.kind.is_directional() {
