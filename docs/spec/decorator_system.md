@@ -6,16 +6,19 @@
 
 | 宿主 | 允许条件 |
 |------|----------|
-| 材料 | `MaterialProps.connectable[面]` |
+| 材料 | catalog `connectable[面]`（`MaterialProps`） |
 | 工厂 | 非 `non_connection_face` |
-| 场景 | 任意面 |
+| 场景 | catalog `connectable[面]` |
 | 电线 | 仅灯面板可贴 |
 
 ## 材料属性 `MaterialProps`
 
-- `directional` / `fragile` / `is_stamp` / `connectable[6]`（局部 +X -X +Y -Y +Z -Z）
+- 来自 `material_blocks` / `stamp_materials` 资源包：`directional` / `fragile` / `is_stamp` / `connectable[6]`
 - 焊接：两端相对面皆 Connectable（`weld_materials`）
+- 滚刷 / 印花：目标面 Connectable
 - 工厂可贴面：`BlockKind::face_attachable`
+
+印花与滚刷**不是颜色**：分别为 `StampMaterialId` / `PaintMaterialId`（见 `docs/report/add_material_block.md`）。
 
 ## 分层
 
@@ -38,11 +41,10 @@
 
 ### 装饰漆（`material_paints`）
 
-- 键：`MaterialFace { block: BlockId, normal }` → `StampColor`
-- 回合后处理：滚刷机（`MaterialLabeler::Roller`）朝向材料且该面 Connectable 时写入
-- 印花机本层不刷漆（L4 生成占格印花）
-- 宿主方块删除时清除；焊接保留（按 BlockId）；平移无需改写；旋转时法线随结构绕 Y 旋转
-- 渲染：材料子实体复用 `face_mark` 网格与 stamp 色材质
+- 键：`MaterialFace { block: BlockId, normal }` → `PaintMaterialId`
+- 回合后处理：滚刷机朝向材料且该面 Connectable 时写入
+- 外观：`paint_materials/<id>/texture.png` 贴到面片
+- 宿主方块删除时清除；焊接保留；旋转时法线随结构绕 Y 旋转
 
 ### 灯面板（`wire_face_panels`）
 
@@ -54,10 +56,11 @@
 
 ## L4 细节
 
-### 印花材料（`MaterialKind::Stamp` / `StampMaterial`）
+### 印花材料（`BlockKind::Stamp(StampMaterialId)`）
 
-- `MaterialProps::STAMP`：有向、`is_stamp`、不可 Connectable
-- 薄面片：`PartsOnly` 空模型 + `material_paints` 面片着色
+- 资源包：`assets/stamp_materials/<id>/`（有厚度模型或 texture 立方体 fallback）
+- `MaterialProps`：`is_stamp`、不可 Connectable
+- 附着：`material_attachments`；外观由 Stamp 资源包决定（不再使用色片面片表）
 
 ### 附着（`material_attachments`）
 
@@ -92,4 +95,4 @@
 
 - 瞄准告示时的 billboard / 状态栏文字
 - 不可破坏（unbreakable）层
-- 印花色（`StampColor`）图标选择 UI（数据层已支持 `SignDisplay::StampColor`）
+- 告示牌选用印花材料图标（`SignDisplay::Stamp`）

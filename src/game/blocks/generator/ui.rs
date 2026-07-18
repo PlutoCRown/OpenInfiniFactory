@@ -14,7 +14,7 @@ use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::blocks::MaterialKind;
+use crate::game::blocks::{material_catalog, MaterialBlockId};
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::access::{i18n, UiMainThread};
@@ -42,7 +42,7 @@ pub enum GeneratorAction {
     AcceptorPrev,
     AcceptorNext,
     ToggleMaterial,
-    SetMaterial(MaterialKind),
+    SetMaterial(MaterialBlockId),
 }
 
 #[derive(Component, Clone, Copy)]
@@ -73,7 +73,7 @@ struct GeneratorMaterialSlot;
 struct GeneratorMaterialList;
 
 #[derive(Component, Clone, Copy)]
-struct GeneratorMaterialOption(MaterialKind);
+struct GeneratorMaterialOption(MaterialBlockId);
 
 impl UiActionLabel for GeneratorAction {
     fn label_key(self) -> &'static str {
@@ -132,9 +132,9 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
     spawn_material_icon_list(
         root,
         GeneratorMaterialList,
-        MaterialKind::ALL
-            .into_iter()
-            .map(|material| (material, GeneratorAction::SetMaterial(material))),
+        material_catalog()
+            .iter()
+            .map(|(id, _)| (id, GeneratorAction::SetMaterial(id))),
         GeneratorMaterialOption,
     );
 }

@@ -4,9 +4,9 @@ use glam::IVec3;
 
 use crate::world::direction::Facing;
 
-use super::MaterialKind;
+use super::material_catalog::MaterialBlockDef;
 
-/// 材料静态属性（后续可迁到配置表）
+/// 材料静态属性（由 catalog 定义派生）
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MaterialProps {
     /// 是否四向有向（facing 参与玩法与存档）
@@ -41,15 +41,24 @@ impl MaterialProps {
         is_stamp: false,
         connectable: [true; 6],
     };
-}
 
-impl MaterialKind {
-    /// 查材料静态属性
-    pub fn props(self) -> MaterialProps {
-        match self {
-            Self::Basic | Self::Iron | Self::Copper => MaterialProps::DEFAULT,
-            Self::Glass => MaterialProps::FRAGILE,
-            Self::Stamp => MaterialProps::STAMP,
+    /// 从材料方块定义派生属性（非印花）
+    pub fn from_material_def(def: &MaterialBlockDef) -> Self {
+        Self {
+            directional: def.directional,
+            fragile: def.fragile,
+            is_stamp: false,
+            connectable: def.connectable,
+        }
+    }
+
+    /// 印花材料属性（不可焊接；朝向由附着面表达）
+    pub fn stamp_props(fragile: bool) -> Self {
+        Self {
+            directional: false,
+            fragile,
+            is_stamp: true,
+            connectable: [false; 6],
         }
     }
 }
@@ -84,7 +93,7 @@ mod tests {
 
     #[test]
     fn default_materials_are_fully_connectable() {
-        let props = MaterialKind::Basic.props();
+        let props = MaterialProps::DEFAULT;
         assert!(!props.fragile);
         assert!(!props.is_stamp);
         assert!(!props.directional);
@@ -94,9 +103,10 @@ mod tests {
 
     #[test]
     fn stamp_props_block_all_faces() {
-        let props = MaterialProps::STAMP;
+        let props = MaterialProps::stamp_props(false);
         assert!(props.is_stamp);
         assert!(!props.directional);
+        assert!(!props.fragile);
         assert!(!material_face_connectable(
             props,
             Facing::North,
@@ -105,18 +115,15 @@ mod tests {
     }
 
     #[test]
-    fn glass_is_fragile() {
-        let props = MaterialKind::Glass.props();
+    fn fragile_constant_matches_glass() {
+        let props = MaterialProps::FRAGILE;
         assert!(props.fragile);
         assert!(!props.is_stamp);
         assert!(!props.directional);
     }
 
     #[test]
-    fn stamp_kind_uses_stamp_props() {
-        let props = MaterialKind::Stamp.props();
-        assert!(props.is_stamp);
-        assert!(!props.directional);
-        assert!(!props.fragile);
+    fn stamp_constant_matches_stamp_props() {
+        assert_eq!(MaterialProps::STAMP, MaterialProps::stamp_props(false));
     }
 }

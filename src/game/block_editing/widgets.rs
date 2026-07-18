@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game::blocks::{BlockKind, MaterialKind};
+use crate::game::blocks::{BlockKind, MaterialBlockId};
 use crate::game::ui::components::{
     default_button_size, default_font_size, localized_text, menu_button, styled_button,
     ui_logical_bounds,
@@ -134,8 +134,8 @@ pub fn spawn_material_icon_toggle<A, S>(
 pub fn spawn_material_icon_list<A, O, L>(
     parent: &mut ChildSpawnerCommands,
     list_marker: L,
-    options: impl IntoIterator<Item = (MaterialKind, A)>,
-    option_marker: fn(MaterialKind) -> O,
+    options: impl IntoIterator<Item = (MaterialBlockId, A)>,
+    option_marker: fn(MaterialBlockId) -> O,
 ) where
     A: Component + Copy,
     O: Component + Copy,
@@ -175,12 +175,12 @@ pub fn spawn_material_icon_list<A, O, L>(
 
 pub fn update_material_icon(
     children: &Children,
-    material: Option<MaterialKind>,
+    material: Option<MaterialBlockId>,
     block_icons: &BlockIconAssets,
     icon_query: &mut Query<&mut ImageNode>,
 ) {
     let icon = material
-        .and_then(BlockKind::material_block_kind)
+        .map(BlockKind::material_block_kind)
         .and_then(|kind| block_icons.get(kind));
     for child in children.iter() {
         if let Ok(mut image) = icon_query.get_mut(child) {

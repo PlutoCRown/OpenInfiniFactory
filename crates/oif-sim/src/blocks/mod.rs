@@ -1,16 +1,17 @@
 mod adapter;
 #[macro_use]
 mod register;
-mod basic;
+mod material_catalog;
 mod material_props;
+mod paint_catalog;
 mod registry;
 mod scene_catalog;
+mod stamp_catalog;
 pub mod traits;
 
 pub mod blocker;
 pub mod converter;
 pub mod conveyor;
-pub mod copper_material;
 pub mod counter_rotator;
 pub mod detector;
 pub mod down_detector;
@@ -19,11 +20,8 @@ pub mod drill;
 pub mod drill_head;
 pub mod generator;
 pub mod goal;
-pub mod glass_material;
-pub mod iron_material;
 pub mod laser;
 pub mod lifter;
-pub mod material;
 pub mod mirror;
 pub mod platform;
 pub mod pusher;
@@ -32,7 +30,6 @@ pub mod roller;
 pub mod roller_body;
 pub mod rotator;
 pub mod splitter;
-pub mod stamp_material;
 pub mod stamper;
 pub mod stamper_body;
 pub mod sign;
@@ -47,13 +44,25 @@ pub mod wire;
 use glam::IVec3;
 use serde::{Deserialize, Serialize};
 
+pub use self::material_catalog::{
+    ensure_fallback_material_catalog, install_material_catalog, material_catalog, material_def,
+    MaterialBlockCatalog, MaterialBlockDef, MaterialBlockId,
+};
 pub use self::material_props::{
     local_face_index, material_face_connectable, MaterialProps,
 };
-pub use self::registry::{assert_registry_consistent, material_block_kind, save_stores_facing};
+pub use self::paint_catalog::{
+    ensure_fallback_paint_catalog, install_paint_catalog, paint_catalog, paint_def,
+    PaintMaterialCatalog, PaintMaterialDef, PaintMaterialId,
+};
+pub use self::registry::{assert_registry_consistent, save_stores_facing};
 pub use self::scene_catalog::{
     ensure_fallback_scene_catalog, install_scene_catalog, leak_str, scene_catalog, scene_def,
     SceneBlockCatalog, SceneBlockDef, SceneBlockId,
+};
+pub use self::stamp_catalog::{
+    ensure_fallback_stamp_catalog, install_stamp_catalog, stamp_catalog, stamp_def,
+    StampMaterialCatalog, StampMaterialDef, StampMaterialId,
 };
 pub use crate::world::direction::Facing;
 use crate::world::grid::BlockSettings;
@@ -106,11 +115,8 @@ pub enum BlockLayer {
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum MaterialBlock {
-    Material,
-    IronMaterial,
-    CopperMaterial,
-    GlassMaterial,
-    StampMaterial,
+    Material(MaterialBlockId),
+    Stamp(StampMaterialId),
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -468,87 +474,6 @@ impl BlockData {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-pub enum MaterialKind {
-    #[default]
-    Basic,
-    Iron,
-    Copper,
-    Glass,
-    /// 印花材料（占格附着，不在生成器/验收可选列表）
-    Stamp,
-}
-
-impl MaterialKind {
-    /// 玩法可选材料（不含印花）
-    pub const ALL: [Self; 4] = [Self::Basic, Self::Iron, Self::Copper, Self::Glass];
-}
-
-// MaterialKind::props 见 material_props.rs
-
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub enum StampColor {
-    #[default]
-    Red,
-    Green,
-    Blue,
-    Yellow,
-}
-
-impl StampColor {
-    pub const ALL: [Self; 4] = [Self::Red, Self::Green, Self::Blue, Self::Yellow];
-
-    pub fn name_key(self) -> &'static str {
-        match self {
-            Self::Red => "stamp_color.red",
-            Self::Green => "stamp_color.green",
-            Self::Blue => "stamp_color.blue",
-            Self::Yellow => "stamp_color.yellow",
-        }
-    }
-
-    pub fn color(self) -> ColorSpec {
-        match self {
-            Self::Red => rgb(0.95, 0.12, 0.10),
-            Self::Green => rgb(0.20, 0.82, 0.28),
-            Self::Blue => rgb(0.18, 0.42, 0.95),
-            Self::Yellow => rgb(1.0, 0.84, 0.18),
-        }
-    }
-}
-
-/// 滚刷装饰漆颜色（后期会换成 2D 贴图选型；与印花色类型分离）
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub enum PaintColor {
-    #[default]
-    Red,
-    Green,
-    Blue,
-    Yellow,
-}
-
-impl PaintColor {
-    pub const ALL: [Self; 4] = [Self::Red, Self::Green, Self::Blue, Self::Yellow];
-
-    pub fn name_key(self) -> &'static str {
-        match self {
-            Self::Red => "paint_color.red",
-            Self::Green => "paint_color.green",
-            Self::Blue => "paint_color.blue",
-            Self::Yellow => "paint_color.yellow",
-        }
-    }
-
-    pub fn color(self) -> ColorSpec {
-        match self {
-            Self::Red => rgb(0.95, 0.12, 0.10),
-            Self::Green => rgb(0.20, 0.82, 0.28),
-            Self::Blue => rgb(0.18, 0.42, 0.95),
-            Self::Yellow => rgb(1.0, 0.84, 0.18),
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum BlockKind {
     /// 配置式场景方块（内置 grass/stone/dirt/planks 的 id 固定为 0..=3）
@@ -580,11 +505,10 @@ pub enum BlockKind {
     TeleportEntrance,
     TeleportExit,
     Goal,
-    Material,
-    IronMaterial,
-    CopperMaterial,
-    GlassMaterial,
-    StampMaterial,
+    /// 配置式材料方块（basic/iron/copper/glass 等）
+    Material(MaterialBlockId),
+    /// 配置式印花材料（red/green/blue/yellow 等）
+    Stamp(StampMaterialId),
     WeldPoint,
     DrillHead,
     RollerBody,
@@ -601,9 +525,39 @@ impl BlockKind {
         Self::Scene(id)
     }
 
+    /// 按资源包字符串 id 解析材料方块
+    pub fn material(string_id: &str) -> Self {
+        ensure_fallback_material_catalog();
+        let id = material_catalog()
+            .id_by_string(string_id)
+            .unwrap_or_else(|| panic!("unknown material block id `{string_id}`"));
+        Self::Material(id)
+    }
+
+    /// 按资源包字符串 id 解析印花材料
+    pub fn stamp(string_id: &str) -> Self {
+        ensure_fallback_stamp_catalog();
+        let id = stamp_catalog()
+            .id_by_string(string_id)
+            .unwrap_or_else(|| panic!("unknown stamp material id `{string_id}`"));
+        Self::Stamp(id)
+    }
+
+    /// 由材料 catalog id 构造 BlockKind
+    pub fn material_block_kind(id: MaterialBlockId) -> Self {
+        Self::Material(id)
+    }
+
+    /// 由印花 catalog id 构造 BlockKind
+    pub fn stamp_block_kind(id: StampMaterialId) -> Self {
+        Self::Stamp(id)
+    }
+
     fn block(self) -> &'static (dyn Block + Send + Sync) {
         match self {
-            BlockKind::Scene(_) => panic!("Scene blocks are not inventory-registered"),
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_) => {
+                panic!("Scene/Material/Stamp blocks are not inventory-registered")
+            }
             other => registry::get(other),
         }
     }
@@ -611,11 +565,8 @@ impl BlockKind {
     pub fn layer(self) -> BlockLayer {
         match self {
             BlockKind::Scene(id) => BlockLayer::Scene(id),
-            BlockKind::Material => BlockLayer::Material(MaterialBlock::Material),
-            BlockKind::IronMaterial => BlockLayer::Material(MaterialBlock::IronMaterial),
-            BlockKind::CopperMaterial => BlockLayer::Material(MaterialBlock::CopperMaterial),
-            BlockKind::GlassMaterial => BlockLayer::Material(MaterialBlock::GlassMaterial),
-            BlockKind::StampMaterial => BlockLayer::Material(MaterialBlock::StampMaterial),
+            BlockKind::Material(id) => BlockLayer::Material(MaterialBlock::Material(id)),
+            BlockKind::Stamp(id) => BlockLayer::Material(MaterialBlock::Stamp(id)),
             BlockKind::Platform => BlockLayer::Factory(FactoryBlock::Platform),
             BlockKind::Welder => BlockLayer::Factory(FactoryBlock::Welder),
             BlockKind::DownWelder => BlockLayer::Factory(FactoryBlock::DownWelder),
@@ -651,18 +602,40 @@ impl BlockKind {
     }
 
     pub fn definition(self) -> BlockDefinition {
-        if let BlockKind::Scene(id) = self {
-            let def = scene_def(id);
-            return BlockDefinition::scene(
-                self,
-                def.name_key,
-                def.short_name_key,
-                def.description_key,
-                def.color,
-            )
-            .with_collision(def.collision);
+        match self {
+            BlockKind::Scene(id) => {
+                let def = scene_def(id);
+                BlockDefinition::scene(
+                    self,
+                    def.name_key,
+                    def.short_name_key,
+                    def.description_key,
+                    def.color,
+                )
+                .with_collision(def.collision)
+            }
+            BlockKind::Material(id) => {
+                let def = material_def(id);
+                BlockDefinition::material(
+                    self,
+                    def.name_key,
+                    def.short_name_key,
+                    def.description_key,
+                    def.color,
+                )
+            }
+            BlockKind::Stamp(id) => {
+                let def = stamp_def(id);
+                BlockDefinition::material(
+                    self,
+                    def.name_key,
+                    def.short_name_key,
+                    def.description_key,
+                    def.color,
+                )
+            }
+            other => other.block().definition(),
         }
-        self.block().definition()
     }
 
     pub fn name_key(self) -> &'static str {
@@ -686,18 +659,37 @@ impl BlockKind {
     }
 
     pub fn is_directional(self) -> bool {
-        if let BlockKind::Scene(id) = self {
-            return scene_def(id).directional;
+        match self {
+            BlockKind::Scene(id) => scene_def(id).directional,
+            BlockKind::Material(id) => material_def(id).directional,
+            BlockKind::Stamp(_) => false,
+            other => other.block().is_directional(),
         }
-        if let Some(kind) = self.material_kind() {
-            return kind.props().directional;
-        }
-        self.block().is_directional()
     }
 
     /// 材料静态属性；非材料返回 None
     pub fn material_props(self) -> Option<MaterialProps> {
-        self.material_kind().map(MaterialKind::props)
+        match self {
+            BlockKind::Material(id) => Some(MaterialProps::from_material_def(&material_def(id))),
+            BlockKind::Stamp(id) => Some(MaterialProps::stamp_props(stamp_def(id).fragile)),
+            _ => None,
+        }
+    }
+
+    /// 仅 `BlockKind::Material` 返回 catalog id
+    pub fn material_id(self) -> Option<MaterialBlockId> {
+        match self {
+            BlockKind::Material(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    /// 仅 `BlockKind::Stamp` 返回 catalog id
+    pub fn stamp_id(self) -> Option<StampMaterialId> {
+        match self {
+            BlockKind::Stamp(id) => Some(id),
+            _ => None,
+        }
     }
 
     /// 材料世界法线面是否 Connectable
@@ -776,102 +768,130 @@ impl BlockKind {
     }
 
     pub fn alternate(self) -> Option<Self> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         self.block().alternate()
     }
 
     pub fn marker_behavior(self, facing: Facing) -> Option<MarkerBehavior> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         self.block().marker_behavior(facing)
     }
 
     pub fn material_source(self, facing: Facing) -> Option<MaterialSource> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         self.block().material_source(facing)
-    }
-
-    pub fn material_kind(self) -> Option<MaterialKind> {
-        if matches!(self, BlockKind::Scene(_)) {
-            return None;
-        }
-        self.block().material_kind()
-    }
-
-    pub fn material_block_kind(material: MaterialKind) -> Option<Self> {
-        registry::material_block_kind(material)
     }
 
     pub fn persistent_layer(self) -> Option<PersistentLayer> {
         if matches!(self, BlockKind::Scene(_)) {
             return Some(PersistentLayer::Puzzle);
         }
+        if matches!(self, BlockKind::Material(_) | BlockKind::Stamp(_)) {
+            return None;
+        }
         self.block().persistent_layer()
     }
 
     pub fn default_settings(self, pos: IVec3) -> Option<BlockSettings> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         self.block().default_settings(pos)
     }
 
     pub fn movement_rule(self, facing: Facing) -> Option<MovementRule> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         self.block().movement_rule(facing)
     }
 
     pub fn material_destroyer(self, facing: Facing) -> Option<MaterialDestroyer> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         self.block().material_destroyer(facing)
     }
 
     pub fn material_labeler(self, facing: Facing) -> Option<MaterialLabeler> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         self.block().material_labeler(facing)
     }
 
     pub fn material_processor(self) -> Option<MaterialProcessor> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         self.block().material_processor()
     }
 
     pub fn laser_optics(self) -> Option<LaserOpticsBehavior> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         self.block().laser_optics()
     }
 
     pub fn weld_behavior(self) -> Option<WeldBehavior> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         self.block().weld_behavior()
     }
 
     pub fn signal_behavior(self, facing: Facing) -> Option<SignalBehavior> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         self.block().signal_behavior(facing)
     }
 
     pub fn non_connection_face(self, facing: Facing) -> Option<IVec3> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         self.block().non_connection_face(facing)

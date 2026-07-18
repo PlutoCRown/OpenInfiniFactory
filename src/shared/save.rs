@@ -642,11 +642,36 @@ pub fn normalized_save_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::game::blocks::{BlockKind, Facing, MaterialKind, PaintColor, StampColor};
+    use crate::game::blocks::{
+        ensure_fallback_material_catalog, ensure_fallback_paint_catalog,
+        ensure_fallback_stamp_catalog, material_catalog, paint_catalog, stamp_catalog, BlockKind,
+        Facing,
+    };
     use crate::game::world::grid::{
         ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, RollerSettings,
         StamperSettings, TeleportSettings,
     };
+
+    fn test_material(id: &str) -> crate::game::blocks::MaterialBlockId {
+        ensure_fallback_material_catalog();
+        material_catalog()
+            .id_by_string(id)
+            .unwrap_or_else(|| panic!("missing material `{id}`"))
+    }
+
+    fn test_stamp(id: &str) -> crate::game::blocks::StampMaterialId {
+        ensure_fallback_stamp_catalog();
+        stamp_catalog()
+            .id_by_string(id)
+            .unwrap_or_else(|| panic!("missing stamp `{id}`"))
+    }
+
+    fn test_paint(id: &str) -> crate::game::blocks::PaintMaterialId {
+        ensure_fallback_paint_catalog();
+        paint_catalog()
+            .id_by_string(id)
+            .unwrap_or_else(|| panic!("missing paint `{id}`"))
+    }
 
     #[test]
     fn puzzle_layer_round_trips_edit_system_blocks_and_settings() {
@@ -680,27 +705,27 @@ mod tests {
                     period: 9,
                     offset: 0,
                 },
-                material: MaterialKind::Copper,
+                material: test_material("copper"),
             },
         );
         world.set_stamper_settings(
             stamper,
             StamperSettings {
-                color: StampColor::Blue,
+                stamp: test_stamp("blue"),
             },
         );
         world.set_roller_settings(
             roller,
             RollerSettings {
-                color: PaintColor::Yellow,
+                paint: test_paint("yellow"),
             },
         );
         world.set_converter_settings(
             converter,
             ConverterSettings {
                 mode: ConverterMode::SpecificInput,
-                input: MaterialKind::Iron,
-                output: MaterialKind::Copper,
+                input: test_material("iron"),
+                output: test_material("copper"),
             },
         );
         world.set_teleport_settings(
@@ -739,27 +764,27 @@ mod tests {
                     period: 9,
                     offset: 0,
                 },
-                material: MaterialKind::Copper,
+                material: test_material("copper"),
             }
         );
         assert_eq!(
             round_trip.stamper_settings(stamper),
             StamperSettings {
-                color: StampColor::Blue,
+                stamp: test_stamp("blue"),
             }
         );
         assert_eq!(
             round_trip.roller_settings(roller),
             RollerSettings {
-                color: PaintColor::Yellow,
+                paint: test_paint("yellow"),
             }
         );
         assert_eq!(
             round_trip.converter_settings(converter),
             ConverterSettings {
                 mode: ConverterMode::SpecificInput,
-                input: MaterialKind::Iron,
-                output: MaterialKind::Copper,
+                input: test_material("iron"),
+                output: test_material("copper"),
             }
         );
         assert_eq!(round_trip.teleport_settings(entrance).name, "Entrance");
@@ -869,7 +894,7 @@ mod tests {
             generator,
             GeneratorSettings {
                 mode: GeneratorMode::Link { anchor: Some(goal) },
-                material: MaterialKind::Copper,
+                material: test_material("copper"),
             },
         );
 
@@ -886,7 +911,7 @@ mod tests {
             loaded_world.generator_settings(generator),
             GeneratorSettings {
                 mode: GeneratorMode::Link { anchor: Some(goal) },
-                material: MaterialKind::Copper,
+                material: test_material("copper"),
             }
         );
         assert_eq!(

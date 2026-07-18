@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openinfinifactory.local/schemas/material_block.meta.schema.json",
+  "title": "MaterialBlockMeta",
+  "description": "材料方块资源包元数据（与 texture.png 同目录的 meta.json）。外观贴图为同目录 texture.png；UI 图标为同目录 icon.png。游戏加载时忽略 $schema。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "指向本 schema 的相对路径，仅供编辑器智能提示；运行时忽略。"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "全局唯一字符串 ID。显示名走 i18n key `block.<id>`；未翻译时 UI 直接显示该 key。"
+    },
+    "fragile": {
+      "type": "boolean",
+      "default": false,
+      "description": "是否脆弱：运动冲突时碎裂而非阻挡。"
+    },
+    "directional": {
+      "type": "boolean",
+      "default": false,
+      "description": "是否有朝向。true：放置时可用 R 旋转，存档会写入 facing；false：无朝向。"
+    },
+    "connectable": {
+      "type": "array",
+      "description": "局部六面是否可焊接/滚刷/印花，顺序为 +X -X +Y -Y +Z -Z（相对 facing=North 的局部系）。",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "boolean"
+      },
+      "default": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    }
+  }
+}

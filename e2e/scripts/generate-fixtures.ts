@@ -32,7 +32,18 @@ const SYSTEM = new Set([
   "TeleportEntrance",
   "TeleportExit",
 ]);
-const MATERIAL = new Set(["Material", "IronMaterial", "CopperMaterial"]);
+const MATERIAL = new Set([
+  "Basic",
+  "Iron",
+  "Copper",
+  "Glass_material",
+  "Gold",
+  "Aluminum",
+  "Wood",
+  "Granite",
+  "Coal",
+  "Crystal",
+]);
 const VIRTUAL = new Set(["WeldPoint", "DrillHead"]);
 
 const VIRTUAL_PARENT: Record<string, string> = {

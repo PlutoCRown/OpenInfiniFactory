@@ -5,6 +5,24 @@
         "**/scene_blocks/*/meta.json"
       ],
       "url": "./schemas/scene_block.meta.schema.json"
+    },
+    {
+      "fileMatch": [
+        "**/material_blocks/*/meta.json"
+      ],
+      "url": "./schemas/material_block.meta.schema.json"
+    },
+    {
+      "fileMatch": [
+        "**/stamp_materials/*/meta.json"
+      ],
+      "url": "./schemas/stamp_material.meta.schema.json"
+    },
+    {
+      "fileMatch": [
+        "**/paint_materials/*/meta.json"
+      ],
+      "url": "./schemas/paint_material.meta.schema.json"
     }
   ]
 }

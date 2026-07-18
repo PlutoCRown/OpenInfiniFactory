@@ -8,13 +8,43 @@ use crate::game::world::grid::WorldBlocks;
 use crate::shared::save::{load_world, SaveSlot};
 use oif_sim::SimSession;
 
-/// 解析方块种类名（含场景字符串 id）
+/// 解析方块种类名（场景 / 材料 / 印花字符串 id，或工厂枚举 Debug 名）
 pub fn parse_block_kind(name: &str) -> Option<BlockKind> {
     let name = name.trim();
     let lower = name.to_ascii_lowercase();
     oif_sim::blocks::ensure_fallback_scene_catalog();
+    oif_sim::blocks::ensure_fallback_material_catalog();
+    oif_sim::blocks::ensure_fallback_stamp_catalog();
     if let Some(id) = oif_sim::blocks::scene_catalog().id_by_string(&lower) {
         return Some(BlockKind::Scene(id));
+    }
+    // 材料：catalog id，或旧 fixture 名 IronMaterial → iron
+    let material_id = match lower.as_str() {
+        "material" => Some("basic"),
+        "ironmaterial" => Some("iron"),
+        "coppermaterial" => Some("copper"),
+        "glassmaterial" => Some("glass_material"),
+        other => Some(other),
+    };
+    if let Some(id_str) = material_id {
+        if let Some(id) = oif_sim::blocks::material_catalog().id_by_string(id_str) {
+            return Some(BlockKind::Material(id));
+        }
+    }
+    let stamp_id = match lower.as_str() {
+        "stampmaterial" | "stamp" => Some("red"),
+        other => Some(other),
+    };
+    if let Some(id_str) = stamp_id {
+        if let Some(id) = oif_sim::blocks::stamp_catalog().id_by_string(id_str) {
+            // 避免与材料同名 id 抢解析：仅当不是材料 id 时才当印花
+            if oif_sim::blocks::material_catalog()
+                .id_by_string(id_str)
+                .is_none()
+            {
+                return Some(BlockKind::Stamp(id));
+            }
+        }
     }
     all_blocks()
         .into_iter()

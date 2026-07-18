@@ -1,6 +1,6 @@
 # 新增场景方块流程
 
-场景方块（Scene Block）是无工厂逻辑的装饰/地形块。游戏不写死种类名，只扫描资源包并注册到 catalog。外观以 `model.glb` 为准，不要在代码里再画贴图。
+场景方块（Scene Block）是无工厂逻辑的装饰/地形块。游戏不写死种类名，只扫描资源包并注册到 catalog。有 `model.glb` 时以外观网格为准；否则用 `texture.png` 贴到标准立方体。
 
 参考目录：`assets/scene_blocks/<id>/`  
 Schema：`schemas/scene_block.meta.schema.json`
@@ -9,17 +9,20 @@ Schema：`schemas/scene_block.meta.schema.json`
 
 ## 1. 建资源目录
 
-在 `assets/scene_blocks/` 下新建以 **id** 命名的文件夹（id 规则：`^[a-z][a-z0-9_]*$`，全局唯一）。
+在 `assets/scene_blocks/` 下新建以 **id** 命名的文件夹（id 规则：`^[a-z][a-z0-9_]*$`，与材料等配置块全局勿撞名）。
 
 最少需要：
 
 ```
 assets/scene_blocks/<id>/
   meta.json      # 必填
-  model.glb      # 必填：网格 + 材质 + 内嵌贴图
+  model.glb      # 优先：网格 + 材质 + 内嵌贴图
+  texture.png    # 无 model.glb 时必填：贴到标准单位立方体
   icon.png       # 必填（用 bake 工具生成，见第 4 步）
   collision.glb  # 可选：非整格碰撞时用
 ```
+
+加载规则：有 `model.glb` 用 GLB；否则有 `texture.png` 则立方体贴图；两者都无则报错。
 
 启动时会扫描全局 `assets/scene_blocks/`；puzzle 也可自带本地包合并（重复 id 会跳过并警告）。
 

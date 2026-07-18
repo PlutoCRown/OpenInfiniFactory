@@ -1,6 +1,10 @@
 use bevy::prelude::*;
 
-use crate::game::blocks::{BlockKind, MaterialKind, PaintColor, StampColor};
+use crate::game::blocks::{
+    ensure_fallback_material_catalog, ensure_fallback_paint_catalog, ensure_fallback_stamp_catalog,
+    material_catalog, paint_catalog, stamp_catalog, BlockKind, MaterialBlockId, PaintMaterialId,
+    StampMaterialId,
+};
 use crate::game::world::grid::{
     BlockSettings, ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, GoalSettings,
     RollerSettings, SignDisplay, SignSettings, StamperSettings, TeleportSettings,
@@ -9,6 +13,7 @@ use crate::game::world::grid::{
 use super::Cursor;
 use super::SaveFormatError;
 
+/// 写入方块设置（v5：材料/印花/漆均为字符串 id）
 pub fn write_settings(out: &mut Vec<u8>, kind: BlockKind, settings: &BlockSettings) {
     match (kind, settings) {
         (BlockKind::Generator, BlockSettings::Generator(value)) => write_generator(out, *value),
@@ -25,22 +30,31 @@ pub fn write_settings(out: &mut Vec<u8>, kind: BlockKind, settings: &BlockSettin
     }
 }
 
+/// 读取方块设置；`string_ids` 为真时用字符串，否则兼容旧 u8 表
 pub fn read_settings(
     cursor: &mut Cursor<'_>,
     kind: BlockKind,
+    string_ids: bool,
 ) -> Result<BlockSettings, SaveFormatError> {
     Ok(match kind {
-        BlockKind::Generator => BlockSettings::Generator(read_generator(cursor)?),
-        BlockKind::Goal => BlockSettings::Goal(read_goal(cursor)?),
-        BlockKind::Stamper => BlockSettings::Stamper(read_stamper(cursor)?),
-        BlockKind::Roller => BlockSettings::Roller(read_roller(cursor)?),
-        BlockKind::Converter => BlockSettings::Converter(read_converter(cursor)?),
+        BlockKind::Generator => BlockSettings::Generator(read_generator(cursor, string_ids)?),
+        BlockKind::Goal => BlockSettings::Goal(read_goal(cursor, string_ids)?),
+        BlockKind::Stamper => BlockSettings::Stamper(read_stamper(cursor, string_ids)?),
+        BlockKind::Roller => BlockSettings::Roller(read_roller(cursor, string_ids)?),
+        BlockKind::Converter => BlockSettings::Converter(read_converter(cursor, string_ids)?),
         BlockKind::TeleportEntrance | BlockKind::TeleportExit => {
             BlockSettings::Teleport(read_teleport(cursor)?)
         }
-        BlockKind::Sign => BlockSettings::Sign(read_sign(cursor)?),
+        BlockKind::Sign => BlockSettings::Sign(read_sign(cursor, string_ids)?),
         _ => return Err(SaveFormatError::InvalidSettings),
     })
+}
+
+fn write_string(out: &mut Vec<u8>, value: &str) {
+    let bytes = value.as_bytes();
+    let len = bytes.len().min(u16::MAX as usize) as u16;
+    out.extend_from_slice(&len.to_le_bytes());
+    out.extend_from_slice(&bytes[..len as usize]);
 }
 
 fn write_generator(out: &mut Vec<u8>, settings: GeneratorSettings) {
@@ -62,10 +76,13 @@ fn write_generator(out: &mut Vec<u8>, settings: GeneratorSettings) {
             }
         }
     }
-    out.push(encode_material(settings.material));
+    write_material_id(out, settings.material);
 }
 
-fn read_generator(cursor: &mut Cursor<'_>) -> Result<GeneratorSettings, SaveFormatError> {
+fn read_generator(
+    cursor: &mut Cursor<'_>,
+    string_ids: bool,
+) -> Result<GeneratorSettings, SaveFormatError> {
     let mode_tag = cursor.read_u8()?;
     let mode = match mode_tag {
         0 => GeneratorMode::Period {
@@ -87,37 +104,40 @@ fn read_generator(cursor: &mut Cursor<'_>) -> Result<GeneratorSettings, SaveForm
     };
     Ok(GeneratorSettings {
         mode,
-        material: decode_material(cursor.read_u8()?)?,
+        material: read_material_id(cursor, string_ids)?,
     })
 }
 
 fn write_goal(out: &mut Vec<u8>, settings: GoalSettings) {
-    out.push(encode_material(settings.material));
+    write_material_id(out, settings.material);
 }
 
-fn read_goal(cursor: &mut Cursor<'_>) -> Result<GoalSettings, SaveFormatError> {
+fn read_goal(cursor: &mut Cursor<'_>, string_ids: bool) -> Result<GoalSettings, SaveFormatError> {
     Ok(GoalSettings {
-        material: decode_material(cursor.read_u8()?)?,
+        material: read_material_id(cursor, string_ids)?,
     })
 }
 
 fn write_stamper(out: &mut Vec<u8>, settings: StamperSettings) {
-    out.push(encode_stamp_color(settings.color));
+    write_stamp_id(out, settings.stamp);
 }
 
-fn read_stamper(cursor: &mut Cursor<'_>) -> Result<StamperSettings, SaveFormatError> {
+fn read_stamper(
+    cursor: &mut Cursor<'_>,
+    string_ids: bool,
+) -> Result<StamperSettings, SaveFormatError> {
     Ok(StamperSettings {
-        color: decode_stamp_color(cursor.read_u8()?)?,
+        stamp: read_stamp_id(cursor, string_ids)?,
     })
 }
 
 fn write_roller(out: &mut Vec<u8>, settings: RollerSettings) {
-    out.push(encode_paint_color(settings.color));
+    write_paint_id(out, settings.paint);
 }
 
-fn read_roller(cursor: &mut Cursor<'_>) -> Result<RollerSettings, SaveFormatError> {
+fn read_roller(cursor: &mut Cursor<'_>, string_ids: bool) -> Result<RollerSettings, SaveFormatError> {
     Ok(RollerSettings {
-        color: decode_paint_color(cursor.read_u8()?)?,
+        paint: read_paint_id(cursor, string_ids)?,
     })
 }
 
@@ -126,11 +146,14 @@ fn write_converter(out: &mut Vec<u8>, settings: ConverterSettings) {
         ConverterMode::AnyInput => 0,
         ConverterMode::SpecificInput => 1,
     });
-    out.push(encode_material(settings.input));
-    out.push(encode_material(settings.output));
+    write_material_id(out, settings.input);
+    write_material_id(out, settings.output);
 }
 
-fn read_converter(cursor: &mut Cursor<'_>) -> Result<ConverterSettings, SaveFormatError> {
+fn read_converter(
+    cursor: &mut Cursor<'_>,
+    string_ids: bool,
+) -> Result<ConverterSettings, SaveFormatError> {
     let mode = match cursor.read_u8()? {
         0 => ConverterMode::AnyInput,
         1 => ConverterMode::SpecificInput,
@@ -138,16 +161,13 @@ fn read_converter(cursor: &mut Cursor<'_>) -> Result<ConverterSettings, SaveForm
     };
     Ok(ConverterSettings {
         mode,
-        input: decode_material(cursor.read_u8()?)?,
-        output: decode_material(cursor.read_u8()?)?,
+        input: read_material_id(cursor, string_ids)?,
+        output: read_material_id(cursor, string_ids)?,
     })
 }
 
 fn write_teleport(out: &mut Vec<u8>, settings: &TeleportSettings) {
-    let name = settings.name.as_bytes();
-    let len = name.len().min(u16::MAX as usize) as u16;
-    out.extend_from_slice(&len.to_le_bytes());
-    out.extend_from_slice(&name[..len as usize]);
+    write_string(out, &settings.name);
     if let Some(pair) = settings.pair {
         out.push(1);
         out.extend_from_slice(&pair.x.to_le_bytes());
@@ -159,11 +179,7 @@ fn write_teleport(out: &mut Vec<u8>, settings: &TeleportSettings) {
 }
 
 fn read_teleport(cursor: &mut Cursor<'_>) -> Result<TeleportSettings, SaveFormatError> {
-    let len = cursor.read_u16()? as usize;
-    let name_bytes = cursor.read_bytes(len)?;
-    let name = std::str::from_utf8(name_bytes)
-        .map(|s| s.to_string())
-        .map_err(|_| SaveFormatError::InvalidSettings)?;
+    let name = cursor.read_string()?;
     let pair = if cursor.read_u8()? == 1 {
         Some(IVec3::new(
             cursor.read_i32()?,
@@ -180,102 +196,141 @@ fn write_sign(out: &mut Vec<u8>, settings: &SignSettings) {
     match &settings.text {
         Some(text) => {
             out.push(1);
-            let bytes = text.as_bytes();
-            let len = bytes.len().min(u16::MAX as usize) as u16;
-            out.extend_from_slice(&len.to_le_bytes());
-            out.extend_from_slice(&bytes[..len as usize]);
+            write_string(out, text);
         }
         None => out.push(0),
     }
     match settings.display {
         Some(SignDisplay::Material(material)) => {
             out.push(1);
-            out.push(encode_material(material));
+            write_material_id(out, material);
         }
-        Some(SignDisplay::StampColor(color)) => {
+        Some(SignDisplay::Stamp(stamp)) => {
             out.push(2);
-            out.push(encode_stamp_color(color));
+            write_stamp_id(out, stamp);
         }
         None => out.push(0),
     }
 }
 
-fn read_sign(cursor: &mut Cursor<'_>) -> Result<SignSettings, SaveFormatError> {
+fn read_sign(cursor: &mut Cursor<'_>, string_ids: bool) -> Result<SignSettings, SaveFormatError> {
     let text = if cursor.read_u8()? == 1 {
-        let len = cursor.read_u16()? as usize;
-        let bytes = cursor.read_bytes(len)?;
-        Some(
-            std::str::from_utf8(bytes)
-                .map(|s| s.to_string())
-                .map_err(|_| SaveFormatError::InvalidSettings)?,
-        )
+        Some(cursor.read_string()?)
     } else {
         None
     };
     let display = match cursor.read_u8()? {
         0 => None,
-        1 => Some(SignDisplay::Material(decode_material(cursor.read_u8()?)?)),
-        2 => Some(SignDisplay::StampColor(decode_stamp_color(cursor.read_u8()?)?)),
+        1 => Some(SignDisplay::Material(read_material_id(cursor, string_ids)?)),
+        2 => Some(SignDisplay::Stamp(read_stamp_id(cursor, string_ids)?)),
         _ => return Err(SaveFormatError::InvalidSettings),
     };
     Ok(SignSettings { text, display })
 }
 
-fn encode_material(material: MaterialKind) -> u8 {
-    match material {
-        MaterialKind::Basic => 0,
-        MaterialKind::Iron => 1,
-        MaterialKind::Copper => 2,
-        MaterialKind::Glass => 3,
-        MaterialKind::Stamp => 4,
-    }
+fn write_material_id(out: &mut Vec<u8>, id: MaterialBlockId) {
+    ensure_fallback_material_catalog();
+    let catalog = material_catalog();
+    let string_id = catalog
+        .string_id(id)
+        .unwrap_or_else(|| panic!("unknown MaterialBlockId {}", id.0));
+    write_string(out, string_id);
 }
 
-fn decode_material(value: u8) -> Result<MaterialKind, SaveFormatError> {
-    Ok(match value {
-        0 => MaterialKind::Basic,
-        1 => MaterialKind::Iron,
-        2 => MaterialKind::Copper,
-        3 => MaterialKind::Glass,
-        4 => MaterialKind::Stamp,
+fn read_material_id(
+    cursor: &mut Cursor<'_>,
+    string_ids: bool,
+) -> Result<MaterialBlockId, SaveFormatError> {
+    ensure_fallback_material_catalog();
+    if string_ids {
+        let string_id = cursor.read_string()?;
+        return material_catalog()
+            .id_by_string(&string_id)
+            .ok_or(SaveFormatError::UnknownMaterialBlockId(string_id));
+    }
+    Ok(match cursor.read_u8()? {
+        0 => material_catalog()
+            .id_by_string("basic")
+            .expect("fallback basic"),
+        1 => material_catalog()
+            .id_by_string("iron")
+            .expect("fallback iron"),
+        2 => material_catalog()
+            .id_by_string("copper")
+            .expect("fallback copper"),
+        3 => material_catalog()
+            .id_by_string("glass_material")
+            .expect("fallback glass"),
+        // 旧 Stamp MaterialKind 映射为 basic（印花已独立）
+        4 => material_catalog()
+            .id_by_string("basic")
+            .expect("fallback basic"),
         _ => return Err(SaveFormatError::InvalidSettings),
     })
 }
 
-fn encode_stamp_color(color: StampColor) -> u8 {
-    match color {
-        StampColor::Red => 0,
-        StampColor::Green => 1,
-        StampColor::Blue => 2,
-        StampColor::Yellow => 3,
-    }
+fn write_stamp_id(out: &mut Vec<u8>, id: StampMaterialId) {
+    ensure_fallback_stamp_catalog();
+    let catalog = stamp_catalog();
+    let string_id = catalog
+        .string_id(id)
+        .unwrap_or_else(|| panic!("unknown StampMaterialId {}", id.0));
+    write_string(out, string_id);
 }
 
-fn decode_stamp_color(value: u8) -> Result<StampColor, SaveFormatError> {
-    Ok(match value {
-        0 => StampColor::Red,
-        1 => StampColor::Green,
-        2 => StampColor::Blue,
-        3 => StampColor::Yellow,
+fn read_stamp_id(
+    cursor: &mut Cursor<'_>,
+    string_ids: bool,
+) -> Result<StampMaterialId, SaveFormatError> {
+    ensure_fallback_stamp_catalog();
+    if string_ids {
+        let string_id = cursor.read_string()?;
+        return stamp_catalog()
+            .id_by_string(&string_id)
+            .ok_or(SaveFormatError::UnknownStampMaterialId(string_id));
+    }
+    Ok(match cursor.read_u8()? {
+        0 => stamp_catalog().id_by_string("red").expect("fallback red"),
+        1 => stamp_catalog()
+            .id_by_string("green")
+            .expect("fallback green"),
+        2 => stamp_catalog().id_by_string("blue").expect("fallback blue"),
+        3 => stamp_catalog()
+            .id_by_string("yellow")
+            .expect("fallback yellow"),
         _ => return Err(SaveFormatError::InvalidSettings),
     })
 }
 
-fn encode_paint_color(color: PaintColor) -> u8 {
-    match color {
-        PaintColor::Red => 0,
-        PaintColor::Green => 1,
-        PaintColor::Blue => 2,
-        PaintColor::Yellow => 3,
-    }
+fn write_paint_id(out: &mut Vec<u8>, id: PaintMaterialId) {
+    ensure_fallback_paint_catalog();
+    let catalog = paint_catalog();
+    let string_id = catalog
+        .string_id(id)
+        .unwrap_or_else(|| panic!("unknown PaintMaterialId {}", id.0));
+    write_string(out, string_id);
 }
 
-fn decode_paint_color(value: u8) -> Result<PaintColor, SaveFormatError> {
-    Ok(match value {
-        0 => PaintColor::Red,
-        1 => PaintColor::Green,
-        2 => PaintColor::Blue,
-        3 => PaintColor::Yellow,
+fn read_paint_id(
+    cursor: &mut Cursor<'_>,
+    string_ids: bool,
+) -> Result<PaintMaterialId, SaveFormatError> {
+    ensure_fallback_paint_catalog();
+    if string_ids {
+        let string_id = cursor.read_string()?;
+        return paint_catalog()
+            .id_by_string(&string_id)
+            .ok_or(SaveFormatError::UnknownPaintMaterialId(string_id));
+    }
+    Ok(match cursor.read_u8()? {
+        0 => paint_catalog().id_by_string("red").expect("fallback red"),
+        1 => paint_catalog()
+            .id_by_string("green")
+            .expect("fallback green"),
+        2 => paint_catalog().id_by_string("blue").expect("fallback blue"),
+        3 => paint_catalog()
+            .id_by_string("yellow")
+            .expect("fallback yellow"),
         _ => return Err(SaveFormatError::InvalidSettings),
     })
 }

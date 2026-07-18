@@ -11,7 +11,7 @@ use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::blocks::StampColor;
+use crate::game::blocks::{stamp_catalog, stamp_def, StampMaterialId};
 use crate::game::edit_history::{apply_block_settings_with_history, EditHistory};
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
@@ -31,23 +31,23 @@ const COLOR_SLOT: u8 = 0;
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StamperAction {
-    ToggleColor,
-    SetColor(StampColor),
+    ToggleStamp,
+    SetStamp(StampMaterialId),
 }
 
 #[derive(Component, Clone, Copy)]
 pub struct StamperPanelTitle;
 
 #[derive(Component, Clone, Copy)]
-struct StamperColorLabel;
+struct StamperStampLabel;
 
 #[derive(Component, Clone, Copy)]
-struct StamperColorList;
+struct StamperStampList;
 
 impl UiActionLabel for StamperAction {
     fn label_key(self) -> &'static str {
         match self {
-            Self::ToggleColor | Self::SetColor(_) => "button.next_color",
+            Self::ToggleStamp | Self::SetStamp(_) => "button.next_color",
         }
     }
 }
@@ -66,7 +66,7 @@ pub fn spawn_panel(root: &mut ChildSpawnerCommands) {
         StamperPanelTitle,
         |panel| {
             spawn_row(panel, "panel.color", |row| {
-                spawn_text_dropdown_toggle(row, StamperAction::ToggleColor, StamperColorLabel);
+                spawn_text_dropdown_toggle(row, StamperAction::ToggleStamp, StamperStampLabel);
             });
         },
     );
@@ -75,10 +75,13 @@ pub fn spawn_panel(root: &mut ChildSpawnerCommands) {
 pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
     spawn_text_dropdown_list(
         root,
-        StamperColorList,
-        StampColor::ALL
-            .into_iter()
-            .map(|color| (i18n.t(color.name_key()), StamperAction::SetColor(color))),
+        StamperStampList,
+        stamp_catalog().iter().map(|(id, def)| {
+            (
+                i18n.t(def.name_key),
+                StamperAction::SetStamp(id),
+            )
+        }),
     );
 }
 
@@ -152,12 +155,12 @@ fn on_click(
 
     let mut settings = world.world.stamper_settings(pos);
     let changed = match action {
-        StamperAction::ToggleColor => {
+        StamperAction::ToggleStamp => {
             open_dropdown.toggle(UiPanelId::Stamper, COLOR_SLOT);
             return;
         }
-        StamperAction::SetColor(color) => {
-            settings.color = color;
+        StamperAction::SetStamp(stamp) => {
+            settings.stamp = stamp;
             open_dropdown.close();
             true
         }
@@ -191,14 +194,14 @@ fn update_dropdowns(
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut labels: Query<(&StamperColorLabel, &mut Text)>,
-    mut lists: Query<(&StamperColorList, &mut Node, &ComputedNode)>,
+    mut labels: Query<(&StamperStampLabel, &mut Text)>,
+    mut lists: Query<(&StamperStampList, &mut Node, &ComputedNode)>,
     triggers: Query<(&StamperAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     let panel = UiPanelId::Stamper;
 
     if let Some(pos) = ui_runtime.active_block_pos() {
-        let label = i18n.t(world.stamper_settings(pos).color.name_key());
+        let label = i18n.t(stamp_def(world.stamper_settings(pos).stamp).name_key);
         for (_, mut text) in &mut labels {
             text.0 = label.clone();
         }
@@ -216,7 +219,7 @@ fn update_dropdowns(
             continue;
         }
         let trigger = triggers.iter().find_map(|(action, node, transform)| {
-            (*action == StamperAction::ToggleColor && !node.is_empty()).then_some((node, transform))
+            (*action == StamperAction::ToggleStamp && !node.is_empty()).then_some((node, transform))
         });
         if let Some((trigger_node, transform)) = trigger {
             if let Some((left, top)) =

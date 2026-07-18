@@ -2,6 +2,7 @@ use crate::game::blocks::BlockKind;
 
 use super::SaveFormatError;
 
+/// 将方块种类编码为 u8；Material/Stamp 仅写种类标记，字符串 id 由 write_block 追加
 pub fn encode_kind(kind: BlockKind) -> u8 {
     match kind {
         BlockKind::Platform => 0,
@@ -42,11 +43,9 @@ pub fn encode_kind(kind: BlockKind) -> u8 {
         BlockKind::TeleportEntrance => 26,
         BlockKind::TeleportExit => 27,
         BlockKind::Goal => 28,
-        BlockKind::Material => 29,
-        BlockKind::IronMaterial => 30,
-        BlockKind::CopperMaterial => 31,
-        BlockKind::GlassMaterial => 35,
-        BlockKind::StampMaterial => 38,
+        // v5：种类标记后跟字符串 id；旧档无字符串时由 decode_kind 映射固定材料
+        BlockKind::Material(_) => 29,
+        BlockKind::Stamp(_) => 38,
         BlockKind::WeldPoint => 32,
         BlockKind::DrillHead => 33,
         BlockKind::RollerBody => 36,
@@ -54,6 +53,7 @@ pub fn encode_kind(kind: BlockKind) -> u8 {
     }
 }
 
+/// 解码非 Material/Stamp 的固定种类；v4 及以下材料/印花映射到默认字符串 id
 pub fn decode_kind(id: u8) -> Result<BlockKind, SaveFormatError> {
     Ok(match id {
         0 => BlockKind::Platform,
@@ -85,16 +85,16 @@ pub fn decode_kind(id: u8) -> Result<BlockKind, SaveFormatError> {
         26 => BlockKind::TeleportEntrance,
         27 => BlockKind::TeleportExit,
         28 => BlockKind::Goal,
-        29 => BlockKind::Material,
-        30 => BlockKind::IronMaterial,
-        31 => BlockKind::CopperMaterial,
+        29 => BlockKind::material("basic"),
+        30 => BlockKind::material("iron"),
+        31 => BlockKind::material("copper"),
         32 => BlockKind::WeldPoint,
         33 => BlockKind::DrillHead,
         34 => BlockKind::SuctionCup,
-        35 => BlockKind::GlassMaterial,
+        35 => BlockKind::material("glass_material"),
         36 => BlockKind::RollerBody,
         37 => BlockKind::StamperBody,
-        38 => BlockKind::StampMaterial,
+        38 => BlockKind::stamp("red"),
         39 => BlockKind::Sign,
         _ => return Err(SaveFormatError::UnknownBlockKind(id)),
     })

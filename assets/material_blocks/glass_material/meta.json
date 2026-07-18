@@ -1,0 +1,14 @@
+{
+  "$schema": "../../../schemas/material_block.meta.schema.json",
+  "id": "glass_material",
+  "fragile": true,
+  "directional": false,
+  "connectable": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ]
+}

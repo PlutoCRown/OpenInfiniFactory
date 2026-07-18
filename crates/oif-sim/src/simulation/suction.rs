@@ -232,7 +232,7 @@ mod tests {
         place(
             &mut world,
             IVec3::new(2, 1, 0),
-            BlockKind::Material,
+            BlockKind::material("basic"),
             Facing::North,
         );
         // 供电：检测器盯着平台，导线接到吸盘上方
@@ -300,7 +300,7 @@ mod tests {
         place(
             &mut world,
             IVec3::new(3, 2, 0),
-            BlockKind::Material,
+            BlockKind::material("basic"),
             Facing::North,
         );
         // 可动结构自供电：向下传感器盯平台，导线接吸盘
@@ -363,7 +363,7 @@ mod tests {
         place(
             &mut world,
             IVec3::new(0, 2, 0),
-            BlockKind::Material,
+            BlockKind::material("basic"),
             Facing::North,
         );
         place(
@@ -449,7 +449,7 @@ mod tests {
         place(
             &mut world,
             IVec3::new(2, 1, 0),
-            BlockKind::Material,
+            BlockKind::material("basic"),
             Facing::North,
         );
 

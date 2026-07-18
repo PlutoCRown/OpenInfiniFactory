@@ -9,6 +9,7 @@ use super::components::{
 };
 use super::spawn::spawn_block_model;
 use crate::game::blocks::{BlockData, BlockKind, PLAY_BLOCKS, edit_blocks};
+use crate::game::material_blocks::{MaterialBlockRegistry, StampMaterialRegistry};
 use crate::game::scene_blocks::{SceneBlockRegistry, load_icon_png};
 use crate::game::world::animation::AnimationTiming;
 use crate::game::world::grid::WorldBlocks;
@@ -23,13 +24,15 @@ const ICON_RENDER_FRAMES: u8 = 3;
 const ICON_ORTHO_SIZE: f32 = 1.55;
 const ICON_CAMERA_OFFSET: Vec3 = Vec3::new(2.8, 2.2, 2.8);
 
-/// 为 UI 准备方块图标：场景块读预烘焙 icon.png，其余离屏渲
+/// 为 UI 准备方块图标：场景/材料/印花读预烘焙 icon.png，其余离屏渲
 pub fn setup_block_icons(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     assets: Res<WorldRenderAssets>,
     scene_registry: Res<SceneBlockRegistry>,
+    material_registry: Res<MaterialBlockRegistry>,
+    stamp_registry: Res<StampMaterialRegistry>,
 ) {
     let icon_layer = RenderLayers::layer(ICON_RENDER_LAYER);
     let mut icon_assets = BlockIconAssets::default();
@@ -57,9 +60,41 @@ pub fn setup_block_icons(
         }
     }
 
+    // 材料 / 印花：直接读资源包 icon.png
+    for presentation in material_registry.ordered() {
+        let kind = BlockKind::Material(presentation.id);
+        let Some(icon_path) = presentation.icon_path.as_ref() else {
+            bevy::log::warn!("material `{}` missing icon.png", presentation.string_id);
+            continue;
+        };
+        match load_icon_png(icon_path, &mut images) {
+            Some(handle) => {
+                icon_assets.icons.insert(kind, handle);
+            }
+            None => {
+                bevy::log::warn!("failed to load icon {}", icon_path.display());
+            }
+        }
+    }
+    for presentation in stamp_registry.ordered() {
+        let kind = BlockKind::Stamp(presentation.id);
+        let Some(icon_path) = presentation.icon_path.as_ref() else {
+            bevy::log::warn!("stamp `{}` missing icon.png", presentation.string_id);
+            continue;
+        };
+        match load_icon_png(icon_path, &mut images) {
+            Some(handle) => {
+                icon_assets.icons.insert(kind, handle);
+            }
+            None => {
+                bevy::log::warn!("failed to load icon {}", icon_path.display());
+            }
+        }
+    }
+
     let icon_kinds: Vec<BlockKind> = block_icon_kinds()
         .into_iter()
-        .filter(|kind| !kind.is_scene())
+        .filter(|kind| !kind.is_scene() && !matches!(kind, BlockKind::Material(_) | BlockKind::Stamp(_)))
         .collect();
     let has_offscreen = !icon_kinds.is_empty();
 
@@ -135,17 +170,11 @@ pub fn setup_block_icons(
     }
 }
 
-/// 需要离屏生成图标的方块种类（不含场景块）
+/// 需要离屏生成图标的方块种类（不含场景 / 材料 / 印花）
 fn block_icon_kinds() -> Vec<BlockKind> {
     let mut kinds = Vec::new();
-    for kind in edit_blocks().into_iter().chain(PLAY_BLOCKS).chain([
-        BlockKind::Material,
-        BlockKind::IronMaterial,
-        BlockKind::CopperMaterial,
-        BlockKind::GlassMaterial,
-        BlockKind::StampMaterial,
-    ]) {
-        if kind.is_scene() {
+    for kind in edit_blocks().into_iter().chain(PLAY_BLOCKS) {
+        if kind.is_scene() || matches!(kind, BlockKind::Material(_) | BlockKind::Stamp(_)) {
             continue;
         }
         if !kinds.contains(&kind) {

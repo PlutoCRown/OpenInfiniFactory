@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 use crate::blocks::{
-    AcceptorId, BlockData, BlockId, BlockKind, MaterialKind, PaintColor, StampColor,
+    ensure_fallback_material_catalog, ensure_fallback_paint_catalog,
+    ensure_fallback_stamp_catalog, material_catalog, paint_catalog, stamp_catalog, AcceptorId,
+    BlockData, BlockId, BlockKind, MaterialBlockId, PaintMaterialId, StampMaterialId,
 };
 use crate::world::direction::Facing;
 
@@ -28,9 +30,7 @@ pub struct WorldBlocks {
     pub machine_bodies: HashMap<IVec3, BlockData>,
     pub material_welds: HashSet<MaterialWeld>,
     /// 材料面装饰漆：按 BlockId+法线键控，移动无需改写
-    pub material_paints: HashMap<MaterialFace, PaintColor>,
-    /// 印花块朝向宿主面的着色（与滚刷漆分离；后期印花会改成薄模型）
-    pub stamp_face_colors: HashMap<MaterialFace, StampColor>,
+    pub material_paints: HashMap<MaterialFace, PaintMaterialId>,
     /// 印花占格附着：子 BlockId → (父 BlockId, 父面法线)
     pub material_attachments: HashMap<BlockId, MaterialAttachment>,
     /// 告示等工厂占格附着：子工厂 BlockId → (父 BlockId, 父面法线)
@@ -102,7 +102,7 @@ pub enum GeneratorMode {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GeneratorSettings {
     pub mode: GeneratorMode,
-    pub material: MaterialKind,
+    pub material: MaterialBlockId,
 }
 
 impl GeneratorSettings {
@@ -129,24 +129,24 @@ impl GeneratorSettings {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GoalSettings {
-    pub material: MaterialKind,
+    pub material: MaterialBlockId,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct StamperSettings {
-    pub color: StampColor,
+    pub stamp: StampMaterialId,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct RollerSettings {
-    pub color: PaintColor,
+    pub paint: PaintMaterialId,
 }
 
-/// 告示牌展示图标：材料或印花色（与文本互斥）
+/// 告示牌展示图标：材料或印花（与文本互斥）
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum SignDisplay {
-    Material(MaterialKind),
-    StampColor(StampColor),
+    Material(MaterialBlockId),
+    Stamp(StampMaterialId),
 }
 
 /// 告示牌设置：文本或图标二选一
@@ -159,16 +159,22 @@ pub struct SignSettings {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ConverterSettings {
     pub mode: ConverterMode,
-    pub input: MaterialKind,
-    pub output: MaterialKind,
+    pub input: MaterialBlockId,
+    pub output: MaterialBlockId,
 }
 
 impl Default for ConverterSettings {
     fn default() -> Self {
+        ensure_fallback_material_catalog();
+        let catalog = material_catalog();
         Self {
             mode: ConverterMode::AnyInput,
-            input: MaterialKind::Basic,
-            output: MaterialKind::Iron,
+            input: catalog
+                .id_by_string("basic")
+                .expect("fallback basic material"),
+            output: catalog
+                .id_by_string("iron")
+                .expect("fallback iron material"),
         }
     }
 }
@@ -196,24 +202,33 @@ impl TeleportSettings {
 
 impl Default for StamperSettings {
     fn default() -> Self {
+        ensure_fallback_stamp_catalog();
         Self {
-            color: StampColor::Red,
+            stamp: stamp_catalog()
+                .id_by_string("red")
+                .expect("fallback red stamp"),
         }
     }
 }
 
 impl Default for RollerSettings {
     fn default() -> Self {
+        ensure_fallback_paint_catalog();
         Self {
-            color: PaintColor::Red,
+            paint: paint_catalog()
+                .id_by_string("red")
+                .expect("fallback red paint"),
         }
     }
 }
 
 impl Default for GoalSettings {
     fn default() -> Self {
+        ensure_fallback_material_catalog();
         Self {
-            material: MaterialKind::Basic,
+            material: material_catalog()
+                .id_by_string("basic")
+                .expect("fallback basic material"),
         }
     }
 }
@@ -233,12 +248,15 @@ impl MaterialFace {
 
 impl Default for GeneratorSettings {
     fn default() -> Self {
+        ensure_fallback_material_catalog();
         Self {
             mode: GeneratorMode::Period {
                 period: crate::blocks::DEFAULT_GENERATOR_PERIOD,
                 offset: 0,
             },
-            material: MaterialKind::Basic,
+            material: material_catalog()
+                .id_by_string("basic")
+                .expect("fallback basic material"),
         }
     }
 }
@@ -326,12 +344,7 @@ impl WorldBlocks {
             if !id.is_none() {
                 self.material_welds.retain(|weld| !weld.contains(id));
                 self.material_paints.retain(|face, _| face.block != id);
-                // 印花色画在宿主面上：拆子印花时清宿主对应面
-                if let Some(att) = self.material_attachments.remove(&id) {
-                    self.stamp_face_colors
-                        .remove(&MaterialFace::new(att.parent, att.parent_face_normal));
-                }
-                self.stamp_face_colors.retain(|face, _| face.block != id);
+                self.material_attachments.remove(&id);
                 self.wire_face_panels.retain(|face| face.block != id);
                 self.factory_attachments.remove(&id);
                 // 宿主销毁时一并拆掉附着子块（印花材料 / 告示工厂）
@@ -345,7 +358,6 @@ impl WorldBlocks {
                     self.material_attachments.remove(&child_id);
                     self.material_paints
                         .retain(|face, _| face.block != child_id);
-                    // 宿主面色已由上面 retain(face.block != id) 清掉
                     if let Some(child_pos) = self
                         .blocks
                         .iter()
@@ -408,7 +420,6 @@ impl WorldBlocks {
             || !self.machine_bodies.is_empty()
             || !self.acceptor_structures.is_empty()
             || !self.material_paints.is_empty()
-            || !self.stamp_face_colors.is_empty()
             || !self.material_attachments.is_empty()
             || !self.factory_attachments.is_empty()
             || !self.wire_face_panels.is_empty()
@@ -418,7 +429,6 @@ impl WorldBlocks {
             self.machine_bodies.clear();
             self.material_welds.clear();
             self.material_paints.clear();
-            self.stamp_face_colors.clear();
             self.material_attachments.clear();
             self.factory_attachments.clear();
             self.wire_face_panels.clear();
@@ -438,20 +448,8 @@ impl WorldBlocks {
                 .retain(|weld| alive.contains(&weld.a) && alive.contains(&weld.b));
             self.material_paints
                 .retain(|face, _| alive.contains(&face.block));
-            self.stamp_face_colors
-                .retain(|face, _| alive.contains(&face.block));
             self.wire_face_panels
                 .retain(|face| alive.contains(&face.block));
-            // 子印花被滤掉时，清掉仍存活宿主上的印花色
-            let orphan_stamp_faces: Vec<MaterialFace> = self
-                .material_attachments
-                .iter()
-                .filter(|(child, _)| !alive.contains(child))
-                .map(|(_, att)| MaterialFace::new(att.parent, att.parent_face_normal))
-                .collect();
-            for face in orphan_stamp_faces {
-                self.stamp_face_colors.remove(&face);
-            }
             self.material_attachments
                 .retain(|child, att| alive.contains(child) && alive.contains(&att.parent));
             self.factory_attachments
@@ -1166,7 +1164,7 @@ impl WorldBlocks {
             .is_some_and(|block| block.kind.is_scene())
     }
 
-    pub fn accepts_material_kind_at(&self, pos: IVec3, material: MaterialKind) -> bool {
+    pub fn accepts_material_id_at(&self, pos: IVec3, material: MaterialBlockId) -> bool {
         self.system_blocks
             .get(&pos)
             .is_some_and(|block| match block.kind {
@@ -1439,7 +1437,7 @@ mod tests {
         world.insert(POS, BlockData::new(BlockKind::Generator, Facing::North));
 
         assert!(!world.can_place_block_kind_at(POS, BlockKind::Platform));
-        assert!(world.can_place_block_kind_at(POS, BlockKind::Material));
+        assert!(world.can_place_block_kind_at(POS, BlockKind::material("basic")));
         assert!(world.can_place_platform_at(POS));
     }
 
@@ -1495,6 +1493,6 @@ mod tests {
         world.insert(POS, BlockData::new(BlockKind::DrillHead, Facing::North));
 
         assert!(!world.can_place_block_kind_at(POS, BlockKind::Wire));
-        assert!(world.can_place_block_kind_at(POS, BlockKind::Material));
+        assert!(world.can_place_block_kind_at(POS, BlockKind::material("basic")));
     }
 }

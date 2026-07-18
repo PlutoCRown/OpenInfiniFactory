@@ -1,0 +1,36 @@
+{
+  "name": "block_basic",
+  "setup": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Stone",
+      "facing": "North"
+    },
+    {
+      "x": 0,
+      "y": 1,
+      "z": 0,
+      "kind": "Platform",
+      "facing": "North"
+    },
+    {
+      "x": 0,
+      "y": 2,
+      "z": 0,
+      "kind": "Basic",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 2,
+      "z": 0,
+      "kind": "Basic",
+      "layer": "material"
+    }
+  ]
+}

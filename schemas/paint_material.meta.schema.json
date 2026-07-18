@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openinfinifactory.local/schemas/paint_material.meta.schema.json",
+  "title": "PaintMaterialMeta",
+  "description": "滚刷漆材料资源包元数据（与 texture.png 同目录的 meta.json）。外观贴图为同目录 texture.png。游戏加载时忽略 $schema。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "指向本 schema 的相对路径，仅供编辑器智能提示；运行时忽略。"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "全局唯一字符串 ID。显示名走 i18n key `paint.<id>`；未翻译时 UI 直接显示该 key。"
+    }
+  }
+}

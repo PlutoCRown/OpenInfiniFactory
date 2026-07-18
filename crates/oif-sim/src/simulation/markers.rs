@@ -89,7 +89,7 @@ mod tests {
 
         assert!(world.is_occupied(pos));
         assert!(!world.can_move_into(pos));
-        assert!(!world.can_place_block_kind_at(pos, BlockKind::Material));
+        assert!(!world.can_place_block_kind_at(pos, BlockKind::material("basic")));
         assert!(!world.can_place_platform_at(pos));
     }
 
@@ -107,7 +107,7 @@ mod tests {
         assert_eq!(body.kind, BlockKind::RollerBody);
         assert!(world.is_occupied(pos));
         assert!(!world.can_move_into(pos));
-        assert!(!world.can_place_block_kind_at(pos, BlockKind::Material));
+        assert!(!world.can_place_block_kind_at(pos, BlockKind::material("basic")));
     }
 
     #[test]
@@ -115,13 +115,13 @@ mod tests {
         let pos = IVec3::new(1, 1, 0);
         let mut world = WorldBlocks::default();
         world.insert(pos, BlockData::new(BlockKind::Stamper, Facing::West));
-        world.insert(pos, BlockData::new(BlockKind::StampMaterial, Facing::East));
+        world.insert(pos, BlockData::new(BlockKind::stamp("red"), Facing::East));
         refresh_static_generated_markers(&mut world);
 
         assert!(world.machine_bodies.contains_key(&pos));
         assert_eq!(
             world.blocks.get(&pos).map(|b| b.kind),
-            Some(BlockKind::StampMaterial)
+            Some(BlockKind::stamp("red"))
         );
         assert!(world.is_occupied(pos));
     }

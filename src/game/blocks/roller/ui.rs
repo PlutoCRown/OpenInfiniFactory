@@ -11,7 +11,7 @@ use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::blocks::PaintColor;
+use crate::game::blocks::{paint_catalog, paint_def, PaintMaterialId};
 use crate::game::edit_history::{apply_block_settings_with_history, EditHistory};
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
@@ -31,23 +31,23 @@ const COLOR_SLOT: u8 = 0;
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RollerAction {
-    ToggleColor,
-    SetColor(PaintColor),
+    TogglePaint,
+    SetPaint(PaintMaterialId),
 }
 
 #[derive(Component, Clone, Copy)]
 pub struct RollerPanelTitle;
 
 #[derive(Component, Clone, Copy)]
-struct RollerColorLabel;
+struct RollerPaintLabel;
 
 #[derive(Component, Clone, Copy)]
-struct RollerColorList;
+struct RollerPaintList;
 
 impl UiActionLabel for RollerAction {
     fn label_key(self) -> &'static str {
         match self {
-            Self::ToggleColor | Self::SetColor(_) => "button.next_color",
+            Self::TogglePaint | Self::SetPaint(_) => "button.next_color",
         }
     }
 }
@@ -66,7 +66,7 @@ pub fn spawn_panel(root: &mut ChildSpawnerCommands) {
         RollerPanelTitle,
         |panel| {
             spawn_row(panel, "panel.color", |row| {
-                spawn_text_dropdown_toggle(row, RollerAction::ToggleColor, RollerColorLabel);
+                spawn_text_dropdown_toggle(row, RollerAction::TogglePaint, RollerPaintLabel);
             });
         },
     );
@@ -75,10 +75,13 @@ pub fn spawn_panel(root: &mut ChildSpawnerCommands) {
 pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
     spawn_text_dropdown_list(
         root,
-        RollerColorList,
-        PaintColor::ALL
-            .into_iter()
-            .map(|color| (i18n.t(color.name_key()), RollerAction::SetColor(color))),
+        RollerPaintList,
+        paint_catalog().iter().map(|(id, def)| {
+            (
+                i18n.t(def.name_key),
+                RollerAction::SetPaint(id),
+            )
+        }),
     );
 }
 
@@ -152,12 +155,12 @@ fn on_click(
 
     let mut settings = world.world.roller_settings(pos);
     let changed = match action {
-        RollerAction::ToggleColor => {
+        RollerAction::TogglePaint => {
             open_dropdown.toggle(UiPanelId::Roller, COLOR_SLOT);
             return;
         }
-        RollerAction::SetColor(color) => {
-            settings.color = color;
+        RollerAction::SetPaint(paint) => {
+            settings.paint = paint;
             open_dropdown.close();
             true
         }
@@ -191,14 +194,14 @@ fn update_dropdowns(
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut labels: Query<(&RollerColorLabel, &mut Text)>,
-    mut lists: Query<(&RollerColorList, &mut Node, &ComputedNode)>,
+    mut labels: Query<(&RollerPaintLabel, &mut Text)>,
+    mut lists: Query<(&RollerPaintList, &mut Node, &ComputedNode)>,
     triggers: Query<(&RollerAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     let panel = UiPanelId::Roller;
 
     if let Some(pos) = ui_runtime.active_block_pos() {
-        let label = i18n.t(world.roller_settings(pos).color.name_key());
+        let label = i18n.t(paint_def(world.roller_settings(pos).paint).name_key);
         for (_, mut text) in &mut labels {
             text.0 = label.clone();
         }
@@ -216,7 +219,7 @@ fn update_dropdowns(
             continue;
         }
         let trigger = triggers.iter().find_map(|(action, node, transform)| {
-            (*action == RollerAction::ToggleColor && !node.is_empty()).then_some((node, transform))
+            (*action == RollerAction::TogglePaint && !node.is_empty()).then_some((node, transform))
         });
         if let Some((trigger_node, transform)) = trigger {
             if let Some((left, top)) =

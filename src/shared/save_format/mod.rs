@@ -12,8 +12,9 @@ pub use block_kind::{decode_kind, encode_kind};
 pub use settings::{read_settings, write_settings};
 
 pub const MAGIC: &[u8; 4] = b"OIF\0";
-/// v4：场景段在字符串 id 后可选 facing（与工厂段 flags 同约定）
-pub const VERSION: u16 = 4;
+/// v5：Material/Stamp 种类后跟字符串 id；设置里材料/印花/漆亦为字符串
+pub const VERSION: u16 = 5;
+pub const VERSION_V4: u16 = 4;
 pub const VERSION_V3: u16 = 3;
 pub const VERSION_V2: u16 = 2;
 pub const VERSION_V1: u16 = 1;
@@ -29,6 +30,9 @@ pub enum SaveFormatError {
     UnsupportedVersion(u16),
     UnknownBlockKind(u8),
     UnknownSceneBlockId(String),
+    UnknownMaterialBlockId(String),
+    UnknownStampMaterialId(String),
+    UnknownPaintMaterialId(String),
     InvalidSettings,
     InvalidFacing(u8),
 }
@@ -43,6 +47,9 @@ impl std::fmt::Display for SaveFormatError {
             }
             Self::UnknownBlockKind(id) => write!(f, "unknown block kind id {id}"),
             Self::UnknownSceneBlockId(id) => write!(f, "unknown scene block id '{id}'"),
+            Self::UnknownMaterialBlockId(id) => write!(f, "unknown material block id '{id}'"),
+            Self::UnknownStampMaterialId(id) => write!(f, "unknown stamp material id '{id}'"),
+            Self::UnknownPaintMaterialId(id) => write!(f, "unknown paint material id '{id}'"),
             Self::InvalidSettings => write!(f, "invalid block settings payload"),
             Self::InvalidFacing(value) => write!(f, "invalid facing value {value}"),
         }
@@ -190,11 +197,12 @@ pub fn decode_blocks(bytes: &[u8]) -> Result<SaveBlocksData, SaveFormatError> {
         return Err(SaveFormatError::InvalidMagic);
     }
     let version = cursor.read_u16()?;
+    let string_ids = version >= VERSION;
     let (scene_blocks, system_blocks, factory_blocks, wire_face_panels) = match version {
-        VERSION => {
+        VERSION | VERSION_V4 => {
             let scene_blocks = read_scene_section(&mut cursor, true)?;
-            let system_blocks = read_section(&mut cursor)?;
-            let factory_blocks = read_section(&mut cursor)?;
+            let system_blocks = read_section(&mut cursor, version, string_ids)?;
+            let factory_blocks = read_section(&mut cursor, version, string_ids)?;
             let wire_face_panels = read_panel_section(&mut cursor)?;
             (
                 scene_blocks,
@@ -206,8 +214,8 @@ pub fn decode_blocks(bytes: &[u8]) -> Result<SaveBlocksData, SaveFormatError> {
         VERSION_V3 => {
             // v3：场景段仅字符串 id，无 facing
             let scene_blocks = read_scene_section(&mut cursor, false)?;
-            let system_blocks = read_section(&mut cursor)?;
-            let factory_blocks = read_section(&mut cursor)?;
+            let system_blocks = read_section(&mut cursor, version, false)?;
+            let factory_blocks = read_section(&mut cursor, version, false)?;
             let wire_face_panels = read_panel_section(&mut cursor)?;
             (
                 scene_blocks,
@@ -218,9 +226,9 @@ pub fn decode_blocks(bytes: &[u8]) -> Result<SaveBlocksData, SaveFormatError> {
         }
         VERSION_V2 => {
             // 漏刷兜底：v2 场景段仍为 u8 kind
-            let scene_blocks = read_section(&mut cursor)?;
-            let system_blocks = read_section(&mut cursor)?;
-            let factory_blocks = read_section(&mut cursor)?;
+            let scene_blocks = read_section(&mut cursor, version, false)?;
+            let system_blocks = read_section(&mut cursor, version, false)?;
+            let factory_blocks = read_section(&mut cursor, version, false)?;
             let wire_face_panels = read_panel_section(&mut cursor)?;
             (
                 scene_blocks,
@@ -231,9 +239,9 @@ pub fn decode_blocks(bytes: &[u8]) -> Result<SaveBlocksData, SaveFormatError> {
         }
         VERSION_V1 => {
             // v1：无 wire_face_panels 段；场景仍为 u8 kind
-            let scene_blocks = read_section(&mut cursor)?;
-            let system_blocks = read_section(&mut cursor)?;
-            let factory_blocks = read_section(&mut cursor)?;
+            let scene_blocks = read_section(&mut cursor, version, false)?;
+            let system_blocks = read_section(&mut cursor, version, false)?;
+            let factory_blocks = read_section(&mut cursor, version, false)?;
             (scene_blocks, system_blocks, factory_blocks, Vec::new())
         }
         other => return Err(SaveFormatError::UnsupportedVersion(other)),
@@ -350,11 +358,34 @@ fn write_panel_section(out: &mut Vec<u8>, panels: &[SavedWireFacePanel]) {
     }
 }
 
+fn write_string(out: &mut Vec<u8>, value: &str) {
+    let bytes = value.as_bytes();
+    let len = bytes.len().min(u16::MAX as usize) as u16;
+    out.extend_from_slice(&len.to_le_bytes());
+    out.extend_from_slice(&bytes[..len as usize]);
+}
+
 fn write_block(out: &mut Vec<u8>, block: &SavedBlock) {
     out.extend_from_slice(&block.x.to_le_bytes());
     out.extend_from_slice(&block.y.to_le_bytes());
     out.extend_from_slice(&block.z.to_le_bytes());
     out.push(encode_kind(block.kind));
+    // v5：Material/Stamp 在种类字节后写字符串 id
+    match block.kind {
+        BlockKind::Material(id) => {
+            oif_sim::blocks::ensure_fallback_material_catalog();
+            let catalog = oif_sim::blocks::material_catalog();
+            let string_id = catalog.string_id(id).unwrap_or("unknown");
+            write_string(out, string_id);
+        }
+        BlockKind::Stamp(id) => {
+            oif_sim::blocks::ensure_fallback_stamp_catalog();
+            let catalog = oif_sim::blocks::stamp_catalog();
+            let string_id = catalog.string_id(id).unwrap_or("unknown");
+            write_string(out, string_id);
+        }
+        _ => {}
+    }
     let has_facing = block.facing.is_some();
     let has_settings = block.settings.is_some();
     out.push((has_facing as u8) | ((has_settings as u8) << 1));
@@ -366,11 +397,15 @@ fn write_block(out: &mut Vec<u8>, block: &SavedBlock) {
     }
 }
 
-fn read_section(cursor: &mut Cursor<'_>) -> Result<Vec<SavedBlock>, SaveFormatError> {
+fn read_section(
+    cursor: &mut Cursor<'_>,
+    version: u16,
+    string_ids: bool,
+) -> Result<Vec<SavedBlock>, SaveFormatError> {
     let count = cursor.read_u32()? as usize;
     let mut blocks = Vec::with_capacity(count);
     for _ in 0..count {
-        blocks.push(read_block(cursor)?);
+        blocks.push(read_block(cursor, version, string_ids)?);
     }
     Ok(blocks)
 }
@@ -391,11 +426,38 @@ fn read_panel_section(cursor: &mut Cursor<'_>) -> Result<Vec<SavedWireFacePanel>
     Ok(panels)
 }
 
-fn read_block(cursor: &mut Cursor<'_>) -> Result<SavedBlock, SaveFormatError> {
+fn read_block(
+    cursor: &mut Cursor<'_>,
+    version: u16,
+    string_ids: bool,
+) -> Result<SavedBlock, SaveFormatError> {
     let x = cursor.read_i32()?;
     let y = cursor.read_i32()?;
     let z = cursor.read_i32()?;
-    let kind = decode_kind(cursor.read_u8()?)?;
+    let kind_u8 = cursor.read_u8()?;
+    let kind = if version >= VERSION {
+        match kind_u8 {
+            29 => {
+                let string_id = cursor.read_string()?;
+                oif_sim::blocks::ensure_fallback_material_catalog();
+                oif_sim::blocks::material_catalog()
+                    .id_by_string(&string_id)
+                    .map(BlockKind::Material)
+                    .ok_or(SaveFormatError::UnknownMaterialBlockId(string_id))?
+            }
+            38 => {
+                let string_id = cursor.read_string()?;
+                oif_sim::blocks::ensure_fallback_stamp_catalog();
+                oif_sim::blocks::stamp_catalog()
+                    .id_by_string(&string_id)
+                    .map(BlockKind::Stamp)
+                    .ok_or(SaveFormatError::UnknownStampMaterialId(string_id))?
+            }
+            other => decode_kind(other)?,
+        }
+    } else {
+        decode_kind(kind_u8)?
+    };
     let flags = cursor.read_u8()?;
     let facing = if flags & 1 != 0 {
         Some(decode_facing(cursor.read_u8()?)?)
@@ -403,7 +465,7 @@ fn read_block(cursor: &mut Cursor<'_>) -> Result<SavedBlock, SaveFormatError> {
         None
     };
     let settings = if flags & 2 != 0 {
-        Some(read_settings(cursor, kind)?)
+        Some(read_settings(cursor, kind, string_ids)?)
     } else {
         None
     };
@@ -439,7 +501,10 @@ fn decode_facing(value: u8) -> Result<Facing, SaveFormatError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::game::blocks::{BlockData, Facing, MaterialKind, StampColor};
+    use crate::game::blocks::{
+        ensure_fallback_material_catalog, ensure_fallback_stamp_catalog, material_catalog,
+        stamp_catalog, BlockData, Facing,
+    };
     use crate::game::world::grid::{
         ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, StamperSettings,
         TeleportSettings,
@@ -447,6 +512,10 @@ mod tests {
 
     #[test]
     fn blocks_round_trip_preserves_settings_and_facing() {
+        ensure_fallback_material_catalog();
+        let copper = material_catalog()
+            .id_by_string("copper")
+            .expect("copper material");
         let data = SaveBlocksData {
             scene_blocks: vec![
                 SavedBlock {
@@ -478,7 +547,7 @@ mod tests {
                             period: 9,
                             offset: 2,
                         },
-                        material: MaterialKind::Copper,
+                        material: copper,
                     })),
                 },
                 SavedBlock {
@@ -531,6 +600,10 @@ mod tests {
 
     #[test]
     fn stamper_settings_round_trip() {
+        ensure_fallback_stamp_catalog();
+        let blue = stamp_catalog()
+            .id_by_string("blue")
+            .expect("blue stamp");
         let data = SaveBlocksData {
             system_blocks: vec![SavedBlock {
                 x: 0,
@@ -538,9 +611,7 @@ mod tests {
                 z: 0,
                 kind: BlockKind::Stamper,
                 facing: Some(Facing::West),
-                settings: Some(BlockSettings::Stamper(StamperSettings {
-                    color: StampColor::Blue,
-                })),
+                settings: Some(BlockSettings::Stamper(StamperSettings { stamp: blue })),
             }],
             ..Default::default()
         };
@@ -549,6 +620,8 @@ mod tests {
 
     #[test]
     fn converter_settings_round_trip() {
+        ensure_fallback_material_catalog();
+        let catalog = material_catalog();
         let data = SaveBlocksData {
             system_blocks: vec![SavedBlock {
                 x: 0,
@@ -558,10 +631,28 @@ mod tests {
                 facing: Some(Facing::North),
                 settings: Some(BlockSettings::Converter(ConverterSettings {
                     mode: ConverterMode::SpecificInput,
-                    input: MaterialKind::Iron,
-                    output: MaterialKind::Copper,
+                    input: catalog.id_by_string("iron").expect("iron"),
+                    output: catalog.id_by_string("copper").expect("copper"),
                 })),
             }],
+            ..Default::default()
+        };
+        assert_eq!(decode_blocks(&encode_blocks(&data)).unwrap(), data);
+    }
+
+    #[test]
+    fn material_and_stamp_blocks_round_trip_with_string_ids() {
+        let data = SaveBlocksData {
+            factory_blocks: vec![
+                SavedBlock::from_block_data(
+                    IVec3::ZERO,
+                    BlockData::new(BlockKind::material("copper"), Facing::North),
+                ),
+                SavedBlock::from_block_data(
+                    IVec3::X,
+                    BlockData::new(BlockKind::stamp("green"), Facing::North),
+                ),
+            ],
             ..Default::default()
         };
         assert_eq!(decode_blocks(&encode_blocks(&data)).unwrap(), data);

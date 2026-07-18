@@ -1,6 +1,6 @@
 use super::traits::PlaceableBlock;
 use super::{Block, BlockKind, EditableBlock};
-use oif_sim::blocks::scene_catalog;
+use oif_sim::blocks::{material_catalog, scene_catalog, stamp_catalog};
 
 pub fn edit_blocks() -> Vec<BlockKind> {
     let mut blocks: Vec<_> = registrations()
@@ -16,6 +16,7 @@ pub fn all_blocks() -> Vec<BlockKind> {
         .map(|registration| registration.kind)
         .collect();
     blocks.extend(scene_kinds());
+    blocks.extend(material_kinds());
     sort_blocks(&mut blocks);
     blocks
 }
@@ -24,6 +25,14 @@ fn scene_kinds() -> Vec<BlockKind> {
     scene_catalog()
         .iter()
         .map(|(id, _)| BlockKind::Scene(id))
+        .collect()
+}
+
+fn material_kinds() -> Vec<BlockKind> {
+    material_catalog()
+        .iter()
+        .map(|(id, _)| BlockKind::Material(id))
+        .chain(stamp_catalog().iter().map(|(id, _)| BlockKind::Stamp(id)))
         .collect()
 }
 
@@ -154,14 +163,11 @@ fn block_order(kind: BlockKind) -> usize {
         BlockKind::Converter => 124,
         BlockKind::TeleportEntrance => 125,
         BlockKind::TeleportExit => 126,
-        BlockKind::Material => 127,
-        BlockKind::IronMaterial => 128,
-        BlockKind::CopperMaterial => 129,
-        BlockKind::GlassMaterial => 130,
-        BlockKind::StampMaterial => 135,
-        BlockKind::WeldPoint => 131,
-        BlockKind::DrillHead => 132,
-        BlockKind::RollerBody => 133,
-        BlockKind::StamperBody => 134,
+        BlockKind::Material(id) => 127 + id.0 as usize,
+        BlockKind::Stamp(id) => 200 + id.0 as usize,
+        BlockKind::WeldPoint => 300,
+        BlockKind::DrillHead => 301,
+        BlockKind::RollerBody => 302,
+        BlockKind::StamperBody => 303,
     }
 }

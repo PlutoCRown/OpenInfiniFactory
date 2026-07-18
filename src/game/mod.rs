@@ -4,6 +4,7 @@ pub mod cameras;
 pub mod debug;
 pub mod edit_history;
 pub mod input;
+pub mod material_blocks;
 pub mod player;
 pub mod scene_blocks;
 pub mod session;
@@ -130,6 +131,9 @@ impl Plugin for GamePlugin {
             .init_resource::<EditHistory>()
             .init_resource::<PendingPlayerSpawn>()
             .init_resource::<scene_blocks::SceneBlockRegistry>()
+            .init_resource::<material_blocks::MaterialBlockRegistry>()
+            .init_resource::<material_blocks::StampMaterialRegistry>()
+            .init_resource::<material_blocks::PaintMaterialRegistry>()
             .insert_resource(systems::debug::DebugState::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(input::GameplayInputPlugin)
@@ -315,24 +319,57 @@ fn apply_launch_load_save_when_ready(
     session::load_world(&mut commands, slot, entry);
 }
 
-/// 启动时加载全局场景方块资源包
-fn load_scene_blocks_on_startup(mut registry: ResMut<scene_blocks::SceneBlockRegistry>) {
+/// 启动时加载全局场景方块与材料/印花/滚刷资源包
+fn load_scene_blocks_on_startup(
+    mut scene_registry: ResMut<scene_blocks::SceneBlockRegistry>,
+    mut material_registry: ResMut<material_blocks::MaterialBlockRegistry>,
+    mut stamp_registry: ResMut<material_blocks::StampMaterialRegistry>,
+    mut paint_registry: ResMut<material_blocks::PaintMaterialRegistry>,
+) {
     #[cfg(target_arch = "wasm32")]
     {
         oif_sim::blocks::ensure_fallback_scene_catalog();
-        let _ = registry;
-        bevy::log::info!("scene blocks: wasm uses builtin catalog (no directory scan)");
+        oif_sim::blocks::ensure_fallback_material_catalog();
+        oif_sim::blocks::ensure_fallback_stamp_catalog();
+        oif_sim::blocks::ensure_fallback_paint_catalog();
+        let _ = (
+            &mut scene_registry,
+            &mut material_registry,
+            &mut stamp_registry,
+            &mut paint_registry,
+        );
+        bevy::log::info!("scene/material packs: wasm uses builtin catalogs (no directory scan)");
         return;
     }
     #[cfg(not(target_arch = "wasm32"))]
-    match scene_blocks::load_global_scene_blocks(&mut registry) {
-        Ok(()) => bevy::log::info!(
-            "loaded {} scene block packs",
-            registry.ordered_kinds().len()
-        ),
-        Err(err) => {
-            bevy::log::error!("failed to load scene blocks: {err}; using fallback catalog");
-            oif_sim::blocks::ensure_fallback_scene_catalog();
+    {
+        match scene_blocks::load_global_scene_blocks(&mut scene_registry) {
+            Ok(()) => bevy::log::info!(
+                "loaded {} scene block packs",
+                scene_registry.ordered_kinds().len()
+            ),
+            Err(err) => {
+                bevy::log::error!("failed to load scene blocks: {err}; using fallback catalog");
+                oif_sim::blocks::ensure_fallback_scene_catalog();
+            }
+        }
+        match material_blocks::load_global_material_packs(material_blocks::MaterialPackRegistries {
+            materials: &mut material_registry,
+            stamps: &mut stamp_registry,
+            paints: &mut paint_registry,
+        }) {
+            Ok(()) => bevy::log::info!(
+                "loaded {} material / {} stamp / {} paint packs",
+                material_registry.ordered().count(),
+                stamp_registry.ordered().count(),
+                paint_registry.ordered().count()
+            ),
+            Err(err) => {
+                bevy::log::error!("failed to load material packs: {err}; using fallback catalogs");
+                oif_sim::blocks::ensure_fallback_material_catalog();
+                oif_sim::blocks::ensure_fallback_stamp_catalog();
+                oif_sim::blocks::ensure_fallback_paint_catalog();
+            }
         }
     }
 }

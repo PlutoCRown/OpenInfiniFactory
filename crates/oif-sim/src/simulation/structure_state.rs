@@ -748,7 +748,7 @@ mod tests {
     }
 
     fn basic_material(_pos: IVec3) -> BlockData {
-        BlockData::new(BlockKind::Material, Facing::North)
+        BlockData::new(BlockKind::material("basic"), Facing::North)
     }
 
     #[test]

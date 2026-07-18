@@ -1,4 +1,4 @@
-use super::{Block, BlockKind, MaterialKind};
+use super::{Block, BlockKind};
 
 /// 按 kind 查模拟侧注册表
 pub fn get(kind: BlockKind) -> &'static (dyn Block + Send + Sync) {
@@ -7,19 +7,12 @@ pub fn get(kind: BlockKind) -> &'static (dyn Block + Send + Sync) {
         .expect("every BlockKind must be registered")
 }
 
-/// 材料种类对应的方块 kind
-pub fn material_block_kind(material: MaterialKind) -> Option<BlockKind> {
-    registrations().find_map(|registration| {
-        (registration.block.material_kind() == Some(material)).then_some(registration.kind)
-    })
-}
-
 /// 存档是否需要持久化朝向
 pub fn save_stores_facing(kind: BlockKind) -> bool {
-    if let BlockKind::Scene(id) = kind {
-        return super::scene_def(id).directional;
-    }
     match kind {
+        BlockKind::Scene(id) => super::scene_def(id).directional,
+        BlockKind::Material(id) => super::material_def(id).directional,
+        BlockKind::Stamp(_) => false,
         BlockKind::Platform | BlockKind::Wire | BlockKind::DownWelder | BlockKind::DownDetector => {
             false
         }

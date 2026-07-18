@@ -5,7 +5,7 @@ use crate::world::grid::BlockSettings;
 
 use super::{
     BlockDefinition, BlockKind, LaserOpticsBehavior, MarkerBehavior, MaterialDestroyer,
-    MaterialKind, MaterialLabeler, MaterialProcessor, MaterialSource, MovementRule, PersistentLayer,
+    MaterialLabeler, MaterialProcessor, MaterialSource, MovementRule, PersistentLayer,
     SignalBehavior, WeldBehavior,
 };
 
@@ -15,10 +15,6 @@ pub trait BlockMeta: Send + Sync {
     fn definition(&self) -> BlockDefinition;
 
     fn alternate(&self) -> Option<BlockKind> {
-        None
-    }
-
-    fn material_kind(&self) -> Option<MaterialKind> {
         None
     }
 

@@ -12,7 +12,7 @@ use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::blocks::MaterialKind;
+use crate::game::blocks::{material_catalog, MaterialBlockId};
 use crate::game::edit_history::{apply_block_settings_with_history, EditHistory};
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
@@ -37,7 +37,7 @@ pub enum SignAction {
     EditText,
     ClearText,
     ToggleDisplay,
-    SetMaterial(MaterialKind),
+    SetMaterial(MaterialBlockId),
     ClearDisplay,
 }
 
@@ -51,7 +51,7 @@ struct SignDisplaySlot;
 struct SignDisplayList;
 
 #[derive(Component, Clone, Copy)]
-struct SignMaterialOption(MaterialKind);
+struct SignMaterialOption(MaterialBlockId);
 
 /// 点击编辑后延迟到 UiAccessScope 内打开文本提示
 #[derive(Resource, Default)]
@@ -97,9 +97,9 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
     spawn_material_icon_list(
         root,
         SignDisplayList,
-        MaterialKind::ALL
-            .into_iter()
-            .map(|material| (material, SignAction::SetMaterial(material))),
+        material_catalog()
+            .iter()
+            .map(|(id, _)| (id, SignAction::SetMaterial(id))),
         SignMaterialOption,
     );
 }

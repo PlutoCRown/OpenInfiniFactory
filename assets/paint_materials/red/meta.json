@@ -1,0 +1,4 @@
+{
+  "$schema": "../../../schemas/paint_material.meta.schema.json",
+  "id": "red"
+}

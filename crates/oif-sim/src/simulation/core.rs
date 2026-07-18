@@ -386,7 +386,7 @@ fn log_movement_plan(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::blocks::{BlockData, BlockKind, MaterialKind};
+    use crate::blocks::{BlockData, BlockKind};
     use crate::simulation::movement::PusherState;
     use crate::simulation::pending::PendingGeneratedMaterials;
     use crate::world::direction::Facing;
@@ -404,7 +404,7 @@ mod tests {
                 period: 1,
                 offset: 0,
             },
-            material: MaterialKind::Basic,
+            material: BlockKind::material("basic").material_id().unwrap(),
         };
         world.set_generator_settings(a, settings);
         world.set_generator_settings(
@@ -414,7 +414,7 @@ mod tests {
                     period: 1,
                     offset: 0,
                 },
-                material: MaterialKind::Iron,
+                material: BlockKind::material("iron").material_id().unwrap(),
             },
         );
 
@@ -697,7 +697,7 @@ mod tests {
                     period: 1,
                     offset: 0,
                 },
-                material: MaterialKind::Basic,
+                material: BlockKind::material("basic").material_id().unwrap(),
             },
         );
 
@@ -759,9 +759,12 @@ mod tests {
         let iron = IVec3::new(1, 1, 1);
         world.insert(
             glass,
-            BlockData::new(BlockKind::GlassMaterial, Facing::North),
+            BlockData::new(BlockKind::material("glass_material"), Facing::North),
         );
-        world.insert(iron, BlockData::new(BlockKind::IronMaterial, Facing::North));
+        world.insert(
+            iron,
+            BlockData::new(BlockKind::material("iron"), Facing::North),
+        );
         world.weld_materials(glass, iron);
 
         let (mut world, mut pending, mut signals, mut structures, mut influence, mut pushers) =
@@ -783,7 +786,7 @@ mod tests {
             world
                 .blocks
                 .get(&iron)
-                .is_some_and(|b| b.kind == BlockKind::IronMaterial),
+                .is_some_and(|b| b.kind == BlockKind::material("iron")),
             "焊着的铁不应被推动"
         );
         assert!(
@@ -806,9 +809,12 @@ mod tests {
         let iron = IVec3::new(0, 2, 0);
         world.insert(
             glass,
-            BlockData::new(BlockKind::GlassMaterial, Facing::North),
+            BlockData::new(BlockKind::material("glass_material"), Facing::North),
         );
-        world.insert(iron, BlockData::new(BlockKind::IronMaterial, Facing::North));
+        world.insert(
+            iron,
+            BlockData::new(BlockKind::material("iron"), Facing::North),
+        );
 
         let (mut world, mut pending, mut signals, mut structures, mut influence, mut pushers) =
             sim_world(world);
@@ -829,14 +835,14 @@ mod tests {
             !world
                 .blocks
                 .get(&IVec3::new(0, 1, 0))
-                .is_some_and(|b| b.kind == BlockKind::GlassMaterial),
+                .is_some_and(|b| b.kind == BlockKind::material("glass_material")),
             "玻璃应碎裂"
         );
         assert!(
             world
                 .blocks
                 .get(&IVec3::new(0, 1, 0))
-                .is_some_and(|b| b.kind == BlockKind::IronMaterial),
+                .is_some_and(|b| b.kind == BlockKind::material("iron")),
             "铁应落到原玻璃格"
         );
     }

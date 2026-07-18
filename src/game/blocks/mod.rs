@@ -11,7 +11,6 @@ pub mod traits;
 pub mod blocker;
 pub mod converter;
 pub mod conveyor;
-pub mod copper_material;
 pub mod counter_rotator;
 pub mod detector;
 pub mod down_detector;
@@ -19,12 +18,9 @@ pub mod down_welder;
 pub mod drill;
 pub mod drill_head;
 pub mod generator;
-pub mod glass_material;
 pub mod goal;
-pub mod iron_material;
 pub mod laser;
 pub mod lifter;
-pub mod material;
 pub mod mirror;
 pub mod platform;
 pub mod pusher;
@@ -33,7 +29,6 @@ pub mod roller;
 pub mod roller_body;
 pub mod rotator;
 pub mod splitter;
-pub mod stamp_material;
 pub mod stamper;
 pub mod stamper_body;
 pub mod sign;
@@ -58,13 +53,17 @@ pub use self::render_types::{
     RenderBehavior, WeldConnectorBehavior, WireConnectorBehavior,
 };
 pub use oif_sim::blocks::{
-    ensure_fallback_scene_catalog, install_scene_catalog, leak_str, scene_catalog, scene_def, rgb,
-    rgba, AcceptorId, BlockClass, BlockData, BlockDefinition, BlockId, BlockKind, BlockLayer,
-    BlockShape, ColorSpec, Facing, FactoryBlock, LaserOpticsBehavior, MarkerBehavior,
-    MaterialBlock, MaterialDestroyer, MaterialKind, MaterialLabeler, MaterialProcessor,
-    MaterialProps, MaterialSource, MovementRule, PersistentLayer, SceneBlockCatalog, SceneBlockDef,
-    SceneBlockId, SignalBehavior, StampColor, PaintColor, SystemBlock, VirtualBlock, WeldBehavior,
-    BLOCK_SIZE, DEFAULT_GENERATOR_PERIOD,
+    ensure_fallback_material_catalog, ensure_fallback_paint_catalog, ensure_fallback_scene_catalog,
+    ensure_fallback_stamp_catalog, install_material_catalog, install_paint_catalog,
+    install_scene_catalog, install_stamp_catalog, leak_str, material_catalog, material_def,
+    paint_catalog, paint_def, rgb, rgba, scene_catalog, scene_def, stamp_catalog, stamp_def,
+    AcceptorId, BlockClass, BlockData, BlockDefinition, BlockId, BlockKind, BlockLayer, BlockShape,
+    ColorSpec, Facing, FactoryBlock, LaserOpticsBehavior, MarkerBehavior, MaterialBlock,
+    MaterialBlockCatalog, MaterialBlockDef, MaterialBlockId, MaterialDestroyer, MaterialLabeler,
+    MaterialProcessor, MaterialProps, MaterialSource, MovementRule, PaintMaterialCatalog,
+    PaintMaterialDef, PaintMaterialId, PersistentLayer, SceneBlockCatalog, SceneBlockDef,
+    SceneBlockId, SignalBehavior, StampMaterialCatalog, StampMaterialDef, StampMaterialId,
+    SystemBlock, VirtualBlock, WeldBehavior, BLOCK_SIZE, DEFAULT_GENERATOR_PERIOD,
 };
 use crate::game::state::UiPanelId;
 
@@ -114,7 +113,10 @@ impl BlockPresent for BlockKind {
     }
 
     fn item_slot_color(self) -> Color {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return self.material();
         }
         registry::placeable(self)
@@ -123,35 +125,50 @@ impl BlockPresent for BlockKind {
     }
 
     fn is_editable(self) -> bool {
-        if matches!(self, BlockKind::Scene(_)) {
-            return true;
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
+            return matches!(self, BlockKind::Scene(_));
         }
         registry::is_editable(self)
     }
 
     fn ui_panel(self) -> Option<UiPanelId> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         registry::editable(self).and_then(traits::BlockUi::ui_panel)
     }
 
     fn render_behavior(self, facing: Facing) -> RenderBehavior {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return RenderBehavior::default();
         }
         registry::get(self).render_behavior(facing)
     }
 
     fn model(self) -> BlockModel {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return BlockModel::Default;
         }
         registry::get(self).model()
     }
 
     fn block_texture(self) -> Option<Image> {
-        if matches!(self, BlockKind::Scene(_)) {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
             return None;
         }
         registry::get(self).block_texture()

@@ -194,7 +194,7 @@ mod tests {
 
     #[test]
     fn trace_laser_reflects_off_mirror_and_destroys_material() {
-        use crate::blocks::{BlockData, BlockKind, MaterialKind};
+        use crate::blocks::{BlockData, BlockKind};
         use crate::simulation::behaviors::trace_laser_for_test;
         use crate::world::grid::WorldBlocks;
 
@@ -210,10 +210,7 @@ mod tests {
         let material_pos = IVec3::new(2, 0, -1);
         world.insert(
             material_pos,
-            BlockData::new(
-                BlockKind::material_block_kind(MaterialKind::Basic).unwrap(),
-                Facing::North,
-            ),
+            BlockData::new(BlockKind::material("basic"), Facing::North),
         );
 
         let mut beams = Vec::new();

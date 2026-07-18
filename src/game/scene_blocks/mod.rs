@@ -1,4 +1,4 @@
-//! 场景方块资源包：扫描 meta.json / model.glb，安装模拟 catalog，并提供表现侧注册表
+//! 场景方块资源包：扫描 meta.json / model.glb 或 texture.png，安装模拟 catalog，并提供表现侧注册表
 
 mod glb;
 mod load;
@@ -12,10 +12,44 @@ pub use glb::{load_collision_triangles, load_scene_glb, SceneGltfHandles};
 pub use load::{load_global_scene_blocks, merge_puzzle_scene_blocks, reload_global_only};
 pub use registry::{SceneBlockPresentation, SceneBlockRegistry};
 
-/// 从磁盘加载预烘焙 icon.png
+/// 从磁盘加载预烘焙 icon.png（UI 用线性采样）
 pub fn load_icon_png(
     path: &std::path::Path,
     images: &mut bevy::prelude::Assets<bevy::prelude::Image>,
+) -> Option<bevy::prelude::Handle<bevy::prelude::Image>> {
+    load_png_with_sampler(
+        path,
+        images,
+        bevy::image::ImageSamplerDescriptor::linear(),
+    )
+}
+
+/// 方块外观 texture.png：像素锐利 + 可重复
+pub fn load_block_texture_png(
+    path: &std::path::Path,
+    images: &mut bevy::prelude::Assets<bevy::prelude::Image>,
+) -> Option<bevy::prelude::Handle<bevy::prelude::Image>> {
+    use bevy::image::{ImageAddressMode, ImageFilterMode, ImageSamplerDescriptor};
+
+    let mut sampler = ImageSamplerDescriptor {
+        label: Some("block_texture".into()),
+        address_mode_u: ImageAddressMode::Repeat,
+        address_mode_v: ImageAddressMode::Repeat,
+        address_mode_w: ImageAddressMode::Repeat,
+        mag_filter: ImageFilterMode::Nearest,
+        min_filter: ImageFilterMode::Nearest,
+        mipmap_filter: ImageFilterMode::Nearest,
+        ..ImageSamplerDescriptor::default()
+    };
+    // 显式 nearest（部分平台 default 可能不同）
+    let _ = &mut sampler;
+    load_png_with_sampler(path, images, sampler)
+}
+
+fn load_png_with_sampler(
+    path: &std::path::Path,
+    images: &mut bevy::prelude::Assets<bevy::prelude::Image>,
+    sampler: bevy::image::ImageSamplerDescriptor,
 ) -> Option<bevy::prelude::Handle<bevy::prelude::Image>> {
     use bevy::asset::RenderAssetUsages;
     use bevy::prelude::*;
@@ -30,7 +64,6 @@ pub fn load_icon_png(
         RenderAssetUsages::default(),
     )
     .ok()?;
-    image.sampler =
-        bevy::image::ImageSampler::Descriptor(bevy::image::ImageSamplerDescriptor::linear());
+    image.sampler = bevy::image::ImageSampler::Descriptor(sampler);
     Some(images.add(image))
 }

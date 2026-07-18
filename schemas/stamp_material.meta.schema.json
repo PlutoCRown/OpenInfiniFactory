@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openinfinifactory.local/schemas/stamp_material.meta.schema.json",
+  "title": "StampMaterialMeta",
+  "description": "印花材料资源包元数据（与 texture.png 同目录的 meta.json）。外观贴图为同目录 texture.png；UI 图标为同目录 icon.png。游戏加载时忽略 $schema。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "指向本 schema 的相对路径，仅供编辑器智能提示；运行时忽略。"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "全局唯一字符串 ID。显示名走 i18n key `stamp.<id>`；未翻译时 UI 直接显示该 key。"
+    },
+    "fragile": {
+      "type": "boolean",
+      "default": false,
+      "description": "是否脆弱：运动冲突时碎裂而非阻挡。"
+    }
+  }
+}

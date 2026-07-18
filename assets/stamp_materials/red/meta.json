@@ -1,0 +1,5 @@
+{
+  "$schema": "../../../schemas/stamp_material.meta.schema.json",
+  "id": "red",
+  "fragile": false
+}

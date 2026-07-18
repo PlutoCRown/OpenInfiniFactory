@@ -1,14 +1,15 @@
 use std::collections::HashMap;
+use std::path::Path;
 
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
 use crate::game::blocks::BlockPresent;
-use crate::game::blocks::ColorSpecExt;
 use crate::game::blocks::pusher::texture;
 use crate::game::blocks::{
-    BLOCK_SIZE, BlockKind, BlockShape, ModelMaterial, ModelMesh, PaintColor, StampColor, all_blocks,
+    BLOCK_SIZE, BlockKind, BlockShape, ModelMaterial, ModelMesh, PaintMaterialId, all_blocks,
+    paint_catalog, stamp_catalog, stamp_def,
 };
 
 #[derive(Resource, Clone)]
@@ -55,8 +56,7 @@ pub struct WorldRenderAssets {
     scene_meshes: HashMap<BlockKind, Handle<Mesh>>,
     /// 立方体 24 顶点 UV 模板（世界 AO 网格复用 glb UV）
     scene_face_uvs: HashMap<BlockKind, [[f32; 2]; 24]>,
-    face_mark_materials: HashMap<PaintColor, Handle<StandardMaterial>>,
-    stamp_face_materials: HashMap<StampColor, Handle<StandardMaterial>>,
+    face_mark_materials: HashMap<PaintMaterialId, Handle<StandardMaterial>>,
     /// 灯面板未通电材质
     pub(crate) light_panel_material: Handle<StandardMaterial>,
     /// 灯面板通电发光材质
@@ -85,6 +85,9 @@ impl WorldRenderAssets {
         materials: &mut Assets<StandardMaterial>,
         images: &mut Assets<Image>,
         scene_registry: &crate::game::scene_blocks::SceneBlockRegistry,
+        material_registry: &crate::game::material_blocks::MaterialBlockRegistry,
+        stamp_registry: &crate::game::material_blocks::StampMaterialRegistry,
+        paint_registry: &crate::game::material_blocks::PaintMaterialRegistry,
     ) -> Self {
         let block_textures: HashMap<_, _> = all_blocks()
             .into_iter()
@@ -118,70 +121,100 @@ impl WorldRenderAssets {
                 (kind, materials.add(preview_block_material(kind, texture)))
             })
             .collect();
-        // 场景块：外观全部来自 model.glb（网格 / UV / 材质 / 内嵌贴图）
+        // 场景 / 材料 / 印花：model.glb 或 texture.png → scene_materials 等 HashMap
         let mut scene_meshes = HashMap::new();
         let mut scene_face_uvs = HashMap::new();
         let mut scene_block_materials = HashMap::new();
         let mut block_materials = block_materials;
         let mut preview_materials = preview_materials;
+        let stamp_plate = meshes.add(stamp_plate_mesh());
         for kind in all_blocks().into_iter().filter(|kind| kind.is_scene()) {
             let Some(presentation) = scene_registry.get_kind(kind) else {
                 continue;
             };
-            match crate::game::scene_blocks::load_scene_glb(
-                &presentation.model_path,
+            insert_configured_pack(
+                kind,
+                presentation.model_path.as_deref(),
+                presentation.texture_path.as_deref(),
+                kind.material(),
+                None,
                 meshes,
                 materials,
                 images,
-            ) {
-                Ok(loaded) => {
-                    if let Some(uvs) = loaded.face_uvs {
-                        scene_face_uvs.insert(kind, uvs);
-                    }
-                    scene_meshes.insert(kind, loaded.mesh);
-                    // 预览半透明版（复用同一贴图句柄）
-                    if let Some(base) = materials.get(&loaded.material).cloned() {
-                        preview_materials.insert(kind, materials.add(preview_model_material(base)));
-                    }
-                    scene_block_materials.insert(kind, loaded.material.clone());
-                    block_materials.insert(kind, loaded.material);
-                }
-                Err(err) => {
-                    bevy::log::error!("scene block glb load failed: {err}");
-                    let fallback = materials.add(scene_color_material(kind.material()));
-                    scene_block_materials.insert(kind, fallback.clone());
-                    block_materials.insert(kind, fallback);
-                }
-            }
+                &mut scene_meshes,
+                &mut scene_face_uvs,
+                &mut scene_block_materials,
+                &mut block_materials,
+                &mut preview_materials,
+            );
         }
-        let face_mark_materials = PaintColor::ALL
-            .into_iter()
-            .map(|color| {
-                (
-                    color,
-                    materials.add(StandardMaterial {
-                        base_color: color.color().color(),
-                        emissive: color.color().color().to_linear() * 0.35,
+        for presentation in material_registry.ordered() {
+            let kind = BlockKind::Material(presentation.id);
+            insert_configured_pack(
+                kind,
+                presentation.model_path.as_deref(),
+                presentation.texture_path.as_deref(),
+                kind.material(),
+                None,
+                meshes,
+                materials,
+                images,
+                &mut scene_meshes,
+                &mut scene_face_uvs,
+                &mut scene_block_materials,
+                &mut block_materials,
+                &mut preview_materials,
+            );
+        }
+        for presentation in stamp_registry.ordered() {
+            let kind = BlockKind::Stamp(presentation.id);
+            insert_configured_pack(
+                kind,
+                presentation.model_path.as_deref(),
+                presentation.texture_path.as_deref(),
+                kind.material(),
+                Some(&stamp_plate),
+                meshes,
+                materials,
+                images,
+                &mut scene_meshes,
+                &mut scene_face_uvs,
+                &mut scene_block_materials,
+                &mut block_materials,
+                &mut preview_materials,
+            );
+        }
+        let face_mark_materials = paint_catalog()
+            .iter()
+            .map(|(id, def)| {
+                let textured = paint_registry
+                    .get(id)
+                    .and_then(|p| crate::game::scene_blocks::load_icon_png(&p.texture_path, images))
+                    .map(|texture| StandardMaterial {
+                        base_color: Color::WHITE,
+                        base_color_texture: Some(texture),
+                        emissive: LinearRgba::new(0.08, 0.08, 0.08, 1.0),
                         unlit: true,
                         cull_mode: None,
                         ..default()
-                    }),
-                )
-            })
-            .collect();
-        let stamp_face_materials = StampColor::ALL
-            .into_iter()
-            .map(|color| {
-                (
-                    color,
-                    materials.add(StandardMaterial {
-                        base_color: color.color().color(),
-                        emissive: color.color().color().to_linear() * 0.35,
+                    });
+                let material = textured.unwrap_or_else(|| {
+                    let base = if let Some(stamp_id) = stamp_catalog().id_by_string(&def.string_id)
+                    {
+                        let c = stamp_def(stamp_id).color;
+                        Color::srgba(c.r, c.g, c.b, c.a)
+                    } else {
+                        Color::srgb(0.95, 0.12, 0.10)
+                    };
+                    StandardMaterial {
+                        base_color: base,
+                        emissive: base.to_linear() * 0.35,
                         unlit: true,
                         cull_mode: None,
                         ..default()
-                    }),
-                )
+                    }
+                });
+                (id, materials.add(material))
             })
             .collect();
         let model_materials = [
@@ -360,7 +393,6 @@ impl WorldRenderAssets {
             scene_meshes,
             scene_face_uvs,
             face_mark_materials,
-            stamp_face_materials,
             light_panel_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(0.55, 0.58, 0.62),
                 unlit: true,
@@ -515,17 +547,10 @@ impl WorldRenderAssets {
         }
     }
 
-    pub(crate) fn face_mark_material(&self, color: PaintColor) -> Handle<StandardMaterial> {
+    pub(crate) fn face_mark_material(&self, paint: PaintMaterialId) -> Handle<StandardMaterial> {
         self.face_mark_materials
-            .get(&color)
-            .expect("every paint color has a material")
-            .clone()
-    }
-
-    pub(crate) fn stamp_face_material(&self, color: StampColor) -> Handle<StandardMaterial> {
-        self.stamp_face_materials
-            .get(&color)
-            .expect("every stamp color has a material")
+            .get(&paint)
+            .expect("every paint material has a face mark material")
             .clone()
     }
 
@@ -622,6 +647,99 @@ fn scene_color_material(base_color: Color) -> StandardMaterial {
         perceptual_roughness: 0.96,
         reflectance: 0.08,
         ..default()
+    }
+}
+
+/// 印花无 GLB 时的默认薄板（对齐告示牌尺度；贴向局部 -Z / 宿主侧）
+fn stamp_plate_mesh() -> Mesh {
+    let mut mesh = Mesh::from(Cuboid::new(0.78, 0.72, 0.06));
+    // 板心移到 z=-0.47，使 +Z 朝外时贴靠宿主面（与 SignBoard 偏移同量）
+    if let Some(positions) = mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION) {
+        if let bevy::mesh::VertexAttributeValues::Float32x3(values) = positions {
+            for v in values.iter_mut() {
+                v[2] -= 0.47;
+            }
+        }
+    }
+    mesh
+}
+
+/// 把 model.glb 或 texture.png 装进 scene_* / block_materials（场景、材料、印花共用）
+/// `stamp_plate`：印花在无 GLB 走贴图/纯色 fallback 时用的薄板网格
+fn insert_configured_pack(
+    kind: BlockKind,
+    model_path: Option<&Path>,
+    texture_path: Option<&Path>,
+    fallback_color: Color,
+    stamp_plate: Option<&Handle<Mesh>>,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    images: &mut Assets<Image>,
+    scene_meshes: &mut HashMap<BlockKind, Handle<Mesh>>,
+    scene_face_uvs: &mut HashMap<BlockKind, [[f32; 2]; 24]>,
+    scene_block_materials: &mut HashMap<BlockKind, Handle<StandardMaterial>>,
+    block_materials: &mut HashMap<BlockKind, Handle<StandardMaterial>>,
+    preview_materials: &mut HashMap<BlockKind, Handle<StandardMaterial>>,
+) {
+    if let Some(model_path) = model_path {
+        match crate::game::scene_blocks::load_scene_glb(model_path, meshes, materials, images) {
+            Ok(loaded) => {
+                if let Some(uvs) = loaded.face_uvs {
+                    scene_face_uvs.insert(kind, uvs);
+                }
+                scene_meshes.insert(kind, loaded.mesh);
+                if let Some(base) = materials.get(&loaded.material).cloned() {
+                    preview_materials.insert(kind, materials.add(preview_model_material(base)));
+                }
+                scene_block_materials.insert(kind, loaded.material.clone());
+                block_materials.insert(kind, loaded.material);
+                return;
+            }
+            Err(err) => {
+                bevy::log::error!(
+                    "configured pack glb load failed ({}): {err}",
+                    kind.name_key()
+                );
+            }
+        }
+    }
+
+    if let Some(texture_path) = texture_path {
+        if let Some(texture) = crate::game::scene_blocks::load_block_texture_png(texture_path, images)
+        {
+            let mut material = StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(texture.clone()),
+                perceptual_roughness: 0.94,
+                reflectance: 0.10,
+                ..default()
+            };
+            if kind.is_transparent() {
+                material.alpha_mode = AlphaMode::Blend;
+            }
+            let material = materials.add(material);
+            preview_materials.insert(
+                kind,
+                materials.add(preview_block_material(kind, Some(texture))),
+            );
+            scene_block_materials.insert(kind, material.clone());
+            block_materials.insert(kind, material);
+            if let Some(plate) = stamp_plate {
+                scene_meshes.insert(kind, plate.clone());
+            }
+            return;
+        }
+        bevy::log::error!(
+            "configured pack texture load failed: {}",
+            texture_path.display()
+        );
+    }
+
+    let fallback = materials.add(scene_color_material(fallback_color));
+    scene_block_materials.insert(kind, fallback.clone());
+    block_materials.insert(kind, fallback);
+    if let Some(plate) = stamp_plate {
+        scene_meshes.insert(kind, plate.clone());
     }
 }
 

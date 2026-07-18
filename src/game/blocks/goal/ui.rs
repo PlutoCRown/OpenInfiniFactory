@@ -13,7 +13,7 @@ use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::blocks::MaterialKind;
+use crate::game::blocks::{material_catalog, MaterialBlockId};
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::access::UiMainThread;
@@ -34,7 +34,7 @@ const MATERIAL_SLOT: u8 = 0;
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GoalAction {
     ToggleMaterial,
-    SetMaterial(MaterialKind),
+    SetMaterial(MaterialBlockId),
 }
 
 #[derive(Component, Clone, Copy)]
@@ -44,7 +44,7 @@ struct GoalMaterialSlot;
 struct GoalMaterialList;
 
 #[derive(Component, Clone, Copy)]
-struct GoalMaterialOption(MaterialKind);
+struct GoalMaterialOption(MaterialBlockId);
 
 #[derive(Component, Clone, Copy)]
 struct GoalAcceptorIdText;
@@ -83,9 +83,9 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
     spawn_material_icon_list(
         root,
         GoalMaterialList,
-        MaterialKind::ALL
-            .into_iter()
-            .map(|material| (material, GoalAction::SetMaterial(material))),
+        material_catalog()
+            .iter()
+            .map(|(id, _)| (id, GoalAction::SetMaterial(id))),
         GoalMaterialOption,
     );
 }

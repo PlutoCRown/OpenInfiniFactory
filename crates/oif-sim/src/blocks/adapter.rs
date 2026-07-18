@@ -6,7 +6,7 @@ use crate::world::grid::BlockSettings;
 use super::traits::{BlockBehavior, BlockMeta};
 use super::{
     BlockDefinition, BlockKind, LaserOpticsBehavior, MarkerBehavior, MaterialDestroyer,
-    MaterialKind, MaterialLabeler, MaterialProcessor, MaterialSource, MovementRule, PersistentLayer,
+    MaterialLabeler, MaterialProcessor, MaterialSource, MovementRule, PersistentLayer,
     SignalBehavior, WeldBehavior,
 };
 
@@ -27,10 +27,6 @@ where
 
     fn alternate(&self) -> Option<BlockKind> {
         self.0.alternate()
-    }
-
-    fn material_kind(&self) -> Option<MaterialKind> {
-        self.0.material_kind()
     }
 
     fn persistent_layer(&self) -> Option<PersistentLayer> {

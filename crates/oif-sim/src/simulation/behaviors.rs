@@ -195,8 +195,8 @@ pub(super) fn run_material_paint_phase(world: &mut WorldBlocks) {
         if !connectable {
             continue;
         }
-        let color = world.roller_settings(pos).color;
-        world.material_paints.insert(face, color);
+        let paint = world.roller_settings(pos).paint;
+        world.material_paints.insert(face, paint);
     }
 }
 
@@ -285,10 +285,10 @@ pub(super) fn run_material_stamp_phase(world: &mut WorldBlocks) {
             (0, 0, -1) => Facing::North,
             _ => facing,
         };
-        let color = world.stamper_settings(stamper_pos).color;
+        let stamp_id = world.stamper_settings(stamper_pos).stamp;
         world.insert(
             stamper_pos,
-            BlockData::new(BlockKind::StampMaterial, stamp_facing),
+            BlockData::new(BlockKind::Stamp(stamp_id), stamp_facing),
         );
         let Some(stamp) = world.blocks.get(&stamper_pos).copied() else {
             continue;
@@ -300,10 +300,6 @@ pub(super) fn run_material_stamp_phase(world: &mut WorldBlocks) {
                 parent_face_normal: face_normal,
             },
         );
-        // 只画在印花块朝宿主的那一面；渲染时再收进自身格，避免扎进宿主
-        world
-            .stamp_face_colors
-            .insert(MaterialFace::new(stamp.id, -face_normal), color);
     }
 }
 
@@ -349,12 +345,12 @@ pub(super) fn material_source_generation(
 
         let spawn_pos = pos;
         if world.can_place_platform_at(spawn_pos) && !blocked_generation.contains(&spawn_pos) {
-            let Some(kind) = BlockKind::material_block_kind(settings.material) else {
-                continue;
-            };
             generated.push(GeneratedMaterial {
                 pos: spawn_pos,
-                block: BlockData::new(kind, Facing::North),
+                block: BlockData::new(
+                    BlockKind::Material(settings.material),
+                    Facing::North,
+                ),
             });
         }
     }
@@ -379,7 +375,7 @@ pub(super) fn run_material_conversion_phase(world: &mut WorldBlocks) {
         let Some(mut block) = world.blocks.get(&pos).copied() else {
             continue;
         };
-        let Some(input_material) = block.kind.material_kind() else {
+        let Some(input_material) = block.kind.material_id() else {
             continue;
         };
 
@@ -388,10 +384,7 @@ pub(super) fn run_material_conversion_phase(world: &mut WorldBlocks) {
             continue;
         }
 
-        let Some(output_kind) = BlockKind::material_block_kind(settings.output) else {
-            continue;
-        };
-        block.kind = output_kind;
+        block.kind = BlockKind::Material(settings.output);
         world.insert(pos, block);
     }
 }
@@ -417,10 +410,10 @@ pub(super) fn run_material_acceptance_phase(
             let Some(block) = world.blocks.get(pos) else {
                 break;
             };
-            let Some(material) = block.kind.material_kind() else {
+            let Some(material) = block.kind.material_id() else {
                 break;
             };
-            if !world.accepts_material_kind_at(*pos, material) {
+            if !world.accepts_material_id_at(*pos, material) {
                 break;
             }
             matched_material.insert(*pos);
@@ -633,19 +626,30 @@ pub(crate) fn trace_laser_for_test(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::blocks::{BlockData, BlockKind, MaterialKind};
+    use crate::blocks::{BlockData, BlockKind, MaterialBlockId};
     use crate::simulation::structures::material_structure;
     use crate::world::direction::Facing;
     use crate::world::grid::{GoalSettings, WorldBlocks};
 
-    fn place_goal(world: &mut WorldBlocks, pos: IVec3, material: MaterialKind) {
-        world.insert(pos, BlockData::new(BlockKind::Goal, Facing::North));
-        world.set_goal_settings(pos, GoalSettings { material });
+    fn material_id(string_id: &str) -> MaterialBlockId {
+        BlockKind::material(string_id).material_id().unwrap()
     }
 
-    fn place_material(world: &mut WorldBlocks, pos: IVec3, material: MaterialKind) {
-        let kind = BlockKind::material_block_kind(material).unwrap();
-        world.insert(pos, BlockData::new(kind, Facing::North));
+    fn place_goal(world: &mut WorldBlocks, pos: IVec3, material: &str) {
+        world.insert(pos, BlockData::new(BlockKind::Goal, Facing::North));
+        world.set_goal_settings(
+            pos,
+            GoalSettings {
+                material: material_id(material),
+            },
+        );
+    }
+
+    fn place_material(world: &mut WorldBlocks, pos: IVec3, material: &str) {
+        world.insert(
+            pos,
+            BlockData::new(BlockKind::material(material), Facing::North),
+        );
     }
 
     fn acceptor_state(world: &WorldBlocks) -> StructureState {
@@ -669,7 +673,7 @@ mod tests {
         let entrance = IVec3::new(1, 0, 0);
         let exit = IVec3::new(5, 0, 0);
         place_teleport_pair(&mut world, entrance, exit);
-        place_material(&mut world, entrance, MaterialKind::Basic);
+        place_material(&mut world, entrance, "basic");
 
         run_material_teleport_phase(&mut world);
 
@@ -683,8 +687,8 @@ mod tests {
         let entrance = IVec3::new(1, 0, 0);
         let exit = IVec3::new(5, 0, 0);
         place_teleport_pair(&mut world, entrance, exit);
-        place_material(&mut world, entrance, MaterialKind::Basic);
-        place_material(&mut world, entrance + IVec3::X, MaterialKind::Basic);
+        place_material(&mut world, entrance, "basic");
+        place_material(&mut world, entrance + IVec3::X, "basic");
         world.weld_materials(entrance, entrance + IVec3::X);
 
         run_material_teleport_phase(&mut world);
@@ -707,8 +711,8 @@ mod tests {
         let entrance = IVec3::new(1, 0, 0);
         let exit = IVec3::new(5, 0, 0);
         place_teleport_pair(&mut world, entrance, exit);
-        place_material(&mut world, entrance, MaterialKind::Basic);
-        place_material(&mut world, exit, MaterialKind::Iron);
+        place_material(&mut world, entrance, "basic");
+        place_material(&mut world, exit, "iron");
 
         run_material_teleport_phase(&mut world);
 
@@ -718,8 +722,8 @@ mod tests {
             world
                 .blocks
                 .get(&exit)
-                .and_then(|block| block.kind.material_kind()),
-            Some(MaterialKind::Iron)
+                .and_then(|block| block.kind.material_id()),
+            Some(material_id("iron"))
         );
     }
 
@@ -730,11 +734,7 @@ mod tests {
         let exit = IVec3::new(5, 0, 0);
         place_teleport_pair(&mut world, entrance, exit);
 
-        for expected in [
-            MaterialKind::Basic,
-            MaterialKind::Iron,
-            MaterialKind::Copper,
-        ] {
+        for expected in ["basic", "iron", "copper"] {
             place_material(&mut world, entrance, expected);
             run_material_teleport_phase(&mut world);
             assert!(!world.is_material_at(entrance));
@@ -742,8 +742,8 @@ mod tests {
                 world
                     .blocks
                     .get(&exit)
-                    .and_then(|block| block.kind.material_kind()),
-                Some(expected)
+                    .and_then(|block| block.kind.material_id()),
+                Some(material_id(expected))
             );
             world.remove(&exit);
         }
@@ -755,8 +755,8 @@ mod tests {
         let entrance = IVec3::new(1, 0, 0);
         let exit = IVec3::new(5, 0, 0);
         place_teleport_pair(&mut world, entrance, exit);
-        place_material(&mut world, entrance, MaterialKind::Basic);
-        place_material(&mut world, exit, MaterialKind::Iron);
+        place_material(&mut world, entrance, "basic");
+        place_material(&mut world, exit, "iron");
 
         run_material_teleport_phase(&mut world);
         assert!(world.is_material_at(entrance));
@@ -769,8 +769,8 @@ mod tests {
             world
                 .blocks
                 .get(&exit)
-                .and_then(|block| block.kind.material_kind()),
-            Some(MaterialKind::Basic)
+                .and_then(|block| block.kind.material_id()),
+            Some(material_id("basic"))
         );
     }
 
@@ -782,8 +782,8 @@ mod tests {
         let entrance = IVec3::new(1, 0, 0);
         let neighbor = IVec3::new(0, 0, 0);
         place_teleport_pair(&mut world, entrance, IVec3::new(5, 0, 0));
-        place_material(&mut world, entrance, MaterialKind::Basic);
-        place_material(&mut world, neighbor, MaterialKind::Basic);
+        place_material(&mut world, entrance, "basic");
+        place_material(&mut world, neighbor, "basic");
         world.weld_materials(entrance, neighbor);
         let state = acceptor_state(&world);
         let structure = material_structure(&world, neighbor);
@@ -803,8 +803,8 @@ mod tests {
         let entrance = IVec3::new(1, 0, 0);
         let exit = IVec3::new(5, 0, 0);
         place_teleport_pair(&mut world, entrance, exit);
-        place_material(&mut world, entrance, MaterialKind::Basic);
-        place_material(&mut world, entrance + IVec3::X, MaterialKind::Basic);
+        place_material(&mut world, entrance, "basic");
+        place_material(&mut world, entrance + IVec3::X, "basic");
         world.weld_materials(entrance, entrance + IVec3::X);
 
         run_material_teleport_phase(&mut world);
@@ -827,8 +827,8 @@ mod tests {
         let entrance = IVec3::new(1, 0, 0);
         let exit = IVec3::new(5, 0, 0);
         place_teleport_pair(&mut world, entrance, exit);
-        place_material(&mut world, entrance, MaterialKind::Basic);
-        place_material(&mut world, entrance + IVec3::Y, MaterialKind::Basic);
+        place_material(&mut world, entrance, "basic");
+        place_material(&mut world, entrance + IVec3::Y, "basic");
 
         run_material_teleport_phase(&mut world);
 
@@ -840,8 +840,8 @@ mod tests {
     #[test]
     fn acceptance_removes_matching_material_immediately() {
         let mut world = WorldBlocks::default();
-        place_goal(&mut world, IVec3::ZERO, MaterialKind::Basic);
-        place_material(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        place_goal(&mut world, IVec3::ZERO, "basic");
+        place_material(&mut world, IVec3::ZERO, "basic");
         let mut state = acceptor_state(&world);
 
         let (_accepted, sparks) = run_material_acceptance_phase(&mut world, &mut state);
@@ -854,8 +854,8 @@ mod tests {
     #[test]
     fn acceptance_ignores_wrong_material() {
         let mut world = WorldBlocks::default();
-        place_goal(&mut world, IVec3::ZERO, MaterialKind::Basic);
-        place_material(&mut world, IVec3::ZERO, MaterialKind::Iron);
+        place_goal(&mut world, IVec3::ZERO, "basic");
+        place_material(&mut world, IVec3::ZERO, "iron");
         let mut state = acceptor_state(&world);
 
         let (_accepted, sparks) = run_material_acceptance_phase(&mut world, &mut state);
@@ -868,9 +868,9 @@ mod tests {
     #[test]
     fn acceptance_requires_entire_connected_acceptor_structure() {
         let mut world = WorldBlocks::default();
-        place_goal(&mut world, IVec3::ZERO, MaterialKind::Basic);
-        place_goal(&mut world, IVec3::X, MaterialKind::Basic);
-        place_material(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        place_goal(&mut world, IVec3::ZERO, "basic");
+        place_goal(&mut world, IVec3::X, "basic");
+        place_material(&mut world, IVec3::ZERO, "basic");
         let mut state = acceptor_state(&world);
 
         let (_accepted, sparks) = run_material_acceptance_phase(&mut world, &mut state);
@@ -883,9 +883,9 @@ mod tests {
     #[test]
     fn acceptance_requires_material_structure_without_extra_blocks() {
         let mut world = WorldBlocks::default();
-        place_goal(&mut world, IVec3::ZERO, MaterialKind::Basic);
-        place_material(&mut world, IVec3::ZERO, MaterialKind::Basic);
-        place_material(&mut world, IVec3::X, MaterialKind::Basic);
+        place_goal(&mut world, IVec3::ZERO, "basic");
+        place_material(&mut world, IVec3::ZERO, "basic");
+        place_material(&mut world, IVec3::X, "basic");
         world.weld_materials(IVec3::ZERO, IVec3::X);
         let mut state = acceptor_state(&world);
 
@@ -900,10 +900,10 @@ mod tests {
     #[test]
     fn acceptance_removes_entire_welded_structure_immediately() {
         let mut world = WorldBlocks::default();
-        place_goal(&mut world, IVec3::ZERO, MaterialKind::Basic);
-        place_goal(&mut world, IVec3::X, MaterialKind::Basic);
-        place_material(&mut world, IVec3::ZERO, MaterialKind::Basic);
-        place_material(&mut world, IVec3::X, MaterialKind::Basic);
+        place_goal(&mut world, IVec3::ZERO, "basic");
+        place_goal(&mut world, IVec3::X, "basic");
+        place_material(&mut world, IVec3::ZERO, "basic");
+        place_material(&mut world, IVec3::X, "basic");
         world.weld_materials(IVec3::ZERO, IVec3::X);
         let mut state = acceptor_state(&world);
 
@@ -927,7 +927,7 @@ mod tests {
                     period: 3,
                     offset: 1,
                 },
-                material: MaterialKind::Basic,
+                material: material_id("basic"),
             },
         );
         let blocked = HashSet::new();
@@ -957,7 +957,7 @@ mod tests {
                 mode: GeneratorMode::Link {
                     anchor: Some(IVec3::ZERO),
                 },
-                material: MaterialKind::Iron,
+                material: material_id("iron"),
             },
         );
         let blocked = HashSet::new();
@@ -972,8 +972,8 @@ mod tests {
     #[test]
     fn acceptance_returns_acceptor_id() {
         let mut world = WorldBlocks::default();
-        place_goal(&mut world, IVec3::ZERO, MaterialKind::Basic);
-        place_material(&mut world, IVec3::ZERO, MaterialKind::Basic);
+        place_goal(&mut world, IVec3::ZERO, "basic");
+        place_material(&mut world, IVec3::ZERO, "basic");
         let expected = world.acceptor_id_at(IVec3::ZERO).unwrap();
         let mut state = acceptor_state(&world);
 
@@ -987,7 +987,7 @@ mod tests {
         let laser = IVec3::new(0, 0, 0);
         let material = IVec3::new(1, 0, 0);
         world.insert(laser, BlockData::new(BlockKind::Laser, Facing::East));
-        place_material(&mut world, material, MaterialKind::Basic);
+        place_material(&mut world, material, "basic");
         let powered = HashSet::from([laser]);
 
         let (beams, _detectors, sparks) = probe_lasers(&mut world, &powered);
@@ -1003,7 +1003,7 @@ mod tests {
         let laser = IVec3::new(0, 0, 0);
         let material = IVec3::new(1, 0, 0);
         world.insert(laser, BlockData::new(BlockKind::Laser, Facing::East));
-        place_material(&mut world, material, MaterialKind::Basic);
+        place_material(&mut world, material, "basic");
         let powered = HashSet::from([laser]);
 
         let sparks = destroy_powered_lasers(&mut world, &powered);
@@ -1018,7 +1018,7 @@ mod tests {
         let roller = IVec3::ZERO;
         let material = IVec3::X;
         world.insert(roller, BlockData::new(BlockKind::Roller, Facing::East));
-        place_material(&mut world, material, MaterialKind::Basic);
+        place_material(&mut world, material, "basic");
         let material_id = world.blocks[&material].id;
 
         run_material_paint_phase(&mut world);
@@ -1026,7 +1026,7 @@ mod tests {
         let face = MaterialFace::new(material_id, IVec3::NEG_X);
         assert_eq!(
             world.material_paints.get(&face).copied(),
-            Some(crate::blocks::PaintColor::Red)
+            Some(world.roller_settings(roller).paint)
         );
     }
 
@@ -1048,7 +1048,7 @@ mod tests {
             BlockData::new(BlockKind::scene("stone"), Facing::North),
         );
         world.insert(roller, BlockData::new(BlockKind::Roller, Facing::East));
-        place_material(&mut world, material, MaterialKind::Basic);
+        place_material(&mut world, material, "basic");
         let material_id = world.blocks[&material].id;
         crate::simulation::markers::refresh_static_generated_markers(&mut world);
 
@@ -1074,7 +1074,7 @@ mod tests {
         let face = MaterialFace::new(material_id, IVec3::NEG_X);
         assert_eq!(
             world.material_paints.get(&face).copied(),
-            Some(crate::blocks::PaintColor::Red),
+            Some(world.roller_settings(roller).paint),
             "full turn must keep roller paint on the contact face"
         );
         assert!(
@@ -1089,7 +1089,7 @@ mod tests {
         let roller = IVec3::ZERO;
         let material = IVec3::X;
         world.insert(roller, BlockData::new(BlockKind::Roller, Facing::East));
-        place_material(&mut world, material, MaterialKind::Basic);
+        place_material(&mut world, material, "basic");
         let material_id = world.blocks[&material].id;
         let face = MaterialFace::new(material_id, IVec3::NEG_X);
         world.test_unconnectable_faces.insert(face);
@@ -1105,7 +1105,7 @@ mod tests {
         let stamper = IVec3::ZERO;
         let material = IVec3::X;
         world.insert(stamper, BlockData::new(BlockKind::Stamper, Facing::East));
-        place_material(&mut world, material, MaterialKind::Basic);
+        place_material(&mut world, material, "basic");
 
         run_material_paint_phase(&mut world);
 
@@ -1118,31 +1118,19 @@ mod tests {
         let stamper = IVec3::new(1, 1, 0);
         let host = IVec3::new(2, 1, 0);
         world.insert(stamper, BlockData::new(BlockKind::Stamper, Facing::East));
-        place_material(&mut world, host, MaterialKind::Basic);
+        place_material(&mut world, host, "basic");
         let host_id = world.blocks[&host].id;
         crate::simulation::markers::refresh_static_generated_markers(&mut world);
 
         run_material_stamp_phase(&mut world);
 
         let stamp = world.blocks.get(&stamper).expect("stamp in stamper cell");
-        assert_eq!(stamp.kind, BlockKind::StampMaterial);
+        assert_eq!(stamp.kind, BlockKind::stamp("red"));
+        assert_eq!(stamp.kind.stamp_id(), Some(world.stamper_settings(stamper).stamp));
         let att = world.material_attachments.get(&stamp.id).unwrap();
         assert_eq!(att.parent, host_id);
         assert_eq!(att.parent_face_normal, IVec3::NEG_X);
         assert!(world.machine_bodies.contains_key(&stamper));
-        assert_eq!(
-            world
-                .stamp_face_colors
-                .get(&MaterialFace::new(stamp.id, IVec3::X))
-                .copied(),
-            Some(world.stamper_settings(stamper).color)
-        );
-        assert!(
-            world
-                .stamp_face_colors
-                .get(&MaterialFace::new(host_id, IVec3::NEG_X))
-                .is_none()
-        );
     }
 
     #[test]
@@ -1151,7 +1139,7 @@ mod tests {
         let stamper = IVec3::new(1, 1, 0);
         let host = IVec3::new(2, 1, 0);
         world.insert(stamper, BlockData::new(BlockKind::Stamper, Facing::East));
-        place_material(&mut world, host, MaterialKind::Basic);
+        place_material(&mut world, host, "basic");
         let host_id = world.blocks[&host].id;
         world
             .test_unconnectable_faces
@@ -1168,10 +1156,10 @@ mod tests {
         let mut world = WorldBlocks::default();
         let host = IVec3::new(0, 1, 0);
         let stamp_pos = IVec3::new(1, 1, 0);
-        place_material(&mut world, host, MaterialKind::Basic);
+        place_material(&mut world, host, "basic");
         world.insert(
             stamp_pos,
-            BlockData::new(BlockKind::StampMaterial, Facing::West),
+            BlockData::new(BlockKind::stamp("red"), Facing::West),
         );
         let host_id = world.blocks[&host].id;
         let stamp_id = world.blocks[&stamp_pos].id;
@@ -1195,10 +1183,10 @@ mod tests {
         let stamp_pos = IVec3::new(1, 1, 0);
         let host = IVec3::new(0, 1, 0);
         world.insert(stamper, BlockData::new(BlockKind::Stamper, Facing::West));
-        place_material(&mut world, host, MaterialKind::Basic);
+        place_material(&mut world, host, "basic");
         world.insert(
             stamp_pos,
-            BlockData::new(BlockKind::StampMaterial, Facing::West),
+            BlockData::new(BlockKind::stamp("red"), Facing::West),
         );
         let host_id = world.blocks[&host].id;
         let stamp_id = world.blocks[&stamp_pos].id;
@@ -1223,10 +1211,10 @@ mod tests {
         let host = IVec3::new(0, 1, 0);
         // 朝北：与印花附着（东向）不对齐
         world.insert(stamper, BlockData::new(BlockKind::Stamper, Facing::North));
-        place_material(&mut world, host, MaterialKind::Basic);
+        place_material(&mut world, host, "basic");
         world.insert(
             stamp_pos,
-            BlockData::new(BlockKind::StampMaterial, Facing::West),
+            BlockData::new(BlockKind::stamp("red"), Facing::West),
         );
         let host_id = world.blocks[&host].id;
         let stamp_id = world.blocks[&stamp_pos].id;
@@ -1250,11 +1238,11 @@ mod tests {
         let stamper = IVec3::new(1, 1, 0);
         let host = IVec3::new(2, 1, 0);
         world.insert(stamper, BlockData::new(BlockKind::Stamper, Facing::East));
-        place_material(&mut world, host, MaterialKind::Basic);
+        place_material(&mut world, host, "basic");
         let host_id = world.blocks[&host].id;
         world.insert(
             stamper,
-            BlockData::new(BlockKind::StampMaterial, Facing::West),
+            BlockData::new(BlockKind::stamp("red"), Facing::West),
         );
         let stamp_id = world.blocks[&stamper].id;
         world.material_attachments.insert(
@@ -1322,7 +1310,7 @@ mod tests {
         let mut world = WorldBlocks::default();
         let host = IVec3::new(0, 1, 0);
         let sign_pos = IVec3::new(1, 1, 0);
-        place_material(&mut world, host, MaterialKind::Basic);
+        place_material(&mut world, host, "basic");
         world.insert(sign_pos, BlockData::new(BlockKind::Sign, Facing::East));
         let host_id = world.blocks[&host].id;
         let sign_id = world.blocks[&sign_pos].id;

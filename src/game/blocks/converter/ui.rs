@@ -13,7 +13,7 @@ use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::blocks::MaterialKind;
+use crate::game::blocks::{material_catalog, MaterialBlockId};
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::access::UiMainThread;
@@ -36,8 +36,8 @@ const OUTPUT_SLOT: u8 = 1;
 pub enum ConverterAction {
     ToggleInput,
     ToggleOutput,
-    SetInput(MaterialKind),
-    SetOutput(MaterialKind),
+    SetInput(MaterialBlockId),
+    SetOutput(MaterialBlockId),
 }
 
 #[derive(Component, Clone, Copy)]
@@ -56,7 +56,7 @@ struct ConverterInputList;
 struct ConverterOutputList;
 
 #[derive(Component, Clone, Copy)]
-struct ConverterMaterialOption(MaterialKind);
+struct ConverterMaterialOption(MaterialBlockId);
 
 impl UiActionLabel for ConverterAction {
     fn label_key(self) -> &'static str {
@@ -116,17 +116,17 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
     spawn_material_icon_list(
         root,
         ConverterInputList,
-        MaterialKind::ALL
-            .into_iter()
-            .map(|m| (m, ConverterAction::SetInput(m))),
+        material_catalog()
+            .iter()
+            .map(|(id, _)| (id, ConverterAction::SetInput(id))),
         ConverterMaterialOption,
     );
     spawn_material_icon_list(
         root,
         ConverterOutputList,
-        MaterialKind::ALL
-            .into_iter()
-            .map(|m| (m, ConverterAction::SetOutput(m))),
+        material_catalog()
+            .iter()
+            .map(|(id, _)| (id, ConverterAction::SetOutput(id))),
         ConverterMaterialOption,
     );
 }

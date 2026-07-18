@@ -90,12 +90,10 @@ fn spawn_factory_debug_overlay(
 fn spawn_selected_material_preview(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
-    material: crate::game::blocks::MaterialKind,
+    material: crate::game::blocks::MaterialBlockId,
     icon_render: Option<(Vec3, &RenderLayers)>,
 ) {
-    let Some(kind) = BlockKind::material_block_kind(material) else {
-        return;
-    };
+    let kind = BlockKind::material_block_kind(material);
 
     let mut child = parent.spawn((
         Mesh3d(assets.block_mesh(kind)),
@@ -318,8 +316,14 @@ pub(crate) fn spawn_block_model(
             .material_props()
             .is_some_and(|props| props.is_stamp)
         {
-            // 印花面片用法线定位，不受 facing yaw 影响
-            Quat::IDENTITY
+            // 印花：局部 +Z 朝外（宿主→印花法线）；无 GLB 的薄板已偏向 -Z 贴宿主
+            world
+                .material_attachments
+                .get(&data.id)
+                .map(|att| {
+                    Quat::from_rotation_arc(Vec3::Z, att.parent_face_normal.as_vec3().normalize())
+                })
+                .unwrap_or(Quat::IDENTITY)
         } else {
             render_rotation(data, data.facing)
         };
@@ -539,7 +543,7 @@ pub(crate) fn spawn_block_model(
         }
 
         if data.kind.is_material() {
-            for (face, color) in world
+            for (face, paint) in world
                 .material_paints
                 .iter()
                 .filter(|(face, _)| face.block == data.id)
@@ -548,24 +552,8 @@ pub(crate) fn spawn_block_model(
                 let local_normal = rotate_y_ccw(face_mark_local_normal(data, face.normal));
                 let mut child = parent.spawn((
                     Mesh3d(assets.face_mark_mesh(local_normal)),
-                    MeshMaterial3d(assets.face_mark_material(*color)),
+                    MeshMaterial3d(assets.face_mark_material(*paint)),
                     face_mark_transform(local_normal, 0.05),
-                ));
-                if let Some((_, icon_layer)) = icon_render {
-                    child.insert((icon_layer.clone(), BlockIconRenderEntity));
-                }
-            }
-            for (face, color) in world
-                .stamp_face_colors
-                .iter()
-                .filter(|(face, _)| face.block == data.id)
-            {
-                // 印花：俯视逆时针 90°；沿法线收回自身格 0.1，避免扎进宿主闪烁
-                let local_normal = rotate_y_ccw(face_mark_local_normal(data, face.normal));
-                let mut child = parent.spawn((
-                    Mesh3d(assets.face_mark_mesh(local_normal)),
-                    MeshMaterial3d(assets.stamp_face_material(*color)),
-                    face_mark_transform(local_normal, -0.1),
                 ));
                 if let Some((_, icon_layer)) = icon_render {
                     child.insert((icon_layer.clone(), BlockIconRenderEntity));

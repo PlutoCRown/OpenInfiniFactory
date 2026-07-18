@@ -272,7 +272,7 @@ mod tests {
         place_factory(
             &mut world,
             target,
-            BlockKind::material_block_kind(crate::blocks::MaterialKind::Basic).unwrap(),
+            BlockKind::material("basic"),
         );
         cache.refresh(&world);
         assert!(cache
@@ -309,7 +309,7 @@ mod tests {
         place_factory(
             &mut world,
             IVec3::new(0, 2, 0),
-            BlockKind::material_block_kind(crate::blocks::MaterialKind::Basic).unwrap(),
+            BlockKind::material("basic"),
         );
         let mut cache = SignalNetworkCache::default();
         cache.refresh(&world);

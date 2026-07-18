@@ -931,25 +931,6 @@ pub(super) fn rotate_structure(
         .collect();
     world.material_paints = updated_paints;
 
-    let updated_stamp_colors: HashMap<_, _> = world
-        .stamp_face_colors
-        .iter()
-        .map(|(face, color)| {
-            if structure_ids.contains(&face.block) {
-                (
-                    MaterialFace {
-                        block: face.block,
-                        normal: rotate_offset_y(face.normal, clockwise),
-                    },
-                    *color,
-                )
-            } else {
-                (*face, *color)
-            }
-        })
-        .collect();
-    world.stamp_face_colors = updated_stamp_colors;
-
     // 附着法线随结构绕 Y 旋转
     for att in world.material_attachments.values_mut() {
         if structure_ids.contains(&att.parent) {
@@ -1006,7 +987,7 @@ fn rotate_facing(facing: Facing, clockwise: bool) -> Facing {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::blocks::{BlockData, BlockKind, MaterialKind};
+    use crate::blocks::{BlockData, BlockKind};
     use crate::world::direction::Facing;
 
     fn place(world: &mut WorldBlocks, pos: IVec3, kind: BlockKind) {
@@ -1014,8 +995,7 @@ mod tests {
     }
 
     fn place_material(world: &mut WorldBlocks, pos: IVec3) {
-        let kind = BlockKind::material_block_kind(MaterialKind::Basic).unwrap();
-        place(world, pos, kind);
+        place(world, pos, BlockKind::material("basic"));
     }
 
     fn structures_for(world: &WorldBlocks) -> StructureState {

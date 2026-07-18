@@ -402,17 +402,7 @@ fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<Cel
             world
                 .material_paints
                 .retain(|face, _| face.block != block.id);
-            if let Some(att) = world.material_attachments.remove(&block.id) {
-                world
-                    .stamp_face_colors
-                    .remove(&crate::game::world::grid::MaterialFace::new(
-                        att.parent,
-                        att.parent_face_normal,
-                    ));
-            }
-            world
-                .stamp_face_colors
-                .retain(|face, _| face.block != block.id);
+            world.material_attachments.remove(&block.id);
             world.wire_face_panels.retain(|face| face.block != block.id);
             world.factory_attachments.remove(&block.id);
             let factory_children: Vec<_> = world

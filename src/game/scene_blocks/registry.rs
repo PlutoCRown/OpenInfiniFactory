@@ -1,4 +1,4 @@
-//! 场景方块表现注册表（模型路径、可选碰撞模型）
+//! 场景方块表现注册表（模型 / 贴图路径、可选碰撞模型）
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -7,12 +7,15 @@ use bevy::prelude::*;
 
 use crate::game::blocks::{scene_catalog, BlockKind, ColorSpec, SceneBlockId};
 
-/// 单个场景方块的表现数据（外观以 model.glb 为准）
+/// 单个场景方块的表现数据（优先 model.glb，否则 texture.png 贴单位立方体）
 #[derive(Clone, Debug)]
 pub struct SceneBlockPresentation {
     pub id: SceneBlockId,
     pub string_id: String,
-    pub model_path: PathBuf,
+    /// 有则走 glb 网格/材质；与 texture_path 至少一个存在
+    pub model_path: Option<PathBuf>,
+    /// 无 model 时用 PNG 贴默认立方体
+    pub texture_path: Option<PathBuf>,
     pub collision_model_path: Option<PathBuf>,
     /// collision.glb 三角形（局部系，中心原点）；无则玩家按整格 AABB
     pub collision_tris: Option<Vec<[Vec3; 3]>>,

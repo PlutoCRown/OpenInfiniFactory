@@ -13,6 +13,9 @@ pub fn setup_scene(
     mut sky_materials: ResMut<Assets<SkyMaterial>>,
     mut images: ResMut<Assets<Image>>,
     scene_registry: Res<crate::game::scene_blocks::SceneBlockRegistry>,
+    material_registry: Res<crate::game::material_blocks::MaterialBlockRegistry>,
+    stamp_registry: Res<crate::game::material_blocks::StampMaterialRegistry>,
+    paint_registry: Res<crate::game::material_blocks::PaintMaterialRegistry>,
     config: Res<crate::shared::config::GameConfig>,
 ) {
     commands.spawn((
@@ -54,8 +57,15 @@ pub fn setup_scene(
         config.skybox_enabled,
     );
 
-    let render_assets =
-        WorldRenderAssets::new(&mut meshes, &mut materials, &mut images, &scene_registry);
+    let render_assets = WorldRenderAssets::new(
+        &mut meshes,
+        &mut materials,
+        &mut images,
+        &scene_registry,
+        &material_registry,
+        &stamp_registry,
+        &paint_registry,
+    );
     commands.insert_resource(render_assets);
 
     let marker_mesh = meshes.add(Cuboid::new(1.04, 1.04, 1.04));

@@ -14,6 +14,7 @@ use crate::shared::platform;
 const SCENE_BLOCKS_DIR: &str = "scene_blocks";
 const META_FILE: &str = "meta.json";
 const MODEL_FILE: &str = "model.glb";
+const TEXTURE_FILE: &str = "texture.png";
 const COLLISION_FILE: &str = "collision.glb";
 const ICON_FILE: &str = "icon.png";
 
@@ -99,12 +100,23 @@ fn load_one_pack(
     presentations: &mut Vec<SceneBlockPresentation>,
 ) -> Result<(), String> {
     let meta_path = dir.join(META_FILE);
-    let model_path = dir.join(MODEL_FILE);
     if !meta_path.is_file() {
         return Err(format!("missing {META_FILE} in {}", dir.display()));
     }
-    if !model_path.is_file() {
-        return Err(format!("missing {MODEL_FILE} in {}", dir.display()));
+
+    let model_path = {
+        let path = dir.join(MODEL_FILE);
+        path.is_file().then_some(path)
+    };
+    let texture_path = {
+        let path = dir.join(TEXTURE_FILE);
+        path.is_file().then_some(path)
+    };
+    if model_path.is_none() && texture_path.is_none() {
+        return Err(format!(
+            "missing {MODEL_FILE} and {TEXTURE_FILE} in {}",
+            dir.display()
+        ));
     }
 
     let text =
@@ -119,7 +131,7 @@ fn load_one_pack(
     let name_key = leak_str(&format!("block.{}", meta.id));
     let short_name_key = leak_str(&format!("short.{}", meta.id));
     let description_key = leak_str(&format!("desc.{}", meta.id));
-    // 展示色兜底；真正外观以 model.glb 为准
+    // 展示色兜底；真正外观以 model.glb / texture.png 为准
     let color = default_scene_color();
 
     let id = match catalog.register(SceneBlockDef {
@@ -163,6 +175,7 @@ fn load_one_pack(
         id,
         string_id: meta.id,
         model_path,
+        texture_path,
         collision_model_path,
         collision_tris,
         icon_path,
