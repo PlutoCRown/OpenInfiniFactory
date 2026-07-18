@@ -167,6 +167,20 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
         StatusText(StatusTextKind::Gameplay),
         InGameHudVisibility,
     ));
+    root.spawn((
+        absolute_text_bundle(
+            "",
+            16.0,
+            STATUS_TEXT,
+            None,
+            Some(Val::Px(18.0)),
+            None,
+            Some(Val::Px(18.0)),
+        ),
+        TextLayout::no_wrap(),
+        StatusText(StatusTextKind::SimulationOverlay),
+        InGameHudVisibility,
+    ));
 }
 
 fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) {

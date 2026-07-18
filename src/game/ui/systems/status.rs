@@ -1,6 +1,7 @@
 use crate::game::blocks::BlockData;
 use crate::game::ui::types::InventoryItem;
 use crate::game::world::direction::Facing;
+use crate::shared::config::{ActionKeyName, GameConfig};
 use crate::shared::save::SaveKind;
 
 pub fn update_status_ui(
@@ -8,14 +9,74 @@ pub fn update_status_ui(
     placement: Res<PlacementState>,
     world: Res<WorldBlocks>,
     inventory: Res<InventoryItems>,
+    builder_mode: Res<BuilderMode>,
+    simulation: Res<SimulationState>,
     save_state: Res<SaveState>,
+    config: Res<GameConfig>,
     mut texts: Query<(&StatusText, &mut Text)>,
 ) {
     for (status, mut text) in &mut texts {
-        if status.0 != StatusTextKind::Gameplay {
-            continue;
-        }
-        let next = gameplay_status_text(&placement, &world, &inventory, &save_state);
+        let next = match status.0 {
+            StatusTextKind::Gameplay => {
+                gameplay_status_text(&placement, &world, &inventory, &save_state)
+            }
+            StatusTextKind::SimulationOverlay => {
+                if *builder_mode != BuilderMode::Play {
+                    String::new()
+                } else {
+                    let start = config.input(ActionKeyName::Simulate).name().to_string();
+                    let fast = config
+                        .input(ActionKeyName::SimulationFast)
+                        .name()
+                        .to_string();
+                    let step = config
+                        .input(ActionKeyName::SimulationStep)
+                        .name()
+                        .to_string();
+                    let rollback = config
+                        .input(ActionKeyName::SimulationRollback)
+                        .name()
+                        .to_string();
+                    let (state_key, controls_key, controls_args): (
+                        &str,
+                        &str,
+                        Vec<(&str, String)>,
+                    ) = if !simulation.is_active() {
+                        (
+                            "simulation_state.ready",
+                            "simulation_controls.ready",
+                            vec![("start", start)],
+                        )
+                    } else if simulation.running && simulation.speed > 1.0 {
+                        (
+                            "simulation_state.fast",
+                            "simulation_controls.fast",
+                            vec![("fast", fast), ("step", step), ("rollback", rollback)],
+                        )
+                    } else if simulation.running {
+                        (
+                            "simulation_state.playing",
+                            "simulation_controls.playing",
+                            vec![("step", step), ("fast", fast), ("rollback", rollback)],
+                        )
+                    } else {
+                        (
+                            "simulation_state.paused",
+                            "simulation_controls.paused",
+                            vec![("step", step), ("start", start), ("rollback", rollback)],
+                        )
+                    };
+                    i18n.fmt(
+                        "status.simulation_overlay",
+                        &[
+                            ("state", i18n.t(state_key)),
+                            ("turns", simulation.turn.to_string()),
+                            ("controls", i18n.fmt(controls_key, &controls_args)),
+                        ],
+                    )
+                }
+            }
+        };
         if text.0 != next {
             text.0 = next;
         }

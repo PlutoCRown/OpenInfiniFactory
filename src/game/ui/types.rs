@@ -14,13 +14,13 @@ pub use crate::game::ui::features::save::types::{
     SaveListSolutionRows, SaveListTitleText,
 };
 pub use crate::game::ui::features::settings::types::{
-    OpenSettingsDropdown, PendingKeyBind, SettingsAction, SettingsControl, SettingsDropdown,
-    SettingsDropdownLabel, SettingsDropdownList, SettingsDropdownRow, SettingsField, SettingsItem,
-    SettingsSliderFill, SettingsSliderKnob, SettingsTab, SettingsText, SettingsTextKind,
-    SettingsValueText, GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS,
+    GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
+    SettingsControl, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList,
+    SettingsDropdownRow, SettingsField, SettingsItem, SettingsSliderFill, SettingsSliderKnob,
+    SettingsTab, SettingsText, SettingsTextKind, SettingsValueText,
 };
 
-use crate::game::blocks::{edit_blocks, BlockKind, PLAY_BLOCKS};
+use crate::game::blocks::{BlockKind, PLAY_BLOCKS, edit_blocks};
 use crate::game::state::BuilderMode;
 use crate::shared::config::ActionKeyName;
 
@@ -64,9 +64,13 @@ pub struct Crosshair;
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct StatusText(pub StatusTextKind);
 
+/// 状态栏文本种类
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum StatusTextKind {
+    /// 左上角建造信息（世界 / 手持 / 瞄准）
     Gameplay,
+    /// 右下角模拟状态（回合 / 播放状态 / 快捷键提示）
+    SimulationOverlay,
 }
 
 #[derive(Component)]

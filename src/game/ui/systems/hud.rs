@@ -12,7 +12,7 @@ pub fn update_hud_visibility(
     )>,
 ) {
     let has_world = save_state.current.is_some();
-    let hide_gameplay_hud = *builder_mode == BuilderMode::Play && simulation.running;
+    let hide_gameplay_hud = *builder_mode == BuilderMode::Play && simulation.is_active();
     let active_play = playing_ui.active_play();
 
     let hud_display = if has_world {
