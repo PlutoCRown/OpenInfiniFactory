@@ -29,7 +29,7 @@ impl Plugin for SavePlugin {
                 (
                     dispatch_save_list_actions
                         .in_set(UiAccessScope)
-                        .after(PerfScope::Input)
+                        .after(PerfScope::Placement)
                         .before(PerfScope::Menus),
                     update_save_list_ui
                         .run_if(|mode: Res<State<GameMode>>, screen: Res<StartMenuScreen>| {

@@ -74,7 +74,7 @@ impl Plugin for PlayingOverlaysPlugin {
             Update,
             sync_playing_overlay_mounts
                 .in_set(UiAccessScope)
-                .after(PerfScope::Input)
+                .after(PerfScope::Placement)
                 .before(PerfScope::Menus),
         );
     }

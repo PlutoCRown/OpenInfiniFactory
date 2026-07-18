@@ -155,7 +155,7 @@ impl Plugin for StartMenuMountsPlugin {
             Update,
             sync_start_menu_mounts
                 .in_set(UiAccessScope)
-                .after(PerfScope::Input)
+                .after(PerfScope::Placement)
                 .before(PerfScope::Menus),
         );
     }

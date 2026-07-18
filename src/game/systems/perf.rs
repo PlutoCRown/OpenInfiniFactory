@@ -44,7 +44,12 @@ macro_rules! perf_scopes {
 
 perf_scopes! {
     PreUpdate => "PreUpdate",
-    Input => "Input",
+    PreUpdateRest => "PreUpdate rest",
+    VirtualRemote => "Virtual remote",
+    InputGather => "Input gather",
+    PlayerMove => "Player move",
+    Hover => "Hover",
+    Placement => "Placement",
     Menus => "Menus",
     Simulation => "Simulation",
     View => "View",
@@ -204,7 +209,19 @@ pub struct PerfPlugin;
 impl Plugin for PerfPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PerfStats>()
-            // 只锁住曾漂进 UI 计时的后半段；Input→View 已有业务 after/before，不必整段串死
+            // 前半段拆开计时；后半段 View→Debug 串死以免漂进 UI
+            .configure_sets(
+                Update,
+                (
+                    PerfScope::PreUpdateRest,
+                    PerfScope::VirtualRemote,
+                    PerfScope::InputGather,
+                    PerfScope::PlayerMove,
+                    PerfScope::Hover,
+                    PerfScope::Placement,
+                )
+                    .chain(),
+            )
             .configure_sets(
                 Update,
                 (
@@ -222,7 +239,21 @@ impl Plugin for PerfPlugin {
                     .in_set(PerfScope::PreUpdate)
                     .after(UiSystems::Focus),
             )
-            .add_systems(Update, perf_mark_input.in_set(PerfScope::Input))
+            .add_systems(
+                Update,
+                perf_mark_pre_update_rest.in_set(PerfScope::PreUpdateRest),
+            )
+            .add_systems(
+                Update,
+                perf_mark_virtual_remote.in_set(PerfScope::VirtualRemote),
+            )
+            .add_systems(
+                Update,
+                perf_mark_input_gather.in_set(PerfScope::InputGather),
+            )
+            .add_systems(Update, perf_mark_player_move.in_set(PerfScope::PlayerMove))
+            .add_systems(Update, perf_mark_hover.in_set(PerfScope::Hover))
+            .add_systems(Update, perf_mark_placement.in_set(PerfScope::Placement))
             .add_systems(Update, perf_mark_menus.in_set(PerfScope::Menus))
             .add_systems(Update, perf_mark_simulation.in_set(PerfScope::Simulation))
             .add_systems(Update, perf_mark_view.in_set(PerfScope::View))

@@ -169,7 +169,7 @@ impl Plugin for PauseMenuPlugin {
             (
                 dispatch_pause_menu_clicks
                     .in_set(UiAccessScope)
-                    .after(PerfScope::Input)
+                    .after(PerfScope::Placement)
                     .before(PerfScope::Menus),
                 sync_pause_menu_buttons
                     .run_if(|playing_ui: Res<PlayingUiState>| playing_ui.paused)

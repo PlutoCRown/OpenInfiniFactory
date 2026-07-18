@@ -23,7 +23,7 @@ impl Plugin for InventoryPlugin {
             .add_systems(
                 Update,
                 dispatch_inventory_slot_actions
-                    .after(PerfScope::Input)
+                    .after(PerfScope::Placement)
                     .before(PerfScope::Menus),
             )
             // 热栏 / tooltip 常驻，不能绑 inventory_open，否则关背包后不刷新、tooltip 残留

@@ -6,8 +6,8 @@ use std::collections::HashSet;
 
 use crate::game::blocks::BlockPresent;
 use crate::game::blocks::{BlockData, BlockKind};
-use crate::game::edit_history::{build_cell_patch, EditHistory, FacePanelDelta, WorldPatch};
-use crate::game::player::controller::{teleport_player_preserve_offset, FlyCamera};
+use crate::game::edit_history::{EditHistory, FacePanelDelta, WorldPatch, build_cell_patch};
+use crate::game::player::controller::{FlyCamera, teleport_player_preserve_offset};
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{
@@ -15,15 +15,15 @@ use crate::game::state::{
     SelectionBounds, SimulationState, SolutionState,
 };
 use crate::game::systems::debug::DebugState;
+use crate::game::ui::features::block_panels::PendingBlockPanelOpen;
 use crate::game::ui::{AreaKind, InventoryItems, UiRuntime};
-use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, WorldBlocks};
 use crate::game::world::rendering::{
-    despawn_edit_previews, spawn_block_preview, spawn_delete_bounds_preview, BlockEntity,
-    EditPreview, SceneChunkMeshes, WorldRenderAssets,
+    BlockEntity, EditPreview, SceneChunkMeshes, WorldRenderAssets, despawn_edit_previews,
+    spawn_block_preview, spawn_delete_bounds_preview,
 };
-use crate::scene::{refresh_edit_changes, BlockEntityIndex};
+use crate::scene::{BlockEntityIndex, refresh_edit_changes};
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
 use super::edit_ops::{
@@ -48,8 +48,7 @@ pub struct PlacementQueries<'w, 's> {
     scene_chunks: ResMut<'w, SceneChunkMeshes>,
     input: Res<'w, crate::game::input::GameplayInputState>,
     touch: Res<'w, crate::shared::touch_profile::TouchProfile>,
-    ui_host: ResMut<'w, UiHost>,
-    playing_ui_root: Option<Res<'w, PlayingUiRootEntity>>,
+    pending_block_panel: ResMut<'w, PendingBlockPanelOpen>,
 }
 
 /// 处理放置/删除手势、取块、旋转与框选入口
@@ -67,7 +66,7 @@ pub fn placement_input(
     playing_ui: Res<PlayingUiState>,
     simulation: Res<SimulationState>,
     mut placement: ResMut<PlacementState>,
-    mut ui_runtime: ResMut<UiRuntime>,
+    ui_runtime: Res<UiRuntime>,
     queries: PlacementQueries,
 ) {
     let PlacementQueries {
@@ -82,8 +81,7 @@ pub fn placement_input(
         mut scene_chunks,
         input,
         touch,
-        mut ui_host,
-        playing_ui_root,
+        mut pending_block_panel,
     } = queries;
 
     if *mode.get() != GameMode::Playing || !playing_ui.active_play() {
@@ -119,17 +117,13 @@ pub fn placement_input(
         }
     }
 
-    let playing_root = playing_ui_root.as_ref().map(|root| root.0);
     if input.open_block_config {
         let current_target_pos = placement.target.map(|target| target.pos);
         if open_target_block_ui(
             current_target_pos,
             &world,
             *builder_mode,
-            &mut ui_host,
-            &mut ui_runtime,
-            &mut commands,
-            playing_root,
+            &mut pending_block_panel,
         ) {
             placement.edit_gesture = None;
             placement.selection.clear();
@@ -164,10 +158,7 @@ pub fn placement_input(
             current_target_pos,
             &world,
             *builder_mode,
-            &mut ui_host,
-            &mut ui_runtime,
-            &mut commands,
-            playing_root,
+            &mut pending_block_panel,
         )
     {
         placement.edit_gesture = None;
@@ -415,7 +406,7 @@ pub fn placement_input(
                                     target.pos + IVec3::Z,
                                     target.pos + IVec3::NEG_Z,
                                 ]),
-                            &mut scene_chunks,
+                                &mut scene_chunks,
                             );
                             solution_state.dirty = true;
                         }
@@ -556,15 +547,12 @@ fn try_player_teleport(
     true
 }
 
-/// 点击可配置方块时打开方块 UI（编辑态系统块，或玩法/编辑态告示等）
+/// 点击可配置方块时请求打开方块 UI（实际挂载延后到 UiAccessScope）
 fn open_target_block_ui(
     target: Option<IVec3>,
     world: &WorldBlocks,
     builder_mode: BuilderMode,
-    ui_host: &mut UiHost,
-    ui_runtime: &mut UiRuntime,
-    commands: &mut Commands,
-    playing_root: Option<Entity>,
+    pending: &mut PendingBlockPanelOpen,
 ) -> bool {
     let Some(pos) = target else {
         return false;
@@ -584,7 +572,7 @@ fn open_target_block_ui(
         return false;
     };
 
-    ui_host.mount_block_panel(commands, playing_root, ui_runtime, panel, pos);
+    pending.0 = Some((pos, panel));
     true
 }
 

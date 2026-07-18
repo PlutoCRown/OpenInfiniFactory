@@ -3,10 +3,10 @@ use bevy::prelude::*;
 use crate::game::state::{GameMode, SolutionState, StartMenuScreen, WorldEntryMode};
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::UiMainThread;
-use crate::game::ui::access::{ui, UiAccessScope};
+use crate::game::ui::access::{UiAccessScope, ui};
 use crate::game::ui::core::host::UiRootEntity;
 use crate::game::ui::core::runtime::UiPanelContext;
-use crate::game::ui::menu_button::{spawn_menu_button, MenuButtonClick, MenuButtonSet};
+use crate::game::ui::menu_button::{MenuButtonClick, MenuButtonSet, spawn_menu_button};
 use crate::list_ui_config;
 use crate::shared::save::SaveState;
 
@@ -81,7 +81,7 @@ impl Plugin for StartMenuPlugin {
             Update,
             dispatch_start_menu_clicks
                 .in_set(UiAccessScope)
-                .after(PerfScope::Input)
+                .after(PerfScope::Placement)
                 .before(PerfScope::Menus),
         );
     }

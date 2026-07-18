@@ -30,7 +30,7 @@ impl Plugin for SettingsPlugin {
                 Update,
                 dispatch_settings_actions
                     .in_set(UiAccessScope)
-                    .after(PerfScope::Input)
+                    .after(PerfScope::Placement)
                     .before(PerfScope::Menus),
             )
             .add_systems(

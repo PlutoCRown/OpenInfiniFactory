@@ -56,7 +56,7 @@ impl Plugin for UiFeaturesPlugin {
             )
                 .chain()
                 .in_set(UiAccessScope)
-                .after(PerfScope::Input)
+                .after(PerfScope::Placement)
                 .before(PerfScope::Menus),
         );
     }

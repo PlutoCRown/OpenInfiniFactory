@@ -188,14 +188,20 @@ impl Plugin for GamePlugin {
                 Update,
                 (
                     input::gather_gameplay_input,
-                    camera_move,
                     camera_look,
                     sync_cursor_grab,
+                    gameplay_input,
                 )
                     .chain()
-                    .before(PerfScope::Input),
+                    .after(PerfScope::VirtualRemote)
+                    .before(PerfScope::InputGather),
             )
-            .add_systems(Update, gameplay_input.before(PerfScope::Input))
+            .add_systems(
+                Update,
+                camera_move
+                    .after(PerfScope::InputGather)
+                    .before(PerfScope::PlayerMove),
+            )
             .add_systems(
                 Update,
                 (
@@ -203,30 +209,32 @@ impl Plugin for GamePlugin {
                     world::rendering::sync_shadow_settings,
                     world::rendering::sync_vsync_settings,
                 )
-                    .after(PerfScope::Input)
+                    .after(PerfScope::Placement)
                     .before(PerfScope::Menus),
             )
             .add_systems(
                 Update,
                 edit_history_input
-                    .after(gameplay_input)
+                    .after(PerfScope::Hover)
                     .before(placement_input),
             )
             .add_systems(
                 Update,
                 clipboard_input
-                    .after(gameplay_input)
+                    .after(PerfScope::Hover)
                     .before(placement_input),
             )
             .add_systems(
                 Update,
-                update_hover.after(gameplay_input).before(placement_input),
+                update_hover
+                    .after(PerfScope::PlayerMove)
+                    .before(PerfScope::Hover),
             )
             .add_systems(
                 Update,
                 placement_input
-                    .after(gameplay_input)
-                    .before(PerfScope::Input),
+                    .after(PerfScope::Hover)
+                    .before(PerfScope::Placement),
             )
             .add_systems(
                 Update,

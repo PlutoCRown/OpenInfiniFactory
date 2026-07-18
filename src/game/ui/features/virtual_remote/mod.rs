@@ -10,10 +10,10 @@ use crate::game::systems::perf::PerfScope;
 use crate::shared::config::VirtualControlId;
 
 pub use editor::{
-    exit_virtual_layout_editor, open_virtual_layout_editor, VirtualLayoutDraft,
-    VirtualLayoutEditorOpen, VirtualLayoutEditorState, EDITOR_Z,
+    EDITOR_Z, VirtualLayoutDraft, VirtualLayoutEditorOpen, VirtualLayoutEditorState,
+    exit_virtual_layout_editor, open_virtual_layout_editor,
 };
-pub use spawn::{spawn_virtual_remote, VirtualRemoteRoot};
+pub use spawn::{VirtualRemoteRoot, spawn_virtual_remote};
 
 use update::{
     apply_virtual_control_layout, sync_landscape_overlay, sync_virtual_remote_visibility,
@@ -117,8 +117,8 @@ impl Plugin for VirtualRemotePlugin {
                     editor::update_layout_editor_ui,
                 )
                     .chain()
-                    .before(crate::game::input::gather_gameplay_input)
-                    .before(PerfScope::Input),
+                    .after(PerfScope::PreUpdateRest)
+                    .before(PerfScope::VirtualRemote),
             );
     }
 }
