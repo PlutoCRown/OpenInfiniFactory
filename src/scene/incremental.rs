@@ -26,11 +26,6 @@ pub fn block_data_at(world: &WorldBlocks, pos: IVec3) -> Option<BlockData> {
         .or_else(|| world.system_blocks.get(&pos).copied())
 }
 
-fn despawn_entity(commands: &mut Commands, index: &mut BlockEntityIndex, entity: Entity) {
-    index.remove_entity(entity);
-    commands.entity(entity).despawn();
-}
-
 fn despawn_animatable_at(commands: &mut Commands, index: &mut BlockEntityIndex, pos: IVec3) {
     if let Some(entity) = index.remove_animatable(pos) {
         commands.entity(entity).despawn();
@@ -401,6 +396,8 @@ pub fn apply_structure_animations(
 ) -> HashSet<IVec3> {
     let factory_debug = debug.factory_activity.then_some(structure_state);
     let mut handled = HashSet::new();
+    // 本函数已排队销毁的实体：禁止再 insert（Bevy 0.19 对已 despawn 实体 insert 会 panic）
+    let mut despawned = HashSet::new();
 
     // 先收集本回合所有可动画移动，避免 HashMap 迭代顺序导致「后到的目标格把先走的实体误删」
     let mut planned: Vec<(IVec3, BlockAnimation, BlockData, Option<Entity>)> = Vec::new();
@@ -433,14 +430,19 @@ pub fn apply_structure_animations(
 
     // 阶段 2：绑定到目标格并挂上动画
     for (pos, animation, data, entity) in planned {
-        if let Some(entity) = entity {
+        // 复用实体须仍有效，且本轮尚未排队销毁（验收销毁的占位格会走到这里）
+        let reuse = entity
+            .filter(|entity| !despawned.contains(entity) && commands.get_entity(*entity).is_ok());
+        if let Some(entity) = reuse {
             if let Some(occupant) = index.get_animatable(pos) {
                 if occupant != entity {
                     if moving_entities.contains(&occupant) {
                         // 对方也在本回合搬走，只解绑占位
                         index.unbind_animatable_pos(pos);
                     } else {
-                        despawn_entity(commands, index, occupant);
+                        index.remove_entity(occupant);
+                        despawned.insert(occupant);
+                        commands.entity(occupant).despawn();
                     }
                 }
             }
@@ -452,7 +454,8 @@ pub fn apply_structure_animations(
             );
             let animated = AnimatedBlock::new(animation, timing);
             let start = animated.start_transform();
-            commands.entity(entity).insert((
+            // try_insert：若同队列里已被销毁，只跳过，不 panic
+            commands.entity(entity).try_insert((
                 BlockEntity {
                     pos,
                     id: animation.block_id,
@@ -464,10 +467,17 @@ pub fn apply_structure_animations(
             continue;
         }
 
+        if let Some(entity) = entity {
+            index.remove_entity(entity);
+            despawned.insert(entity);
+        }
+
         // 找不到原实体时才新建；不要误删其它正在移动的实体
         if let Some(occupant) = index.get_animatable(pos) {
             if !moving_entities.contains(&occupant) {
-                despawn_entity(commands, index, occupant);
+                index.remove_entity(occupant);
+                despawned.insert(occupant);
+                commands.entity(occupant).despawn();
             } else {
                 index.unbind_animatable_pos(pos);
             }
@@ -641,7 +651,7 @@ pub fn apply_turn_output_incremental(
     spawn_weld_sparks(commands, assets, &output.behavior_sparks, 0.0);
     spawn_break_debris(commands, meshes, assets, &output.break_debris);
     spawn_laser_beams(commands, assets, &output.laser_beams, animation_duration);
-    spawn_acceptance_sparks(commands, assets, &output.acceptance_sparks);
+    spawn_acceptance_sparks(commands, meshes, assets, &output.acceptance_sparks);
     stats.render_rebuild_ms = render_start.elapsed().as_secs_f64() * 1000.0;
     stats.total_ms += stats.render_rebuild_ms;
 }

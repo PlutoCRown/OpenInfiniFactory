@@ -30,7 +30,7 @@ pub struct LaserBeam {
     pub emits_from_center: bool,
 }
 
-/// 钻头/激光毁掉的材料：位置 + 种类（表现层采样纹理做碎片）
+/// 钻头/激光/验收毁掉的材料：位置 + 种类（表现层采样纹理）
 #[derive(Clone, Copy, Debug)]
 pub struct BreakDebris {
     pub pos: IVec3,

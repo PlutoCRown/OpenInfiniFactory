@@ -3,6 +3,8 @@
 mod components;
 mod connectors;
 mod fx;
+pub(crate) mod goal_ghost;
+mod goal_visual_sync;
 mod icons;
 mod previews;
 mod scene;
@@ -26,6 +28,7 @@ pub use fx::{
     spawn_acceptance_sparks, spawn_break_debris, spawn_laser_beams, spawn_weld_bursts,
     spawn_weld_sparks,
 };
+pub use goal_ghost::{GoalGhostMaterial, GoalGhostPlugin};
 pub use icons::{retire_block_icon_renderers, setup_block_icons};
 pub use previews::{
     despawn_edit_previews, despawn_pending_generated_previews, spawn_block_preview,

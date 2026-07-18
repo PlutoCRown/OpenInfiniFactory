@@ -2,13 +2,15 @@
 
 use bevy::prelude::*;
 
-use crate::game::edit_history::{EditHistory, apply_block_settings_with_history};
+use crate::game::block_editing::world_refresh::apply_block_settings_edit;
+use crate::game::edit_history::EditHistory;
+use crate::game::session::PlayingWorldParams;
 use crate::game::state::{
     BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
 };
 use crate::game::ui::core::text_input::InlineTextEditState;
 use crate::game::ui::{AreaKind, InventoryItem, InventoryItems, UiRuntime};
-use crate::game::world::grid::{BlockSettings, TeleportSettings, WorldBlocks};
+use crate::game::world::grid::{BlockSettings, TeleportSettings};
 use crate::shared::config::{ActionKeyName, GameConfig};
 
 /// 系统方块配置剪贴板
@@ -35,7 +37,7 @@ pub fn clipboard_input(
     mut inventory: ResMut<InventoryItems>,
     mut clipboard: ResMut<BlockSettingsClipboard>,
     mut tool_swap: ResMut<SelectionToolSwap>,
-    mut world: ResMut<WorldBlocks>,
+    mut world: PlayingWorldParams,
     mut edit_history: ResMut<EditHistory>,
     mut solution_state: ResMut<SolutionState>,
 ) {
@@ -79,10 +81,11 @@ pub fn clipboard_input(
     };
 
     if config.chord(ActionKeyName::Copy).just_triggered(&keys) {
-        let Some(block) = world.system_blocks.get(&pos) else {
+        let Some(block) = world.world.system_blocks.get(&pos) else {
             return;
         };
         let Some(settings) = world
+            .world
             .block_settings
             .get(&pos)
             .cloned()
@@ -98,10 +101,11 @@ pub fn clipboard_input(
         let Some(copied) = clipboard.0.clone() else {
             return;
         };
-        let Some(block) = world.system_blocks.get(&pos).copied() else {
+        let Some(block) = world.world.system_blocks.get(&pos).copied() else {
             return;
         };
         let Some(current) = world
+            .world
             .block_settings
             .get(&pos)
             .cloned()
@@ -112,7 +116,7 @@ pub fn clipboard_input(
         if std::mem::discriminant(&copied) != std::mem::discriminant(&current) {
             return;
         }
-        apply_block_settings_with_history(edit_history.as_mut(), &mut world, pos, |blocks| {
+        apply_block_settings_edit(edit_history.as_mut(), &mut world, pos, |blocks| {
             match copied {
                 BlockSettings::Teleport(TeleportSettings { name, .. }) => {
                     blocks.set_teleport_pair(pos, None);

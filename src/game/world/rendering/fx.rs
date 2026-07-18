@@ -202,11 +202,12 @@ pub fn spawn_break_debris(
     }
 }
 
-/// 在验收成功位置生成火花粒子
+/// 验收火花：运动沿用 WeldSpark，外观从材料贴图随机 UV 采样
 pub fn spawn_acceptance_sparks(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     assets: &WorldRenderAssets,
-    positions: &[IVec3],
+    sparks: &[BreakDebris],
 ) {
     const VELOCITIES: [Vec3; 12] = [
         Vec3::new(3.20, 5.40, 0.84),
@@ -223,18 +224,60 @@ pub fn spawn_acceptance_sparks(
         Vec3::new(-0.84, 3.72, 2.96),
     ];
 
-    for pos in positions {
-        let origin = grid_to_world(*pos);
+    for item in sparks {
+        let origin = grid_to_world(item.pos);
+        let material = assets.break_debris_material(item.kind);
+        let seed = (item.pos.x.wrapping_mul(73856093)
+            ^ item.pos.y.wrapping_mul(19349663)
+            ^ item.pos.z.wrapping_mul(83492791)) as u32;
         for (index, velocity) in VELOCITIES.into_iter().enumerate() {
+            let n = seed.wrapping_add((index as u32).wrapping_mul(2654435761));
+            let u_cell = (n % 4) as f32;
+            let v_cell = ((n / 4) % 4) as f32;
+            let u0 = u_cell * 0.25;
+            let v0 = v_cell * 0.25;
+            let u1 = u0 + 0.25;
+            let v1 = v0 + 0.25;
+            let size = 0.12 + ((n >> 7) & 7) as f32 * 0.014;
             let offset = Vec3::new(
                 (index as f32 * 1.37).sin() * 0.40,
                 0.08,
                 (index as f32 * 2.11).cos() * 0.40,
             );
+            let mesh = meshes.add({
+                let h = size * 0.5;
+                Mesh::new(
+                    PrimitiveTopology::TriangleList,
+                    RenderAssetUsages::default(),
+                )
+                .with_inserted_attribute(
+                    Mesh::ATTRIBUTE_POSITION,
+                    vec![[-h, -h, 0.0], [h, -h, 0.0], [h, h, 0.0], [-h, h, 0.0]],
+                )
+                .with_inserted_attribute(
+                    Mesh::ATTRIBUTE_NORMAL,
+                    vec![
+                        [0.0, 0.0, 1.0],
+                        [0.0, 0.0, 1.0],
+                        [0.0, 0.0, 1.0],
+                        [0.0, 0.0, 1.0],
+                    ],
+                )
+                .with_inserted_attribute(
+                    Mesh::ATTRIBUTE_UV_0,
+                    vec![[u0, v1], [u1, v1], [u1, v0], [u0, v0]],
+                )
+                .with_inserted_indices(Indices::U32(vec![0, 1, 2, 0, 2, 3]))
+            });
             commands.spawn((
-                Mesh3d(assets.weld_spark.clone()),
-                MeshMaterial3d(assets.acceptance_spark_material.clone()),
-                Transform::from_translation(origin + offset),
+                Mesh3d(mesh),
+                MeshMaterial3d(material.clone()),
+                Transform::from_translation(origin + offset).with_rotation(Quat::from_euler(
+                    EulerRot::XYZ,
+                    ((n >> 5) & 255) as f32 / 255.0 * std::f32::consts::TAU,
+                    ((n >> 13) & 255) as f32 / 255.0 * std::f32::consts::TAU,
+                    ((n >> 21) & 255) as f32 / 255.0 * std::f32::consts::TAU,
+                )),
                 WeldSpark::new(velocity, 0.56, 0.0),
             ));
         }

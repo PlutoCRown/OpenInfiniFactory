@@ -9,11 +9,11 @@ use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
     spawn_labeled_panel_button, spawn_text_dropdown_toggle, sync_dropdown_overlay,
 };
-use crate::game::block_editing::world_refresh::refresh_world_after_edit;
+use crate::game::block_editing::world_refresh::apply_teleport_pair_edit;
 use crate::game::blocks::BlockKind;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::edit_history::{EditHistory, apply_teleport_pair_with_history};
+use crate::game::edit_history::EditHistory;
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::access::{UiMainThread, i18n};
@@ -141,10 +141,9 @@ pub fn dispatch_teleport_action(
             open_dropdown.toggle(UiPanelId::Teleport, PAIR_SLOT);
         }
         TeleportAction::SetPair(pair) => {
-            apply_teleport_pair_with_history(edit_history, &mut world.world, pos, pair);
+            apply_teleport_pair_edit(edit_history, world, pos, pair);
             open_dropdown.close();
             solution_state.dirty = true;
-            refresh_world_after_edit(world, pos);
         }
     }
 }

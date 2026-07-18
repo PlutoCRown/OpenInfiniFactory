@@ -339,12 +339,35 @@ pub(crate) fn spawn_block_model(
 
     let is_preview = edit_preview.is_some();
     let has_factory_visual = assets.factory_visual(data.kind).is_some();
-    let mut entity = if data.kind == crate::game::blocks::BlockKind::Wire
+    // 游玩态验收器：半透明目标材料 + 扫光；编辑/图标/放置预览仍用绿壳
+    let use_goal_ghost = data.kind == BlockKind::Goal
+        && assets.use_goal_play_visual()
+        && !is_preview
+        && icon_render.is_none();
+    let goal_material_kind = use_goal_ghost.then(|| {
+        BlockKind::material_block_kind(world.goal_settings(pos).material)
+    });
+    let mut entity = if let Some(mat_kind) = goal_material_kind {
+        if let Some(ghost) = assets.goal_ghost_material(mat_kind) {
+            commands.spawn((
+                Mesh3d(assets.goal_ghost_mesh(mat_kind)),
+                MeshMaterial3d(ghost),
+                transform,
+            ))
+        } else {
+            commands.spawn((
+                Mesh3d(assets.block_mesh(data.kind)),
+                MeshMaterial3d(material.clone()),
+                transform,
+            ))
+        }
+    } else if data.kind == crate::game::blocks::BlockKind::Wire
         || has_factory_visual
         || matches!(
             data.kind.model(),
             BlockModel::PartsOnly(_) | BlockModel::PusherParts(_)
-        ) {
+        )
+    {
         commands.spawn((transform, Visibility::default()))
     } else if data.kind == BlockKind::Platform {
         commands.spawn((
@@ -600,13 +623,21 @@ pub(crate) fn spawn_block_model(
             }
         }
 
-        if show_generator_preview && data.kind.shows_material_preview() {
-            let material = if data.kind == BlockKind::Generator {
-                world.generator_settings(pos).material
-            } else {
-                world.goal_settings(pos).material
+        if show_generator_preview {
+            let show_tilted_preview = match data.kind {
+                BlockKind::Generator => true,
+                // 游玩态验收器本体已是目标材料，不再挂倾斜小预览
+                BlockKind::Goal => !use_goal_ghost,
+                _ => false,
             };
-            spawn_selected_material_preview(parent, assets, material, icon_render);
+            if show_tilted_preview {
+                let material = if data.kind == BlockKind::Generator {
+                    world.generator_settings(pos).material
+                } else {
+                    world.goal_settings(pos).material
+                };
+                spawn_selected_material_preview(parent, assets, material, icon_render);
+            }
         }
 
         if let Some(material) = debug_overlay {

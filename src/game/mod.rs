@@ -48,7 +48,9 @@ use systems::simulation_controls::simulation_controls;
 use ui::{GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
-use world::rendering::{HoverStructureBounds, SkyboxPlugin, retire_block_icon_renderers};
+use world::rendering::{
+    GoalGhostPlugin, HoverStructureBounds, SkyboxPlugin, retire_block_icon_renderers,
+};
 
 pub struct GamePlugin;
 
@@ -144,7 +146,8 @@ impl Plugin for GamePlugin {
             .add_plugins(SessionPlugin)
             .add_plugins(GameUiPlugin)
             .add_plugins(PerfPlugin)
-            .add_plugins(SkyboxPlugin);
+            .add_plugins(SkyboxPlugin)
+            .add_plugins(GoalGhostPlugin);
         #[cfg(not(target_arch = "wasm32"))]
         app.add_plugins(DebugToolsPlugin);
         app.add_observer(slider_self_update)
@@ -250,7 +253,12 @@ impl Plugin for GamePlugin {
             )
             .add_systems(
                 Update,
-                crate::sim_bridge::tick_simulation
+                (
+                    crate::sim_bridge::tick_simulation,
+                    // 先落地 present/despawn，再跑动画，避免对已销毁实体 remove/insert
+                    ApplyDeferred,
+                )
+                    .chain()
                     .after(crate::sim_bridge::poll_simulation_worker)
                     .before(PerfScope::Simulation),
             )

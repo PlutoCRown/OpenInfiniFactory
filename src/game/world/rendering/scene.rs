@@ -2,6 +2,7 @@ use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 
 use super::components::{AimFaceHighlight, GameplayScene, HoverMarker, PlacementPreview};
+use super::goal_ghost::GoalGhostMaterial;
 use super::skybox::{spawn_sky_dome, transform_for_sun_direction, SkyMaterial};
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::shared::save::PuzzleLighting;
@@ -11,6 +12,7 @@ pub fn setup_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut ghost_materials: ResMut<Assets<GoalGhostMaterial>>,
     mut sky_materials: ResMut<Assets<SkyMaterial>>,
     mut images: ResMut<Assets<Image>>,
     scene_registry: Res<crate::game::scene_blocks::SceneBlockRegistry>,
@@ -60,7 +62,7 @@ pub fn setup_scene(
         &lighting,
     );
 
-    let render_assets = WorldRenderAssets::new(
+    let mut render_assets = WorldRenderAssets::new(
         &mut meshes,
         &mut materials,
         &mut images,
@@ -69,6 +71,7 @@ pub fn setup_scene(
         &stamp_registry,
         &paint_registry,
     );
+    render_assets.install_goal_ghost_materials(&materials, &mut ghost_materials, &mut images);
     commands.insert_resource(render_assets);
 
     let marker_mesh = meshes.add(Cuboid::new(1.04, 1.04, 1.04));

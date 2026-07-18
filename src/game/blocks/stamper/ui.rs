@@ -8,11 +8,11 @@ use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
     spawn_material_icon_list, spawn_material_icon_toggle, sync_dropdown_overlay, update_slot_icon,
 };
-use crate::game::block_editing::world_refresh::refresh_world_after_edit;
+use crate::game::block_editing::world_refresh::apply_block_settings_edit;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
 use crate::game::blocks::{BlockKind, StampMaterialId, stamp_catalog};
-use crate::game::edit_history::{EditHistory, apply_block_settings_with_history};
+use crate::game::edit_history::EditHistory;
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::access::{UiMainThread, i18n};
@@ -169,11 +169,10 @@ fn on_click(
     };
 
     if changed {
-        apply_block_settings_with_history(edit_history.as_mut(), &mut world.world, pos, |blocks| {
+        apply_block_settings_edit(edit_history.as_mut(), &mut world, pos, |blocks| {
             blocks.set_stamper_settings(pos, settings);
         });
         solution_state.dirty = true;
-        refresh_world_after_edit(&mut world, pos);
     }
 }
 

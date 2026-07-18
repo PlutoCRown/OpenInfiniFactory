@@ -100,6 +100,13 @@ pub struct WorldRenderAssets {
     scene_face_occluders: HashSet<BlockKind>,
     /// 工厂块 GLB 外观（无则回退程序化零件）
     factory_models: HashMap<BlockKind, FactoryVisual>,
+    /// 当前是否用游玩态验收器外观（由 BuilderMode 驱动）
+    pub(crate) goal_play_visual: bool,
+    /// 是否已完成首次与 BuilderMode 对齐（避免 OnEnter 前误重建）
+    pub(crate) goal_play_visual_initialized: bool,
+    /// 游玩态验收器幽灵材质（按目标材料种类）
+    goal_ghost_materials:
+        HashMap<BlockKind, Handle<crate::game::world::rendering::GoalGhostMaterial>>,
     face_mark_materials: HashMap<PaintMaterialId, Handle<StandardMaterial>>,
     /// 灯面板未通电材质
     pub(crate) light_panel_material: Handle<StandardMaterial>,
@@ -113,7 +120,6 @@ pub struct WorldRenderAssets {
     /// 焊接扩散粒子：白底 + 黄自发光（与焊点同风格，须 lit）
     pub(crate) weld_burst_material: Handle<StandardMaterial>,
     pub(crate) laser_beam_material: Handle<StandardMaterial>,
-    pub(crate) acceptance_spark_material: Handle<StandardMaterial>,
     delete_preview_material: Handle<StandardMaterial>,
     /// 选区包围盒半透明填充
     selection_fill_material: Handle<StandardMaterial>,
@@ -533,6 +539,9 @@ impl WorldRenderAssets {
             scene_face_uvs,
             scene_face_occluders,
             factory_models,
+            goal_play_visual: false,
+            goal_play_visual_initialized: false,
+            goal_ghost_materials: HashMap::new(),
             face_mark_materials,
             light_panel_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(0.55, 0.58, 0.62),
@@ -578,13 +587,6 @@ impl WorldRenderAssets {
             laser_beam_material: materials.add(StandardMaterial {
                 base_color: Color::srgba(1.0, 0.12, 0.26, 0.92),
                 emissive: LinearRgba::new(0.55, 0.02, 0.10, 1.0),
-                alpha_mode: AlphaMode::Blend,
-                unlit: true,
-                ..default()
-            }),
-            acceptance_spark_material: materials.add(StandardMaterial {
-                base_color: Color::srgba(0.45, 1.0, 0.38, 0.82),
-                emissive: Color::srgb(0.10, 0.34, 0.08).into(),
                 alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 ..default()
@@ -701,6 +703,55 @@ impl WorldRenderAssets {
             .get(&kind)
             .expect("every block kind has a preview material")
             .clone()
+    }
+
+    /// 游玩态验收器是否显示幽灵材料外观
+    pub(crate) fn use_goal_play_visual(&self) -> bool {
+        self.goal_play_visual
+    }
+
+    pub(crate) fn set_goal_play_visual(&mut self, play: bool) {
+        self.goal_play_visual = play;
+        self.goal_play_visual_initialized = true;
+    }
+
+    /// 填入游玩态验收器幽灵材质
+    pub(crate) fn install_goal_ghost_materials(
+        &mut self,
+        standard_materials: &Assets<StandardMaterial>,
+        ghost_materials: &mut Assets<crate::game::world::rendering::GoalGhostMaterial>,
+        images: &mut Assets<Image>,
+    ) {
+        use crate::game::world::rendering::goal_ghost::{
+            goal_ghost_from_standard, white_pixel_image,
+        };
+        let white = images.add(white_pixel_image());
+        let mut map = HashMap::new();
+        for (kind, handle) in &self.block_materials {
+            if !kind.is_material() {
+                continue;
+            }
+            let Some(standard) = standard_materials.get(handle) else {
+                continue;
+            };
+            map.insert(
+                *kind,
+                ghost_materials.add(goal_ghost_from_standard(standard, &white)),
+            );
+        }
+        self.goal_ghost_materials = map;
+    }
+
+    pub(crate) fn goal_ghost_material(
+        &self,
+        kind: BlockKind,
+    ) -> Option<Handle<crate::game::world::rendering::GoalGhostMaterial>> {
+        self.goal_ghost_materials.get(&kind).cloned()
+    }
+
+    pub(crate) fn goal_ghost_mesh(&self, kind: BlockKind) -> Handle<Mesh> {
+        self.scene_mesh(kind)
+            .unwrap_or_else(|| self.block_mesh(kind))
     }
 
     pub(crate) fn scene_material(&self, kind: BlockKind) -> Option<Handle<StandardMaterial>> {

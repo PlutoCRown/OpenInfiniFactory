@@ -4,13 +4,13 @@ use bevy::window::PrimaryWindow;
 
 use super::GeneratorBlock;
 
-use crate::game::edit_history::{apply_block_settings_with_history, EditHistory};
+use crate::game::edit_history::EditHistory;
 
 use crate::game::block_editing::widgets::{
     click_material_slot, spawn_labeled_panel_button, spawn_material_icon_list,
     spawn_material_icon_toggle, sync_dropdown_overlay, update_material_icon,
 };
-use crate::game::block_editing::world_refresh::refresh_world_after_edit;
+use crate::game::block_editing::world_refresh::apply_block_settings_edit;
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
@@ -336,11 +336,10 @@ fn dispatch_action(
     };
 
     if changed {
-        apply_block_settings_with_history(edit_history, &mut world.world, pos, |blocks| {
+        apply_block_settings_edit(edit_history, world, pos, |blocks| {
             blocks.set_generator_settings(pos, settings);
         });
         solution_state.dirty = true;
-        refresh_world_after_edit(world, pos);
     }
 }
 

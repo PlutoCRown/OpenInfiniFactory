@@ -23,7 +23,7 @@ pub use world_ops::SaveCurrentWorldResult;
 
 use cover::PendingMainMenuExit;
 #[cfg(not(target_arch = "wasm32"))]
-use cover::{on_screenshot_saved_for_exit, CoverScreenshotComplete};
+use cover::{CoverScreenshotComplete, on_screenshot_saved_for_exit};
 
 use bevy::prelude::*;
 
@@ -36,12 +36,12 @@ use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost};
 use crate::game::ui::{PlayingUiRoot, UiRuntime};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    teardown_playing_scene, BlockIconRenderRoot, GameplayScene, WorldRenderAssets,
+    BlockIconRenderRoot, GameplayScene, WorldRenderAssets, teardown_playing_scene,
 };
 
 use load::{
-    handle_create_new_puzzle, handle_create_new_solution, handle_load_world,
-    poll_pending_world_load, release_session_busy_after_playing, PendingWorldLoad,
+    PendingWorldLoad, handle_create_new_puzzle, handle_create_new_solution, handle_load_world,
+    poll_pending_world_load, release_session_busy_after_playing,
 };
 use messages::{
     CreateNewPuzzle, CreateNewSolution, ExitToMainMenu, ResetSolution, SaveCurrentWorld,
@@ -51,8 +51,8 @@ use navigation::{
     handle_exit_to_main_menu, process_deferred_main_menu_exit, release_session_busy_after_menu,
 };
 use save::{
-    handle_save_current_world, handle_save_current_world_invalidate_solutions,
-    handle_save_world_as_new_puzzle, process_pending_save, PendingSave,
+    PendingSave, handle_save_current_world, handle_save_current_world_invalidate_solutions,
+    handle_save_world_as_new_puzzle, process_pending_save,
 };
 use solution::{handle_reset_solution, handle_switch_to_edit_mode};
 
@@ -120,12 +120,14 @@ pub fn rebuild_playing_world(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     world: Res<WorldBlocks>,
-    render_assets: Res<WorldRenderAssets>,
+    mut render_assets: ResMut<WorldRenderAssets>,
+    builder_mode: Res<crate::game::state::BuilderMode>,
     debug: Res<DebugState>,
     mut structure_state: ResMut<StructureState>,
     mut index: ResMut<crate::scene::BlockEntityIndex>,
     mut scene_chunks: ResMut<crate::game::world::rendering::SceneChunkMeshes>,
 ) {
+    render_assets.set_goal_play_visual(*builder_mode == crate::game::state::BuilderMode::Play);
     crate::game::world::rendering::rebuild_world_on_enter(
         &mut commands,
         &mut meshes,
@@ -161,7 +163,9 @@ pub fn on_exit_playing(
         commands.entity(entity).despawn();
     }
     ui_host.unmount_all_panels(&mut ui_runtime, None);
-    commands.insert_resource(crate::game::ui::features::playing_overlays::PlayingOverlayMounts::default());
+    commands.insert_resource(
+        crate::game::ui::features::playing_overlays::PlayingOverlayMounts::default(),
+    );
     commands.remove_resource::<PlayingUiRootEntity>();
 
     crate::game::world::rendering::forget_scene_chunks(&mut meshes, &mut scene_chunks);

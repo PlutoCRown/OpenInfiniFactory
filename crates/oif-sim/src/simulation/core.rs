@@ -39,7 +39,8 @@ pub struct TurnOutput {
     /// 钻头/激光毁掉的材料碎片
     pub break_debris: Vec<BreakDebris>,
     pub laser_beams: Vec<LaserBeam>,
-    pub acceptance_sparks: Vec<IVec3>,
+    /// 验收销毁：带材料种类，表现层采样贴图
+    pub acceptance_sparks: Vec<BreakDebris>,
     pub stats: SimulationStepStats,
 }
 
@@ -83,7 +84,7 @@ pub fn simulate_turn(
                 break_debris.push(BreakDebris { pos, kind });
             }
             PendingDestroyReason::Accept => {
-                acceptance_sparks.push(pos);
+                acceptance_sparks.push(BreakDebris { pos, kind });
             }
         }
     }

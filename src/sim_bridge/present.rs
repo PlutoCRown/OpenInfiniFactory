@@ -183,30 +183,31 @@ pub fn tick_simulation(
     }
 
     simulation.accumulator += time.delta_secs() * simulation.speed / SIMULATION_TURN_SECONDS;
-    while simulation.accumulator >= 1.0 {
-        let Some(cached) = deps.turn_cache.take_pending(simulation.turn + 1) else {
-            break;
-        };
-        simulation.turn += 1;
-        simulation.accumulator -= 1.0;
-        present_turn(
-            cached,
-            animation_duration_for(simulation.running, simulation.speed),
-            &mut deps.presentation,
-            &mut deps.world,
-            &mut deps.pending_generated,
-            &mut deps.signal_cache,
-            &mut deps.structure_state,
-            &mut deps.movement_influence,
-            &mut deps.pusher_state,
-            &mut commands,
-            &mut deps.meshes,
-            &mut deps.block_index,
-            &mut deps.scene_chunks,
-            render_assets,
-            &deps.debug,
-            &mut deps.sim_stats,
-        );
+    // 每帧最多呈现一回合：多回合连续 present 会在命令未 flush 时改索引，
+    // 随后对已排队 despawn 的实体 insert，Bevy 0.19 会直接 panic。
+    if simulation.accumulator >= 1.0 {
+        if let Some(cached) = deps.turn_cache.take_pending(simulation.turn + 1) {
+            simulation.turn += 1;
+            simulation.accumulator -= 1.0;
+            present_turn(
+                cached,
+                animation_duration_for(simulation.running, simulation.speed),
+                &mut deps.presentation,
+                &mut deps.world,
+                &mut deps.pending_generated,
+                &mut deps.signal_cache,
+                &mut deps.structure_state,
+                &mut deps.movement_influence,
+                &mut deps.pusher_state,
+                &mut commands,
+                &mut deps.meshes,
+                &mut deps.block_index,
+                &mut deps.scene_chunks,
+                render_assets,
+                &deps.debug,
+                &mut deps.sim_stats,
+            );
+        }
     }
 
     prepare_upcoming_generation(
