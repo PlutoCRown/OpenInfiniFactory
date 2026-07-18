@@ -282,6 +282,7 @@
   "save.title.main": "Load Save",
   "save.title.pause": "Switch Save",
   "save.title.play_solution": "Start Playing",
+  "save.title.select_solution": "Select Solution",
   "save.world": "World: {name}",
   "selection_mode.line": "Line",
   "selection_mode.plane": "Plane",

@@ -282,6 +282,7 @@
   "save.title.main": "读取存档",
   "save.title.pause": "切换存档",
   "save.title.play_solution": "开始游玩",
+  "save.title.select_solution": "选择方案",
   "save.world": "世界：{name}",
   "selection_mode.line": "线",
   "selection_mode.plane": "面",

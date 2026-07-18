@@ -18,9 +18,13 @@ use crate::game::state::{GameSettings, UiPanelId};
 use crate::game::ui::access::i18n;
 
 /// 标题栏 + Tab + 面板边距/间距，滚动区高度不超过窗口剩余空间
-const SETTINGS_SCROLL_CHROME: f32 = 168.0;
+pub const SETTINGS_SCROLL_CHROME: f32 = 168.0;
 
-pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands, settings: &GameSettings) {
+pub fn spawn_settings_panel(
+    root: &mut ChildSpawnerCommands,
+    settings: &GameSettings,
+    scroll_height: f32,
+) {
     spawn_panel(
         root,
         PanelOptions::new(840.0, "settings.title")
@@ -29,9 +33,9 @@ pub fn spawn_settings_panel(root: &mut ChildSpawnerCommands, settings: &GameSett
         UiPanelBinding(UiPanelId::Settings),
         |panel| {
             spawn_settings_tabs(panel);
-            spawn_gameplay_settings(panel, settings);
-            spawn_graphics_settings(panel, settings);
-            spawn_key_bindings(panel);
+            spawn_gameplay_settings(panel, settings, scroll_height);
+            spawn_graphics_settings(panel, settings, scroll_height);
+            spawn_key_bindings(panel, scroll_height);
         },
     );
     spawn_settings_dropdown_layers(root);
@@ -178,9 +182,13 @@ fn spawn_settings_item(
     }
 }
 
-fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
+fn spawn_gameplay_settings(
+    panel: &mut ChildSpawnerCommands,
+    settings: &GameSettings,
+    scroll_height: f32,
+) {
     panel
-        .spawn(scroll_container(SETTINGS_SCROLL_CHROME))
+        .spawn(scroll_container(SETTINGS_SCROLL_CHROME, scroll_height))
         .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
         .with_children(|container| {
             container.spawn(scroll_content()).with_children(|content| {
@@ -192,9 +200,13 @@ fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, settings: &GameSett
         });
 }
 
-fn spawn_graphics_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
+fn spawn_graphics_settings(
+    panel: &mut ChildSpawnerCommands,
+    settings: &GameSettings,
+    scroll_height: f32,
+) {
     panel
-        .spawn(scroll_container(SETTINGS_SCROLL_CHROME))
+        .spawn(scroll_container(SETTINGS_SCROLL_CHROME, scroll_height))
         .insert(PanelVisibility::SettingsTab(SettingsTab::Graphics))
         .with_children(|container| {
             container.spawn(scroll_content()).with_children(|content| {
@@ -205,9 +217,9 @@ fn spawn_graphics_settings(panel: &mut ChildSpawnerCommands, settings: &GameSett
         });
 }
 
-fn spawn_key_bindings(panel: &mut ChildSpawnerCommands) {
+fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, scroll_height: f32) {
     panel
-        .spawn(scroll_container(SETTINGS_SCROLL_CHROME))
+        .spawn(scroll_container(SETTINGS_SCROLL_CHROME, scroll_height))
         .insert(PanelVisibility::SettingsTab(SettingsTab::KeyBindings))
         .with_children(|container| {
             container.spawn(scroll_content()).with_children(|content| {

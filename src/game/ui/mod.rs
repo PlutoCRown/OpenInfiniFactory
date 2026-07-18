@@ -13,7 +13,7 @@ mod widgets;
 
 use bevy::prelude::*;
 
-pub use access::{bind_ui_scope, i18n, ui, I18nRevision, UiAccessScope};
+pub use access::{I18nRevision, UiAccessScope, bind_ui_scope, i18n, ui};
 pub use layout::{setup_menu_ui, setup_playing_ui_system};
 pub use systems::{
     apply_ui_font, dismiss_playing_overlay, load_ui_font, panel_close_clicked, panel_drag_ended,
@@ -24,11 +24,11 @@ pub use types::*;
 
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::core::confirm_dialog::{
-    emit_confirm_dialog_actions, update_confirm_dialog_ui, PendingConfirmHandler,
+    PendingConfirmHandler, emit_confirm_dialog_actions, update_confirm_dialog_ui,
 };
 use crate::game::ui::core::host::UiAction;
 use crate::game::ui::core::text_prompt::{
-    emit_text_prompt_actions, update_text_prompt_ui, PendingTextPromptHandler,
+    PendingTextPromptHandler, emit_text_prompt_actions, update_text_prompt_ui,
 };
 use access::unbind_ui_scope;
 use components::{

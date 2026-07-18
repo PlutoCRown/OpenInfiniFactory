@@ -12,6 +12,7 @@ pub use confirm::{EXTRA_SAVE_AS, open_save_puzzle_confirm, open_save_puzzle_conf
 pub use prompt::open_save_as_new_puzzle_prompt;
 pub use types::*;
 pub use update::update_save_list_ui;
+pub use view::save_list_title;
 
 use crate::game::state::{GameMode, StartMenuScreen};
 use crate::game::systems::perf::PerfScope;

@@ -35,7 +35,7 @@ pub fn handle_save_current_world(
         *busy = SessionBusy::Saving;
         pending.active = true;
         pending.invalidate_solutions = false;
-        pending.hold_frames = 1;
+        pending.hold_frames = 2;
     }
 }
 
@@ -48,7 +48,7 @@ pub fn handle_save_current_world_invalidate_solutions(
         *busy = SessionBusy::Saving;
         pending.active = true;
         pending.invalidate_solutions = true;
-        pending.hold_frames = 1;
+        pending.hold_frames = 2;
     }
 }
 

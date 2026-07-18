@@ -84,4 +84,9 @@ native-tools = []
 webgpu = ["bevy/webgpu"]
 
 [profile.release]
+# 最高运行时优化（编译会明显变慢）
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
 strip = "debuginfo"

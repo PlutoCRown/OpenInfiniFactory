@@ -1,11 +1,12 @@
 use bevy::prelude::*;
 
 use super::super::types::{
-    LocalizedText, PanelCloseButton, PanelPosition, PanelTitleBar, PanelWindow,
+    LocalizedText, PanelCloseButton, PanelFlowLayout, PanelPosition, PanelTitleBar, PanelWindow,
 };
-use super::button::{raised_border, HoverButton};
+use super::button::{HoverButton, raised_border};
 use super::icon::spawn_close_icon;
 use super::text::default_font_size;
+use crate::game::ui::access::i18n;
 
 pub const PANEL_BG: Color = Color::srgb(0.192, 0.188, 0.192);
 pub const PANEL_LIGHT_EDGE: Color = Color::srgb(0.40, 0.38, 0.36);
@@ -21,6 +22,8 @@ pub struct PanelOptions {
     pub title_key: &'static str,
     pub show_close: bool,
     pub title_size: f32,
+    /// 为 true 时以 Display::None 生成（常驻面板先藏着）
+    pub start_hidden: bool,
 }
 
 impl PanelOptions {
@@ -30,6 +33,7 @@ impl PanelOptions {
             title_key,
             show_close: false,
             title_size: 26.0,
+            start_hidden: false,
         }
     }
 
@@ -42,6 +46,11 @@ impl PanelOptions {
         self.title_size = title_size;
         self
     }
+
+    pub const fn start_hidden(mut self) -> Self {
+        self.start_hidden = true;
+        self
+    }
 }
 
 pub fn spawn_panel(
@@ -50,10 +59,11 @@ pub fn spawn_panel(
     markers: impl Bundle,
     content: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
-    spawn_panel_with_title_marker(
+    spawn_panel_with_title(
         root,
         options,
         markers,
+        i18n.t(options.title_key),
         LocalizedText {
             key: options.title_key,
         },
@@ -68,22 +78,46 @@ pub fn spawn_panel_with_title_marker(
     title_marker: impl Component,
     content: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
-    root.spawn((panel_bundle(options.width), GlobalZIndex(0), markers))
-        .with_children(|panel| {
-            panel.spawn(panel_title_bar()).with_children(|title| {
-                title.spawn((
-                    // 文案由 LocalizedText / 各面板 update_title 填充，避免 spawn 时依赖 ui scope
-                    panel_title_label("", options.title_size),
-                    title_marker,
-                ));
-                if options.show_close {
-                    title
-                        .spawn(panel_close_button())
-                        .with_children(spawn_close_icon);
-                }
-            });
-            panel.spawn(panel_content()).with_children(content);
+    spawn_panel_with_title(
+        root,
+        options,
+        markers,
+        i18n.t(options.title_key),
+        title_marker,
+        content,
+    );
+}
+
+/// 标题文案在 spawn 时写好（须已 bind_ui_scope）
+pub fn spawn_panel_with_title(
+    root: &mut ChildSpawnerCommands,
+    options: PanelOptions,
+    markers: impl Bundle,
+    title: impl Into<String>,
+    title_marker: impl Component,
+    content: impl FnOnce(&mut ChildSpawnerCommands),
+) {
+    let title = title.into();
+    root.spawn((
+        panel_window_bundle(
+            Val::Px(options.width),
+            Val::Percent(100.0),
+            options.start_hidden,
+            true,
+        ),
+        GlobalZIndex(0),
+        markers,
+    ))
+    .with_children(|panel| {
+        panel.spawn(panel_title_bar()).with_children(|bar| {
+            bar.spawn((panel_title_label(title, options.title_size), title_marker));
+            if options.show_close {
+                bar.spawn(panel_close_button())
+                    .with_children(spawn_close_icon);
+            }
         });
+        panel.spawn(panel_content()).with_children(content);
+    });
 }
 
 pub fn panel_raised_border() -> BorderColor {
@@ -158,34 +192,72 @@ pub fn compact_raised_panel(style: Node) -> impl Bundle {
 }
 
 pub fn panel_bundle(width: f32) -> impl Bundle {
-    panel_window_bundle(Val::Px(width), Val::Percent(100.0))
+    panel_window_bundle(Val::Px(width), Val::Percent(100.0), false, true)
 }
 
 pub fn panel_bundle_auto(max_width_px: f32) -> impl Bundle {
-    panel_window_bundle(Val::Auto, Val::Px(max_width_px))
+    panel_window_bundle(Val::Auto, Val::Px(max_width_px), false, true)
 }
 
 pub fn panel_bundle_responsive(width_percent: f32, max_width_px: f32) -> impl Bundle {
-    panel_window_bundle(Val::Percent(width_percent), Val::Px(max_width_px))
+    panel_window_bundle(
+        Val::Percent(width_percent),
+        Val::Px(max_width_px),
+        false,
+        true,
+    )
 }
 
-fn panel_window_bundle(width: Val, max_width: Val) -> impl Bundle {
+/// 流式布局面板（相对定位），用于并排的多个面板
+pub fn panel_bundle_responsive_flow(
+    width_percent: f32,
+    max_width_px: f32,
+    start_hidden: bool,
+) -> impl Bundle {
+    (
+        panel_window_bundle(
+            Val::Percent(width_percent),
+            Val::Px(max_width_px),
+            start_hidden,
+            false,
+        ),
+        PanelFlowLayout,
+    )
+}
+
+fn panel_window_bundle(
+    width: Val,
+    max_width: Val,
+    start_hidden: bool,
+    absolute: bool,
+) -> impl Bundle {
     (
         Node {
             width,
             height: Val::Auto,
             max_width,
             max_height: Val::Percent(100.0),
-            position_type: PositionType::Absolute,
+            position_type: if absolute {
+                PositionType::Absolute
+            } else {
+                PositionType::Relative
+            },
             left: Val::Auto,
             right: Val::Auto,
             top: Val::Auto,
             bottom: Val::Auto,
-            margin: UiRect::all(Val::Auto),
+            margin: if absolute {
+                UiRect::all(Val::Auto)
+            } else {
+                UiRect::all(Val::Px(0.0))
+            },
             padding: UiRect::all(Val::Px(8.0)),
             border: UiRect::all(Val::Px(4.0)),
-            // 按需挂载：实体只在打开时存在，默认就显示
-            display: Display::Flex,
+            display: if start_hidden {
+                Display::None
+            } else {
+                Display::Flex
+            },
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(12.0),
             overflow: Overflow::clip(),
@@ -193,7 +265,11 @@ fn panel_window_bundle(width: Val, max_width: Val) -> impl Bundle {
         },
         PanelWindow,
         PanelPosition::default(),
-        Visibility::Visible,
+        if start_hidden {
+            Visibility::Hidden
+        } else {
+            Visibility::Visible
+        },
         BackgroundColor(PANEL_BG),
         panel_raised_border(),
         BoxShadow::new(

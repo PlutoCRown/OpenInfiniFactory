@@ -16,13 +16,22 @@ pub struct SessionBusyOverlay;
 pub struct SessionBusyLabel;
 
 /// 在菜单 / 游玩 UI 根下各挂一份遮罩（相机切换后仍能看见）
-pub fn spawn_session_busy_overlay(root: &mut ChildSpawnerCommands) {
+pub fn spawn_session_busy_overlay(root: &mut ChildSpawnerCommands, busy: SessionBusy) {
+    let display = if busy.is_busy() {
+        Display::Flex
+    } else {
+        Display::None
+    };
+    let label = busy
+        .label_key()
+        .map(|key| i18n.t(key))
+        .unwrap_or_default();
     root.spawn((
         Node {
             width: Val::Percent(100.0),
             height: Val::Percent(100.0),
             position_type: PositionType::Absolute,
-            display: Display::None,
+            display,
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
             ..default()
@@ -34,7 +43,7 @@ pub fn spawn_session_busy_overlay(root: &mut ChildSpawnerCommands) {
     ))
     .with_children(|overlay| {
         overlay.spawn((
-            text("", 22.0, Color::WHITE),
+            text(label, 22.0, Color::WHITE),
             TextLayout::no_wrap(),
             SessionBusyLabel,
         ));

@@ -31,7 +31,10 @@ pub fn update_save_list_ui(
     )>,
     mut column_nodes: ParamSet<(
         Query<&mut Node, (With<SaveListPuzzleColumn>, Without<SaveListSolutionColumn>)>,
-        Query<&mut Node, (With<SaveListSolutionColumn>, Without<SaveListPuzzleColumn>)>,
+        Query<
+            (&mut Node, &mut Visibility),
+            (With<SaveListSolutionColumn>, Without<SaveListPuzzleColumn>),
+        >,
         Query<
             (&SaveListAction, &mut Node),
             (
@@ -42,6 +45,7 @@ pub fn update_save_list_ui(
             ),
         >,
     )>,
+    added_titles: Query<(), Added<SaveListTitleText>>,
     puzzle_rows_query: Query<Entity, (With<SaveListPuzzleRows>, Without<SaveListSolutionRows>)>,
     solution_rows_query: Query<Entity, (With<SaveListSolutionRows>, Without<SaveListPuzzleRows>)>,
     children_query: Query<&Children>,
@@ -81,7 +85,9 @@ pub fn update_save_list_ui(
     let structure_changed = mode.is_changed()
         || start_menu_screen.is_changed()
         || save_state.is_changed()
-        || solution_state.is_changed();
+        || solution_state.is_changed()
+        || render_state.paint_buttons
+        || !added_titles.is_empty();
     let mut rebuilt_rows = false;
 
     let entry = solution_state.save_list_entry;
@@ -124,10 +130,16 @@ pub fn update_save_list_ui(
         } else {
             Display::None
         };
-        for mut node in &mut column_nodes.p1() {
+        let solution_visibility = if show_solutions {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+        for (mut node, mut visibility) in &mut column_nodes.p1() {
             if node.display != solution_display {
                 node.display = solution_display;
             }
+            visibility.set_if_neq(solution_visibility);
         }
         for (action, mut node) in &mut column_nodes.p2() {
             let next = match action {
@@ -139,11 +151,8 @@ pub fn update_save_list_ui(
                     }
                 }
                 SaveListAction::NewSolution => {
-                    if show_solutions {
-                        Display::Flex
-                    } else {
-                        Display::None
-                    }
+                    // 方案面板本身会显隐；按钮保持可见即可
+                    Display::Flex
                 }
                 _ => node.display,
             };

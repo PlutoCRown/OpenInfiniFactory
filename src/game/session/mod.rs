@@ -41,13 +41,15 @@ use crate::game::world::rendering::{
 
 use load::{
     handle_create_new_puzzle, handle_create_new_solution, handle_load_world,
-    poll_pending_world_load, PendingWorldLoad,
+    poll_pending_world_load, release_session_busy_after_playing, PendingWorldLoad,
 };
 use messages::{
     CreateNewPuzzle, CreateNewSolution, ExitToMainMenu, ResetSolution, SaveCurrentWorld,
     SaveCurrentWorldInvalidateSolutions, SaveWorldAsNewPuzzle, SwitchToEditMode,
 };
-use navigation::{handle_exit_to_main_menu, process_deferred_main_menu_exit};
+use navigation::{
+    handle_exit_to_main_menu, process_deferred_main_menu_exit, release_session_busy_after_menu,
+};
 use save::{
     handle_save_current_world, handle_save_current_world_invalidate_solutions,
     handle_save_world_as_new_puzzle, process_pending_save, PendingSave,
@@ -87,6 +89,8 @@ impl Plugin for SessionPlugin {
                 handle_switch_to_edit_mode,
                 handle_load_world,
                 poll_pending_world_load,
+                release_session_busy_after_playing,
+                release_session_busy_after_menu,
                 handle_create_new_puzzle,
                 handle_create_new_solution,
             )

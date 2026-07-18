@@ -25,6 +25,8 @@ pub struct DeferredMainMenuExit {
 pub struct PendingMainMenuExit {
     pub waiting_cover: bool,
     pub deferred: Option<DeferredMainMenuExit>,
+    /// 回主菜单的 OnExit 拆景完成后再清 SessionBusy
+    pub release_busy_after_menu: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]

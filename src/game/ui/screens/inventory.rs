@@ -2,14 +2,16 @@ use bevy::prelude::*;
 
 use super::super::components::{
     PanelOptions, compact_raised_panel, default_button_size, default_font_size,
-    inventory_tray_bundle, inventory_tray_row_bundle, localized_text,
-    spawn_panel_with_title_marker, text,
+    inventory_tray_bundle, inventory_tray_row_bundle, localized_text, spawn_panel_with_title,
+    text,
 };
 use super::super::types::{
     BACKPACK_SLOTS, CarriedItemPreview, GameplayHudVisibility, HOTBAR_SLOTS, InGameHudStyle,
     InventoryTooltip, InventoryTooltipDescription, InventoryTooltipName, PanelVisibility, SlotArea,
 };
 use super::super::widgets::spawn_slot;
+use crate::game::state::BuilderMode;
+use crate::game::ui::access::i18n;
 use crate::game::ui::features::inventory::InventoryTitleText;
 
 pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
@@ -52,11 +54,22 @@ pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
     });
 }
 
-pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands) {
-    spawn_panel_with_title_marker(
+pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, builder_mode: BuilderMode) {
+    let title = i18n.fmt(
+        "inventory.title",
+        &[(
+            "mode",
+            i18n.t(match builder_mode {
+                BuilderMode::Edit => "mode.edit",
+                BuilderMode::Play => "mode.play",
+            }),
+        )],
+    );
+    spawn_panel_with_title(
         root,
-        PanelOptions::new(640.0, "inventory.title"),
+        PanelOptions::new(640.0, "inventory.title").start_hidden(),
         PanelVisibility::Inventory,
+        title,
         InventoryTitleText,
         |panel| {
             panel.spawn(inventory_tray_bundle()).with_children(|grid| {

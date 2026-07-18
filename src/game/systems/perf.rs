@@ -204,6 +204,17 @@ pub struct PerfPlugin;
 impl Plugin for PerfPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PerfStats>()
+            // 只锁住曾漂进 UI 计时的后半段；Input→View 已有业务 after/before，不必整段串死
+            .configure_sets(
+                Update,
+                (
+                    PerfScope::View,
+                    PerfScope::Animation,
+                    PerfScope::Ui,
+                    PerfScope::Debug,
+                )
+                    .chain(),
+            )
             .add_systems(First, begin_perf_frame)
             .add_systems(
                 PreUpdate,
@@ -281,4 +292,3 @@ impl Plugin for PerfPlugin {
             );
     }
 }
-

@@ -2,7 +2,8 @@
 
 use bevy::prelude::*;
 
-use crate::game::state::{GameMode, StartMenuScreen};
+use crate::game::session::SessionBusy;
+use crate::game::state::{GameMode, SolutionState, StartMenuScreen};
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::UiAccessScope;
 use crate::game::ui::core::host::{UiHostMountRoot, UiRootEntity};
@@ -23,21 +24,25 @@ pub fn sync_start_menu_mounts(
     _ui_thread: crate::game::ui::access::UiMainThread,
     mode: Res<State<GameMode>>,
     screen: Res<StartMenuScreen>,
+    solution_state: Res<SolutionState>,
+    busy: Res<SessionBusy>,
     root: Option<Res<UiRootEntity>>,
     mut mounts: ResMut<StartMenuMounts>,
     mut save_list_render: ResMut<SaveListRenderState>,
     mut commands: Commands,
 ) {
     if *mode.get() != GameMode::StartMenu {
-        for entity in [
-            mounts.main.take(),
-            mounts.save_list.take(),
-            mounts.session_busy.take(),
-        ]
-        .into_iter()
-        .flatten()
+        for entity in [mounts.main.take(), mounts.save_list.take()]
+            .into_iter()
+            .flatten()
         {
             commands.entity(entity).despawn();
+        }
+        // 忙碌遮罩留到 busy 结束：进 Playing 的过渡帧仍可能靠上一帧像素
+        if !busy.is_busy() {
+            if let Some(entity) = mounts.session_busy.take() {
+                commands.entity(entity).despawn();
+            }
         }
         // 卸掉存档列表后清渲染缓存，否则下次进列表会跳过行重建
         *save_list_render = SaveListRenderState::default();
@@ -48,6 +53,7 @@ pub fn sync_start_menu_mounts(
     };
 
     if mounts.session_busy.is_none() {
+        let busy_now = *busy;
         let mut entity = None;
         commands.entity(root).with_children(|root| {
             entity = Some(
@@ -63,7 +69,7 @@ pub fn sync_start_menu_mounts(
                     Pickable::IGNORE,
                 ))
                 .with_children(|c| {
-                    spawn_session_busy_overlay(c);
+                    spawn_session_busy_overlay(c, busy_now);
                 })
                 .id(),
             );
@@ -122,7 +128,7 @@ pub fn sync_start_menu_mounts(
                         Pickable::IGNORE,
                     ))
                     .with_children(|c| {
-                        spawn_save_list(c);
+                        spawn_save_list(c, solution_state.save_list_entry);
                     })
                     .id(),
                 );
@@ -130,6 +136,7 @@ pub fn sync_start_menu_mounts(
             mounts.save_list = entity;
             // 新挂载的行容器是空的，必须丢弃上次的 keys 缓存
             *save_list_render = SaveListRenderState::default();
+            save_list_render.paint_buttons = true;
         }
         (false, Some(entity)) => {
             commands.entity(entity).despawn();

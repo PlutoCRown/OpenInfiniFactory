@@ -23,7 +23,7 @@ cp -R "$ROOT_DIR/assets" "$RESOURCES_DIR/assets"
 
 # cargo strip=true 已去符号；再跑一遍系统 strip 兜底（幂等）
 strip "$MACOS_DIR/$APP_NAME" 2>/dev/null || true
-echo "binary: $(du -h "$MACOS_DIR/$APP_NAME" | awk '{print $1}') (was built with profile.release size opts)"
+echo "binary: $(du -h "$MACOS_DIR/$APP_NAME" | awk '{print $1}') (release: lto + codegen-units=1)"
 
 cat > "$CONTENTS_DIR/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

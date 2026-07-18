@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::game::edit_history::EditHistory;
-use crate::game::player::controller::{capture_player_save, FlyCamera};
+use crate::game::player::controller::{FlyCamera, capture_player_save};
 use crate::game::state::{
     GameMode, PlacementState, SimulationState, SolutionState, StartMenuScreen,
 };
@@ -10,8 +10,8 @@ use crate::shared::save::SaveState;
 
 use super::busy::SessionBusy;
 #[cfg(not(target_arch = "wasm32"))]
-use super::cover::{begin_cover_capture, CoverScreenshotComplete};
-use super::cover::{should_capture_cover, DeferredMainMenuExit, PendingMainMenuExit};
+use super::cover::{CoverScreenshotComplete, begin_cover_capture};
+use super::cover::{DeferredMainMenuExit, PendingMainMenuExit, should_capture_cover};
 use super::messages::ExitToMainMenu;
 use super::world_access::PlayingWorldParams;
 use super::world_ops::{
@@ -33,7 +33,7 @@ pub fn handle_exit_to_main_menu(
             pending_exit.deferred = Some(DeferredMainMenuExit {
                 save_first: true,
                 invalidate_solutions: request.invalidate_solutions,
-                hold_frames: 1,
+                hold_frames: 2,
             });
         } else {
             // 不保存退出：不显示「保存中」，也不截封面
@@ -134,7 +134,12 @@ pub fn process_deferred_main_menu_exit(
         &mut world.block_index,
         &mut world.scene_chunks,
     );
-    *busy = SessionBusy::None;
+    if deferred.save_first {
+        // OnExit(Playing) 拆景在下一帧；等回 StartMenu 后再清 busy
+        pending_exit.release_busy_after_menu = true;
+    } else {
+        *busy = SessionBusy::None;
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -149,7 +154,6 @@ pub fn finish_pending_main_menu_exit(
     mut start_menu_screen: ResMut<StartMenuScreen>,
     mut pending_exit: ResMut<PendingMainMenuExit>,
     mut edit_history: ResMut<EditHistory>,
-    mut busy: ResMut<SessionBusy>,
 ) {
     if !pending_exit.waiting_cover {
         return;
@@ -176,6 +180,21 @@ pub fn finish_pending_main_menu_exit(
             &mut world.block_index,
             &mut world.scene_chunks,
         );
+        pending_exit.release_busy_after_menu = true;
+    }
+}
+
+/// OnExit(Playing) 完成并回到主菜单后再关掉「保存中」
+pub fn release_session_busy_after_menu(
+    mut pending_exit: ResMut<PendingMainMenuExit>,
+    mut busy: ResMut<SessionBusy>,
+    mode: Res<State<GameMode>>,
+) {
+    if !pending_exit.release_busy_after_menu || *mode.get() != GameMode::StartMenu {
+        return;
+    }
+    pending_exit.release_busy_after_menu = false;
+    if *busy == SessionBusy::Saving {
         *busy = SessionBusy::None;
     }
 }

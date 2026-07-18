@@ -1,14 +1,19 @@
 use bevy::prelude::*;
 
-use crate::game::ui::access::bind_ui_scope;
+use crate::game::ui::access::{bind_ui_scope, unbind_ui_scope};
 
 use super::components::{STATUS_TEXT, absolute_text_bundle, root_node};
-use super::screens::{spawn_carried_label, spawn_hotbar, spawn_inventory_tooltip};
+use super::screens::{
+    spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_inventory_tooltip,
+};
 use super::types::{
     Crosshair, InGameHudVisibility, PlayingUiRoot, StatusText, StatusTextKind, UiRoot,
 };
 use crate::game::cameras::{GameplayViewBackdrop, GameplayViewImage};
-use crate::game::ui::core::host::{PlayingUiRootEntity, UiRootEntity};
+use crate::game::state::BuilderMode;
+use crate::game::ui::core::host::{PlayingUiRootEntity, UiHostMountRoot, UiRootEntity};
+use crate::game::ui::features::playing_overlays::PlayingOverlayMounts;
+use crate::game::session::SessionBusy;
 use crate::game::ui::features::session_busy::spawn_session_busy_overlay;
 use crate::game::ui::features::virtual_remote::spawn_virtual_remote;
 use crate::shared::touch_profile::TouchProfile;
@@ -19,6 +24,7 @@ pub fn setup_menu_ui(world: &mut World) {
     let mut commands = world.commands();
     let root = commands.spawn((root_node(), UiRoot)).id();
     commands.insert_resource(UiRootEntity(root));
+    unbind_ui_scope(world);
 }
 
 fn spawn_gameplay_view_backdrop(root: &mut ChildSpawnerCommands, image: Handle<Image>) {
@@ -38,6 +44,7 @@ fn spawn_gameplay_view_backdrop(root: &mut ChildSpawnerCommands, image: Handle<I
 pub fn setup_playing_ui_system(world: &mut World) {
     bind_ui_scope(world);
     let Some(view) = world.get_resource::<GameplayViewImage>() else {
+        unbind_ui_scope(world);
         return;
     };
     let image = view.0.clone();
@@ -45,11 +52,32 @@ pub fn setup_playing_ui_system(world: &mut World) {
         .get_resource::<TouchProfile>()
         .copied()
         .unwrap_or(TouchProfile { enabled: false });
+    let builder_mode = world
+        .get_resource::<BuilderMode>()
+        .copied()
+        .unwrap_or(BuilderMode::Edit);
+    let busy = world
+        .get_resource::<SessionBusy>()
+        .copied()
+        .unwrap_or_default();
     let mut commands = world.commands();
-    setup_playing_ui(&mut commands, image, touch);
+    let inventory = setup_playing_ui(&mut commands, image, touch, builder_mode, busy);
+    commands.insert_resource(PlayingOverlayMounts {
+        inventory: Some(inventory),
+        pause: None,
+    });
+    unbind_ui_scope(world);
 }
 
-pub fn setup_playing_ui(commands: &mut Commands, view_image: Handle<Image>, touch: TouchProfile) {
+/// 返回背包挂载根实体（常驻，用 Display 显隐）
+pub fn setup_playing_ui(
+    commands: &mut Commands,
+    view_image: Handle<Image>,
+    touch: TouchProfile,
+    builder_mode: BuilderMode,
+    busy: SessionBusy,
+) -> Entity {
+    let mut inventory_mount = None;
     let root = commands
         .spawn((root_node(), PlayingUiRoot))
         .with_children(|root| {
@@ -58,11 +86,29 @@ pub fn setup_playing_ui(commands: &mut Commands, view_image: Handle<Image>, touc
             spawn_hotbar(root);
             spawn_carried_label(root);
             spawn_inventory_tooltip(root);
-            spawn_session_busy_overlay(root);
+            spawn_session_busy_overlay(root, busy);
             spawn_virtual_remote(root, &touch, false);
+            inventory_mount = Some(
+                root.spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        position_type: PositionType::Absolute,
+                        ..default()
+                    },
+                    BackgroundColor(Color::NONE),
+                    UiHostMountRoot,
+                    Pickable::IGNORE,
+                ))
+                .with_children(|container| {
+                    spawn_inventory_panel(container, builder_mode);
+                })
+                .id(),
+            );
         })
         .id();
     commands.insert_resource(PlayingUiRootEntity(root));
+    inventory_mount.expect("inventory mount")
 }
 
 const CROSSHAIR_ARM: f32 = 12.0;

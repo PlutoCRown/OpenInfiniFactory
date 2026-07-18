@@ -106,7 +106,12 @@ pub fn update_panel_visibility(
         Query<(&PanelVisibility, &mut Node)>,
         Query<(&UiPanelBinding, &mut Node)>,
         Query<
-            (&mut Node, &mut Visibility, &mut PanelPosition),
+            (
+                &mut Node,
+                &mut Visibility,
+                &mut PanelPosition,
+                Option<&PanelFlowLayout>,
+            ),
             (With<PanelWindow>, Without<TextPromptRoot>),
         >,
     )>,
@@ -155,15 +160,16 @@ pub fn update_panel_visibility(
         }
     }
 
-    for (mut style, mut visibility, mut position) in &mut nodes.p2() {
+    for (mut style, mut visibility, mut position, flow) in &mut nodes.p2() {
+        let flow = flow.is_some();
         if style.display == Display::None {
             position.dragged = false;
-            reset_panel_centering(&mut style);
+            reset_panel_layout(&mut style, flow);
             visibility.set_if_neq(Visibility::Hidden);
         } else if position.dragged {
             visibility.set_if_neq(Visibility::Visible);
         } else {
-            reset_panel_centering(&mut style);
+            reset_panel_layout(&mut style, flow);
             visibility.set_if_neq(Visibility::Visible);
         }
     }
@@ -223,8 +229,8 @@ pub fn panel_drag_started(
     };
     drag_start.propagate(false);
     let top_left = panel_logical_top_left(computed, transform);
-    // Margin-auto centering does not populate `Node.left/top`; pin the laid-out position
-    // before switching to pointer-driven coordinates so the panel does not jump.
+    // 统一切到 Absolute：流式面板的 left/top 是偏移量，屏幕坐标只能写给 Absolute
+    style.position_type = PositionType::Absolute;
     style.left = Val::Px(top_left.x);
     style.top = Val::Px(top_left.y);
     style.right = Val::Auto;
@@ -323,7 +329,7 @@ fn panel_logical_top_left(computed: &ComputedNode, transform: &UiGlobalTransform
     ui_logical_bounds(computed, transform).min
 }
 
-fn reset_panel_centering(style: &mut Node) {
+fn reset_panel_layout(style: &mut Node, flow: bool) {
     if style.left != Val::Auto {
         style.left = Val::Auto;
     }
@@ -336,8 +342,20 @@ fn reset_panel_centering(style: &mut Node) {
     if style.bottom != Val::Auto {
         style.bottom = Val::Auto;
     }
-    if style.margin != UiRect::all(Val::Auto) {
-        style.margin = UiRect::all(Val::Auto);
+    if flow {
+        if style.position_type != PositionType::Relative {
+            style.position_type = PositionType::Relative;
+        }
+        if style.margin != UiRect::all(Val::Px(0.0)) {
+            style.margin = UiRect::all(Val::Px(0.0));
+        }
+    } else {
+        if style.position_type != PositionType::Absolute {
+            style.position_type = PositionType::Absolute;
+        }
+        if style.margin != UiRect::all(Val::Auto) {
+            style.margin = UiRect::all(Val::Auto);
+        }
     }
 }
 

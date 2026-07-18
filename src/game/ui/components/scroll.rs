@@ -15,13 +15,14 @@ pub struct ScrollContainer {
 #[derive(Component)]
 pub struct ScrollContent;
 
-/// 高度取 min(内容, 窗口 − chrome)，避免设置面板撑破屏幕
-pub fn scroll_container(window_chrome: f32) -> (impl Bundle, ScrollContainer) {
+/// 高度取 min(内容, 窗口 − chrome)，避免设置面板撑破屏幕。
+/// `initial_height` 在 spawn 时按窗口算好，避免首帧 Autolayout 再跳变。
+pub fn scroll_container(window_chrome: f32, initial_height: f32) -> (impl Bundle, ScrollContainer) {
     (
         (
             Node {
                 width: Val::Percent(100.0),
-                height: Val::Px(200.0),
+                height: Val::Px(initial_height.max(80.0)),
                 position_type: PositionType::Relative,
                 overflow: Overflow::clip_y(),
                 flex_shrink: 0.0,

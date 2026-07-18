@@ -40,8 +40,8 @@ use state::{
     SimulationState, SolutionState, StartMenuScreen,
 };
 use systems::gameplay::{
-    apply_fov, clipboard_input, draw_hover_structure_bounds, gameplay_input, placement_input,
-    update_hover, BlockSettingsClipboard, SelectionToolSwap,
+    BlockSettingsClipboard, SelectionToolSwap, apply_fov, clipboard_input,
+    draw_hover_structure_bounds, gameplay_input, placement_input, update_hover,
 };
 use systems::perf::{PerfPlugin, PerfScope};
 use systems::simulation_controls::simulation_controls;
@@ -195,10 +195,17 @@ impl Plugin for GamePlugin {
                     .chain()
                     .before(PerfScope::Input),
             )
-            .add_systems(Update, sync_gameplay_view_image_size)
-            .add_systems(Update, world::rendering::sync_shadow_settings)
-            .add_systems(Update, world::rendering::sync_vsync_settings)
             .add_systems(Update, gameplay_input.before(PerfScope::Input))
+            .add_systems(
+                Update,
+                (
+                    sync_gameplay_view_image_size,
+                    world::rendering::sync_shadow_settings,
+                    world::rendering::sync_vsync_settings,
+                )
+                    .after(PerfScope::Input)
+                    .before(PerfScope::Menus),
+            )
             .add_systems(
                 Update,
                 edit_history_input
@@ -246,8 +253,12 @@ impl Plugin for GamePlugin {
                     .after(PerfScope::Simulation)
                     .before(PerfScope::View),
             )
-            .add_systems(Update, animate_blocks.after(PerfScope::View))
-            .add_systems(Update, retire_block_icon_renderers)
+            .add_systems(
+                Update,
+                (animate_blocks, retire_block_icon_renderers)
+                    .after(PerfScope::View)
+                    .before(PerfScope::Animation),
+            )
             .add_systems(
                 Update,
                 (

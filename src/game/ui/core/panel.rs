@@ -5,6 +5,10 @@ use crate::game::state::StartMenuScreen;
 #[derive(Component)]
 pub struct PanelWindow;
 
+/// 并排流式面板：初始由父级 flex 居中，拖动后切 Absolute；隐藏时还原
+#[derive(Component)]
+pub struct PanelFlowLayout;
+
 #[derive(Component, Default)]
 pub struct PanelPosition {
     pub dragged: bool,

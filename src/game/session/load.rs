@@ -25,6 +25,8 @@ pub struct PendingWorldLoad {
     ready: Option<Option<(SaveSlot, WorldEntryMode, LoadedSave)>>,
     /// 至少留一帧给「加载中」绘制
     hold_frames: u8,
+    /// 进 Playing 的 OnEnter 重建完成后再清 SessionBusy
+    release_busy_after_playing: bool,
 }
 
 pub fn handle_load_world(
@@ -36,8 +38,9 @@ pub fn handle_load_world(
     for request in requests.read() {
         edit_history.clear();
         *busy = SessionBusy::Loading;
-        pending.hold_frames = 1;
+        pending.hold_frames = 2;
         pending.ready = None;
+        pending.release_busy_after_playing = false;
         let slot = request.slot.clone();
         let entry = request.entry;
         pending.task = Some(
@@ -133,7 +136,27 @@ pub fn poll_pending_world_load(
         &mut world.block_index,
         &mut world.scene_chunks,
     );
-    *busy = SessionBusy::None;
+    // StartMenu→Playing 的世界重建在下一帧 OnEnter；等进 Playing 后再清 busy
+    if *mode.get() == GameMode::StartMenu {
+        pending.release_busy_after_playing = true;
+    } else {
+        *busy = SessionBusy::None;
+    }
+}
+
+/// OnEnter(Playing) 重建结束后再关掉「加载中」
+pub fn release_session_busy_after_playing(
+    mut pending: ResMut<PendingWorldLoad>,
+    mut busy: ResMut<SessionBusy>,
+    mode: Res<State<GameMode>>,
+) {
+    if !pending.release_busy_after_playing || *mode.get() != GameMode::Playing {
+        return;
+    }
+    pending.release_busy_after_playing = false;
+    if *busy == SessionBusy::Loading {
+        *busy = SessionBusy::None;
+    }
 }
 
 pub fn handle_create_new_puzzle(

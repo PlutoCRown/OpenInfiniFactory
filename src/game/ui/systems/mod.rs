@@ -9,14 +9,15 @@ use crate::game::state::{
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::save::SaveState;
 
-use crate::game::ui::access::{i18n, I18nRevision, UiMainThread};
+use crate::game::ui::access::{I18nRevision, UiMainThread, i18n};
 use crate::game::ui::components::ui_logical_bounds;
 
 use super::types::{
     CarriedItem, Crosshair, GameplayHudVisibility, InGameHudStyle, InGameHudVisibility,
     InlineTextEditState, InventoryItems, LocalizedText, OpenBlockPanelDropdown,
-    OpenSettingsDropdown, PanelCloseButton, PanelDragState, PanelPosition, PanelTitleBar,
-    PanelVisibility, PanelWindow, PendingKeyBind, SettingsTab, StatusText, StatusTextKind,
+    OpenSettingsDropdown, PanelCloseButton, PanelDragState, PanelFlowLayout, PanelPosition,
+    PanelTitleBar, PanelVisibility, PanelWindow, PendingKeyBind, SettingsTab, StatusText,
+    StatusTextKind,
     TextPromptRoot, UiHost, UiHoverState, UiPanelBinding, UiRuntime,
 };
 include!("font.rs");

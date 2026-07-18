@@ -10,8 +10,8 @@ pub use action::UiActionLabel;
 pub use confirm_dialog::ConfirmButtonId;
 pub use host::UiHost;
 pub use panel::{
-    PanelCloseButton, PanelDragState, PanelPosition, PanelTitleBar, PanelVisibility, PanelWindow,
-    UiHoverState,
+    PanelCloseButton, PanelDragState, PanelFlowLayout, PanelPosition, PanelTitleBar,
+    PanelVisibility, PanelWindow, UiHoverState,
 };
 pub use runtime::{UiPanelBinding, UiRuntime};
 pub use text_input::InlineTextEditState;
