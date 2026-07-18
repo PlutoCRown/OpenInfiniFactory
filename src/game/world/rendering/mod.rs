@@ -30,10 +30,11 @@ pub use previews::{
 };
 pub use scene::{setup_scene, sync_shadow_settings, sync_vsync_settings, teardown_playing_scene};
 pub use scene_chunks::{
-    clear_scene_chunks, forget_scene_chunks, rebuild_all_scene_chunks,
-    sync_scene_chunks_for_positions, SceneChunkMeshes,
+    SceneChunkMeshes, clear_scene_chunks, forget_scene_chunks, rebuild_all_scene_chunks,
+    sync_scene_chunks_for_positions,
 };
 pub use skybox::SkyboxPlugin;
+pub use skybox::{environment_map_intensity, environment_map_light};
 pub(crate) use spawn::spawn_world_block_entity;
 pub use spawn::{
     spawn_block, spawn_block_with_animation, spawn_block_with_timed_animation,

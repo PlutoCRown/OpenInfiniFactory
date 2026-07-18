@@ -7,7 +7,7 @@ use crate::world::grid::WorldBlocks;
 use super::motion::PusherMotion;
 use super::structure_state::StructureState;
 use super::structures::{
-    can_translate_structure, MovementMark, PusherActor, PusherAnimationKind, StructureMove,
+    MovementMark, PusherActor, PusherAnimationKind, StructureMove, can_translate_structure,
 };
 use super::suction::SuctionLinks;
 
@@ -169,8 +169,7 @@ pub(super) fn mark_structure_movement_phase(
                 }
             }
             MovementRule::Lift { range } => {
-                if let Some(movement) =
-                    mark_lift_structure(world, structures, pos, range, suction)
+                if let Some(movement) = mark_lift_structure(world, structures, pos, range, suction)
                 {
                     if let Some(source_id) = source_id {
                         moves.push(movement.with_source(source_id, pos));
@@ -376,20 +375,26 @@ impl StructureMoveActorExt for StructureMove {
                 structure_id,
                 structure,
                 offset,
+                mut actors,
                 source,
                 source_pos,
                 ..
-            } => StructureMove::translate_by_pusher_actor(
-                structure_id,
-                structure,
-                offset,
-                PusherActor {
+            } => {
+                actors.push(PusherActor {
                     pos: actor,
                     animation,
-                },
-                mark,
-            )
-            .with_optional_source(source, source_pos),
+                });
+                StructureMove::Translate {
+                    structure_id,
+                    structure,
+                    offset,
+                    actors,
+                    mark,
+                    source: None,
+                    source_pos: None,
+                }
+                .with_optional_source(source, source_pos)
+            }
             movement => movement,
         }
     }
@@ -441,8 +446,7 @@ fn mark_structure_translate(
                 block.kind.movement_rule(block.facing),
                 Some(MovementRule::PoweredTranslate { .. })
             )
-        })
-    {
+        }) {
         // 活塞子集后再经吸盘扩展（子集不膨胀为整结构）
         let subset = structures.pusher_target_structure(world, actor, source, offset)?;
         structures.linked_expand_pusher_subset(suction, &subset, offset)?
@@ -507,4 +511,3 @@ fn mark_rotate_material_structure(
         clockwise,
     ))
 }
-

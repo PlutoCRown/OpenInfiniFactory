@@ -3,7 +3,7 @@
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::Camera3d;
 use bevy::image::ImageSampler;
-use bevy::light::{NotShadowCaster, Skybox};
+use bevy::light::{EnvironmentMapLight, GlobalAmbientLight, NotShadowCaster, Skybox};
 use bevy::mesh::MeshVertexBufferLayoutRef;
 use bevy::pbr::{Material, MaterialPipeline, MaterialPipelineKey, MaterialPlugin};
 use bevy::prelude::*;
@@ -17,10 +17,9 @@ use bevy::shader::ShaderRef;
 use super::components::GameplayScene;
 use crate::game::cameras::{GameplayCamera, MENU_CLEAR};
 use crate::shared::config::GameConfig;
+use crate::shared::persistent_storage;
 use crate::shared::save::{PuzzleLighting, SaveSlot, SaveState};
 use crate::shared::save_format::SKYBOX_FILE;
-use crate::shared::persistent_storage;
-use bevy::light::GlobalAmbientLight;
 
 /// 天空穹顶半边长
 const SKY_HALF_EXTENT: f32 = 800.0;
@@ -78,6 +77,26 @@ pub fn resolved_sun_direction(dir: Option<Vec3>) -> Vec3 {
         Some(dir) if dir != Vec3::ZERO => dir.normalize(),
         _ => (sunlight_rotation() * Vec3::Z).normalize(),
     }
+}
+
+/// 环境贴图强度：给金属镜面反射，略低于环境光以免整景过曝
+pub fn environment_map_intensity(lighting: &PuzzleLighting) -> f32 {
+    (lighting.ambient_brightness * 0.6).clamp(200.0, 900.0)
+}
+
+/// 简易半球环境贴图（金属 PBR 需要可反射的环境，否则金属度几乎看不见）
+pub fn environment_map_light(
+    images: &mut Assets<Image>,
+    lighting: &PuzzleLighting,
+) -> EnvironmentMapLight {
+    let mut light = EnvironmentMapLight::hemispherical_gradient(
+        images,
+        Color::srgb(0.42, 0.58, 0.95),
+        lighting.ambient_color,
+        Color::srgb(0.30, 0.28, 0.26),
+    );
+    light.intensity = environment_map_intensity(lighting);
+    light
 }
 
 /// 着色器天空参数
@@ -318,11 +337,9 @@ fn horizontal_cross_png_to_cubemap(png_bytes: &[u8]) -> Result<Image, String> {
 fn sync_puzzle_lighting(
     lighting: Res<PuzzleLighting>,
     config: Res<GameConfig>,
-    mut lights: Query<
-        (&mut Transform, &mut DirectionalLight),
-        With<GameplayScene>,
-    >,
+    mut lights: Query<(&mut Transform, &mut DirectionalLight), With<GameplayScene>>,
     mut skyboxes: Query<&mut Skybox, With<GameplayCamera>>,
+    mut env_maps: Query<&mut EnvironmentMapLight, With<GameplayCamera>>,
     sky_meshes: Query<&MeshMaterial3d<SkyMaterial>, With<SkyDome>>,
     mut sky_materials: ResMut<Assets<SkyMaterial>>,
     mut ambient: ResMut<GlobalAmbientLight>,
@@ -340,6 +357,9 @@ fn sync_puzzle_lighting(
     }
     for mut skybox in &mut skyboxes {
         skybox.brightness = lighting.skybox_brightness;
+    }
+    for mut env in &mut env_maps {
+        env.intensity = environment_map_intensity(&lighting);
     }
     for mat in &sky_meshes {
         if let Some(mut material) = sky_materials.get_mut(&mat.0) {

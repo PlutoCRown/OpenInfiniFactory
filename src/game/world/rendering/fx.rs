@@ -73,7 +73,7 @@ pub fn spawn_weld_sparks(commands: &mut Commands, assets: &WorldRenderAssets, po
             );
             commands.spawn((
                 Mesh3d(assets.weld_spark.clone()),
-                MeshMaterial3d(assets.weld_connector_material.clone()),
+                MeshMaterial3d(assets.laser_beam_material.clone()),
                 Transform::from_translation(origin + offset),
                 WeldSpark::new(velocity, 0.28),
             ));

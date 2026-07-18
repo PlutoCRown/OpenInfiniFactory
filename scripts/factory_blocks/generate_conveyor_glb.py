@@ -429,7 +429,8 @@ def unwrap_belt_strip(obj: bpy.types.Object) -> None:
             p = loop.vert.co
             u = (p.x / half_w) * 0.5 + 0.5
             v = belt_loop_s(p.y, p.z) / loop_len
-            loop[uv_layer].uv = (u, v)
+            # 顶面箭头方向：整圈 UV 旋转 180°
+            loop[uv_layer].uv = (1.0 - u, 1.0 - v)
 
     bm.to_mesh(mesh)
     bm.free()

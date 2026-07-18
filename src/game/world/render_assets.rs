@@ -11,6 +11,37 @@ use crate::game::blocks::{
     BLOCK_SIZE, BlockKind, BlockShape, ModelMaterial, ModelMesh, PaintMaterialId, all_blocks,
     paint_catalog, stamp_catalog, stamp_def,
 };
+use crate::game::scene_blocks::{FactoryGltfPart, load_factory_glb};
+
+/// 工厂 GLB 单个可渲染零件（含编辑预览材质）
+#[derive(Clone)]
+pub struct FactoryPartHandles {
+    pub mesh: Handle<Mesh>,
+    pub material: Handle<StandardMaterial>,
+    pub preview_material: Handle<StandardMaterial>,
+}
+
+/// 工厂块从 assets/factory_blocks 加载的外观
+#[derive(Clone)]
+pub enum FactoryVisual {
+    /// 静态整块零件
+    Static {
+        parts: Vec<FactoryPartHandles>,
+        /// DownWelder：模型绕局部 X 俯仰 -90°
+        pitch_radians: f32,
+    },
+    /// 活塞 / 拦截器：Body 静、Stage 半行程、Head 全行程
+    Pusher {
+        body: Vec<FactoryPartHandles>,
+        stage: Vec<FactoryPartHandles>,
+        head: Vec<FactoryPartHandles>,
+    },
+    /// 电线六向臂：索引对齐 signal_neighbor_offsets；power 为通电凹槽灯
+    Wire {
+        faces: [Vec<FactoryPartHandles>; 6],
+        power: [Vec<FactoryPartHandles>; 6],
+    },
+}
 
 #[derive(Resource, Clone)]
 pub struct WorldRenderAssets {
@@ -58,6 +89,8 @@ pub struct WorldRenderAssets {
     scene_face_uvs: HashMap<BlockKind, [[f32; 2]; 24]>,
     /// 合并 mesh 时可作为实心遮挡邻面的场景种类（不透明立方体）
     scene_face_occluders: HashSet<BlockKind>,
+    /// 工厂块 GLB 外观（无则回退程序化零件）
+    factory_models: HashMap<BlockKind, FactoryVisual>,
     face_mark_materials: HashMap<PaintMaterialId, Handle<StandardMaterial>>,
     /// 灯面板未通电材质
     pub(crate) light_panel_material: Handle<StandardMaterial>,
@@ -68,6 +101,8 @@ pub struct WorldRenderAssets {
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
     pub(crate) active_wire_material: Handle<StandardMaterial>,
     pub(crate) weld_connector_material: Handle<StandardMaterial>,
+    /// 焊点连接杆外圈荧光黄
+    pub(crate) weld_connector_glow_material: Handle<StandardMaterial>,
     pub(crate) laser_beam_material: Handle<StandardMaterial>,
     pub(crate) acceptance_spark_material: Handle<StandardMaterial>,
     delete_preview_material: Handle<StandardMaterial>,
@@ -388,6 +423,8 @@ impl WorldRenderAssets {
             })
             .collect();
 
+        let factory_models = load_factory_visuals(meshes, materials, images);
+
         Self {
             block: {
                 let mut mesh = Mesh::from(Cuboid::new(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE));
@@ -411,9 +448,9 @@ impl WorldRenderAssets {
             face_mark_y: meshes.add(Cuboid::new(0.78, 0.02, 0.78)),
             face_mark_z: meshes.add(Cuboid::new(0.78, 0.78, 0.02)),
             weld_spark: meshes.add(Cuboid::new(0.24, 0.24, 0.24)),
-            connector_x: meshes.add(Cuboid::new(0.55, 0.10, 0.10)),
-            connector_y: meshes.add(Cuboid::new(0.10, 0.55, 0.10)),
-            connector_z: meshes.add(Cuboid::new(0.10, 0.10, 0.55)),
+            connector_x: meshes.add(Cuboid::new(0.55, 0.045, 0.045)),
+            connector_y: meshes.add(Cuboid::new(0.045, 0.55, 0.045)),
+            connector_z: meshes.add(Cuboid::new(0.045, 0.045, 0.55)),
             wire_connector_x: meshes.add(Cuboid::new(0.652, 0.304, 0.304)),
             wire_connector_y: meshes.add(Cuboid::new(0.304, 0.652, 0.304)),
             wire_connector_z: meshes.add(Cuboid::new(0.304, 0.304, 0.652)),
@@ -459,6 +496,7 @@ impl WorldRenderAssets {
             scene_meshes,
             scene_face_uvs,
             scene_face_occluders,
+            factory_models,
             face_mark_materials,
             light_panel_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(0.55, 0.58, 0.62),
@@ -486,9 +524,17 @@ impl WorldRenderAssets {
                 ..default()
             }),
             weld_connector_material: materials.add(StandardMaterial {
-                base_color: Color::srgba(1.0, 0.22, 0.10, 0.72),
+                base_color: Color::WHITE,
+                emissive: LinearRgba::new(2.2, 2.2, 2.2, 1.0),
+                unlit: true,
+                ..default()
+            }),
+            weld_connector_glow_material: materials.add(StandardMaterial {
+                base_color: Color::srgba(1.0, 0.95, 0.25, 0.55),
+                emissive: LinearRgba::new(1.8, 1.4, 0.15, 1.0),
                 alpha_mode: AlphaMode::Blend,
                 unlit: true,
+                cull_mode: None,
                 ..default()
             }),
             laser_beam_material: materials.add(StandardMaterial {
@@ -628,6 +674,11 @@ impl WorldRenderAssets {
         self.scene_face_occluders.contains(&kind)
     }
 
+    /// 工厂 GLB 外观；无则走程序化零件
+    pub(crate) fn factory_visual(&self, kind: BlockKind) -> Option<&FactoryVisual> {
+        self.factory_models.get(&kind)
+    }
+
     pub(crate) fn connector_mesh(&self, offset: IVec3) -> Handle<Mesh> {
         if offset.x != 0 {
             self.connector_x.clone()
@@ -750,10 +801,25 @@ fn preview_block_material(
 }
 
 fn preview_model_material(material: StandardMaterial) -> StandardMaterial {
+    // 不用 Blend：多零件 GLB 每帧重建时透明排序会闪；Opaque 幽灵色更稳
+    let c = material.base_color.to_srgba();
     StandardMaterial {
-        base_color: material.base_color.with_alpha(0.46),
-        alpha_mode: AlphaMode::Blend,
-        ..material
+        base_color: Color::srgba(
+            c.red * 0.55 + 0.28,
+            c.green * 0.55 + 0.30,
+            c.blue * 0.55 + 0.34,
+            1.0,
+        ),
+        base_color_texture: material.base_color_texture,
+        normal_map_texture: material.normal_map_texture,
+        emissive: material.emissive * 0.25,
+        metallic: material.metallic * 0.35,
+        perceptual_roughness: material.perceptual_roughness.max(0.75),
+        reflectance: material.reflectance,
+        alpha_mode: AlphaMode::Opaque,
+        cull_mode: material.cull_mode,
+        unlit: false,
+        ..default()
     }
 }
 
@@ -778,6 +844,214 @@ fn stamp_plate_mesh() -> Mesh {
         }
     }
     mesh
+}
+
+/// 扫描 factory_blocks 目录，按种类装成 FactoryVisual
+fn load_factory_visuals(
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    images: &mut Assets<Image>,
+) -> HashMap<BlockKind, FactoryVisual> {
+    use std::f32::consts::FRAC_PI_2;
+    use std::path::PathBuf;
+
+    let root = PathBuf::from(crate::shared::platform::asset_path()).join("factory_blocks");
+    let mut map = HashMap::new();
+
+    let static_dirs: &[(BlockKind, &str, f32)] = &[
+        (BlockKind::Platform, "platform", 0.0),
+        (BlockKind::Conveyor, "conveyor", 0.0),
+        (BlockKind::ReverseConveyor, "conveyor", 0.0),
+        (BlockKind::Rotator, "rotator", 0.0),
+        (BlockKind::CounterRotator, "counter_rotator", 0.0),
+        (BlockKind::Detector, "detector", 0.0),
+        (BlockKind::DownDetector, "detector", 0.0),
+        (BlockKind::Lifter, "lifter", 0.0),
+        (BlockKind::Welder, "welder", 0.0),
+        (BlockKind::DownWelder, "welder", -FRAC_PI_2),
+        (BlockKind::Drill, "drill", 0.0),
+        (BlockKind::Laser, "laser", 0.0),
+        (BlockKind::Mirror, "mirror", 0.0),
+        (BlockKind::VerticalMirror, "vertical_mirror", 0.0),
+        (BlockKind::Splitter, "splitter", 0.0),
+        (BlockKind::SuctionCup, "suction_cup", 0.0),
+    ];
+    for &(kind, dir, pitch) in static_dirs {
+        let path = root.join(dir).join("model.glb");
+        match load_factory_glb(&path, meshes, materials, images) {
+            Ok(raw) => {
+                map.insert(
+                    kind,
+                    FactoryVisual::Static {
+                        parts: factory_parts_with_preview(raw, materials),
+                        pitch_radians: pitch,
+                    },
+                );
+            }
+            Err(err) => {
+                bevy::log::warn!("factory glb load failed ({}): {err}", kind.name_key());
+            }
+        }
+    }
+
+    for &(kind, dir) in &[
+        (BlockKind::Pusher, "pusher"),
+        (BlockKind::Blocker, "blocker"),
+    ] {
+        let path = root.join(dir).join("model.glb");
+        match load_factory_glb(&path, meshes, materials, images) {
+            Ok(raw) => match split_pusher_parts(raw, materials) {
+                Some(visual) => {
+                    map.insert(kind, visual);
+                }
+                None => {
+                    bevy::log::warn!(
+                        "factory pusher glb missing Body/Stage/Head ({})",
+                        kind.name_key()
+                    );
+                }
+            },
+            Err(err) => {
+                bevy::log::warn!("factory glb load failed ({}): {err}", kind.name_key());
+            }
+        }
+    }
+
+    let wire_path = root.join("wire").join("model.glb");
+    match load_factory_glb(&wire_path, meshes, materials, images) {
+        Ok(raw) => match split_wire_faces(raw, materials) {
+            Some(visual) => {
+                map.insert(BlockKind::Wire, visual);
+            }
+            None => {
+                bevy::log::warn!("factory wire glb missing Pos/Neg face groups");
+            }
+        },
+        Err(err) => {
+            bevy::log::warn!("factory glb load failed (wire): {err}");
+        }
+    }
+
+    map
+}
+
+/// 给工厂零件补半透明预览材质
+fn factory_parts_with_preview(
+    raw: Vec<FactoryGltfPart>,
+    materials: &mut Assets<StandardMaterial>,
+) -> Vec<FactoryPartHandles> {
+    raw.into_iter()
+        .map(|part| {
+            let preview_material = materials
+                .get(&part.material)
+                .cloned()
+                .map(|source| materials.add(preview_model_material(source)))
+                .unwrap_or_else(|| part.material.clone());
+            FactoryPartHandles {
+                mesh: part.mesh,
+                material: part.material,
+                preview_material,
+            }
+        })
+        .collect()
+}
+
+/// 按 Body / Stage / Head 拆活塞零件
+fn split_pusher_parts(
+    raw: Vec<FactoryGltfPart>,
+    materials: &mut Assets<StandardMaterial>,
+) -> Option<FactoryVisual> {
+    let mut body = Vec::new();
+    let mut stage = Vec::new();
+    let mut head = Vec::new();
+    for part in raw {
+        let group = part.group.as_deref().unwrap_or("");
+        let handles = {
+            let preview_material = materials
+                .get(&part.material)
+                .cloned()
+                .map(|source| materials.add(preview_model_material(source)))
+                .unwrap_or_else(|| part.material.clone());
+            FactoryPartHandles {
+                mesh: part.mesh,
+                material: part.material,
+                preview_material,
+            }
+        };
+        match group {
+            "Body" => body.push(handles),
+            "Stage" => stage.push(handles),
+            "Head" => head.push(handles),
+            _ => body.push(handles),
+        }
+    }
+    if body.is_empty() || head.is_empty() {
+        return None;
+    }
+    Some(FactoryVisual::Pusher { body, stage, head })
+}
+
+/// 按 PosX…NegZ / PosX_Power… 拆电线六向臂与通电条
+fn split_wire_faces(
+    raw: Vec<FactoryGltfPart>,
+    materials: &mut Assets<StandardMaterial>,
+) -> Option<FactoryVisual> {
+    let mut faces: [Vec<FactoryPartHandles>; 6] = Default::default();
+    let mut power: [Vec<FactoryPartHandles>; 6] = Default::default();
+    let mut any = false;
+    for part in raw {
+        let group = part.group.as_deref().unwrap_or("");
+        let (is_power, face_name) = match group.strip_suffix("_Power") {
+            Some(face) => (true, face),
+            None => (false, group),
+        };
+        let Some(index) = wire_face_index(Some(face_name)) else {
+            continue;
+        };
+        any = true;
+        let mut handles = {
+            let preview_material = materials
+                .get(&part.material)
+                .cloned()
+                .map(|source| materials.add(preview_model_material(source)))
+                .unwrap_or_else(|| part.material.clone());
+            FactoryPartHandles {
+                mesh: part.mesh,
+                material: part.material,
+                preview_material,
+            }
+        };
+        // 通电条：强制纯白强自发光（glTF 发射强度可能丢失）
+        if is_power {
+            handles.material = materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                emissive: LinearRgba::new(3.5, 3.5, 3.5, 1.0),
+                unlit: true,
+                ..default()
+            });
+            handles.preview_material = handles.material.clone();
+            power[index].push(handles);
+        } else {
+            faces[index].push(handles);
+        }
+    }
+    if !any {
+        return None;
+    }
+    Some(FactoryVisual::Wire { faces, power })
+}
+
+/// 电线节点名 → signal_neighbor_offsets 下标
+fn wire_face_index(group: Option<&str>) -> Option<usize> {
+    match group? {
+        "PosX" => Some(0),
+        "NegX" => Some(1),
+        "PosY" => Some(2),
+        "NegY" => Some(3),
+        "PosZ" => Some(4),
+        "NegZ" => Some(5),
+        _ => None,
+    }
 }
 
 /// 把 model.glb 或 texture.png（可选 normal.png）装进 scene_* / block_materials

@@ -28,10 +28,10 @@ pub mod reverse_conveyor;
 pub mod roller;
 pub mod roller_body;
 pub mod rotator;
+pub mod sign;
 pub mod splitter;
 pub mod stamper;
 pub mod stamper_body;
-pub mod sign;
 pub mod suction_cup;
 pub mod teleport_entrance;
 pub mod teleport_exit;
@@ -44,30 +44,30 @@ mod model_spawn;
 
 use bevy::prelude::*;
 
-pub use self::model_spawn::spawn_model_parts;
+pub use self::model_spawn::{spawn_factory_wire_arm, spawn_model_parts};
 pub use self::registry::{
-    all_blocks, assert_registry_consistent, edit_blocks, save_stores_facing, PLAY_BLOCKS,
+    PLAY_BLOCKS, all_blocks, assert_registry_consistent, edit_blocks, save_stores_facing,
 };
 pub use self::render_types::{
-    render_directional_wire_device, BlockModel, BlockModelPart, ModelMaterial, ModelMesh,
-    RenderBehavior, WeldConnectorBehavior, WireConnectorBehavior,
-};
-pub use oif_sim::blocks::{
-    ensure_fallback_material_catalog, ensure_fallback_paint_catalog, ensure_fallback_scene_catalog,
-    ensure_fallback_stamp_catalog, fallback_material_id, fallback_scene_id,
-    install_material_catalog, install_paint_catalog, install_scene_catalog, install_stamp_catalog,
-    leak_str, material_catalog, material_def, paint_catalog, paint_def, resolve_material_id,
-    resolve_scene_id, rgb, rgba, scene_catalog, scene_def, stamp_catalog, stamp_def, AcceptorId,
-    BlockClass, BlockData, BlockDefinition, BlockId, BlockKind, BlockLayer, BlockShape, ColorSpec,
-    Facing, FactoryBlock, LaserOpticsBehavior, MarkerBehavior, MaterialBlock, MaterialBlockCatalog,
-    MaterialBlockDef, MaterialBlockId, MaterialDestroyer, MaterialLabeler, MaterialProcessor,
-    MaterialProps, MaterialSource, MovementRule, PaintMaterialCatalog, PaintMaterialDef,
-    PaintMaterialId, PersistentLayer, SceneBlockCatalog, SceneBlockDef, SceneBlockId,
-    SignalBehavior, StampMaterialCatalog, StampMaterialDef, StampMaterialId, SystemBlock,
-    VirtualBlock, WeldBehavior, BLOCK_SIZE, DEFAULT_GENERATOR_PERIOD, FALLBACK_MATERIAL_STRING_ID,
-    FALLBACK_SCENE_STRING_ID,
+    BlockModel, BlockModelPart, ModelMaterial, ModelMesh, RenderBehavior, WeldConnectorBehavior,
+    WireConnectorBehavior, render_directional_wire_device,
 };
 use crate::game::state::UiPanelId;
+pub use oif_sim::blocks::{
+    AcceptorId, BLOCK_SIZE, BlockClass, BlockData, BlockDefinition, BlockId, BlockKind, BlockLayer,
+    BlockShape, ColorSpec, DEFAULT_GENERATOR_PERIOD, FALLBACK_MATERIAL_STRING_ID,
+    FALLBACK_SCENE_STRING_ID, Facing, FactoryBlock, LaserOpticsBehavior, MarkerBehavior,
+    MaterialBlock, MaterialBlockCatalog, MaterialBlockDef, MaterialBlockId, MaterialDestroyer,
+    MaterialLabeler, MaterialProcessor, MaterialProps, MaterialSource, MovementRule,
+    PaintMaterialCatalog, PaintMaterialDef, PaintMaterialId, PersistentLayer, SceneBlockCatalog,
+    SceneBlockDef, SceneBlockId, SignalBehavior, StampMaterialCatalog, StampMaterialDef,
+    StampMaterialId, SystemBlock, VirtualBlock, WeldBehavior, ensure_fallback_material_catalog,
+    ensure_fallback_paint_catalog, ensure_fallback_scene_catalog, ensure_fallback_stamp_catalog,
+    fallback_material_id, fallback_scene_id, install_material_catalog, install_paint_catalog,
+    install_scene_catalog, install_stamp_catalog, leak_str, material_catalog, material_def,
+    paint_catalog, paint_def, resolve_material_id, resolve_scene_id, rgb, rgba, scene_catalog,
+    scene_def, stamp_catalog, stamp_def,
+};
 
 /// ColorSpec → Bevy Color
 pub trait ColorSpecExt {

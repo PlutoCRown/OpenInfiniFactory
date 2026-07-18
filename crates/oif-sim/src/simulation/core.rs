@@ -331,7 +331,7 @@ fn log_movement_plan(
             StructureMove::Translate {
                 structure,
                 offset,
-                actor,
+                actors,
                 mark,
                 source,
                 ..
@@ -339,7 +339,7 @@ fn log_movement_plan(
                 sim_log.log(
                     turn,
                     format!(
-                        "  translate {} cell(s) by ({}, {}, {}) mark={mark:?} source={source:?} actor={actor:?}",
+                        "  translate {} cell(s) by ({}, {}, {}) mark={mark:?} source={source:?} actors={actors:?}",
                         structure.len(),
                         offset.x,
                         offset.y,

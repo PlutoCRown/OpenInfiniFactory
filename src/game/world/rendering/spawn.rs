@@ -13,7 +13,7 @@ use super::scene_mesh::scene_block_mesh;
 use crate::game::blocks::BlockPresent;
 use crate::game::blocks::{
     BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
-    spawn_model_parts,
+    spawn_factory_wire_arm, spawn_model_parts,
 };
 use crate::game::simulation::structure_state::{FactoryActivity, StructureState};
 use crate::game::world::animation::{
@@ -338,7 +338,9 @@ pub(crate) fn spawn_block_model(
     }
 
     let is_preview = edit_preview.is_some();
+    let has_factory_visual = assets.factory_visual(data.kind).is_some();
     let mut entity = if data.kind == crate::game::blocks::BlockKind::Wire
+        || has_factory_visual
         || matches!(
             data.kind.model(),
             BlockModel::PartsOnly(_) | BlockModel::PusherParts(_)
@@ -429,6 +431,7 @@ pub(crate) fn spawn_block_model(
             spawn_model_parts(
                 parent,
                 assets,
+                data.kind,
                 data.kind.model(),
                 pusher_animation,
                 icon_render.map(|(_, layer)| layer),
@@ -447,10 +450,30 @@ pub(crate) fn spawn_block_model(
                 let neighbor = pos + offset;
                 if weld_neighbor_connects_to(world, neighbor, -offset) {
                     let local_offset = local_connector_offset(data, offset);
+                    let translation = local_offset.as_vec3() * 0.225;
+                    let glow_scale = if local_offset.x != 0 {
+                        Vec3::new(1.0, 1.7, 1.7)
+                    } else if local_offset.y != 0 {
+                        Vec3::new(1.7, 1.0, 1.7)
+                    } else {
+                        Vec3::new(1.7, 1.7, 1.0)
+                    };
+                    let mut glow = parent.spawn((
+                        Mesh3d(assets.connector_mesh(local_offset)),
+                        MeshMaterial3d(assets.weld_connector_glow_material.clone()),
+                        Transform {
+                            translation,
+                            scale: glow_scale,
+                            ..default()
+                        },
+                    ));
+                    if let Some((_, icon_layer)) = icon_render {
+                        glow.insert((icon_layer.clone(), BlockIconRenderEntity));
+                    }
                     let mut child = parent.spawn((
                         Mesh3d(assets.connector_mesh(local_offset)),
                         MeshMaterial3d(assets.weld_connector_material.clone()),
-                        Transform::from_translation(local_offset.as_vec3() * 0.225),
+                        Transform::from_translation(translation),
                     ));
                     if let Some((_, icon_layer)) = icon_render {
                         child.insert((icon_layer.clone(), BlockIconRenderEntity));
@@ -464,8 +487,14 @@ pub(crate) fn spawn_block_model(
                 WireConnectorBehavior::Device { blocked_offset } => Some(blocked_offset),
                 WireConnectorBehavior::Wire => None,
             };
+            let use_factory_wire = data.kind == BlockKind::Wire
+                && matches!(
+                    assets.factory_visual(BlockKind::Wire),
+                    Some(crate::game::world::render_assets::FactoryVisual::Wire { .. })
+                );
+            let powered_wire = material == assets.active_wire_material;
             let mut connected_offsets = Vec::new();
-            for offset in signal_neighbor_offsets() {
+            for (face_index, offset) in signal_neighbor_offsets().into_iter().enumerate() {
                 if blocked_offset == Some(offset) {
                     continue;
                 }
@@ -491,24 +520,53 @@ pub(crate) fn spawn_block_model(
                     }
                     wire_connects_to(block, -offset)
                 }) {
-                    connected_offsets.push(offset);
-                    let local_offset = local_connector_offset(data, offset);
-                    let mut child = parent.spawn((
-                        Mesh3d(assets.wire_connector_mesh(local_offset)),
-                        MeshMaterial3d(if data.kind == BlockKind::Wire {
-                            material.clone()
-                        } else {
-                            assets.wire_connector_material.clone()
-                        }),
-                        Transform::from_translation(local_offset.as_vec3() * 0.174),
-                    ));
-                    if let Some((_, icon_layer)) = icon_render {
-                        child.insert((icon_layer.clone(), BlockIconRenderEntity));
+                    connected_offsets.push((face_index, offset));
+                    if !use_factory_wire {
+                        let local_offset = local_connector_offset(data, offset);
+                        let mut child = parent.spawn((
+                            Mesh3d(assets.wire_connector_mesh(local_offset)),
+                            MeshMaterial3d(if data.kind == BlockKind::Wire {
+                                material.clone()
+                            } else {
+                                assets.wire_connector_material.clone()
+                            }),
+                            Transform::from_translation(local_offset.as_vec3() * 0.174),
+                        ));
+                        if let Some((_, icon_layer)) = icon_render {
+                            child.insert((icon_layer.clone(), BlockIconRenderEntity));
+                        }
                     }
                 }
             }
 
-            if data.kind == crate::game::blocks::BlockKind::Wire && connected_offsets.is_empty() {
+            if use_factory_wire {
+                // 孤立或图标：六向全画；单边连通时补对向臂（露出金属环端面）
+                let mut faces: Vec<usize> = if connected_offsets.is_empty() || icon_render.is_some()
+                {
+                    (0..6).collect()
+                } else {
+                    connected_offsets.iter().map(|(i, _)| *i).collect()
+                };
+                if connected_offsets.len() == 1 {
+                    let only = connected_offsets[0].0;
+                    let opposite = only ^ 1;
+                    if !faces.contains(&opposite) {
+                        faces.push(opposite);
+                    }
+                }
+                for face_index in faces {
+                    spawn_factory_wire_arm(
+                        parent,
+                        assets,
+                        face_index,
+                        icon_render.map(|(_, layer)| layer),
+                        is_preview,
+                        powered_wire,
+                    );
+                }
+            } else if data.kind == crate::game::blocks::BlockKind::Wire
+                && connected_offsets.is_empty()
+            {
                 let mut child = parent.spawn((
                     Mesh3d(assets.wire_node_mesh()),
                     MeshMaterial3d(material.clone()),

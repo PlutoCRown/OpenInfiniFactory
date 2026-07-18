@@ -97,7 +97,8 @@ pub(super) enum StructureMove {
         structure_id: StructureId,
         structure: HashSet<IVec3>,
         offset: IVec3,
-        actor: Option<PusherActor>,
+        /// 同结构同位移可合并多个推杆，同回合同步伸出/收回
+        actors: Vec<PusherActor>,
         mark: MovementMark,
         source: Option<BlockId>,
         source_pos: Option<IVec3>,
@@ -195,7 +196,7 @@ impl StructureMove {
             structure_id,
             structure,
             offset,
-            actor: None,
+            actors: Vec::new(),
             mark,
             source: None,
             source_pos: None,
@@ -213,7 +214,7 @@ impl StructureMove {
             structure_id,
             structure,
             offset,
-            actor: Some(actor),
+            actors: vec![actor],
             mark,
             source: None,
             source_pos: None,
@@ -295,7 +296,53 @@ pub(super) fn merge_structure_movement_plan(
     influence_cache.prune_missing(&living_structures, &living_blocks);
     planned_moves.extend(device_moves);
     planned_moves.sort_by(|a, b| compare_movement_priority(a, b, influence_cache));
-    planned_moves
+    // 同结构同位移的 Push 合并推杆，粘头也能同回合同步推
+    coalesce_same_push_moves(planned_moves)
+}
+
+/// 把同 structure_id + offset 的 Push 合成一条，actors 并在一起
+fn coalesce_same_push_moves(moves: Vec<StructureMove>) -> Vec<StructureMove> {
+    let mut out = Vec::new();
+    let mut push_index: HashMap<(StructureId, IVec3), usize> = HashMap::new();
+    for movement in moves {
+        match movement {
+            StructureMove::Translate {
+                structure_id,
+                structure,
+                offset,
+                actors,
+                mark: MovementMark::Push,
+                source,
+                source_pos,
+            } => {
+                let key = (structure_id, offset);
+                if let Some(&i) = push_index.get(&key) {
+                    if let StructureMove::Translate {
+                        structure: existing,
+                        actors: existing_actors,
+                        ..
+                    } = &mut out[i]
+                    {
+                        existing.extend(structure);
+                        existing_actors.extend(actors);
+                    }
+                } else {
+                    push_index.insert(key, out.len());
+                    out.push(StructureMove::Translate {
+                        structure_id,
+                        structure,
+                        offset,
+                        actors,
+                        mark: MovementMark::Push,
+                        source,
+                        source_pos,
+                    });
+                }
+            }
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 fn compare_movement_priority(
@@ -412,10 +459,10 @@ pub(super) fn apply_fragile_shatter_before_execute(
             StructureMove::Translate {
                 structure,
                 offset,
-                actor,
+                actors,
                 ..
             } => {
-                if let Some(actor) = actor {
+                for actor in actors {
                     if matches!(actor.animation, PusherAnimationKind::Extend) {
                         if let Some(block) = world.blocks.get(&actor.pos) {
                             let head = actor.pos + block.facing.forward_ivec3();
@@ -466,7 +513,8 @@ pub(super) fn apply_fragile_shatter_before_execute(
     }
     for movement in moves.iter_mut() {
         match movement {
-            StructureMove::Translate { structure, .. } | StructureMove::Rotate { structure, .. } => {
+            StructureMove::Translate { structure, .. }
+            | StructureMove::Rotate { structure, .. } => {
                 for pos in &shatter {
                     structure.remove(pos);
                 }
@@ -477,6 +525,7 @@ pub(super) fn apply_fragile_shatter_before_execute(
 
 /// 按序执行运动标签：失败则试下一个；种子判占用，成功后标记展开后的格子。
 /// `hard_pusher_head_occupancy` 为本回合开始时已伸出的头；执行中随 Push 伸出/收回更新。
+/// `moved`：本回合真实平移过的格子；`gravity_held`：空头/推杆本体，只抑重力不挡其它 Push。
 pub(super) fn execute_structure_moves_with_pushers(
     world: &mut WorldBlocks,
     moves: Vec<StructureMove>,
@@ -484,11 +533,9 @@ pub(super) fn execute_structure_moves_with_pushers(
     influence_cache: &mut MovementInfluenceCache,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
     suction: &SuctionLinks,
-) -> (
-    HashMap<IVec3, BlockMotion>,
-    HashMap<IVec3, PusherMotion>,
-) {
+) -> (HashMap<IVec3, BlockMotion>, HashMap<IVec3, PusherMotion>) {
     let mut moved = HashSet::new();
+    let mut gravity_held = HashSet::new();
     let mut animations = HashMap::new();
     let mut pusher_animations = HashMap::new();
     let mut executed = Vec::new();
@@ -499,18 +546,26 @@ pub(super) fn execute_structure_moves_with_pushers(
                 structure_id,
                 structure,
                 offset,
-                actor,
+                actors,
                 mark,
                 source,
                 source_pos: _,
             } => {
+                let is_gravity = matches!(mark, MovementMark::Vertical) && source.is_none();
                 // 仅用种子结构判占用；展开在当前世界上做，避免预展开导致误跳过
-                if structure.iter().any(|pos| moved.contains(pos)) {
+                if is_gravity {
+                    if structure
+                        .iter()
+                        .any(|pos| moved.contains(pos) || gravity_held.contains(pos))
+                    {
+                        continue;
+                    }
+                } else if offset != IVec3::ZERO && structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
                 }
                 // 收回标签检查时忽略自己的头，否则粘头拉回会撞上尚未释放的头占位
                 let mut heads_for_check = heads.clone();
-                if let Some(actor) = &actor {
+                for actor in &actors {
                     if matches!(actor.animation, PusherAnimationKind::Retract) {
                         if let Some(block) = world.blocks.get(&actor.pos) {
                             heads_for_check.remove(&(actor.pos + block.facing.forward_ivec3()));
@@ -528,8 +583,15 @@ pub(super) fn execute_structure_moves_with_pushers(
                 ) else {
                     continue;
                 };
-                // 展开卷入的格子若本回合已动过，本标签失败（可 fallback）
-                if structure.iter().any(|pos| moved.contains(pos)) {
+                // 展开卷入的格子若本回合已真实平移过，本标签失败（可 fallback）
+                if is_gravity {
+                    if structure
+                        .iter()
+                        .any(|pos| moved.contains(pos) || gravity_held.contains(pos))
+                    {
+                        continue;
+                    }
+                } else if offset != IVec3::ZERO && structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
                 }
                 // 活塞头是实体：本回合已提交的头会挡住后续更低优先级移动
@@ -566,10 +628,10 @@ pub(super) fn execute_structure_moves_with_pushers(
                         structure.iter().map(|pos| *pos + offset).collect();
                     moved.extend(target_structure);
                 } else {
-                    // 空头伸出/收回：零位移 Push，只占位并抑制本结构重力 fallback
-                    moved.extend(structure.iter().copied());
+                    // 空头伸出/收回：零位移 Push，只抑制本结构重力 fallback
+                    gravity_held.extend(structure.iter().copied());
                 }
-                if let Some(actor) = actor {
+                for actor in actors {
                     let (from_extension, to_extension) = match actor.animation {
                         PusherAnimationKind::Extend => (0.0, 1.0),
                         PusherAnimationKind::Retract => (1.0, 0.0),
@@ -592,10 +654,10 @@ pub(super) fn execute_structure_moves_with_pushers(
                             }
                         }
                     }
-                    // 粘头推动的是前方结构：活塞本体也算本回合已动作，抑制自身重力
+                    // 粘头推动的是前方结构：活塞本体只抑重力，不挡同结构其它推杆
                     if let Some(actor_id) = structures.id_at(actor.pos) {
                         if let Some(actor_structure) = structures.structure_positions(actor_id) {
-                            moved.extend(actor_structure.iter().copied());
+                            gravity_held.extend(actor_structure.iter().copied());
                         }
                     }
                 }
@@ -733,8 +795,7 @@ fn expanded_move_structure(
     let structure = with_factory_attachment_children(world, &structure);
 
     if offset.abs().element_sum() != 1 {
-        return can_move_structure_without_push(world, &structure, offset)
-            .then_some(structure);
+        return can_move_structure_without_push(world, &structure, offset).then_some(structure);
     }
 
     let mut expanded = structure.clone();
@@ -983,4 +1044,3 @@ fn rotate_facing(facing: Facing, clockwise: bool) -> Facing {
         facing.rotate_counter()
     }
 }
-

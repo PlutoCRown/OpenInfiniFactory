@@ -119,6 +119,8 @@ impl From<PusherMotion> for PusherAnimation {
 pub struct AnimatedPusher {
     base_translation: Vec3,
     direction: Vec3,
+    /// Head=1.0，Stage=0.5
+    extension_factor: f32,
     elapsed: f32,
     duration: f32,
     from_extension: f32,
@@ -177,9 +179,15 @@ pub struct WeldSpark {
 
 impl AnimatedPusher {
     pub fn new(animation: PusherAnimation, base_translation: Vec3) -> Self {
+        Self::with_factor(animation, base_translation, 1.0)
+    }
+
+    /// Stage 用 0.5、Head 用 1.0
+    pub fn with_factor(animation: PusherAnimation, base_translation: Vec3, extension_factor: f32) -> Self {
         Self {
             base_translation,
             direction: Vec3::NEG_Z,
+            extension_factor,
             elapsed: 0.0,
             duration: animation.duration.unwrap_or(0.0),
             from_extension: animation.from_extension,
@@ -314,11 +322,12 @@ pub fn animate_blocks(
         animation.elapsed += time.delta_secs();
         let t = (animation.elapsed / animation.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
         let extension = animation.from_extension.lerp(animation.to_extension, t);
-        transform.translation = animation.base_translation + animation.direction * extension;
+        transform.translation =
+            animation.base_translation + animation.direction * (extension * animation.extension_factor);
 
         if t >= 1.0 {
-            transform.translation =
-                animation.base_translation + animation.direction * animation.to_extension;
+            transform.translation = animation.base_translation
+                + animation.direction * (animation.to_extension * animation.extension_factor);
             commands.entity(entity).remove::<AnimatedPusher>();
         }
     }

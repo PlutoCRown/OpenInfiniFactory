@@ -1,14 +1,8 @@
 use super::WeldPointBlock;
 
 use crate::game::blocks::traits::BlockRender;
-use crate::game::blocks::{BlockModel, BlockModelPart, ModelMaterial, ModelMesh, RenderBehavior, WeldConnectorBehavior};
-use crate::game::world::direction::{Facing};
-
-const MODEL: &[BlockModelPart] = &[BlockModelPart::new(
-    ModelMesh::Small,
-    ModelMaterial::WeldCore,
-    [0.0, 0.0, 0.0],
-)];
+use crate::game::blocks::{BlockModel, RenderBehavior, WeldConnectorBehavior};
+use crate::game::world::direction::Facing;
 
 impl BlockRender for WeldPointBlock {
     fn render_behavior(&self, _facing: Facing) -> RenderBehavior {
@@ -19,6 +13,7 @@ impl BlockRender for WeldPointBlock {
     }
 
     fn model(&self) -> BlockModel {
-        BlockModel::PartsOnly(MODEL)
+        // 只画连接杆，不画中心红点
+        BlockModel::PartsOnly(&[])
     }
 }

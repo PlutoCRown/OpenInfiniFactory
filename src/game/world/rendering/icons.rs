@@ -9,11 +9,15 @@ use super::components::{
 };
 use super::spawn::spawn_block_model;
 use crate::game::blocks::{BlockData, BlockKind, PLAY_BLOCKS, edit_blocks};
-use crate::game::material_blocks::{MaterialBlockRegistry, PaintMaterialRegistry, StampMaterialRegistry};
+use crate::game::material_blocks::{
+    MaterialBlockRegistry, PaintMaterialRegistry, StampMaterialRegistry,
+};
 use crate::game::scene_blocks::{SceneBlockRegistry, load_icon_png};
 use crate::game::world::animation::AnimationTiming;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::render_assets::WorldRenderAssets;
+use crate::game::world::rendering::environment_map_light;
+use crate::shared::save::PuzzleLighting;
 
 /// 工厂等仍走离屏渲染的图标尺寸
 const ICON_TEXTURE_SIZE: u32 = 256;
@@ -35,6 +39,7 @@ pub fn setup_block_icons(
     material_registry: Res<MaterialBlockRegistry>,
     stamp_registry: Res<StampMaterialRegistry>,
     paint_registry: Res<PaintMaterialRegistry>,
+    lighting: Res<PuzzleLighting>,
 ) {
     let icon_layer = RenderLayers::layer(ICON_RENDER_LAYER);
     let mut icon_assets = BlockIconAssets::default();
@@ -123,20 +128,26 @@ pub fn setup_block_icons(
 
     let icon_kinds: Vec<BlockKind> = block_icon_kinds()
         .into_iter()
-        .filter(|kind| !kind.is_scene() && !matches!(kind, BlockKind::Material(_) | BlockKind::Stamp(_)))
+        .filter(|kind| {
+            !kind.is_scene() && !matches!(kind, BlockKind::Material(_) | BlockKind::Stamp(_))
+        })
         .collect();
     let selection_glb = {
         use std::path::PathBuf;
         PathBuf::from(crate::shared::platform::asset_path())
             .join("factory_blocks/selection/model.glb")
     };
-    let selection_handles =
-        crate::game::scene_blocks::load_scene_glb(&selection_glb, &mut meshes, &mut materials, &mut images)
-            .map_err(|err| {
-                bevy::log::warn!("selection icon glb: {err}");
-                err
-            })
-            .ok();
+    let selection_handles = crate::game::scene_blocks::load_scene_glb(
+        &selection_glb,
+        &mut meshes,
+        &mut materials,
+        &mut images,
+    )
+    .map_err(|err| {
+        bevy::log::warn!("selection icon glb: {err}");
+        err
+    })
+    .ok();
     let has_offscreen = !icon_kinds.is_empty() || selection_handles.is_some();
     let selection_origin_index = icon_kinds.len();
 
@@ -190,13 +201,13 @@ pub fn setup_block_icons(
                 },
                 ..OrthographicProjection::default_3d()
             }),
-            Transform::from_translation(origin + ICON_CAMERA_OFFSET)
-                .looking_at(origin, Vec3::Y),
+            Transform::from_translation(origin + ICON_CAMERA_OFFSET).looking_at(origin, Vec3::Y),
             AmbientLight {
                 color: Color::WHITE,
                 brightness: 520.0,
                 ..default()
             },
+            environment_map_light(&mut images, &lighting),
             icon_layer.clone(),
             BlockIconRenderEntity,
             BlockIconRenderRoot,
@@ -243,6 +254,7 @@ pub fn setup_block_icons(
                 brightness: 520.0,
                 ..default()
             },
+            environment_map_light(&mut images, &lighting),
             icon_layer.clone(),
             BlockIconRenderEntity,
             BlockIconRenderRoot,

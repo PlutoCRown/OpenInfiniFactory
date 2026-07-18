@@ -30,17 +30,22 @@ OUT_GLB = OUT_DIR / "model.glb"
 
 CELL = 0.5
 
-# 端面圆形接口：样式对齐 detector，但半径收进线身截面内（无大方板）
-PORT_HOLE_R, PORT_HOLE_D = 0.095, 0.035
-PORT_GOLD_MAJOR, PORT_GOLD_MINOR = 0.118, 0.009
-PORT_OUTER_MAJOR, PORT_OUTER_MINOR = 0.130, 0.007
-PORT_SCREW_R, PORT_SCREW_D = 0.011, 0.012
-PORT_SCREW_OFF = 0.100
+# 端面圆形接口：略外凸，游戏里才能看见金属环（过薄会像橙色平面）
+PORT_HOLE_R, PORT_HOLE_D = 0.085, 0.045
+PORT_GOLD_MAJOR, PORT_GOLD_MINOR = 0.105, 0.018
+PORT_OUTER_MAJOR, PORT_OUTER_MINOR = 0.122, 0.014
+PORT_SCREW_R, PORT_SCREW_D = 0.011, 0.014
+PORT_SCREW_OFF = 0.088
 
-# 橙臂截面 ≈0.30；臂身贴齐格面，两根对接成一根棍
+# 橙臂截面 ≈0.30；臂身从格心贴到格面，两根对接成一根棍
 ARM_W = 0.30
-ARM_Z0 = 0.06
+ARM_Z0 = 0.0  # 接到格心，避免对向臂中间留缝
 ARM_Z1 = CELL  # 0.50 贴齐面，无外凸
+
+# 通电指示条：嵌在四侧纵槽里
+POWER_W = 0.028
+POWER_D = 0.018
+POWER_LEN_RATIO = 0.72
 
 
 def clear_scene() -> None:
@@ -232,9 +237,11 @@ def build_arm_along_pos_z(
     mat_metal: bpy.types.Material,
     mat_gold: bpy.types.Material,
     mat_dark: bpy.types.Material,
-) -> list[bpy.types.Object]:
-    """沿 Blender +Z 的单臂：橙身贴齐格面，端面内嵌圆形接口（不粗于线身）。"""
+    mat_power: bpy.types.Material,
+) -> tuple[list[bpy.types.Object], list[bpy.types.Object]]:
+    """沿 Blender +Z 的单臂：橙身贴齐格面；返回 (外观零件, 通电凹槽条)。"""
     parts: list[bpy.types.Object] = []
+    power_parts: list[bpy.types.Object] = []
     arm_h = ARM_Z1 - ARM_Z0
     arm_z = (ARM_Z0 + ARM_Z1) * 0.5
     oct_r = ARM_W * 0.5 / math.cos(math.radians(22.5))
@@ -258,20 +265,31 @@ def build_arm_along_pos_z(
         apply_transforms(cutter)
         boolean_diff(arm, cutter)
 
+        # 通电白条：坐在槽底，默认由游戏按通电显隐
+        px = math.cos(rad) * (ARM_W * 0.5 - groove_d * 0.55)
+        py = math.sin(rad) * (ARM_W * 0.5 - groove_d * 0.55)
+        glow = mesh_cube(
+            f"Power_{ang}",
+            Vector((POWER_D, POWER_W, arm_h * POWER_LEN_RATIO)),
+            Vector((px, py, arm_z)),
+        )
+        glow.rotation_euler = Euler((0, 0, rad))
+        power_parts.append(finish(glow, mat_power))
+
     # 端面浅凹，给接口留出嵌面
     boolean_diff(
         arm,
         mesh_cylinder(
             "FaceRecess",
-            PORT_OUTER_MAJOR + 0.008,
-            0.04,
-            Vector((0, 0, ARM_Z1 - 0.01)),
+            PORT_OUTER_MAJOR + 0.010,
+            0.05,
+            Vector((0, 0, ARM_Z1 - 0.005)),
         ),
     )
     parts.append(arm)
 
-    # 端面接口：全部落在橙臂端面上，外径不超出线身
-    z_face = ARM_Z1 - 0.018
+    # 端面接口：略探出橙面，避免游戏里只剩橙色平面
+    z_face = ARM_Z1 - 0.008
     parts.append(
         finish(
             mesh_cylinder(
@@ -289,7 +307,7 @@ def build_arm_along_pos_z(
                 "Gold",
                 PORT_GOLD_MAJOR,
                 PORT_GOLD_MINOR,
-                Vector((0, 0, z_face + 0.008)),
+                Vector((0, 0, z_face + 0.012)),
             ),
             mat_gold,
         )
@@ -300,7 +318,7 @@ def build_arm_along_pos_z(
                 "Outer",
                 PORT_OUTER_MAJOR,
                 PORT_OUTER_MINOR,
-                Vector((0, 0, z_face + 0.006)),
+                Vector((0, 0, z_face + 0.010)),
             ),
             mat_metal,
         )
@@ -319,13 +337,13 @@ def build_arm_along_pos_z(
                     f"Screw_{i}",
                     PORT_SCREW_R,
                     PORT_SCREW_D,
-                    Vector((sx, sy, z_face + 0.010)),
+                    Vector((sx, sy, z_face + 0.014)),
                     verts=10,
                 ),
                 mat_dark,
             )
         )
-    return parts
+    return parts, power_parts
 
 
 def rotate_objects(objs: list[bpy.types.Object], rot: Euler) -> None:
@@ -376,12 +394,26 @@ def main() -> None:
     )
     mat_gold = make_mat("Gold", (0.88, 0.68, 0.16, 1.0), metallic=0.95, roughness=0.20)
     mat_dark = make_mat("Dark", (0.04, 0.04, 0.05, 1.0), metallic=0.40, roughness=0.42)
+    mat_power = make_mat("Power", (1.0, 1.0, 1.0, 1.0), metallic=0.0, roughness=0.35)
+    # 自发光：Blender Principled Emission
+    nt = mat_power.node_tree
+    bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    if "Emission Color" in bsdf.inputs:
+        bsdf.inputs["Emission Color"].default_value = (1.0, 1.0, 1.0, 1.0)
+        bsdf.inputs["Emission Strength"].default_value = 4.0
+    elif "Emission" in bsdf.inputs:
+        bsdf.inputs["Emission"].default_value = (1.0, 1.0, 1.0, 1.0)
 
     for name, rot in FACE_ORIENTATIONS:
         print(f"building {name}…", file=sys.stderr)
-        parts = build_arm_along_pos_z(mat_orange, mat_metal, mat_gold, mat_dark)
+        parts, power_parts = build_arm_along_pos_z(
+            mat_orange, mat_metal, mat_gold, mat_dark, mat_power
+        )
         rotate_objects(parts, rot)
+        rotate_objects(power_parts, rot)
         join_objects(name, parts)
+        if power_parts:
+            join_objects(f"{name}_Power", power_parts)
 
     export_glb(OUT_GLB)
     print(f"Wrote {OUT_GLB}", file=sys.stderr)

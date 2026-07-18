@@ -147,6 +147,27 @@ fn expand_wire_connectivity(world: &WorldBlocks, seeds: &HashSet<IVec3>, out: &m
     }
 }
 
+/// 焊接连接器邻格也要重建（焊点常在对角线外，仅扩一圈不够）
+fn expand_weld_connectivity(world: &WorldBlocks, out: &mut HashSet<IVec3>) {
+    let seeds: Vec<IVec3> = out.iter().copied().collect();
+    for pos in seeds {
+        let Some(data) = block_data_at(world, pos) else {
+            continue;
+        };
+        if data
+            .kind
+            .render_behavior(data.facing)
+            .weld_connector
+            .is_none()
+        {
+            continue;
+        }
+        for offset in signal_neighbor_offsets() {
+            out.insert(pos + offset);
+        }
+    }
+}
+
 fn expand_local_neighborhood(positions: &HashSet<IVec3>) -> HashSet<IVec3> {
     let mut expanded = HashSet::new();
     for &pos in positions {
@@ -164,6 +185,7 @@ pub fn collect_edit_refresh_positions(
 ) -> HashSet<IVec3> {
     let mut refresh = expand_local_neighborhood(changed);
     expand_wire_connectivity(world, changed, &mut refresh);
+    expand_weld_connectivity(world, &mut refresh);
     refresh
 }
 
@@ -213,6 +235,7 @@ pub fn collect_sim_refresh_positions(
         }
     }
     expand_wire_connectivity(after, &changed, &mut refresh);
+    expand_weld_connectivity(after, &mut refresh);
     // 空头伸出/收回只改 PusherState 动画，世界格子不变；必须单独纳入刷新
     refresh.extend(output.pusher_animations.keys().copied());
 

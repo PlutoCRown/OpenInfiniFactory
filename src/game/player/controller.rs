@@ -17,8 +17,9 @@ use crate::game::simulation::movement::PusherState;
 use crate::game::state::{GameMode, GameSettings, PlayingUiState};
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::{WorldBlocks, grid_to_world};
-use crate::game::world::rendering::GameplayScene;
+use crate::game::world::rendering::{GameplayScene, environment_map_light};
 use crate::shared::config::GameConfig;
+use crate::shared::save::PuzzleLighting;
 
 pub const EYE_HEIGHT: f32 = 1.7;
 pub const PLAYER_RADIUS: f32 = 0.28;
@@ -52,6 +53,7 @@ pub fn spawn_player(
     mut images: ResMut<Assets<Image>>,
     window: Query<&Window, With<PrimaryWindow>>,
     config: Res<GameConfig>,
+    lighting: Res<PuzzleLighting>,
 ) {
     let (width, height) = window
         .single()
@@ -87,6 +89,7 @@ pub fn spawn_player(
             },
             GameplayCamera,
             GameplayScene,
+            environment_map_light(&mut images, &lighting),
         ))
         .insert((
             Hdr,
