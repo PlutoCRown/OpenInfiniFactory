@@ -20,7 +20,7 @@ pub use panel::{
 };
 pub use scroll::{
     fix_scroll_clip_picking, scroll_container, scroll_content, scroll_dragged,
-    update_scroll_containers, ScrollContent,
+    update_scroll_containers,
 };
 pub use slider::{slider_bundle, slider_fill, slider_knob};
 pub use text::{default_button_size, default_font_size, localized_text, text};

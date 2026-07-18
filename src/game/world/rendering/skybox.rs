@@ -48,7 +48,7 @@ struct SkyUniform {
 
 /// 天空盒自定义材质
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
-pub(crate) struct SkyMaterial {
+pub struct SkyMaterial {
     #[uniform(0)]
     params: SkyUniform,
 }
@@ -129,7 +129,7 @@ fn sync_sky_to_camera(
 }
 
 /// 把配置里的天空盒开关同步到穹顶可见性与相机清屏色
-pub fn sync_skybox_settings(
+fn sync_skybox_settings(
     config: Res<GameConfig>,
     mut sky: Query<&mut Visibility, With<SkyDome>>,
     mut cameras: Query<&mut Camera, With<GameplayCamera>>,

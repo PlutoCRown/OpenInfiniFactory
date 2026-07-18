@@ -92,6 +92,18 @@ pub fn setup_block_icons(
         }
     }
 
+    // 兜底方块：程序化缺失贴图作图标
+    {
+        use crate::game::blocks::{fallback_material_id, fallback_scene_id};
+        let icon = images.add(crate::game::world::procedural_textures::missing_texture_image());
+        icon_assets
+            .icons
+            .insert(BlockKind::Material(fallback_material_id()), icon.clone());
+        icon_assets
+            .icons
+            .insert(BlockKind::Scene(fallback_scene_id()), icon);
+    }
+
     let icon_kinds: Vec<BlockKind> = block_icon_kinds()
         .into_iter()
         .filter(|kind| !kind.is_scene() && !matches!(kind, BlockKind::Material(_) | BlockKind::Stamp(_)))

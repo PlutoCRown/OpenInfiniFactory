@@ -14,14 +14,6 @@ pub enum SaveListColumn {
 }
 
 impl SaveListColumn {
-    pub fn create_action(self) -> Option<SaveListAction> {
-        match self {
-            Self::PuzzleEdit => Some(SaveListAction::NewPuzzle),
-            Self::PuzzlePlay => None,
-            Self::Solution => Some(SaveListAction::NewSolution),
-        }
-    }
-
     pub fn load(self, name: String) -> SaveListAction {
         match self {
             Self::PuzzleEdit | Self::PuzzlePlay => SaveListAction::LoadPuzzle(name),

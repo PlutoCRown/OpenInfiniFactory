@@ -78,6 +78,49 @@ pub fn wood_pixel(x: u32, y: u32) -> [u8; 3] {
     }
 }
 
+/// MC 缺失贴图：洋红 / 黑 2×2 交替
+pub fn missing_texture_pixel(x: u32, y: u32) -> [u8; 3] {
+    let cell = SIZE / 2;
+    if ((x / cell) + (y / cell)) % 2 == 0 {
+        [255, 0, 255]
+    } else {
+        [0, 0, 0]
+    }
+}
+
+/// 缺失贴图 Image（Nearest + Repeat，避免糊成粉灰）
+pub fn missing_texture_image() -> Image {
+    let mut data = Vec::with_capacity((SIZE * SIZE * 4) as usize);
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let [r, g, b] = missing_texture_pixel(x, y);
+            data.extend_from_slice(&[r, g, b, 255]);
+        }
+    }
+    let mut image = Image::new(
+        Extent3d {
+            width: SIZE,
+            height: SIZE,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    );
+    image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+        label: Some("missing_texture".into()),
+        address_mode_u: ImageAddressMode::Repeat,
+        address_mode_v: ImageAddressMode::Repeat,
+        address_mode_w: ImageAddressMode::Repeat,
+        mag_filter: bevy::image::ImageFilterMode::Nearest,
+        min_filter: bevy::image::ImageFilterMode::Nearest,
+        mipmap_filter: bevy::image::ImageFilterMode::Nearest,
+        ..ImageSamplerDescriptor::default()
+    });
+    image
+}
+
 pub fn bordered_wood_pixel(x: u32, y: u32) -> [u8; 3] {
     let border = SIZE / 8;
     if x < border || y < border || x >= SIZE - border || y >= SIZE - border {

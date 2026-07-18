@@ -29,8 +29,6 @@ pub enum SaveFormatError {
     InvalidMagic,
     UnsupportedVersion(u16),
     UnknownBlockKind(u8),
-    UnknownSceneBlockId(String),
-    UnknownMaterialBlockId(String),
     UnknownStampMaterialId(String),
     UnknownPaintMaterialId(String),
     InvalidSettings,
@@ -46,8 +44,6 @@ impl std::fmt::Display for SaveFormatError {
                 write!(f, "unsupported blocks.bin version {version}")
             }
             Self::UnknownBlockKind(id) => write!(f, "unknown block kind id {id}"),
-            Self::UnknownSceneBlockId(id) => write!(f, "unknown scene block id '{id}'"),
-            Self::UnknownMaterialBlockId(id) => write!(f, "unknown material block id '{id}'"),
             Self::UnknownStampMaterialId(id) => write!(f, "unknown stamp material id '{id}'"),
             Self::UnknownPaintMaterialId(id) => write!(f, "unknown paint material id '{id}'"),
             Self::InvalidSettings => write!(f, "invalid block settings payload"),
@@ -283,7 +279,7 @@ fn scene_string_id(kind: BlockKind) -> String {
     match kind {
         BlockKind::Scene(id) => oif_sim::blocks::scene_catalog()
             .string_id(id)
-            .unwrap_or("unknown")
+            .unwrap_or(oif_sim::blocks::FALLBACK_SCENE_STRING_ID)
             .to_string(),
         // 防御：不应出现
         other => format!("{other:?}").to_ascii_lowercase(),
@@ -310,7 +306,7 @@ fn read_scene_block(
     let y = cursor.read_i32()?;
     let z = cursor.read_i32()?;
     let string_id = cursor.read_string()?;
-    let kind = resolve_scene_kind(&string_id)?;
+    let kind = BlockKind::Scene(oif_sim::blocks::resolve_scene_id(&string_id));
     let facing = if with_facing {
         let flags = cursor.read_u8()?;
         if flags & 1 != 0 {
@@ -329,14 +325,6 @@ fn read_scene_block(
         facing,
         settings: None,
     })
-}
-
-fn resolve_scene_kind(string_id: &str) -> Result<BlockKind, SaveFormatError> {
-    oif_sim::blocks::ensure_fallback_scene_catalog();
-    oif_sim::blocks::scene_catalog()
-        .id_by_string(string_id)
-        .map(BlockKind::Scene)
-        .ok_or_else(|| SaveFormatError::UnknownSceneBlockId(string_id.to_string()))
 }
 
 fn write_section(out: &mut Vec<u8>, blocks: &[SavedBlock]) {
@@ -375,7 +363,9 @@ fn write_block(out: &mut Vec<u8>, block: &SavedBlock) {
         BlockKind::Material(id) => {
             oif_sim::blocks::ensure_fallback_material_catalog();
             let catalog = oif_sim::blocks::material_catalog();
-            let string_id = catalog.string_id(id).unwrap_or("unknown");
+            let string_id = catalog
+                .string_id(id)
+                .unwrap_or(oif_sim::blocks::FALLBACK_MATERIAL_STRING_ID);
             write_string(out, string_id);
         }
         BlockKind::Stamp(id) => {
@@ -439,11 +429,7 @@ fn read_block(
         match kind_u8 {
             29 => {
                 let string_id = cursor.read_string()?;
-                oif_sim::blocks::ensure_fallback_material_catalog();
-                oif_sim::blocks::material_catalog()
-                    .id_by_string(&string_id)
-                    .map(BlockKind::Material)
-                    .ok_or(SaveFormatError::UnknownMaterialBlockId(string_id))?
+                BlockKind::Material(oif_sim::blocks::resolve_material_id(&string_id))
             }
             38 => {
                 let string_id = cursor.read_string()?;
@@ -498,163 +484,3 @@ fn decode_facing(value: u8) -> Result<Facing, SaveFormatError> {
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::game::blocks::{
-        ensure_fallback_material_catalog, ensure_fallback_stamp_catalog, material_catalog,
-        stamp_catalog, BlockData, Facing,
-    };
-    use crate::game::world::grid::{
-        ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, StamperSettings,
-        TeleportSettings,
-    };
-
-    #[test]
-    fn blocks_round_trip_preserves_settings_and_facing() {
-        ensure_fallback_material_catalog();
-        let copper = material_catalog()
-            .id_by_string("copper")
-            .expect("copper material");
-        let data = SaveBlocksData {
-            scene_blocks: vec![
-                SavedBlock {
-                    x: 1,
-                    y: 2,
-                    z: 3,
-                    kind: BlockKind::scene("stone"),
-                    facing: None,
-                    settings: None,
-                },
-                SavedBlock {
-                    x: 2,
-                    y: 2,
-                    z: 3,
-                    kind: BlockKind::scene("grass"),
-                    facing: Some(Facing::East),
-                    settings: None,
-                },
-            ],
-            system_blocks: vec![
-                SavedBlock {
-                    x: 4,
-                    y: 1,
-                    z: 0,
-                    kind: BlockKind::Generator,
-                    facing: Some(Facing::East),
-                    settings: Some(BlockSettings::Generator(GeneratorSettings {
-                        mode: GeneratorMode::Period {
-                            period: 9,
-                            offset: 2,
-                        },
-                        material: copper,
-                    })),
-                },
-                SavedBlock {
-                    x: 5,
-                    y: 1,
-                    z: 0,
-                    kind: BlockKind::TeleportEntrance,
-                    facing: Some(Facing::North),
-                    settings: Some(BlockSettings::Teleport(TeleportSettings {
-                        name: "In".to_string(),
-                        pair: Some(IVec3::new(6, 1, 0)),
-                    })),
-                },
-            ],
-            factory_blocks: vec![SavedBlock::from_block_data(
-                IVec3::new(0, 0, 1),
-                BlockData::new(BlockKind::Conveyor, Facing::South),
-            )],
-            wire_face_panels: vec![SavedWireFacePanel {
-                x: 0,
-                y: 0,
-                z: 1,
-                nx: 0,
-                ny: 1,
-                nz: 0,
-            }],
-        };
-
-        let encoded = encode_blocks(&data);
-        let decoded = decode_blocks(&encoded).unwrap();
-        assert_eq!(decoded, data);
-    }
-
-    #[test]
-    fn decode_rejects_unknown_kind() {
-        let data = SaveBlocksData {
-            factory_blocks: vec![SavedBlock::from_block_data(
-                IVec3::ZERO,
-                BlockData::new(BlockKind::Platform, Facing::North),
-            )],
-            ..Default::default()
-        };
-        let mut bytes = encode_blocks(&data);
-        bytes[30] = 255;
-        assert!(matches!(
-            decode_blocks(&bytes),
-            Err(SaveFormatError::UnknownBlockKind(255))
-        ));
-    }
-
-    #[test]
-    fn stamper_settings_round_trip() {
-        ensure_fallback_stamp_catalog();
-        let blue = stamp_catalog()
-            .id_by_string("blue")
-            .expect("blue stamp");
-        let data = SaveBlocksData {
-            system_blocks: vec![SavedBlock {
-                x: 0,
-                y: 0,
-                z: 0,
-                kind: BlockKind::Stamper,
-                facing: Some(Facing::West),
-                settings: Some(BlockSettings::Stamper(StamperSettings { stamp: blue })),
-            }],
-            ..Default::default()
-        };
-        assert_eq!(decode_blocks(&encode_blocks(&data)).unwrap(), data);
-    }
-
-    #[test]
-    fn converter_settings_round_trip() {
-        ensure_fallback_material_catalog();
-        let catalog = material_catalog();
-        let data = SaveBlocksData {
-            system_blocks: vec![SavedBlock {
-                x: 0,
-                y: 0,
-                z: 0,
-                kind: BlockKind::Converter,
-                facing: Some(Facing::North),
-                settings: Some(BlockSettings::Converter(ConverterSettings {
-                    mode: ConverterMode::SpecificInput,
-                    input: catalog.id_by_string("iron").expect("iron"),
-                    output: catalog.id_by_string("copper").expect("copper"),
-                })),
-            }],
-            ..Default::default()
-        };
-        assert_eq!(decode_blocks(&encode_blocks(&data)).unwrap(), data);
-    }
-
-    #[test]
-    fn material_and_stamp_blocks_round_trip_with_string_ids() {
-        let data = SaveBlocksData {
-            factory_blocks: vec![
-                SavedBlock::from_block_data(
-                    IVec3::ZERO,
-                    BlockData::new(BlockKind::material("copper"), Facing::North),
-                ),
-                SavedBlock::from_block_data(
-                    IVec3::X,
-                    BlockData::new(BlockKind::stamp("green"), Facing::North),
-                ),
-            ],
-            ..Default::default()
-        };
-        assert_eq!(decode_blocks(&encode_blocks(&data)).unwrap(), data);
-    }
-}

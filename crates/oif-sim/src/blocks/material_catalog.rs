@@ -1,12 +1,15 @@
 //! 材料方块运行时目录：字符串 id ↔ MaterialBlockId，以及 connectable/fragile 等模拟元数据
 
 use std::collections::HashMap;
-use std::sync::{LazyLock, Once, RwLock};
+use std::sync::{LazyLock, RwLock};
 
 use serde::{Deserialize, Serialize};
 
 use super::scene_catalog::leak_str;
 use super::{ColorSpec, rgb};
+
+/// 找不到资源包时使用的兜底材料 string id
+pub const FALLBACK_MATERIAL_STRING_ID: &str = "fallback";
 
 /// 材料方块句柄（会话内稳定；存档存字符串 id，不依赖固定编号）
 #[derive(
@@ -57,6 +60,19 @@ impl MaterialBlockCatalog {
         self.by_string.get(string_id).copied()
     }
 
+    /// 解析 string id；未知则返回兜底材料
+    pub fn resolve_id(&self, string_id: &str) -> MaterialBlockId {
+        self.id_by_string(string_id)
+            .unwrap_or_else(|| self.fallback_id())
+    }
+
+    /// 目录内兜底材料（必存在）
+    pub fn fallback_id(&self) -> MaterialBlockId {
+        self.id_by_string(FALLBACK_MATERIAL_STRING_ID)
+            .or_else(|| self.defs.first().map(|_| MaterialBlockId(0)))
+            .expect("material catalog must contain fallback")
+    }
+
     pub fn string_id(&self, id: MaterialBlockId) -> Option<&str> {
         self.defs.get(id.0 as usize).map(|d| d.string_id.as_str())
     }
@@ -86,10 +102,29 @@ impl MaterialBlockCatalog {
 static CATALOG: LazyLock<RwLock<MaterialBlockCatalog>> =
     LazyLock::new(|| RwLock::new(MaterialBlockCatalog::new()));
 
-static FALLBACK_ONCE: Once = Once::new();
+/// 确保目录里有兜底材料（外观由渲染层棋盘贴图负责）
+fn ensure_fallback_entry(catalog: &mut MaterialBlockCatalog) {
+    if catalog.id_by_string(FALLBACK_MATERIAL_STRING_ID).is_some() {
+        return;
+    }
+    catalog
+        .register(MaterialBlockDef {
+            string_id: FALLBACK_MATERIAL_STRING_ID.to_string(),
+            name_key: leak_str("block.fallback"),
+            short_name_key: leak_str("short.fallback"),
+            description_key: leak_str("desc.fallback"),
+            connectable: [true; 6],
+            fragile: false,
+            directional: false,
+            // UI 无贴图时的色块提示（洋红）
+            color: rgb(1.0, 0.0, 1.0),
+        })
+        .expect("fallback material id unique");
+}
 
-/// 安装/替换全局材料目录（游戏加载资源包时调用）
-pub fn install_material_catalog(catalog: MaterialBlockCatalog) {
+/// 安装/替换全局材料目录；保证兜底材料存在
+pub fn install_material_catalog(mut catalog: MaterialBlockCatalog) {
+    ensure_fallback_entry(&mut catalog);
     *CATALOG.write().expect("material catalog lock") = catalog;
 }
 
@@ -99,88 +134,35 @@ pub fn material_catalog() -> MaterialBlockCatalog {
     CATALOG.read().expect("material catalog lock").clone()
 }
 
-/// 按 id 查定义（无则 panic，用于已解析的 BlockKind::Material）
-pub fn material_def(id: MaterialBlockId) -> MaterialBlockDef {
-    ensure_fallback_material_catalog();
-    CATALOG
-        .read()
-        .expect("material catalog lock")
-        .get(id)
-        .cloned()
-        .unwrap_or_else(|| panic!("unknown MaterialBlockId {}", id.0))
+/// 当前兜底材料 id
+pub fn fallback_material_id() -> MaterialBlockId {
+    material_catalog().fallback_id()
 }
 
-/// 无资源包时的兜底（单测 / wasm）：注册最小可玩集合，编号不保证跨会话稳定
+/// 按 string id 解析；未知 → 兜底
+pub fn resolve_material_id(string_id: &str) -> MaterialBlockId {
+    material_catalog().resolve_id(string_id)
+}
+/// 按 id 查定义；未知 id → 兜底定义
+pub fn material_def(id: MaterialBlockId) -> MaterialBlockDef {
+    ensure_fallback_material_catalog();
+    let catalog = CATALOG.read().expect("material catalog lock");
+    catalog
+        .get(id)
+        .cloned()
+        .unwrap_or_else(|| catalog.get(catalog.fallback_id()).cloned().expect("fallback def"))
+}
+
+/// 确保兜底材料已注册
 pub fn ensure_fallback_material_catalog() {
-    FALLBACK_ONCE.call_once(|| {
-        let mut catalog = CATALOG.write().expect("material catalog lock");
-        if !catalog.is_empty() {
-            return;
-        }
-        let entries: [(&str, bool, ColorSpec); 10] = [
-            (
-                "basic",
-                false,
-                rgb(214.0 / 255.0, 186.0 / 255.0, 118.0 / 255.0),
-            ),
-            (
-                "iron",
-                false,
-                rgb(160.0 / 255.0, 168.0 / 255.0, 176.0 / 255.0),
-            ),
-            (
-                "copper",
-                false,
-                rgb(200.0 / 255.0, 110.0 / 255.0, 58.0 / 255.0),
-            ),
-            (
-                "glass_material",
-                true,
-                rgb(168.0 / 255.0, 214.0 / 255.0, 228.0 / 255.0),
-            ),
-            (
-                "gold",
-                false,
-                rgb(232.0 / 255.0, 190.0 / 255.0, 70.0 / 255.0),
-            ),
-            (
-                "aluminum",
-                false,
-                rgb(200.0 / 255.0, 208.0 / 255.0, 216.0 / 255.0),
-            ),
-            (
-                "wood",
-                false,
-                rgb(150.0 / 255.0, 95.0 / 255.0, 48.0 / 255.0),
-            ),
-            (
-                "granite",
-                false,
-                rgb(140.0 / 255.0, 142.0 / 255.0, 148.0 / 255.0),
-            ),
-            ("coal", false, rgb(36.0 / 255.0, 36.0 / 255.0, 40.0 / 255.0)),
-            (
-                "crystal",
-                true,
-                rgb(140.0 / 255.0, 120.0 / 255.0, 220.0 / 255.0),
-            ),
-        ];
-        for (string_id, fragile, color) in entries {
-            let name_key = leak_str(&format!("block.{string_id}"));
-            let short_name_key = leak_str(&format!("short.{string_id}"));
-            let description_key = leak_str(&format!("desc.{string_id}"));
-            catalog
-                .register(MaterialBlockDef {
-                    string_id: string_id.to_string(),
-                    name_key,
-                    short_name_key,
-                    description_key,
-                    connectable: [true; 6],
-                    fragile,
-                    directional: false,
-                    color,
-                })
-                .expect("fallback material id unique");
-        }
-    });
+    if CATALOG
+        .read()
+        .expect("material catalog lock")
+        .id_by_string(FALLBACK_MATERIAL_STRING_ID)
+        .is_some()
+    {
+        return;
+    }
+    let mut catalog = CATALOG.write().expect("material catalog lock");
+    ensure_fallback_entry(&mut catalog);
 }

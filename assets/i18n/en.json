@@ -429,5 +429,8 @@
   "virtual.short.sim_pause": "Pause",
   "virtual.short.sim_step": "Step",
   "virtual.short.simulate": "Sim",
-  "virtual.sim_pause": "Pause Sim"
+  "virtual.sim_pause": "Pause Sim",
+  "block.fallback": "Unknown Block",
+  "short.fallback": "Unknown",
+  "desc.fallback": "Fallback used when a material or scene pack is missing"
 }

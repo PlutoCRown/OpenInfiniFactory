@@ -1,14 +1,19 @@
 //! 场景方块运行时目录：字符串 id ↔ SceneBlockId，以及碰撞/connectable 等模拟元数据
 
 use std::collections::HashMap;
-use std::sync::{LazyLock, Once, RwLock};
+use std::sync::{LazyLock, RwLock};
 
 use serde::{Deserialize, Serialize};
 
-use super::{rgb, ColorSpec};
+use super::{ColorSpec, rgb};
+
+/// 找不到资源包时使用的兜底场景方块 string id
+pub const FALLBACK_SCENE_STRING_ID: &str = "fallback";
 
 /// 场景方块句柄（会话内稳定；存档存字符串 id，不依赖固定编号）
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize,
+)]
 pub struct SceneBlockId(pub u16);
 
 /// 单种场景方块的模拟侧定义
@@ -54,6 +59,19 @@ impl SceneBlockCatalog {
         self.by_string.get(string_id).copied()
     }
 
+    /// 解析 string id；未知则返回兜底场景方块
+    pub fn resolve_id(&self, string_id: &str) -> SceneBlockId {
+        self.id_by_string(string_id)
+            .unwrap_or_else(|| self.fallback_id())
+    }
+
+    /// 目录内兜底场景方块（必存在）
+    pub fn fallback_id(&self) -> SceneBlockId {
+        self.id_by_string(FALLBACK_SCENE_STRING_ID)
+            .or_else(|| self.defs.first().map(|_| SceneBlockId(0)))
+            .expect("scene catalog must contain fallback")
+    }
+
     pub fn string_id(&self, id: SceneBlockId) -> Option<&str> {
         self.defs.get(id.0 as usize).map(|d| d.string_id.as_str())
     }
@@ -83,10 +101,29 @@ impl SceneBlockCatalog {
 static CATALOG: LazyLock<RwLock<SceneBlockCatalog>> =
     LazyLock::new(|| RwLock::new(SceneBlockCatalog::new()));
 
-static FALLBACK_ONCE: Once = Once::new();
+/// 确保目录里有醒目的兜底场景方块
+fn ensure_fallback_entry(catalog: &mut SceneBlockCatalog) {
+    if catalog.id_by_string(FALLBACK_SCENE_STRING_ID).is_some() {
+        return;
+    }
+    catalog
+        .register(SceneBlockDef {
+            string_id: FALLBACK_SCENE_STRING_ID.to_string(),
+            name_key: leak_str("block.fallback"),
+            short_name_key: leak_str("short.fallback"),
+            description_key: leak_str("desc.fallback"),
+            collision: true,
+            connectable: [true; 6],
+            directional: false,
+            // UI 无贴图时的色块提示（洋红）
+            color: rgb(1.0, 0.0, 1.0),
+        })
+        .expect("fallback scene id unique");
+}
 
-/// 安装/替换全局场景目录（游戏加载资源包时调用）
-pub fn install_scene_catalog(catalog: SceneBlockCatalog) {
+/// 安装/替换全局场景目录；保证兜底方块存在
+pub fn install_scene_catalog(mut catalog: SceneBlockCatalog) {
+    ensure_fallback_entry(&mut catalog);
     *CATALOG.write().expect("scene catalog lock") = catalog;
 }
 
@@ -96,42 +133,40 @@ pub fn scene_catalog() -> SceneBlockCatalog {
     CATALOG.read().expect("scene catalog lock").clone()
 }
 
-/// 按 id 查定义（无则 panic，用于已解析的 BlockKind::Scene）
-pub fn scene_def(id: SceneBlockId) -> SceneBlockDef {
-    ensure_fallback_scene_catalog();
-    CATALOG
-        .read()
-        .expect("scene catalog lock")
-        .get(id)
-        .cloned()
-        .unwrap_or_else(|| panic!("unknown SceneBlockId {}", id.0))
+/// 当前兜底场景方块 id
+pub fn fallback_scene_id() -> SceneBlockId {
+    scene_catalog().fallback_id()
 }
 
-/// 无资源包时的兜底（单测 / wasm）：注册最小可玩集合，编号不保证跨会话稳定
+/// 按 string id 解析；未知 → 兜底
+pub fn resolve_scene_id(string_id: &str) -> SceneBlockId {
+    scene_catalog().resolve_id(string_id)
+}
+
+/// 按 id 查定义；未知 id → 兜底定义
+pub fn scene_def(id: SceneBlockId) -> SceneBlockDef {
+    ensure_fallback_scene_catalog();
+    let catalog = CATALOG.read().expect("scene catalog lock");
+    catalog.get(id).cloned().unwrap_or_else(|| {
+        catalog
+            .get(catalog.fallback_id())
+            .cloned()
+            .expect("fallback def")
+    })
+}
+
+/// 确保兜底场景方块已注册
 pub fn ensure_fallback_scene_catalog() {
-    FALLBACK_ONCE.call_once(|| {
-        let mut catalog = CATALOG.write().expect("scene catalog lock");
-        if !catalog.is_empty() {
-            return;
-        }
-        for string_id in ["grass", "stone", "dirt", "planks"] {
-            let name_key = leak_str(&format!("block.{string_id}"));
-            let short_name_key = leak_str(&format!("short.{string_id}"));
-            let description_key = leak_str(&format!("desc.{string_id}"));
-            catalog
-                .register(SceneBlockDef {
-                    string_id: string_id.to_string(),
-                    name_key,
-                    short_name_key,
-                    description_key,
-                    collision: true,
-                    connectable: [true; 6],
-                    directional: false,
-                    color: rgb(0.55, 0.55, 0.55),
-                })
-                .expect("fallback scene id unique");
-        }
-    });
+    if CATALOG
+        .read()
+        .expect("scene catalog lock")
+        .id_by_string(FALLBACK_SCENE_STRING_ID)
+        .is_some()
+    {
+        return;
+    }
+    let mut catalog = CATALOG.write().expect("scene catalog lock");
+    ensure_fallback_entry(&mut catalog);
 }
 
 /// 把字符串泄漏为 `'static`（资源包 id / i18n key）

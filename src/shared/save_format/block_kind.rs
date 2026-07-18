@@ -6,17 +6,9 @@ use super::SaveFormatError;
 pub fn encode_kind(kind: BlockKind) -> u8 {
     match kind {
         BlockKind::Platform => 0,
-        // 场景方块 v3 走字符串段；此处仅兼容旧 u8 表里的四种
-        BlockKind::Scene(id) => match oif_sim::blocks::scene_catalog().string_id(id) {
-            Some("grass") => 1,
-            Some("stone") => 2,
-            Some("dirt") => 3,
-            Some("planks") => 4,
-            other => panic!(
-                "encode_kind: scene block {:?} must use string id section",
-                other
-            ),
-        },
+        BlockKind::Scene(_) => {
+            panic!("encode_kind: scene blocks must use the string id section")
+        }
         BlockKind::Generator => 5,
         BlockKind::Welder => 6,
         BlockKind::DownWelder => 7,
@@ -43,7 +35,7 @@ pub fn encode_kind(kind: BlockKind) -> u8 {
         BlockKind::TeleportEntrance => 26,
         BlockKind::TeleportExit => 27,
         BlockKind::Goal => 28,
-        // v5：种类标记后跟字符串 id；旧档无字符串时由 decode_kind 映射固定材料
+        // 种类标记后跟字符串 id
         BlockKind::Material(_) => 29,
         BlockKind::Stamp(_) => 38,
         BlockKind::WeldPoint => 32,
@@ -53,14 +45,12 @@ pub fn encode_kind(kind: BlockKind) -> u8 {
     }
 }
 
-/// 解码非 Material/Stamp 的固定种类；v4 及以下材料/印花映射到默认字符串 id
+/// 解码非 Material/Stamp 的固定种类；旧档场景/材料数字一律落到兜底
 pub fn decode_kind(id: u8) -> Result<BlockKind, SaveFormatError> {
     Ok(match id {
         0 => BlockKind::Platform,
-        1 => BlockKind::scene("grass"),
-        2 => BlockKind::scene("stone"),
-        3 => BlockKind::scene("dirt"),
-        4 => BlockKind::scene("planks"),
+        // 旧场景数字 id → 兜底
+        1 | 2 | 3 | 4 => BlockKind::Scene(oif_sim::blocks::fallback_scene_id()),
         5 => BlockKind::Generator,
         6 => BlockKind::Welder,
         7 => BlockKind::DownWelder,
@@ -85,13 +75,11 @@ pub fn decode_kind(id: u8) -> Result<BlockKind, SaveFormatError> {
         26 => BlockKind::TeleportEntrance,
         27 => BlockKind::TeleportExit,
         28 => BlockKind::Goal,
-        29 => BlockKind::material("basic"),
-        30 => BlockKind::material("iron"),
-        31 => BlockKind::material("copper"),
+        // 旧材料数字 id → 兜底（v5 会再读字符串覆盖）
+        29 | 30 | 31 | 35 => BlockKind::Material(oif_sim::blocks::fallback_material_id()),
         32 => BlockKind::WeldPoint,
         33 => BlockKind::DrillHead,
         34 => BlockKind::SuctionCup,
-        35 => BlockKind::material("glass_material"),
         36 => BlockKind::RollerBody,
         37 => BlockKind::StamperBody,
         38 => BlockKind::stamp("red"),

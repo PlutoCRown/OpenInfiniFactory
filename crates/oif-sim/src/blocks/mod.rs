@@ -45,8 +45,9 @@ use glam::IVec3;
 use serde::{Deserialize, Serialize};
 
 pub use self::material_catalog::{
-    ensure_fallback_material_catalog, install_material_catalog, material_catalog, material_def,
-    MaterialBlockCatalog, MaterialBlockDef, MaterialBlockId,
+    ensure_fallback_material_catalog, fallback_material_id, install_material_catalog,
+    material_catalog, material_def, resolve_material_id, MaterialBlockCatalog, MaterialBlockDef,
+    MaterialBlockId, FALLBACK_MATERIAL_STRING_ID,
 };
 pub use self::material_props::{
     local_face_index, material_face_connectable, MaterialProps,
@@ -57,8 +58,9 @@ pub use self::paint_catalog::{
 };
 pub use self::registry::{assert_registry_consistent, save_stores_facing};
 pub use self::scene_catalog::{
-    ensure_fallback_scene_catalog, install_scene_catalog, leak_str, scene_catalog, scene_def,
-    SceneBlockCatalog, SceneBlockDef, SceneBlockId,
+    ensure_fallback_scene_catalog, fallback_scene_id, install_scene_catalog, leak_str,
+    resolve_scene_id, scene_catalog, scene_def, SceneBlockCatalog, SceneBlockDef, SceneBlockId,
+    FALLBACK_SCENE_STRING_ID,
 };
 pub use self::stamp_catalog::{
     ensure_fallback_stamp_catalog, install_stamp_catalog, stamp_catalog, stamp_def,
@@ -516,22 +518,14 @@ pub enum BlockKind {
 }
 
 impl BlockKind {
-    /// 按资源包字符串 id 解析场景方块（依赖已安装的 catalog）
+    /// 按资源包字符串 id 解析场景方块（未知 → 兜底）
     pub fn scene(string_id: &str) -> Self {
-        ensure_fallback_scene_catalog();
-        let id = scene_catalog()
-            .id_by_string(string_id)
-            .unwrap_or_else(|| panic!("unknown scene block id `{string_id}`"));
-        Self::Scene(id)
+        Self::Scene(resolve_scene_id(string_id))
     }
 
-    /// 按资源包字符串 id 解析材料方块
+    /// 按资源包字符串 id 解析材料方块（未知 → 兜底）
     pub fn material(string_id: &str) -> Self {
-        ensure_fallback_material_catalog();
-        let id = material_catalog()
-            .id_by_string(string_id)
-            .unwrap_or_else(|| panic!("unknown material block id `{string_id}`"));
-        Self::Material(id)
+        Self::Material(resolve_material_id(string_id))
     }
 
     /// 按资源包字符串 id 解析印花材料

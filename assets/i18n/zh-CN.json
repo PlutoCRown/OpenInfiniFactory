@@ -429,5 +429,8 @@
   "virtual.short.sim_pause": "暂停",
   "virtual.short.sim_step": "单步",
   "virtual.short.simulate": "模拟",
-  "virtual.sim_pause": "暂停模拟"
+  "virtual.sim_pause": "暂停模拟",
+  "block.fallback": "未知方块",
+  "short.fallback": "未知",
+  "desc.fallback": "找不到对应资源时的兜底方块"
 }

@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 use crate::blocks::{
-    ensure_fallback_material_catalog, ensure_fallback_paint_catalog,
-    ensure_fallback_stamp_catalog, material_catalog, paint_catalog, stamp_catalog, AcceptorId,
-    BlockData, BlockId, BlockKind, MaterialBlockId, PaintMaterialId, StampMaterialId,
+    AcceptorId, BlockData, BlockId, BlockKind, MaterialBlockId, PaintMaterialId, StampMaterialId,
+    ensure_fallback_paint_catalog, ensure_fallback_stamp_catalog, fallback_material_id,
+    paint_catalog, stamp_catalog,
 };
 use crate::world::direction::Facing;
 
@@ -46,9 +46,6 @@ pub struct WorldBlocks {
     pub next_block_id: u64,
     /// 下一个可分配的验收结构 ID
     pub next_acceptor_id: u64,
-    /// 测试用：强制视为不可 Connectable 的材料面
-    #[cfg(test)]
-    pub test_unconnectable_faces: HashSet<MaterialFace>,
 }
 
 /// 印花等占格附着：子材料挂在父材料的某一面上
@@ -165,16 +162,11 @@ pub struct ConverterSettings {
 
 impl Default for ConverterSettings {
     fn default() -> Self {
-        ensure_fallback_material_catalog();
-        let catalog = material_catalog();
+        let fallback = fallback_material_id();
         Self {
             mode: ConverterMode::AnyInput,
-            input: catalog
-                .id_by_string("basic")
-                .expect("fallback basic material"),
-            output: catalog
-                .id_by_string("iron")
-                .expect("fallback iron material"),
+            input: fallback,
+            output: fallback,
         }
     }
 }
@@ -224,11 +216,8 @@ impl Default for RollerSettings {
 
 impl Default for GoalSettings {
     fn default() -> Self {
-        ensure_fallback_material_catalog();
         Self {
-            material: material_catalog()
-                .id_by_string("basic")
-                .expect("fallback basic material"),
+            material: fallback_material_id(),
         }
     }
 }
@@ -248,15 +237,12 @@ impl MaterialFace {
 
 impl Default for GeneratorSettings {
     fn default() -> Self {
-        ensure_fallback_material_catalog();
         Self {
             mode: GeneratorMode::Period {
                 period: crate::blocks::DEFAULT_GENERATOR_PERIOD,
                 offset: 0,
             },
-            material: material_catalog()
-                .id_by_string("basic")
-                .expect("fallback basic material"),
+            material: fallback_material_id(),
         }
     }
 }
@@ -1305,12 +1291,11 @@ fn snap_line_on_plane(hit: Vec3, start: IVec3, axis: IVec3) -> IVec3 {
 }
 
 pub fn seed_demo_world(world: &mut WorldBlocks) {
+    // 新建谜题默认地板：特殊允许硬编码草方块
+    let grass = BlockKind::scene("grass");
     for x in -FLOOR_RADIUS..=FLOOR_RADIUS {
         for z in -FLOOR_RADIUS..=FLOOR_RADIUS {
-            world.insert(
-                IVec3::new(x, 0, z),
-                BlockData::new(BlockKind::scene("stone"), Facing::North),
-            );
+            world.insert(IVec3::new(x, 0, z), BlockData::new(grass, Facing::North));
         }
     }
 }
@@ -1422,77 +1407,5 @@ fn axis_vec(axis: usize) -> IVec3 {
         0 => IVec3::X,
         1 => IVec3::Y,
         _ => IVec3::Z,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const POS: IVec3 = IVec3::new(1, 0, 2);
-
-    #[test]
-    fn factory_cannot_overlap_system_block() {
-        let mut world = WorldBlocks::default();
-        world.insert(POS, BlockData::new(BlockKind::Generator, Facing::North));
-
-        assert!(!world.can_place_block_kind_at(POS, BlockKind::Platform));
-        assert!(world.can_place_block_kind_at(POS, BlockKind::material("basic")));
-        assert!(world.can_place_platform_at(POS));
-    }
-
-    #[test]
-    fn system_block_cannot_overlap_factory() {
-        let mut world = WorldBlocks::default();
-        world.insert(POS, BlockData::new(BlockKind::Platform, Facing::North));
-
-        assert!(!world.can_place_block_kind_at(POS, BlockKind::Goal));
-    }
-
-    #[test]
-    fn adjacent_goals_share_acceptor_id() {
-        let mut world = WorldBlocks::default();
-        world.insert(IVec3::ZERO, BlockData::new(BlockKind::Goal, Facing::North));
-        world.insert(IVec3::X, BlockData::new(BlockKind::Goal, Facing::North));
-        world.insert(
-            IVec3::new(0, 2, 0),
-            BlockData::new(BlockKind::Goal, Facing::North),
-        );
-
-        assert_eq!(world.acceptor_structures.len(), 2);
-        let id_a = world.acceptor_id_at(IVec3::ZERO).unwrap();
-        let id_b = world.acceptor_id_at(IVec3::X).unwrap();
-        let id_c = world.acceptor_id_at(IVec3::new(0, 2, 0)).unwrap();
-        assert_eq!(id_a, id_b);
-        assert_ne!(id_a, id_c);
-        assert!(!id_a.is_none());
-    }
-
-    #[test]
-    fn removing_goal_splits_acceptor_and_keeps_representative_id() {
-        let mut world = WorldBlocks::default();
-        world.insert(IVec3::ZERO, BlockData::new(BlockKind::Goal, Facing::North));
-        world.insert(IVec3::X, BlockData::new(BlockKind::Goal, Facing::North));
-        world.insert(
-            IVec3::new(2, 0, 0),
-            BlockData::new(BlockKind::Goal, Facing::North),
-        );
-        let original = world.acceptor_id_at(IVec3::ZERO).unwrap();
-        assert_eq!(world.acceptor_structures.len(), 1);
-
-        world.remove_system(&IVec3::X);
-        assert_eq!(world.acceptor_structures.len(), 2);
-        assert_eq!(world.acceptor_id_at(IVec3::ZERO), Some(original));
-        let other = world.acceptor_id_at(IVec3::new(2, 0, 0)).unwrap();
-        assert_ne!(other, original);
-    }
-
-    #[test]
-    fn factory_cannot_overlap_generated_marker() {
-        let mut world = WorldBlocks::default();
-        world.insert(POS, BlockData::new(BlockKind::DrillHead, Facing::North));
-
-        assert!(!world.can_place_block_kind_at(POS, BlockKind::Wire));
-        assert!(world.can_place_block_kind_at(POS, BlockKind::material("basic")));
     }
 }

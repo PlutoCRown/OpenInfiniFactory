@@ -190,6 +190,34 @@ impl WorldRenderAssets {
                 &mut preview_materials,
             );
         }
+        // 兜底场景/材料：MC 式洋红黑棋盘（不进 all_blocks，需显式注册）
+        {
+            use crate::game::blocks::{fallback_material_id, fallback_scene_id};
+            let texture = images.add(crate::game::world::procedural_textures::missing_texture_image());
+            let material = materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(texture.clone()),
+                perceptual_roughness: 0.94,
+                reflectance: 0.10,
+                ..default()
+            });
+            let preview = materials.add(StandardMaterial {
+                base_color: Color::WHITE.with_alpha(0.46),
+                base_color_texture: Some(texture),
+                alpha_mode: AlphaMode::Blend,
+                perceptual_roughness: 0.94,
+                reflectance: 0.08,
+                ..default()
+            });
+            for kind in [
+                BlockKind::Material(fallback_material_id()),
+                BlockKind::Scene(fallback_scene_id()),
+            ] {
+                scene_block_materials.insert(kind, material.clone());
+                block_materials.insert(kind, material.clone());
+                preview_materials.insert(kind, preview.clone());
+            }
+        }
         let face_mark_materials = paint_catalog()
             .iter()
             .map(|(id, def)| {

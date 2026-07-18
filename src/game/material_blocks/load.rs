@@ -364,21 +364,9 @@ fn load_one_paint(
     Ok(())
 }
 
-/// 已知种子材料颜色（与 ensure_fallback_material_catalog 对齐）
-fn material_seed_color(id: &str) -> ColorSpec {
-    match id {
-        "basic" => rgb(214.0 / 255.0, 186.0 / 255.0, 118.0 / 255.0),
-        "iron" => rgb(160.0 / 255.0, 168.0 / 255.0, 176.0 / 255.0),
-        "copper" => rgb(200.0 / 255.0, 110.0 / 255.0, 58.0 / 255.0),
-        "glass_material" => rgb(168.0 / 255.0, 214.0 / 255.0, 228.0 / 255.0),
-        "gold" => rgb(232.0 / 255.0, 190.0 / 255.0, 70.0 / 255.0),
-        "aluminum" => rgb(200.0 / 255.0, 208.0 / 255.0, 216.0 / 255.0),
-        "wood" => rgb(150.0 / 255.0, 95.0 / 255.0, 48.0 / 255.0),
-        "granite" => rgb(140.0 / 255.0, 142.0 / 255.0, 148.0 / 255.0),
-        "coal" => rgb(36.0 / 255.0, 36.0 / 255.0, 40.0 / 255.0),
-        "crystal" => rgb(140.0 / 255.0, 120.0 / 255.0, 220.0 / 255.0),
-        _ => rgb(0.7, 0.7, 0.7),
-    }
+/// 已知材料包缺省色（包无 color 字段时用统一灰）
+fn material_seed_color(_id: &str) -> ColorSpec {
+    rgb(0.7, 0.7, 0.7)
 }
 
 /// 已知种子印花颜色（与 ensure_fallback_stamp_catalog 对齐）

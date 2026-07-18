@@ -332,9 +332,9 @@ pub fn sync_cursor_grab(
     mode: Res<State<GameMode>>,
     playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
-    mut windows: Query<&mut CursorOptions, With<PrimaryWindow>>,
+    mut windows: Query<(&mut Window, &mut CursorOptions), With<PrimaryWindow>>,
 ) {
-    let Ok(mut cursor) = windows.single_mut() else {
+    let Ok((mut window, mut cursor)) = windows.single_mut() else {
         return;
     };
 
@@ -344,13 +344,19 @@ pub fn sync_cursor_grab(
         return;
     }
 
-    if *mode.get() == GameMode::Playing
+    let want_lock = *mode.get() == GameMode::Playing
         && playing_ui.active_play()
         && !ui_runtime.blocks_gameplay()
-        && !alt_pressed(&keys)
-    {
+        && !alt_pressed(&keys);
+    if want_lock {
+        let just_locked = cursor.grab_mode != CursorGrabMode::Locked;
         cursor.grab_mode = CursorGrabMode::Locked;
         cursor.visible = false;
+        // 锁回准心时把系统光标移到窗口中心，避免解锁后再锁时光标还在边上
+        if just_locked {
+            let center = window.size() * 0.5;
+            window.set_cursor_position(Some(center));
+        }
     } else {
         cursor.grab_mode = CursorGrabMode::None;
         cursor.visible = true;

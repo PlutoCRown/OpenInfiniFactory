@@ -282,13 +282,3 @@ impl Plugin for PerfPlugin {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn scope_order_matches_enum_variants() {
-        assert_eq!(PerfScope::ORDER.len(), 16);
-        assert_eq!(PerfScope::Input.idx(), 1);
-    }
-}

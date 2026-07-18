@@ -1,6 +1,9 @@
 use super::traits::PlaceableBlock;
 use super::{Block, BlockKind, EditableBlock};
-use oif_sim::blocks::{material_catalog, scene_catalog, stamp_catalog};
+use oif_sim::blocks::{
+    material_catalog, scene_catalog, stamp_catalog, FALLBACK_MATERIAL_STRING_ID,
+    FALLBACK_SCENE_STRING_ID,
+};
 
 pub fn edit_blocks() -> Vec<BlockKind> {
     let mut blocks: Vec<_> = registrations()
@@ -24,6 +27,7 @@ pub fn all_blocks() -> Vec<BlockKind> {
 fn scene_kinds() -> Vec<BlockKind> {
     scene_catalog()
         .iter()
+        .filter(|(_, def)| def.string_id != FALLBACK_SCENE_STRING_ID)
         .map(|(id, _)| BlockKind::Scene(id))
         .collect()
 }
@@ -31,6 +35,7 @@ fn scene_kinds() -> Vec<BlockKind> {
 fn material_kinds() -> Vec<BlockKind> {
     material_catalog()
         .iter()
+        .filter(|(_, def)| def.string_id != FALLBACK_MATERIAL_STRING_ID)
         .map(|(id, _)| BlockKind::Material(id))
         .chain(stamp_catalog().iter().map(|(id, _)| BlockKind::Stamp(id)))
         .collect()

@@ -15,40 +15,31 @@ pub fn parse_block_kind(name: &str) -> Option<BlockKind> {
     oif_sim::blocks::ensure_fallback_scene_catalog();
     oif_sim::blocks::ensure_fallback_material_catalog();
     oif_sim::blocks::ensure_fallback_stamp_catalog();
-    if let Some(id) = oif_sim::blocks::scene_catalog().id_by_string(&lower) {
-        return Some(BlockKind::Scene(id));
+    if oif_sim::blocks::scene_catalog()
+        .id_by_string(&lower)
+        .is_some()
+    {
+        return Some(BlockKind::Scene(oif_sim::blocks::resolve_scene_id(&lower)));
     }
-    // 材料：catalog id，或旧 fixture 名 IronMaterial → iron
-    let material_id = match lower.as_str() {
-        "material" => Some("basic"),
-        "ironmaterial" => Some("iron"),
-        "coppermaterial" => Some("copper"),
-        "glassmaterial" => Some("glass_material"),
-        other => Some(other),
-    };
-    if let Some(id_str) = material_id {
-        if let Some(id) = oif_sim::blocks::material_catalog().id_by_string(id_str) {
-            return Some(BlockKind::Material(id));
-        }
+    if oif_sim::blocks::material_catalog()
+        .id_by_string(&lower)
+        .is_some()
+    {
+        return Some(BlockKind::Material(oif_sim::blocks::resolve_material_id(
+            &lower,
+        )));
     }
-    let stamp_id = match lower.as_str() {
-        "stampmaterial" | "stamp" => Some("red"),
-        other => Some(other),
-    };
-    if let Some(id_str) = stamp_id {
-        if let Some(id) = oif_sim::blocks::stamp_catalog().id_by_string(id_str) {
-            // 避免与材料同名 id 抢解析：仅当不是材料 id 时才当印花
-            if oif_sim::blocks::material_catalog()
-                .id_by_string(id_str)
-                .is_none()
-            {
-                return Some(BlockKind::Stamp(id));
-            }
-        }
+    if let Some(id) = oif_sim::blocks::stamp_catalog().id_by_string(&lower) {
+        return Some(BlockKind::Stamp(id));
     }
-    all_blocks()
+    if let Some(kind) = all_blocks()
         .into_iter()
         .find(|kind| format!("{:?}", kind).eq_ignore_ascii_case(name))
+    {
+        return Some(kind);
+    }
+    // 未识别：材料兜底
+    Some(BlockKind::Material(oif_sim::blocks::fallback_material_id()))
 }
 
 /// 解析朝向名

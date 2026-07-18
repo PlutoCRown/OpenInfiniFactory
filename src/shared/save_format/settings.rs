@@ -2,8 +2,8 @@ use bevy::prelude::*;
 
 use crate::game::blocks::{
     ensure_fallback_material_catalog, ensure_fallback_paint_catalog, ensure_fallback_stamp_catalog,
-    material_catalog, paint_catalog, stamp_catalog, BlockKind, MaterialBlockId, PaintMaterialId,
-    StampMaterialId,
+    fallback_material_id, material_catalog, paint_catalog, resolve_material_id, stamp_catalog,
+    BlockKind, MaterialBlockId, PaintMaterialId, StampMaterialId,
 };
 use crate::game::world::grid::{
     BlockSettings, ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, GoalSettings,
@@ -233,7 +233,7 @@ fn write_material_id(out: &mut Vec<u8>, id: MaterialBlockId) {
     let catalog = material_catalog();
     let string_id = catalog
         .string_id(id)
-        .unwrap_or_else(|| panic!("unknown MaterialBlockId {}", id.0));
+        .unwrap_or(oif_sim::blocks::FALLBACK_MATERIAL_STRING_ID);
     write_string(out, string_id);
 }
 
@@ -244,29 +244,11 @@ fn read_material_id(
     ensure_fallback_material_catalog();
     if string_ids {
         let string_id = cursor.read_string()?;
-        return material_catalog()
-            .id_by_string(&string_id)
-            .ok_or(SaveFormatError::UnknownMaterialBlockId(string_id));
+        return Ok(resolve_material_id(&string_id));
     }
-    Ok(match cursor.read_u8()? {
-        0 => material_catalog()
-            .id_by_string("basic")
-            .expect("fallback basic"),
-        1 => material_catalog()
-            .id_by_string("iron")
-            .expect("fallback iron"),
-        2 => material_catalog()
-            .id_by_string("copper")
-            .expect("fallback copper"),
-        3 => material_catalog()
-            .id_by_string("glass_material")
-            .expect("fallback glass"),
-        // 旧 Stamp MaterialKind 映射为 basic（印花已独立）
-        4 => material_catalog()
-            .id_by_string("basic")
-            .expect("fallback basic"),
-        _ => return Err(SaveFormatError::InvalidSettings),
-    })
+    // 旧数字材料枚举已弃用，一律兜底
+    let _ = cursor.read_u8()?;
+    Ok(fallback_material_id())
 }
 
 fn write_stamp_id(out: &mut Vec<u8>, id: StampMaterialId) {
