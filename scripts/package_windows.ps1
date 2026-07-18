@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $AppName = "OpenInfiniFactory"
-$BinName = "open_infinifactory.exe"
+$BinName = "oif.exe"
 $CargoBin = if ($env:CARGO) { $env:CARGO } else { "cargo" }
 $RootDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $DistDir = Join-Path $RootDir "dist\open-infinifactory-windows"

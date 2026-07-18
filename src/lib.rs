@@ -40,6 +40,8 @@ pub fn main_entry() {
                         title: "OpenInfiniFactory Prototype".to_string(),
                         resolution: (1280, 720).into(),
                         present_mode: bevy::window::PresentMode::AutoVsync,
+                        // 玩法默认关闭 IME，避免 Shift 等键被输入法抢走；文本框获焦时再打开
+                        ime_enabled: false,
                         ..default()
                     }),
                     ..default()

@@ -4,6 +4,7 @@ use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 use bevy::text::{EditableText, TextEdit};
+use bevy::window::PrimaryWindow;
 
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost};
 use crate::game::ui::core::text_input::primary_click;
@@ -183,6 +184,7 @@ pub fn text_prompt_hotkeys(
 pub fn update_text_prompt_ui(
     mut prompt: ResMut<TextPromptState>,
     mut focus: ResMut<InputFocus>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
     mut roots: Query<(&mut Node, &mut Visibility), With<TextPromptRoot>>,
     mut titles: Query<&mut Text, With<TextPromptTitle>>,
     mut inputs: Query<(Entity, &mut EditableText), With<TextPromptInput>>,
@@ -207,6 +209,28 @@ pub fn update_text_prompt_ui(
         visibility.set_if_neq(next_visibility);
     }
     if !visible {
+        // 关闭时清焦点 → Bevy 会关 Window.ime_enabled（桌面停用 IME；iOS 经 winit resignFirstResponder 收键盘）
+        let focused_prompt = focus.get().is_some_and(|entity| inputs.contains(entity));
+        if focused_prompt {
+            focus.clear();
+        }
+        for (_, mut editable) in &mut inputs {
+            if editable.is_composing() {
+                editable.queue_edit(TextEdit::clear_ime_compose());
+            }
+        }
+        if let Ok(mut window) = windows.single_mut() {
+            if window.ime_enabled {
+                window.ime_enabled = false;
+            }
+        }
+        // Android：winit 的 set_ime_allowed(false) 只用 hide_implicit_only，关框时再强制收一次
+        #[cfg(target_os = "android")]
+        if prompt.is_changed() {
+            if let Some(app) = bevy::android::ANDROID_APP.get() {
+                app.hide_soft_input(false);
+            }
+        }
         return;
     }
 
@@ -241,6 +265,12 @@ pub fn update_text_prompt_ui(
             editable.editor.set_text(&value);
             editable.queue_edit(TextEdit::TextEnd(false));
             focus.set(entity, FocusCause::Navigated);
+        }
+        if let Ok(mut window) = windows.single_mut() {
+            window.ime_enabled = true;
+            if let Some(pos) = window.cursor_position() {
+                window.ime_position = pos;
+            }
         }
     }
 }

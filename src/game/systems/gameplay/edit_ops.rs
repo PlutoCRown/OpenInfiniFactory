@@ -10,11 +10,11 @@ use crate::game::systems::debug::DebugState;
 use crate::game::ui::InventoryItems;
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::WorldBlocks;
+use crate::game::world::rendering::WorldRenderAssets;
 use crate::game::world::rendering::{
     rebuild_world_for_debug_state, rebuild_world_with_animations,
     rebuild_world_with_animations_for_debug_state, BlockEntity,
 };
-use crate::game::world::rendering::WorldRenderAssets;
 use crate::scene::BlockEntityIndex;
 
 use super::placement::{despawn_block_entities, refresh_edit_generated_markers};

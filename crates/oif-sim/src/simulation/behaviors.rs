@@ -160,10 +160,12 @@ pub(super) fn run_material_paint_phase(world: &mut WorldBlocks) {
     let rollers: Vec<(IVec3, IVec3)> = world
         .system_blocks
         .iter()
-        .filter_map(|(pos, block)| match block.kind.material_labeler(block.facing) {
-            Some(MaterialLabeler::Roller { target }) => Some((*pos, target)),
-            Some(MaterialLabeler::Stamper { .. }) | None => None,
-        })
+        .filter_map(
+            |(pos, block)| match block.kind.material_labeler(block.facing) {
+                Some(MaterialLabeler::Roller { target }) => Some((*pos, target)),
+                Some(MaterialLabeler::Stamper { .. }) | None => None,
+            },
+        )
         .collect();
 
     for (pos, target_offset) in rollers {
@@ -203,10 +205,12 @@ pub(super) fn run_material_stamp_phase(world: &mut WorldBlocks) {
     let stampers: Vec<(IVec3, Facing)> = world
         .system_blocks
         .iter()
-        .filter_map(|(pos, block)| match block.kind.material_labeler(block.facing) {
-            Some(MaterialLabeler::Stamper { .. }) => Some((*pos, block.facing)),
-            Some(MaterialLabeler::Roller { .. }) | None => None,
-        })
+        .filter_map(
+            |(pos, block)| match block.kind.material_labeler(block.facing) {
+                Some(MaterialLabeler::Stamper { .. }) => Some((*pos, block.facing)),
+                Some(MaterialLabeler::Roller { .. }) | None => None,
+            },
+        )
         .collect();
 
     for (stamper_pos, facing) in stampers {
@@ -325,12 +329,7 @@ pub(super) fn material_source_generation(
     let sources: Vec<IVec3> = world
         .system_blocks
         .iter()
-        .filter_map(|(pos, block)| {
-            block
-                .kind
-                .material_source(block.facing)
-                .map(|_| *pos)
-        })
+        .filter_map(|(pos, block)| block.kind.material_source(block.facing).map(|_| *pos))
         .collect();
 
     for pos in sources {
@@ -340,11 +339,9 @@ pub(super) fn material_source_generation(
                 let period = period.max(1);
                 turn % period == offset % period
             }
-            GeneratorMode::Link { anchor } => {
-                anchor
-                    .and_then(|pos| world.acceptor_id_at(pos))
-                    .is_some_and(|id| accepted_acceptors.contains(&id))
-            }
+            GeneratorMode::Link { anchor } => anchor
+                .and_then(|pos| world.acceptor_id_at(pos))
+                .is_some_and(|id| accepted_acceptors.contains(&id)),
         };
         if !should_spawn {
             continue;
@@ -662,10 +659,7 @@ mod tests {
             entrance,
             BlockData::new(BlockKind::TeleportEntrance, Facing::North),
         );
-        world.insert(
-            exit,
-            BlockData::new(BlockKind::TeleportExit, Facing::North),
-        );
+        world.insert(exit, BlockData::new(BlockKind::TeleportExit, Facing::North));
         world.set_teleport_pair(entrance, Some(exit));
     }
 
@@ -700,11 +694,11 @@ mod tests {
         assert!(world.is_material_at(entrance + IVec3::X));
         let exit_id = world.blocks[&exit].id;
         let neighbor_id = world.blocks[&(entrance + IVec3::X)].id;
-        assert!(!world
-            .material_welds
-            .contains(&crate::world::grid::MaterialWeld::new(
-                exit_id, neighbor_id
-            )));
+        assert!(
+            !world
+                .material_welds
+                .contains(&crate::world::grid::MaterialWeld::new(exit_id, neighbor_id))
+        );
     }
 
     #[test]
@@ -820,11 +814,11 @@ mod tests {
         assert!(world.is_material_at(entrance + IVec3::X));
         let exit_id = world.blocks[&exit].id;
         let neighbor_id = world.blocks[&(entrance + IVec3::X)].id;
-        assert!(!world
-            .material_welds
-            .contains(&crate::world::grid::MaterialWeld::new(
-                exit_id, neighbor_id
-            )));
+        assert!(
+            !world
+                .material_welds
+                .contains(&crate::world::grid::MaterialWeld::new(exit_id, neighbor_id))
+        );
     }
 
     #[test]
@@ -955,10 +949,10 @@ mod tests {
         let mut world = WorldBlocks::default();
         world.insert(IVec3::ZERO, BlockData::new(BlockKind::Goal, Facing::North));
         let acceptor = world.acceptor_id_at(IVec3::ZERO).unwrap();
-        let gen = IVec3::new(2, 1, 0);
-        world.insert(gen, BlockData::new(BlockKind::Generator, Facing::North));
+        let gen_pos = IVec3::new(2, 1, 0);
+        world.insert(gen_pos, BlockData::new(BlockKind::Generator, Facing::North));
         world.set_generator_settings(
-            gen,
+            gen_pos,
             crate::world::grid::GeneratorSettings {
                 mode: GeneratorMode::Link {
                     anchor: Some(IVec3::ZERO),
@@ -972,7 +966,7 @@ mod tests {
         let accepted = HashSet::from([acceptor]);
         let generated = material_source_generation(&world, 5, &blocked, &accepted);
         assert_eq!(generated.len(), 1);
-        assert_eq!(generated[0].pos, gen);
+        assert_eq!(generated[0].pos, gen_pos);
     }
 
     #[test]
@@ -1255,8 +1249,8 @@ mod tests {
 
     #[test]
     fn sign_moves_with_material_host() {
-        use crate::simulation::structures::{can_translate_structure, move_structure};
         use crate::simulation::structure_state::StructureState;
+        use crate::simulation::structures::{can_translate_structure, move_structure};
         use crate::simulation::suction::SuctionLinks;
 
         let mut world = WorldBlocks::default();
@@ -1287,4 +1281,3 @@ mod tests {
         assert_eq!(world.blocks[&(sign_pos + IVec3::X)].id, sign_id);
     }
 }
-

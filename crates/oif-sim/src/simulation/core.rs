@@ -1,26 +1,27 @@
-use std::time::Instant;
 use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 use glam::IVec3;
 
 use crate::world::grid::WorldBlocks;
 
 use super::behaviors::{
-    destroy_powered_lasers, material_source_generation, probe_lasers, run_drill_destroy_phase,
-    run_material_acceptance_phase, run_material_conversion_phase, run_material_paint_phase,
-    run_material_stamp_phase, run_material_teleport_phase, run_weld_behavior_phase, LaserBeam,
+    LaserBeam, destroy_powered_lasers, material_source_generation, probe_lasers,
+    run_drill_destroy_phase, run_material_acceptance_phase, run_material_conversion_phase,
+    run_material_paint_phase, run_material_stamp_phase, run_material_teleport_phase,
+    run_weld_behavior_phase,
 };
 use super::gravity::mark_gravity_phase;
 use super::markers::run_static_marker_phase;
 use super::motion::{BlockMotion, BlockMotionKind, PusherMotion};
-use super::movement::{mark_structure_movement_phase, PusherState};
+use super::movement::{PusherState, mark_structure_movement_phase};
 use super::pending::PendingGeneratedMaterials;
 use super::signals::SignalNetworkCache;
 use super::stats::SimulationStepStats;
 use super::structure_state::StructureState;
 use super::structures::{
-    apply_fragile_shatter_before_execute, execute_structure_moves_with_pushers,
-    merge_structure_movement_plan, MovementInfluenceCache, StructureMove,
+    MovementInfluenceCache, StructureMove, apply_fragile_shatter_before_execute,
+    execute_structure_moves_with_pushers, merge_structure_movement_plan,
 };
 use super::suction::SuctionLinks;
 
@@ -425,9 +426,11 @@ mod tests {
         assert!(world.is_material_at(b));
         let id_a = world.blocks[&a].id;
         let id_b = world.blocks[&b].id;
-        assert!(world
-            .material_welds
-            .contains(&crate::world::grid::MaterialWeld::new(id_a, id_b)));
+        assert!(
+            world
+                .material_welds
+                .contains(&crate::world::grid::MaterialWeld::new(id_a, id_b))
+        );
     }
 
     #[test]
@@ -461,13 +464,17 @@ mod tests {
             None,
         );
         assert!(world.is_factory_at(IVec3::new(0, 5, 0)));
-        assert!(pusher_state
-            .sustained_animations(&world)
-            .contains_key(&IVec3::new(0, 5, 0)));
-        assert!(turn1
-            .pusher_animations
-            .get(&IVec3::new(0, 5, 0))
-            .is_some_and(|a| a.from_extension < a.to_extension));
+        assert!(
+            pusher_state
+                .sustained_animations(&world)
+                .contains_key(&IVec3::new(0, 5, 0))
+        );
+        assert!(
+            turn1
+                .pusher_animations
+                .get(&IVec3::new(0, 5, 0))
+                .is_some_and(|a| a.from_extension < a.to_extension)
+        );
 
         let turn2 = simulate_turn(
             &mut world,
@@ -482,9 +489,11 @@ mod tests {
         );
         assert!(world.is_factory_at(IVec3::new(0, 4, 0)));
         assert!(!world.is_factory_at(IVec3::new(0, 5, 0)));
-        assert!(pusher_state
-            .sustained_animations(&world)
-            .contains_key(&IVec3::new(0, 4, 0)));
+        assert!(
+            pusher_state
+                .sustained_animations(&world)
+                .contains_key(&IVec3::new(0, 4, 0))
+        );
         assert!(
             !turn2
                 .pusher_animations
@@ -505,9 +514,11 @@ mod tests {
             None,
         );
         assert!(world.is_factory_at(IVec3::new(0, 3, 0)));
-        assert!(pusher_state
-            .sustained_animations(&world)
-            .contains_key(&IVec3::new(0, 3, 0)));
+        assert!(
+            pusher_state
+                .sustained_animations(&world)
+                .contains_key(&IVec3::new(0, 3, 0))
+        );
     }
 
     fn sim_world(
@@ -677,10 +688,10 @@ mod tests {
     fn generated_material_places_at_end_and_moves_next_turn() {
         // 生成在阶段 4 落地，下一回合才首次参与运动
         let mut world = WorldBlocks::default();
-        let gen = IVec3::new(0, 2, 0);
-        world.insert(gen, BlockData::new(BlockKind::Generator, Facing::North));
+        let gen_pos = IVec3::new(0, 2, 0);
+        world.insert(gen_pos, BlockData::new(BlockKind::Generator, Facing::North));
         world.set_generator_settings(
-            gen,
+            gen_pos,
             GeneratorSettings {
                 mode: GeneratorMode::Period {
                     period: 1,
@@ -705,7 +716,7 @@ mod tests {
             None,
             None,
         );
-        assert!(world.is_material_at(gen), "阶段 4 应落地材料");
+        assert!(world.is_material_at(gen_pos), "阶段 4 应落地材料");
 
         simulate_turn(
             &mut world,
@@ -767,10 +778,7 @@ mod tests {
             None,
         );
 
-        assert!(
-            !world.is_material_at(glass),
-            "玻璃应被活塞头压碎"
-        );
+        assert!(!world.is_material_at(glass), "玻璃应被活塞头压碎");
         assert!(
             world
                 .blocks

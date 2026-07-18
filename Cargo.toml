@@ -5,15 +5,15 @@ resolver = "2"
 [package]
 name = "open_infinifactory"
 version = "0.1.0"
-edition = "2021"
-default-run = "open_infinifactory"
+edition = "2024"
+default-run = "oif"
 
 [lib]
 path = "src/lib.rs"
 crate-type = ["lib", "cdylib"]
 
 [[bin]]
-name = "open_infinifactory"
+name = "oif"
 path = "src/main.rs"
 
 [[bin]]

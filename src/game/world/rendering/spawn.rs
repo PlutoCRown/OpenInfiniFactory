@@ -6,21 +6,21 @@ use super::components::{
     FactoryDebugOverlay, PendingGeneratedPreview,
 };
 use super::connectors::{
-    face_mark_transform, local_connector_offset, signal_neighbor_offsets, weld_neighbor_connects_to,
-    wire_connects_to,
+    face_mark_transform, local_connector_offset, signal_neighbor_offsets,
+    weld_neighbor_connects_to, wire_connects_to,
 };
 use super::scene_mesh::scene_block_mesh;
 use crate::game::blocks::BlockPresent;
 use crate::game::blocks::{
-    spawn_model_parts, BlockData, BlockKind, BlockModel, WeldConnectorBehavior,
-    WireConnectorBehavior,
+    BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
+    spawn_model_parts,
 };
 use crate::game::simulation::structure_state::{FactoryActivity, StructureState};
 use crate::game::world::animation::{
-    rotate_world_pos_y, AnimatedBlock, AnimationEasing, AnimationTiming, BlockAnimation,
-    BlockAnimationKind, PusherAnimation,
+    AnimatedBlock, AnimationEasing, AnimationTiming, BlockAnimation, BlockAnimationKind,
+    PusherAnimation, rotate_world_pos_y,
 };
-use crate::game::world::grid::{grid_to_world, MaterialFace, WorldBlocks};
+use crate::game::world::grid::{MaterialFace, WorldBlocks, grid_to_world};
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::scene::BlockEntityIndex;
 
@@ -341,27 +341,30 @@ pub(super) fn spawn_block_model(
             }),
             transform,
         ))
-    } else if let Some(scene_material) = assets.scene_material(data.kind) {
-        let mesh = if icon_render.is_some() {
-            assets.block_mesh(data.kind)
-        } else {
-            meshes.add(scene_block_mesh(pos, world))
-        };
-        commands.spawn((
-            Mesh3d(mesh),
-            MeshMaterial3d(if is_preview {
-                material.clone()
-            } else {
-                scene_material
-            }),
-            transform,
-        ))
     } else {
-        commands.spawn((
-            Mesh3d(assets.block_mesh(data.kind)),
-            MeshMaterial3d(material.clone()),
-            transform,
-        ))
+        match assets.scene_material(data.kind) {
+            Some(scene_material) => {
+                let mesh = if icon_render.is_some() {
+                    assets.block_mesh(data.kind)
+                } else {
+                    meshes.add(scene_block_mesh(pos, world))
+                };
+                commands.spawn((
+                    Mesh3d(mesh),
+                    MeshMaterial3d(if is_preview {
+                        material.clone()
+                    } else {
+                        scene_material
+                    }),
+                    transform,
+                ))
+            }
+            None => commands.spawn((
+                Mesh3d(assets.block_mesh(data.kind)),
+                MeshMaterial3d(material.clone()),
+                transform,
+            )),
+        }
     };
 
     if let Some((_, icon_layer)) = icon_render {

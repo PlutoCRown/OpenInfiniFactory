@@ -29,7 +29,9 @@ use super::edit_ops::{
     alternate_block_at, pick_target_block, rotate_block_at, rotate_facing, shift_pressed,
 };
 use super::rules::{can_delete_at, can_place_block_at, can_place_in_mode, delete_block_at};
-use super::selection::{handle_selection_area_input, selection_positions, spawn_selection_previews};
+use super::selection::{
+    handle_selection_area_input, selection_positions, spawn_selection_previews,
+};
 
 /// 放置输入所需的查询与资源集合
 #[derive(SystemParam)]
@@ -265,7 +267,10 @@ pub fn placement_input(
             return;
         }
         // 优先卸下瞄准面的灯面板（不占格，点对面删除）
-        if let Some(target) = placement.target.filter(|target| target.normal != IVec3::ZERO) {
+        if let Some(target) = placement
+            .target
+            .filter(|target| target.normal != IVec3::ZERO)
+        {
             if let Some(block) = world.blocks.get(&target.pos).copied() {
                 if block.kind == BlockKind::Wire {
                     let face = MaterialFace::new(block.id, target.normal);
@@ -334,7 +339,10 @@ pub fn placement_input(
     if input.place.just_pressed {
         // 灯面板：点在电线表面即时粘贴，不走占格手势
         if inventory.hotbar[placement.selected].is_some_and(|item| item.is_light_panel()) {
-            if let Some(target) = placement.target.filter(|target| target.normal != IVec3::ZERO) {
+            if let Some(target) = placement
+                .target
+                .filter(|target| target.normal != IVec3::ZERO)
+            {
                 if let Some(block) = world.blocks.get(&target.pos).copied() {
                     if block.kind == BlockKind::Wire {
                         let face = MaterialFace::new(block.id, target.normal);
@@ -614,11 +622,7 @@ fn commit_edit_gesture(
                         let host_pos = *pos - gesture.plane_normal;
                         if let Some(host) = world.blocks.get(&host_pos).copied() {
                             if let Some(sign) = world.blocks.get(pos).copied() {
-                                world.attach_factory_child(
-                                    sign.id,
-                                    host.id,
-                                    gesture.plane_normal,
-                                );
+                                world.attach_factory_child(sign.id, host.id, gesture.plane_normal);
                             }
                         }
                     }
@@ -720,7 +724,11 @@ fn spawn_gesture_previews(
 }
 
 /// 克隆世界并插入预览方块，用于连通预览渲染
-pub(super) fn preview_world(world: &WorldBlocks, positions: &[IVec3], block: BlockData) -> WorldBlocks {
+pub(super) fn preview_world(
+    world: &WorldBlocks,
+    positions: &[IVec3],
+    block: BlockData,
+) -> WorldBlocks {
     let mut preview = world.clone();
     for pos in positions {
         preview.insert(*pos, block);

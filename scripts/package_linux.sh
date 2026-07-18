@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="OpenInfiniFactory"
-BIN_NAME="open_infinifactory"
+BIN_NAME="oif"
 CARGO_BIN="${CARGO:-cargo}"
 TARGET_ARG=()
 TARGET_DIR_SEGMENT="release"

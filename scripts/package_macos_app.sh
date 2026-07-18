@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="OpenInfiniFactory"
-BIN_NAME="open_infinifactory"
+BIN_NAME="oif"
 CARGO_BIN="${CARGO:-cargo}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
