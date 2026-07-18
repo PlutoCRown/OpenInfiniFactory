@@ -10,7 +10,7 @@ use crate::game::ui::core::host::PlayingUiRootEntity;
 use crate::game::ui::{PendingKeyBind, TextPromptState};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
+    despawn_world, rebuild_world_for_debug_state, BlockEntity, SceneChunkMeshes, WorldRenderAssets,
 };
 use crate::shared::config::{ActionKeyName, GameConfig};
 
@@ -106,6 +106,7 @@ pub fn toggle_factory_activity_debug(
     render_assets: Option<Res<WorldRenderAssets>>,
     block_entities: Query<Entity, With<BlockEntity>>,
     mut block_index: ResMut<crate::scene::BlockEntityIndex>,
+    mut scene_chunks: ResMut<SceneChunkMeshes>,
 ) {
     if pending_key_bind.0.is_some()
         || text_prompt.is_open()
@@ -126,7 +127,13 @@ pub fn toggle_factory_activity_debug(
         } else if structure_state.is_empty() || !simulation.is_active() {
             structure_state.clear();
         }
-        despawn_world(&mut commands, &block_entities, &mut block_index);
+        despawn_world(
+            &mut commands,
+            &mut meshes,
+            &block_entities,
+            &mut block_index,
+            &mut scene_chunks,
+        );
         rebuild_world_for_debug_state(
             &mut commands,
             &mut meshes,
@@ -135,6 +142,7 @@ pub fn toggle_factory_activity_debug(
             &debug,
             &structure_state,
             &mut block_index,
+            &mut scene_chunks,
         );
     }
 }

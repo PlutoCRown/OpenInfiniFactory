@@ -37,6 +37,7 @@ pub fn handle_reset_solution(
             &mut world.pusher_state,
             &solution_state,
             &mut world.block_index,
+            &mut world.scene_chunks,
         );
         playing_ui.paused = true;
     }
@@ -90,6 +91,7 @@ pub fn handle_switch_to_edit_mode(
             &mut world.movement_influence,
             &mut world.pusher_state,
             &mut world.block_index,
+            &mut world.scene_chunks,
         );
     }
 }

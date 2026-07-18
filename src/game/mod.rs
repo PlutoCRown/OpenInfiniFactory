@@ -122,6 +122,7 @@ impl Plugin for GamePlugin {
             .insert_resource(simulation::structures::MovementInfluenceCache::default())
             .insert_resource(crate::sim_bridge::SimulationPresentationState::default())
             .insert_resource(BlockEntityIndex::default())
+            .init_resource::<crate::game::world::rendering::SceneChunkMeshes>()
             .insert_resource(SimulationWorker::spawn())
             .insert_resource(TurnCache::default())
             .insert_resource(settings)

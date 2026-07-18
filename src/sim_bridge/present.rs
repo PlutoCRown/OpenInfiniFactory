@@ -17,7 +17,7 @@ use crate::game::world::animation::{
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_pending_generated_previews, spawn_pending_generated_block, PendingGeneratedPreview,
-    WorldRenderAssets,
+    SceneChunkMeshes, WorldRenderAssets,
 };
 use crate::scene::{apply_turn_output, BlockEntityIndex};
 use super::{CachedTurn, SimSnapshot, SimulationWorker, TurnCache};
@@ -93,6 +93,7 @@ pub struct SimulationTickDeps<'w> {
     sim_stats: ResMut<'w, SimulationStepStats>,
     presentation: ResMut<'w, SimulationPresentationState>,
     block_index: ResMut<'w, BlockEntityIndex>,
+    scene_chunks: ResMut<'w, SceneChunkMeshes>,
     meshes: ResMut<'w, Assets<Mesh>>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
     debug: Res<'w, DebugState>,
@@ -156,6 +157,7 @@ pub fn tick_simulation(
                 &mut commands,
                 &mut deps.meshes,
                 &mut deps.block_index,
+                &mut deps.scene_chunks,
                 render_assets,
                 &deps.debug,
                 &mut deps.sim_stats,
@@ -200,6 +202,7 @@ pub fn tick_simulation(
             &mut commands,
             &mut deps.meshes,
             &mut deps.block_index,
+            &mut deps.scene_chunks,
             render_assets,
             &deps.debug,
             &mut deps.sim_stats,
@@ -237,6 +240,7 @@ fn present_turn(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
     render_assets: &WorldRenderAssets,
     debug: &DebugState,
     sim_stats: &mut SimulationStepStats,
@@ -265,6 +269,7 @@ fn present_turn(
         debug,
         structure_state,
         sim_stats,
+        scene_chunks,
     );
     presentation.last_render_powered_wires = cached.output.render_powered_wires.clone();
     presentation.committed_world = world.clone();

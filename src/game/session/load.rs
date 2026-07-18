@@ -131,6 +131,7 @@ pub fn poll_pending_world_load(
         *mode.get(),
         &mut next_state,
         &mut world.block_index,
+        &mut world.scene_chunks,
     );
     *busy = SessionBusy::None;
 }
@@ -184,6 +185,7 @@ pub fn handle_create_new_puzzle(
             *mode.get(),
             &mut next_state,
             &mut world.block_index,
+            &mut world.scene_chunks,
         );
     }
 }
@@ -248,6 +250,7 @@ pub fn handle_create_new_solution(
             *mode.get(),
             &mut next_state,
             &mut world.block_index,
+            &mut world.scene_chunks,
         );
     }
 }

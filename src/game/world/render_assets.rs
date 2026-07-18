@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use bevy::asset::RenderAssetUsages;
@@ -56,6 +56,8 @@ pub struct WorldRenderAssets {
     scene_meshes: HashMap<BlockKind, Handle<Mesh>>,
     /// 立方体 24 顶点 UV 模板（世界 AO 网格复用 glb UV）
     scene_face_uvs: HashMap<BlockKind, [[f32; 2]; 24]>,
+    /// 合并 mesh 时可作为实心遮挡邻面的场景种类（不透明立方体）
+    scene_face_occluders: HashSet<BlockKind>,
     face_mark_materials: HashMap<PaintMaterialId, Handle<StandardMaterial>>,
     /// 灯面板未通电材质
     pub(crate) light_panel_material: Handle<StandardMaterial>,
@@ -200,7 +202,8 @@ impl WorldRenderAssets {
         // 兜底场景/材料：MC 式洋红黑棋盘（不进 all_blocks，需显式注册）
         {
             use crate::game::blocks::{fallback_material_id, fallback_scene_id};
-            let texture = images.add(crate::game::world::procedural_textures::missing_texture_image());
+            let texture =
+                images.add(crate::game::world::procedural_textures::missing_texture_image());
             let material = materials.add(StandardMaterial {
                 base_color: Color::WHITE,
                 base_color_texture: Some(texture.clone()),
@@ -223,6 +226,22 @@ impl WorldRenderAssets {
                 scene_block_materials.insert(kind, material.clone());
                 block_materials.insert(kind, material.clone());
                 preview_materials.insert(kind, preview.clone());
+            }
+        }
+        // 不透明立方体才遮挡邻面；玻璃等 Blend、异形 GLB 不进此集合
+        let mut scene_face_occluders = HashSet::new();
+        for (kind, handle) in &scene_block_materials {
+            if !kind.is_scene() || !kind.has_collision() {
+                continue;
+            }
+            if !scene_face_uvs.contains_key(kind) && scene_meshes.contains_key(kind) {
+                continue;
+            }
+            let opaque = materials
+                .get(handle)
+                .is_none_or(|mat| matches!(mat.alpha_mode, AlphaMode::Opaque));
+            if opaque {
+                scene_face_occluders.insert(*kind);
             }
         }
         let face_mark_materials = paint_catalog()
@@ -439,6 +458,7 @@ impl WorldRenderAssets {
             scene_materials: scene_block_materials,
             scene_meshes,
             scene_face_uvs,
+            scene_face_occluders,
             face_mark_materials,
             light_panel_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(0.55, 0.58, 0.62),
@@ -601,6 +621,11 @@ impl WorldRenderAssets {
 
     pub(crate) fn scene_face_uvs(&self, kind: BlockKind) -> Option<&[[f32; 2]; 24]> {
         self.scene_face_uvs.get(&kind)
+    }
+
+    /// 合并场景 mesh 时邻格是否按实心遮挡此面（玻璃/异形块为 false）
+    pub(crate) fn scene_occludes_faces(&self, kind: BlockKind) -> bool {
+        self.scene_face_occluders.contains(&kind)
     }
 
     pub(crate) fn connector_mesh(&self, offset: IVec3) -> Handle<Mesh> {

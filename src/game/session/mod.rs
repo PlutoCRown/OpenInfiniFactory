@@ -120,6 +120,7 @@ pub fn rebuild_playing_world(
     debug: Res<DebugState>,
     mut structure_state: ResMut<StructureState>,
     mut index: ResMut<crate::scene::BlockEntityIndex>,
+    mut scene_chunks: ResMut<crate::game::world::rendering::SceneChunkMeshes>,
 ) {
     crate::game::world::rendering::rebuild_world_on_enter(
         &mut commands,
@@ -129,6 +130,7 @@ pub fn rebuild_playing_world(
         &debug,
         &mut structure_state,
         &mut index,
+        &mut scene_chunks,
     );
 }
 
@@ -140,6 +142,8 @@ pub fn on_exit_playing(
     gameplay_scene: Query<Entity, With<GameplayScene>>,
     icon_roots: Query<Entity, With<BlockIconRenderRoot>>,
     playing_ui_roots: Query<Entity, With<PlayingUiRoot>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut scene_chunks: ResMut<crate::game::world::rendering::SceneChunkMeshes>,
 ) {
     playing_ui.reset();
 
@@ -156,6 +160,7 @@ pub fn on_exit_playing(
     commands.insert_resource(crate::game::ui::features::playing_overlays::PlayingOverlayMounts::default());
     commands.remove_resource::<PlayingUiRootEntity>();
 
+    crate::game::world::rendering::forget_scene_chunks(&mut meshes, &mut scene_chunks);
     teardown_playing_scene(&mut commands);
     commands.remove_resource::<GameplayViewImage>();
 }

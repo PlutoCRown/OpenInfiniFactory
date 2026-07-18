@@ -6,6 +6,7 @@ use crate::game::state::{GameMode, StartMenuScreen};
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::UiAccessScope;
 use crate::game::ui::core::host::{UiHostMountRoot, UiRootEntity};
+use crate::game::ui::features::save::types::SaveListRenderState;
 use crate::game::ui::features::session_busy::spawn_session_busy_overlay;
 use crate::game::ui::screens::{spawn_main_menu, spawn_save_list};
 
@@ -24,6 +25,7 @@ pub fn sync_start_menu_mounts(
     screen: Res<StartMenuScreen>,
     root: Option<Res<UiRootEntity>>,
     mut mounts: ResMut<StartMenuMounts>,
+    mut save_list_render: ResMut<SaveListRenderState>,
     mut commands: Commands,
 ) {
     if *mode.get() != GameMode::StartMenu {
@@ -37,6 +39,8 @@ pub fn sync_start_menu_mounts(
         {
             commands.entity(entity).despawn();
         }
+        // 卸掉存档列表后清渲染缓存，否则下次进列表会跳过行重建
+        *save_list_render = SaveListRenderState::default();
         return;
     }
     let Some(root) = root.map(|r| r.0) else {
@@ -124,10 +128,13 @@ pub fn sync_start_menu_mounts(
                 );
             });
             mounts.save_list = entity;
+            // 新挂载的行容器是空的，必须丢弃上次的 keys 缓存
+            *save_list_render = SaveListRenderState::default();
         }
         (false, Some(entity)) => {
             commands.entity(entity).despawn();
             mounts.save_list = None;
+            *save_list_render = SaveListRenderState::default();
         }
         _ => {}
     }

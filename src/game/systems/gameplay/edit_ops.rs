@@ -10,10 +10,9 @@ use crate::game::systems::debug::DebugState;
 use crate::game::ui::InventoryItems;
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::WorldBlocks;
-use crate::game::world::rendering::WorldRenderAssets;
 use crate::game::world::rendering::{
     rebuild_world_for_debug_state, rebuild_world_with_animations,
-    rebuild_world_with_animations_for_debug_state, BlockEntity,
+    rebuild_world_with_animations_for_debug_state, BlockEntity, SceneChunkMeshes, WorldRenderAssets,
 };
 use crate::scene::BlockEntityIndex;
 
@@ -59,6 +58,7 @@ pub(super) fn alternate_block_at(
     debug: &DebugState,
     structure_state: &mut StructureState,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) -> bool {
     let patch = build_cell_patch(world, &[pos], |world| {
         let Some(block) = world.blocks.get_mut(&pos) else {
@@ -82,7 +82,7 @@ pub(super) fn alternate_block_at(
     }
     edit_history.record(patch);
     refresh_edit_generated_markers(world);
-    despawn_block_entities(commands, block_entities, block_index);
+    despawn_block_entities(commands, meshes, block_entities, block_index, scene_chunks);
     rebuild_world_for_debug_state(
         commands,
         meshes,
@@ -91,6 +91,7 @@ pub(super) fn alternate_block_at(
         debug,
         structure_state,
         block_index,
+        scene_chunks,
     );
     true
 }
@@ -107,6 +108,7 @@ pub(super) fn rotate_block_at(
     debug: &DebugState,
     structure_state: &mut StructureState,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) -> bool {
     let in_system = !world.blocks.contains_key(&pos);
     let Some(block) = (if in_system {
@@ -140,7 +142,7 @@ pub(super) fn rotate_block_at(
         },
     );
 
-    despawn_block_entities(commands, block_entities, block_index);
+    despawn_block_entities(commands, meshes, block_entities, block_index, scene_chunks);
     if debug.factory_activity {
         rebuild_world_with_animations_for_debug_state(
             commands,
@@ -151,6 +153,7 @@ pub(super) fn rotate_block_at(
             debug,
             structure_state,
             block_index,
+            scene_chunks,
         );
     } else {
         rebuild_world_with_animations(
@@ -161,6 +164,7 @@ pub(super) fn rotate_block_at(
             &animations,
             None,
             block_index,
+            scene_chunks,
         );
     }
     true
@@ -178,7 +182,6 @@ pub(super) fn rotate_facing(
     }
 }
 
-/// 是否按住 Shift
 pub(super) fn shift_pressed(keys: &ButtonInput<KeyCode>) -> bool {
     keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight)
 }

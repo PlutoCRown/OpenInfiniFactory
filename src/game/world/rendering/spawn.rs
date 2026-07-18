@@ -362,7 +362,7 @@ pub(crate) fn spawn_block_model(
                         .scene_mesh(data.kind)
                         .unwrap_or_else(|| assets.block_mesh(data.kind))
                 } else if let Some(face_uvs) = assets.scene_face_uvs(data.kind) {
-                    meshes.add(scene_block_mesh(pos, world, face_uvs))
+                    meshes.add(scene_block_mesh(pos, world, assets, face_uvs))
                 } else {
                     assets
                         .scene_mesh(data.kind)

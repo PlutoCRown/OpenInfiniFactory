@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 use super::components::BlockEntity;
+use super::scene_chunks::{clear_scene_chunks, rebuild_all_scene_chunks, SceneChunkMeshes};
 use super::spawn::{block_render_material, spawn_block, spawn_block_model};
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::systems::debug::DebugState;
@@ -19,6 +20,7 @@ pub fn rebuild_world_on_enter(
     debug: &DebugState,
     structure_state: &mut StructureState,
     index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     structure_state.clear();
     if debug.factory_activity {
@@ -32,6 +34,7 @@ pub fn rebuild_world_on_enter(
         debug,
         structure_state,
         index,
+        scene_chunks,
     );
 }
 
@@ -43,9 +46,13 @@ pub fn rebuild_world(
     assets: &WorldRenderAssets,
     factory_debug: Option<&StructureState>,
     index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     index.clear();
     for (pos, data) in &world.blocks {
+        if data.kind.is_scene() {
+            continue;
+        }
         spawn_block(
             commands,
             meshes,
@@ -69,6 +76,7 @@ pub fn rebuild_world(
             index,
         );
     }
+    rebuild_all_scene_chunks(commands, meshes, world, assets, scene_chunks);
 }
 
 /// 按调试开关决定是否带工厂叠层重建
@@ -80,6 +88,7 @@ pub fn rebuild_world_for_debug_state(
     debug: &DebugState,
     structure_state: &StructureState,
     index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     rebuild_world(
         commands,
@@ -88,6 +97,7 @@ pub fn rebuild_world_for_debug_state(
         assets,
         debug.factory_activity.then_some(structure_state),
         index,
+        scene_chunks,
     );
 }
 
@@ -101,6 +111,7 @@ pub fn rebuild_world_with_animations_for_debug_state(
     debug: &DebugState,
     structure_state: &StructureState,
     index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     rebuild_world_with_animations(
         commands,
@@ -110,16 +121,20 @@ pub fn rebuild_world_with_animations_for_debug_state(
         animations,
         debug.factory_activity.then_some(structure_state),
         index,
+        scene_chunks,
     );
 }
 
 /// 销毁全部方块实体并清空索引
 pub fn despawn_world(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     block_entities: &Query<Entity, With<BlockEntity>>,
     index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     index.clear();
+    clear_scene_chunks(commands, meshes, scene_chunks);
     for entity in block_entities {
         commands.entity(entity).despawn();
     }
@@ -134,6 +149,7 @@ pub fn rebuild_world_with_animations(
     animations: &HashMap<IVec3, BlockAnimation>,
     factory_debug: Option<&StructureState>,
     index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     rebuild_world_with_timed_animations(
         commands,
@@ -144,6 +160,7 @@ pub fn rebuild_world_with_animations(
         AnimationTiming::edit(),
         factory_debug,
         index,
+        scene_chunks,
     );
 }
 
@@ -157,9 +174,13 @@ pub fn rebuild_world_with_timed_animations(
     timing: AnimationTiming,
     factory_debug: Option<&StructureState>,
     index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     index.clear();
     for (pos, data) in &world.blocks {
+        if data.kind.is_scene() {
+            continue;
+        }
         spawn_block_model(
             commands,
             meshes,
@@ -201,6 +222,7 @@ pub fn rebuild_world_with_timed_animations(
             Some(index),
         );
     }
+    rebuild_all_scene_chunks(commands, meshes, world, assets, scene_chunks);
 }
 
 /// 运行时重建：含推动动画与通电电线材质
@@ -215,9 +237,13 @@ pub fn rebuild_world_with_runtime_animations(
     powered_wires: &HashSet<IVec3>,
     factory_debug: Option<&StructureState>,
     index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     index.clear();
     for (pos, data) in &world.blocks {
+        if data.kind.is_scene() {
+            continue;
+        }
         let material = block_render_material(assets, *data, powered_wires.contains(pos));
         spawn_block_model(
             commands,
@@ -260,6 +286,7 @@ pub fn rebuild_world_with_runtime_animations(
             Some(index),
         );
     }
+    rebuild_all_scene_chunks(commands, meshes, world, assets, scene_chunks);
 }
 
 /// 运行时重建并按调试开关挂工厂叠层
@@ -275,6 +302,7 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
     structure_state: &StructureState,
     powered_wires: &HashSet<IVec3>,
     index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     rebuild_world_with_runtime_animations(
         commands,
@@ -287,5 +315,6 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
         powered_wires,
         debug.factory_activity.then_some(structure_state),
         index,
+        scene_chunks,
     );
 }

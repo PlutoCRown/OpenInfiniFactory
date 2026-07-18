@@ -6,6 +6,7 @@ mod fx;
 mod icons;
 mod previews;
 mod scene;
+mod scene_chunks;
 mod scene_mesh;
 mod skybox;
 pub(crate) mod spawn;
@@ -28,6 +29,10 @@ pub use previews::{
     spawn_delete_bounds_preview, spawn_edit_preview, spawn_selection_bounds_preview,
 };
 pub use scene::{setup_scene, sync_shadow_settings, sync_vsync_settings, teardown_playing_scene};
+pub use scene_chunks::{
+    clear_scene_chunks, forget_scene_chunks, rebuild_all_scene_chunks,
+    sync_scene_chunks_for_positions, SceneChunkMeshes,
+};
 pub use skybox::SkyboxPlugin;
 pub(crate) use spawn::spawn_world_block_entity;
 pub use spawn::{

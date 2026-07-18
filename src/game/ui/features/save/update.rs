@@ -44,6 +44,7 @@ pub fn update_save_list_ui(
     )>,
     puzzle_rows_query: Query<Entity, (With<SaveListPuzzleRows>, Without<SaveListSolutionRows>)>,
     solution_rows_query: Query<Entity, (With<SaveListSolutionRows>, Without<SaveListPuzzleRows>)>,
+    children_query: Query<&Children>,
     mut buttons: Query<
         (
             Entity,
@@ -82,6 +83,24 @@ pub fn update_save_list_ui(
         || save_state.is_changed()
         || solution_state.is_changed();
     let mut rebuilt_rows = false;
+
+    let entry = solution_state.save_list_entry;
+    let puzzle_column = if edit_flow {
+        SaveListColumn::PuzzleEdit
+    } else {
+        SaveListColumn::PuzzlePlay
+    };
+    // 按需挂载后行容器是空壳；或挂载当帧实体尚未出现时，不能信 keys 缓存
+    let puzzle_rows_stale =
+        row_hosts_stale(puzzle_rows_query.iter(), &children_query, puzzle_rows.len())
+            || render_state.entry != Some(entry)
+            || render_state.puzzle_keys != puzzle_rows;
+    let solution_rows_stale = row_hosts_stale(
+        solution_rows_query.iter(),
+        &children_query,
+        solution_rows.len(),
+    ) || render_state.entry != Some(entry)
+        || render_state.solution_keys != solution_rows;
 
     if structure_changed {
         let title = save_list_title(
@@ -133,21 +152,34 @@ pub fn update_save_list_ui(
             }
         }
 
-        let entry = solution_state.save_list_entry;
-        let puzzle_column = if edit_flow {
-            SaveListColumn::PuzzleEdit
+        let prompt = if play_flow && save_state.selected_puzzle.is_none() {
+            i18n.t("save.choose_puzzle_prompt")
         } else {
-            SaveListColumn::PuzzlePlay
+            String::new()
         };
+        for mut text in &mut texts.p2() {
+            if text.0 != prompt {
+                text.0 = prompt.clone();
+            }
+        }
+    }
 
-        if render_state.entry != Some(entry) || render_state.puzzle_keys != puzzle_rows {
+    if puzzle_rows_stale {
+        if puzzle_rows_query.is_empty() {
+            // 挂载命令尚未生效，下一帧再重建；勿写 cache
+            render_state.paint_buttons = true;
+        } else {
             for entity in &puzzle_rows_query {
                 rebuild_rows(&mut commands, entity, puzzle_column, &puzzle_rows);
             }
             render_state.puzzle_keys = puzzle_rows.clone();
             rebuilt_rows = true;
         }
-        if render_state.entry != Some(entry) || render_state.solution_keys != solution_rows {
+    }
+    if solution_rows_stale {
+        if solution_rows_query.is_empty() {
+            render_state.paint_buttons = true;
+        } else {
             for entity in &solution_rows_query {
                 rebuild_rows(
                     &mut commands,
@@ -159,21 +191,12 @@ pub fn update_save_list_ui(
             render_state.solution_keys = solution_rows;
             rebuilt_rows = true;
         }
+    }
+    if rebuilt_rows || structure_changed {
         render_state.entry = Some(entry);
-        if rebuilt_rows {
-            render_state.paint_buttons = true;
-        }
-
-        let prompt = if play_flow && save_state.selected_puzzle.is_none() {
-            i18n.t("save.choose_puzzle_prompt")
-        } else {
-            String::new()
-        };
-        for mut text in &mut texts.p2() {
-            if text.0 != prompt {
-                text.0 = prompt.clone();
-            }
-        }
+    }
+    if rebuilt_rows {
+        render_state.paint_buttons = true;
     }
 
     let style_changed = structure_changed || hover.is_changed() || render_state.paint_buttons;
@@ -258,6 +281,24 @@ pub fn update_save_list_ui(
             }
         }
     }
+}
+
+/// 行容器缺失，或子节点数量与期望不一致（含刚挂载的空壳）
+fn row_hosts_stale(
+    hosts: impl IntoIterator<Item = Entity>,
+    children: &Query<&Children>,
+    expected_len: usize,
+) -> bool {
+    let mut any = false;
+    for entity in hosts {
+        any = true;
+        let count = children.get(entity).map(|c| c.len()).unwrap_or(0);
+        if count != expected_len {
+            return true;
+        }
+    }
+    // 期望有行但宿主还没出现
+    !any && expected_len > 0
 }
 
 fn rebuild_rows(

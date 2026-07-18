@@ -23,6 +23,7 @@ pub fn refresh_world_after_edit_many(world: &mut PlayingWorldParams, changed: Ha
             &world.debug,
             &mut world.structure_state,
             &changed,
+            &mut world.scene_chunks,
         );
     }
 }

@@ -16,8 +16,9 @@ use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    BlockEntity, BlockEntityLayer, WorldRenderAssets, rebuild_world_with_animations_for_debug_state,
-    spawn_block_with_animation, spawn_selection_bounds_preview,
+    BlockEntity, BlockEntityLayer, SceneChunkMeshes, WorldRenderAssets,
+    rebuild_world_with_animations_for_debug_state, spawn_block_with_animation,
+    spawn_selection_bounds_preview, sync_scene_chunks_for_positions,
 };
 use crate::scene::BlockEntityIndex;
 use crate::shared::config::{ConfigChord, ConfigSelectionMode};
@@ -44,6 +45,7 @@ pub(super) fn handle_selection_area_input(
     debug: &DebugState,
     structure_state: &mut StructureState,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) -> bool {
     let mut changed = false;
 
@@ -79,6 +81,7 @@ pub(super) fn handle_selection_area_input(
                         debug,
                         structure_state,
                         block_index,
+                        scene_chunks,
                         bounds,
                         drag.offset,
                         force_place,
@@ -113,6 +116,7 @@ pub(super) fn handle_selection_area_input(
                         debug,
                         structure_state,
                         block_index,
+                        scene_chunks,
                         bounds,
                         drag.offset,
                         force_place,
@@ -308,6 +312,7 @@ fn move_selection(
     debug: &DebugState,
     structure_state: &mut StructureState,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
     bounds: SelectionBounds,
     offset: IVec3,
     force: bool,
@@ -392,6 +397,8 @@ fn move_selection(
             },
         );
     }
+    let mut also_dirty = despawn_positions;
+    also_dirty.extend(animations.keys().copied());
     spawn_selection_result(
         world,
         block_entities,
@@ -401,7 +408,9 @@ fn move_selection(
         debug,
         structure_state,
         block_index,
+        scene_chunks,
         animations,
+        also_dirty,
     );
     true
 }
@@ -417,6 +426,7 @@ fn copy_selection(
     debug: &DebugState,
     structure_state: &mut StructureState,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
     bounds: SelectionBounds,
     offset: IVec3,
     force: bool,
@@ -527,6 +537,8 @@ fn copy_selection(
             },
         );
     }
+    let mut also_dirty = overwrite;
+    also_dirty.extend(target_positions.iter().copied());
     spawn_selection_result(
         world,
         block_entities,
@@ -536,7 +548,9 @@ fn copy_selection(
         debug,
         structure_state,
         block_index,
+        scene_chunks,
         animations,
+        also_dirty,
     );
     true
 }
@@ -551,10 +565,13 @@ fn spawn_selection_result(
     debug: &DebugState,
     structure_state: &mut StructureState,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
     animations: HashMap<IVec3, BlockAnimation>,
+    also_dirty: impl IntoIterator<Item = IVec3>,
 ) {
+    let mut scene_dirty: HashSet<IVec3> = also_dirty.into_iter().collect();
     if debug.factory_activity {
-        despawn_block_entities(commands, block_entities, block_index);
+        despawn_block_entities(commands, meshes, block_entities, block_index, scene_chunks);
         rebuild_world_with_animations_for_debug_state(
             commands,
             meshes,
@@ -564,20 +581,36 @@ fn spawn_selection_result(
             debug,
             structure_state,
             block_index,
+            scene_chunks,
         );
     } else {
-        for (target, animation) in animations {
-            let block = world.blocks[&target];
+        for (target, animation) in &animations {
+            let block = world.blocks[target];
+            if block.kind.is_scene() {
+                scene_dirty.insert(*target);
+                scene_dirty.insert(animation.from_pos);
+                continue;
+            }
             spawn_block_with_animation(
                 commands,
                 meshes,
                 render_assets,
                 world,
-                target,
+                *target,
                 block,
-                Some(animation),
+                Some(*animation),
                 None,
                 block_index,
+            );
+        }
+        if !scene_dirty.is_empty() {
+            sync_scene_chunks_for_positions(
+                commands,
+                meshes,
+                world,
+                render_assets,
+                scene_chunks,
+                scene_dirty,
             );
         }
     }

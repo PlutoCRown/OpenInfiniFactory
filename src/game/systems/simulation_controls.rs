@@ -13,7 +13,7 @@ use crate::game::systems::debug::DebugState;
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
+    despawn_world, rebuild_world_for_debug_state, BlockEntity, SceneChunkMeshes, WorldRenderAssets,
 };
 use crate::sim_bridge::SimulationPresentationState;
 use crate::sim_bridge::{SimSnapshot, SimulationWorker, TurnCache};
@@ -46,6 +46,7 @@ pub fn simulation_controls(
     mut meshes: ResMut<Assets<Mesh>>,
     mut deps: SimulationControlDeps,
     mut block_index: ResMut<crate::scene::BlockEntityIndex>,
+    mut scene_chunks: ResMut<SceneChunkMeshes>,
 ) {
     if *deps.builder_mode != BuilderMode::Play
         || *deps.mode.get() != GameMode::Playing
@@ -130,7 +131,13 @@ pub fn simulation_controls(
         } else {
             deps.structure_state.clear();
         }
-        despawn_world(&mut commands, &block_entities, &mut block_index);
+        despawn_world(
+            &mut commands,
+            &mut meshes,
+            &block_entities,
+            &mut block_index,
+            &mut scene_chunks,
+        );
         rebuild_world_for_debug_state(
             &mut commands,
             &mut meshes,
@@ -139,6 +146,7 @@ pub fn simulation_controls(
             &deps.debug,
             &deps.structure_state,
             &mut block_index,
+            &mut scene_chunks,
         );
     }
 }

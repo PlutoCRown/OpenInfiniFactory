@@ -21,7 +21,7 @@ use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, WorldBlocks};
 use crate::game::world::rendering::{
     despawn_edit_previews, spawn_block_preview, spawn_delete_bounds_preview, BlockEntity,
-    EditPreview, WorldRenderAssets,
+    EditPreview, SceneChunkMeshes, WorldRenderAssets,
 };
 use crate::scene::{refresh_edit_changes, BlockEntityIndex};
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
@@ -45,6 +45,7 @@ pub struct PlacementQueries<'w, 's> {
     debug: Res<'w, DebugState>,
     structure_state: ResMut<'w, StructureState>,
     block_index: ResMut<'w, BlockEntityIndex>,
+    scene_chunks: ResMut<'w, SceneChunkMeshes>,
     input: Res<'w, crate::game::input::GameplayInputState>,
     touch: Res<'w, crate::shared::touch_profile::TouchProfile>,
     ui_host: ResMut<'w, UiHost>,
@@ -78,6 +79,7 @@ pub fn placement_input(
         debug,
         mut structure_state,
         mut block_index,
+        mut scene_chunks,
         input,
         touch,
         mut ui_host,
@@ -195,6 +197,7 @@ pub fn placement_input(
             &debug,
             &mut structure_state,
             &mut block_index,
+            &mut scene_chunks,
         ) {
             solution_state.dirty = true;
         }
@@ -237,6 +240,7 @@ pub fn placement_input(
                 &debug,
                 &mut structure_state,
                 &mut block_index,
+                &mut scene_chunks,
             ) {
                 solution_state.dirty = true;
             }
@@ -268,6 +272,7 @@ pub fn placement_input(
                 &debug,
                 &mut structure_state,
                 &mut block_index,
+                &mut scene_chunks,
             ) {
                 let facing = world
                     .blocks
@@ -338,6 +343,7 @@ pub fn placement_input(
                                 target.pos + IVec3::Z,
                                 target.pos + IVec3::NEG_Z,
                             ]),
+                            &mut scene_chunks,
                         );
                         solution_state.dirty = true;
                         placement.edit_gesture = None;
@@ -409,6 +415,7 @@ pub fn placement_input(
                                     target.pos + IVec3::Z,
                                     target.pos + IVec3::NEG_Z,
                                 ]),
+                            &mut scene_chunks,
                             );
                             solution_state.dirty = true;
                         }
@@ -476,6 +483,7 @@ pub fn placement_input(
                     &debug,
                     &mut structure_state,
                     &mut block_index,
+                    &mut scene_chunks,
                 ) {
                     solution_state.dirty = true;
                 }
@@ -583,10 +591,13 @@ fn open_target_block_ui(
 /// 清除全部方块实体并重置索引
 pub(super) fn despawn_block_entities(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     block_entities: &Query<(Entity, &BlockEntity)>,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     block_index.clear();
+    crate::game::world::rendering::clear_scene_chunks(commands, meshes, scene_chunks);
     for (entity, _) in block_entities {
         commands.entity(entity).despawn();
     }
@@ -613,6 +624,7 @@ fn commit_edit_gesture(
     debug: &DebugState,
     structure_state: &mut StructureState,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) -> bool {
     let patch = match gesture.kind {
         EditGestureKind::Place { block } => {
@@ -700,6 +712,7 @@ fn commit_edit_gesture(
         debug,
         structure_state,
         &changed_positions,
+        scene_chunks,
     );
     true
 }

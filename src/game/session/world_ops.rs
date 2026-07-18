@@ -12,7 +12,7 @@ use crate::game::systems::debug::DebugState;
 use crate::game::ui::{CarriedItem, InventoryItems};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_world, rebuild_world_for_debug_state, BlockEntity, WorldRenderAssets,
+    despawn_world, rebuild_world_for_debug_state, BlockEntity, SceneChunkMeshes, WorldRenderAssets,
 };
 use crate::scene::BlockEntityIndex;
 use crate::shared::save::{
@@ -151,6 +151,7 @@ pub fn switch_to_edit_mode_and_rebuild(
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     switch_to_edit_mode(
         world,
@@ -163,7 +164,7 @@ pub fn switch_to_edit_mode_and_rebuild(
         solution_state,
     );
     if let Some(render_assets) = render_assets {
-        despawn_world(commands, block_entities, block_index);
+        despawn_world(commands, meshes, block_entities, block_index, scene_chunks);
         structure_state.clear();
         movement_influence.clear();
         pusher_state.clear();
@@ -175,6 +176,7 @@ pub fn switch_to_edit_mode_and_rebuild(
             debug,
             structure_state,
             block_index,
+            scene_chunks,
         );
     }
 }
@@ -192,6 +194,7 @@ pub fn reset_current_solution(
     pusher_state: &mut PusherState,
     solution_state: &SolutionState,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     if let Some(puzzle_snapshot) = &solution_state.puzzle_snapshot {
         reset_solution_world(world, puzzle_snapshot);
@@ -206,7 +209,7 @@ pub fn reset_current_solution(
         movement_influence.clear();
         pusher_state.clear();
         if let Some(render_assets) = render_assets {
-            despawn_world(commands, block_entities, block_index);
+            despawn_world(commands, meshes, block_entities, block_index, scene_chunks);
             rebuild_world_for_debug_state(
                 commands,
                 meshes,
@@ -215,6 +218,7 @@ pub fn reset_current_solution(
                 debug,
                 structure_state,
                 block_index,
+                scene_chunks,
             );
         }
     }
@@ -237,6 +241,7 @@ pub fn exit_to_main_menu(
     next_state: &mut NextState<GameMode>,
     start_menu_screen: &mut StartMenuScreen,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     clear_loaded_world(
         world,
@@ -253,6 +258,7 @@ pub fn exit_to_main_menu(
         movement_influence,
         pusher_state,
         block_index,
+        scene_chunks,
     );
     *start_menu_screen = StartMenuScreen::Main;
     next_state.set(GameMode::StartMenu);
@@ -282,6 +288,7 @@ pub fn load_world_into_session(
     current_mode: GameMode,
     next_state: &mut NextState<GameMode>,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     let lighting = loaded.lighting;
     *world = loaded.world;
@@ -333,7 +340,7 @@ pub fn load_world_into_session(
         GameMode::StartMenu => next_state.set(GameMode::Playing),
         GameMode::Playing => {
             if let Some(render_assets) = render_assets {
-                despawn_world(commands, block_entities, block_index);
+                despawn_world(commands, meshes, block_entities, block_index, scene_chunks);
                 rebuild_world_for_debug_state(
                     commands,
                     meshes,
@@ -342,6 +349,7 @@ pub fn load_world_into_session(
                     debug,
                     structure_state,
                     block_index,
+                    scene_chunks,
                 );
             }
         }
@@ -363,6 +371,7 @@ pub fn clear_loaded_world(
     movement_influence: &mut MovementInfluenceCache,
     pusher_state: &mut PusherState,
     block_index: &mut BlockEntityIndex,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     simulation.running = false;
     simulation.step_requested = false;
@@ -384,7 +393,7 @@ pub fn clear_loaded_world(
     movement_influence.clear();
     pusher_state.clear();
     if let Some(render_assets) = render_assets {
-        despawn_world(commands, block_entities, block_index);
+        despawn_world(commands, meshes, block_entities, block_index, scene_chunks);
         rebuild_world_for_debug_state(
             commands,
             meshes,
@@ -393,6 +402,7 @@ pub fn clear_loaded_world(
             debug,
             structure_state,
             block_index,
+            scene_chunks,
         );
     }
 }

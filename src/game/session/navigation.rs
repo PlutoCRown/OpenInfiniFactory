@@ -132,6 +132,7 @@ pub fn process_deferred_main_menu_exit(
         &mut next_state,
         &mut start_menu_screen,
         &mut world.block_index,
+        &mut world.scene_chunks,
     );
     *busy = SessionBusy::None;
 }
@@ -173,6 +174,7 @@ pub fn finish_pending_main_menu_exit(
             &mut next_state,
             &mut start_menu_screen,
             &mut world.block_index,
+            &mut world.scene_chunks,
         );
         *busy = SessionBusy::None;
     }

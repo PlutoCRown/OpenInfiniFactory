@@ -9,6 +9,7 @@ use crate::game::ui::core::text_input::InlineTextEditState;
 use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::WorldRenderAssets;
+use crate::game::world::rendering::SceneChunkMeshes;
 use crate::scene::{refresh_edit_changes, BlockEntityIndex};
 use crate::shared::config::{ActionKeyName, GameConfig};
 
@@ -20,6 +21,7 @@ pub struct EditHistoryApply<'w, 's> {
     commands: Commands<'w, 's>,
     meshes: ResMut<'w, Assets<Mesh>>,
     block_index: ResMut<'w, BlockEntityIndex>,
+    scene_chunks: ResMut<'w, SceneChunkMeshes>,
     structure_state: ResMut<'w, StructureState>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
     debug: Res<'w, DebugState>,
@@ -76,6 +78,7 @@ pub fn edit_history_input(
         &apply.debug,
         &mut apply.structure_state,
         &patch.affected_positions(),
+        &mut apply.scene_chunks,
     );
     solution_state.dirty = true;
 }

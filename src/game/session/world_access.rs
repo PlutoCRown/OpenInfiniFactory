@@ -6,7 +6,7 @@ use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::systems::debug::DebugState;
 use crate::game::world::grid::WorldBlocks;
-use crate::game::world::rendering::{BlockEntity, WorldRenderAssets};
+use crate::game::world::rendering::{BlockEntity, SceneChunkMeshes, WorldRenderAssets};
 use crate::scene::BlockEntityIndex;
 
 /// ECS access bundle for mutating the loaded playing world and its render/sim sidecars.
@@ -21,5 +21,6 @@ pub struct PlayingWorldParams<'w, 's> {
     pub movement_influence: ResMut<'w, MovementInfluenceCache>,
     pub pusher_state: ResMut<'w, PusherState>,
     pub block_index: ResMut<'w, BlockEntityIndex>,
+    pub scene_chunks: ResMut<'w, SceneChunkMeshes>,
     pub block_entities: Query<'w, 's, Entity, With<BlockEntity>>,
 }

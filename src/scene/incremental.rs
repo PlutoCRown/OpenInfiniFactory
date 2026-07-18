@@ -10,8 +10,9 @@ use crate::game::world::animation::{
 };
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    BlockEntity, BlockEntityLayer, WorldRenderAssets, signal_neighbor_offsets,
+    BlockEntity, BlockEntityLayer, SceneChunkMeshes, WorldRenderAssets, signal_neighbor_offsets,
     spawn_acceptance_sparks, spawn_laser_beams, spawn_weld_sparks, spawn_world_block_entity,
+    sync_scene_chunks_for_positions,
 };
 use crate::sim_bridge::TurnOutput;
 
@@ -269,22 +270,28 @@ pub fn refresh_positions(
     skip: &HashSet<IVec3>,
     pusher_animations: &HashMap<IVec3, PusherAnimation>,
     timing: AnimationTiming,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     let factory_debug = debug.factory_activity.then_some(structure_state);
+    let mut scene_dirty = HashSet::new();
     for &pos in positions {
         if skip.contains(&pos) {
             continue;
         }
+        // 邻格 AO / 面剔除，以及「场景被其它层覆盖」都要刷 chunk
+        scene_dirty.insert(pos);
 
         // blocks 层（工厂/材料/场景）
         match world.blocks.get(&pos).copied() {
+            Some(data) if data.kind.is_scene() => {
+                despawn_animatable_at(commands, index, pos);
+            }
             Some(data) if data.kind.is_factory() || data.kind.is_material() => {
                 let same_instance = index
                     .get_by_id(data.id)
                     .is_some_and(|entity| index.get_animatable(pos) == Some(entity));
                 if !(same_instance && can_preserve_animatable(data)) {
                     despawn_animatable_at(commands, index, pos);
-                    despawn_scene_at(commands, index, pos);
                     spawn_and_index(
                         commands,
                         meshes,
@@ -349,6 +356,10 @@ pub fn refresh_positions(
                 despawn_system_at(commands, index, pos);
             }
         }
+    }
+
+    if !scene_dirty.is_empty() {
+        sync_scene_chunks_for_positions(commands, meshes, world, assets, scene_chunks, scene_dirty);
     }
 }
 
@@ -465,6 +476,7 @@ pub fn refresh_edit_changes(
     debug: &DebugState,
     structure_state: &StructureState,
     changed: &HashSet<IVec3>,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     let refresh = collect_edit_refresh_positions(world, changed);
     // 编辑常只改 block_settings（材料预览等），BlockData 不变；
@@ -487,6 +499,7 @@ pub fn refresh_edit_changes(
         &HashSet::new(),
         &HashMap::new(),
         AnimationTiming::edit(),
+        scene_chunks,
     );
 }
 
@@ -503,6 +516,7 @@ pub fn apply_turn_output_incremental(
     debug: &DebugState,
     structure_state: &StructureState,
     stats: &mut crate::game::simulation::stats::SimulationStepStats,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     let render_start = bevy::platform::time::Instant::now();
     let timing = AnimationTiming::simulation(animation_duration);
@@ -555,6 +569,7 @@ pub fn apply_turn_output_incremental(
         &animated,
         &pusher_animations,
         timing,
+        scene_chunks,
     );
     for (&pos, data) in &after.blocks {
         if !data.kind.is_material() || index.get_animatable(pos).is_some() {

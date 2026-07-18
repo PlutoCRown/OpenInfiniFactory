@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 use crate::game::systems::debug::DebugState;
 use crate::game::world::grid::WorldBlocks;
-use crate::game::world::rendering::WorldRenderAssets;
+use crate::game::world::rendering::{SceneChunkMeshes, WorldRenderAssets};
 use crate::sim_bridge::TurnOutput;
 
 use super::entity_index::BlockEntityIndex;
@@ -22,6 +22,7 @@ pub fn apply_turn_output(
     debug: &DebugState,
     structure_state: &crate::game::simulation::structure_state::StructureState,
     stats: &mut crate::game::simulation::stats::SimulationStepStats,
+    scene_chunks: &mut SceneChunkMeshes,
 ) {
     apply_turn_output_incremental(
         before,
@@ -36,5 +37,6 @@ pub fn apply_turn_output(
         debug,
         structure_state,
         stats,
+        scene_chunks,
     );
 }
