@@ -1,12 +1,12 @@
 """生成纯立方体材料的 texture.png + normal.png（无需 Blender / GLB）。
 
-写入已有材料目录：
-  coal     — 粗框 + 深色碎石填芯
-  iron     — 单回字凹槽金属
-  granite  — 双回字嵌套凹槽
-  basic    — 米色工业面板（双槽 + 角螺孔）
+写入新增材料目录：
+  material_1 — 粗框 + 深色碎石填芯
+  material_2 — 单回字凹槽金属
+  material_3 — 双回字嵌套凹槽
+  material_4 — 米色工业面板（双槽 + 角螺孔）
 
-aluminum 有独立 model.glb（见 generate_aluminum_glb.py），不在此生成。
+material_5 有独立 model.glb（见 generate_aluminum_glb.py），不在此生成。
 
 用法：
   python3 scripts/material_blocks/generate_face_textures.py
@@ -174,7 +174,7 @@ def clamp01(x: float) -> float:
 
 
 def gen_framed_fill() -> None:
-    """粗框 + 深色碎石填芯（coal）。"""
+    """粗框 + 深色碎石填芯（material_1）。"""
     size = TEX_SIZE
     frame_rgb = (52, 54, 58)
     height = [[0.5] * size for _ in range(size)]
@@ -216,11 +216,11 @@ def gen_framed_fill() -> None:
             albedo[i : i + 3] = list(rgb)
             albedo[i + 3] = 255
 
-    write_pack("coal", albedo, height_to_normal(height, size, NORMAL_STRENGTH))
+    write_pack("material_1", albedo, height_to_normal(height, size, NORMAL_STRENGTH))
 
 
 def gen_single_groove() -> None:
-    """单回字凹槽（iron）。"""
+    """单回字凹槽（material_2）。"""
     size = TEX_SIZE
     base = (78, 82, 88)
     height = [[0.5] * size for _ in range(size)]
@@ -242,11 +242,11 @@ def gen_single_groove() -> None:
             albedo[i : i + 3] = list(rgb)
             albedo[i + 3] = 255
 
-    write_pack("iron", albedo, height_to_normal(height, size, NORMAL_STRENGTH))
+    write_pack("material_2", albedo, height_to_normal(height, size, NORMAL_STRENGTH))
 
 
 def gen_nested_groove() -> None:
-    """双回字嵌套凹槽（granite）。"""
+    """双回字嵌套凹槽（material_3）。"""
     size = TEX_SIZE
     base = (70, 72, 76)
     height = [[0.5] * size for _ in range(size)]
@@ -274,11 +274,11 @@ def gen_nested_groove() -> None:
             albedo[i : i + 3] = list(rgb)
             albedo[i + 3] = 255
 
-    write_pack("granite", albedo, height_to_normal(height, size, NORMAL_STRENGTH))
+    write_pack("material_3", albedo, height_to_normal(height, size, NORMAL_STRENGTH))
 
 
 def gen_basic_panel() -> None:
-    """米色工业面板：外框 + 角螺孔 + 双暗槽 + 底小方块（basic）。"""
+    """米色工业面板：外框 + 角螺孔 + 双暗槽 + 底小方块（material_4）。"""
     size = TEX_SIZE
     body = (183, 172, 142)  # #B7AC8E
     slot = (40, 44, 52)  # 深灰蓝槽
@@ -368,17 +368,17 @@ def gen_basic_panel() -> None:
             albedo[i : i + 3] = list(rgb)
             albedo[i + 3] = 255
 
-    write_pack("basic", albedo, height_to_normal(height, size, NORMAL_STRENGTH))
+    write_pack("material_4", albedo, height_to_normal(height, size, NORMAL_STRENGTH))
 
 
 def main() -> None:
-    print("generating framed fill (coal)…", file=sys.stderr)
+    print("generating material_1 (framed fill)…", file=sys.stderr)
     gen_framed_fill()
-    print("generating single groove (iron)…", file=sys.stderr)
+    print("generating material_2 (single groove)…", file=sys.stderr)
     gen_single_groove()
-    print("generating nested groove (granite)…", file=sys.stderr)
+    print("generating material_3 (nested groove)…", file=sys.stderr)
     gen_nested_groove()
-    print("generating basic panel…", file=sys.stderr)
+    print("generating material_4 (panel)…", file=sys.stderr)
     gen_basic_panel()
 
 

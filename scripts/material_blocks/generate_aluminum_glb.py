@@ -1,7 +1,7 @@
-"""用 Blender 生成铝材料 model.glb：十二边单段倒角 + 面板贴图烤进 GLB。
+"""用 Blender 生成 material_5：十二边单段倒角 + 面板贴图烤进 GLB。
 
 几何：1×1×1 立方体，12 棱 bevel（segments=1），单网格单材质。
-细节（板缝 / 屋形 / 灯 / 铜边）全部在 albedo 里；法线细节烤进同一张贴图的明暗。
+细节（板缝 / 屋形 / 灯 / 铜边）全部在 albedo 里。
 导出后只保留 model.glb（不留外部 texture/normal.png）。
 
 用法：
@@ -22,7 +22,7 @@ import bmesh
 from mathutils import Vector
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT_DIR = ROOT / "assets" / "material_blocks" / "aluminum"
+OUT_DIR = ROOT / "assets" / "material_blocks" / "material_5"
 OUT_GLB = OUT_DIR / "model.glb"
 
 CHAMFER = 0.065
