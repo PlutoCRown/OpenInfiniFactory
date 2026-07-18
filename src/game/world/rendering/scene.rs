@@ -2,8 +2,9 @@ use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 
 use super::components::{AimFaceHighlight, GameplayScene, HoverMarker, PlacementPreview};
-use super::skybox::{SkyMaterial, spawn_sky_dome, sunlight_rotation};
+use super::skybox::{spawn_sky_dome, transform_for_sun_direction, SkyMaterial};
 use crate::game::world::render_assets::WorldRenderAssets;
+use crate::shared::save::PuzzleLighting;
 
 /// 初始化游玩场景灯光、渲染资源与准星/预览实体
 pub fn setup_scene(
@@ -17,6 +18,7 @@ pub fn setup_scene(
     stamp_registry: Res<crate::game::material_blocks::StampMaterialRegistry>,
     paint_registry: Res<crate::game::material_blocks::PaintMaterialRegistry>,
     config: Res<crate::shared::config::GameConfig>,
+    lighting: Res<PuzzleLighting>,
 ) {
     commands.spawn((
         PointLight {
@@ -33,12 +35,12 @@ pub fn setup_scene(
 
     commands.spawn((
         DirectionalLight {
-            illuminance: 9500.0,
-            color: Color::srgb(1.0, 0.97, 0.92),
+            illuminance: lighting.illuminance,
+            color: lighting.color,
             shadow_maps_enabled: config.shadows_enabled,
             ..default()
         },
-        Transform::from_rotation(sunlight_rotation()),
+        transform_for_sun_direction(lighting.direction),
         CascadeShadowConfigBuilder {
             num_cascades: 3,
             minimum_distance: 0.15,
@@ -55,6 +57,7 @@ pub fn setup_scene(
         &mut meshes,
         &mut sky_materials,
         config.skybox_enabled,
+        &lighting,
     );
 
     let render_assets = WorldRenderAssets::new(

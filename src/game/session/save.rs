@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 
-use crate::game::player::controller::{capture_player_save, FlyCamera};
+use crate::game::player::controller::{FlyCamera, capture_player_save};
 use crate::game::state::{SimulationState, SolutionState};
 use crate::game::ui::InventoryItems;
 use crate::game::world::grid::WorldBlocks;
-use crate::shared::save::{save_puzzle, SaveKind, SaveSlot, SaveState};
+use crate::shared::save::{SaveKind, SaveState, save_puzzle_as};
 
 use super::busy::SessionBusy;
 #[cfg(not(target_arch = "wasm32"))]
@@ -128,13 +128,8 @@ pub fn handle_save_world_as_new_puzzle(
             .ok()
             .map(|(camera, transform)| capture_player_save(camera, transform));
         let snapshot = simulation.authoring_world(&world);
-        if save_puzzle(
-            snapshot,
-            &SaveSlot::puzzle(&request.name),
-            &inventory,
-            player_save,
-        ) {
-            save_state.current = Some(SaveSlot::puzzle(&request.name));
+        if let Some(slot) = save_puzzle_as(snapshot, &request.name, &inventory, player_save) {
+            save_state.current = Some(slot);
             save_state.current_kind = Some(SaveKind::Puzzle);
             solution_state.dirty = false;
             solution_state.puzzle_id = None;

@@ -3,9 +3,7 @@ use bevy::prelude::*;
 use crate::game::session;
 use crate::game::ui::access::{i18n, ui};
 use crate::game::ui::core::text_prompt::{TextPromptProps, TextPromptResult};
-use crate::shared::save::{
-    next_named_save, puzzle_names, rename_save, solution_names_for_puzzle, SaveSlot, SaveState,
-};
+use crate::shared::save::{rename_save_to, SaveSlot, SaveState};
 
 pub fn text_prompt_spec(title_key: &'static str, default_value: &str) -> TextPromptProps {
     TextPromptProps {
@@ -16,55 +14,16 @@ pub fn text_prompt_spec(title_key: &'static str, default_value: &str) -> TextPro
     }
 }
 
-fn resolved_puzzle_name(
-    save_state: &SaveState,
-    requested: &str,
-    rename_from: Option<&str>,
-) -> Option<String> {
-    if let Some(old) = rename_from {
-        if requested.trim() == old {
-            return Some(old.to_string());
-        }
-    }
-    let existing = puzzle_names(&save_state.entries);
-    let name = next_named_save(&existing, requested);
-    if name.is_empty() {
-        None
-    } else {
-        Some(name)
-    }
-}
-
-fn resolved_solution_name(
-    save_state: &SaveState,
-    puzzle: &str,
-    requested: &str,
-    rename_from: Option<&str>,
-) -> Option<String> {
-    if let Some(old) = rename_from {
-        if requested.trim() == old {
-            return Some(old.to_string());
-        }
-    }
-    let existing = solution_names_for_puzzle(&save_state.entries, puzzle);
-    let name = next_named_save(&existing, requested);
-    if name.is_empty() {
-        None
-    } else {
-        Some(name)
-    }
-}
-
 pub fn open_new_puzzle_prompt() {
     let spec = text_prompt_spec("save.prompt.new_puzzle", "puzzle");
     ui.open_text_prompt_then(spec, |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
-        let save_state = world.resource::<SaveState>();
-        let Some(name) = resolved_puzzle_name(save_state, &requested, None) else {
+        let name = requested.trim().to_string();
+        if name.is_empty() {
             return;
-        };
+        }
         session::create_new_puzzle_in_world(world, name);
     });
 }
@@ -75,59 +34,54 @@ pub fn open_new_solution_prompt(puzzle: String) {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
-        let save_state = world.resource::<SaveState>();
-        let Some(name) = resolved_solution_name(save_state, &puzzle, &requested, None) else {
+        let name = requested.trim().to_string();
+        if name.is_empty() {
             return;
-        };
+        }
         session::create_new_solution_in_world(world, name, puzzle);
     });
 }
 
-pub fn open_rename_puzzle_prompt(old_name: String) {
-    let spec = text_prompt_spec("save.prompt.rename_puzzle", old_name.as_str());
+pub fn open_rename_puzzle_prompt(slot: SaveSlot, name: String) {
+    let spec = text_prompt_spec("save.prompt.rename_puzzle", name.as_str());
     ui.open_text_prompt_then(spec, move |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
+        if requested.trim() == name {
+            return;
+        }
         let mut save_state = world.resource_mut::<SaveState>();
-        let Some(name) = resolved_puzzle_name(&save_state, &requested, Some(old_name.as_str()))
-        else {
+        let Some(new_slot) = rename_save_to(&slot, &requested) else {
             return;
         };
-        let old_slot = SaveSlot::puzzle(&old_name);
-        let new_slot = SaveSlot::puzzle(&name);
-        if old_slot == new_slot || rename_save(&old_slot, &new_slot) {
-            if save_state.current.as_ref() == Some(&old_slot) {
-                save_state.current = Some(new_slot.clone());
-            }
-            if save_state.selected_puzzle.as_deref() == Some(old_name.as_str()) {
-                save_state.select_puzzle(Some(name.clone()));
-            }
-            save_state.refresh();
+        if save_state.current.as_ref() == Some(&slot) {
+            save_state.current = Some(new_slot.clone());
         }
+        if save_state.selected_puzzle.as_deref() == Some(slot.puzzle.as_str()) {
+            save_state.select_puzzle(Some(new_slot.puzzle.clone()));
+        }
+        save_state.refresh();
     });
 }
 
-pub fn open_rename_solution_prompt(puzzle: String, old_name: String) {
-    let spec = text_prompt_spec("save.prompt.rename_solution", old_name.as_str());
+pub fn open_rename_solution_prompt(slot: SaveSlot, name: String) {
+    let spec = text_prompt_spec("save.prompt.rename_solution", name.as_str());
     ui.open_text_prompt_then(spec, move |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
+        if requested.trim() == name {
+            return;
+        }
         let mut save_state = world.resource_mut::<SaveState>();
-        let Some(name) =
-            resolved_solution_name(&save_state, &puzzle, &requested, Some(old_name.as_str()))
-        else {
+        let Some(new_slot) = rename_save_to(&slot, &requested) else {
             return;
         };
-        let old_slot = SaveSlot::solution(&puzzle, &old_name);
-        let new_slot = SaveSlot::solution(&puzzle, &name);
-        if old_slot == new_slot || rename_save(&old_slot, &new_slot) {
-            if save_state.current.as_ref() == Some(&old_slot) {
-                save_state.current = Some(new_slot.clone());
-            }
-            save_state.refresh();
+        if save_state.current.as_ref() == Some(&slot) {
+            save_state.current = Some(new_slot);
         }
+        save_state.refresh();
     });
 }
 
@@ -137,10 +91,10 @@ pub fn open_save_as_new_puzzle_prompt() {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
-        let save_state = world.resource::<SaveState>();
-        let Some(name) = resolved_puzzle_name(save_state, &requested, None) else {
+        let name = requested.trim().to_string();
+        if name.is_empty() {
             return;
-        };
+        }
         session::save_world_as_new_puzzle_in_world(world, name);
     });
 }

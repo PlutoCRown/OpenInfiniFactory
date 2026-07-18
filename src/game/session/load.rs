@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy::tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task};
+use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, futures_lite::future};
 
 use crate::game::edit_history::EditHistory;
 use crate::game::state::{
@@ -7,9 +7,9 @@ use crate::game::state::{
     WorldEntryMode,
 };
 use crate::game::ui::{CarriedItem, InventoryItems};
-use crate::game::world::grid::seed_demo_world;
 use crate::shared::save::{
-    decode_save_slot, load_world, save_puzzle, save_solution, LoadedSave, SaveSlot, SaveState,
+    LoadedSave, SaveSlot, SaveState, create_puzzle_from_default_template, decode_save_slot,
+    load_world, save_solution_as,
 };
 
 use super::busy::SessionBusy;
@@ -40,9 +40,10 @@ pub fn handle_load_world(
         pending.ready = None;
         let slot = request.slot.clone();
         let entry = request.entry;
-        pending.task = Some(AsyncComputeTaskPool::get().spawn(async move {
-            decode_save_slot(&slot).map(|loaded| (slot, entry, loaded))
-        }));
+        pending.task = Some(
+            AsyncComputeTaskPool::get()
+                .spawn(async move { decode_save_slot(&slot).map(|loaded| (slot, entry, loaded)) }),
+        );
     }
 }
 
@@ -150,47 +151,40 @@ pub fn handle_create_new_puzzle(
     mut next_state: ResMut<NextState<GameMode>>,
 ) {
     for request in requests.read() {
-        world.world.clear();
-        seed_demo_world(&mut world.world);
-        *inventory = InventoryItems::for_mode(BuilderMode::Edit);
-        if save_puzzle(
-            &world.world,
-            &SaveSlot::puzzle(&request.name),
-            &inventory,
-            None,
-        ) {
-            save_state.refresh();
-            edit_history.clear();
-            let slot = SaveSlot::puzzle(&request.name);
-            let Some(loaded) = decode_save_slot(&slot) else {
-                continue;
-            };
-            load_world_into_session(
-                &slot,
-                WorldEntryMode::EditPuzzle,
-                loaded,
-                &mut world.world,
-                &mut builder_mode,
-                &mut inventory,
-                &mut carried,
-                &mut placement,
-                &mut save_state,
-                &mut solution_state,
-                &mut simulation,
-                &mut world.commands,
-                &mut world.meshes,
-                &world.block_entities,
-                world.render_assets.as_deref(),
-                &world.debug,
-                &mut world.structure_state,
-                &mut world.movement_influence,
-                &mut world.pusher_state,
-                &mut pending_player,
-                *mode.get(),
-                &mut next_state,
-                &mut world.block_index,
-            );
-        }
+        let Some(slot) = create_puzzle_from_default_template(&request.name) else {
+            bevy::log::warn!("failed to create puzzle `{}` from template", request.name);
+            continue;
+        };
+        save_state.refresh();
+        edit_history.clear();
+        let Some(loaded) = decode_save_slot(&slot) else {
+            continue;
+        };
+        load_world_into_session(
+            &slot,
+            WorldEntryMode::EditPuzzle,
+            loaded,
+            &mut world.world,
+            &mut builder_mode,
+            &mut inventory,
+            &mut carried,
+            &mut placement,
+            &mut save_state,
+            &mut solution_state,
+            &mut simulation,
+            &mut world.commands,
+            &mut world.meshes,
+            &world.block_entities,
+            world.render_assets.as_deref(),
+            &world.debug,
+            &mut world.structure_state,
+            &mut world.movement_influence,
+            &mut world.pusher_state,
+            &mut pending_player,
+            *mode.get(),
+            &mut next_state,
+            &mut world.block_index,
+        );
     }
 }
 
@@ -216,38 +210,44 @@ pub fn handle_create_new_solution(
         };
         *world.world = loaded.world;
         *inventory = InventoryItems::for_mode(BuilderMode::Play);
-        let solution_slot = SaveSlot::solution(&request.puzzle, &request.name);
-        if save_solution(&world.world, &solution_slot, &inventory, None) {
-            save_state.refresh();
-            edit_history.clear();
-            let Some(loaded) = decode_save_slot(&solution_slot) else {
-                continue;
-            };
-            load_world_into_session(
-                &solution_slot,
-                WorldEntryMode::PlaySolution,
-                loaded,
-                &mut world.world,
-                &mut builder_mode,
-                &mut inventory,
-                &mut carried,
-                &mut placement,
-                &mut save_state,
-                &mut solution_state,
-                &mut simulation,
-                &mut world.commands,
-                &mut world.meshes,
-                &world.block_entities,
-                world.render_assets.as_deref(),
-                &world.debug,
-                &mut world.structure_state,
-                &mut world.movement_influence,
-                &mut world.pusher_state,
-                &mut pending_player,
-                *mode.get(),
-                &mut next_state,
-                &mut world.block_index,
-            );
-        }
+        let Some(solution_slot) = save_solution_as(
+            &world.world,
+            &request.puzzle,
+            &request.name,
+            &inventory,
+            None,
+        ) else {
+            continue;
+        };
+        save_state.refresh();
+        edit_history.clear();
+        let Some(loaded) = decode_save_slot(&solution_slot) else {
+            continue;
+        };
+        load_world_into_session(
+            &solution_slot,
+            WorldEntryMode::PlaySolution,
+            loaded,
+            &mut world.world,
+            &mut builder_mode,
+            &mut inventory,
+            &mut carried,
+            &mut placement,
+            &mut save_state,
+            &mut solution_state,
+            &mut simulation,
+            &mut world.commands,
+            &mut world.meshes,
+            &world.block_entities,
+            world.render_assets.as_deref(),
+            &world.debug,
+            &mut world.structure_state,
+            &mut world.movement_influence,
+            &mut world.pusher_state,
+            &mut pending_player,
+            *mode.get(),
+            &mut next_state,
+            &mut world.block_index,
+        );
     }
 }

@@ -134,30 +134,30 @@ fn dispatch_save_list_row_action(
     load_requests: &mut MessageWriter<LoadWorld>,
 ) {
     match action {
-        SaveListAction::LoadPuzzle(name) => {
+        SaveListAction::LoadPuzzle(storage) => {
             if ctx.solution_state.save_list_entry == WorldEntryMode::EditPuzzle {
                 if !ctx
                     .save_state
                     .puzzles()
                     .iter()
-                    .any(|entry| entry.name == *name)
+                    .any(|entry| entry.slot.puzzle == *storage)
                 {
                     return;
                 }
                 load_requests.write(LoadWorld {
-                    slot: SaveSlot::puzzle(name.clone()),
+                    slot: SaveSlot::puzzle(storage.clone()),
                     entry: WorldEntryMode::EditPuzzle,
                 });
             } else if ctx
                 .save_state
                 .puzzles()
                 .iter()
-                .any(|entry| entry.name == *name)
+                .any(|entry| entry.slot.puzzle == *storage)
             {
-                ctx.save_state.select_puzzle(Some(name));
+                ctx.save_state.select_puzzle(Some(storage));
             }
         }
-        SaveListAction::LoadSolution(name) => {
+        SaveListAction::LoadSolution(storage) => {
             if ctx.solution_state.save_list_entry != WorldEntryMode::PlaySolution {
                 return;
             }
@@ -171,45 +171,49 @@ fn dispatch_save_list_row_action(
                 .save_state
                 .selected_puzzle_solutions()
                 .iter()
-                .any(|entry| entry.name == *name)
+                .any(|entry| entry.slot.solution.as_deref() == Some(storage.as_str()))
             {
                 return;
             }
             load_requests.write(LoadWorld {
-                slot: SaveSlot::solution(puzzle, name.clone()),
+                slot: SaveSlot::solution(puzzle, storage.clone()),
                 entry: WorldEntryMode::PlaySolution,
             });
         }
-        SaveListAction::RenamePuzzle(name) => {
+        SaveListAction::RenamePuzzle(storage) => {
             if ctx.solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
                 return;
             }
-            if ctx
+            let display = ctx
                 .save_state
                 .puzzles()
                 .iter()
-                .any(|entry| entry.name == *name)
-            {
-                open_rename_puzzle_prompt(name.clone());
-            }
+                .find(|entry| entry.slot.puzzle == *storage)
+                .map(|entry| entry.name.clone());
+            let Some(display) = display else {
+                return;
+            };
+            open_rename_puzzle_prompt(SaveSlot::puzzle(storage.clone()), display);
         }
-        SaveListAction::RenameSolution(name) => {
+        SaveListAction::RenameSolution(storage) => {
             if ctx.solution_state.save_list_entry != WorldEntryMode::PlaySolution {
                 return;
             }
-            if ctx
+            let display = ctx
                 .save_state
                 .selected_puzzle_solutions()
                 .iter()
-                .any(|entry| entry.name == *name)
-            {
-                let Some(puzzle) = ctx.save_state.selected_puzzle.clone() else {
-                    return;
-                };
-                open_rename_solution_prompt(puzzle, name.clone());
-            }
+                .find(|entry| entry.slot.solution.as_deref() == Some(storage.as_str()))
+                .map(|entry| entry.name.clone());
+            let Some(display) = display else {
+                return;
+            };
+            let Some(puzzle) = ctx.save_state.selected_puzzle.clone() else {
+                return;
+            };
+            open_rename_solution_prompt(SaveSlot::solution(puzzle, storage.clone()), display);
         }
-        SaveListAction::DeletePuzzle(name) => {
+        SaveListAction::DeletePuzzle(storage) => {
             if ctx.solution_state.save_list_entry != WorldEntryMode::EditPuzzle {
                 return;
             }
@@ -217,22 +221,22 @@ fn dispatch_save_list_row_action(
                 .save_state
                 .puzzles()
                 .iter()
-                .any(|entry| entry.name == *name)
+                .any(|entry| entry.slot.puzzle == *storage)
             {
-                open_delete_confirm(SaveSlot::puzzle(name.clone()));
+                open_delete_confirm(SaveSlot::puzzle(storage.clone()));
             }
         }
-        SaveListAction::DeleteSolution(name) => {
+        SaveListAction::DeleteSolution(storage) => {
             if ctx
                 .save_state
                 .selected_puzzle_solutions()
                 .iter()
-                .any(|entry| entry.name == *name)
+                .any(|entry| entry.slot.solution.as_deref() == Some(storage.as_str()))
             {
                 let Some(puzzle) = ctx.save_state.selected_puzzle.clone() else {
                     return;
                 };
-                open_delete_confirm(SaveSlot::solution(puzzle, name.clone()));
+                open_delete_confirm(SaveSlot::solution(puzzle, storage.clone()));
             }
         }
         SaveListAction::NewPuzzle | SaveListAction::NewSolution | SaveListAction::Back => {}

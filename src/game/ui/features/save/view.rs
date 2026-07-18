@@ -70,19 +70,21 @@ impl SaveListAction {
             ..
         } = ctx;
         match self {
-            Self::LoadPuzzle(name) => {
+            Self::LoadPuzzle(storage) => {
+                let name = puzzle_display_name(save_state, storage);
                 if *play_flow {
-                    if save_state.selected_puzzle.as_deref() == Some(name.as_str()) {
-                        i18n.fmt("save.selected_puzzle", &[("name", name.clone())])
+                    if save_state.selected_puzzle.as_deref() == Some(storage.as_str()) {
+                        i18n.fmt("save.selected_puzzle", &[("name", name)])
                     } else {
-                        i18n.fmt("save.select_puzzle", &[("name", name.clone())])
+                        i18n.fmt("save.select_puzzle", &[("name", name)])
                     }
                 } else {
-                    i18n.fmt("save.load_puzzle", &[("name", name.clone())])
+                    i18n.fmt("save.load_puzzle", &[("name", name)])
                 }
             }
-            Self::LoadSolution(name) => {
-                i18n.fmt("save.load_solution", &[("name", name.clone())])
+            Self::LoadSolution(storage) => {
+                let name = solution_display_name(save_state, storage);
+                i18n.fmt("save.load_solution", &[("name", name)])
             }
             Self::RenamePuzzle(_) | Self::RenameSolution(_) => i18n.t("button.rename"),
             Self::DeletePuzzle(_) | Self::DeleteSolution(_) => i18n.t("button.delete"),
@@ -100,18 +102,24 @@ impl SaveListAction {
             ..
         } = ctx;
         match self {
-            Self::LoadPuzzle(name) => save_state.puzzles().iter().any(|entry| &entry.name == name),
-            Self::LoadSolution(name)
-            | Self::RenameSolution(name)
-            | Self::DeleteSolution(name) => {
+            Self::LoadPuzzle(storage) => save_state
+                .puzzles()
+                .iter()
+                .any(|entry| entry.slot.puzzle == *storage),
+            Self::LoadSolution(storage)
+            | Self::RenameSolution(storage)
+            | Self::DeleteSolution(storage) => {
                 *play_flow
-                    && save_state
-                        .selected_puzzle_solutions()
-                        .iter()
-                        .any(|entry| &entry.name == name)
+                    && save_state.selected_puzzle_solutions().iter().any(|entry| {
+                        entry.slot.solution.as_deref() == Some(storage.as_str())
+                    })
             }
-            Self::RenamePuzzle(name) | Self::DeletePuzzle(name) => {
-                *edit_flow && save_state.puzzles().iter().any(|entry| &entry.name == name)
+            Self::RenamePuzzle(storage) | Self::DeletePuzzle(storage) => {
+                *edit_flow
+                    && save_state
+                        .puzzles()
+                        .iter()
+                        .any(|entry| entry.slot.puzzle == *storage)
             }
             Self::NewPuzzle => *edit_flow,
             Self::NewSolution => *play_flow && save_state.selected_puzzle.is_some(),
@@ -122,18 +130,36 @@ impl SaveListAction {
     fn button_selected(&self, ctx: &SaveListViewCtx<'_>) -> bool {
         matches!(
             self,
-            Self::LoadPuzzle(name)
+            Self::LoadPuzzle(storage)
                 if ctx.play_flow
-                    && ctx.save_state.selected_puzzle.as_deref() == Some(name.as_str())
+                    && ctx.save_state.selected_puzzle.as_deref() == Some(storage.as_str())
         )
     }
+}
+
+fn puzzle_display_name(save_state: &SaveState, storage: &str) -> String {
+    save_state
+        .puzzles()
+        .iter()
+        .find(|entry| entry.slot.puzzle == storage)
+        .map(|entry| entry.name.clone())
+        .unwrap_or_else(|| storage.to_string())
+}
+
+fn solution_display_name(save_state: &SaveState, storage: &str) -> String {
+    save_state
+        .selected_puzzle_solutions()
+        .iter()
+        .find(|entry| entry.slot.solution.as_deref() == Some(storage))
+        .map(|entry| entry.name.clone())
+        .unwrap_or_else(|| storage.to_string())
 }
 
 pub fn save_list_puzzle_rows(save_state: &SaveState) -> Vec<String> {
     save_state
         .puzzles()
         .into_iter()
-        .map(|entry| entry.name.clone())
+        .map(|entry| entry.slot.puzzle.clone())
         .collect()
 }
 

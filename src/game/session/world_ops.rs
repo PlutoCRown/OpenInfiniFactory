@@ -283,6 +283,7 @@ pub fn load_world_into_session(
     next_state: &mut NextState<GameMode>,
     block_index: &mut BlockEntityIndex,
 ) {
+    let lighting = loaded.lighting;
     *world = loaded.world;
 
     simulation.running = false;
@@ -320,6 +321,8 @@ pub fn load_world_into_session(
         WorldEntryMode::PlaySolution => loaded.puzzle_snapshot,
     };
     pending_player.0 = loaded.player;
+
+    commands.insert_resource(lighting);
 
     refresh_static_generated_markers(world);
     structure_state.clear();
@@ -372,6 +375,7 @@ pub fn clear_loaded_world(
     save_state.current = None;
     save_state.current_kind = None;
     save_state.select_puzzle(None);
+    commands.insert_resource(crate::shared::save::PuzzleLighting::default());
     solution_state.puzzle_snapshot = None;
     solution_state.puzzle_id = None;
     solution_state.dirty = false;

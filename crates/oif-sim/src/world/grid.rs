@@ -7,10 +7,8 @@ use crate::blocks::{
     ensure_fallback_paint_catalog, ensure_fallback_stamp_catalog, fallback_material_id,
     paint_catalog, stamp_catalog,
 };
-use crate::world::direction::Facing;
 
 pub const REACH: f32 = 12.0;
-pub const FLOOR_RADIUS: i32 = 12;
 const TELEPORT_ENTRANCE_NAMES: &[&str] = &["Alpha In", "Beta In", "Gamma In", "Delta In"];
 const TELEPORT_EXIT_NAMES: &[&str] = &["Alpha Out", "Beta Out", "Gamma Out", "Delta Out"];
 const ACCEPTOR_NEIGHBOR_OFFSETS: [IVec3; 6] = [
@@ -1287,16 +1285,6 @@ fn snap_line_on_plane(hit: Vec3, start: IVec3, axis: IVec3) -> IVec3 {
         IVec3::new(start.x, grid.y, start.z)
     } else {
         IVec3::new(start.x, start.y, grid.z)
-    }
-}
-
-pub fn seed_demo_world(world: &mut WorldBlocks) {
-    // 新建谜题默认地板：特殊允许硬编码草方块
-    let grass = BlockKind::scene("grass");
-    for x in -FLOOR_RADIUS..=FLOOR_RADIUS {
-        for z in -FLOOR_RADIUS..=FLOOR_RADIUS {
-            world.insert(IVec3::new(x, 0, z), BlockData::new(grass, Facing::North));
-        }
     }
 }
 

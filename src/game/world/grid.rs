@@ -1,8 +1,8 @@
 //! 世界网格：Bevy Resource 包装 `oif_sim::WorldBlocks`
 
 pub use oif_sim::world::grid::{
-    grid_to_world, raycast_blocks, raycast_infinite_plane, seed_demo_world, world_to_grid,
-    BlockSettings, ConverterMode, ConverterSettings, EditSelectionMode, FLOOR_RADIUS,
+    grid_to_world, raycast_blocks, raycast_infinite_plane, world_to_grid,
+    BlockSettings, ConverterMode, ConverterSettings, EditSelectionMode,
     GeneratorMode, GeneratorSettings, GoalSettings, MaterialFace, MaterialWeld, REACH,
     RollerSettings, SignDisplay, SignSettings, StamperSettings, StoredAcceptorStructure,
     TargetHit, TeleportSettings,

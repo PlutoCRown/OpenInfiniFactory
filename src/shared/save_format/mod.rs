@@ -22,6 +22,8 @@ pub const VERSION_V1: u16 = 1;
 pub const META_FILE: &str = "meta.json";
 pub const BLOCKS_FILE: &str = "blocks.bin";
 pub const COVER_FILE: &str = "cover.png";
+/// 谜题目录下的水平十字天空盒贴图
+pub const SKYBOX_FILE: &str = "skybox.png";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SaveFormatError {
@@ -483,4 +485,3 @@ fn decode_facing(value: u8) -> Result<Facing, SaveFormatError> {
         _ => return Err(SaveFormatError::InvalidFacing(value)),
     })
 }
-

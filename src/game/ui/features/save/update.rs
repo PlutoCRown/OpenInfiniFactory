@@ -68,7 +68,7 @@ pub fn update_save_list_ui(
     let solution_rows = save_state
         .selected_puzzle_solutions()
         .iter()
-        .map(|entry| entry.name.clone())
+        .filter_map(|entry| entry.slot.solution.clone())
         .collect::<Vec<_>>();
     let show_solutions = play_flow && save_state.selected_puzzle.is_some();
 

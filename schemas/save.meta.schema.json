@@ -1,0 +1,323 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openinfinifactory.local/schemas/save.meta.schema.json",
+  "title": "SaveMeta",
+  "description": "谜题/通关存档目录下的 meta.json（与 blocks.bin、可选 cover.png / skybox.png 同级）。新建谜题默认内容来自 assets/save_templates/default/。本文件仅供开发者查阅与编辑器校验；玩家存档 JSON 不要写 $schema，以免引用到游戏内部路径造成困惑。游戏加载时只按字段反序列化，忽略未知键。",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "version",
+    "kind"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "meta 格式版本。当前固定为 1。"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "puzzle",
+        "solution"
+      ],
+      "description": "puzzle：编辑态谜题存档；solution：游玩态通关存档（位于 puzzle/solutions/<name>/）。"
+    },
+    "puzzle_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "solution 存档所属谜题名（应与目录层级一致）。puzzle 存档一般为 null 或省略。"
+    },
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "存档显示名，可含中文。省略时用文件夹名。文件夹本身仍是 sanitize 后的 id（仅 ASCII 字母数字/_/-）。"
+    },
+    "hotbar": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "description": "快捷栏 9 格。元素为 InventoryItem，或 null 表示空槽。省略时加载按模式填默认栏。",
+      "minItems": 9,
+      "maxItems": 9,
+      "items": {
+        "$ref": "#/$defs/InventoryItemOrNull"
+      }
+    },
+    "player": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/PlayerSave"
+        }
+      ],
+      "description": "玩家相机位姿。null/省略表示使用默认出生点。"
+    },
+    "sun": {
+      "$ref": "#/$defs/Sun",
+      "description": "平行光与贴图天空盒亮度。各项均可选，省略的用内置默认。仅 puzzle meta 生效；solution 读所属 puzzle。游戏内保存不会覆盖手写值。"
+    },
+    "ambient": {
+      "$ref": "#/$defs/Ambient",
+      "description": "环境光。省略用默认（偏冷白，brightness 680）。"
+    },
+    "sun_direction": {
+      "type": "array",
+      "description": "【旧字段】仅方向；若同时存在 `sun`，以 `sun.direction` 为准，否则等价于 sun.direction。新存档请写在 `sun.direction`。",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "number"
+      },
+      "deprecated": true
+    }
+  },
+  "$defs": {
+    "Sun": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "type": "array",
+          "description": "光线前进方向（太阳 → 地面）。不必单位向量，加载时归一化。默认约 (-0.5, -0.7, -0.5) 量级（内置欧拉角）。",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number"
+          },
+          "examples": [
+            [
+              0.6,
+              -0.5,
+              0.2
+            ]
+          ]
+        },
+        "illuminance": {
+          "type": "number",
+          "minimum": 0,
+          "description": "照度（lux）。默认 9500。正午直射约 100000，阴天/黄昏可降到几千。",
+          "examples": [
+            9500,
+            3000,
+            20000
+          ]
+        },
+        "color": {
+          "type": "array",
+          "description": "平行光 sRGB 颜色 [r,g,b]。若与 color_temperature 同时存在，以 color 为准。默认 [1.0, 0.97, 0.92]。",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number"
+          }
+        },
+        "color_temperature": {
+          "type": "number",
+          "minimum": 1000,
+          "maximum": 40000,
+          "description": "色温（开尔文）。无 color 时换算为颜色。日出/日落约 2000–3500，日光约 5000–6500，阴天偏蓝约 7000–10000。",
+          "examples": [
+            3200,
+            5500,
+            7500
+          ]
+        },
+        "skybox_brightness": {
+          "type": "number",
+          "minimum": 0,
+          "description": "贴图天空盒（skybox.png）的 Bevy Skybox 亮度。默认 1000。不影响程序化 WGSL 天空。",
+          "examples": [
+            1000,
+            500,
+            2000
+          ]
+        }
+      },
+      "examples": [
+        {
+          "direction": [
+            0.8,
+            -0.35,
+            0.1
+          ],
+          "illuminance": 6000,
+          "color_temperature": 3200,
+          "skybox_brightness": 1200
+        }
+      ]
+    },
+    "Ambient": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "type": "array",
+          "description": "环境光 sRGB [r,g,b]。默认 [0.90, 0.94, 1.0]。",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number"
+          }
+        },
+        "brightness": {
+          "type": "number",
+          "minimum": 0,
+          "description": "环境光亮度。默认 680。",
+          "examples": [
+            680,
+            200,
+            1200
+          ]
+        }
+      }
+    },
+    "PlayerSave": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z",
+        "yaw",
+        "pitch",
+        "flying"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "description": "相机世界坐标 X"
+        },
+        "y": {
+          "type": "number",
+          "description": "相机世界坐标 Y（眼高）"
+        },
+        "z": {
+          "type": "number",
+          "description": "相机世界坐标 Z"
+        },
+        "yaw": {
+          "type": "number",
+          "description": "水平朝向（弧度）"
+        },
+        "pitch": {
+          "type": "number",
+          "description": "俯仰（弧度）"
+        },
+        "flying": {
+          "type": "boolean",
+          "description": "是否飞行模式"
+        }
+      }
+    },
+    "InventoryItemOrNull": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/InventoryItem"
+        }
+      ]
+    },
+    "InventoryItem": {
+      "description": "快捷栏物品。serde 外部标签：{\"Block\": <BlockKind>} | {\"Area\": <AreaKind>} | \"LightPanel\"。",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "Block"
+          ],
+          "properties": {
+            "Block": {
+              "$ref": "#/$defs/BlockKind"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "Area"
+          ],
+          "properties": {
+            "Area": {
+              "$ref": "#/$defs/AreaKind"
+            }
+          }
+        },
+        {
+          "type": "string",
+          "const": "LightPanel",
+          "description": "灯面板工具（贴在电线表面）"
+        }
+      ]
+    },
+    "AreaKind": {
+      "type": "string",
+      "enum": [
+        "Selection"
+      ],
+      "description": "区域工具种类（serde 外部标签枚举变体名）。"
+    },
+    "BlockKind": {
+      "description": "方块种类。无参变体为字符串（如 \"Platform\"）；有参变体为单键对象。Scene / Material / Stamp 的数字 id 为当次会话 catalog 句柄，跨存档不稳定，热键栏里通常只在同一次编辑会话内有意义。",
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "无参 BlockKind，例如 Platform、Conveyor、Welder、Generator、Goal 等。"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "Scene"
+          ],
+          "properties": {
+            "Scene": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "场景方块句柄（u16），对应 scene catalog 下标。"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "Material"
+          ],
+          "properties": {
+            "Material": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "材料方块句柄（u16）。"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "Stamp"
+          ],
+          "properties": {
+            "Stamp": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "印花材料句柄（u16）。"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
