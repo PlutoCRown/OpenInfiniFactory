@@ -3,7 +3,9 @@ use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
 use crate::game::simulation::{BreakDebris, LaserBeam, LaserBeamStop};
-use crate::game::world::animation::{BreakDebrisParticle, LaserBeamBurst, WeldSpark};
+use crate::game::world::animation::{
+    BreakDebrisParticle, LaserBeamBurst, WeldBurstParticle, WeldSpark,
+};
 use crate::game::world::grid::grid_to_world;
 use crate::game::world::render_assets::WorldRenderAssets;
 
@@ -54,8 +56,13 @@ pub fn spawn_laser_beams(
     }
 }
 
-/// 在焊接位置生成火花粒子
-pub fn spawn_weld_sparks(commands: &mut Commands, assets: &WorldRenderAssets, positions: &[IVec3]) {
+/// 激光等非焊接行为的立方火花（焊接已改用 `spawn_weld_bursts`）
+pub fn spawn_weld_sparks(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    positions: &[IVec3],
+    delay: f32,
+) {
     const VELOCITIES: [Vec3; 6] = [
         Vec3::new(1.60, 2.70, 0.42),
         Vec3::new(-1.44, 2.46, 0.76),
@@ -76,8 +83,56 @@ pub fn spawn_weld_sparks(commands: &mut Commands, assets: &WorldRenderAssets, po
             commands.spawn((
                 Mesh3d(assets.weld_spark.clone()),
                 MeshMaterial3d(assets.laser_beam_material.clone()),
-                Transform::from_translation(origin + offset),
-                WeldSpark::new(velocity, 0.28),
+                Transform::from_translation(origin + offset).with_scale(Vec3::ZERO),
+                WeldSpark::new(velocity, 0.28, delay),
+            ));
+        }
+    }
+}
+
+/// 焊接成功：两焊点连线中点，沿法平面向外扩散的 2D 白粒子（黄泛光）
+pub fn spawn_weld_bursts(
+    commands: &mut Commands,
+    assets: &WorldRenderAssets,
+    pairs: &[(IVec3, IVec3)],
+    delay: f32,
+) {
+    const COUNT: i32 = 42;
+    /// 相对初版 1.85 的三倍飞溅速度
+    const SPEED: f32 = 5.55;
+    const SIZE: f32 = 0.11;
+
+    for &(a, b) in pairs {
+        let wa = grid_to_world(a);
+        let wb = grid_to_world(b);
+        let origin = (wa + wb) * 0.5;
+        let axis = (wb - wa).normalize_or_zero();
+        if axis == Vec3::ZERO {
+            continue;
+        }
+        let tangent = if axis.cross(Vec3::Y).length_squared() > 0.05 {
+            axis.cross(Vec3::Y).normalize()
+        } else {
+            axis.cross(Vec3::X).normalize()
+        };
+        let bitangent = axis.cross(tangent);
+        // 方片躺在法平面上（局部 XY ↔ 法平面，Z 对齐焊点连线）
+        let rotation = Quat::from_rotation_arc(Vec3::Z, axis);
+
+        for i in 0..COUNT {
+            let angle = std::f32::consts::TAU * (i as f32) / (COUNT as f32)
+                + (i as f32 * 0.37).sin() * 0.12;
+            let dir = (tangent * angle.cos() + bitangent * angle.sin()).normalize_or_zero();
+            // 终点距离在 1～2 格之间伪随机
+            let target_radius = 1.0 + ((i as f32 * 2.13).sin() * 0.5 + 0.5);
+            let duration = target_radius / SPEED;
+            commands.spawn((
+                Mesh3d(assets.weld_burst_quad.clone()),
+                MeshMaterial3d(assets.weld_burst_material.clone()),
+                Transform::from_translation(origin)
+                    .with_rotation(rotation)
+                    .with_scale(Vec3::ZERO),
+                WeldBurstParticle::new(origin, dir, target_radius, duration, delay, SIZE),
             ));
         }
     }
@@ -180,7 +235,7 @@ pub fn spawn_acceptance_sparks(
                 Mesh3d(assets.weld_spark.clone()),
                 MeshMaterial3d(assets.acceptance_spark_material.clone()),
                 Transform::from_translation(origin + offset),
-                WeldSpark::new(velocity, 0.56),
+                WeldSpark::new(velocity, 0.56, 0.0),
             ));
         }
     }

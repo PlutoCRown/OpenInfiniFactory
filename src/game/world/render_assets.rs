@@ -57,6 +57,8 @@ pub struct WorldRenderAssets {
     pub(crate) face_mark_y: Handle<Mesh>,
     pub(crate) face_mark_z: Handle<Mesh>,
     pub(crate) weld_spark: Handle<Mesh>,
+    /// 焊接扩散粒子薄方片（局部 XY，法线 +Z）
+    pub(crate) weld_burst_quad: Handle<Mesh>,
     connector_x: Handle<Mesh>,
     connector_y: Handle<Mesh>,
     connector_z: Handle<Mesh>,
@@ -108,6 +110,8 @@ pub struct WorldRenderAssets {
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
     pub(crate) active_wire_material: Handle<StandardMaterial>,
     pub(crate) weld_connector_material: Handle<StandardMaterial>,
+    /// 焊接扩散粒子：白底 + 黄自发光（与焊点同风格，须 lit）
+    pub(crate) weld_burst_material: Handle<StandardMaterial>,
     pub(crate) laser_beam_material: Handle<StandardMaterial>,
     pub(crate) acceptance_spark_material: Handle<StandardMaterial>,
     delete_preview_material: Handle<StandardMaterial>,
@@ -478,6 +482,7 @@ impl WorldRenderAssets {
             face_mark_y: meshes.add(Cuboid::new(0.78, 0.02, 0.78)),
             face_mark_z: meshes.add(Cuboid::new(0.78, 0.78, 0.02)),
             weld_spark: meshes.add(Cuboid::new(0.24, 0.24, 0.24)),
+            weld_burst_quad: meshes.add(Rectangle::new(1.0, 1.0)),
             connector_x: meshes.add(Cuboid::new(0.55, 0.045, 0.045)),
             connector_y: meshes.add(Cuboid::new(0.045, 0.55, 0.045)),
             connector_z: meshes.add(Cuboid::new(0.045, 0.045, 0.55)),
@@ -560,6 +565,14 @@ impl WorldRenderAssets {
                 emissive: LinearRgba::new(22.0, 14.0, 0.6, 1.0),
                 perceptual_roughness: 1.0,
                 metallic: 0.0,
+                ..default()
+            }),
+            weld_burst_material: materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                emissive: LinearRgba::new(22.0, 14.0, 0.6, 1.0),
+                perceptual_roughness: 1.0,
+                metallic: 0.0,
+                cull_mode: None,
                 ..default()
             }),
             laser_beam_material: materials.add(StandardMaterial {

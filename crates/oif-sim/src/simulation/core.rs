@@ -6,16 +6,16 @@ use glam::IVec3;
 use crate::world::grid::WorldBlocks;
 
 use super::behaviors::{
-    BreakDebris, LaserBeam, destroy_powered_lasers, material_source_generation, probe_lasers,
-    run_drill_destroy_phase, run_material_acceptance_phase, run_material_conversion_phase,
-    run_material_paint_phase, run_material_stamp_phase, run_material_teleport_phase,
-    run_weld_behavior_phase,
+    BreakDebris, LaserBeam, apply_pending_teleport, destroy_powered_lasers,
+    material_source_generation, probe_lasers, run_drill_destroy_phase,
+    run_material_acceptance_phase, run_material_conversion_phase, run_material_paint_phase,
+    run_material_stamp_phase, run_material_teleport_phase, run_weld_behavior_phase,
 };
 use super::gravity::mark_gravity_phase;
 use super::markers::run_static_marker_phase;
 use super::motion::{BlockMotion, BlockMotionKind, PusherMotion};
 use super::movement::{PusherState, mark_structure_movement_phase};
-use super::pending::PendingGeneratedMaterials;
+use super::pending::{PendingDestroyReason, PendingGeneratedMaterials};
 use super::signals::SignalNetworkCache;
 use super::stats::SimulationStepStats;
 use super::structure_state::StructureState;
@@ -32,7 +32,8 @@ pub struct TurnOutput {
     pub animations: HashMap<IVec3, BlockMotion>,
     pub pusher_animations: HashMap<IVec3, PusherMotion>,
     pub render_powered_wires: HashSet<IVec3>,
-    pub weld_sparks: Vec<IVec3>,
+    /// 成功焊接的焊点对（两端格心连线中点播扩散粒子）
+    pub weld_sparks: Vec<(IVec3, IVec3)>,
     /// 激光打镜等非破坏火花
     pub behavior_sparks: Vec<IVec3>,
     /// 钻头/激光毁掉的材料碎片
@@ -66,6 +67,35 @@ pub fn simulate_turn(
     world.clear_generated_markers();
     run_static_marker_phase(world);
     sample.prep_ms = mark_elapsed_ms(&mut mark);
+
+    // 上一回合挂起的钻头/验收销毁：此时上一回合移动动画已结束，再真正移除
+    let mut break_debris = Vec::new();
+    let mut acceptance_sparks = Vec::new();
+    let mut structures_dirty = false;
+    for (pos, kind, reason) in pending_generated.take_ready_destroyed(turn) {
+        if !world.is_material_at(pos) {
+            continue;
+        }
+        world.remove(&pos);
+        structures_dirty = true;
+        match reason {
+            PendingDestroyReason::Drill => {
+                break_debris.push(BreakDebris { pos, kind });
+            }
+            PendingDestroyReason::Accept => {
+                acceptance_sparks.push(pos);
+            }
+        }
+    }
+    // 上一回合挂起的传送：材料已在入口停稳后再搬到出口
+    for (entrance, exit) in pending_generated.take_ready_teleports(turn) {
+        if apply_pending_teleport(world, entrance, exit) {
+            structures_dirty = true;
+        }
+    }
+    if structures_dirty {
+        structure_state.refresh_material_structures(world);
+    }
 
     // —— 阶段 1 信号：光学探测（不销毁）→ 二次供电 ——
     signal_cache.refresh(world);
@@ -183,21 +213,25 @@ pub fn simulate_turn(
 
     // —— 阶段 4 结构后处理（销毁 → 传送 → 转换 → 验收 → 生成 → 焊）——
     let mut behavior_sparks = laser_probe_sparks;
-    let mut break_debris: Vec<BreakDebris> = fragile_debris
-        .into_iter()
-        .map(|(pos, kind)| BreakDebris { pos, kind })
-        .collect();
-    break_debris.extend(run_drill_destroy_phase(world));
-    // 与阶段 1 探测同一批通电激光；移动后按新布局再 trace 并销毁
+    break_debris.extend(
+        fragile_debris
+            .into_iter()
+            .map(|(pos, kind)| BreakDebris { pos, kind }),
+    );
+    // 钻头：挂起至 turn+1，等本回合移动动画播完再删
+    run_drill_destroy_phase(world, pending_generated, turn + 1);
+    // 与阶段 1 探测同一批通电激光；移动后按新布局再 trace 并销毁（激光仍立刻移除）
     let (laser_destroy_sparks, laser_debris) = destroy_powered_lasers(world, &laser_devices);
     behavior_sparks.extend(laser_destroy_sparks);
     break_debris.extend(laser_debris);
 
-    run_material_teleport_phase(world);
+    // 传送：挂起至 turn+1，等本回合移动动画完全进入入口后再传
+    run_material_teleport_phase(world, pending_generated, turn + 1);
     run_material_conversion_phase(world);
 
-    let (accepted_acceptors, acceptance_sparks) =
-        run_material_acceptance_phase(world, structure_state);
+    // 验收：计数立刻生效，材料挂起至 turn+1 再删
+    let accepted_acceptors =
+        run_material_acceptance_phase(world, structure_state, pending_generated, turn + 1);
 
     // 生成状态机：先落地本回合到期的 pending，再调度 turn+1
     let generated_animations = place_ready_generated_materials(world, pending_generated, turn);

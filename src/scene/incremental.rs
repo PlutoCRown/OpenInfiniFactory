@@ -11,8 +11,8 @@ use crate::game::world::animation::{
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     BlockEntity, BlockEntityLayer, SceneChunkMeshes, WorldRenderAssets, signal_neighbor_offsets,
-    spawn_acceptance_sparks, spawn_break_debris, spawn_laser_beams, spawn_weld_sparks,
-    spawn_world_block_entity, sync_scene_chunks_for_positions,
+    spawn_acceptance_sparks, spawn_break_debris, spawn_laser_beams, spawn_weld_bursts,
+    spawn_weld_sparks, spawn_world_block_entity, sync_scene_chunks_for_positions,
 };
 use crate::sim_bridge::TurnOutput;
 
@@ -632,8 +632,13 @@ pub fn apply_turn_output_incremental(
             debug.factory_activity.then_some(structure_state),
         );
     }
-    spawn_weld_sparks(commands, assets, &output.weld_sparks);
-    spawn_weld_sparks(commands, assets, &output.behavior_sparks);
+    let weld_delay = if output.animations.is_empty() && output.pusher_animations.is_empty() {
+        0.0
+    } else {
+        animation_duration
+    };
+    spawn_weld_bursts(commands, assets, &output.weld_sparks, weld_delay);
+    spawn_weld_sparks(commands, assets, &output.behavior_sparks, 0.0);
     spawn_break_debris(commands, meshes, assets, &output.break_debris);
     spawn_laser_beams(commands, assets, &output.laser_beams, animation_duration);
     spawn_acceptance_sparks(commands, assets, &output.acceptance_sparks);

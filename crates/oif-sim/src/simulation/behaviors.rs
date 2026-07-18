@@ -55,8 +55,12 @@ pub(super) fn destroy_powered_lasers(
     (sparks, debris)
 }
 
-/// 阶段 4 钻头销毁：立刻移除材料
-pub(super) fn run_drill_destroy_phase(world: &mut WorldBlocks) -> Vec<BreakDebris> {
+/// 阶段 4 钻头销毁：本回合只挂起，下一回合开始再移除（等移动动画播完）
+pub(super) fn run_drill_destroy_phase(
+    world: &WorldBlocks,
+    pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    ready_turn: u64,
+) {
     let destroyers: Vec<(IVec3, MaterialDestroyer)> = world
         .blocks
         .iter()
@@ -68,25 +72,39 @@ pub(super) fn run_drill_destroy_phase(world: &mut WorldBlocks) -> Vec<BreakDebri
         })
         .collect();
 
-    let mut debris = Vec::new();
     for (pos, destroyer) in destroyers {
         match destroyer {
             MaterialDestroyer::Drill { target } => {
-                destroy_material_immediate(world, pos + target, &mut debris);
+                mark_material_destroy(
+                    world,
+                    pending_generated,
+                    pos + target,
+                    ready_turn,
+                    super::pending::PendingDestroyReason::Drill,
+                );
             }
             MaterialDestroyer::AdjacentDrillHead => {
                 for offset in signal_offsets() {
-                    destroy_material_immediate(world, pos + offset, &mut debris);
+                    mark_material_destroy(
+                        world,
+                        pending_generated,
+                        pos + offset,
+                        ready_turn,
+                        super::pending::PendingDestroyReason::Drill,
+                    );
                 }
             }
             MaterialDestroyer::Laser { .. } => {}
         }
     }
-    debris
 }
 
-/// 阶段 4 传送：入口材料立刻迁到出口
-pub(super) fn run_material_teleport_phase(world: &mut WorldBlocks) {
+/// 阶段 4 传送：本回合只挂起，下一回合开始再搬迁（等移动动画完全进入入口）
+pub(super) fn run_material_teleport_phase(
+    world: &WorldBlocks,
+    pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    ready_turn: u64,
+) {
     let entrances: Vec<IVec3> = world
         .system_blocks
         .iter()
@@ -107,9 +125,10 @@ pub(super) fn run_material_teleport_phase(world: &mut WorldBlocks) {
         let Some(exit) = resolve_teleport_pair(world, entrance) else {
             continue;
         };
-        if !teleport_entrance_material(world, entrance, exit) {
+        if world.is_material_at(exit) || !world.can_move_into(exit) {
             continue;
         }
+        pending_generated.mark_teleport(entrance, exit, ready_turn);
         handled.insert(entrance);
         handled.insert(exit);
     }
@@ -128,14 +147,14 @@ fn resolve_teleport_pair(world: &WorldBlocks, entrance: IVec3) -> Option<IVec3> 
         .map(|_| exit)
 }
 
-/// 阶段 4 焊接：相邻焊点上的材料焊成一体
-pub(super) fn run_weld_behavior_phase(world: &mut WorldBlocks) -> Vec<IVec3> {
+/// 阶段 4 焊接：本回合移动结束后把相邻焊点上的材料焊成一体；返回成功焊点对
+pub(super) fn run_weld_behavior_phase(world: &mut WorldBlocks) -> Vec<(IVec3, IVec3)> {
     let weld_points: Vec<IVec3> = world
         .system_blocks
         .iter()
         .filter_map(|(pos, block)| block.kind.weld_behavior().is_some().then_some(*pos))
         .collect();
-    let mut sparks = Vec::new();
+    let mut pairs = Vec::new();
 
     for weld_point in weld_points {
         if !world.is_material_at(weld_point) {
@@ -156,12 +175,11 @@ pub(super) fn run_weld_behavior_phase(world: &mut WorldBlocks) -> Vec<IVec3> {
                 continue;
             }
             if world.weld_materials(weld_point, neighbor) {
-                sparks.push(weld_point);
-                sparks.push(neighbor);
+                pairs.push((weld_point, neighbor));
             }
         }
     }
-    sparks
+    pairs
 }
 
 /// 阶段 4 装饰漆：滚刷机朝向可 Connectable 材料面写入油漆（印花机 L4 再处理）
@@ -372,13 +390,14 @@ pub(super) fn run_material_conversion_phase(world: &mut WorldBlocks) {
     }
 }
 
-/// 阶段 4 验收：匹配的材料立刻移除，返回验收器 id 与火花位置
+/// 阶段 4 验收：匹配则挂起销毁（下一回合开始移除），验收计数立刻生效
 pub(super) fn run_material_acceptance_phase(
-    world: &mut WorldBlocks,
+    world: &WorldBlocks,
     structure_state: &mut StructureState,
-) -> (HashSet<AcceptorId>, Vec<IVec3>) {
+    pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    ready_turn: u64,
+) -> HashSet<AcceptorId> {
     let mut accepted = HashSet::new();
-    let mut sparks = Vec::new();
     let acceptor_count = structure_state.acceptor_structures().len();
     for index in 0..acceptor_count {
         let Some(acceptor) = structure_state.acceptor_structures().get(index) else {
@@ -415,29 +434,27 @@ pub(super) fn run_material_acceptance_phase(
         }
 
         for pos in &welded_material {
-            if world.is_material_at(*pos) {
-                world.remove(pos);
-                sparks.push(*pos);
-            }
+            mark_material_destroy(
+                world,
+                pending_generated,
+                *pos,
+                ready_turn,
+                super::pending::PendingDestroyReason::Accept,
+            );
         }
         structure_state.increment_acceptor_count(index);
         if !acceptor_id.is_none() {
             accepted.insert(acceptor_id);
         }
     }
-    (accepted, sparks)
+    accepted
 }
 
 fn run_lasers(
     world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
     destroy: bool,
-) -> (
-    Vec<LaserBeam>,
-    HashSet<IVec3>,
-    Vec<IVec3>,
-    Vec<BreakDebris>,
-) {
+) -> (Vec<LaserBeam>, HashSet<IVec3>, Vec<IVec3>, Vec<BreakDebris>) {
     let lasers: Vec<(IVec3, IVec3, i32)> = world
         .blocks
         .iter()
@@ -475,22 +492,30 @@ fn run_lasers(
     (laser_beams, hit_detectors, sparks, debris)
 }
 
-fn destroy_material_immediate(
-    world: &mut WorldBlocks,
+/// 挂起销毁：本回合不删格，下一回合开始再落地
+fn mark_material_destroy(
+    world: &WorldBlocks,
+    pending_generated: &mut super::pending::PendingGeneratedMaterials,
     pos: IVec3,
-    debris: &mut Vec<BreakDebris>,
+    ready_turn: u64,
+    reason: super::pending::PendingDestroyReason,
 ) {
-    let Some(block) = world.blocks.get(&pos).copied() else {
+    let Some(block) = world.blocks.get(&pos) else {
         return;
     };
     if !block.kind.is_material() {
         return;
     }
-    world.remove(&pos);
-    debris.push(BreakDebris {
-        pos,
-        kind: block.kind,
-    });
+    pending_generated.mark_destroyed(pos, block.kind, ready_turn, reason);
+}
+
+/// 落地一笔挂起的传送（入口仍有材料且出口可进）
+pub(super) fn apply_pending_teleport(
+    world: &mut WorldBlocks,
+    entrance: IVec3,
+    exit: IVec3,
+) -> bool {
+    teleport_entrance_material(world, entrance, exit)
 }
 
 fn detach_material_block(world: &mut WorldBlocks, pos: IVec3) {
@@ -604,4 +629,3 @@ fn trace_laser(
         });
     }
 }
-

@@ -179,6 +179,22 @@ pub struct WeldSpark {
     velocity: Vec3,
     elapsed: f32,
     duration: f32,
+    /// 等本回合移动动画结束后再开始飞溅
+    delay: f32,
+}
+
+/// 焊接成功：在焊点连线中点的法平面上向外扩散的 2D 粒子
+#[derive(Component)]
+pub struct WeldBurstParticle {
+    origin: Vec3,
+    /// 法平面内单位方向
+    dir: Vec3,
+    /// 终点半径（世界单位，约 1～2 格）
+    target_radius: f32,
+    elapsed: f32,
+    duration: f32,
+    delay: f32,
+    size: f32,
 }
 
 /// MC 风格破坏碎片：重力落地 + 始终朝向镜头
@@ -280,11 +296,33 @@ impl AnimatedBlock {
 }
 
 impl WeldSpark {
-    pub fn new(velocity: Vec3, duration: f32) -> Self {
+    pub fn new(velocity: Vec3, duration: f32, delay: f32) -> Self {
         Self {
             velocity,
             elapsed: 0.0,
             duration,
+            delay: delay.max(0.0),
+        }
+    }
+}
+
+impl WeldBurstParticle {
+    pub fn new(
+        origin: Vec3,
+        dir: Vec3,
+        target_radius: f32,
+        duration: f32,
+        delay: f32,
+        size: f32,
+    ) -> Self {
+        Self {
+            origin,
+            dir,
+            target_radius,
+            elapsed: 0.0,
+            duration,
+            delay: delay.max(0.0),
+            size,
         }
     }
 }
@@ -321,6 +359,7 @@ pub fn animate_blocks(
             Without<AnimatedPusher>,
             Without<AnimatedPusherRod>,
             Without<WeldSpark>,
+            Without<WeldBurstParticle>,
             Without<LaserBeamBurst>,
             Without<BreakDebrisParticle>,
         ),
@@ -332,6 +371,19 @@ pub fn animate_blocks(
             Without<AnimatedPusher>,
             Without<AnimatedPusherRod>,
             Without<SpinningDrillHead>,
+            Without<WeldBurstParticle>,
+            Without<LaserBeamBurst>,
+            Without<BreakDebrisParticle>,
+        ),
+    >,
+    mut weld_bursts: Query<
+        (Entity, &mut Transform, &mut WeldBurstParticle),
+        (
+            Without<AnimatedBlock>,
+            Without<AnimatedPusher>,
+            Without<AnimatedPusherRod>,
+            Without<SpinningDrillHead>,
+            Without<WeldSpark>,
             Without<LaserBeamBurst>,
             Without<BreakDebrisParticle>,
         ),
@@ -344,6 +396,7 @@ pub fn animate_blocks(
             Without<AnimatedPusherRod>,
             Without<SpinningDrillHead>,
             Without<WeldSpark>,
+            Without<WeldBurstParticle>,
             Without<LaserBeamBurst>,
         ),
     >,
@@ -355,6 +408,7 @@ pub fn animate_blocks(
             Without<AnimatedPusherRod>,
             Without<SpinningDrillHead>,
             Without<WeldSpark>,
+            Without<WeldBurstParticle>,
             Without<BreakDebrisParticle>,
         ),
     >,
@@ -421,9 +475,34 @@ pub fn animate_blocks(
 
     for (entity, mut transform, mut spark) in &mut sparks {
         spark.elapsed += time.delta_secs();
-        let t = (spark.elapsed / spark.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
+        if spark.elapsed < spark.delay {
+            transform.scale = Vec3::ZERO;
+            continue;
+        }
+        let active = spark.elapsed - spark.delay;
+        let t = (active / spark.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
         transform.translation += spark.velocity * time.delta_secs();
         transform.scale = Vec3::splat((1.0 - t).max(0.0));
+
+        if t >= 1.0 {
+            commands.entity(entity).despawn();
+        }
+    }
+
+    for (entity, mut transform, mut particle) in &mut weld_bursts {
+        particle.elapsed += time.delta_secs();
+        if particle.elapsed < particle.delay {
+            transform.scale = Vec3::ZERO;
+            continue;
+        }
+        let active = particle.elapsed - particle.delay;
+        let t = (active / particle.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
+        // 先快后慢飞到各自的随机终点距离
+        let eased = 1.0 - (1.0 - t) * (1.0 - t);
+        let radius = particle.target_radius * eased;
+        transform.translation = particle.origin + particle.dir * radius;
+        let fade = (1.0 - t).max(0.0);
+        transform.scale = Vec3::splat(particle.size * (0.55 + 0.45 * fade));
 
         if t >= 1.0 {
             commands.entity(entity).despawn();
