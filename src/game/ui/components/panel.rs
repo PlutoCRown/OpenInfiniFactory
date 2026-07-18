@@ -191,21 +191,8 @@ pub fn compact_raised_panel(style: Node) -> impl Bundle {
     )
 }
 
-pub fn panel_bundle(width: f32) -> impl Bundle {
-    panel_window_bundle(Val::Px(width), Val::Percent(100.0), false, true)
-}
-
 pub fn panel_bundle_auto(max_width_px: f32) -> impl Bundle {
     panel_window_bundle(Val::Auto, Val::Px(max_width_px), false, true)
-}
-
-pub fn panel_bundle_responsive(width_percent: f32, max_width_px: f32) -> impl Bundle {
-    panel_window_bundle(
-        Val::Percent(width_percent),
-        Val::Px(max_width_px),
-        false,
-        true,
-    )
 }
 
 /// 流式布局面板（相对定位），用于并排的多个面板

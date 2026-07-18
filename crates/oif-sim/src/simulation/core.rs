@@ -6,7 +6,7 @@ use glam::IVec3;
 use crate::world::grid::WorldBlocks;
 
 use super::behaviors::{
-    LaserBeam, destroy_powered_lasers, material_source_generation, probe_lasers,
+    BreakDebris, LaserBeam, destroy_powered_lasers, material_source_generation, probe_lasers,
     run_drill_destroy_phase, run_material_acceptance_phase, run_material_conversion_phase,
     run_material_paint_phase, run_material_stamp_phase, run_material_teleport_phase,
     run_weld_behavior_phase,
@@ -33,7 +33,10 @@ pub struct TurnOutput {
     pub pusher_animations: HashMap<IVec3, PusherMotion>,
     pub render_powered_wires: HashSet<IVec3>,
     pub weld_sparks: Vec<IVec3>,
+    /// 激光打镜等非破坏火花
     pub behavior_sparks: Vec<IVec3>,
+    /// 钻头/激光毁掉的材料碎片
+    pub break_debris: Vec<BreakDebris>,
     pub laser_beams: Vec<LaserBeam>,
     pub acceptance_sparks: Vec<IVec3>,
     pub stats: SimulationStepStats,
@@ -151,7 +154,8 @@ pub fn simulate_turn(
     sample.movement_mark_ms = mark_elapsed_ms(&mut mark);
 
     // —— 阶段 3a 脆弱碎裂：按运动计划移除冲突脆弱材料，再执行位姿 ——
-    apply_fragile_shatter_before_execute(world, &mut movement_plan, structure_state);
+    let fragile_debris =
+        apply_fragile_shatter_before_execute(world, &mut movement_plan, structure_state);
 
     // —— 阶段 3b 执行运动：位姿/推杆，再重生静态 marker ——
     let (mut animations, pusher_animations) = execute_structure_moves_with_pushers(
@@ -179,9 +183,15 @@ pub fn simulate_turn(
 
     // —— 阶段 4 结构后处理（销毁 → 传送 → 转换 → 验收 → 生成 → 焊）——
     let mut behavior_sparks = laser_probe_sparks;
-    behavior_sparks.extend(run_drill_destroy_phase(world));
+    let mut break_debris: Vec<BreakDebris> = fragile_debris
+        .into_iter()
+        .map(|(pos, kind)| BreakDebris { pos, kind })
+        .collect();
+    break_debris.extend(run_drill_destroy_phase(world));
     // 与阶段 1 探测同一批通电激光；移动后按新布局再 trace 并销毁
-    behavior_sparks.extend(destroy_powered_lasers(world, &laser_devices));
+    let (laser_destroy_sparks, laser_debris) = destroy_powered_lasers(world, &laser_devices);
+    behavior_sparks.extend(laser_destroy_sparks);
+    break_debris.extend(laser_debris);
 
     run_material_teleport_phase(world);
     run_material_conversion_phase(world);
@@ -221,6 +231,7 @@ pub fn simulate_turn(
         render_powered_wires,
         weld_sparks,
         behavior_sparks,
+        break_debris,
         laser_beams,
         acceptance_sparks,
         stats: sample,
@@ -382,4 +393,3 @@ fn log_movement_plan(
         }
     }
 }
-

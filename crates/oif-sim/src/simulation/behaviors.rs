@@ -30,24 +30,33 @@ pub struct LaserBeam {
     pub emits_from_center: bool,
 }
 
+/// 钻头/激光毁掉的材料：位置 + 种类（表现层采样纹理做碎片）
+#[derive(Clone, Copy, Debug)]
+pub struct BreakDebris {
+    pub pos: IVec3,
+    pub kind: BlockKind,
+}
+
 /// 阶段 1 光学探测：只点亮传感器、记录光束，不销毁材料
 pub(super) fn probe_lasers(
     world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
 ) -> (Vec<LaserBeam>, HashSet<IVec3>, Vec<IVec3>) {
-    run_lasers(world, powered_devices, false)
+    let (beams, detectors, sparks, _) = run_lasers(world, powered_devices, false);
+    (beams, detectors, sparks)
 }
 
 /// 阶段 4 激光销毁：按通电路径再 trace 并立刻移除材料
 pub(super) fn destroy_powered_lasers(
     world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
-) -> Vec<IVec3> {
-    run_lasers(world, powered_devices, true).2
+) -> (Vec<IVec3>, Vec<BreakDebris>) {
+    let (_, _, sparks, debris) = run_lasers(world, powered_devices, true);
+    (sparks, debris)
 }
 
 /// 阶段 4 钻头销毁：立刻移除材料
-pub(super) fn run_drill_destroy_phase(world: &mut WorldBlocks) -> Vec<IVec3> {
+pub(super) fn run_drill_destroy_phase(world: &mut WorldBlocks) -> Vec<BreakDebris> {
     let destroyers: Vec<(IVec3, MaterialDestroyer)> = world
         .blocks
         .iter()
@@ -59,21 +68,21 @@ pub(super) fn run_drill_destroy_phase(world: &mut WorldBlocks) -> Vec<IVec3> {
         })
         .collect();
 
-    let mut sparks = Vec::new();
+    let mut debris = Vec::new();
     for (pos, destroyer) in destroyers {
         match destroyer {
             MaterialDestroyer::Drill { target } => {
-                destroy_material_immediate(world, pos + target, &mut sparks);
+                destroy_material_immediate(world, pos + target, &mut debris);
             }
             MaterialDestroyer::AdjacentDrillHead => {
                 for offset in signal_offsets() {
-                    destroy_material_immediate(world, pos + offset, &mut sparks);
+                    destroy_material_immediate(world, pos + offset, &mut debris);
                 }
             }
             MaterialDestroyer::Laser { .. } => {}
         }
     }
-    sparks
+    debris
 }
 
 /// 阶段 4 传送：入口材料立刻迁到出口
@@ -423,7 +432,12 @@ fn run_lasers(
     world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
     destroy: bool,
-) -> (Vec<LaserBeam>, HashSet<IVec3>, Vec<IVec3>) {
+) -> (
+    Vec<LaserBeam>,
+    HashSet<IVec3>,
+    Vec<IVec3>,
+    Vec<BreakDebris>,
+) {
     let lasers: Vec<(IVec3, IVec3, i32)> = world
         .blocks
         .iter()
@@ -438,6 +452,7 @@ fn run_lasers(
         .collect();
 
     let mut sparks = Vec::new();
+    let mut debris = Vec::new();
     let mut laser_beams = Vec::new();
     let mut hit_detectors = HashSet::new();
     for (pos, direction, range) in lasers {
@@ -452,18 +467,30 @@ fn run_lasers(
             destroy,
             &mut laser_beams,
             &mut sparks,
+            &mut debris,
             &mut hit_detectors,
             0,
         );
     }
-    (laser_beams, hit_detectors, sparks)
+    (laser_beams, hit_detectors, sparks, debris)
 }
 
-fn destroy_material_immediate(world: &mut WorldBlocks, pos: IVec3, sparks: &mut Vec<IVec3>) {
-    if world.is_material_at(pos) {
-        world.remove(&pos);
-        sparks.push(pos);
+fn destroy_material_immediate(
+    world: &mut WorldBlocks,
+    pos: IVec3,
+    debris: &mut Vec<BreakDebris>,
+) {
+    let Some(block) = world.blocks.get(&pos).copied() else {
+        return;
+    };
+    if !block.kind.is_material() {
+        return;
     }
+    world.remove(&pos);
+    debris.push(BreakDebris {
+        pos,
+        kind: block.kind,
+    });
 }
 
 fn detach_material_block(world: &mut WorldBlocks, pos: IVec3) {
@@ -498,6 +525,7 @@ fn trace_laser(
     destroy: bool,
     beams: &mut Vec<LaserBeam>,
     sparks: &mut Vec<IVec3>,
+    debris: &mut Vec<BreakDebris>,
     hit_detectors: &mut HashSet<IVec3>,
     bounce_depth: u32,
 ) {
@@ -517,7 +545,10 @@ fn trace_laser(
         if block.kind.is_material() {
             if destroy {
                 world.remove(&target);
-                sparks.push(target);
+                debris.push(BreakDebris {
+                    pos: target,
+                    kind: block.kind,
+                });
             }
             traveled = distance;
             continue;
@@ -549,6 +580,7 @@ fn trace_laser(
                 destroy,
                 beams,
                 sparks,
+                debris,
                 hit_detectors,
                 bounce_depth + 1,
             );

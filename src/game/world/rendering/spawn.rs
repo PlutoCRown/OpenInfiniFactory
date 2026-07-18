@@ -451,25 +451,6 @@ pub(crate) fn spawn_block_model(
                 if weld_neighbor_connects_to(world, neighbor, -offset) {
                     let local_offset = local_connector_offset(data, offset);
                     let translation = local_offset.as_vec3() * 0.225;
-                    let glow_scale = if local_offset.x != 0 {
-                        Vec3::new(1.0, 1.7, 1.7)
-                    } else if local_offset.y != 0 {
-                        Vec3::new(1.7, 1.0, 1.7)
-                    } else {
-                        Vec3::new(1.7, 1.7, 1.0)
-                    };
-                    let mut glow = parent.spawn((
-                        Mesh3d(assets.connector_mesh(local_offset)),
-                        MeshMaterial3d(assets.weld_connector_glow_material.clone()),
-                        Transform {
-                            translation,
-                            scale: glow_scale,
-                            ..default()
-                        },
-                    ));
-                    if let Some((_, icon_layer)) = icon_render {
-                        glow.insert((icon_layer.clone(), BlockIconRenderEntity));
-                    }
                     let mut child = parent.spawn((
                         Mesh3d(assets.connector_mesh(local_offset)),
                         MeshMaterial3d(assets.weld_connector_material.clone()),

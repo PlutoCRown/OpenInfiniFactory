@@ -15,9 +15,9 @@ pub use icon::spawn_close_icon;
 pub use layout::{flex_row, flex_row_auto, root_node, transparent_node, ui_logical_bounds};
 pub use panel::{
     PanelOptions, STATUS_TEXT, absolute_text_bundle, compact_raised_panel, inventory_tray_bundle,
-    inventory_tray_row_bundle, panel_bundle_auto, panel_bundle_responsive,
-    panel_bundle_responsive_flow, panel_content, panel_title_bar, panel_title_button,
-    panel_title_label, spawn_panel, spawn_panel_with_title, spawn_panel_with_title_marker,
+    inventory_tray_row_bundle, panel_bundle_auto, panel_bundle_responsive_flow, panel_content,
+    panel_title_bar, panel_title_button, panel_title_label, spawn_panel, spawn_panel_with_title,
+    spawn_panel_with_title_marker,
 };
 pub use scroll::{
     fix_scroll_clip_picking, scroll_container, scroll_content, scroll_dragged,

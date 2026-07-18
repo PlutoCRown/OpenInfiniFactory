@@ -136,6 +136,10 @@ pub struct AnimatedPusherRod {
     to_extension: f32,
 }
 
+/// 钻头 Head：模拟激活后绕局部前进轴（Z）持续旋转
+#[derive(Component, Default)]
+pub struct SpinningDrillHead;
+
 #[derive(Component)]
 pub struct LaserBeamBurst {
     origin: Vec3,
@@ -177,13 +181,37 @@ pub struct WeldSpark {
     duration: f32,
 }
 
+/// MC 风格破坏碎片：重力落地 + 始终朝向镜头
+#[derive(Component)]
+pub struct BreakDebrisParticle {
+    velocity: Vec3,
+    elapsed: f32,
+    lifetime: f32,
+    ground_y: f32,
+}
+
+impl BreakDebrisParticle {
+    pub fn new(velocity: Vec3, lifetime: f32, ground_y: f32) -> Self {
+        Self {
+            velocity,
+            elapsed: 0.0,
+            lifetime,
+            ground_y,
+        }
+    }
+}
+
 impl AnimatedPusher {
     pub fn new(animation: PusherAnimation, base_translation: Vec3) -> Self {
         Self::with_factor(animation, base_translation, 1.0)
     }
 
     /// Stage 用 0.5、Head 用 1.0
-    pub fn with_factor(animation: PusherAnimation, base_translation: Vec3, extension_factor: f32) -> Self {
+    pub fn with_factor(
+        animation: PusherAnimation,
+        base_translation: Vec3,
+        extension_factor: f32,
+    ) -> Self {
         Self {
             base_translation,
             direction: Vec3::NEG_Z,
@@ -209,7 +237,7 @@ impl AnimatedPusherRod {
 
     fn apply(&self, extension: f32, transform: &mut Transform) {
         use crate::game::blocks::pusher::model::{
-            pusher_rod_center_z, pusher_rod_length, ROD_BASE_LENGTH,
+            ROD_BASE_LENGTH, pusher_rod_center_z, pusher_rod_length,
         };
 
         let length = pusher_rod_length(extension);
@@ -263,15 +291,39 @@ impl WeldSpark {
 
 pub fn animate_blocks(
     time: Res<Time>,
+    simulation: Res<crate::game::state::SimulationState>,
+    camera: Query<&GlobalTransform, With<crate::game::cameras::GameplayCamera>>,
     mut commands: Commands,
     mut blocks: Query<(Entity, &mut Transform, &mut AnimatedBlock)>,
     mut pushers: Query<
         (Entity, &mut Transform, &mut AnimatedPusher),
-        (Without<AnimatedBlock>, Without<AnimatedPusherRod>),
+        (
+            Without<AnimatedBlock>,
+            Without<AnimatedPusherRod>,
+            Without<SpinningDrillHead>,
+            Without<BreakDebrisParticle>,
+        ),
     >,
     mut pusher_rods: Query<
         (Entity, &mut Transform, &mut AnimatedPusherRod),
-        (Without<AnimatedBlock>, Without<AnimatedPusher>),
+        (
+            Without<AnimatedBlock>,
+            Without<AnimatedPusher>,
+            Without<SpinningDrillHead>,
+            Without<BreakDebrisParticle>,
+        ),
+    >,
+    mut drill_heads: Query<
+        &mut Transform,
+        (
+            With<SpinningDrillHead>,
+            Without<AnimatedBlock>,
+            Without<AnimatedPusher>,
+            Without<AnimatedPusherRod>,
+            Without<WeldSpark>,
+            Without<LaserBeamBurst>,
+            Without<BreakDebrisParticle>,
+        ),
     >,
     mut sparks: Query<
         (Entity, &mut Transform, &mut WeldSpark),
@@ -279,6 +331,19 @@ pub fn animate_blocks(
             Without<AnimatedBlock>,
             Without<AnimatedPusher>,
             Without<AnimatedPusherRod>,
+            Without<SpinningDrillHead>,
+            Without<LaserBeamBurst>,
+            Without<BreakDebrisParticle>,
+        ),
+    >,
+    mut debris: Query<
+        (Entity, &mut Transform, &mut BreakDebrisParticle),
+        (
+            Without<AnimatedBlock>,
+            Without<AnimatedPusher>,
+            Without<AnimatedPusherRod>,
+            Without<SpinningDrillHead>,
+            Without<WeldSpark>,
             Without<LaserBeamBurst>,
         ),
     >,
@@ -288,7 +353,9 @@ pub fn animate_blocks(
             Without<AnimatedBlock>,
             Without<AnimatedPusher>,
             Without<AnimatedPusherRod>,
+            Without<SpinningDrillHead>,
             Without<WeldSpark>,
+            Without<BreakDebrisParticle>,
         ),
     >,
 ) {
@@ -322,8 +389,8 @@ pub fn animate_blocks(
         animation.elapsed += time.delta_secs();
         let t = (animation.elapsed / animation.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
         let extension = animation.from_extension.lerp(animation.to_extension, t);
-        transform.translation =
-            animation.base_translation + animation.direction * (extension * animation.extension_factor);
+        transform.translation = animation.base_translation
+            + animation.direction * (extension * animation.extension_factor);
 
         if t >= 1.0 {
             transform.translation = animation.base_translation
@@ -344,6 +411,14 @@ pub fn animate_blocks(
         }
     }
 
+    if simulation.is_active() {
+        // 约每模拟回合转两圈
+        let delta = time.delta_secs() * (std::f32::consts::TAU * 2.0 / SIMULATION_TURN_SECONDS);
+        for mut transform in &mut drill_heads {
+            transform.rotate_local_z(delta);
+        }
+    }
+
     for (entity, mut transform, mut spark) in &mut sparks {
         spark.elapsed += time.delta_secs();
         let t = (spark.elapsed / spark.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
@@ -351,6 +426,38 @@ pub fn animate_blocks(
         transform.scale = Vec3::splat((1.0 - t).max(0.0));
 
         if t >= 1.0 {
+            commands.entity(entity).despawn();
+        }
+    }
+
+    let camera_pos = camera
+        .iter()
+        .next()
+        .map(|t| t.translation())
+        .unwrap_or(Vec3::ZERO);
+    let dt = time.delta_secs();
+    for (entity, mut transform, mut particle) in &mut debris {
+        particle.elapsed += dt;
+        particle.velocity.y -= 18.0 * dt;
+        transform.translation += particle.velocity * dt;
+        if transform.translation.y < particle.ground_y {
+            transform.translation.y = particle.ground_y;
+            particle.velocity.y *= -0.35;
+            particle.velocity.x *= 0.72;
+            particle.velocity.z *= 0.72;
+            if particle.velocity.y.abs() < 0.6 {
+                particle.velocity = Vec3::ZERO;
+            }
+        }
+        let to_cam = (camera_pos - transform.translation).normalize_or_zero();
+        if to_cam != Vec3::ZERO {
+            transform.rotation = Quat::from_rotation_arc(Vec3::Z, to_cam);
+        }
+        let life_t = (particle.elapsed / particle.lifetime.max(f32::EPSILON)).clamp(0.0, 1.0);
+        if life_t > 0.7 {
+            transform.scale = Vec3::splat(((1.0 - life_t) / 0.3).max(0.0));
+        }
+        if life_t >= 1.0 {
             commands.entity(entity).despawn();
         }
     }

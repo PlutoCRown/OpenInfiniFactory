@@ -4,6 +4,7 @@ use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrep
 use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
 use bevy::light::ShadowFilteringMethod;
 use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
+use bevy::post_process::bloom::{Bloom, BloomCompositeMode, BloomPrefilter};
 use bevy::prelude::*;
 use bevy::render::camera::TemporalJitter;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
@@ -94,8 +95,21 @@ pub fn spawn_player(
         .insert((
             Hdr,
             Msaa::Off,
-            Tonemapping::SomewhatBoringDisplayTransform,
+            Tonemapping::TonyMcMapface,
             DebandDither::Enabled,
+            // 高阈值：只让电线充能条 / 焊点（自发光 ≫ 环境光）泛光
+            Bloom {
+                intensity: 0.7,
+                low_frequency_boost: 0.85,
+                low_frequency_boost_curvature: 0.85,
+                high_pass_frequency: 0.85,
+                prefilter: BloomPrefilter {
+                    threshold: 10.0,
+                    threshold_softness: 0.5,
+                },
+                composite_mode: BloomCompositeMode::Additive,
+                ..Bloom::NATURAL
+            },
             ScreenSpaceAmbientOcclusion {
                 quality_level: ScreenSpaceAmbientOcclusionQualityLevel::Medium,
                 ..default()

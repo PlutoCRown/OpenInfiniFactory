@@ -22,7 +22,7 @@ pub use components::{
     block_face_highlight_transform,
 };
 pub(crate) use connectors::{face_mark_transform, signal_neighbor_offsets};
-pub use fx::{spawn_acceptance_sparks, spawn_laser_beams, spawn_weld_sparks};
+pub use fx::{spawn_acceptance_sparks, spawn_break_debris, spawn_laser_beams, spawn_weld_sparks};
 pub use icons::{retire_block_icon_renderers, setup_block_icons};
 pub use previews::{
     despawn_edit_previews, despawn_pending_generated_previews, spawn_block_preview,

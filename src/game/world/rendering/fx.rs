@@ -1,7 +1,9 @@
+use bevy::asset::RenderAssetUsages;
+use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
-use crate::game::simulation::{LaserBeam, LaserBeamStop};
-use crate::game::world::animation::{LaserBeamBurst, WeldSpark};
+use crate::game::simulation::{BreakDebris, LaserBeam, LaserBeamStop};
+use crate::game::world::animation::{BreakDebrisParticle, LaserBeamBurst, WeldSpark};
 use crate::game::world::grid::grid_to_world;
 use crate::game::world::render_assets::WorldRenderAssets;
 
@@ -76,6 +78,70 @@ pub fn spawn_weld_sparks(commands: &mut Commands, assets: &WorldRenderAssets, po
                 MeshMaterial3d(assets.laser_beam_material.clone()),
                 Transform::from_translation(origin + offset),
                 WeldSpark::new(velocity, 0.28),
+            ));
+        }
+    }
+}
+
+/// MC 风格：采样材料贴图随机 UV 方片，公告板朝镜头，重力落地
+pub fn spawn_break_debris(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    assets: &WorldRenderAssets,
+    debris: &[BreakDebris],
+) {
+    const COUNT: i32 = 16;
+    for item in debris {
+        let origin = grid_to_world(item.pos);
+        let material = assets.break_debris_material(item.kind);
+        let ground_y = 0.02_f32;
+        let seed = (item.pos.x.wrapping_mul(73856093)
+            ^ item.pos.y.wrapping_mul(19349663)
+            ^ item.pos.z.wrapping_mul(83492791)) as u32;
+        for i in 0..COUNT {
+            let n = seed.wrapping_add((i as u32).wrapping_mul(2654435761));
+            let u_cell = (n % 4) as f32;
+            let v_cell = ((n / 4) % 4) as f32;
+            let u0 = u_cell * 0.25;
+            let v0 = v_cell * 0.25;
+            let u1 = u0 + 0.25;
+            let v1 = v0 + 0.25;
+            let fx = ((n >> 3) & 255) as f32 / 255.0;
+            let fy = ((n >> 11) & 255) as f32 / 255.0;
+            let fz = ((n >> 19) & 255) as f32 / 255.0;
+            let offset = Vec3::new(fx - 0.5, fy * 0.6 + 0.1, fz - 0.5) * 0.85;
+            let velocity = Vec3::new((fx - 0.5) * 3.2, 2.4 + fy * 2.8, (fz - 0.5) * 3.2);
+            let size = 0.10 + ((n >> 7) & 7) as f32 * 0.012;
+            let mesh = meshes.add({
+                let h = size * 0.5;
+                Mesh::new(
+                    PrimitiveTopology::TriangleList,
+                    RenderAssetUsages::default(),
+                )
+                .with_inserted_attribute(
+                    Mesh::ATTRIBUTE_POSITION,
+                    vec![[-h, -h, 0.0], [h, -h, 0.0], [h, h, 0.0], [-h, h, 0.0]],
+                )
+                .with_inserted_attribute(
+                    Mesh::ATTRIBUTE_NORMAL,
+                    vec![
+                        [0.0, 0.0, 1.0],
+                        [0.0, 0.0, 1.0],
+                        [0.0, 0.0, 1.0],
+                        [0.0, 0.0, 1.0],
+                    ],
+                )
+                .with_inserted_attribute(
+                    Mesh::ATTRIBUTE_UV_0,
+                    vec![[u0, v1], [u1, v1], [u1, v0], [u0, v0]],
+                )
+                .with_inserted_indices(Indices::U32(vec![0, 1, 2, 0, 2, 3]))
+            });
+            commands.spawn((
+                Mesh3d(mesh),
+                MeshMaterial3d(material.clone()),
+                Transform::from_translation(origin + offset),
+                BreakDebrisParticle::new(velocity, 1.1, ground_y),
             ));
         }
     }

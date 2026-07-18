@@ -27,8 +27,13 @@ pub enum FactoryVisual {
     /// 静态整块零件
     Static {
         parts: Vec<FactoryPartHandles>,
-        /// DownWelder：模型绕局部 X 俯仰 -90°
-        pitch_radians: f32,
+        /// 相对方块朝向的额外旋转（DownWelder 俯仰、反向传送带翻底等）
+        local_rotation: Quat,
+    },
+    /// 钻头：Body 静、Head 模拟时绕前进轴转
+    Drill {
+        body: Vec<FactoryPartHandles>,
+        head: Vec<FactoryPartHandles>,
     },
     /// 活塞 / 拦截器：Body 静、Stage 半行程、Head 全行程
     Pusher {
@@ -80,6 +85,8 @@ pub struct WorldRenderAssets {
     part_pusher_body: Handle<Mesh>,
     part_pusher_head: Handle<Mesh>,
     block_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
+    /// 破坏碎片公告板材质（双面 unlit，采样方块贴图）
+    break_debris_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     preview_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     /// 场景块材质（从 model.glb 加载）
     scene_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
@@ -101,8 +108,6 @@ pub struct WorldRenderAssets {
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
     pub(crate) active_wire_material: Handle<StandardMaterial>,
     pub(crate) weld_connector_material: Handle<StandardMaterial>,
-    /// 焊点连接杆外圈荧光黄
-    pub(crate) weld_connector_glow_material: Handle<StandardMaterial>,
     pub(crate) laser_beam_material: Handle<StandardMaterial>,
     pub(crate) acceptance_spark_material: Handle<StandardMaterial>,
     delete_preview_material: Handle<StandardMaterial>,
@@ -262,6 +267,31 @@ impl WorldRenderAssets {
                 block_materials.insert(kind, material.clone());
                 preview_materials.insert(kind, preview.clone());
             }
+        }
+        // 材料/印花破坏碎片：从方块材质抽出贴图做双面 unlit
+        let mut break_debris_materials = HashMap::new();
+        for (kind, handle) in &block_materials {
+            if !(kind.is_material() || matches!(kind, BlockKind::Stamp(_))) {
+                continue;
+            }
+            let Some(source) = materials.get(handle) else {
+                continue;
+            };
+            break_debris_materials.insert(
+                *kind,
+                materials.add(StandardMaterial {
+                    base_color: if source.base_color_texture.is_some() {
+                        Color::WHITE
+                    } else {
+                        source.base_color
+                    },
+                    base_color_texture: source.base_color_texture.clone(),
+                    unlit: true,
+                    cull_mode: None,
+                    alpha_mode: AlphaMode::Mask(0.2),
+                    ..default()
+                }),
+            );
         }
         // 不透明立方体才遮挡邻面；玻璃等 Blend、异形 GLB 不进此集合
         let mut scene_face_occluders = HashSet::new();
@@ -491,6 +521,7 @@ impl WorldRenderAssets {
             part_pusher_body: meshes.add(cover_cuboid_mesh(Vec3::new(1.0, 1.0, 0.80))),
             part_pusher_head: meshes.add(cover_cuboid_mesh(Vec3::new(1.0, 1.0, 0.20))),
             block_materials,
+            break_debris_materials,
             preview_materials,
             scene_materials: scene_block_materials,
             scene_meshes,
@@ -523,18 +554,12 @@ impl WorldRenderAssets {
                 emissive: Color::srgb(0.34, 0.02, 0.01).into(),
                 ..default()
             }),
+            // 白杆 + 黄自发光（须 lit：unlit 会丢掉 emissive，Bloom 看不到）
             weld_connector_material: materials.add(StandardMaterial {
                 base_color: Color::WHITE,
-                emissive: LinearRgba::new(2.2, 2.2, 2.2, 1.0),
-                unlit: true,
-                ..default()
-            }),
-            weld_connector_glow_material: materials.add(StandardMaterial {
-                base_color: Color::srgba(1.0, 0.95, 0.25, 0.55),
-                emissive: LinearRgba::new(1.8, 1.4, 0.15, 1.0),
-                alpha_mode: AlphaMode::Blend,
-                unlit: true,
-                cull_mode: None,
+                emissive: LinearRgba::new(22.0, 14.0, 0.6, 1.0),
+                perceptual_roughness: 1.0,
+                metallic: 0.0,
                 ..default()
             }),
             laser_beam_material: materials.add(StandardMaterial {
@@ -617,6 +642,14 @@ impl WorldRenderAssets {
             .get(&kind)
             .expect("every block kind has a material")
             .clone()
+    }
+
+    /// 破坏碎片材质；无专用贴图时回退方块材质
+    pub(crate) fn break_debris_material(&self, kind: BlockKind) -> Handle<StandardMaterial> {
+        self.break_debris_materials
+            .get(&kind)
+            .cloned()
+            .unwrap_or_else(|| self.block_material(kind))
     }
 
     pub(crate) fn active_factory_debug_material(&self) -> Handle<StandardMaterial> {
@@ -852,31 +885,39 @@ fn load_factory_visuals(
     materials: &mut Assets<StandardMaterial>,
     images: &mut Assets<Image>,
 ) -> HashMap<BlockKind, FactoryVisual> {
-    use std::f32::consts::FRAC_PI_2;
+    use std::f32::consts::{FRAC_PI_2, PI};
     use std::path::PathBuf;
 
     let root = PathBuf::from(crate::shared::platform::asset_path()).join("factory_blocks");
     let mut map = HashMap::new();
 
-    let static_dirs: &[(BlockKind, &str, f32)] = &[
-        (BlockKind::Platform, "platform", 0.0),
-        (BlockKind::Conveyor, "conveyor", 0.0),
-        (BlockKind::ReverseConveyor, "conveyor", 0.0),
-        (BlockKind::Rotator, "rotator", 0.0),
-        (BlockKind::CounterRotator, "counter_rotator", 0.0),
-        (BlockKind::Detector, "detector", 0.0),
-        (BlockKind::DownDetector, "detector", 0.0),
-        (BlockKind::Lifter, "lifter", 0.0),
-        (BlockKind::Welder, "welder", 0.0),
-        (BlockKind::DownWelder, "welder", -FRAC_PI_2),
-        (BlockKind::Drill, "drill", 0.0),
-        (BlockKind::Laser, "laser", 0.0),
-        (BlockKind::Mirror, "mirror", 0.0),
-        (BlockKind::VerticalMirror, "vertical_mirror", 0.0),
-        (BlockKind::Splitter, "splitter", 0.0),
-        (BlockKind::SuctionCup, "suction_cup", 0.0),
+    // 反向传送带：绕局部 X 翻 180°，顶面到底面
+    let static_dirs: &[(BlockKind, &str, Quat)] = &[
+        (BlockKind::Platform, "platform", Quat::IDENTITY),
+        (BlockKind::Conveyor, "conveyor", Quat::IDENTITY),
+        (
+            BlockKind::ReverseConveyor,
+            "conveyor",
+            Quat::from_rotation_x(PI),
+        ),
+        (BlockKind::Rotator, "rotator", Quat::IDENTITY),
+        (BlockKind::CounterRotator, "counter_rotator", Quat::IDENTITY),
+        (BlockKind::Detector, "detector", Quat::IDENTITY),
+        (BlockKind::DownDetector, "detector", Quat::IDENTITY),
+        (BlockKind::Lifter, "lifter", Quat::IDENTITY),
+        (BlockKind::Welder, "welder", Quat::IDENTITY),
+        (
+            BlockKind::DownWelder,
+            "welder",
+            Quat::from_rotation_x(-FRAC_PI_2),
+        ),
+        (BlockKind::Laser, "laser", Quat::IDENTITY),
+        (BlockKind::Mirror, "mirror", Quat::IDENTITY),
+        (BlockKind::VerticalMirror, "vertical_mirror", Quat::IDENTITY),
+        (BlockKind::Splitter, "splitter", Quat::IDENTITY),
+        (BlockKind::SuctionCup, "suction_cup", Quat::IDENTITY),
     ];
-    for &(kind, dir, pitch) in static_dirs {
+    for &(kind, dir, local_rotation) in static_dirs {
         let path = root.join(dir).join("model.glb");
         match load_factory_glb(&path, meshes, materials, images) {
             Ok(raw) => {
@@ -884,13 +925,28 @@ fn load_factory_visuals(
                     kind,
                     FactoryVisual::Static {
                         parts: factory_parts_with_preview(raw, materials),
-                        pitch_radians: pitch,
+                        local_rotation,
                     },
                 );
             }
             Err(err) => {
                 bevy::log::warn!("factory glb load failed ({}): {err}", kind.name_key());
             }
+        }
+    }
+
+    let drill_path = root.join("drill").join("model.glb");
+    match load_factory_glb(&drill_path, meshes, materials, images) {
+        Ok(raw) => match split_drill_parts(raw, materials) {
+            Some(visual) => {
+                map.insert(BlockKind::Drill, visual);
+            }
+            None => {
+                bevy::log::warn!("factory drill glb missing Body/Head");
+            }
+        },
+        Err(err) => {
+            bevy::log::warn!("factory glb load failed (drill): {err}");
         }
     }
 
@@ -954,6 +1010,38 @@ fn factory_parts_with_preview(
             }
         })
         .collect()
+}
+
+/// 按 Body / Head 拆钻头零件
+fn split_drill_parts(
+    raw: Vec<FactoryGltfPart>,
+    materials: &mut Assets<StandardMaterial>,
+) -> Option<FactoryVisual> {
+    let mut body = Vec::new();
+    let mut head = Vec::new();
+    for part in raw {
+        let group = part.group.as_deref().unwrap_or("");
+        let handles = {
+            let preview_material = materials
+                .get(&part.material)
+                .cloned()
+                .map(|source| materials.add(preview_model_material(source)))
+                .unwrap_or_else(|| part.material.clone());
+            FactoryPartHandles {
+                mesh: part.mesh,
+                material: part.material,
+                preview_material,
+            }
+        };
+        match group {
+            "Head" => head.push(handles),
+            _ => body.push(handles),
+        }
+    }
+    if body.is_empty() || head.is_empty() {
+        return None;
+    }
+    Some(FactoryVisual::Drill { body, head })
 }
 
 /// 按 Body / Stage / Head 拆活塞零件
@@ -1021,12 +1109,13 @@ fn split_wire_faces(
                 preview_material,
             }
         };
-        // 通电条：强制纯白强自发光（glTF 发射强度可能丢失）
+        // 通电条：白自发光（须 lit，否则 emissive 不进 HDR，Bloom 无效）
         if is_power {
             handles.material = materials.add(StandardMaterial {
                 base_color: Color::WHITE,
-                emissive: LinearRgba::new(3.5, 3.5, 3.5, 1.0),
-                unlit: true,
+                emissive: LinearRgba::new(16.0, 16.0, 16.0, 1.0),
+                perceptual_roughness: 1.0,
+                metallic: 0.0,
                 ..default()
             });
             handles.preview_material = handles.material.clone();

@@ -448,11 +448,12 @@ fn structure_supported_by_lifter(world: &WorldBlocks, structure: &HashSet<IVec3>
 }
 
 /// 运动执行前：按计划压碎/让出冲突的脆弱材料（与钻头/激光销毁分离）
+/// 返回碎裂格子与种类，供表现层生成碎片
 pub(super) fn apply_fragile_shatter_before_execute(
     world: &mut WorldBlocks,
     moves: &mut [StructureMove],
     structures: &mut StructureState,
-) {
+) -> Vec<(IVec3, crate::blocks::BlockKind)> {
     let mut shatter = HashSet::new();
     for movement in moves.iter() {
         match movement {
@@ -494,11 +495,17 @@ pub(super) fn apply_fragile_shatter_before_execute(
         }
     }
     if shatter.is_empty() {
-        return;
+        return Vec::new();
     }
 
+    let mut debris = Vec::new();
     let mut affected: HashMap<StructureId, HashSet<IVec3>> = HashMap::new();
     for pos in &shatter {
+        if let Some(block) = world.blocks.get(pos).copied() {
+            if block.kind.is_material() {
+                debris.push((*pos, block.kind));
+            }
+        }
         if let Some(id) = structures.id_at(*pos) {
             affected.entry(id).or_default().insert(*pos);
         }
@@ -521,6 +528,7 @@ pub(super) fn apply_fragile_shatter_before_execute(
             }
         }
     }
+    debris
 }
 
 /// 按序执行运动标签：失败则试下一个；种子判占用，成功后标记展开后的格子。

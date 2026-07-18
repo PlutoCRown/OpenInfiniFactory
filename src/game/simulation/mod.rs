@@ -1,6 +1,6 @@
 //! 模拟逻辑已迁至 `oif_sim`；此处提供 Bevy Resource 包装与路径兼容 re-export
 
-pub use oif_sim::simulation::{LaserBeam, LaserBeamStop};
+pub use oif_sim::simulation::{BreakDebris, LaserBeam, LaserBeamStop};
 
 pub mod core {
     pub use oif_sim::simulation::core::*;

@@ -2,7 +2,9 @@ use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 
 use crate::game::blocks::{BlockModel, BlockModelPart, ModelMesh};
-use crate::game::world::animation::{AnimatedPusher, AnimatedPusherRod, PusherAnimation};
+use crate::game::world::animation::{
+    AnimatedPusher, AnimatedPusherRod, PusherAnimation, SpinningDrillHead,
+};
 use crate::game::world::render_assets::{FactoryPartHandles, FactoryVisual, WorldRenderAssets};
 use crate::game::world::rendering::BlockIconRenderEntity;
 
@@ -20,9 +22,12 @@ pub fn spawn_model_parts(
         match visual {
             FactoryVisual::Static {
                 parts,
-                pitch_radians,
+                local_rotation,
             } => {
-                spawn_factory_static(parent, parts, *pitch_radians, icon_layer, preview);
+                spawn_factory_static(parent, parts, *local_rotation, icon_layer, preview);
+            }
+            FactoryVisual::Drill { body, head } => {
+                spawn_factory_drill(parent, body, head, icon_layer, preview);
             }
             FactoryVisual::Pusher { body, stage, head } => {
                 spawn_factory_pusher(
@@ -54,22 +59,22 @@ pub fn spawn_model_parts(
     }
 }
 
-/// 生成静态工厂 GLB 零件（可选俯仰）
+/// 生成静态工厂 GLB 零件（可选额外局部旋转）
 fn spawn_factory_static(
     parent: &mut ChildSpawnerCommands,
     parts: &[FactoryPartHandles],
-    pitch_radians: f32,
+    local_rotation: Quat,
     icon_layer: Option<&RenderLayers>,
     preview: bool,
 ) {
-    if pitch_radians == 0.0 {
+    if local_rotation == Quat::IDENTITY {
         for part in parts {
             spawn_factory_part(parent, part, Transform::default(), icon_layer, preview);
         }
         return;
     }
     let mut root = parent.spawn((
-        Transform::from_rotation(Quat::from_rotation_x(pitch_radians)),
+        Transform::from_rotation(local_rotation),
         Visibility::default(),
     ));
     if let Some(icon_layer) = icon_layer {
@@ -77,6 +82,32 @@ fn spawn_factory_static(
     }
     root.with_children(|parent| {
         for part in parts {
+            spawn_factory_part(parent, part, Transform::default(), icon_layer, preview);
+        }
+    });
+}
+
+/// 生成钻头 Body / Head；Head 挂持续旋转组件
+fn spawn_factory_drill(
+    parent: &mut ChildSpawnerCommands,
+    body: &[FactoryPartHandles],
+    head: &[FactoryPartHandles],
+    icon_layer: Option<&RenderLayers>,
+    preview: bool,
+) {
+    for part in body {
+        spawn_factory_part(parent, part, Transform::default(), icon_layer, preview);
+    }
+
+    let mut head_root = parent.spawn((Transform::default(), Visibility::default()));
+    if let Some(icon_layer) = icon_layer {
+        head_root.insert((icon_layer.clone(), BlockIconRenderEntity));
+    }
+    if !preview && icon_layer.is_none() {
+        head_root.insert(SpinningDrillHead::default());
+    }
+    head_root.with_children(|parent| {
+        for part in head {
             spawn_factory_part(parent, part, Transform::default(), icon_layer, preview);
         }
     });

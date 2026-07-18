@@ -11,8 +11,8 @@ use crate::game::world::animation::{
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     BlockEntity, BlockEntityLayer, SceneChunkMeshes, WorldRenderAssets, signal_neighbor_offsets,
-    spawn_acceptance_sparks, spawn_laser_beams, spawn_weld_sparks, spawn_world_block_entity,
-    sync_scene_chunks_for_positions,
+    spawn_acceptance_sparks, spawn_break_debris, spawn_laser_beams, spawn_weld_sparks,
+    spawn_world_block_entity, sync_scene_chunks_for_positions,
 };
 use crate::sim_bridge::TurnOutput;
 
@@ -634,6 +634,7 @@ pub fn apply_turn_output_incremental(
     }
     spawn_weld_sparks(commands, assets, &output.weld_sparks);
     spawn_weld_sparks(commands, assets, &output.behavior_sparks);
+    spawn_break_debris(commands, meshes, assets, &output.break_debris);
     spawn_laser_beams(commands, assets, &output.laser_beams, animation_duration);
     spawn_acceptance_sparks(commands, assets, &output.acceptance_sparks);
     stats.render_rebuild_ms = render_start.elapsed().as_secs_f64() * 1000.0;
