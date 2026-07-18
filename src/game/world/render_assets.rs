@@ -118,7 +118,10 @@ impl WorldRenderAssets {
             .into_iter()
             .map(|kind| {
                 let texture = block_textures.get(&kind).cloned();
-                (kind, materials.add(preview_block_material(kind, texture)))
+                (
+                    kind,
+                    materials.add(preview_block_material(kind, texture, None)),
+                )
             })
             .collect();
         // 场景 / 材料 / 印花：model.glb 或 texture.png → scene_materials 等 HashMap
@@ -136,6 +139,7 @@ impl WorldRenderAssets {
                 kind,
                 presentation.model_path.as_deref(),
                 presentation.texture_path.as_deref(),
+                None,
                 kind.material(),
                 None,
                 meshes,
@@ -154,6 +158,7 @@ impl WorldRenderAssets {
                 kind,
                 presentation.model_path.as_deref(),
                 presentation.texture_path.as_deref(),
+                presentation.normal_path.as_deref(),
                 kind.material(),
                 None,
                 meshes,
@@ -172,6 +177,7 @@ impl WorldRenderAssets {
                 kind,
                 presentation.model_path.as_deref(),
                 presentation.texture_path.as_deref(),
+                None,
                 kind.material(),
                 Some(&stamp_plate),
                 meshes,
@@ -329,7 +335,13 @@ impl WorldRenderAssets {
             .collect();
 
         Self {
-            block: meshes.add(Cuboid::new(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)),
+            block: {
+                let mut mesh = Mesh::from(Cuboid::new(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE));
+                // 无 GLB、靠 texture/normal.png 的立方体需要切线
+                mesh.generate_tangents()
+                    .expect("unit cube should generate tangents");
+                meshes.add(mesh)
+            },
             node: meshes.add(Cuboid::new(
                 BLOCK_SIZE * 0.38,
                 BLOCK_SIZE * 0.38,
@@ -622,10 +634,15 @@ fn textured_block_material(kind: BlockKind, texture: Handle<Image>) -> StandardM
     }
 }
 
-fn preview_block_material(kind: BlockKind, texture: Option<Handle<Image>>) -> StandardMaterial {
+fn preview_block_material(
+    kind: BlockKind,
+    texture: Option<Handle<Image>>,
+    normal: Option<Handle<Image>>,
+) -> StandardMaterial {
     StandardMaterial {
         base_color: kind.material().with_alpha(0.46),
         base_color_texture: texture,
+        normal_map_texture: normal,
         alpha_mode: AlphaMode::Blend,
         perceptual_roughness: 0.94,
         reflectance: 0.08,
@@ -664,12 +681,14 @@ fn stamp_plate_mesh() -> Mesh {
     mesh
 }
 
-/// 把 model.glb 或 texture.png 装进 scene_* / block_materials（场景、材料、印花共用）
+/// 把 model.glb 或 texture.png（可选 normal.png）装进 scene_* / block_materials
+/// 有 model.glb 时只走 GLB（不读外部贴图）；无模型的纯立方体才用 texture/normal.png
 /// `stamp_plate`：印花在无 GLB 走贴图/纯色 fallback 时用的薄板网格
 fn insert_configured_pack(
     kind: BlockKind,
     model_path: Option<&Path>,
     texture_path: Option<&Path>,
+    normal_path: Option<&Path>,
     fallback_color: Color,
     stamp_plate: Option<&Handle<Mesh>>,
     meshes: &mut Assets<Mesh>,
@@ -705,11 +724,20 @@ fn insert_configured_pack(
     }
 
     if let Some(texture_path) = texture_path {
-        if let Some(texture) = crate::game::scene_blocks::load_block_texture_png(texture_path, images)
+        if let Some(texture) =
+            crate::game::scene_blocks::load_block_texture_png(texture_path, images)
         {
+            let normal = normal_path.and_then(|path| {
+                let handle = crate::game::scene_blocks::load_block_normal_png(path, images);
+                if handle.is_none() {
+                    bevy::log::error!("configured pack normal load failed: {}", path.display());
+                }
+                handle
+            });
             let mut material = StandardMaterial {
                 base_color: Color::WHITE,
                 base_color_texture: Some(texture.clone()),
+                normal_map_texture: normal.clone(),
                 perceptual_roughness: 0.94,
                 reflectance: 0.10,
                 ..default()
@@ -720,7 +748,7 @@ fn insert_configured_pack(
             let material = materials.add(material);
             preview_materials.insert(
                 kind,
-                materials.add(preview_block_material(kind, Some(texture))),
+                materials.add(preview_block_material(kind, Some(texture), normal)),
             );
             scene_block_materials.insert(kind, material.clone());
             block_materials.insert(kind, material);

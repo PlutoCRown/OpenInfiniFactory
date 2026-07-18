@@ -21,6 +21,7 @@ const PAINT_MATERIALS_DIR: &str = "paint_materials";
 const META_FILE: &str = "meta.json";
 const MODEL_FILE: &str = "model.glb";
 const TEXTURE_FILE: &str = "texture.png";
+const NORMAL_FILE: &str = "normal.png";
 const ICON_FILE: &str = "icon.png";
 
 /// 三个表现注册表的可变引用集合（加载入口共用）
@@ -230,6 +231,7 @@ fn load_one_material(
         string_id: meta.id,
         model_path,
         texture_path,
+        normal_path: optional_file(dir, NORMAL_FILE),
         icon_path: optional_file(dir, ICON_FILE),
         color,
     });

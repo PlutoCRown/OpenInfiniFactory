@@ -21,18 +21,31 @@ pub fn load_icon_png(
         path,
         images,
         bevy::image::ImageSamplerDescriptor::linear(),
+        true,
     )
 }
 
-/// 方块外观 texture.png：像素锐利 + 可重复
+/// 方块外观 texture.png：像素锐利 + 可重复（sRGB）
 pub fn load_block_texture_png(
     path: &std::path::Path,
     images: &mut bevy::prelude::Assets<bevy::prelude::Image>,
 ) -> Option<bevy::prelude::Handle<bevy::prelude::Image>> {
+    load_png_with_sampler(path, images, block_nearest_sampler("block_texture"), true)
+}
+
+/// 方块法线 normal.png：线性色域 + 像素锐利
+pub fn load_block_normal_png(
+    path: &std::path::Path,
+    images: &mut bevy::prelude::Assets<bevy::prelude::Image>,
+) -> Option<bevy::prelude::Handle<bevy::prelude::Image>> {
+    load_png_with_sampler(path, images, block_nearest_sampler("block_normal"), false)
+}
+
+fn block_nearest_sampler(label: &str) -> bevy::image::ImageSamplerDescriptor {
     use bevy::image::{ImageAddressMode, ImageFilterMode, ImageSamplerDescriptor};
 
-    let mut sampler = ImageSamplerDescriptor {
-        label: Some("block_texture".into()),
+    ImageSamplerDescriptor {
+        label: Some(label.into()),
         address_mode_u: ImageAddressMode::Repeat,
         address_mode_v: ImageAddressMode::Repeat,
         address_mode_w: ImageAddressMode::Repeat,
@@ -40,16 +53,14 @@ pub fn load_block_texture_png(
         min_filter: ImageFilterMode::Nearest,
         mipmap_filter: ImageFilterMode::Nearest,
         ..ImageSamplerDescriptor::default()
-    };
-    // 显式 nearest（部分平台 default 可能不同）
-    let _ = &mut sampler;
-    load_png_with_sampler(path, images, sampler)
+    }
 }
 
 fn load_png_with_sampler(
     path: &std::path::Path,
     images: &mut bevy::prelude::Assets<bevy::prelude::Image>,
     sampler: bevy::image::ImageSamplerDescriptor,
+    is_srgb: bool,
 ) -> Option<bevy::prelude::Handle<bevy::prelude::Image>> {
     use bevy::asset::RenderAssetUsages;
     use bevy::prelude::*;
@@ -59,7 +70,7 @@ fn load_png_with_sampler(
         &bytes,
         bevy::image::ImageType::Format(bevy::image::ImageFormat::Png),
         bevy::image::CompressedImageFormats::NONE,
-        true,
+        is_srgb,
         bevy::image::ImageSampler::Default,
         RenderAssetUsages::default(),
     )

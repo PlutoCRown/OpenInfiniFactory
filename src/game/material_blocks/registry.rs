@@ -16,6 +16,8 @@ pub struct MaterialBlockPresentation {
     pub string_id: String,
     pub model_path: Option<PathBuf>,
     pub texture_path: Option<PathBuf>,
+    /// 可选法线贴图（同目录 `normal.png`）
+    pub normal_path: Option<PathBuf>,
     pub icon_path: Option<PathBuf>,
     pub color: ColorSpec,
 }
