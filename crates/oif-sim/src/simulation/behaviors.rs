@@ -395,8 +395,9 @@ pub(super) fn run_material_acceptance_phase(
     world: &WorldBlocks,
     structure_state: &mut StructureState,
     pending_generated: &mut super::pending::PendingGeneratedMaterials,
-    ready_turn: u64,
+    turn: u64,
 ) -> HashSet<AcceptorId> {
+    let ready_turn = turn + 1;
     let mut accepted = HashSet::new();
     let acceptor_count = structure_state.acceptor_structures().len();
     for index in 0..acceptor_count {
@@ -443,6 +444,7 @@ pub(super) fn run_material_acceptance_phase(
             );
         }
         structure_state.increment_acceptor_count(index);
+        eprintln!("[sim turn={turn}] 验收成功");
         if !acceptor_id.is_none() {
             accepted.insert(acceptor_id);
         }

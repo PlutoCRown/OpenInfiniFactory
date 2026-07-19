@@ -199,8 +199,6 @@ fn update_dropdowns(
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut option_icons_filled: Local<bool>,
-    mut last_slot_paint: Local<Option<Option<PaintMaterialId>>>,
     mut paint_slots: Query<(&RollerPaintSlot, &Children)>,
     mut paint_options: Query<(&RollerPaintOption, &Children)>,
     mut icons: Query<&mut ImageNode>,
@@ -222,34 +220,27 @@ fn update_dropdowns(
         sync_dropdown_overlay(open, &mut style, list_node, trigger, viewport);
     }
 
+    if !panel_active {
+        return;
+    }
+
+    // 不缓存「已填充」：关面板时本系统被 run_if 跳过，Local 清不掉，二次打开会跳过刷新
     let Some(block_icons_res) = block_icons.as_ref() else {
         return;
     };
-    let icons_changed = block_icons_res.is_changed();
     let block_icons = block_icons_res.as_ref();
-    if !*option_icons_filled || icons_changed {
-        for (option, children) in &mut paint_options {
-            update_slot_icon(children, block_icons.paint(option.0), &mut icons);
-        }
-        *option_icons_filled = true;
+    for (option, children) in &mut paint_options {
+        update_slot_icon(children, block_icons.paint(option.0), &mut icons);
     }
 
-    if !panel_active {
-        *option_icons_filled = false;
-        *last_slot_paint = None;
-        return;
-    }
     let paint = ui_runtime
         .active_block_pos()
         .map(|pos| world.roller_settings(pos).paint);
-    if last_slot_paint.as_ref() != Some(&paint) || icons_changed {
-        for (_, children) in &mut paint_slots {
-            update_slot_icon(
-                children,
-                paint.and_then(|id| block_icons.paint(id)),
-                &mut icons,
-            );
-        }
-        *last_slot_paint = Some(paint);
+    for (_, children) in &mut paint_slots {
+        update_slot_icon(
+            children,
+            paint.and_then(|id| block_icons.paint(id)),
+            &mut icons,
+        );
     }
 }

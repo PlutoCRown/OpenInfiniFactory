@@ -116,8 +116,8 @@ impl UiAccess {
                 }
             };
             let scroll_height = {
-                use bevy::window::PrimaryWindow;
                 use crate::game::ui::screens::SETTINGS_SCROLL_CHROME;
+                use bevy::window::PrimaryWindow;
                 let scale = world.resource::<UiScale>().0.max(0.01);
                 let window_h = world
                     .query_filtered::<&Window, With<PrimaryWindow>>()
@@ -137,14 +137,22 @@ impl UiAccess {
         with_ui(|host| host.unmount_panel(panel, commands));
     }
 
+    /// 挂载方块面板并立即 flush，使实体同帧可被查询
     pub fn mount_block_panel(
         self,
-        commands: &mut Commands,
         root: Option<Entity>,
         panel: UiPanelId,
         pos: IVec3,
     ) -> UiInstanceId {
-        with_ui(|host| host.mount_block_panel(commands, root, panel, pos))
+        with_world(|world| {
+            let mut state = SystemState::<(UiHostCommands, Commands)>::new(world);
+            let Ok((mut host, mut commands)) = state.get_mut(world) else {
+                panic!("ui mount_block_panel params unavailable");
+            };
+            let id = host.mount_block_panel(&mut commands, root, panel, pos);
+            state.apply(world);
+            id
+        })
     }
 
     pub fn open_confirm_then(

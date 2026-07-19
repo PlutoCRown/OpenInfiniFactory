@@ -220,8 +220,6 @@ fn update_dropdowns(
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut option_icons_filled: Local<bool>,
-    mut last_slot_material: Local<Option<Option<MaterialBlockId>>>,
     mut material_slots: Query<(&GoalMaterialSlot, &Children)>,
     mut material_options: Query<(&GoalMaterialOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
@@ -243,30 +241,23 @@ fn update_dropdowns(
         sync_dropdown_overlay(open, &mut style, list_node, trigger, viewport);
     }
 
+    if !panel_active {
+        return;
+    }
+
+    // 不缓存「已填充」：关面板时本系统被 run_if 跳过，Local 清不掉，二次打开会跳过刷新
     let Some(icons) = block_icons.as_ref() else {
         return;
     };
-    let icons_changed = icons.is_changed();
     let block_icons = icons.as_ref();
-    if !*option_icons_filled || icons_changed {
-        for (option, children) in &mut material_options {
-            update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
-        }
-        *option_icons_filled = true;
+    for (option, children) in &mut material_options {
+        update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
     }
 
-    if !panel_active {
-        *option_icons_filled = false;
-        *last_slot_material = None;
-        return;
-    }
     let material = ui_runtime
         .active_block_pos()
         .map(|pos| world.goal_settings(pos).material);
-    if last_slot_material.as_ref() != Some(&material) || icons_changed {
-        for (_, children) in &mut material_slots {
-            update_material_icon(children, material, block_icons, &mut material_icons);
-        }
-        *last_slot_material = Some(material);
+    for (_, children) in &mut material_slots {
+        update_material_icon(children, material, block_icons, &mut material_icons);
     }
 }

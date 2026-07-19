@@ -29,14 +29,13 @@ fn block_panel_systems_active(ui_runtime: Res<UiRuntime>) -> bool {
 fn process_pending_block_panel_open(
     _ui_thread: UiMainThread,
     mut pending: ResMut<PendingBlockPanelOpen>,
-    mut commands: Commands,
     playing_ui_root: Option<Res<PlayingUiRootEntity>>,
 ) {
     let Some((pos, panel)) = pending.0.take() else {
         return;
     };
     let root = playing_ui_root.as_ref().map(|root| root.0);
-    ui.mount_block_panel(&mut commands, root, panel, pos);
+    ui.mount_block_panel(root, panel, pos);
 }
 
 pub struct BlockPanelsPlugin;
@@ -47,6 +46,7 @@ impl Plugin for BlockPanelsPlugin {
             Update,
             BlockPanelSystems
                 .in_set(UiAccessScope)
+                .after(process_pending_block_panel_open)
                 .run_if(block_panel_systems_active),
         )
         .insert_resource(OpenBlockPanelDropdown::default())

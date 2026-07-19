@@ -625,7 +625,8 @@ pub(crate) fn spawn_block_model(
 
         if show_generator_preview {
             let show_tilted_preview = match data.kind {
-                BlockKind::Generator => true,
+                // 游玩态有生成缩放预览，不再挂倾斜小材料以免重叠
+                BlockKind::Generator => !assets.use_goal_play_visual(),
                 // 游玩态验收器本体已是目标材料，不再挂倾斜小预览
                 BlockKind::Goal => !use_goal_ghost,
                 _ => false,

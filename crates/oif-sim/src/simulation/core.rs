@@ -13,7 +13,7 @@ use super::behaviors::{
 };
 use super::gravity::mark_gravity_phase;
 use super::markers::run_static_marker_phase;
-use super::motion::{BlockMotion, BlockMotionKind, PusherMotion};
+use super::motion::{BlockMotion, PusherMotion};
 use super::movement::{PusherState, mark_structure_movement_phase};
 use super::pending::{PendingDestroyReason, PendingGeneratedMaterials};
 use super::signals::SignalNetworkCache;
@@ -93,6 +93,10 @@ pub fn simulate_turn(
         if apply_pending_teleport(world, entrance, exit) {
             structures_dirty = true;
         }
+    }
+    // 上一回合调度的生成：须在重力前落地，否则会多悬一回合才下落
+    if place_ready_generated_materials(world, pending_generated, turn) {
+        structures_dirty = true;
     }
     if structures_dirty {
         structure_state.refresh_material_structures(world);
@@ -232,13 +236,9 @@ pub fn simulate_turn(
 
     // 验收：计数立刻生效，材料挂起至 turn+1 再删
     let accepted_acceptors =
-        run_material_acceptance_phase(world, structure_state, pending_generated, turn + 1);
+        run_material_acceptance_phase(world, structure_state, pending_generated, turn);
 
-    // 生成状态机：先落地本回合到期的 pending，再调度 turn+1
-    let generated_animations = place_ready_generated_materials(world, pending_generated, turn);
-    for (pos, animation) in generated_animations {
-        animations.insert(pos, animation);
-    }
+    // 只调度下一回合生成；落地已在回合初完成
     prepare_upcoming_generation(world, pending_generated, turn + 1, &accepted_acceptors);
 
     let weld_sparks = run_weld_behavior_phase(world);
@@ -288,14 +288,13 @@ pub fn prepare_upcoming_generation(
     }
 }
 
-/// 落地 ready_turn 已到的生成材料，并焊接同参共生成块
+/// 落地 ready_turn 已到的生成材料，并焊接同参共生成块；有落地则返回 true
 fn place_ready_generated_materials(
     world: &mut WorldBlocks,
     pending_generated: &mut PendingGeneratedMaterials,
     turn: u64,
-) -> HashMap<IVec3, BlockMotion> {
+) -> bool {
     let ready = pending_generated.ready_pending_positions(turn);
-    let mut animations = HashMap::new();
     let mut placed = Vec::new();
     for pos in ready {
         let Some(block) = pending_generated.take_pending_block(pos) else {
@@ -303,24 +302,13 @@ fn place_ready_generated_materials(
         };
         if world.can_place_platform_at(pos) {
             world.insert(pos, block);
-            let id = world.blocks.get(&pos).map(|b| b.id).unwrap_or(block.id);
-            animations.insert(
-                pos,
-                BlockMotion {
-                    block_id: id,
-                    from_pos: pos,
-                    to_pos: pos,
-                    from_facing: block.facing,
-                    to_facing: block.facing,
-                    kind: BlockMotionKind::SpawnScale,
-                },
-            );
+            // 不播 SpawnScale：上一回合 pending 预览已播完生长，落地保持最终尺寸
             placed.push(pos);
         }
     }
     // 同参相连生成器本回合同时生成的材料焊接为同一结构
     weld_co_generated_materials(world, &placed);
-    animations
+    !placed.is_empty()
 }
 
 /// 同回合共生成且相邻的材料焊成一体

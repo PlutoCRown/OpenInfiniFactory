@@ -269,8 +269,6 @@ fn update_dropdowns(
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut option_icons_filled: Local<bool>,
-    mut last_slot_materials: Local<Option<(Option<MaterialBlockId>, Option<MaterialBlockId>)>>,
     mut material_slots: Query<(&ConverterInputSlot, &Children)>,
     mut output_slots: Query<(&ConverterOutputSlot, &Children)>,
     mut material_options: Query<(&ConverterMaterialOption, &Children)>,
@@ -306,23 +304,19 @@ fn update_dropdowns(
         viewport,
     );
 
+    if !panel_active {
+        return;
+    }
+
+    // 不缓存「已填充」：关面板时本系统被 run_if 跳过，Local 清不掉，二次打开会跳过刷新
     let Some(icons) = block_icons.as_ref() else {
         return;
     };
-    let icons_changed = icons.is_changed();
     let block_icons = icons.as_ref();
-    if !*option_icons_filled || icons_changed {
-        for (option, children) in &mut material_options {
-            update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
-        }
-        *option_icons_filled = true;
+    for (option, children) in &mut material_options {
+        update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
     }
 
-    if !panel_active {
-        *option_icons_filled = false;
-        *last_slot_materials = None;
-        return;
-    }
     let slot_materials = ui_runtime
         .active_block_pos()
         .map(|pos| {
@@ -330,14 +324,11 @@ fn update_dropdowns(
             (Some(settings.input), Some(settings.output))
         })
         .unwrap_or((None, None));
-    if last_slot_materials.as_ref() != Some(&slot_materials) || icons_changed {
-        for (_, children) in &mut material_slots {
-            update_material_icon(children, slot_materials.0, block_icons, &mut material_icons);
-        }
-        for (_, children) in &mut output_slots {
-            update_material_icon(children, slot_materials.1, block_icons, &mut material_icons);
-        }
-        *last_slot_materials = Some(slot_materials);
+    for (_, children) in &mut material_slots {
+        update_material_icon(children, slot_materials.0, block_icons, &mut material_icons);
+    }
+    for (_, children) in &mut output_slots {
+        update_material_icon(children, slot_materials.1, block_icons, &mut material_icons);
     }
 }
 

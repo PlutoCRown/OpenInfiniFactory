@@ -4,22 +4,22 @@ use bevy::window::PrimaryWindow;
 
 use super::SignBlock;
 
+use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
     click_material_slot, spawn_labeled_panel_button, spawn_material_icon_list,
     spawn_material_icon_toggle, sync_dropdown_overlay, update_material_icon,
 };
 use crate::game::block_editing::world_refresh::apply_block_settings_edit;
-use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::blocks::{material_catalog, MaterialBlockId};
+use crate::game::blocks::{MaterialBlockId, material_catalog};
 use crate::game::edit_history::EditHistory;
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
-use crate::game::ui::access::{i18n, ui, UiMainThread};
+use crate::game::ui::access::{UiMainThread, i18n, ui};
 use crate::game::ui::components::{
-    default_button_size, localized_text, spawn_panel as spawn_ui_panel, text, transparent_node,
-    PanelOptions,
+    PanelOptions, default_button_size, localized_text, spawn_panel as spawn_ui_panel, text,
+    transparent_node,
 };
 use crate::game::ui::core::host::UiHost;
 use crate::game::ui::core::runtime::UiRuntime;
@@ -189,9 +189,12 @@ fn on_click(
             true
         }
         SignAction::ToggleDisplay => {
-            if let Some(material) =
-                click_material_slot(UiPanelId::Sign, DISPLAY_SLOT, &mut carried, &mut open_dropdown)
-            {
+            if let Some(material) = click_material_slot(
+                UiPanelId::Sign,
+                DISPLAY_SLOT,
+                &mut carried,
+                &mut open_dropdown,
+            ) {
                 settings.display = Some(SignDisplay::Material(material));
                 settings.text = None;
                 true
@@ -306,8 +309,6 @@ fn update_dropdowns(
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut option_icons_filled: Local<bool>,
-    mut last_slot_material: Local<Option<Option<MaterialBlockId>>>,
     mut display_slots: Query<(&SignDisplaySlot, &Children)>,
     mut material_options: Query<(&SignMaterialOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
@@ -329,33 +330,27 @@ fn update_dropdowns(
         sync_dropdown_overlay(open, &mut style, list_node, trigger, viewport);
     }
 
+    if !panel_active {
+        return;
+    }
+
+    // 不缓存「已填充」：关面板时本系统被 run_if 跳过，Local 清不掉，二次打开会跳过刷新
     let Some(icons) = block_icons.as_ref() else {
         return;
     };
-    let icons_changed = icons.is_changed();
     let block_icons = icons.as_ref();
-    if !*option_icons_filled || icons_changed {
-        for (option, children) in &mut material_options {
-            update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
-        }
-        *option_icons_filled = true;
+    for (option, children) in &mut material_options {
+        update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
     }
 
-    if !panel_active {
-        *option_icons_filled = false;
-        *last_slot_material = None;
-        return;
-    }
-    let material = ui_runtime.active_block_pos().and_then(|pos| {
-        match world.sign_settings(pos).display {
-            Some(SignDisplay::Material(material)) => Some(material),
-            _ => None,
-        }
-    });
-    if last_slot_material.as_ref() != Some(&material) || icons_changed {
-        for (_, children) in &mut display_slots {
-            update_material_icon(children, material, block_icons, &mut material_icons);
-        }
-        *last_slot_material = Some(material);
+    let material =
+        ui_runtime
+            .active_block_pos()
+            .and_then(|pos| match world.sign_settings(pos).display {
+                Some(SignDisplay::Material(material)) => Some(material),
+                _ => None,
+            });
+    for (_, children) in &mut display_slots {
+        update_material_icon(children, material, block_icons, &mut material_icons);
     }
 }
