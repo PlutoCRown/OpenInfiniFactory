@@ -4,7 +4,9 @@ mod types;
 
 use bevy::prelude::*;
 
-pub use actions::{dispatch_inventory_slot_actions, emit_inventory_slot_actions};
+pub use actions::{
+    dispatch_inventory_slot_actions, emit_inventory_slot_actions, inventory_hotbar_digit_input,
+};
 pub use render::{
     update_carried_item_ui, update_inventory_slots, update_inventory_title,
     update_inventory_tooltip,
@@ -22,7 +24,10 @@ impl Plugin for InventoryPlugin {
         app.add_observer(emit_inventory_slot_actions)
             .add_systems(
                 Update,
-                dispatch_inventory_slot_actions
+                (
+                    inventory_hotbar_digit_input,
+                    dispatch_inventory_slot_actions,
+                )
                     .after(PerfScope::Placement)
                     .before(PerfScope::Menus),
             )

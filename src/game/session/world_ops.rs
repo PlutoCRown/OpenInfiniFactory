@@ -12,13 +12,13 @@ use crate::game::systems::debug::DebugState;
 use crate::game::ui::{CarriedItem, InventoryItems};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_world, rebuild_world_for_debug_state, BlockEntity, SceneChunkMeshes, WorldRenderAssets,
+    BlockEntity, SceneChunkMeshes, WorldRenderAssets, despawn_world, rebuild_world_for_debug_state,
 };
 use crate::scene::BlockEntityIndex;
 use crate::shared::save::{
-    has_solutions_for_puzzle, invalidate_solutions_for_puzzle, next_named_save, puzzle_names,
-    reset_solution_world, save_puzzle, save_solution, solution_names_for_puzzle, LoadedSave,
-    PlayerSave, SaveKind, SaveSlot, SaveState,
+    LoadedSave, PlayerSave, SaveKind, SaveSlot, SaveState, has_solutions_for_puzzle,
+    invalidate_solutions_for_puzzle, next_named_save, puzzle_names, reset_solution_world,
+    save_puzzle, save_solution, solution_names_for_puzzle,
 };
 
 pub enum SaveCurrentWorldResult {
@@ -92,10 +92,7 @@ fn commit_save_current_world(
     let world = simulation.authoring_world(world);
     let kind = save_state.current_kind.unwrap_or(SaveKind::Puzzle);
     let mut slot = save_state.current.clone().unwrap_or_else(|| {
-        SaveSlot::puzzle(next_named_save(
-            &puzzle_names(&save_state.entries),
-            "world",
-        ))
+        SaveSlot::puzzle(next_named_save(&puzzle_names(&save_state.entries), "world"))
     });
     let saved = match kind {
         SaveKind::Puzzle => {
@@ -422,7 +419,7 @@ fn switch_to_edit_mode(
         refresh_static_generated_markers(world);
     }
     *builder_mode = BuilderMode::Edit;
-    *inventory = InventoryItems::for_mode(*builder_mode);
+    inventory.return_to_edit();
     carried.clear();
     placement.selected = 0;
     save_state.current_kind = Some(SaveKind::Puzzle);

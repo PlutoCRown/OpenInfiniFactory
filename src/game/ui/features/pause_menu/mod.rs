@@ -93,6 +93,7 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
                     );
                     ctx.save_state.current = Some(SaveSlot::solution(&puzzle_id, &solution_name));
                     ctx.save_state.current_kind = Some(SaveKind::Solution);
+                    ctx.inventory.begin_play_from_edit();
                     BuilderMode::Play
                 }
                 BuilderMode::Play => {
@@ -100,7 +101,6 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
                     return;
                 }
             };
-            *ctx.inventory = InventoryItems::for_mode(*ctx.builder_mode);
             ctx.carried.clear();
             ctx.placement.selected = 0;
             ctx.playing_ui.paused = false;

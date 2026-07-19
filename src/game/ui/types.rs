@@ -165,6 +165,8 @@ impl InventoryItem {
 pub struct InventoryItems {
     pub hotbar: [Option<InventoryItem>; HOTBAR_SLOTS],
     pub(super) backpack: [Option<InventoryItem>; BACKPACK_SLOTS],
+    /// 编辑→游玩时暂存快捷栏，切回编辑时恢复
+    stashed_edit_hotbar: Option<HotbarItems>,
 }
 
 impl Default for InventoryItems {
@@ -207,7 +209,27 @@ impl InventoryItems {
             }
         }
 
-        Self { hotbar, backpack }
+        Self {
+            hotbar,
+            backpack,
+            stashed_edit_hotbar: None,
+        }
+    }
+
+    /// 编辑切游玩：暂存编辑快捷栏并换成游玩物品栏
+    pub fn begin_play_from_edit(&mut self) {
+        let edit_hotbar = self.hotbar;
+        *self = Self::for_mode(BuilderMode::Play);
+        self.stashed_edit_hotbar = Some(edit_hotbar);
+    }
+
+    /// 游玩切回编辑：恢复暂存的编辑快捷栏（无暂存则用默认）
+    pub fn return_to_edit(&mut self) {
+        let stash = self.stashed_edit_hotbar.take();
+        *self = Self::for_mode(BuilderMode::Edit);
+        if let Some(hotbar) = stash {
+            self.hotbar = hotbar;
+        }
     }
 
     pub fn can_take_block(&self, kind: BlockKind) -> bool {
