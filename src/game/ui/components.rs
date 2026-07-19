@@ -7,9 +7,9 @@ mod slider;
 mod text;
 
 pub use button::{
-    BUTTON_BG, BUTTON_HOVER_BG, auto_width_button, button_hovered, button_pressed, button_released,
-    button_unhovered, full_width_button, hover_border, inset_border, menu_button, pressed_border,
-    raised_border, styled_button, text_button,
+    BUTTON_BG, BUTTON_HOVER_BG, BUTTON_PRESSED_BG, auto_width_button, button_hovered,
+    button_pressed, button_released, button_unhovered, full_width_button, hover_border,
+    inset_border, menu_button, pressed_border, raised_border, styled_button, text_button,
 };
 pub use icon::spawn_close_icon;
 pub use layout::{flex_row, flex_row_auto, root_node, transparent_node, ui_logical_bounds};

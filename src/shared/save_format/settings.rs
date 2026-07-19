@@ -1,13 +1,13 @@
 use bevy::prelude::*;
 
 use crate::game::blocks::{
-    ensure_fallback_material_catalog, ensure_fallback_paint_catalog, ensure_fallback_stamp_catalog,
-    fallback_material_id, material_catalog, paint_catalog, resolve_material_id, stamp_catalog,
-    BlockKind, MaterialBlockId, PaintMaterialId, StampMaterialId,
+    BlockKind, MaterialBlockId, PaintMaterialId, StampMaterialId, ensure_fallback_material_catalog,
+    ensure_fallback_paint_catalog, ensure_fallback_stamp_catalog, fallback_material_id,
+    material_catalog, paint_catalog, resolve_material_id, stamp_catalog,
 };
 use crate::game::world::grid::{
-    BlockSettings, ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, GoalSettings,
-    RollerSettings, SignDisplay, SignSettings, StamperSettings, TeleportSettings,
+    BlockSettings, ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings,
+    GoalSettings, RollerSettings, SignDisplay, SignSettings, StamperSettings, TeleportSettings,
 };
 
 use super::Cursor;
@@ -21,10 +21,9 @@ pub fn write_settings(out: &mut Vec<u8>, kind: BlockKind, settings: &BlockSettin
         (BlockKind::Stamper, BlockSettings::Stamper(value)) => write_stamper(out, *value),
         (BlockKind::Roller, BlockSettings::Roller(value)) => write_roller(out, *value),
         (BlockKind::Converter, BlockSettings::Converter(value)) => write_converter(out, *value),
-        (
-            BlockKind::TeleportEntrance | BlockKind::TeleportExit,
-            BlockSettings::Teleport(value),
-        ) => write_teleport(out, value),
+        (BlockKind::TeleportEntrance | BlockKind::TeleportExit, BlockSettings::Teleport(value)) => {
+            write_teleport(out, value)
+        }
         (BlockKind::Sign, BlockSettings::Sign(value)) => write_sign(out, value),
         _ => {}
     }
@@ -77,6 +76,7 @@ fn write_generator(out: &mut Vec<u8>, settings: GeneratorSettings) {
         }
     }
     write_material_id(out, settings.material);
+    out.push(encode_settings_facing(settings.facing));
 }
 
 fn read_generator(
@@ -105,17 +105,79 @@ fn read_generator(
     Ok(GeneratorSettings {
         mode,
         material: read_material_id(cursor, string_ids)?,
+        facing: decode_settings_facing(cursor.read_u8()?)?,
     })
 }
 
 fn write_goal(out: &mut Vec<u8>, settings: GoalSettings) {
     write_material_id(out, settings.material);
+    out.push(encode_settings_facing(settings.facing));
+    for stamp in settings.stamps {
+        match stamp {
+            Some(id) => {
+                out.push(1);
+                write_stamp_id(out, id);
+            }
+            None => out.push(0),
+        }
+    }
+    for paint in settings.paints {
+        match paint {
+            Some(id) => {
+                out.push(1);
+                write_paint_id(out, id);
+            }
+            None => out.push(0),
+        }
+    }
 }
 
 fn read_goal(cursor: &mut Cursor<'_>, string_ids: bool) -> Result<GoalSettings, SaveFormatError> {
+    let material = read_material_id(cursor, string_ids)?;
+    let facing = decode_settings_facing(cursor.read_u8()?)?;
+    let mut stamps = [None; 4];
+    for slot in &mut stamps {
+        *slot = if cursor.read_u8()? == 1 {
+            Some(read_stamp_id(cursor, string_ids)?)
+        } else {
+            None
+        };
+    }
+    let mut paints = [None; 4];
+    for slot in &mut paints {
+        *slot = if cursor.read_u8()? == 1 {
+            Some(read_paint_id(cursor, string_ids)?)
+        } else {
+            None
+        };
+    }
     Ok(GoalSettings {
-        material: read_material_id(cursor, string_ids)?,
+        material,
+        facing,
+        stamps,
+        paints,
     })
+}
+
+fn encode_settings_facing(facing: crate::game::world::direction::Facing) -> u8 {
+    match facing {
+        crate::game::world::direction::Facing::North => 0,
+        crate::game::world::direction::Facing::East => 1,
+        crate::game::world::direction::Facing::South => 2,
+        crate::game::world::direction::Facing::West => 3,
+    }
+}
+
+fn decode_settings_facing(
+    value: u8,
+) -> Result<crate::game::world::direction::Facing, SaveFormatError> {
+    match value {
+        0 => Ok(crate::game::world::direction::Facing::North),
+        1 => Ok(crate::game::world::direction::Facing::East),
+        2 => Ok(crate::game::world::direction::Facing::South),
+        3 => Ok(crate::game::world::direction::Facing::West),
+        _ => Err(SaveFormatError::InvalidFacing(value)),
+    }
 }
 
 fn write_stamper(out: &mut Vec<u8>, settings: StamperSettings) {
@@ -135,7 +197,10 @@ fn write_roller(out: &mut Vec<u8>, settings: RollerSettings) {
     write_paint_id(out, settings.paint);
 }
 
-fn read_roller(cursor: &mut Cursor<'_>, string_ids: bool) -> Result<RollerSettings, SaveFormatError> {
+fn read_roller(
+    cursor: &mut Cursor<'_>,
+    string_ids: bool,
+) -> Result<RollerSettings, SaveFormatError> {
     Ok(RollerSettings {
         paint: read_paint_id(cursor, string_ids)?,
     })

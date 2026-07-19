@@ -91,21 +91,28 @@ fn spawn_selected_material_preview(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
     material: crate::game::blocks::MaterialBlockId,
+    facing: crate::game::world::direction::Facing,
     icon_render: Option<(Vec3, &RenderLayers)>,
 ) {
     let kind = BlockKind::material_block_kind(material);
+    let rotation = if kind.is_directional() {
+        Quat::from_rotation_y(facing.yaw())
+    } else {
+        Quat::IDENTITY
+    };
+    let mesh = assets
+        .scene_mesh(kind)
+        .unwrap_or_else(|| assets.block_mesh(kind));
+    let material = assets
+        .scene_material(kind)
+        .unwrap_or_else(|| assets.block_material(kind));
 
     let mut child = parent.spawn((
-        Mesh3d(assets.block_mesh(kind)),
-        MeshMaterial3d(assets.block_material(kind)),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform {
-            rotation: Quat::from_euler(
-                EulerRot::XYZ,
-                std::f32::consts::FRAC_PI_4,
-                std::f32::consts::FRAC_PI_4,
-                std::f32::consts::FRAC_PI_4,
-            ),
-            scale: Vec3::splat(0.38),
+            rotation,
+            scale: Vec3::splat(0.76),
             ..default()
         },
     ));
@@ -344,9 +351,14 @@ pub(crate) fn spawn_block_model(
         && assets.use_goal_play_visual()
         && !is_preview
         && icon_render.is_none();
-    let goal_material_kind = use_goal_ghost.then(|| {
-        BlockKind::material_block_kind(world.goal_settings(pos).material)
-    });
+    let goal_settings = use_goal_ghost.then(|| world.goal_settings(pos));
+    if let Some(settings) = goal_settings {
+        let mat_kind = BlockKind::material_block_kind(settings.material);
+        transform.rotation =
+            render_rotation(BlockData::new(mat_kind, settings.facing), settings.facing);
+    }
+    let goal_material_kind =
+        goal_settings.map(|settings| BlockKind::material_block_kind(settings.material));
     let mut entity = if let Some(mat_kind) = goal_material_kind {
         if let Some(ghost) = assets.goal_ghost_material(mat_kind) {
             commands.spawn((
@@ -624,20 +636,22 @@ pub(crate) fn spawn_block_model(
         }
 
         if show_generator_preview {
-            let show_tilted_preview = match data.kind {
-                // 游玩态有生成缩放预览，不再挂倾斜小材料以免重叠
+            let show_material_preview = match data.kind {
+                // 游玩态有生成缩放预览，不再挂材料小预览以免重叠
                 BlockKind::Generator => !assets.use_goal_play_visual(),
-                // 游玩态验收器本体已是目标材料，不再挂倾斜小预览
+                // 游玩态验收器本体已是目标材料，不再挂小预览
                 BlockKind::Goal => !use_goal_ghost,
                 _ => false,
             };
-            if show_tilted_preview {
-                let material = if data.kind == BlockKind::Generator {
-                    world.generator_settings(pos).material
+            if show_material_preview {
+                let (material, facing) = if data.kind == BlockKind::Generator {
+                    let settings = world.generator_settings(pos);
+                    (settings.material, settings.facing)
                 } else {
-                    world.goal_settings(pos).material
+                    let settings = world.goal_settings(pos);
+                    (settings.material, settings.facing)
                 };
-                spawn_selected_material_preview(parent, assets, material, icon_render);
+                spawn_selected_material_preview(parent, assets, material, facing, icon_render);
             }
         }
 

@@ -1,0 +1,14 @@
+{
+  "$schema": "../../../schemas/material_block.meta.schema.json",
+  "id": "gypsum_slope",
+  "fragile": false,
+  "directional": true,
+  "connectable": [
+    true,
+    true,
+    false,
+    true,
+    false,
+    true
+  ]
+}

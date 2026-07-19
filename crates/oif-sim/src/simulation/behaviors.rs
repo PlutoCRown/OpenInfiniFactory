@@ -351,7 +351,7 @@ pub(super) fn material_source_generation(
         if world.can_place_platform_at(spawn_pos) && !blocked_generation.contains(&spawn_pos) {
             generated.push(GeneratedMaterial {
                 pos: spawn_pos,
-                block: BlockData::new(BlockKind::Material(settings.material), Facing::North),
+                block: BlockData::new(BlockKind::Material(settings.material), settings.facing),
             });
         }
     }
@@ -416,7 +416,7 @@ pub(super) fn run_material_acceptance_phase(
             let Some(material) = block.kind.material_id() else {
                 break;
             };
-            if !world.accepts_material_id_at(*pos, material) {
+            if !world.accepts_material_id_at(*pos, material, block.facing, block.id) {
                 break;
             }
             matched_material.insert(*pos);
@@ -430,7 +430,18 @@ pub(super) fn run_material_acceptance_phase(
             continue;
         };
         let welded_material = material_structure(world, sample_pos);
-        if welded_material != matched_material {
+        // 印花附着会并入材料结构，但验收格只要求宿主材料重合
+        let host_material: HashSet<_> = welded_material
+            .iter()
+            .copied()
+            .filter(|pos| {
+                world
+                    .blocks
+                    .get(pos)
+                    .is_some_and(|block| block.kind.material_id().is_some())
+            })
+            .collect();
+        if host_material != matched_material {
             continue;
         }
 

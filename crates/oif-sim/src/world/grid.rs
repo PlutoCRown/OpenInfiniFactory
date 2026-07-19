@@ -7,6 +7,7 @@ use crate::blocks::{
     ensure_fallback_paint_catalog, ensure_fallback_stamp_catalog, fallback_material_id,
     paint_catalog, stamp_catalog,
 };
+use crate::world::direction::Facing;
 
 pub const REACH: f32 = 12.0;
 const TELEPORT_ENTRANCE_NAMES: &[&str] = &["Alpha In", "Beta In", "Gamma In", "Delta In"];
@@ -98,6 +99,8 @@ pub enum GeneratorMode {
 pub struct GeneratorSettings {
     pub mode: GeneratorMode,
     pub material: MaterialBlockId,
+    /// 有向材料的生成朝向（非有向材料忽略）
+    pub facing: Facing,
 }
 
 impl GeneratorSettings {
@@ -125,6 +128,12 @@ impl GeneratorSettings {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GoalSettings {
     pub material: MaterialBlockId,
+    /// 有向材料的验收朝向（非有向材料忽略）
+    pub facing: Facing,
+    /// 要求附着的印花（空槽忽略；有值则精确匹配多重集合）
+    pub stamps: [Option<StampMaterialId>; 4],
+    /// 要求附着的漆（空槽忽略；有值则精确匹配多重集合）
+    pub paints: [Option<PaintMaterialId>; 4],
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -216,6 +225,9 @@ impl Default for GoalSettings {
     fn default() -> Self {
         Self {
             material: fallback_material_id(),
+            facing: Facing::North,
+            stamps: [None; 4],
+            paints: [None; 4],
         }
     }
 }
@@ -241,6 +253,7 @@ impl Default for GeneratorSettings {
                 offset: 0,
             },
             material: fallback_material_id(),
+            facing: Facing::North,
         }
     }
 }
@@ -1148,13 +1161,65 @@ impl WorldBlocks {
             .is_some_and(|block| block.kind.is_scene())
     }
 
-    pub fn accepts_material_id_at(&self, pos: IVec3, material: MaterialBlockId) -> bool {
+    /// 验收：材料种类/朝向匹配，且印花与漆的附着多重集合精确匹配设定
+    pub fn accepts_material_id_at(
+        &self,
+        pos: IVec3,
+        material: MaterialBlockId,
+        facing: Facing,
+        block_id: BlockId,
+    ) -> bool {
         self.system_blocks
             .get(&pos)
             .is_some_and(|block| match block.kind {
-                BlockKind::Goal => self.goal_settings(pos).material == material,
+                BlockKind::Goal => {
+                    let settings = self.goal_settings(pos);
+                    if settings.material != material {
+                        return false;
+                    }
+                    if BlockKind::Material(material).is_directional()
+                        && settings.facing != facing
+                    {
+                        return false;
+                    }
+                    self.goal_attachments_match(block_id, &settings)
+                }
                 _ => block.kind.accepts_material(),
             })
+    }
+
+    /// 目标设定与方块实际印花/漆附着是否精确一致（空槽不计入要求）
+    fn goal_attachments_match(&self, block_id: BlockId, settings: &GoalSettings) -> bool {
+        let mut required_stamps: Vec<StampMaterialId> =
+            settings.stamps.iter().copied().flatten().collect();
+        required_stamps.sort_unstable();
+        let mut actual_stamps: Vec<StampMaterialId> = self
+            .material_attachments
+            .iter()
+            .filter(|(_, att)| att.parent == block_id)
+            .filter_map(|(child_id, _)| {
+                self.blocks
+                    .values()
+                    .find(|block| block.id == *child_id)
+                    .and_then(|block| block.kind.stamp_id())
+            })
+            .collect();
+        actual_stamps.sort_unstable();
+        if actual_stamps != required_stamps {
+            return false;
+        }
+
+        let mut required_paints: Vec<PaintMaterialId> =
+            settings.paints.iter().copied().flatten().collect();
+        required_paints.sort_unstable();
+        let mut actual_paints: Vec<PaintMaterialId> = self
+            .material_paints
+            .iter()
+            .filter(|(face, _)| face.block == block_id)
+            .map(|(_, paint)| *paint)
+            .collect();
+        actual_paints.sort_unstable();
+        actual_paints == required_paints
     }
 
     pub fn clear_generated_markers(&mut self) {

@@ -8,13 +8,14 @@ use crate::game::edit_history::EditHistory;
 
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
-    click_material_slot, spawn_labeled_panel_button, spawn_material_icon_list,
-    spawn_material_icon_toggle, sync_dropdown_overlay, update_material_icon,
+    click_material_slot, spawn_facing_radio_row, spawn_labeled_panel_button,
+    spawn_material_icon_list, spawn_material_icon_toggle, sync_dropdown_overlay,
+    sync_facing_radio_buttons, update_material_icon,
 };
 use crate::game::block_editing::world_refresh::apply_block_settings_edit;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
-use crate::game::blocks::{MaterialBlockId, material_catalog};
+use crate::game::blocks::{BlockKind, MaterialBlockId, material_catalog};
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::access::{UiMainThread, i18n};
@@ -27,6 +28,7 @@ use crate::game::ui::core::runtime::UiRuntime;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{CarriedItem, UiActionLabel, UiPanelBinding};
+use crate::game::world::direction::Facing;
 use crate::game::world::grid::{GeneratorMode, WorldBlocks};
 use crate::game::world::rendering::BlockIconAssets;
 
@@ -43,6 +45,7 @@ pub enum GeneratorAction {
     AcceptorNext,
     ToggleMaterial,
     SetMaterial(MaterialBlockId),
+    SetFacing(Facing),
 }
 
 #[derive(Component, Clone, Copy)]
@@ -67,6 +70,9 @@ struct GeneratorOffsetRow;
 struct GeneratorAcceptorRow;
 
 #[derive(Component, Clone, Copy)]
+struct GeneratorFacingRow;
+
+#[derive(Component, Clone, Copy)]
 struct GeneratorMaterialSlot;
 
 #[derive(Component, Clone, Copy)]
@@ -81,7 +87,9 @@ impl UiActionLabel for GeneratorAction {
             Self::ToggleMode => "button.generator_mode",
             Self::PeriodDown | Self::OffsetDown | Self::AcceptorPrev => "button.period_down",
             Self::PeriodUp | Self::OffsetUp | Self::AcceptorNext => "button.period_up",
-            Self::ToggleMaterial | Self::SetMaterial(_) => "button.material_next",
+            Self::ToggleMaterial | Self::SetMaterial(_) | Self::SetFacing(_) => {
+                "button.material_next"
+            }
         }
     }
 }
@@ -124,6 +132,7 @@ pub fn spawn_panel(root: &mut ChildSpawnerCommands) {
                     GeneratorAction::ToggleMaterial,
                 );
             });
+            spawn_facing_radio_row(panel, GeneratorFacingRow, GeneratorAction::SetFacing);
         },
     );
 }
@@ -333,6 +342,10 @@ fn dispatch_action(
             open_dropdown.close();
             true
         }
+        GeneratorAction::SetFacing(facing) => {
+            settings.facing = facing;
+            true
+        }
     };
 
     if changed {
@@ -393,6 +406,19 @@ fn update_panel(
             Without<GeneratorOffsetRow>,
         ),
     >,
+    mut facing_rows: Query<
+        &mut Node,
+        (
+            With<GeneratorFacingRow>,
+            Without<GeneratorPeriodRow>,
+            Without<GeneratorOffsetRow>,
+            Without<GeneratorAcceptorRow>,
+        ),
+    >,
+    mut facing_buttons: Query<
+        (&GeneratorAction, &mut BackgroundColor, &mut BorderColor),
+        With<Button>,
+    >,
 ) {
     let Some(pos) = ui_runtime.active_block_pos() else {
         return;
@@ -402,6 +428,7 @@ fn update_panel(
     }
     let settings = world.generator_settings(pos);
     let is_period = matches!(settings.mode, GeneratorMode::Period { .. });
+    let show_facing = BlockKind::Material(settings.material).is_directional();
     for mut node in &mut period_rows {
         node.display = if is_period {
             Display::Flex
@@ -422,6 +449,21 @@ fn update_panel(
         } else {
             Display::Flex
         };
+    }
+    for mut node in &mut facing_rows {
+        node.display = if show_facing {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    if show_facing {
+        sync_facing_radio_buttons(&mut facing_buttons, settings.facing, |action| {
+            match action {
+                GeneratorAction::SetFacing(facing) => Some(*facing),
+                _ => None,
+            }
+        });
     }
 
     match settings.mode {

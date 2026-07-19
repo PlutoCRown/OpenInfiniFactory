@@ -4,10 +4,12 @@ use crate::game::blocks::{BlockKind, MaterialBlockId};
 use crate::game::state::UiPanelId;
 use crate::game::ui::access::UiMainThread;
 use crate::game::ui::components::{
-    default_button_size, default_font_size, hover_border, inset_border, localized_text,
-    menu_button, styled_button, ui_logical_bounds,
+    BUTTON_BG, BUTTON_PRESSED_BG, default_button_size, default_font_size, hover_border,
+    inset_border, localized_text, menu_button, raised_border, styled_button, text,
+    ui_logical_bounds,
 };
 use crate::game::ui::types::{CarriedItem, UiActionLabel};
+use crate::game::world::direction::Facing;
 use crate::game::world::rendering::BlockIconAssets;
 
 use super::OpenBlockPanelDropdown;
@@ -25,6 +27,94 @@ where
         .with_children(|button| {
             button.spawn(localized_text(action.label_key(), 14.0, Color::WHITE));
         });
+}
+
+/// 材料朝向：0/90/180/270 四个选项
+const FACING_RADIO_OPTIONS: [(Facing, &'static str); 4] = [
+    (Facing::North, "0"),
+    (Facing::East, "90"),
+    (Facing::South, "180"),
+    (Facing::West, "270"),
+];
+
+/// 生成朝向 radio 行（有向材料时显示）
+pub fn spawn_facing_radio_row<A, T>(
+    panel: &mut ChildSpawnerCommands,
+    row_tag: T,
+    action_for: impl Fn(Facing) -> A,
+) where
+    A: Component + Copy,
+    T: Component + Copy,
+{
+    panel
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(default_button_size(40.0)),
+                display: Display::Flex,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(10.0),
+                ..default()
+            },
+            BackgroundColor(Color::NONE),
+            row_tag,
+        ))
+        .with_children(|row| {
+            row.spawn((
+                localized_text("panel.rotation", 16.0, Color::srgb(0.86, 0.88, 0.86)),
+                Node {
+                    width: Val::Px(110.0),
+                    ..default()
+                },
+            ));
+            for (facing, label) in FACING_RADIO_OPTIONS {
+                // 不用 HoverButton：选中态由 sync_facing_radio_buttons 每帧刷
+                row.spawn((
+                    Button,
+                    Node {
+                        width: Val::Auto,
+                        height: Val::Px(default_button_size(32.0)),
+                        flex_shrink: 0.0,
+                        border: UiRect {
+                            left: Val::Px(3.0),
+                            right: Val::Px(3.0),
+                            top: Val::Px(4.0),
+                            bottom: Val::Px(5.0),
+                        },
+                        padding: UiRect::horizontal(Val::Px(10.0)),
+                        align_items: AlignItems::Center,
+                        justify_content: JustifyContent::Center,
+                        ..default()
+                    },
+                    raised_border(),
+                    BackgroundColor(BUTTON_BG),
+                    action_for(facing),
+                ))
+                .with_children(|button| {
+                    button.spawn(text(label, 14.0, Color::WHITE));
+                });
+            }
+        });
+}
+
+/// 按当前朝向刷新 radio 选中态
+pub fn sync_facing_radio_buttons<A: Component>(
+    buttons: &mut Query<(&A, &mut BackgroundColor, &mut BorderColor), With<Button>>,
+    selected: Facing,
+    facing_of: impl Fn(&A) -> Option<Facing>,
+) {
+    for (action, mut bg, mut border) in buttons.iter_mut() {
+        let Some(facing) = facing_of(action) else {
+            continue;
+        };
+        if facing == selected {
+            *bg = BUTTON_PRESSED_BG.into();
+            *border = inset_border();
+        } else {
+            *bg = BUTTON_BG.into();
+            *border = raised_border();
+        }
+    }
 }
 
 pub fn spawn_text_dropdown_toggle<A, L>(
