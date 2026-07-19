@@ -2,7 +2,7 @@
 name: sim-debug-http
 description: >-
   OpenInfiniFactory 模拟调试：从存档区域或文字描述的方块结构导出 e2e fixture，
-  启动 oif-debug-http 无头服务，用 HTTP 复现并调试 SimCoreWorld 逻辑。
+  启动 oif-debug-http 无头服务，用 HTTP 复现并调试 SimSession / WorldBlocks 逻辑。
   在用户描述存档某坐标范围的行为异常、某方块没被推动/没通电、
   或直接文字描述方块布局要查模拟问题时使用。
 ---
@@ -13,7 +13,7 @@ description: >-
 
 - 玩家说某个 **存档** 在某个 **坐标范围** 行为不对
 - 玩家 **文字描述方块结构**（种类、朝向、相对位置）要查模拟逻辑
-- 需要最小化复现、写回归用例、或定位 `SimCoreWorld` / 结构移动 / 信号等问题
+- 需要最小化复现、写回归用例、或定位 `SimSession` / `WorldBlocks` / 结构移动 / 信号等问题
 
 ## 总流程（两步，不可跳过验证）
 
@@ -191,6 +191,6 @@ Fixture 路径相对 `e2e/fixtures/`（如 `sim/foo.json`、`blocks/Platform.jso
 
 ## 注意
 
-- 模拟逻辑在 ECS / `SimCoreWorld`；UI 问题不走此 skill
+- 模拟逻辑在 `SimSession` / `WorldBlocks`；UI 问题不走此 skill
 - 项目未发布，旧存档格式用 `export_fixture` 或手动改 `saves/`，不在游戏内做 legacy 兼容
 - 正常开发无需 `cargo check`/`cargo run` 游戏本体，但 **HTTP 调试必须能编译 `oif-debug-http`**

@@ -1,7 +1,8 @@
 use crate::simulation::structure_state::StructureState;
 use crate::world::grid::WorldBlocks;
 
-/// 模拟控制面：回合计数、运行意图与开局快照
+/// 无头 `SimSession` 的模拟控制面：回合计数、运行意图与开局快照。
+/// 字段形状接近游戏侧 `SimulationState`（Bevy Resource），二者刻意分离：此处无 Bevy，供 debug HTTP / 纯模拟复用。
 #[derive(Clone, Default)]
 pub struct SimulationControl {
     pub turn: u64,

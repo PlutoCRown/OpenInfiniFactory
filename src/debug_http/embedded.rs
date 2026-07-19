@@ -401,7 +401,7 @@ fn handle_embedded_debug_command(
             );
             if starting {
                 presentation.committed_world = playing.world.clone();
-                presentation.last_render_powered_wires.clear();
+                presentation.last_powered_wires.clear();
                 turn_cache.reset_to_turn(simulation.turn);
                 if let Some(worker) = worker {
                     worker.reset(
@@ -445,7 +445,7 @@ fn handle_embedded_debug_command(
             );
             if starting {
                 presentation.committed_world = playing.world.clone();
-                presentation.last_render_powered_wires.clear();
+                presentation.last_powered_wires.clear();
                 turn_cache.reset_to_turn(simulation.turn);
                 if let Some(worker) = worker {
                     worker.reset(

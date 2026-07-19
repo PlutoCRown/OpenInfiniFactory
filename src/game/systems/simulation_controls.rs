@@ -69,7 +69,7 @@ pub fn simulation_controls(
             &mut deps.edit_history,
         );
         deps.presentation.committed_world = deps.world.clone();
-        deps.presentation.last_render_powered_wires.clear();
+        deps.presentation.last_powered_wires.clear();
         if let Some(worker) = deps.worker.as_ref() {
             worker.reset(
                 SimSnapshot::from_world(
@@ -113,7 +113,7 @@ pub fn simulation_controls(
         deps.pusher_state.clear();
         deps.turn_cache.reset_to_turn(0);
         deps.presentation.committed_world = deps.world.clone();
-        deps.presentation.last_render_powered_wires.clear();
+        deps.presentation.last_powered_wires.clear();
         if let Some(worker) = deps.worker.as_ref() {
             worker.reset(
                 SimSnapshot::from_world(

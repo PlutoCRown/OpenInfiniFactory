@@ -231,6 +231,8 @@ impl Default for BuilderMode {
     }
 }
 
+/// 游戏侧模拟 UI/调度状态（Bevy Resource）：运行意图、倍速与开局快照。
+/// 与 `oif_sim::SimulationControl` 字段相近但职责不同——后者服务无头 `SimSession`，勿合并。
 #[derive(Resource)]
 pub struct SimulationState {
     pub running: bool,

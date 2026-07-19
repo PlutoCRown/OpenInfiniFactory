@@ -1,4 +1,4 @@
-//! 模拟逻辑已迁至 `oif_sim`；此处提供 Bevy Resource 包装与路径兼容 re-export
+//! 兼容 re-export facade：模拟逻辑在 `oif_sim`，此处包装为 Bevy Resource 并保留旧路径
 
 pub use oif_sim::simulation::{BreakDebris, LaserBeam, LaserBeamStop};
 

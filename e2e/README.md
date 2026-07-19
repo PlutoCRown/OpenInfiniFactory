@@ -1,6 +1,6 @@
 # E2E 测试（模拟核心 + Debug HTTP）
 
-通过无头 `oif-debug-http`（Bevy ECS App，无窗口）驱动 `SimCoreWorld`，对每个方块做放置与（部分）模拟断言。
+通过无头 `oif-debug-http`（Bevy ECS App，无窗口）驱动 `SimSession` / `WorldBlocks`，对每个方块做放置与（部分）模拟断言。
 
 ## 前置
 

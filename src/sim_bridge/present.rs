@@ -22,11 +22,11 @@ use crate::game::world::rendering::{
 use crate::scene::{apply_turn_output, BlockEntityIndex};
 use super::{CachedTurn, SimSnapshot, SimulationWorker, TurnCache};
 
-/// 表现层提交状态：已提交世界与上次通电线渲染集
+/// 表现层提交状态：已提交世界与上次通电电线集
 #[derive(Resource, Default)]
 pub struct SimulationPresentationState {
     pub committed_world: WorldBlocks,
-    pub last_render_powered_wires: HashSet<IVec3>,
+    pub last_powered_wires: HashSet<IVec3>,
 }
 
 /// 将模拟快照写回世界与相关缓存资源
@@ -261,7 +261,7 @@ fn present_turn(
         &before,
         world,
         &cached.output,
-        &presentation.last_render_powered_wires,
+        &presentation.last_powered_wires,
         animation_duration,
         commands,
         meshes,
@@ -272,7 +272,7 @@ fn present_turn(
         sim_stats,
         scene_chunks,
     );
-    presentation.last_render_powered_wires = cached.output.render_powered_wires.clone();
+    presentation.last_powered_wires = cached.output.powered_wires.clone();
     presentation.committed_world = world.clone();
 }
 

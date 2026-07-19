@@ -593,7 +593,7 @@ pub fn apply_turn_output_incremental(
         assets,
         debug,
         structure_state,
-        &output.render_powered_wires,
+        &output.powered_wires,
         &animations,
         &pusher_animations,
         timing,
@@ -602,7 +602,7 @@ pub fn apply_turn_output_incremental(
     let mut refresh = collect_sim_refresh_positions(before, after, output);
     refresh.extend(collect_wire_power_refresh_positions(
         after,
-        &output.render_powered_wires,
+        &output.powered_wires,
         previous_powered_wires,
     ));
     refresh_positions(
@@ -613,7 +613,7 @@ pub fn apply_turn_output_incremental(
         assets,
         debug,
         structure_state,
-        &output.render_powered_wires,
+        &output.powered_wires,
         &refresh,
         &animated,
         &pusher_animations,
@@ -635,7 +635,7 @@ pub fn apply_turn_output_incremental(
             None,
             pusher_animations.get(&pos).copied(),
             timing,
-            output.render_powered_wires.contains(&pos),
+            output.powered_wires.contains(&pos),
             debug.factory_activity.then_some(structure_state),
         );
     }

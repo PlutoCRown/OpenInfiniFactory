@@ -31,7 +31,7 @@ pub struct TurnOutput {
     pub turn: u64,
     pub animations: HashMap<IVec3, BlockMotion>,
     pub pusher_animations: HashMap<IVec3, PusherMotion>,
-    pub render_powered_wires: HashSet<IVec3>,
+    pub powered_wires: HashSet<IVec3>,
     /// 成功焊接的焊点对（两端格心连线中点播扩散粒子）
     pub weld_sparks: Vec<(IVec3, IVec3)>,
     /// 激光打镜等非破坏火花
@@ -117,7 +117,7 @@ pub fn simulate_turn(
         probe_lasers(world, &laser_devices);
     let powered_components = signal_cache.powered_components(world, &laser_hit_detectors);
     let powered_devices = signal_cache.powered_devices(world, &powered_components);
-    let render_powered_wires = signal_cache.powered_wires(world, &powered_components);
+    let powered_wires = signal_cache.powered_wires(world, &powered_components);
     sample.signal_ms = mark_elapsed_ms(&mut mark);
     if let Some(sim_log) = sim_log.as_mut() {
         sim_log.log(
@@ -200,7 +200,7 @@ pub fn simulate_turn(
         apply_fragile_shatter_before_execute(world, &mut movement_plan, structure_state);
 
     // —— 阶段 3b 执行运动：位姿/推杆，再重生静态 marker ——
-    let (mut animations, pusher_animations) = execute_structure_moves_with_pushers(
+    let (animations, pusher_animations) = execute_structure_moves_with_pushers(
         world,
         movement_plan,
         structure_state,
@@ -269,7 +269,7 @@ pub fn simulate_turn(
         turn,
         animations,
         pusher_animations,
-        render_powered_wires,
+        powered_wires,
         weld_sparks,
         behavior_sparks,
         break_debris,

@@ -25,7 +25,7 @@ pub use components::{
     HoverStructureBounds, PendingGeneratedPreview, PlacementPreview, StructureBounds,
     block_face_highlight_transform,
 };
-pub(crate) use connectors::{face_mark_transform, light_panel_transform, signal_neighbor_offsets};
+pub(crate) use connectors::{light_panel_transform, signal_neighbor_offsets};
 pub use fx::{
     spawn_acceptance_sparks, spawn_break_debris, spawn_laser_beams, spawn_weld_bursts,
     spawn_weld_sparks,
