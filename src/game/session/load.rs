@@ -175,13 +175,13 @@ pub fn handle_create_new_solution(
         let Some(loaded) = load_world(&mut playing.world, &puzzle_slot) else {
             continue;
         };
-        *playing.world = loaded.world;
+        *playing.world = crate::game::world::grid::WorldBlocks(loaded.world);
         *session.inventory = InventoryItems::for_mode(BuilderMode::Play);
         let Some(solution_slot) = save_solution_as(
             &playing.world,
             &request.puzzle,
             &request.name,
-            &session.inventory,
+            &session.inventory.to_saved_hotbar(),
             None,
         ) else {
             continue;

@@ -1,31 +1,36 @@
 use bevy::prelude::*;
-
-use crate::game::blocks::{
-    BlockKind, MaterialBlockId, PaintMaterialId, StampMaterialId, ensure_fallback_material_catalog,
+use oif_sim::Facing;
+use oif_sim::blocks::{
+    MaterialBlockId, PaintMaterialId, StampMaterialId, ensure_fallback_material_catalog,
     ensure_fallback_paint_catalog, ensure_fallback_stamp_catalog, fallback_material_id,
     material_catalog, paint_catalog, paint_id_by_string, resolve_material_id, stamp_catalog,
     stamp_id_by_string,
 };
-use crate::game::world::grid::{
-    BlockSettings, ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings,
-    GoalSettings, RollerSettings, SignDisplay, SignSettings, StamperSettings, TeleportSettings,
+use oif_sim::world::grid::{
+    BlockSettings, ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, GoalSettings,
+    RollerSettings, SignDisplay, SignSettings, StamperSettings, TeleportSettings,
 };
 
 use super::Cursor;
 use super::SaveFormatError;
 
 /// 写入方块设置（v5：材料/印花/漆均为字符串 id）
-pub fn write_settings(out: &mut Vec<u8>, kind: BlockKind, settings: &BlockSettings) {
+pub fn write_settings(out: &mut Vec<u8>, kind: oif_sim::BlockKind, settings: &BlockSettings) {
     match (kind, settings) {
-        (BlockKind::Generator, BlockSettings::Generator(value)) => write_generator(out, *value),
-        (BlockKind::Goal, BlockSettings::Goal(value)) => write_goal(out, *value),
-        (BlockKind::Stamper, BlockSettings::Stamper(value)) => write_stamper(out, *value),
-        (BlockKind::Roller, BlockSettings::Roller(value)) => write_roller(out, *value),
-        (BlockKind::Converter, BlockSettings::Converter(value)) => write_converter(out, *value),
-        (BlockKind::TeleportEntrance | BlockKind::TeleportExit, BlockSettings::Teleport(value)) => {
-            write_teleport(out, value)
+        (oif_sim::BlockKind::Generator, BlockSettings::Generator(value)) => {
+            write_generator(out, *value)
         }
-        (BlockKind::Sign, BlockSettings::Sign(value)) => write_sign(out, value),
+        (oif_sim::BlockKind::Goal, BlockSettings::Goal(value)) => write_goal(out, *value),
+        (oif_sim::BlockKind::Stamper, BlockSettings::Stamper(value)) => write_stamper(out, *value),
+        (oif_sim::BlockKind::Roller, BlockSettings::Roller(value)) => write_roller(out, *value),
+        (oif_sim::BlockKind::Converter, BlockSettings::Converter(value)) => {
+            write_converter(out, *value)
+        }
+        (
+            oif_sim::BlockKind::TeleportEntrance | oif_sim::BlockKind::TeleportExit,
+            BlockSettings::Teleport(value),
+        ) => write_teleport(out, value),
+        (oif_sim::BlockKind::Sign, BlockSettings::Sign(value)) => write_sign(out, value),
         _ => {}
     }
 }
@@ -33,19 +38,23 @@ pub fn write_settings(out: &mut Vec<u8>, kind: BlockKind, settings: &BlockSettin
 /// 读取方块设置；`string_ids` 为真时用字符串，否则兼容旧 u8 表
 pub fn read_settings(
     cursor: &mut Cursor<'_>,
-    kind: BlockKind,
+    kind: oif_sim::BlockKind,
     string_ids: bool,
 ) -> Result<BlockSettings, SaveFormatError> {
     Ok(match kind {
-        BlockKind::Generator => BlockSettings::Generator(read_generator(cursor, string_ids)?),
-        BlockKind::Goal => BlockSettings::Goal(read_goal(cursor, string_ids)?),
-        BlockKind::Stamper => BlockSettings::Stamper(read_stamper(cursor, string_ids)?),
-        BlockKind::Roller => BlockSettings::Roller(read_roller(cursor, string_ids)?),
-        BlockKind::Converter => BlockSettings::Converter(read_converter(cursor, string_ids)?),
-        BlockKind::TeleportEntrance | BlockKind::TeleportExit => {
+        oif_sim::BlockKind::Generator => {
+            BlockSettings::Generator(read_generator(cursor, string_ids)?)
+        }
+        oif_sim::BlockKind::Goal => BlockSettings::Goal(read_goal(cursor, string_ids)?),
+        oif_sim::BlockKind::Stamper => BlockSettings::Stamper(read_stamper(cursor, string_ids)?),
+        oif_sim::BlockKind::Roller => BlockSettings::Roller(read_roller(cursor, string_ids)?),
+        oif_sim::BlockKind::Converter => {
+            BlockSettings::Converter(read_converter(cursor, string_ids)?)
+        }
+        oif_sim::BlockKind::TeleportEntrance | oif_sim::BlockKind::TeleportExit => {
             BlockSettings::Teleport(read_teleport(cursor)?)
         }
-        BlockKind::Sign => BlockSettings::Sign(read_sign(cursor, string_ids)?),
+        oif_sim::BlockKind::Sign => BlockSettings::Sign(read_sign(cursor, string_ids)?),
         _ => return Err(SaveFormatError::InvalidSettings),
     })
 }
@@ -160,23 +169,21 @@ fn read_goal(cursor: &mut Cursor<'_>, string_ids: bool) -> Result<GoalSettings, 
     })
 }
 
-fn encode_settings_facing(facing: crate::game::world::direction::Facing) -> u8 {
+fn encode_settings_facing(facing: Facing) -> u8 {
     match facing {
-        crate::game::world::direction::Facing::North => 0,
-        crate::game::world::direction::Facing::East => 1,
-        crate::game::world::direction::Facing::South => 2,
-        crate::game::world::direction::Facing::West => 3,
+        Facing::North => 0,
+        Facing::East => 1,
+        Facing::South => 2,
+        Facing::West => 3,
     }
 }
 
-fn decode_settings_facing(
-    value: u8,
-) -> Result<crate::game::world::direction::Facing, SaveFormatError> {
+fn decode_settings_facing(value: u8) -> Result<Facing, SaveFormatError> {
     match value {
-        0 => Ok(crate::game::world::direction::Facing::North),
-        1 => Ok(crate::game::world::direction::Facing::East),
-        2 => Ok(crate::game::world::direction::Facing::South),
-        3 => Ok(crate::game::world::direction::Facing::West),
+        0 => Ok(Facing::North),
+        1 => Ok(Facing::East),
+        2 => Ok(Facing::South),
+        3 => Ok(Facing::West),
         _ => Err(SaveFormatError::InvalidFacing(value)),
     }
 }

@@ -1,6 +1,5 @@
 //! Shared UI types and re-exports from modular subsystems.
 use bevy::prelude::*;
-use serde::{Deserialize, Serialize};
 
 pub use crate::game::block_editing::OpenBlockPanelDropdown;
 pub use crate::game::ui::core::{
@@ -23,6 +22,7 @@ pub use crate::game::ui::features::settings::types::{
 use crate::game::blocks::{BlockKind, PLAY_BLOCKS, edit_blocks};
 use crate::game::state::BuilderMode;
 use crate::shared::config::ActionKeyName;
+use crate::shared::save::{SavedAreaKind, SavedHotbar, SavedHotbarItem};
 
 pub const HOTBAR_SLOTS: usize = 9;
 pub(super) const BACKPACK_SLOTS: usize = 27;
@@ -98,7 +98,7 @@ pub struct InventorySlot {
     pub index: usize,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AreaKind {
     Selection,
 }
@@ -117,7 +117,7 @@ impl AreaKind {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InventoryItem {
     Block(BlockKind),
     Area(AreaKind),
@@ -248,8 +248,30 @@ impl InventoryItems {
         }
     }
 
-    pub fn set_hotbar(&mut self, hotbar: HotbarItems) {
-        self.hotbar = hotbar;
+    /// 导出存档用快捷栏 DTO
+    pub fn to_saved_hotbar(&self) -> SavedHotbar {
+        self.hotbar.map(|slot| {
+            slot.map(|item| match item {
+                InventoryItem::Block(kind) => SavedHotbarItem::Block(kind),
+                InventoryItem::Area(AreaKind::Selection) => {
+                    SavedHotbarItem::Area(SavedAreaKind::Selection)
+                }
+                InventoryItem::LightPanel => SavedHotbarItem::LightPanel,
+            })
+        })
+    }
+
+    /// 从存档快捷栏 DTO 写回 UI
+    pub fn apply_saved_hotbar(&mut self, hotbar: SavedHotbar) {
+        self.hotbar = hotbar.map(|slot| {
+            slot.map(|item| match item {
+                SavedHotbarItem::Block(kind) => InventoryItem::Block(kind),
+                SavedHotbarItem::Area(SavedAreaKind::Selection) => {
+                    InventoryItem::Area(AreaKind::Selection)
+                }
+                SavedHotbarItem::LightPanel => InventoryItem::LightPanel,
+            })
+        });
     }
 }
 

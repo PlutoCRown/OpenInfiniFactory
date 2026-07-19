@@ -128,7 +128,12 @@ pub fn handle_save_world_as_new_puzzle(
             .ok()
             .map(|(camera, transform)| capture_player_save(camera, transform));
         let snapshot = simulation.authoring_world(&world);
-        if let Some(slot) = save_puzzle_as(snapshot, &request.name, &inventory, player_save) {
+        if let Some(slot) = save_puzzle_as(
+            snapshot,
+            &request.name,
+            &inventory.to_saved_hotbar(),
+            player_save,
+        ) {
             save_state.current = Some(slot);
             save_state.current_kind = Some(SaveKind::Puzzle);
             solution_state.dirty = false;

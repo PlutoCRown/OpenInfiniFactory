@@ -1,16 +1,33 @@
 use bevy::prelude::*;
+use oif_sim::blocks::{BlockData, BlockKind, PersistentLayer};
+use oif_sim::world::grid::{BlockSettings, MaterialFace, WorldBlocks};
 use serde::{Deserialize, Serialize};
 
-use crate::game::blocks::{BlockData, BlockKind, PersistentLayer};
-use crate::game::world::grid::{BlockSettings, WorldBlocks};
-use crate::game::{
-    state::BuilderMode,
-    ui::{HotbarItems, InventoryItems},
-};
 use crate::shared::persistent_storage;
 use crate::shared::save_format::{
     self, BLOCKS_FILE, META_FILE, SKYBOX_FILE, SaveBlocksData, SavedBlock,
 };
+
+/// 存档快捷栏格数（与 UI 快捷栏一致）
+pub const HOTBAR_SLOTS: usize = 9;
+
+/// 存档中的区域工具种类（纯 DTO，与 UI AreaKind 对应）
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum SavedAreaKind {
+    Selection,
+}
+
+/// 存档快捷栏物品（纯 DTO，与 UI InventoryItem 对应）
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum SavedHotbarItem {
+    Block(BlockKind),
+    Area(SavedAreaKind),
+    /// 灯面板：贴在电线表面，不占邻格
+    LightPanel,
+}
+
+/// 存档快捷栏 9 格
+pub type SavedHotbar = [Option<SavedHotbarItem>; HOTBAR_SLOTS];
 
 const SAVE_VERSION: u32 = 1;
 
@@ -167,7 +184,7 @@ struct SaveMeta {
     #[serde(default)]
     puzzle_id: Option<String>,
     #[serde(default)]
-    hotbar: Option<HotbarItems>,
+    hotbar: Option<SavedHotbar>,
     #[serde(default)]
     player: Option<PlayerSave>,
     /// 平行光与天空光照；字段见 `schemas/save.meta.schema.json`（存档勿写 `$schema`）
@@ -252,7 +269,7 @@ struct SaveFile {
 pub fn save_puzzle(
     world: &WorldBlocks,
     slot: &SaveSlot,
-    inventory: &InventoryItems,
+    hotbar: &SavedHotbar,
     player: Option<PlayerSave>,
 ) -> bool {
     if slot.solution.is_some() {
@@ -260,7 +277,7 @@ pub fn save_puzzle(
     }
     write_save(
         slot,
-        SaveFile::puzzle(capture_puzzle_layer(world, inventory), player),
+        SaveFile::puzzle(capture_puzzle_layer(world, hotbar), player),
     )
 }
 
@@ -268,11 +285,11 @@ pub fn save_puzzle(
 pub fn save_puzzle_as(
     world: &WorldBlocks,
     name: &str,
-    inventory: &InventoryItems,
+    hotbar: &SavedHotbar,
     player: Option<PlayerSave>,
 ) -> Option<SaveSlot> {
     let slot = allocate_puzzle_slot(name)?;
-    let mut save = SaveFile::puzzle(capture_puzzle_layer(world, inventory), player);
+    let mut save = SaveFile::puzzle(capture_puzzle_layer(world, hotbar), player);
     save.meta.name = Some(name.trim().to_string());
     write_save(&slot, save).then_some(slot)
 }
@@ -317,7 +334,7 @@ pub fn save_solution_as(
     world: &WorldBlocks,
     puzzle: &str,
     name: &str,
-    inventory: &InventoryItems,
+    hotbar: &SavedHotbar,
     player: Option<PlayerSave>,
 ) -> Option<SaveSlot> {
     let slot = allocate_solution_slot(puzzle, name)?;
@@ -325,7 +342,7 @@ pub fn save_solution_as(
         puzzle,
         capture_factory_blocks(world),
         capture_wire_face_panels(world),
-        inventory,
+        hotbar,
         player,
     );
     save.meta.name = Some(name.trim().to_string());
@@ -431,7 +448,7 @@ fn load_template_bytes(file: &str) -> Option<Vec<u8>> {
 pub fn save_solution(
     world: &WorldBlocks,
     slot: &SaveSlot,
-    inventory: &InventoryItems,
+    hotbar: &SavedHotbar,
     player: Option<PlayerSave>,
 ) -> bool {
     let Some(solution) = slot.solution.as_deref() else {
@@ -446,7 +463,7 @@ pub fn save_solution(
             &slot.puzzle,
             capture_factory_blocks(world),
             capture_wire_face_panels(world),
-            inventory,
+            hotbar,
             player,
         ),
     )
@@ -519,7 +536,7 @@ pub struct LoadedSave {
     pub world: WorldBlocks,
     pub puzzle_snapshot: Option<WorldBlocks>,
     pub puzzle_id: Option<String>,
-    pub hotbar: Option<HotbarItems>,
+    pub hotbar: Option<SavedHotbar>,
     pub player: Option<PlayerSave>,
     /// 谜题光照（来自 puzzle meta；solution 读所属 puzzle）
     pub lighting: PuzzleLighting,
@@ -552,7 +569,7 @@ impl SaveFile {
         puzzle_id: &str,
         factory_blocks: Vec<SavedBlock>,
         wire_face_panels: Vec<save_format::SavedWireFacePanel>,
-        inventory: &InventoryItems,
+        hotbar: &SavedHotbar,
         player: Option<PlayerSave>,
     ) -> Self {
         Self {
@@ -561,7 +578,7 @@ impl SaveFile {
                 kind: SaveMetaKind::Solution,
                 name: None,
                 puzzle_id: Some(puzzle_id.to_string()),
-                hotbar: Some(inventory.hotbar),
+                hotbar: Some(*hotbar),
                 player,
                 sun: None,
                 ambient: None,
@@ -599,10 +616,8 @@ impl SaveFile {
                     warn!("Solution save path puzzle `{puzzle_id}` disagrees with meta puzzle_id");
                     return None;
                 }
-                let hotbar = self
-                    .meta
-                    .hotbar
-                    .or_else(|| Some(InventoryItems::for_mode(BuilderMode::Play).hotbar));
+                // 缺省快捷栏由 game 层按 BuilderMode 填默认
+                let hotbar = self.meta.hotbar;
                 let puzzle_world = load_puzzle_world(&puzzle_id)?;
                 let lighting = read_puzzle_lighting(&puzzle_id);
                 let mut world = puzzle_world.clone();
@@ -623,9 +638,8 @@ impl SaveFile {
                 }
                 let lighting = resolve_lighting(&self.meta);
                 let layer = PuzzleLayer::from_blocks(self.blocks, self.meta.hotbar);
-                let hotbar = layer
-                    .hotbar
-                    .or_else(|| Some(InventoryItems::for_mode(BuilderMode::Edit).hotbar));
+                // 缺省快捷栏由 game 层按 BuilderMode 填默认
+                let hotbar = layer.hotbar;
                 let mut world = WorldBlocks::default();
                 apply_layer(&mut world, layer);
                 Some(LoadedSave {
@@ -644,11 +658,11 @@ impl SaveFile {
 struct PuzzleLayer {
     scene_blocks: Vec<SavedBlock>,
     system_blocks: Vec<SavedBlock>,
-    hotbar: Option<HotbarItems>,
+    hotbar: Option<SavedHotbar>,
 }
 
 impl PuzzleLayer {
-    fn from_blocks(blocks: SaveBlocksData, hotbar: Option<HotbarItems>) -> Self {
+    fn from_blocks(blocks: SaveBlocksData, hotbar: Option<SavedHotbar>) -> Self {
         Self {
             scene_blocks: blocks.scene_blocks,
             system_blocks: blocks.system_blocks,
@@ -805,7 +819,7 @@ fn read_save(slot: &SaveSlot) -> Option<SaveFile> {
     Some(SaveFile { meta, blocks })
 }
 
-fn capture_puzzle_layer(world: &WorldBlocks, inventory: &InventoryItems) -> PuzzleLayer {
+fn capture_puzzle_layer(world: &WorldBlocks, hotbar: &SavedHotbar) -> PuzzleLayer {
     let scene_blocks: Vec<SavedBlock> = world
         .blocks
         .iter()
@@ -828,7 +842,7 @@ fn capture_puzzle_layer(world: &WorldBlocks, inventory: &InventoryItems) -> Puzz
     PuzzleLayer {
         scene_blocks,
         system_blocks,
-        hotbar: Some(inventory.hotbar),
+        hotbar: Some(*hotbar),
     }
 }
 
@@ -901,10 +915,7 @@ fn apply_wire_face_panels(world: &mut WorldBlocks, panels: Vec<save_format::Save
         if block.kind != BlockKind::Wire {
             continue;
         }
-        world.set_wire_face_panel(
-            crate::game::world::grid::MaterialFace::new(block.id, panel.normal()),
-            true,
-        );
+        world.set_wire_face_panel(MaterialFace::new(block.id, panel.normal()), true);
     }
 }
 

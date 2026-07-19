@@ -92,7 +92,7 @@ fn commit_save_current_world(
             if invalidate_solutions {
                 invalidate_solutions_for_puzzle(&slot.puzzle);
             }
-            save_puzzle(world, &slot, inventory, player)
+            save_puzzle(world, &slot, &inventory.to_saved_hotbar(), player)
         }
         SaveKind::Solution => {
             if slot.solution.is_none() {
@@ -111,7 +111,7 @@ fn commit_save_current_world(
                     ),
                 );
             }
-            save_solution(world, &slot, inventory, player)
+            save_solution(world, &slot, &inventory.to_saved_hotbar(), player)
         }
     };
     if saved {
@@ -184,7 +184,7 @@ pub fn load_world_into_session(
     next_state: &mut NextState<GameMode>,
 ) {
     let lighting = loaded.lighting;
-    *playing.world = loaded.world;
+    *playing.world = crate::game::world::grid::WorldBlocks(loaded.world);
 
     session.simulation.running = false;
     session.simulation.step_requested = false;
@@ -202,7 +202,7 @@ pub fn load_world_into_session(
     };
     *session.inventory = InventoryItems::for_mode(*session.builder_mode);
     if let Some(hotbar) = loaded.hotbar {
-        session.inventory.set_hotbar(hotbar);
+        session.inventory.apply_saved_hotbar(hotbar);
     }
     session.placement.selected = 0;
 
@@ -218,7 +218,9 @@ pub fn load_world_into_session(
     session.solution_state.puzzle_id = loaded.puzzle_id;
     session.solution_state.puzzle_snapshot = match entry {
         WorldEntryMode::EditPuzzle => None,
-        WorldEntryMode::PlaySolution => loaded.puzzle_snapshot,
+        WorldEntryMode::PlaySolution => loaded
+            .puzzle_snapshot
+            .map(crate::game::world::grid::WorldBlocks),
     };
     session.pending_player.0 = loaded.player;
 

@@ -1,4 +1,4 @@
-use crate::game::blocks::BlockKind;
+use oif_sim::BlockKind;
 
 use super::SaveFormatError;
 

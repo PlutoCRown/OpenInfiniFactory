@@ -2,11 +2,9 @@ mod block_kind;
 mod settings;
 
 use bevy::prelude::*;
-
-use crate::game::blocks::save_stores_facing;
-use crate::game::blocks::{BlockData, BlockKind};
-use crate::game::world::direction::Facing;
-use crate::game::world::grid::BlockSettings;
+use oif_sim::Facing;
+use oif_sim::blocks::{save_stores_facing, BlockData, BlockKind};
+use oif_sim::world::grid::BlockSettings;
 
 pub use block_kind::{decode_kind, encode_kind};
 pub use settings::{read_settings, write_settings};
