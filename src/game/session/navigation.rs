@@ -2,18 +2,14 @@ use bevy::prelude::*;
 
 use crate::game::edit_history::EditHistory;
 use crate::game::player::controller::{FlyCamera, capture_player_save};
-use crate::game::state::{
-    GameMode, PlacementState, SimulationState, SolutionState, StartMenuScreen,
-};
-use crate::game::ui::InventoryItems;
-use crate::shared::save::SaveState;
+use crate::game::state::{GameMode, StartMenuScreen};
 
 use super::busy::SessionBusy;
 #[cfg(not(target_arch = "wasm32"))]
 use super::cover::{CoverScreenshotComplete, begin_cover_capture};
 use super::cover::{DeferredMainMenuExit, PendingMainMenuExit, should_capture_cover};
 use super::messages::ExitToMainMenu;
-use super::world_access::PlayingWorldParams;
+use super::world_access::{PlayingWorldParams, SessionStateParams};
 use super::world_ops::{
     exit_to_main_menu, save_current_world, save_current_world_invalidate_solutions,
 };
@@ -48,13 +44,9 @@ pub fn handle_exit_to_main_menu(
 
 /// 消耗延后的退出：可选存档/封面截图，再回主菜单
 pub fn process_deferred_main_menu_exit(
-    mut world: PlayingWorldParams,
-    inventory: Res<InventoryItems>,
+    mut playing: PlayingWorldParams,
+    mut session: SessionStateParams,
     player: Query<(&FlyCamera, &Transform)>,
-    mut placement: ResMut<PlacementState>,
-    mut save_state: ResMut<SaveState>,
-    mut solution_state: ResMut<SolutionState>,
-    mut simulation: ResMut<SimulationState>,
     mut next_state: ResMut<NextState<GameMode>>,
     mut start_menu_screen: ResMut<StartMenuScreen>,
     mut pending_exit: ResMut<PendingMainMenuExit>,
@@ -82,30 +74,30 @@ pub fn process_deferred_main_menu_exit(
     if deferred.save_first {
         if deferred.invalidate_solutions {
             save_current_world_invalidate_solutions(
-                &world.world,
-                &inventory,
-                &mut save_state,
-                &mut solution_state,
-                &simulation,
+                &playing.world,
+                &session.inventory,
+                &mut session.save_state,
+                &mut session.solution_state,
+                &session.simulation,
                 player_save.clone(),
             );
         } else {
             save_current_world(
-                &world.world,
-                &inventory,
-                &mut save_state,
-                &mut solution_state,
-                &simulation,
+                &playing.world,
+                &session.inventory,
+                &mut session.save_state,
+                &mut session.solution_state,
+                &session.simulation,
                 player_save.clone(),
             );
         }
         // 封面只在本次真正写档后更新；不保存退出沿用磁盘上的旧封面
-        if should_capture_cover(save_state.current.as_ref()) {
+        if should_capture_cover(session.save_state.current.as_ref()) {
             #[cfg(not(target_arch = "wasm32"))]
             if let Some(view_image) = view_image.as_ref() {
                 begin_cover_capture(
-                    &mut world.commands,
-                    save_state.current.as_ref().unwrap(),
+                    &mut playing.commands,
+                    session.save_state.current.as_ref().unwrap(),
                     view_image,
                 );
                 pending_exit.waiting_cover = true;
@@ -116,23 +108,10 @@ pub fn process_deferred_main_menu_exit(
     }
     edit_history.clear();
     exit_to_main_menu(
-        &mut world.world,
-        &mut placement,
-        &mut save_state,
-        &mut solution_state,
-        &mut simulation,
-        &mut world.commands,
-        &mut world.meshes,
-        world.render_assets.as_deref(),
-        &world.block_entities,
-        &world.debug,
-        &mut world.structure_state,
-        &mut world.movement_influence,
-        &mut world.pusher_state,
+        &mut playing,
+        &mut session,
         &mut next_state,
         &mut start_menu_screen,
-        &mut world.block_index,
-        &mut world.scene_chunks,
     );
     if deferred.save_first {
         // OnExit(Playing) 拆景在下一帧；等回 StartMenu 后再清 busy
@@ -145,11 +124,8 @@ pub fn process_deferred_main_menu_exit(
 #[cfg(not(target_arch = "wasm32"))]
 pub fn finish_pending_main_menu_exit(
     mut complete: MessageReader<CoverScreenshotComplete>,
-    mut world: PlayingWorldParams,
-    mut placement: ResMut<PlacementState>,
-    mut save_state: ResMut<SaveState>,
-    mut solution_state: ResMut<SolutionState>,
-    mut simulation: ResMut<SimulationState>,
+    mut playing: PlayingWorldParams,
+    mut session: SessionStateParams,
     mut next_state: ResMut<NextState<GameMode>>,
     mut start_menu_screen: ResMut<StartMenuScreen>,
     mut pending_exit: ResMut<PendingMainMenuExit>,
@@ -162,23 +138,10 @@ pub fn finish_pending_main_menu_exit(
         pending_exit.waiting_cover = false;
         edit_history.clear();
         exit_to_main_menu(
-            &mut world.world,
-            &mut placement,
-            &mut save_state,
-            &mut solution_state,
-            &mut simulation,
-            &mut world.commands,
-            &mut world.meshes,
-            world.render_assets.as_deref(),
-            &world.block_entities,
-            &world.debug,
-            &mut world.structure_state,
-            &mut world.movement_influence,
-            &mut world.pusher_state,
+            &mut playing,
+            &mut session,
             &mut next_state,
             &mut start_menu_screen,
-            &mut world.block_index,
-            &mut world.scene_chunks,
         );
         pending_exit.release_busy_after_menu = true;
     }

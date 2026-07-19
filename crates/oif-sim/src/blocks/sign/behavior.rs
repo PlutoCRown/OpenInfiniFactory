@@ -6,4 +6,8 @@ impl BlockBehavior for SignBlock {
     fn is_directional(&self) -> bool {
         true
     }
+
+    fn attaches_to_factory_face(&self) -> bool {
+        true
+    }
 }

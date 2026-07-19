@@ -29,7 +29,7 @@ pub(super) fn can_place_block_at(
         return false;
     }
 
-    if block.kind == BlockKind::Sign {
+    if block.kind.attaches_to_factory_face() {
         let Some(normal) = face_normal.filter(|n| n.abs().element_sum() == 1) else {
             return false;
         };

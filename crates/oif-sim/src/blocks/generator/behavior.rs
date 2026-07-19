@@ -9,4 +9,8 @@ impl BlockBehavior for GeneratorBlock {
         let _ = facing;
         Some(MaterialSource::Generator)
     }
+
+    fn shows_material_preview(&self) -> bool {
+        true
+    }
 }

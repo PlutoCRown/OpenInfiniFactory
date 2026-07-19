@@ -7,7 +7,7 @@ use super::traits::{BlockBehavior, BlockMeta};
 use super::{
     BlockDefinition, BlockKind, LaserOpticsBehavior, MarkerBehavior, MaterialDestroyer,
     MaterialLabeler, MaterialProcessor, MaterialSource, MovementRule, PersistentLayer,
-    SignalBehavior, WeldBehavior,
+    PoweredSideEffect, SignalBehavior, WeldBehavior,
 };
 
 /// 包装各方块类型，使分文件的 sub-trait impl 能注册进 inventory
@@ -27,6 +27,10 @@ where
 
     fn alternate(&self) -> Option<BlockKind> {
         self.0.alternate()
+    }
+
+    fn alternate_flip_facing(&self) -> bool {
+        self.0.alternate_flip_facing()
     }
 
     fn persistent_layer(&self) -> Option<PersistentLayer> {
@@ -84,5 +88,29 @@ where
 
     fn signal_behavior(&self, facing: Facing) -> Option<SignalBehavior> {
         self.0.signal_behavior(facing)
+    }
+
+    fn powered_side_effect(&self) -> Option<PoweredSideEffect> {
+        self.0.powered_side_effect()
+    }
+
+    fn is_detector_target(&self) -> bool {
+        self.0.is_detector_target()
+    }
+
+    fn allows_stamp_passthrough(&self) -> bool {
+        self.0.allows_stamp_passthrough()
+    }
+
+    fn accepts_material(&self) -> bool {
+        self.0.accepts_material()
+    }
+
+    fn shows_material_preview(&self) -> bool {
+        self.0.shows_material_preview()
+    }
+
+    fn attaches_to_factory_face(&self) -> bool {
+        self.0.attaches_to_factory_face()
     }
 }

@@ -10,7 +10,6 @@ use crate::game::block_editing::widgets::{
     spawn_labeled_panel_button, spawn_text_dropdown_toggle, sync_dropdown_overlay,
 };
 use crate::game::block_editing::world_refresh::apply_teleport_pair_edit;
-use crate::game::blocks::BlockKind;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
 use crate::game::edit_history::EditHistory;
@@ -357,16 +356,18 @@ fn pair_candidates(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
     let Some(block) = world.system_blocks.get(&pos) else {
         return Vec::new();
     };
-    let target_kind = match block.kind {
-        BlockKind::TeleportEntrance => BlockKind::TeleportExit,
-        BlockKind::TeleportExit => BlockKind::TeleportEntrance,
-        _ => return Vec::new(),
+    let Some(target_role) = block
+        .kind
+        .material_processor()
+        .and_then(|role| role.teleport_partner_role())
+    else {
+        return Vec::new();
     };
     let mut candidates: Vec<IVec3> = world
         .system_blocks
         .iter()
         .filter_map(|(candidate_pos, candidate)| {
-            (candidate.kind == target_kind).then_some(*candidate_pos)
+            (candidate.kind.material_processor() == Some(target_role)).then_some(*candidate_pos)
         })
         .collect();
     candidates.sort_by_key(|candidate| world.teleport_settings(*candidate).name);

@@ -2,8 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::game::blocks::BlockKind;
-use crate::game::edit_history::{build_cell_patch, EditHistory};
+use crate::game::edit_history::{EditHistory, build_cell_patch};
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::PlacementState;
 use crate::game::systems::debug::DebugState;
@@ -68,11 +67,7 @@ pub(super) fn alternate_block_at(
             return;
         };
 
-        if matches!(
-            (block.kind, kind),
-            (BlockKind::Conveyor, BlockKind::ReverseConveyor)
-                | (BlockKind::ReverseConveyor, BlockKind::Conveyor)
-        ) {
+        if block.kind.alternate_flip_facing() {
             block.facing = block.facing.rotate().rotate();
         }
         block.kind = kind;

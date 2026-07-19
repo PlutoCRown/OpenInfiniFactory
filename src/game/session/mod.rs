@@ -18,7 +18,7 @@ pub use dispatch::{
     save_world_as_new_puzzle_in_world, switch_to_edit_mode_in_world,
 };
 pub use messages::LoadWorld;
-pub use world_access::PlayingWorldParams;
+pub use world_access::{PlayingWorldParams, SessionStateParams};
 pub use world_ops::SaveCurrentWorldResult;
 
 use cover::PendingMainMenuExit;

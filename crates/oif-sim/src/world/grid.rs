@@ -324,7 +324,7 @@ impl WorldBlocks {
         if previous != Some(block) {
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
-        if kind == BlockKind::Goal {
+        if kind.accepts_material() {
             self.resync_acceptor_structures();
         }
         previous
@@ -392,9 +392,9 @@ impl WorldBlocks {
     pub fn remove_system(&mut self, pos: &IVec3) -> Option<BlockData> {
         let removed = self.system_blocks.remove(pos);
         if removed.is_some() {
-            let was_goal = removed
+            let was_acceptor = removed
                 .as_ref()
-                .is_some_and(|block| block.kind == BlockKind::Goal);
+                .is_some_and(|block| block.kind.accepts_material());
             self.block_settings.remove(pos);
             for settings in self.block_settings.values_mut() {
                 if let BlockSettings::Teleport(settings) = settings {
@@ -404,7 +404,7 @@ impl WorldBlocks {
                 }
             }
             self.topology_revision = self.topology_revision.wrapping_add(1);
-            if was_goal {
+            if was_acceptor {
                 self.resync_acceptor_structures();
             }
         }
@@ -659,7 +659,7 @@ impl WorldBlocks {
                     .find(|pos| {
                         self.system_blocks
                             .get(pos)
-                            .is_some_and(|block| block.kind == BlockKind::Goal)
+                            .is_some_and(|block| block.kind.accepts_material())
                     })
                     .map(|rep| (structure.id, rep))
             })
@@ -669,7 +669,7 @@ impl WorldBlocks {
         let mut starts: Vec<IVec3> = self
             .system_blocks
             .iter()
-            .filter_map(|(pos, block)| (block.kind == BlockKind::Goal).then_some(*pos))
+            .filter_map(|(pos, block)| block.kind.accepts_material().then_some(*pos))
             .collect();
         starts.sort_by_key(|pos| (pos.x, pos.y, pos.z));
 
@@ -722,7 +722,7 @@ impl WorldBlocks {
                 if self
                     .system_blocks
                     .get(&neighbor)
-                    .is_some_and(|block| block.kind == BlockKind::Goal)
+                    .is_some_and(|block| block.kind.accepts_material())
                 {
                     seen.insert(neighbor);
                     queue.push_back(neighbor);
@@ -816,7 +816,7 @@ impl WorldBlocks {
             if self
                 .system_blocks
                 .get(&pair)
-                .is_some_and(|block| self.teleport_kinds_match(pos, pair, block.kind))
+                .is_some_and(|block| self.teleport_roles_match(pos, pair, block.kind))
             {
                 return Some(pair);
             }
@@ -834,7 +834,7 @@ impl WorldBlocks {
             let Some(block) = self.system_blocks.get(other_pos) else {
                 continue;
             };
-            if self.teleport_kinds_match(pos, *other_pos, block.kind) {
+            if self.teleport_roles_match(pos, *other_pos, block.kind) {
                 return Some(*other_pos);
             }
         }
@@ -845,10 +845,11 @@ impl WorldBlocks {
         let Some(block) = self.system_blocks.get(&pos).copied() else {
             return;
         };
-        if !matches!(
-            block.kind,
-            BlockKind::TeleportEntrance | BlockKind::TeleportExit
-        ) {
+        if !block
+            .kind
+            .material_processor()
+            .is_some_and(|processor| processor.is_teleport())
+        {
             return;
         }
 
@@ -866,7 +867,7 @@ impl WorldBlocks {
             let Some(partner_block) = self.system_blocks.get(&partner_pos).copied() else {
                 return;
             };
-            if !self.teleport_kinds_match(pos, partner_pos, partner_block.kind) {
+            if !self.teleport_roles_match(pos, partner_pos, partner_block.kind) {
                 return;
             }
 
@@ -892,21 +893,20 @@ impl WorldBlocks {
         self.set_block_settings(pos, BlockSettings::Teleport(settings));
     }
 
-    fn teleport_kinds_match(&self, pos: IVec3, other: IVec3, other_kind: BlockKind) -> bool {
+    fn teleport_roles_match(&self, pos: IVec3, other: IVec3, other_kind: BlockKind) -> bool {
         let Some(block) = self.system_blocks.get(&pos) else {
             return false;
         };
-        matches!(
-            (block.kind, other_kind),
-            (BlockKind::TeleportEntrance, BlockKind::TeleportExit)
-                | (BlockKind::TeleportExit, BlockKind::TeleportEntrance)
-        ) && pos != other
+        let Some(role) = block.kind.material_processor() else {
+            return false;
+        };
+        role.teleport_partner_role() == other_kind.material_processor() && pos != other
     }
 
     fn next_teleport_name(&self, kind: BlockKind) -> String {
-        let base_names = match kind {
-            BlockKind::TeleportEntrance => TELEPORT_ENTRANCE_NAMES,
-            BlockKind::TeleportExit => TELEPORT_EXIT_NAMES,
+        let base_names = match kind.material_processor() {
+            Some(crate::blocks::MaterialProcessor::TeleportEntrance) => TELEPORT_ENTRANCE_NAMES,
+            Some(crate::blocks::MaterialProcessor::TeleportExit) => TELEPORT_EXIT_NAMES,
             _ => &[],
         };
         let used: HashSet<String> = self
@@ -1077,12 +1077,12 @@ impl WorldBlocks {
         !self.is_occupied(pos)
     }
 
-    /// 印花机身是否允许该印花材料沿工作朝向进入本格
+    /// 机身是否允许该印花材料沿工作朝向进入本格
     pub fn stamper_body_allows_stamp(&self, pos: IVec3, stamp: &BlockData) -> bool {
         let Some(body) = self.machine_bodies.get(&pos) else {
             return false;
         };
-        if body.kind != BlockKind::StamperBody {
+        if !body.kind.allows_stamp_passthrough() {
             return false;
         }
         if !stamp
@@ -1152,7 +1152,7 @@ impl WorldBlocks {
     pub fn is_detectable_by_detector_at(&self, pos: IVec3) -> bool {
         self.blocks
             .get(&pos)
-            .is_some_and(|block| block.kind.is_detectable_by_detector())
+            .is_some_and(|block| block.kind.is_detector_target())
     }
 
     pub fn is_scene_at(&self, pos: IVec3) -> bool {
@@ -1171,20 +1171,18 @@ impl WorldBlocks {
     ) -> bool {
         self.system_blocks
             .get(&pos)
-            .is_some_and(|block| match block.kind {
-                BlockKind::Goal => {
-                    let settings = self.goal_settings(pos);
-                    if settings.material != material {
-                        return false;
-                    }
-                    if BlockKind::Material(material).is_directional()
-                        && settings.facing != facing
-                    {
-                        return false;
-                    }
-                    self.goal_attachments_match(block_id, &settings)
+            .is_some_and(|block| {
+                if !block.kind.accepts_material() {
+                    return false;
                 }
-                _ => block.kind.accepts_material(),
+                let settings = self.goal_settings(pos);
+                if settings.material != material {
+                    return false;
+                }
+                if BlockKind::Material(material).is_directional() && settings.facing != facing {
+                    return false;
+                }
+                self.goal_attachments_match(block_id, &settings)
             })
     }
 

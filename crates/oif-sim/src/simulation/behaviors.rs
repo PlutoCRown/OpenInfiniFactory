@@ -47,7 +47,7 @@ pub(super) fn probe_lasers(
 }
 
 /// 阶段 4 激光销毁：按通电路径再 trace 并立刻移除材料
-pub(super) fn destroy_powered_lasers(
+fn destroy_powered_lasers(
     world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
 ) -> (Vec<IVec3>, Vec<BreakDebris>) {
@@ -55,12 +55,13 @@ pub(super) fn destroy_powered_lasers(
     (sparks, debris)
 }
 
-/// 阶段 4 钻头销毁：本回合只挂起，下一回合开始再移除（等移动动画播完）
-pub(super) fn run_drill_destroy_phase(
-    world: &WorldBlocks,
+/// 阶段 4 材料销毁：钻头挂起至下一回合；通电激光当场移除
+pub(super) fn run_material_destroy_phase(
+    world: &mut WorldBlocks,
     pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    powered_laser_devices: &HashSet<IVec3>,
     ready_turn: u64,
-) {
+) -> (Vec<IVec3>, Vec<BreakDebris>) {
     let destroyers: Vec<(IVec3, MaterialDestroyer)> = world
         .blocks
         .iter()
@@ -94,9 +95,12 @@ pub(super) fn run_drill_destroy_phase(
                     );
                 }
             }
+            // 激光需通电射线结算，见下方 destroy_powered_lasers
             MaterialDestroyer::Laser { .. } => {}
         }
     }
+
+    destroy_powered_lasers(world, powered_laser_devices)
 }
 
 /// 阶段 4 传送：本回合只挂起，下一回合开始再搬迁（等移动动画完全进入入口）
@@ -143,7 +147,9 @@ fn resolve_teleport_pair(world: &WorldBlocks, entrance: IVec3) -> Option<IVec3> 
     world
         .system_blocks
         .get(&exit)
-        .filter(|block| block.kind == BlockKind::TeleportExit)
+        .filter(|block| {
+            block.kind.material_processor() == Some(MaterialProcessor::TeleportExit)
+        })
         .map(|_| exit)
 }
 
@@ -182,41 +188,111 @@ pub(super) fn run_weld_behavior_phase(world: &mut WorldBlocks) -> Vec<(IVec3, IV
     pairs
 }
 
-/// 阶段 4 装饰漆：只挂起，下一回合开始再写入（等移动动画播完）
-pub(super) fn run_material_paint_phase(
+/// 阶段 4 材料打标：滚刷漆 / 印花，只挂起，下一回合开始再落地（等移动动画播完）
+pub(super) fn run_material_label_phase(
     world: &WorldBlocks,
     pending_generated: &mut super::pending::PendingGeneratedMaterials,
     ready_turn: u64,
 ) {
-    let rollers: Vec<(IVec3, IVec3)> = world
+    let labelers: Vec<(IVec3, Facing, MaterialLabeler)> = world
         .system_blocks
         .iter()
-        .filter_map(
-            |(pos, block)| match block.kind.material_labeler(block.facing) {
-                Some(MaterialLabeler::Roller { target }) => Some((*pos, target)),
-                Some(MaterialLabeler::Stamper { .. }) | None => None,
-            },
-        )
+        .filter_map(|(pos, block)| {
+            block
+                .kind
+                .material_labeler(block.facing)
+                .map(|labeler| (*pos, block.facing, labeler))
+        })
         .collect();
 
-    for (pos, target_offset) in rollers {
-        let target = pos + target_offset;
-        let Some(target_block) = world.blocks.get(&target).copied() else {
-            continue;
-        };
-        if !target_block.kind.is_material() {
-            continue;
+    for (pos, facing, labeler) in labelers {
+        match labeler {
+            MaterialLabeler::Roller { target } => {
+                let target_pos = pos + target;
+                let Some(target_block) = world.blocks.get(&target_pos).copied() else {
+                    continue;
+                };
+                if !target_block.kind.is_material() {
+                    continue;
+                }
+                let face_normal = -target;
+                let face = MaterialFace::new(target_block.id, face_normal);
+                let connectable = target_block
+                    .kind
+                    .material_face_connectable(target_block.facing, face_normal);
+                if !connectable {
+                    continue;
+                }
+                let paint = world.roller_settings(pos).paint;
+                pending_generated.mark_paint(face, paint, ready_turn);
+            }
+            MaterialLabeler::Stamper { .. } => {
+                let forward = facing.forward_ivec3();
+                let host_pos = pos + forward;
+                let Some(host) = world.blocks.get(&host_pos).copied() else {
+                    continue;
+                };
+                if !host.kind.is_material()
+                    || host
+                        .kind
+                        .material_props()
+                        .is_some_and(|props| props.is_stamp)
+                {
+                    continue;
+                }
+                let face_normal = -forward;
+                let connectable = host
+                    .kind
+                    .material_face_connectable(host.facing, face_normal);
+                if !connectable {
+                    continue;
+                }
+
+                let existing_child = world
+                    .material_attachments
+                    .iter()
+                    .find(|(_, att)| att.parent == host.id && att.parent_face_normal == face_normal)
+                    .map(|(child, _)| *child);
+                if let Some(child_id) = existing_child {
+                    let Some((_, child_block)) = world
+                        .blocks
+                        .iter()
+                        .find(|(_, b)| b.id == child_id)
+                        .map(|(p, b)| (*p, *b))
+                    else {
+                        continue;
+                    };
+                    let fragile = child_block
+                        .kind
+                        .material_props()
+                        .is_some_and(|props| props.fragile);
+                    if !fragile {
+                        continue;
+                    }
+                }
+
+                if world.blocks.contains_key(&pos) {
+                    continue;
+                }
+
+                let stamp_facing = match (face_normal.x, face_normal.y, face_normal.z) {
+                    (1, 0, 0) => Facing::East,
+                    (-1, 0, 0) => Facing::West,
+                    (0, 0, 1) => Facing::South,
+                    (0, 0, -1) => Facing::North,
+                    _ => facing,
+                };
+                let stamp_id = world.stamper_settings(pos).stamp;
+                pending_generated.mark_stamp(
+                    pos,
+                    host.id,
+                    face_normal,
+                    stamp_id,
+                    stamp_facing,
+                    ready_turn,
+                );
+            }
         }
-        let face_normal = -target_offset;
-        let face = MaterialFace::new(target_block.id, face_normal);
-        let connectable = target_block
-            .kind
-            .material_face_connectable(target_block.facing, face_normal);
-        if !connectable {
-            continue;
-        }
-        let paint = world.roller_settings(pos).paint;
-        pending_generated.mark_paint(face, paint, ready_turn);
     }
 }
 
@@ -235,91 +311,6 @@ pub(super) fn apply_pending_paints(
         any = true;
     }
     any
-}
-
-/// 阶段 4 印花：只挂起，下一回合开始再生成附着（等移动动画播完）
-pub(super) fn run_material_stamp_phase(
-    world: &WorldBlocks,
-    pending_generated: &mut super::pending::PendingGeneratedMaterials,
-    ready_turn: u64,
-) {
-    let stampers: Vec<(IVec3, Facing)> = world
-        .system_blocks
-        .iter()
-        .filter_map(
-            |(pos, block)| match block.kind.material_labeler(block.facing) {
-                Some(MaterialLabeler::Stamper { .. }) => Some((*pos, block.facing)),
-                Some(MaterialLabeler::Roller { .. }) | None => None,
-            },
-        )
-        .collect();
-
-    for (stamper_pos, facing) in stampers {
-        let forward = facing.forward_ivec3();
-        let host_pos = stamper_pos + forward;
-        let Some(host) = world.blocks.get(&host_pos).copied() else {
-            continue;
-        };
-        if !host.kind.is_material()
-            || host
-                .kind
-                .material_props()
-                .is_some_and(|props| props.is_stamp)
-        {
-            continue;
-        }
-        let face_normal = -forward;
-        let connectable = host
-            .kind
-            .material_face_connectable(host.facing, face_normal);
-        if !connectable {
-            continue;
-        }
-
-        let existing_child = world
-            .material_attachments
-            .iter()
-            .find(|(_, att)| att.parent == host.id && att.parent_face_normal == face_normal)
-            .map(|(child, _)| *child);
-        if let Some(child_id) = existing_child {
-            let Some((_, child_block)) = world
-                .blocks
-                .iter()
-                .find(|(_, b)| b.id == child_id)
-                .map(|(p, b)| (*p, *b))
-            else {
-                continue;
-            };
-            let fragile = child_block
-                .kind
-                .material_props()
-                .is_some_and(|props| props.fragile);
-            if !fragile {
-                continue;
-            }
-        }
-
-        if world.blocks.contains_key(&stamper_pos) {
-            continue;
-        }
-
-        let stamp_facing = match (face_normal.x, face_normal.y, face_normal.z) {
-            (1, 0, 0) => Facing::East,
-            (-1, 0, 0) => Facing::West,
-            (0, 0, 1) => Facing::South,
-            (0, 0, -1) => Facing::North,
-            _ => facing,
-        };
-        let stamp_id = world.stamper_settings(stamper_pos).stamp;
-        pending_generated.mark_stamp(
-            stamper_pos,
-            host.id,
-            face_normal,
-            stamp_id,
-            stamp_facing,
-            ready_turn,
-        );
-    }
 }
 
 /// 回合初落地延后印花

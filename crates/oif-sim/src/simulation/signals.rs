@@ -124,7 +124,7 @@ impl SignalNetworkCache {
         }
     }
 
-    // laser_hit_detectors：本回合激光打中工作面的传感器，视为已激活（按当前坐标，回合内临时）
+    // 传感器激活：激光打中工作面 ∪ 检测格占位（材料 / Behavior 声明目标）
     pub(super) fn powered_components(
         &self,
         world: &WorldBlocks,
@@ -145,8 +145,7 @@ impl SignalNetworkCache {
                         let Some(&detector_pos) = id_to_pos.get(detector_id) else {
                             return false;
                         };
-                        laser_hit_detectors.contains(&detector_pos)
-                            || detector_is_active(world, detector_pos)
+                        detector_activated(world, detector_pos, laser_hit_detectors)
                     })
                     .then_some(SignalComponentId(component))
             })
@@ -218,15 +217,22 @@ fn adjacent_wire_components(
     components
 }
 
-fn detector_is_active(world: &WorldBlocks, pos: IVec3) -> bool {
-    let Some(block) = world.blocks.get(&pos) else {
+/// 传感器是否激活：激光打中（LaserHit）或检测格被可检测目标占据（Occupancy）
+fn detector_activated(
+    world: &WorldBlocks,
+    detector_pos: IVec3,
+    laser_hit_detectors: &HashSet<IVec3>,
+) -> bool {
+    if laser_hit_detectors.contains(&detector_pos) {
+        return true;
+    }
+    let Some(block) = world.blocks.get(&detector_pos) else {
         return false;
     };
     let Some(SignalBehavior::Detector { detection_pos }) = block.kind.signal_behavior(block.facing)
     else {
         return false;
     };
-
-    world.is_detectable_by_detector_at(pos + detection_pos)
+    world.is_detectable_by_detector_at(detector_pos + detection_pos)
 }
 

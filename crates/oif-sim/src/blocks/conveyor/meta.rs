@@ -21,5 +21,9 @@ impl BlockMeta for ConveyorBlock {
     fn alternate(&self) -> Option<BlockKind> {
         Some(BlockKind::ReverseConveyor)
     }
+
+    fn alternate_flip_facing(&self) -> bool {
+        true
+    }
 }
 

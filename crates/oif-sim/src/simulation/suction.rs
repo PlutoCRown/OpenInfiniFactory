@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use glam::IVec3;
 
-use crate::blocks::BlockKind;
+use crate::blocks::PoweredSideEffect;
 use crate::world::grid::WorldBlocks;
 
 use super::structure_state::{StructureId, StructureKind, StructureState};
@@ -25,7 +25,7 @@ impl SuctionLinks {
             let Some(block) = world.blocks.get(&pos) else {
                 continue;
             };
-            if block.kind != BlockKind::SuctionCup {
+            if block.kind.powered_side_effect() != Some(PoweredSideEffect::SuctionLink) {
                 continue;
             }
             let Some(self_id) = structures.id_at(pos) else {

@@ -6,7 +6,7 @@ use crate::world::grid::BlockSettings;
 use super::{
     BlockDefinition, BlockKind, LaserOpticsBehavior, MarkerBehavior, MaterialDestroyer,
     MaterialLabeler, MaterialProcessor, MaterialSource, MovementRule, PersistentLayer,
-    SignalBehavior, WeldBehavior,
+    PoweredSideEffect, SignalBehavior, WeldBehavior,
 };
 
 /// 方块身份与目录元数据、实例默认设置
@@ -16,6 +16,11 @@ pub trait BlockMeta: Send + Sync {
 
     fn alternate(&self) -> Option<BlockKind> {
         None
+    }
+
+    /// 切换到 alternate 时是否把朝向转 180°（如传送带正反）
+    fn alternate_flip_facing(&self) -> bool {
+        false
     }
 
     fn persistent_layer(&self) -> Option<PersistentLayer> {
@@ -71,5 +76,34 @@ pub trait BlockBehavior: Send + Sync {
 
     fn signal_behavior(&self, _facing: Facing) -> Option<SignalBehavior> {
         None
+    }
+
+    fn powered_side_effect(&self) -> Option<PoweredSideEffect> {
+        None
+    }
+
+    /// 是否可作为方块传感器的检测目标（材料层另见 `BlockKind::is_detector_target`）
+    fn is_detector_target(&self) -> bool {
+        false
+    }
+
+    /// 机身格是否允许印花材料沿工作朝向透传进入
+    fn allows_stamp_passthrough(&self) -> bool {
+        false
+    }
+
+    /// 是否验收材料（Goal 等）
+    fn accepts_material(&self) -> bool {
+        false
+    }
+
+    /// 是否展示材料外壳预览（Goal / Generator 等）
+    fn shows_material_preview(&self) -> bool {
+        false
+    }
+
+    /// 是否贴工厂面放置并建立 factory_attachments（告示等）
+    fn attaches_to_factory_face(&self) -> bool {
+        false
     }
 }

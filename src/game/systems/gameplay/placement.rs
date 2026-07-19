@@ -4,8 +4,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use std::collections::HashSet;
 
-use crate::game::blocks::BlockPresent;
-use crate::game::blocks::{BlockData, BlockKind};
+use crate::game::blocks::{BlockData, BlockPresent};
 use crate::game::edit_history::{EditHistory, FacePanelDelta, WorldPatch, build_cell_patch};
 use crate::game::player::controller::{FlyCamera, teleport_player_preserve_offset};
 use crate::game::simulation::markers::refresh_static_generated_markers;
@@ -301,7 +300,9 @@ pub fn placement_input(
             .filter(|target| target.normal != IVec3::ZERO)
         {
             if let Some(block) = world.blocks.get(&target.pos).copied() {
-                if block.kind == BlockKind::Wire {
+                if block.kind.signal_behavior(block.facing)
+                    == Some(crate::game::blocks::SignalBehavior::Wire)
+                {
                     let face = MaterialFace::new(block.id, target.normal);
                     if world.wire_face_panels.contains(&face) {
                         edit_history.flush_pending_rotation();
@@ -374,7 +375,9 @@ pub fn placement_input(
                 .filter(|target| target.normal != IVec3::ZERO)
             {
                 if let Some(block) = world.blocks.get(&target.pos).copied() {
-                    if block.kind == BlockKind::Wire {
+                    if block.kind.signal_behavior(block.facing)
+                        == Some(crate::game::blocks::SignalBehavior::Wire)
+                    {
                         let face = MaterialFace::new(block.id, target.normal);
                         if !world.wire_face_panels.contains(&face) {
                             edit_history.flush_pending_rotation();
@@ -531,10 +534,11 @@ fn try_player_teleport(
     let Some(block) = world.system_blocks.get(&pos) else {
         return false;
     };
-    if !matches!(
-        block.kind,
-        BlockKind::TeleportEntrance | BlockKind::TeleportExit
-    ) {
+    if !block
+        .kind
+        .material_processor()
+        .is_some_and(|processor| processor.is_teleport())
+    {
         return false;
     }
     let Some(partner) = world.teleport_partner(pos) else {
@@ -641,7 +645,7 @@ fn commit_edit_gesture(
                 for pos in &positions {
                     let mut placed = block;
                     // 侧贴：朝向取贴面法线；顶立：保留预览朝向
-                    if block.kind == BlockKind::Sign {
+                    if block.kind.attaches_to_factory_face() {
                         let normal = gesture.plane_normal;
                         if normal.y == 0 {
                             placed.facing = match (normal.x, normal.z) {
@@ -654,7 +658,7 @@ fn commit_edit_gesture(
                         }
                     }
                     world.insert(*pos, placed);
-                    if block.kind == BlockKind::Sign {
+                    if block.kind.attaches_to_factory_face() {
                         let host_pos = *pos - gesture.plane_normal;
                         if let Some(host) = world.blocks.get(&host_pos).copied() {
                             if let Some(sign) = world.blocks.get(pos).copied() {

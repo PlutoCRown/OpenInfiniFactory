@@ -3,7 +3,6 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::game::blocks::BlockKind;
 use crate::game::player::controller::FlyCamera;
 use crate::game::simulation::structure_state::{
     StructureFreedom, StructureKind, StructureState, material_structure, query_factory_structure,
@@ -181,11 +180,10 @@ pub fn update_hover(
                     .filter(|target| target.normal != IVec3::ZERO),
                 preview_deps.render_assets.as_ref(),
             ) {
-                if world
-                    .blocks
-                    .get(&target.pos)
-                    .is_some_and(|block| block.kind == BlockKind::Wire)
-                {
+                if world.blocks.get(&target.pos).is_some_and(|block| {
+                    block.kind.signal_behavior(block.facing)
+                        == Some(crate::game::blocks::SignalBehavior::Wire)
+                }) {
                     let mut transform = light_panel_transform(target.normal);
                     transform.translation += grid_to_world(target.pos);
                     preview_deps.commands.spawn((

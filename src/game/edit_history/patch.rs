@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 
-use crate::game::blocks::{BlockData, BlockId, BlockKind};
+use crate::game::blocks::{BlockData, BlockId};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{BlockSettings, MaterialFace, MaterialWeld, WorldBlocks};
 
@@ -100,11 +100,14 @@ impl WorldPatch {
 
     pub fn touches_goal_or_generator(&self) -> bool {
         self.cells.iter().any(|delta| {
-            delta.before.as_ref().is_some_and(|snap| {
-                snap.block.kind == BlockKind::Goal || snap.block.kind == BlockKind::Generator
-            }) || delta.after.as_ref().is_some_and(|snap| {
-                snap.block.kind == BlockKind::Goal || snap.block.kind == BlockKind::Generator
-            })
+            delta
+                .before
+                .as_ref()
+                .is_some_and(|snap| snap.block.kind.shows_material_preview())
+                || delta
+                    .after
+                    .as_ref()
+                    .is_some_and(|snap| snap.block.kind.shows_material_preview())
         }) || self.settings.iter().any(|delta| {
             matches!(
                 (&delta.before, &delta.after),

@@ -223,11 +223,28 @@ pub enum MaterialLabeler {
     Roller { target: IVec3 },
 }
 
-/// 材料处理器：转换器 / 传送入口
+/// 材料处理器：转换器 / 传送入口 / 传送出口
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MaterialProcessor {
     Converter,
     TeleportEntrance,
+    TeleportExit,
+}
+
+impl MaterialProcessor {
+    /// 是否为传送口（入口或出口）
+    pub fn is_teleport(self) -> bool {
+        matches!(self, Self::TeleportEntrance | Self::TeleportExit)
+    }
+
+    /// 配对另一端角色；非传送口返回 None
+    pub fn teleport_partner_role(self) -> Option<Self> {
+        match self {
+            Self::TeleportEntrance => Some(Self::TeleportExit),
+            Self::TeleportExit => Some(Self::TeleportEntrance),
+            Self::Converter => None,
+        }
+    }
 }
 
 /// 激光光学行为：平面镜 / 垂直镜 / 分光镜
@@ -245,11 +262,18 @@ pub enum WeldBehavior {
 }
 
 /// 信号行为：导线 / 传感器 / 用电器
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SignalBehavior {
     Wire,
     Detector { detection_pos: IVec3 },
     PoweredDevice,
+}
+
+/// 通电用电器的额外副作用（与运动/激光等阶段效果正交）
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PoweredSideEffect {
+    /// 面前工厂/材料结构临时粘连到本结构
+    SuctionLink,
 }
 
 /// 方块目录用 RGBA 颜色规格（表现层再转 Bevy Color）
@@ -721,7 +745,21 @@ impl BlockKind {
     }
 
     pub fn is_detectable_by_detector(self) -> bool {
-        self.is_material() || matches!(self, BlockKind::Platform)
+        self.is_detector_target()
+    }
+
+    /// 方块传感器可检测：全部材料，或 Behavior 声明的目标（如 Platform）
+    pub fn is_detector_target(self) -> bool {
+        if self.is_material() {
+            return true;
+        }
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
+            return false;
+        }
+        self.block().is_detector_target()
     }
 
     pub fn is_scene(self) -> bool {
@@ -746,11 +784,23 @@ impl BlockKind {
     }
 
     pub fn accepts_material(self) -> bool {
-        matches!(self, BlockKind::Goal)
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
+            return false;
+        }
+        self.block().accepts_material()
     }
 
     pub fn shows_material_preview(self) -> bool {
-        matches!(self, BlockKind::Generator | BlockKind::Goal)
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
+            return false;
+        }
+        self.block().shows_material_preview()
     }
 
     pub fn material_shell_scale(self) -> f32 {
@@ -769,6 +819,26 @@ impl BlockKind {
             return None;
         }
         self.block().alternate()
+    }
+
+    pub fn alternate_flip_facing(self) -> bool {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
+            return false;
+        }
+        self.block().alternate_flip_facing()
+    }
+
+    pub fn attaches_to_factory_face(self) -> bool {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
+            return false;
+        }
+        self.block().attaches_to_factory_face()
     }
 
     pub fn marker_behavior(self, facing: Facing) -> Option<MarkerBehavior> {
@@ -879,6 +949,26 @@ impl BlockKind {
             return None;
         }
         self.block().signal_behavior(facing)
+    }
+
+    pub fn powered_side_effect(self) -> Option<PoweredSideEffect> {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
+            return None;
+        }
+        self.block().powered_side_effect()
+    }
+
+    pub fn allows_stamp_passthrough(self) -> bool {
+        if matches!(
+            self,
+            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
+        ) {
+            return false;
+        }
+        self.block().allows_stamp_passthrough()
     }
 
     pub fn non_connection_face(self, facing: Facing) -> Option<IVec3> {

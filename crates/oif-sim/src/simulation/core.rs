@@ -7,9 +7,9 @@ use crate::world::grid::WorldBlocks;
 
 use super::behaviors::{
     BreakDebris, LaserBeam, apply_pending_paints, apply_pending_stamps, apply_pending_teleport,
-    destroy_powered_lasers, material_source_generation, probe_lasers, run_drill_destroy_phase,
-    run_material_acceptance_phase, run_material_conversion_phase, run_material_paint_phase,
-    run_material_stamp_phase, run_material_teleport_phase, run_weld_behavior_phase,
+    material_source_generation, probe_lasers, run_material_acceptance_phase,
+    run_material_conversion_phase, run_material_destroy_phase, run_material_label_phase,
+    run_material_teleport_phase, run_weld_behavior_phase,
 };
 use super::gravity::mark_gravity_phase;
 use super::markers::run_static_marker_phase;
@@ -230,10 +230,9 @@ pub fn simulate_turn(
             .into_iter()
             .map(|(pos, kind)| BreakDebris { pos, kind }),
     );
-    // 钻头：挂起至 turn+1，等本回合移动动画播完再删
-    run_drill_destroy_phase(world, pending_generated, turn + 1);
-    // 与阶段 1 探测同一批通电激光；移动后按新布局再 trace 并销毁（激光仍立刻移除）
-    let (laser_destroy_sparks, laser_debris) = destroy_powered_lasers(world, &laser_devices);
+    // 材料销毁：钻头挂起至 turn+1；通电激光当场移除（与阶段 1 探测同一批激光设备）
+    let (laser_destroy_sparks, laser_debris) =
+        run_material_destroy_phase(world, pending_generated, &laser_devices, turn + 1);
     behavior_sparks.extend(laser_destroy_sparks);
     break_debris.extend(laser_debris);
 
@@ -250,8 +249,7 @@ pub fn simulate_turn(
 
     let weld_sparks = run_weld_behavior_phase(world);
     // 漆/印花：挂起至 turn+1，等本回合移动动画播完再附着
-    run_material_paint_phase(world, pending_generated, turn + 1);
-    run_material_stamp_phase(world, pending_generated, turn + 1);
+    run_material_label_phase(world, pending_generated, turn + 1);
     structure_state.refresh_material_structures(world);
     sample.behavior_ms = mark_elapsed_ms(&mut mark);
 

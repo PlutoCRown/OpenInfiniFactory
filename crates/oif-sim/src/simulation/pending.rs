@@ -19,7 +19,7 @@ pub struct PendingGeneratedMaterials {
     pending_stamps: HashMap<IVec3, PendingStamp>,
 }
 
-/// 延后销毁原因
+/// 延后销毁原因（立即销毁如激光/脆弱不走挂起表）
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PendingDestroyReason {
     Drill,
