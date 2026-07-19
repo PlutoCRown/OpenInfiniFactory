@@ -4,8 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::blocks::{
     AcceptorId, BlockData, BlockId, BlockKind, MaterialBlockId, PaintMaterialId, StampMaterialId,
-    ensure_fallback_paint_catalog, ensure_fallback_stamp_catalog, fallback_material_id,
-    paint_catalog, stamp_catalog,
+    fallback_material_id, paint_id_by_string, stamp_id_by_string,
 };
 use crate::world::direction::Facing;
 
@@ -201,22 +200,16 @@ impl TeleportSettings {
 
 impl Default for StamperSettings {
     fn default() -> Self {
-        ensure_fallback_stamp_catalog();
         Self {
-            stamp: stamp_catalog()
-                .id_by_string("red")
-                .expect("fallback red stamp"),
+            stamp: stamp_id_by_string("red").expect("fallback red stamp"),
         }
     }
 }
 
 impl Default for RollerSettings {
     fn default() -> Self {
-        ensure_fallback_paint_catalog();
         Self {
-            paint: paint_catalog()
-                .id_by_string("red")
-                .expect("fallback red paint"),
+            paint: paint_id_by_string("red").expect("fallback red paint"),
         }
     }
 }

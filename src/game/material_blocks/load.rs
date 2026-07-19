@@ -11,7 +11,7 @@ use super::registry::{
 use crate::game::blocks::{
     ColorSpec, MaterialBlockCatalog, MaterialBlockDef, PaintMaterialCatalog, PaintMaterialDef,
     StampMaterialCatalog, StampMaterialDef, install_material_catalog, install_paint_catalog,
-    install_stamp_catalog, leak_str, rgb,
+    install_stamp_catalog, leak_str, rgb, stamp_seed_color,
 };
 use crate::shared::platform;
 
@@ -364,15 +364,4 @@ fn load_one_paint(
 /// 已知材料包缺省色（包无 color 字段时用统一灰）
 fn material_seed_color(_id: &str) -> ColorSpec {
     rgb(0.7, 0.7, 0.7)
-}
-
-/// 已知种子印花颜色（与 ensure_fallback_stamp_catalog 对齐）
-fn stamp_seed_color(id: &str) -> ColorSpec {
-    match id {
-        "red" => rgb(242.0 / 255.0, 31.0 / 255.0, 26.0 / 255.0),
-        "green" => rgb(51.0 / 255.0, 209.0 / 255.0, 71.0 / 255.0),
-        "blue" => rgb(46.0 / 255.0, 107.0 / 255.0, 242.0 / 255.0),
-        "yellow" => rgb(255.0 / 255.0, 214.0 / 255.0, 46.0 / 255.0),
-        _ => rgb(0.7, 0.7, 0.7),
-    }
 }

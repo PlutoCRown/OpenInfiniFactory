@@ -66,8 +66,9 @@ pub use oif_sim::blocks::{
     ensure_fallback_paint_catalog, ensure_fallback_scene_catalog, ensure_fallback_stamp_catalog,
     fallback_material_id, fallback_scene_id, install_material_catalog, install_paint_catalog,
     install_scene_catalog, install_stamp_catalog, leak_str, material_catalog, material_def,
-    paint_catalog, paint_def, resolve_material_id, resolve_scene_id, rgb, rgba, scene_catalog,
-    scene_def, stamp_catalog, stamp_def,
+    paint_catalog, paint_def, paint_id_by_string, resolve_material_id, resolve_scene_id, rgb, rgba,
+    scene_catalog, scene_def, stamp_catalog, stamp_def, stamp_id_by_string, stamp_seed_color,
+    FALLBACK_STAMP_SEED_COLORS,
 };
 
 /// ColorSpec → Bevy Color

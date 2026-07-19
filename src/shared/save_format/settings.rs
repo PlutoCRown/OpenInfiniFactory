@@ -3,7 +3,8 @@ use bevy::prelude::*;
 use crate::game::blocks::{
     BlockKind, MaterialBlockId, PaintMaterialId, StampMaterialId, ensure_fallback_material_catalog,
     ensure_fallback_paint_catalog, ensure_fallback_stamp_catalog, fallback_material_id,
-    material_catalog, paint_catalog, resolve_material_id, stamp_catalog,
+    material_catalog, paint_catalog, paint_id_by_string, resolve_material_id, stamp_catalog,
+    stamp_id_by_string,
 };
 use crate::game::world::grid::{
     BlockSettings, ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings,
@@ -332,19 +333,14 @@ fn read_stamp_id(
     ensure_fallback_stamp_catalog();
     if string_ids {
         let string_id = cursor.read_string()?;
-        return stamp_catalog()
-            .id_by_string(&string_id)
+        return stamp_id_by_string(&string_id)
             .ok_or(SaveFormatError::UnknownStampMaterialId(string_id));
     }
     Ok(match cursor.read_u8()? {
-        0 => stamp_catalog().id_by_string("red").expect("fallback red"),
-        1 => stamp_catalog()
-            .id_by_string("green")
-            .expect("fallback green"),
-        2 => stamp_catalog().id_by_string("blue").expect("fallback blue"),
-        3 => stamp_catalog()
-            .id_by_string("yellow")
-            .expect("fallback yellow"),
+        0 => stamp_id_by_string("red").expect("fallback red"),
+        1 => stamp_id_by_string("green").expect("fallback green"),
+        2 => stamp_id_by_string("blue").expect("fallback blue"),
+        3 => stamp_id_by_string("yellow").expect("fallback yellow"),
         _ => return Err(SaveFormatError::InvalidSettings),
     })
 }
@@ -365,19 +361,14 @@ fn read_paint_id(
     ensure_fallback_paint_catalog();
     if string_ids {
         let string_id = cursor.read_string()?;
-        return paint_catalog()
-            .id_by_string(&string_id)
+        return paint_id_by_string(&string_id)
             .ok_or(SaveFormatError::UnknownPaintMaterialId(string_id));
     }
     Ok(match cursor.read_u8()? {
-        0 => paint_catalog().id_by_string("red").expect("fallback red"),
-        1 => paint_catalog()
-            .id_by_string("green")
-            .expect("fallback green"),
-        2 => paint_catalog().id_by_string("blue").expect("fallback blue"),
-        3 => paint_catalog()
-            .id_by_string("yellow")
-            .expect("fallback yellow"),
+        0 => paint_id_by_string("red").expect("fallback red"),
+        1 => paint_id_by_string("green").expect("fallback green"),
+        2 => paint_id_by_string("blue").expect("fallback blue"),
+        3 => paint_id_by_string("yellow").expect("fallback yellow"),
         _ => return Err(SaveFormatError::InvalidSettings),
     })
 }

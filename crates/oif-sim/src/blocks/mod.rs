@@ -1,6 +1,7 @@
 mod adapter;
 #[macro_use]
 mod register;
+mod catalog_store;
 mod material_catalog;
 mod material_props;
 mod paint_catalog;
@@ -54,7 +55,7 @@ pub use self::material_props::{
 };
 pub use self::paint_catalog::{
     ensure_fallback_paint_catalog, install_paint_catalog, paint_catalog, paint_def,
-    PaintMaterialCatalog, PaintMaterialDef, PaintMaterialId,
+    paint_id_by_string, PaintMaterialCatalog, PaintMaterialDef, PaintMaterialId,
 };
 pub use self::registry::{assert_registry_consistent, save_stores_facing};
 pub use self::scene_catalog::{
@@ -64,7 +65,8 @@ pub use self::scene_catalog::{
 };
 pub use self::stamp_catalog::{
     ensure_fallback_stamp_catalog, install_stamp_catalog, stamp_catalog, stamp_def,
-    StampMaterialCatalog, StampMaterialDef, StampMaterialId,
+    stamp_id_by_string, stamp_seed_color, StampMaterialCatalog, StampMaterialDef, StampMaterialId,
+    FALLBACK_STAMP_SEED_COLORS,
 };
 pub use crate::world::direction::Facing;
 use crate::world::grid::BlockSettings;
@@ -554,9 +556,7 @@ impl BlockKind {
 
     /// 按资源包字符串 id 解析印花材料
     pub fn stamp(string_id: &str) -> Self {
-        ensure_fallback_stamp_catalog();
-        let id = stamp_catalog()
-            .id_by_string(string_id)
+        let id = stamp_id_by_string(string_id)
             .unwrap_or_else(|| panic!("unknown stamp material id `{string_id}`"));
         Self::Stamp(id)
     }
