@@ -19,7 +19,7 @@ use crate::game::world::grid::{
 use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
     AimFaceHighlight, EditPreview, HoverMarker, HoverStructureBounds, WorldRenderAssets,
-    block_face_highlight_transform, despawn_edit_previews, face_mark_transform,
+    block_face_highlight_transform, despawn_edit_previews, light_panel_transform,
     spawn_block_preview,
 };
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
@@ -186,10 +186,10 @@ pub fn update_hover(
                     .get(&target.pos)
                     .is_some_and(|block| block.kind == BlockKind::Wire)
                 {
-                    let mut transform = face_mark_transform(target.normal, 0.01);
+                    let mut transform = light_panel_transform(target.normal);
                     transform.translation += grid_to_world(target.pos);
                     preview_deps.commands.spawn((
-                        Mesh3d(render_assets.face_mark_mesh(target.normal)),
+                        Mesh3d(render_assets.light_panel_mesh()),
                         MeshMaterial3d(render_assets.light_panel_material.clone()),
                         transform,
                         EditPreview,

@@ -54,6 +54,8 @@ pub struct WorldRenderAssets {
     node: Handle<Mesh>,
     wire_node: Handle<Mesh>,
     pub(crate) face_mark: Handle<Mesh>,
+    /// 灯面板 mesh（factory_blocks/light_panel/model.glb，板心已烘焙）
+    pub(crate) light_panel: Handle<Mesh>,
     pub(crate) weld_spark: Handle<Mesh>,
     /// 焊接扩散粒子薄方片（局部 XY，法线 +Z）
     pub(crate) weld_burst_quad: Handle<Mesh>,
@@ -460,6 +462,7 @@ impl WorldRenderAssets {
             .collect();
 
         let factory_models = load_factory_visuals(meshes, materials, images);
+        let light_panel = load_light_panel_mesh(meshes, materials, images);
 
         Self {
             block: {
@@ -479,8 +482,9 @@ impl WorldRenderAssets {
                 BLOCK_SIZE * 0.304,
                 BLOCK_SIZE * 0.304,
             )),
-            // 漆/灯面板：零厚度面片（+Y 法线），spawn 时按附着法线旋转
+            // 漆：零厚度面片（+Y 法线），spawn 时按附着法线旋转
             face_mark: meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(0.49))),
+            light_panel,
             weld_spark: meshes.add(Cuboid::new(0.24, 0.24, 0.24)),
             weld_burst_quad: meshes.add(Rectangle::new(1.0, 1.0)),
             connector_x: meshes.add(Cuboid::new(0.55, 0.045, 0.045)),
@@ -537,19 +541,19 @@ impl WorldRenderAssets {
             goal_play_visual_initialized: false,
             goal_ghost_materials: HashMap::new(),
             face_mark_materials,
+            // 未通电：黑；通电：白 + 轻度自发光（须 lit，Bloom 阈值约 10）；bias 用默认 0
             light_panel_material: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.55, 0.58, 0.62),
+                base_color: Color::BLACK,
                 unlit: true,
                 cull_mode: None,
-                depth_bias: crate::game::world::rendering::depth_bias::PAINT,
                 ..default()
             }),
             light_panel_lit_material: materials.add(StandardMaterial {
-                base_color: Color::srgb(1.0, 0.92, 0.45),
-                emissive: Color::srgb(0.55, 0.42, 0.08).into(),
-                unlit: true,
+                base_color: Color::WHITE,
+                emissive: LinearRgba::new(12.0, 12.0, 12.0, 1.0),
+                perceptual_roughness: 1.0,
+                metallic: 0.0,
                 cull_mode: None,
-                depth_bias: crate::game::world::rendering::depth_bias::PAINT,
                 ..default()
             }),
             model_materials,
@@ -800,6 +804,10 @@ impl WorldRenderAssets {
         self.face_mark.clone()
     }
 
+    pub(crate) fn light_panel_mesh(&self) -> Handle<Mesh> {
+        self.light_panel.clone()
+    }
+
     pub(crate) fn face_mark_material(&self, paint: PaintMaterialId) -> Handle<StandardMaterial> {
         self.face_mark_materials
             .get(&paint)
@@ -921,6 +929,32 @@ fn scene_color_material(base_color: Color) -> StandardMaterial {
         reflectance: 0.08,
         ..default()
     }
+}
+
+/// 加载灯面板 mesh（几何已烘焙；通电材质由引擎切换）
+fn load_light_panel_mesh(
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    images: &mut Assets<Image>,
+) -> Handle<Mesh> {
+    use std::path::PathBuf;
+
+    let path = PathBuf::from(crate::shared::platform::asset_path())
+        .join("factory_blocks")
+        .join("light_panel")
+        .join("model.glb");
+    match load_factory_glb(&path, meshes, materials, images) {
+        Ok(mut parts) => {
+            if let Some(part) = parts.pop() {
+                return part.mesh;
+            }
+            bevy::log::warn!("light_panel glb has no mesh primitives");
+        }
+        Err(err) => {
+            bevy::log::warn!("factory glb load failed (light_panel): {err}");
+        }
+    }
+    meshes.add(Cuboid::new(1.0, 0.1, 1.0))
 }
 
 /// 扫描 factory_blocks 目录，按种类装成 FactoryVisual

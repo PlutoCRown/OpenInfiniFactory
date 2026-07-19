@@ -14,6 +14,15 @@ pub(crate) fn face_mark_transform(normal: IVec3, surface_outset: f32) -> Transfo
     }
 }
 
+/// 灯板 GLB 已烘焙板心到局部 +Y `0.45`；只需把 +Y 旋到附着法线
+pub(crate) fn light_panel_transform(normal: IVec3) -> Transform {
+    let n = normal.as_vec3().normalize_or_zero();
+    Transform {
+        rotation: Quat::from_rotation_arc(Vec3::Y, n),
+        ..default()
+    }
+}
+
 /// 判断方块是否在指定方向接受焊接连接
 pub(super) fn weld_connects_to(block: &BlockData, connector_from_block: IVec3) -> bool {
     match block.kind.render_behavior(block.facing).weld_connector {

@@ -3,10 +3,10 @@ use bevy::prelude::*;
 
 use super::components::{
     BlockEntity, BlockEntityLayer, BlockIconRenderEntity, BlockIconRenderRoot, EditPreview,
-    FactoryDebugOverlay, PendingGeneratedPreview,
+    FactoryDebugOverlay, GeneratorConfigMaterialPreview, PendingGeneratedPreview,
 };
 use super::connectors::{
-    face_mark_transform, local_connector_offset, signal_neighbor_offsets,
+    face_mark_transform, light_panel_transform, local_connector_offset, signal_neighbor_offsets,
     weld_neighbor_connects_to, wire_connects_to,
 };
 use super::scene_mesh::scene_block_mesh;
@@ -109,6 +109,7 @@ fn spawn_selected_material_preview(
     stamps: [Option<crate::game::blocks::StampMaterialId>; 4],
     paints: [Option<crate::game::blocks::PaintMaterialId>; 4],
     icon_render: Option<(Vec3, &RenderLayers)>,
+    mark_generator_config: bool,
 ) {
     let kind = BlockKind::material_block_kind(material);
     let rotation = if kind.is_directional() {
@@ -132,6 +133,9 @@ fn spawn_selected_material_preview(
             ..default()
         },
     ));
+    if mark_generator_config {
+        child.insert(GeneratorConfigMaterialPreview);
+    }
     if let Some((_, icon_layer)) = icon_render {
         child.insert((icon_layer.clone(), BlockIconRenderEntity));
     }
@@ -571,47 +575,74 @@ pub(crate) fn spawn_block_model(
                 );
             let powered_wire = material == assets.active_wire_material;
             let mut connected_offsets = Vec::new();
+            let mut panel_face_indices = std::collections::HashSet::new();
             for (face_index, offset) in signal_neighbor_offsets().into_iter().enumerate() {
                 if blocked_offset == Some(offset) {
                     continue;
                 }
-                if data.kind == BlockKind::Wire
+                // 本面有灯板：仍画该向臂（面板贴臂端）；信号隔断在 BFS，不在这里
+                let has_panel = data.kind == BlockKind::Wire
                     && world
                         .wire_face_panels
-                        .contains(&MaterialFace::new(data.id, offset))
-                {
+                        .contains(&MaterialFace::new(data.id, offset));
+                let neighbor_connects = {
+                    let neighbor = pos + offset;
+                    let neighbor_block = world
+                        .blocks
+                        .get(&neighbor)
+                        .or_else(|| world.system_blocks.get(&neighbor));
+                    neighbor_block.is_some_and(|block| {
+                        if block.kind == BlockKind::Wire
+                            && world
+                                .wire_face_panels
+                                .contains(&MaterialFace::new(block.id, -offset))
+                        {
+                            return false;
+                        }
+                        wire_connects_to(block, -offset)
+                    })
+                };
+                if !has_panel && !neighbor_connects {
                     continue;
                 }
-                let neighbor = pos + offset;
-                let neighbor_block = world
-                    .blocks
-                    .get(&neighbor)
-                    .or_else(|| world.system_blocks.get(&neighbor));
-                if neighbor_block.is_some_and(|block| {
-                    if block.kind == BlockKind::Wire
-                        && world
-                            .wire_face_panels
-                            .contains(&MaterialFace::new(block.id, -offset))
-                    {
-                        return false;
-                    }
-                    wire_connects_to(block, -offset)
-                }) {
-                    connected_offsets.push((face_index, offset));
-                    if !use_factory_wire {
-                        let local_offset = local_connector_offset(data, offset);
-                        let mut child = parent.spawn((
-                            Mesh3d(assets.wire_connector_mesh(local_offset)),
-                            MeshMaterial3d(if data.kind == BlockKind::Wire {
-                                material.clone()
-                            } else {
-                                assets.wire_connector_material.clone()
-                            }),
-                            Transform::from_translation(local_offset.as_vec3() * 0.174),
-                        ));
-                        if let Some((_, icon_layer)) = icon_render {
-                            child.insert((icon_layer.clone(), BlockIconRenderEntity));
-                        }
+                if has_panel {
+                    panel_face_indices.insert(face_index);
+                }
+                connected_offsets.push((face_index, offset));
+                if !use_factory_wire {
+                    let local_offset = local_connector_offset(data, offset);
+                    let arm_scale = if has_panel { 0.8 } else { 1.0 };
+                    let mut child = parent.spawn((
+                        Mesh3d(assets.wire_connector_mesh(local_offset)),
+                        MeshMaterial3d(if data.kind == BlockKind::Wire {
+                            material.clone()
+                        } else {
+                            assets.wire_connector_material.clone()
+                        }),
+                        Transform {
+                            translation: local_offset.as_vec3() * (0.174 * arm_scale),
+                            scale: Vec3::new(
+                                if local_offset.x != 0 {
+                                    arm_scale
+                                } else {
+                                    1.0
+                                },
+                                if local_offset.y != 0 {
+                                    arm_scale
+                                } else {
+                                    1.0
+                                },
+                                if local_offset.z != 0 {
+                                    arm_scale
+                                } else {
+                                    1.0
+                                },
+                            ),
+                            ..default()
+                        },
+                    ));
+                    if let Some((_, icon_layer)) = icon_render {
+                        child.insert((icon_layer.clone(), BlockIconRenderEntity));
                     }
                 }
             }
@@ -639,6 +670,7 @@ pub(crate) fn spawn_block_model(
                         icon_render.map(|(_, layer)| layer),
                         is_preview,
                         powered_wire,
+                        panel_face_indices.contains(&face_index),
                     );
                 }
             } else if data.kind == crate::game::blocks::BlockKind::Wire
@@ -666,9 +698,9 @@ pub(crate) fn spawn_block_model(
                         assets.light_panel_material.clone()
                     };
                     let mut child = parent.spawn((
-                        Mesh3d(assets.face_mark_mesh(face.normal)),
+                        Mesh3d(assets.light_panel_mesh()),
                         MeshMaterial3d(panel_material),
-                        face_mark_transform(face.normal, 0.01),
+                        light_panel_transform(face.normal),
                     ));
                     if let Some((_, icon_layer)) = icon_render {
                         child.insert((icon_layer.clone(), BlockIconRenderEntity));
@@ -709,7 +741,7 @@ pub(crate) fn spawn_block_model(
 
         if show_generator_preview {
             let show_material_preview = match data.kind {
-                // 游玩/编辑显示配置材料；模拟回合重建时 show_generator_preview=false
+                // 游玩/编辑显示配置材料；模拟激活时由 sync 隐藏 GeneratorConfigMaterialPreview
                 BlockKind::Generator => true,
                 // 游玩态验收器本体已是目标材料，不再挂小预览
                 BlockKind::Goal => !use_goal_ghost,
@@ -726,6 +758,7 @@ pub(crate) fn spawn_block_model(
                         [None; 4],
                         [None; 4],
                         icon_render,
+                        true,
                     );
                 } else {
                     let settings = world.goal_settings(pos);
@@ -737,6 +770,7 @@ pub(crate) fn spawn_block_model(
                         settings.stamps,
                         settings.paints,
                         icon_render,
+                        false,
                     );
                 }
             }

@@ -32,7 +32,8 @@ use cameras::{spawn_ui_camera, sync_gameplay_view_image_size};
 use debug::DebugToolsPlugin;
 use edit_history::{EditHistory, edit_history_input};
 use player::controller::{
-    apply_pending_player_spawn, camera_look, camera_move, spawn_player, sync_cursor_grab,
+    MouseLookBaseline, apply_pending_player_spawn, camera_look, camera_move, spawn_player,
+    sync_cursor_grab,
 };
 use session::{SessionPlugin, on_exit_playing, prepare_playing_session, rebuild_playing_world};
 use state::{
@@ -44,7 +45,7 @@ use systems::gameplay::{
     draw_hover_structure_bounds, gameplay_input, placement_input, update_hover,
 };
 use systems::perf::{PerfPlugin, PerfScope};
-use systems::simulation_controls::simulation_controls;
+use systems::simulation_controls::{simulation_controls, sync_generator_config_material_preview};
 use ui::{GameUiPlugin, InventoryItems};
 use world::animation::animate_blocks;
 use world::grid::WorldBlocks;
@@ -134,6 +135,7 @@ impl Plugin for GamePlugin {
             .insert_resource(SaveState::default())
             .init_resource::<EditHistory>()
             .init_resource::<PendingPlayerSpawn>()
+            .init_resource::<MouseLookBaseline>()
             .init_resource::<BlockSettingsClipboard>()
             .init_resource::<SelectionToolSwap>()
             .init_resource::<scene_blocks::SceneBlockRegistry>()
@@ -190,9 +192,9 @@ impl Plugin for GamePlugin {
             .add_systems(
                 Update,
                 (
+                    sync_cursor_grab,
                     input::gather_gameplay_input,
                     camera_look,
-                    sync_cursor_grab,
                     gameplay_input,
                 )
                     .chain()
@@ -244,6 +246,10 @@ impl Plugin for GamePlugin {
                 simulation_controls
                     .after(PerfScope::Menus)
                     .before(crate::sim_bridge::tick_simulation),
+            )
+            .add_systems(
+                Update,
+                sync_generator_config_material_preview.after(simulation_controls),
             )
             .add_systems(
                 Update,

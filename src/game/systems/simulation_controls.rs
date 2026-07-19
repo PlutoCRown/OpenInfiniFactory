@@ -13,7 +13,8 @@ use crate::game::systems::debug::DebugState;
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_world, rebuild_world_for_debug_state, BlockEntity, SceneChunkMeshes, WorldRenderAssets,
+    BlockEntity, GeneratorConfigMaterialPreview, SceneChunkMeshes, WorldRenderAssets,
+    despawn_world, rebuild_world_for_debug_state,
 };
 use crate::sim_bridge::SimulationPresentationState;
 use crate::sim_bridge::{SimSnapshot, SimulationWorker, TurnCache};
@@ -196,6 +197,28 @@ pub fn request_one_turn(simulation: &mut SimulationState) -> Result<(), &'static
     simulation.step_requested = true;
     Ok(())
 }
+
+/// 模拟激活时隐藏生成块配置材料小预览，退出后恢复
+pub fn sync_generator_config_material_preview(
+    simulation: Res<SimulationState>,
+    mut was_active: Local<Option<bool>>,
+    mut previews: Query<&mut Visibility, With<GeneratorConfigMaterialPreview>>,
+) {
+    let active = simulation.is_active();
+    if *was_active == Some(active) {
+        return;
+    }
+    *was_active = Some(active);
+    let visibility = if active {
+        Visibility::Hidden
+    } else {
+        Visibility::Inherited
+    };
+    for mut preview_visibility in &mut previews {
+        *preview_visibility = visibility;
+    }
+}
+
 fn rollback_simulation(
     simulation: &mut SimulationState,
     world: &mut WorldBlocks,

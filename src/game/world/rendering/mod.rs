@@ -18,13 +18,14 @@ mod world_rebuild;
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
 
 pub(crate) use components::BlockIconRenderEntity;
+pub(crate) use components::GeneratorConfigMaterialPreview;
 pub use components::{
     AimFaceHighlight, BlockEntity, BlockEntityLayer, BlockIconAssets, BlockIconRenderCamera,
     BlockIconRenderRoot, BlockIconRenderState, EditPreview, GameplayScene, HoverMarker,
     HoverStructureBounds, PendingGeneratedPreview, PlacementPreview, StructureBounds,
     block_face_highlight_transform,
 };
-pub(crate) use connectors::{face_mark_transform, signal_neighbor_offsets};
+pub(crate) use connectors::{face_mark_transform, light_panel_transform, signal_neighbor_offsets};
 pub use fx::{
     spawn_acceptance_sparks, spawn_break_debris, spawn_laser_beams, spawn_weld_bursts,
     spawn_weld_sparks,

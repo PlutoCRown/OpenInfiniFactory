@@ -89,6 +89,10 @@ pub struct EditPreview;
 #[derive(Component)]
 pub struct PendingGeneratedPreview;
 
+/// 生成块上表示所选材料的配置小预览（模拟激活时隐藏）
+#[derive(Component)]
+pub struct GeneratorConfigMaterialPreview;
+
 /// 方块种类对应的离屏图标贴图
 #[derive(Resource, Default)]
 pub struct BlockIconAssets {

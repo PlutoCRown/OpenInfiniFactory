@@ -3,6 +3,7 @@
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 
+use crate::game::player::controller::MouseLookBaseline;
 use crate::shared::config::{ActionKeyName, GameConfig};
 use crate::shared::touch_profile::TouchProfile;
 
@@ -95,6 +96,7 @@ pub fn gather_gameplay_input(
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut mouse_motion: MessageReader<MouseMotion>,
+    mut look_baseline: ResMut<MouseLookBaseline>,
     config: Res<GameConfig>,
     touch: Res<TouchProfile>,
     mut input: ResMut<GameplayInputState>,
@@ -117,6 +119,13 @@ pub fn gather_gameplay_input(
     let mut look_delta = Vec2::ZERO;
     if !touch.enabled {
         for event in mouse_motion.read() {
+            if look_baseline.resync_on_next_motion {
+                if event.delta != Vec2::ZERO {
+                    // 丢掉回中并进的那次位移，基准视为已在中心
+                    look_baseline.resync_on_next_motion = false;
+                }
+                continue;
+            }
             look_delta += event.delta;
         }
     } else {

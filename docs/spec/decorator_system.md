@@ -50,8 +50,8 @@
 
 - 键：`MaterialFace`（电线 BlockId + 法线），`HashSet` 存有无
 - 玩法背包工具 `InventoryItem::LightPanel`：对准电线面放置 / 删除（不占邻格）
+- 外观：`factory_blocks/light_panel/model.glb`（齐格面）；通电切换白自发光材质；贴板面的电线臂缩到 0.8
 - 信号 BFS：A→邻格时若 A 在 `offset` 有面板或邻格在 `-offset` 有面板则不通
-- 通电电线上面板用发光材质；视觉连接件同样被面板隔断
 - 方案存档：`blocks.bin` v2 增加按格坐标+法线的面板段（加载时映射到 BlockId）
 
 ## L4 细节

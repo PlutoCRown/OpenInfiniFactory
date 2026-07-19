@@ -77,6 +77,10 @@ pub fn spawn_player(
                 clear_color,
                 ..default()
             },
+            Projection::Perspective(PerspectiveProjection {
+                fov: config.fov_degrees.to_radians(),
+                ..default()
+            }),
             RenderTarget::Image(image_handle.into()),
             Transform::from_xyz(0.5, SPAWN_EYE_Y + 1.2, 10.5)
                 .looking_at(Vec3::new(0.5, 0.8, 0.5), Vec3::Y),
@@ -343,12 +347,19 @@ pub fn camera_look(
         Quat::from_axis_angle(Vec3::Y, camera.yaw) * Quat::from_axis_angle(Vec3::X, camera.pitch);
 }
 
+/// 锁鼠回中后的视角基准：下一次非零 MouseMotion 只同步基准，不转镜头
+#[derive(Resource, Default)]
+pub struct MouseLookBaseline {
+    pub resync_on_next_motion: bool,
+}
+
 pub fn sync_cursor_grab(
     keys: Res<ButtonInput<KeyCode>>,
     touch: Res<crate::shared::touch_profile::TouchProfile>,
     mode: Res<State<GameMode>>,
     playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
+    mut look_baseline: ResMut<MouseLookBaseline>,
     mut windows: Query<(&mut Window, &mut CursorOptions), With<PrimaryWindow>>,
 ) {
     let Ok((mut window, mut cursor)) = windows.single_mut() else {
@@ -373,6 +384,9 @@ pub fn sync_cursor_grab(
         if just_locked {
             let center = window.size() * 0.5;
             window.set_cursor_position(Some(center));
+            // 程序化回中本身不转镜头；OS 常把这段位移并进「下一次真移动」里，
+            // 那一次只用来把基准更新到回中后的位置。
+            look_baseline.resync_on_next_motion = true;
         }
     } else {
         cursor.grab_mode = CursorGrabMode::None;

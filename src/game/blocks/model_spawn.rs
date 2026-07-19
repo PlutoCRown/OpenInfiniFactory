@@ -193,6 +193,7 @@ fn spawn_factory_part(
 }
 
 /// 按连通面生成电线 GLB 臂；通电时额外显示凹槽白条
+/// `shorten_for_panel`：该面贴灯板时沿法线缩到 0.8，避免穿出面板
 pub fn spawn_factory_wire_arm(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
@@ -200,11 +201,29 @@ pub fn spawn_factory_wire_arm(
     icon_layer: Option<&RenderLayers>,
     preview: bool,
     powered: bool,
+    shorten_for_panel: bool,
 ) {
     let Some(FactoryVisual::Wire { faces, power }) =
         assets.factory_visual(crate::game::blocks::BlockKind::Wire)
     else {
         return;
+    };
+    let transform = if shorten_for_panel {
+        let axis = [
+            IVec3::X,
+            IVec3::NEG_X,
+            IVec3::Y,
+            IVec3::NEG_Y,
+            IVec3::Z,
+            IVec3::NEG_Z,
+        ][face_index];
+        Transform::from_scale(Vec3::new(
+            if axis.x != 0 { 0.8 } else { 1.0 },
+            if axis.y != 0 { 0.8 } else { 1.0 },
+            if axis.z != 0 { 0.8 } else { 1.0 },
+        ))
+    } else {
+        Transform::default()
     };
     if let Some(parts) = faces.get(face_index) {
         for part in parts {
@@ -216,7 +235,7 @@ pub fn spawn_factory_wire_arm(
             let mut child = parent.spawn((
                 Mesh3d(part.mesh.clone()),
                 MeshMaterial3d(material),
-                Transform::default(),
+                transform,
             ));
             if let Some(icon_layer) = icon_layer {
                 child.insert((icon_layer.clone(), BlockIconRenderEntity));
@@ -229,7 +248,7 @@ pub fn spawn_factory_wire_arm(
                 let mut child = parent.spawn((
                     Mesh3d(part.mesh.clone()),
                     MeshMaterial3d(part.material.clone()),
-                    Transform::default(),
+                    transform,
                 ));
                 if let Some(icon_layer) = icon_layer {
                     child.insert((icon_layer.clone(), BlockIconRenderEntity));
