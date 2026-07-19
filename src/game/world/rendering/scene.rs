@@ -1,7 +1,9 @@
+use bevy::gizmos::config::{DefaultGizmoConfigGroup, GizmoConfigStore};
 use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 
 use super::components::{AimFaceHighlight, GameplayScene, HoverMarker, PlacementPreview};
+use super::depth_bias;
 use super::goal_ghost::GoalGhostMaterial;
 use super::skybox::{spawn_sky_dome, transform_for_sun_direction, SkyMaterial};
 use crate::game::world::render_assets::WorldRenderAssets;
@@ -15,6 +17,7 @@ pub fn setup_scene(
     mut ghost_materials: ResMut<Assets<GoalGhostMaterial>>,
     mut sky_materials: ResMut<Assets<SkyMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    mut gizmo_config: ResMut<GizmoConfigStore>,
     scene_registry: Res<crate::game::scene_blocks::SceneBlockRegistry>,
     material_registry: Res<crate::game::material_blocks::MaterialBlockRegistry>,
     stamp_registry: Res<crate::game::material_blocks::StampMaterialRegistry>,
@@ -22,6 +25,7 @@ pub fn setup_scene(
     config: Res<crate::shared::config::GameConfig>,
     lighting: Res<PuzzleLighting>,
 ) {
+    gizmo_config.config_mut::<DefaultGizmoConfigGroup>().0.depth_bias = depth_bias::GIZMO_OVERLAY;
     commands.spawn((
         PointLight {
             intensity: 1100.0,
@@ -74,11 +78,12 @@ pub fn setup_scene(
     render_assets.install_goal_ghost_materials(&materials, &mut ghost_materials, &mut images);
     commands.insert_resource(render_assets);
 
-    let marker_mesh = meshes.add(Cuboid::new(1.04, 1.04, 1.04));
+    let marker_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
     let marker_material = materials.add(StandardMaterial {
         base_color: Color::srgba(1.0, 1.0, 1.0, 0.16),
         alpha_mode: AlphaMode::Blend,
         unlit: true,
+        depth_bias: depth_bias::OVERLAY,
         ..default()
     });
 
@@ -90,13 +95,14 @@ pub fn setup_scene(
         GameplayScene,
     ));
 
-    let face_mesh = meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(0.49)));
+    let face_mesh = meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(0.5)));
     let face_material = materials.add(StandardMaterial {
         base_color: Color::srgba(0.72, 0.92, 1.0, 0.10),
         emissive: LinearRgba::from(Color::srgb(0.35, 0.72, 1.0)),
         alpha_mode: AlphaMode::Blend,
         unlit: true,
         cull_mode: None,
+        depth_bias: depth_bias::OVERLAY,
         ..default()
     });
 

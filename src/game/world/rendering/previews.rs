@@ -47,7 +47,7 @@ pub fn spawn_delete_bounds_preview(
     max: IVec3,
 ) {
     let center = (grid_to_world(min) + grid_to_world(max)) * 0.5;
-    let size = (max - min + IVec3::ONE).as_vec3() + Vec3::splat(0.06);
+    let size = (max - min + IVec3::ONE).as_vec3();
     let half = size * 0.5;
     let mesh = assets.block.clone();
     let fill = assets.selection_invalid_fill_material();
@@ -134,7 +134,7 @@ pub fn spawn_selection_bounds_preview(
     valid: bool,
 ) {
     let center = (grid_to_world(min) + grid_to_world(max)) * 0.5;
-    let size = (max - min + IVec3::ONE).as_vec3() + Vec3::splat(0.06);
+    let size = (max - min + IVec3::ONE).as_vec3();
     let half = size * 0.5;
     let fill = if valid {
         assets.selection_fill_material()

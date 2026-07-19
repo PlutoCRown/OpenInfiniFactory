@@ -2,6 +2,7 @@
 
 mod components;
 mod connectors;
+pub(crate) mod depth_bias;
 mod fx;
 pub(crate) mod goal_ghost;
 mod goal_visual_sync;

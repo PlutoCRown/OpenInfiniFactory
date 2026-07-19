@@ -291,7 +291,7 @@ pub fn draw_hover_structure_bounds(bounds: Res<HoverStructureBounds>, mut gizmos
     let min = bounds.min;
     let max = bounds.max;
     let center = (grid_to_world(min) + grid_to_world(max)) * 0.5;
-    let size = (max - min + IVec3::ONE).as_vec3() + Vec3::splat(0.06);
+    let size = (max - min + IVec3::ONE).as_vec3();
     let color = match bounds.kind {
         StructureKind::Material => Color::srgba(1.0, 1.0, 1.0, 0.95),
         StructureKind::Factory => Color::srgba(0.35, 1.0, 0.45, 0.95),

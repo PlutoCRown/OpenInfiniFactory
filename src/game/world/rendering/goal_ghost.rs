@@ -49,6 +49,10 @@ impl Material for GoalGhostMaterial {
         AlphaMode::Blend
     }
 
+    fn depth_bias(&self) -> f32 {
+        super::depth_bias::GOAL_GHOST
+    }
+
     fn enable_prepass() -> bool {
         false
     }

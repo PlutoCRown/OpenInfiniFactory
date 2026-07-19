@@ -37,9 +37,14 @@ pub(crate) fn block_render_material(
     }
 }
 
-/// 按朝向得到方块渲染旋转
+/// 按朝向得到方块渲染旋转（印花与告示牌同：前向为局部 -Z，+Z 朝宿主）
 fn render_rotation(data: BlockData, facing: crate::game::world::direction::Facing) -> Quat {
-    if data.kind.is_directional() {
+    if data.kind.is_directional()
+        || data
+            .kind
+            .material_props()
+            .is_some_and(|props| props.is_stamp)
+    {
         Quat::from_rotation_y(facing.yaw())
     } else {
         Quat::IDENTITY
@@ -153,7 +158,7 @@ fn spawn_goal_attachment_previews(
             let mut child = parent.spawn((
                 Mesh3d(assets.face_mark_mesh(*face)),
                 MeshMaterial3d(assets.face_mark_material(paint)),
-                face_mark_transform(*face, 0.05),
+                face_mark_transform(*face, 0.0),
             ));
             if let Some(layer) = icon_layer {
                 child.insert((layer.clone(), BlockIconRenderEntity));
@@ -161,18 +166,16 @@ fn spawn_goal_attachment_previews(
         }
         if let Some(stamp) = stamps[index] {
             let kind = BlockKind::stamp_block_kind(stamp);
-            let mesh = assets
-                .scene_mesh(kind)
-                .unwrap_or_else(|| assets.block_mesh(kind));
+            // 预览：厚 0.1 整板外凸（贴面心外移 0.05）；世界印花仍用邻格偏置板
             let mesh_material = assets
                 .scene_material(kind)
                 .unwrap_or_else(|| assets.block_material(kind));
             let normal = face.as_vec3().normalize_or_zero();
             let mut child = parent.spawn((
-                Mesh3d(mesh),
+                Mesh3d(assets.stamp_embed_plate()),
                 MeshMaterial3d(mesh_material),
                 Transform {
-                    translation: normal * 0.5,
+                    translation: normal * 0.55,
                     rotation: Quat::from_rotation_arc(Vec3::Z, normal),
                     ..default()
                 },
@@ -381,22 +384,7 @@ pub(crate) fn spawn_block_model(
             BlockAnimationKind::SpawnScale => Vec3::splat(eased),
         };
     } else {
-        transform.rotation = if data
-            .kind
-            .material_props()
-            .is_some_and(|props| props.is_stamp)
-        {
-            // 印花：局部 +Z 朝外（宿主→印花法线）；无 GLB 的薄板已偏向 -Z 贴宿主
-            world
-                .material_attachments
-                .get(&data.id)
-                .map(|att| {
-                    Quat::from_rotation_arc(Vec3::Z, att.parent_face_normal.as_vec3().normalize())
-                })
-                .unwrap_or(Quat::IDENTITY)
-        } else {
-            render_rotation(data, data.facing)
-        };
+        transform.rotation = render_rotation(data, data.facing);
     }
     if let Some((origin, _)) = icon_render {
         transform.translation += origin;
@@ -690,7 +678,7 @@ pub(crate) fn spawn_block_model(
                 let mut child = parent.spawn((
                     Mesh3d(assets.face_mark_mesh(local_normal)),
                     MeshMaterial3d(assets.face_mark_material(*paint)),
-                    face_mark_transform(local_normal, 0.05),
+                    face_mark_transform(local_normal, 0.0),
                 ));
                 if let Some((_, icon_layer)) = icon_render {
                     child.insert((icon_layer.clone(), BlockIconRenderEntity));

@@ -53,9 +53,9 @@ pub struct WorldRenderAssets {
     pub(crate) block: Handle<Mesh>,
     node: Handle<Mesh>,
     wire_node: Handle<Mesh>,
-    pub(crate) face_mark_x: Handle<Mesh>,
-    pub(crate) face_mark_y: Handle<Mesh>,
-    pub(crate) face_mark_z: Handle<Mesh>,
+    pub(crate) face_mark: Handle<Mesh>,
+    /// 生成器/验收预览用：厚 0.1、心在原点的印花板（贴面后整板外凸）
+    stamp_embed_plate: Handle<Mesh>,
     pub(crate) weld_spark: Handle<Mesh>,
     /// 焊接扩散粒子薄方片（局部 XY，法线 +Z）
     pub(crate) weld_burst_quad: Handle<Mesh>,
@@ -331,6 +331,7 @@ impl WorldRenderAssets {
                         emissive: LinearRgba::new(0.08, 0.08, 0.08, 1.0),
                         unlit: true,
                         cull_mode: None,
+                        depth_bias: crate::game::world::rendering::depth_bias::PAINT,
                         ..default()
                     });
                 let material = textured.unwrap_or_else(|| {
@@ -346,6 +347,7 @@ impl WorldRenderAssets {
                         emissive: base.to_linear() * 0.35,
                         unlit: true,
                         cull_mode: None,
+                        depth_bias: crate::game::world::rendering::depth_bias::PAINT,
                         ..default()
                     }
                 });
@@ -483,10 +485,10 @@ impl WorldRenderAssets {
                 BLOCK_SIZE * 0.304,
                 BLOCK_SIZE * 0.304,
             )),
-            // 三轴各一块薄片，spawn 时按法线选用，不旋转
-            face_mark_x: meshes.add(Cuboid::new(0.02, 0.78, 0.78)),
-            face_mark_y: meshes.add(Cuboid::new(0.78, 0.02, 0.78)),
-            face_mark_z: meshes.add(Cuboid::new(0.78, 0.78, 0.02)),
+            // 漆/灯面板：零厚度面片（+Y 法线），spawn 时按附着法线旋转
+            face_mark: meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(0.49))),
+            // 预览印花：厚 0.1 居中；spawn 时平移到面外 0.55，整板外凸 0.1
+            stamp_embed_plate: meshes.add(Cuboid::new(0.9, 0.9, 0.1)),
             weld_spark: meshes.add(Cuboid::new(0.24, 0.24, 0.24)),
             weld_burst_quad: meshes.add(Rectangle::new(1.0, 1.0)),
             connector_x: meshes.add(Cuboid::new(0.55, 0.045, 0.045)),
@@ -547,6 +549,7 @@ impl WorldRenderAssets {
                 base_color: Color::srgb(0.55, 0.58, 0.62),
                 unlit: true,
                 cull_mode: None,
+                depth_bias: crate::game::world::rendering::depth_bias::PAINT,
                 ..default()
             }),
             light_panel_lit_material: materials.add(StandardMaterial {
@@ -554,6 +557,7 @@ impl WorldRenderAssets {
                 emissive: Color::srgb(0.55, 0.42, 0.08).into(),
                 unlit: true,
                 cull_mode: None,
+                depth_bias: crate::game::world::rendering::depth_bias::PAINT,
                 ..default()
             }),
             model_materials,
@@ -603,6 +607,7 @@ impl WorldRenderAssets {
                 alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 cull_mode: None,
+                depth_bias: crate::game::world::rendering::depth_bias::OVERLAY,
                 ..default()
             }),
             selection_edge_material: materials.add(StandardMaterial {
@@ -610,6 +615,7 @@ impl WorldRenderAssets {
                 emissive: LinearRgba::new(0.35, 0.55, 0.48, 1.0),
                 alpha_mode: AlphaMode::Opaque,
                 unlit: true,
+                depth_bias: crate::game::world::rendering::depth_bias::OVERLAY,
                 ..default()
             }),
             selection_invalid_fill_material: materials.add(StandardMaterial {
@@ -617,6 +623,7 @@ impl WorldRenderAssets {
                 alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 cull_mode: None,
+                depth_bias: crate::game::world::rendering::depth_bias::OVERLAY,
                 ..default()
             }),
             selection_invalid_edge_material: materials.add(StandardMaterial {
@@ -624,6 +631,7 @@ impl WorldRenderAssets {
                 emissive: LinearRgba::new(0.55, 0.08, 0.04, 1.0),
                 alpha_mode: AlphaMode::Opaque,
                 unlit: true,
+                depth_bias: crate::game::world::rendering::depth_bias::OVERLAY,
                 ..default()
             }),
             active_factory_debug_material: materials.add(StandardMaterial {
@@ -796,14 +804,13 @@ impl WorldRenderAssets {
         }
     }
 
-    pub(crate) fn face_mark_mesh(&self, normal: IVec3) -> Handle<Mesh> {
-        if normal.x != 0 {
-            self.face_mark_x.clone()
-        } else if normal.y != 0 {
-            self.face_mark_y.clone()
-        } else {
-            self.face_mark_z.clone()
-        }
+    pub(crate) fn face_mark_mesh(&self, _normal: IVec3) -> Handle<Mesh> {
+        self.face_mark.clone()
+    }
+
+    /// 预览用外凸印花板（厚 0.1，局部 +Z 朝外）
+    pub(crate) fn stamp_embed_plate(&self) -> Handle<Mesh> {
+        self.stamp_embed_plate.clone()
     }
 
     pub(crate) fn face_mark_material(&self, paint: PaintMaterialId) -> Handle<StandardMaterial> {
@@ -929,14 +936,13 @@ fn scene_color_material(base_color: Color) -> StandardMaterial {
     }
 }
 
-/// 印花无 GLB 时的默认薄板（对齐告示牌尺度；贴向局部 -Z / 宿主侧）
+/// 印花无 GLB 时的默认薄板（局部 +Z 朝宿主；厚 0.1，板心 +0.45 → 贴宿主面外凸 0.1）
 fn stamp_plate_mesh() -> Mesh {
-    let mut mesh = Mesh::from(Cuboid::new(0.78, 0.72, 0.06));
-    // 板心移到 z=-0.47，使 +Z 朝外时贴靠宿主面（与 SignBoard 偏移同量）
+    let mut mesh = Mesh::from(Cuboid::new(0.78, 0.72, 0.1));
     if let Some(positions) = mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION) {
         if let bevy::mesh::VertexAttributeValues::Float32x3(values) = positions {
             for v in values.iter_mut() {
-                v[2] -= 0.47;
+                v[2] += 0.45;
             }
         }
     }

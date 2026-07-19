@@ -5,11 +5,11 @@ use crate::game::blocks::BlockKind;
 use crate::game::simulation::structure_state::StructureKind;
 use crate::game::world::grid::grid_to_world;
 
-/// 根据方块位置与法线，计算瞄准面高亮的 Transform
+/// 根据方块位置与法线，计算瞄准面高亮的 Transform（贴在格面，不外浮；靠 depth_bias 叠层）
 pub fn block_face_highlight_transform(block_pos: IVec3, normal: IVec3) -> Transform {
     let normal = normal.as_vec3().normalize();
     Transform {
-        translation: grid_to_world(block_pos) + normal * 0.501,
+        translation: grid_to_world(block_pos) + normal * 0.5,
         rotation: Quat::from_rotation_arc(Vec3::Y, normal),
         scale: Vec3::ONE,
     }
