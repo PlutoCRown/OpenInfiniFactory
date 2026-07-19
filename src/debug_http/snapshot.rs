@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::game::blocks::BlockKind;
 use crate::game::simulation::stats::SimulationStepStats;
@@ -13,23 +13,243 @@ use crate::game::world::direction::Facing;
 use crate::game::world::grid::{TargetHit, WorldBlocks};
 use crate::shared::save::{SaveKind, SaveState};
 use oif_sim::SimulationControl;
+use oif_sim::blocks::{
+    MaterialBlockId, PaintMaterialId, StampMaterialId, material_catalog, paint_catalog,
+    scene_catalog, stamp_catalog,
+};
+use oif_sim::world::grid::{
+    BlockSettings, ConverterMode, GeneratorMode, GoalSettings, SignDisplay,
+};
 
+/// 查询坐标上方块的完整调试信息（含朝向、漆、印花附着、设定等）
 pub fn block_json(world: &oif_sim::WorldBlocks, pos: IVec3) -> Value {
-    if let Some(block) = world.blocks.get(&pos) {
-        json!({
-            "layer": block_layer(block.kind),
-            "kind": format!("{:?}", block.kind),
-            "facing": format!("{:?}", block.facing),
-        })
-    } else if let Some(block) = world.system_blocks.get(&pos) {
-        json!({
-            "layer": "system",
-            "kind": format!("{:?}", block.kind),
-            "facing": format!("{:?}", block.facing),
-        })
+    let material_block = world.blocks.get(&pos).copied();
+    let system_block = world.system_blocks.get(&pos).copied();
+    let machine_body = world.machine_bodies.get(&pos).copied();
+
+    let Some(block) = material_block.or(system_block) else {
+        if let Some(body) = machine_body {
+            return json!({
+                "layer": "machine_body",
+                "kind": format!("{:?}", body.kind),
+                "kind_detail": kind_detail(body.kind),
+                "facing": format!("{:?}", body.facing),
+                "yaw": body.facing.yaw(),
+                "id": body.id.0,
+                "directional": body.kind.is_directional(),
+            });
+        }
+        return Value::Null;
+    };
+
+    let layer = if material_block.is_some() {
+        block_layer(block.kind)
     } else {
-        Value::Null
+        "system"
+    };
+    let id = block.id;
+
+    let paints: Vec<Value> = world
+        .material_paints
+        .iter()
+        .filter(|(face, _)| face.block == id)
+        .map(|(face, paint)| {
+            json!({
+                "normal": pos_json(face.normal),
+                "paint": paint_string_id(*paint),
+            })
+        })
+        .collect();
+
+    let attached_stamps: Vec<Value> = world
+        .material_attachments
+        .iter()
+        .filter(|(_, att)| att.parent == id)
+        .filter_map(|(child_id, att)| {
+            let (child_pos, child) = world.blocks.iter().find(|(_, b)| b.id == *child_id)?;
+            Some(json!({
+                "child_id": child_id.0,
+                "pos": pos_json(*child_pos),
+                "kind": format!("{:?}", child.kind),
+                "stamp": child.kind.stamp_id().map(stamp_string_id),
+                "facing": format!("{:?}", child.facing),
+                "parent_face_normal": pos_json(att.parent_face_normal),
+            }))
+        })
+        .collect();
+
+    let attachment = world.material_attachments.get(&id).map(|att| {
+        let parent_pos = world
+            .blocks
+            .iter()
+            .find(|(_, b)| b.id == att.parent)
+            .map(|(p, _)| pos_json(*p));
+        json!({
+            "parent_id": att.parent.0,
+            "parent_pos": parent_pos,
+            "parent_face_normal": pos_json(att.parent_face_normal),
+        })
+    });
+
+    let welds: Vec<Value> = world
+        .material_welds
+        .iter()
+        .filter_map(|weld| {
+            let other = weld.other(id)?;
+            let other_pos = world
+                .blocks
+                .iter()
+                .find(|(_, b)| b.id == other)
+                .map(|(p, _)| pos_json(*p));
+            Some(json!({
+                "other_id": other.0,
+                "other_pos": other_pos,
+            }))
+        })
+        .collect();
+
+    let wire_panels: Vec<Value> = world
+        .wire_face_panels
+        .iter()
+        .filter(|face| face.block == id)
+        .map(|face| json!({ "normal": pos_json(face.normal) }))
+        .collect();
+
+    let settings = world
+        .block_settings
+        .get(&pos)
+        .map(block_settings_json)
+        .unwrap_or(Value::Null);
+
+    let acceptor_id = world.acceptor_id_at(pos).map(|id| id.0);
+
+    json!({
+        "layer": layer,
+        "kind": format!("{:?}", block.kind),
+        "kind_detail": kind_detail(block.kind),
+        "facing": format!("{:?}", block.facing),
+        "yaw": block.facing.yaw(),
+        "id": id.0,
+        "directional": block.kind.is_directional(),
+        "paints": paints,
+        "attached_stamps": attached_stamps,
+        "attachment": attachment,
+        "welds": welds,
+        "wire_panels": wire_panels,
+        "settings": settings,
+        "acceptor_id": acceptor_id,
+        "machine_body": machine_body.map(|body| json!({
+            "kind": format!("{:?}", body.kind),
+            "facing": format!("{:?}", body.facing),
+            "id": body.id.0,
+        })),
+        "system_overlap": material_block.is_some().then(|| system_block.map(|sys| json!({
+            "kind": format!("{:?}", sys.kind),
+            "facing": format!("{:?}", sys.facing),
+            "id": sys.id.0,
+        }))).flatten(),
+    })
+}
+
+fn kind_detail(kind: BlockKind) -> Value {
+    match kind {
+        BlockKind::Material(id) => json!({
+            "type": "material",
+            "string_id": material_string_id(id),
+        }),
+        BlockKind::Stamp(id) => json!({
+            "type": "stamp",
+            "string_id": stamp_string_id(id),
+        }),
+        BlockKind::Scene(id) => json!({
+            "type": "scene",
+            "string_id": scene_catalog().string_id(id).unwrap_or("?"),
+        }),
+        _ => json!({ "type": "block" }),
     }
+}
+
+fn material_string_id(id: MaterialBlockId) -> String {
+    material_catalog().string_id(id).unwrap_or("?").to_string()
+}
+
+fn stamp_string_id(id: StampMaterialId) -> String {
+    stamp_catalog().string_id(id).unwrap_or("?").to_string()
+}
+
+fn paint_string_id(id: PaintMaterialId) -> String {
+    paint_catalog().string_id(id).unwrap_or("?").to_string()
+}
+
+fn block_settings_json(settings: &BlockSettings) -> Value {
+    match settings {
+        BlockSettings::Generator(s) => json!({
+            "type": "generator",
+            "mode": match s.mode {
+                GeneratorMode::Period { period, offset } => json!({
+                    "kind": "period",
+                    "period": period,
+                    "offset": offset,
+                }),
+                GeneratorMode::Link { anchor } => json!({
+                    "kind": "link",
+                    "anchor": anchor.map(pos_json),
+                }),
+            },
+            "material": material_string_id(s.material),
+            "facing": format!("{:?}", s.facing),
+            "yaw": s.facing.yaw(),
+        }),
+        BlockSettings::Goal(s) => goal_settings_json(s),
+        BlockSettings::Stamper(s) => json!({
+            "type": "stamper",
+            "stamp": stamp_string_id(s.stamp),
+        }),
+        BlockSettings::Roller(s) => json!({
+            "type": "roller",
+            "paint": paint_string_id(s.paint),
+        }),
+        BlockSettings::Converter(s) => json!({
+            "type": "converter",
+            "mode": match s.mode {
+                ConverterMode::AnyInput => "any_input",
+                ConverterMode::SpecificInput => "specific_input",
+            },
+            "input": material_string_id(s.input),
+            "output": material_string_id(s.output),
+        }),
+        BlockSettings::Teleport(s) => json!({
+            "type": "teleport",
+            "name": s.name,
+            "pair": s.pair.map(pos_json),
+        }),
+        BlockSettings::Sign(s) => json!({
+            "type": "sign",
+            "text": s.text,
+            "display": match s.display {
+                Some(SignDisplay::Material(id)) => json!({
+                    "kind": "material",
+                    "id": material_string_id(id),
+                }),
+                Some(SignDisplay::Stamp(id)) => json!({
+                    "kind": "stamp",
+                    "id": stamp_string_id(id),
+                }),
+                None => Value::Null,
+            },
+        }),
+    }
+}
+
+fn goal_settings_json(s: &GoalSettings) -> Value {
+    json!({
+        "type": "goal",
+        "material": material_string_id(s.material),
+        "facing": format!("{:?}", s.facing),
+        "yaw": s.facing.yaw(),
+        "stamps": s.stamps.map(|slot| slot.map(stamp_string_id)),
+        "paints": s.paints.map(|slot| slot.map(paint_string_id)),
+    })
 }
 
 pub fn block_layer(kind: BlockKind) -> &'static str {

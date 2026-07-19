@@ -11,14 +11,20 @@ pub enum DebugHttpCommand {
     GetPerf,
     Run,
     RunOneTurn,
-    RunN { n: u64 },
-    GetLogs { limit: usize },
+    RunN {
+        n: u64,
+    },
+    GetLogs {
+        limit: usize,
+    },
     ClearLogs,
     Help,
     BlockKinds,
     WorldReset,
     BeginSimulation,
-    LoadSave { name: String },
+    LoadSave {
+        name: String,
+    },
     PlaceBlock {
         x: i32,
         y: i32,
@@ -26,8 +32,12 @@ pub enum DebugHttpCommand {
         kind: String,
         facing: String,
     },
-    LoadFixture { path: String },
-    RunFixture { path: String },
+    LoadFixture {
+        path: String,
+    },
+    RunFixture {
+        path: String,
+    },
     RunAllFixtures,
 }
 
@@ -67,17 +77,17 @@ pub fn parse_http_request(request: &tiny_http::Request) -> DebugHttpCommand {
             DebugHttpCommand::BeginSimulation
         }
         ("POST", "/loadsave") | ("GET", "/loadsave") => DebugHttpCommand::LoadSave {
-            name: params
-                .get("name")
-                .cloned()
-                .unwrap_or_default(),
+            name: params.get("name").cloned().unwrap_or_default(),
         },
         ("POST", "/world/place") | ("GET", "/world/place") => DebugHttpCommand::PlaceBlock {
             x: params.get("x").and_then(|v| v.parse().ok()).unwrap_or(0),
             y: params.get("y").and_then(|v| v.parse().ok()).unwrap_or(0),
             z: params.get("z").and_then(|v| v.parse().ok()).unwrap_or(0),
             kind: params.get("kind").cloned().unwrap_or_default(),
-            facing: params.get("facing").cloned().unwrap_or_else(|| "North".into()),
+            facing: params
+                .get("facing")
+                .cloned()
+                .unwrap_or_else(|| "North".into()),
         },
         ("POST", "/loadfixture") | ("GET", "/loadfixture") => DebugHttpCommand::LoadFixture {
             path: params.get("path").cloned().unwrap_or_default(),
@@ -85,7 +95,9 @@ pub fn parse_http_request(request: &tiny_http::Request) -> DebugHttpCommand {
         ("POST", "/runfixture") | ("GET", "/runfixture") => DebugHttpCommand::RunFixture {
             path: params.get("path").cloned().unwrap_or_default(),
         },
-        ("POST", "/runallfixtures") | ("GET", "/runallfixtures") => DebugHttpCommand::RunAllFixtures,
+        ("POST", "/runallfixtures") | ("GET", "/runallfixtures") => {
+            DebugHttpCommand::RunAllFixtures
+        }
         ("POST", "/run") | ("GET", "/run") => DebugHttpCommand::Run,
         ("POST", "/runoneturn") | ("GET", "/runoneturn") => DebugHttpCommand::RunOneTurn,
         ("POST", "/runn") | ("GET", "/runn") => DebugHttpCommand::RunN {
@@ -105,7 +117,10 @@ fn parse_query(query: &str) -> std::collections::HashMap<String, String> {
         .split('&')
         .filter_map(|pair| {
             let mut parts = pair.splitn(2, '=');
-            Some((parts.next()?.to_string(), parts.next().unwrap_or("").to_string()))
+            Some((
+                parts.next()?.to_string(),
+                parts.next().unwrap_or("").to_string(),
+            ))
         })
         .collect()
 }
@@ -114,7 +129,7 @@ pub fn help_json() -> String {
     serde_json::json!({
         "ok": true,
         "endpoints": [
-            {"method": "GET", "path": "/getPosBlock?x=&y=&z=", "desc": "block at coordinate"},
+            {"method": "GET", "path": "/getPosBlock?x=&y=&z=", "desc": "full block info at coordinate (facing/paints/stamps/settings)"},
             {"method": "GET", "path": "/status", "desc": "session + simulation snapshot (any game mode)"},
             {"method": "GET", "path": "/perf", "desc": "frame timing stats (in-game overlay)"},
             {"method": "GET", "path": "/blockKinds", "desc": "all registered block kinds"},

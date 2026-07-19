@@ -393,6 +393,7 @@ pub fn apply_structure_animations(
     animations: &HashMap<IVec3, BlockAnimation>,
     pusher_animations: &HashMap<IVec3, PusherAnimation>,
     timing: AnimationTiming,
+    paint_changed_ids: &HashSet<crate::game::blocks::BlockId>,
 ) -> HashSet<IVec3> {
     let factory_debug = debug.factory_activity.then_some(structure_state);
     let mut handled = HashSet::new();
@@ -431,8 +432,11 @@ pub fn apply_structure_animations(
     // 阶段 2：绑定到目标格并挂上动画
     for (pos, animation, data, entity) in planned {
         // 复用实体须仍有效，且本轮尚未排队销毁（验收销毁的占位格会走到这里）
+        // 本回合漆刚变过：子节点需重建，不能只搬旧实体
+        let paint_dirty = paint_changed_ids.contains(&animation.block_id);
         let reuse = entity
-            .filter(|entity| !despawned.contains(entity) && commands.get_entity(*entity).is_ok());
+            .filter(|entity| !despawned.contains(entity) && commands.get_entity(*entity).is_ok())
+            .filter(|_| !paint_dirty);
         if let Some(entity) = reuse {
             if let Some(occupant) = index.get_animatable(pos) {
                 if occupant != entity {
@@ -470,6 +474,10 @@ pub fn apply_structure_animations(
         if let Some(entity) = entity {
             index.remove_entity(entity);
             despawned.insert(entity);
+            // 不复用时必须销毁旧实体，否则会在沿途留下可瞄准的残影
+            if commands.get_entity(entity).is_ok() {
+                commands.entity(entity).despawn();
+            }
         }
 
         // 找不到原实体时才新建；不要误删其它正在移动的实体
@@ -570,6 +578,13 @@ pub fn apply_turn_output_incremental(
             (pos, animation)
         })
         .collect();
+    let paint_changed_ids: HashSet<crate::game::blocks::BlockId> = before
+        .material_paints
+        .keys()
+        .chain(after.material_paints.keys())
+        .filter(|face| before.material_paints.get(face) != after.material_paints.get(face))
+        .map(|face| face.block)
+        .collect();
     let animated = apply_structure_animations(
         commands,
         meshes,
@@ -582,6 +597,7 @@ pub fn apply_turn_output_incremental(
         &animations,
         &pusher_animations,
         timing,
+        &paint_changed_ids,
     );
     let mut refresh = collect_sim_refresh_positions(before, after, output);
     refresh.extend(collect_wire_power_refresh_positions(

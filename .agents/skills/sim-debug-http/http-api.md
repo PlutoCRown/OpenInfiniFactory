@@ -24,11 +24,26 @@
 {
   "ok": true,
   "pos": { "x": 0, "y": 1, "z": 0 },
-  "block": { "kind": "Platform", "facing": "North", "layer": "factory" }
+  "block": {
+    "layer": "material",
+    "kind": "Material(...)",
+    "kind_detail": { "type": "material", "string_id": "wood" },
+    "facing": "North",
+    "yaw": 0.0,
+    "id": 12,
+    "directional": false,
+    "paints": [{ "normal": { "x": 0, "y": 0, "z": 1 }, "paint": "red" }],
+    "attached_stamps": [],
+    "attachment": null,
+    "welds": [],
+    "wire_panels": [],
+    "settings": null,
+    "acceptor_id": null
+  }
 }
 ```
 
-无方块时 `block` 为 `null`。headless 模式缺少 x/y/z 会 `{ ok: false, error: "..." }`。
+含朝向/`yaw`、漆、印花附着、焊接、方块设定（生成器/验收器等）。无方块时 `block` 为 `null`。headless 模式缺少 x/y/z 会 `{ ok: false, error: "..." }`。
 
 ### GET `/status`
 

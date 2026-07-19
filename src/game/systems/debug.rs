@@ -2,7 +2,7 @@ use crate::game::systems::perf::PerfStats;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
-use crate::game::player::controller::{player_collision_box, FlyCamera};
+use crate::game::player::controller::{FlyCamera, player_collision_box};
 use crate::game::simulation::stats::SimulationStepStats;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
@@ -10,7 +10,7 @@ use crate::game::ui::core::host::PlayingUiRootEntity;
 use crate::game::ui::{PendingKeyBind, TextPromptState};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_world, rebuild_world_for_debug_state, BlockEntity, SceneChunkMeshes, WorldRenderAssets,
+    BlockEntity, SceneChunkMeshes, WorldRenderAssets, despawn_world, rebuild_world_for_debug_state,
 };
 use crate::shared::config::{ActionKeyName, GameConfig};
 

@@ -135,7 +135,7 @@ curl -X POST 'http://127.0.0.1:8765/runFixture?path=sim/<case>.json'  # 含 step
 - `gravity` / `devices` / `merged` — 移动计划（水平 Push 在 `devices`）
 - `translate ... mark=Push` — 结构被推动
 
-`getPosBlock` 返回 `{ kind, facing, layer }` 或空。
+`getPosBlock` 返回完整方块信息：`kind`/`facing`/`yaw`/`paints`/`attached_stamps`/`settings` 等，或空。
 
 ---
 

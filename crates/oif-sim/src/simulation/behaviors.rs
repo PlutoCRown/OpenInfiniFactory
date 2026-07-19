@@ -182,8 +182,12 @@ pub(super) fn run_weld_behavior_phase(world: &mut WorldBlocks) -> Vec<(IVec3, IV
     pairs
 }
 
-/// 阶段 4 装饰漆：滚刷机朝向可 Connectable 材料面写入油漆（印花机 L4 再处理）
-pub(super) fn run_material_paint_phase(world: &mut WorldBlocks) {
+/// 阶段 4 装饰漆：只挂起，下一回合开始再写入（等移动动画播完）
+pub(super) fn run_material_paint_phase(
+    world: &WorldBlocks,
+    pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    ready_turn: u64,
+) {
     let rollers: Vec<(IVec3, IVec3)> = world
         .system_blocks
         .iter()
@@ -212,12 +216,33 @@ pub(super) fn run_material_paint_phase(world: &mut WorldBlocks) {
             continue;
         }
         let paint = world.roller_settings(pos).paint;
-        world.material_paints.insert(face, paint);
+        pending_generated.mark_paint(face, paint, ready_turn);
     }
 }
 
-/// 阶段 4 印花：面前宿主可 Connectable 时在机身格生成/替换印花附着
-pub(super) fn run_material_stamp_phase(world: &mut WorldBlocks) {
+/// 回合初落地延后漆（宿主仍在则写入）
+pub(super) fn apply_pending_paints(
+    world: &mut WorldBlocks,
+    pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    turn: u64,
+) -> bool {
+    let mut any = false;
+    for (face, paint) in pending_generated.take_ready_paints(turn) {
+        if !world.blocks.values().any(|block| block.id == face.block) {
+            continue;
+        }
+        world.material_paints.insert(face, paint);
+        any = true;
+    }
+    any
+}
+
+/// 阶段 4 印花：只挂起，下一回合开始再生成附着（等移动动画播完）
+pub(super) fn run_material_stamp_phase(
+    world: &WorldBlocks,
+    pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    ready_turn: u64,
+) {
     let stampers: Vec<(IVec3, Facing)> = world
         .system_blocks
         .iter()
@@ -251,11 +276,70 @@ pub(super) fn run_material_stamp_phase(world: &mut WorldBlocks) {
             continue;
         }
 
-        // 该面已有附着印花：非脆弱则跳过；脆弱则碎旧换新
         let existing_child = world
             .material_attachments
             .iter()
             .find(|(_, att)| att.parent == host.id && att.parent_face_normal == face_normal)
+            .map(|(child, _)| *child);
+        if let Some(child_id) = existing_child {
+            let Some((_, child_block)) = world
+                .blocks
+                .iter()
+                .find(|(_, b)| b.id == child_id)
+                .map(|(p, b)| (*p, *b))
+            else {
+                continue;
+            };
+            let fragile = child_block
+                .kind
+                .material_props()
+                .is_some_and(|props| props.fragile);
+            if !fragile {
+                continue;
+            }
+        }
+
+        if world.blocks.contains_key(&stamper_pos) {
+            continue;
+        }
+
+        let stamp_facing = match (face_normal.x, face_normal.y, face_normal.z) {
+            (1, 0, 0) => Facing::East,
+            (-1, 0, 0) => Facing::West,
+            (0, 0, 1) => Facing::South,
+            (0, 0, -1) => Facing::North,
+            _ => facing,
+        };
+        let stamp_id = world.stamper_settings(stamper_pos).stamp;
+        pending_generated.mark_stamp(
+            stamper_pos,
+            host.id,
+            face_normal,
+            stamp_id,
+            stamp_facing,
+            ready_turn,
+        );
+    }
+}
+
+/// 回合初落地延后印花
+pub(super) fn apply_pending_stamps(
+    world: &mut WorldBlocks,
+    pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    turn: u64,
+) -> bool {
+    let mut any = false;
+    for (stamper_pos, pending) in pending_generated.take_ready_stamps(turn) {
+        if !world.blocks.values().any(|block| block.id == pending.host) {
+            continue;
+        }
+        // 该面已有附着：非脆弱跳过；脆弱碎旧换新
+        let existing_child = world
+            .material_attachments
+            .iter()
+            .find(|(_, att)| {
+                att.parent == pending.host && att.parent_face_normal == pending.face_normal
+            })
             .map(|(child, _)| *child);
         if let Some(child_id) = existing_child {
             let Some((child_pos, child_block)) = world
@@ -276,23 +360,12 @@ pub(super) fn run_material_stamp_phase(world: &mut WorldBlocks) {
             }
             world.remove(&child_pos);
         }
-
-        // 印花占宿主面向机身的邻格 = 印花机格；该格 blocks 须空（机身在 machine_bodies）
         if world.blocks.contains_key(&stamper_pos) {
             continue;
         }
-
-        let stamp_facing = match (face_normal.x, face_normal.y, face_normal.z) {
-            (1, 0, 0) => Facing::East,
-            (-1, 0, 0) => Facing::West,
-            (0, 0, 1) => Facing::South,
-            (0, 0, -1) => Facing::North,
-            _ => facing,
-        };
-        let stamp_id = world.stamper_settings(stamper_pos).stamp;
         world.insert(
             stamper_pos,
-            BlockData::new(BlockKind::Stamp(stamp_id), stamp_facing),
+            BlockData::new(BlockKind::Stamp(pending.stamp), pending.stamp_facing),
         );
         let Some(stamp) = world.blocks.get(&stamper_pos).copied() else {
             continue;
@@ -300,11 +373,13 @@ pub(super) fn run_material_stamp_phase(world: &mut WorldBlocks) {
         world.material_attachments.insert(
             stamp.id,
             crate::world::grid::MaterialAttachment {
-                parent: host.id,
-                parent_face_normal: face_normal,
+                parent: pending.host,
+                parent_face_normal: pending.face_normal,
             },
         );
+        any = true;
     }
+    any
 }
 
 /// 本回合生成判定用的材料源结果

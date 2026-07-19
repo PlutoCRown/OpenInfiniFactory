@@ -6,7 +6,7 @@ use super::components::{
     FactoryDebugOverlay, PendingGeneratedPreview,
 };
 use super::connectors::{
-    face_mark_transform, local_connector_offset, rotate_y_ccw, signal_neighbor_offsets,
+    face_mark_transform, local_connector_offset, signal_neighbor_offsets,
     weld_neighbor_connects_to, wire_connects_to,
 };
 use super::scene_mesh::scene_block_mesh;
@@ -86,12 +86,22 @@ fn spawn_factory_debug_overlay(
     ));
 }
 
+/// 验收预览用：4 个水平面槽位（北→东→南→西）
+const GOAL_PREVIEW_FACES: [IVec3; 4] = [
+    IVec3::new(0, 0, -1),
+    IVec3::X,
+    IVec3::new(0, 0, 1),
+    IVec3::NEG_X,
+];
+
 /// 在生成器/目标上挂所选材料的小预览块
 fn spawn_selected_material_preview(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
     material: crate::game::blocks::MaterialBlockId,
     facing: crate::game::world::direction::Facing,
+    stamps: [Option<crate::game::blocks::StampMaterialId>; 4],
+    paints: [Option<crate::game::blocks::PaintMaterialId>; 4],
     icon_render: Option<(Vec3, &RenderLayers)>,
 ) {
     let kind = BlockKind::material_block_kind(material);
@@ -103,13 +113,13 @@ fn spawn_selected_material_preview(
     let mesh = assets
         .scene_mesh(kind)
         .unwrap_or_else(|| assets.block_mesh(kind));
-    let material = assets
+    let mesh_material = assets
         .scene_material(kind)
         .unwrap_or_else(|| assets.block_material(kind));
 
     let mut child = parent.spawn((
         Mesh3d(mesh),
-        MeshMaterial3d(material),
+        MeshMaterial3d(mesh_material),
         Transform {
             rotation,
             scale: Vec3::splat(0.76),
@@ -118,6 +128,59 @@ fn spawn_selected_material_preview(
     ));
     if let Some((_, icon_layer)) = icon_render {
         child.insert((icon_layer.clone(), BlockIconRenderEntity));
+    }
+    child.with_children(|preview| {
+        spawn_goal_attachment_previews(
+            preview,
+            assets,
+            stamps,
+            paints,
+            icon_render.map(|(_, layer)| layer),
+        );
+    });
+}
+
+/// 按槽位把印花/漆挂到材料预览或验收幽灵上（像真实方块附着）
+fn spawn_goal_attachment_previews(
+    parent: &mut ChildSpawnerCommands,
+    assets: &WorldRenderAssets,
+    stamps: [Option<crate::game::blocks::StampMaterialId>; 4],
+    paints: [Option<crate::game::blocks::PaintMaterialId>; 4],
+    icon_layer: Option<&RenderLayers>,
+) {
+    for (index, face) in GOAL_PREVIEW_FACES.iter().enumerate() {
+        if let Some(paint) = paints[index] {
+            let mut child = parent.spawn((
+                Mesh3d(assets.face_mark_mesh(*face)),
+                MeshMaterial3d(assets.face_mark_material(paint)),
+                face_mark_transform(*face, 0.05),
+            ));
+            if let Some(layer) = icon_layer {
+                child.insert((layer.clone(), BlockIconRenderEntity));
+            }
+        }
+        if let Some(stamp) = stamps[index] {
+            let kind = BlockKind::stamp_block_kind(stamp);
+            let mesh = assets
+                .scene_mesh(kind)
+                .unwrap_or_else(|| assets.block_mesh(kind));
+            let mesh_material = assets
+                .scene_material(kind)
+                .unwrap_or_else(|| assets.block_material(kind));
+            let normal = face.as_vec3().normalize_or_zero();
+            let mut child = parent.spawn((
+                Mesh3d(mesh),
+                MeshMaterial3d(mesh_material),
+                Transform {
+                    translation: normal * 0.5,
+                    rotation: Quat::from_rotation_arc(Vec3::Z, normal),
+                    ..default()
+                },
+            ));
+            if let Some(layer) = icon_layer {
+                child.insert((layer.clone(), BlockIconRenderEntity));
+            }
+        }
     }
 }
 
@@ -622,8 +685,8 @@ pub(crate) fn spawn_block_model(
                 .iter()
                 .filter(|(face, _)| face.block == data.id)
             {
-                // 与印花一致：俯视逆时针 90°，画在敞露侧，避免夹在滚刷机缝里看不见
-                let local_normal = rotate_y_ccw(face_mark_local_normal(data, face.normal));
+                // 局部法线贴在真实附着面；有向块的 yaw 由父实体承担
+                let local_normal = face_mark_local_normal(data, face.normal);
                 let mut child = parent.spawn((
                     Mesh3d(assets.face_mark_mesh(local_normal)),
                     MeshMaterial3d(assets.face_mark_material(*paint)),
@@ -635,23 +698,49 @@ pub(crate) fn spawn_block_model(
             }
         }
 
+        if use_goal_ghost {
+            let settings = world.goal_settings(pos);
+            spawn_goal_attachment_previews(
+                parent,
+                assets,
+                settings.stamps,
+                settings.paints,
+                icon_render.map(|(_, layer)| layer),
+            );
+        }
+
         if show_generator_preview {
             let show_material_preview = match data.kind {
-                // 游玩态有生成缩放预览，不再挂材料小预览以免重叠
-                BlockKind::Generator => !assets.use_goal_play_visual(),
+                // 游玩/编辑显示配置材料；模拟回合重建时 show_generator_preview=false
+                BlockKind::Generator => true,
                 // 游玩态验收器本体已是目标材料，不再挂小预览
                 BlockKind::Goal => !use_goal_ghost,
                 _ => false,
             };
             if show_material_preview {
-                let (material, facing) = if data.kind == BlockKind::Generator {
+                if data.kind == BlockKind::Generator {
                     let settings = world.generator_settings(pos);
-                    (settings.material, settings.facing)
+                    spawn_selected_material_preview(
+                        parent,
+                        assets,
+                        settings.material,
+                        settings.facing,
+                        [None; 4],
+                        [None; 4],
+                        icon_render,
+                    );
                 } else {
                     let settings = world.goal_settings(pos);
-                    (settings.material, settings.facing)
-                };
-                spawn_selected_material_preview(parent, assets, material, facing, icon_render);
+                    spawn_selected_material_preview(
+                        parent,
+                        assets,
+                        settings.material,
+                        settings.facing,
+                        settings.stamps,
+                        settings.paints,
+                        icon_render,
+                    );
+                }
             }
         }
 

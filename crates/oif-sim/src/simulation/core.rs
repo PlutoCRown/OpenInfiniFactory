@@ -6,8 +6,8 @@ use glam::IVec3;
 use crate::world::grid::WorldBlocks;
 
 use super::behaviors::{
-    BreakDebris, LaserBeam, apply_pending_teleport, destroy_powered_lasers,
-    material_source_generation, probe_lasers, run_drill_destroy_phase,
+    BreakDebris, LaserBeam, apply_pending_paints, apply_pending_stamps, apply_pending_teleport,
+    destroy_powered_lasers, material_source_generation, probe_lasers, run_drill_destroy_phase,
     run_material_acceptance_phase, run_material_conversion_phase, run_material_paint_phase,
     run_material_stamp_phase, run_material_teleport_phase, run_weld_behavior_phase,
 };
@@ -93,6 +93,13 @@ pub fn simulate_turn(
         if apply_pending_teleport(world, entrance, exit) {
             structures_dirty = true;
         }
+    }
+    // 上一回合挂起的滚刷漆 / 印花：停稳后再附着
+    if apply_pending_paints(world, pending_generated, turn) {
+        structures_dirty = true;
+    }
+    if apply_pending_stamps(world, pending_generated, turn) {
+        structures_dirty = true;
     }
     // 上一回合调度的生成：须在重力前落地，否则会多悬一回合才下落
     if place_ready_generated_materials(world, pending_generated, turn) {
@@ -216,7 +223,7 @@ pub fn simulate_turn(
     run_static_marker_phase(world);
     sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
 
-    // —— 阶段 4 结构后处理（销毁 → 传送 → 转换 → 验收 → 生成 → 焊）——
+    // —— 阶段 4 结构后处理（销毁 → 传送 → 转换 → 验收 → 生成 → 焊 → 漆/印花挂起）——
     let mut behavior_sparks = laser_probe_sparks;
     break_debris.extend(
         fragile_debris
@@ -242,8 +249,9 @@ pub fn simulate_turn(
     prepare_upcoming_generation(world, pending_generated, turn + 1, &accepted_acceptors);
 
     let weld_sparks = run_weld_behavior_phase(world);
-    run_material_paint_phase(world);
-    run_material_stamp_phase(world);
+    // 漆/印花：挂起至 turn+1，等本回合移动动画播完再附着
+    run_material_paint_phase(world, pending_generated, turn + 1);
+    run_material_stamp_phase(world, pending_generated, turn + 1);
     structure_state.refresh_material_structures(world);
     sample.behavior_ms = mark_elapsed_ms(&mut mark);
 
