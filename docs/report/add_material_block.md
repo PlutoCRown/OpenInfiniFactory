@@ -105,17 +105,17 @@ Connectable 规则（重要）：
 ```
 assets/stamp_materials/<id>/
   meta.json      # 必填
-  model.glb      # 优先：有厚度薄板等
-  texture.png    # 无 model.glb 时必填
-  icon.png       # 必填（目前可手绘/复制贴图；后续可扩展 bake）
+  model.glb      # 必填：有厚度薄板（可用 generate_stamp_glb.py）
+  texture.png    # 建议：烘焙源贴图
+  icon.png       # 必填
 ```
 
 | 文件 | 必填？ | 定义 |
 |------|--------|------|
 | `meta.json` | 是 | id、fragile |
-| `model.glb` | 二选一 | 有厚度模型；建议局部 **+Z 朝外**，主体贴靠 **-Z（宿主侧）** |
-| `texture.png` | 二选一 | 无 GLB 时用引擎内置**告示牌式薄板**（约 0.78×0.72×0.06，贴靠宿主）+ 该贴图 |
-| `icon.png` | 是 | UI 选型图标 |
+| `model.glb` | 是 | 有厚度薄板；局部 **+Z 朝宿主**（与告示牌 / `facing.yaw` 一致），板心约 `z=+0.45`，厚 `0.1` 外凸 |
+| `texture.png` | 建议 | 烘焙 `model.glb` 用的源贴图（运行时优先 GLB 内嵌贴图） |
+| `icon.png` | 是 | UI 选型图标（`./scripts/bake_scene_icons.sh --stamps-only`） |
 
 ### B2. 写 `meta.json`
 
@@ -137,7 +137,15 @@ assets/stamp_materials/<id>/
 - `is_stamp = true`
 - 六面不可 Connectable（不能再当焊 / 刷 / 印的宿主）
 
-### B3. 补 i18n
+### B3. 烘焙 `icon.png`
+
+```bash
+./scripts/bake_scene_icons.sh --stamps-only
+# 或只 bake 某一个：
+./scripts/bake_scene_icons.sh --stamps-only --only red
+```
+
+### B4. 补 i18n
 
 | Key | 用途 |
 |-----|------|
@@ -145,7 +153,7 @@ assets/stamp_materials/<id>/
 | `short.stamp.<id>` | 短名 |
 | `desc.stamp.<id>` | 描述 |
 
-### B4. 验证清单
+### B5. 验证清单
 
 1. 印花机设置里能选到该包
 2. 通电印花后生成占格印花，贴在宿主面上，有厚度
@@ -202,7 +210,7 @@ assets/paint_materials/<id>/
 | 类型 | 有 `model.glb` | 仅 `texture.png` | 都没有 |
 |------|----------------|------------------|--------|
 | 场景 / 普通材料 | 用 GLB | 单位立方体 + 贴图 | 报错 |
-| 印花 | 用 GLB | 告示牌式薄板 + 贴图 | 报错 |
+| 印花 | 用 GLB | 报错（须有 model.glb） | 报错 |
 | 滚刷 | （忽略） | 面片贴图 | 报错 |
 
 ---

@@ -20,6 +20,7 @@ use crate::game::world::animation::{
     AnimatedBlock, AnimationEasing, AnimationTiming, BlockAnimation, BlockAnimationKind,
     PusherAnimation, rotate_world_pos_y,
 };
+use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, WorldBlocks, grid_to_world};
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::scene::BlockEntityIndex;
@@ -166,17 +167,26 @@ fn spawn_goal_attachment_previews(
         }
         if let Some(stamp) = stamps[index] {
             let kind = BlockKind::stamp_block_kind(stamp);
-            // 预览：厚 0.1 整板外凸（贴面心外移 0.05）；世界印花仍用邻格偏置板
+            // 与世界印花同 GLB：邻格中心 + facing.yaw（局部 +Z 朝宿主）
+            let mesh = assets
+                .scene_mesh(kind)
+                .unwrap_or_else(|| assets.block_mesh(kind));
             let mesh_material = assets
                 .scene_material(kind)
                 .unwrap_or_else(|| assets.block_material(kind));
-            let normal = face.as_vec3().normalize_or_zero();
+            let stamp_facing = match (face.x, face.y, face.z) {
+                (1, 0, 0) => Facing::East,
+                (-1, 0, 0) => Facing::West,
+                (0, 0, 1) => Facing::South,
+                (0, 0, -1) => Facing::North,
+                _ => Facing::North,
+            };
             let mut child = parent.spawn((
-                Mesh3d(assets.stamp_embed_plate()),
+                Mesh3d(mesh),
                 MeshMaterial3d(mesh_material),
                 Transform {
-                    translation: normal * 0.55,
-                    rotation: Quat::from_rotation_arc(Vec3::Z, normal),
+                    translation: face.as_vec3(),
+                    rotation: Quat::from_rotation_y(stamp_facing.yaw()),
                     ..default()
                 },
             ));

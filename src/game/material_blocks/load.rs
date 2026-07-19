@@ -259,13 +259,10 @@ fn load_one_stamp(
         return Err(format!("missing {META_FILE} in {}", dir.display()));
     }
     let model_path = optional_file(dir, MODEL_FILE);
-    let texture_path = optional_file(dir, TEXTURE_FILE);
-    if model_path.is_none() && texture_path.is_none() {
-        return Err(format!(
-            "missing {MODEL_FILE} and {TEXTURE_FILE} in {}",
-            dir.display()
-        ));
+    if model_path.is_none() {
+        return Err(format!("missing {MODEL_FILE} in {}", dir.display()));
     }
+    let texture_path = optional_file(dir, TEXTURE_FILE);
 
     let text =
         fs::read_to_string(&meta_path).map_err(|e| format!("read {}: {e}", meta_path.display()))?;

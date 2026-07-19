@@ -54,8 +54,6 @@ pub struct WorldRenderAssets {
     node: Handle<Mesh>,
     wire_node: Handle<Mesh>,
     pub(crate) face_mark: Handle<Mesh>,
-    /// 生成器/验收预览用：厚 0.1、心在原点的印花板（贴面后整板外凸）
-    stamp_embed_plate: Handle<Mesh>,
     pub(crate) weld_spark: Handle<Mesh>,
     /// 焊接扩散粒子薄方片（局部 XY，法线 +Z）
     pub(crate) weld_burst_quad: Handle<Mesh>,
@@ -189,7 +187,6 @@ impl WorldRenderAssets {
         let mut scene_block_materials = HashMap::new();
         let mut block_materials = block_materials;
         let mut preview_materials = preview_materials;
-        let stamp_plate = meshes.add(stamp_plate_mesh());
         for kind in all_blocks().into_iter().filter(|kind| kind.is_scene()) {
             let Some(presentation) = scene_registry.get_kind(kind) else {
                 continue;
@@ -200,7 +197,6 @@ impl WorldRenderAssets {
                 presentation.texture_path.as_deref(),
                 None,
                 kind.material(),
-                None,
                 meshes,
                 materials,
                 images,
@@ -219,7 +215,6 @@ impl WorldRenderAssets {
                 presentation.texture_path.as_deref(),
                 presentation.normal_path.as_deref(),
                 kind.material(),
-                None,
                 meshes,
                 materials,
                 images,
@@ -238,7 +233,6 @@ impl WorldRenderAssets {
                 presentation.texture_path.as_deref(),
                 None,
                 kind.material(),
-                Some(&stamp_plate),
                 meshes,
                 materials,
                 images,
@@ -487,8 +481,6 @@ impl WorldRenderAssets {
             )),
             // 漆/灯面板：零厚度面片（+Y 法线），spawn 时按附着法线旋转
             face_mark: meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(0.49))),
-            // 预览印花：厚 0.1 居中；spawn 时平移到面外 0.55，整板外凸 0.1
-            stamp_embed_plate: meshes.add(Cuboid::new(0.9, 0.9, 0.1)),
             weld_spark: meshes.add(Cuboid::new(0.24, 0.24, 0.24)),
             weld_burst_quad: meshes.add(Rectangle::new(1.0, 1.0)),
             connector_x: meshes.add(Cuboid::new(0.55, 0.045, 0.045)),
@@ -808,11 +800,6 @@ impl WorldRenderAssets {
         self.face_mark.clone()
     }
 
-    /// 预览用外凸印花板（厚 0.1，局部 +Z 朝外）
-    pub(crate) fn stamp_embed_plate(&self) -> Handle<Mesh> {
-        self.stamp_embed_plate.clone()
-    }
-
     pub(crate) fn face_mark_material(&self, paint: PaintMaterialId) -> Handle<StandardMaterial> {
         self.face_mark_materials
             .get(&paint)
@@ -934,19 +921,6 @@ fn scene_color_material(base_color: Color) -> StandardMaterial {
         reflectance: 0.08,
         ..default()
     }
-}
-
-/// 印花无 GLB 时的默认薄板（局部 +Z 朝宿主；厚 0.1，板心 +0.45 → 贴宿主面外凸 0.1）
-fn stamp_plate_mesh() -> Mesh {
-    let mut mesh = Mesh::from(Cuboid::new(0.78, 0.72, 0.1));
-    if let Some(positions) = mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION) {
-        if let bevy::mesh::VertexAttributeValues::Float32x3(values) = positions {
-            for v in values.iter_mut() {
-                v[2] += 0.45;
-            }
-        }
-    }
-    mesh
 }
 
 /// 扫描 factory_blocks 目录，按种类装成 FactoryVisual
@@ -1214,15 +1188,14 @@ fn wire_face_index(group: Option<&str>) -> Option<usize> {
 }
 
 /// 把 model.glb 或 texture.png（可选 normal.png）装进 scene_* / block_materials
-/// 有 model.glb 时只走 GLB（不读外部贴图）；无模型的纯立方体才用 texture/normal.png
-/// `stamp_plate`：印花在无 GLB 走贴图/纯色 fallback 时用的薄板网格
+/// 有 model.glb 时只走 GLB；无模型的纯立方体才用 texture/normal.png
+/// 印花薄板虽常为 24 顶点，也不写入 face_uvs，避免被当成整格 AO 立方体
 fn insert_configured_pack(
     kind: BlockKind,
     model_path: Option<&Path>,
     texture_path: Option<&Path>,
     normal_path: Option<&Path>,
     fallback_color: Color,
-    stamp_plate: Option<&Handle<Mesh>>,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     images: &mut Assets<Image>,
@@ -1235,8 +1208,10 @@ fn insert_configured_pack(
     if let Some(model_path) = model_path {
         match crate::game::scene_blocks::load_scene_glb(model_path, meshes, materials, images) {
             Ok(loaded) => {
-                if let Some(uvs) = loaded.face_uvs {
-                    scene_face_uvs.insert(kind, uvs);
+                if !matches!(kind, BlockKind::Stamp(_)) {
+                    if let Some(uvs) = loaded.face_uvs {
+                        scene_face_uvs.insert(kind, uvs);
+                    }
                 }
                 scene_meshes.insert(kind, loaded.mesh);
                 if let Some(base) = materials.get(&loaded.material).cloned() {
@@ -1284,9 +1259,6 @@ fn insert_configured_pack(
             );
             scene_block_materials.insert(kind, material.clone());
             block_materials.insert(kind, material);
-            if let Some(plate) = stamp_plate {
-                scene_meshes.insert(kind, plate.clone());
-            }
             return;
         }
         bevy::log::error!(
@@ -1298,9 +1270,6 @@ fn insert_configured_pack(
     let fallback = materials.add(scene_color_material(fallback_color));
     scene_block_materials.insert(kind, fallback.clone());
     block_materials.insert(kind, fallback);
-    if let Some(plate) = stamp_plate {
-        scene_meshes.insert(kind, plate.clone());
-    }
 }
 
 fn srgb_material(r: f32, g: f32, b: f32) -> StandardMaterial {

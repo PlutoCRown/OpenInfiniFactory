@@ -18,6 +18,10 @@ use super::OpenBlockPanelDropdown;
 #[derive(Component, Clone, Copy)]
 pub struct MaterialIconSlot;
 
+/// 凹槽不可点选（如验收器该面不可附着）：悬停不变亮，由业务刷暗色
+#[derive(Component, Clone, Copy)]
+pub struct MaterialIconSlotBlocked;
+
 pub fn spawn_labeled_panel_button<A>(parent: &mut ChildSpawnerCommands, action: A)
 where
     A: Component + Copy + UiActionLabel,
@@ -391,12 +395,20 @@ fn material_icon_node() -> impl Bundle {
     )
 }
 
-/// 材料凹槽悬停：亮一点背景 + hover 边框，移出恢复凹槽
+/// 材料凹槽悬停：亮一点背景 + hover 边框，移出恢复凹槽；Blocked 保持暗色
 pub fn update_material_slot_hover(
     _ui_thread: UiMainThread,
     mut slots: Query<
         (&Interaction, &mut BackgroundColor, &mut BorderColor),
-        (With<MaterialIconSlot>, Changed<Interaction>),
+        (
+            With<MaterialIconSlot>,
+            Without<MaterialIconSlotBlocked>,
+            Changed<Interaction>,
+        ),
+    >,
+    mut blocked: Query<
+        (&mut BackgroundColor, &mut BorderColor),
+        (With<MaterialIconSlot>, With<MaterialIconSlotBlocked>),
     >,
 ) {
     for (interaction, mut background, mut border) in &mut slots {
@@ -411,6 +423,10 @@ pub fn update_material_slot_hover(
         } else {
             inset_border()
         };
+    }
+    for (mut background, mut border) in &mut blocked {
+        *background = Color::srgb(0.14, 0.14, 0.14).into();
+        *border = inset_border();
     }
 }
 

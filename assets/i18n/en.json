@@ -232,6 +232,7 @@
   "generator.mode_period": "Period",
   "generator.period": "Period: {period} turns",
   "generator.title": "Generation Block",
+  "goal.face_not_attachable": "This face cannot hold attachments",
   "goal.title": "Acceptance Settings",
   "input.modifier_alt": "Alt",
   "input.modifier_command": "Command",

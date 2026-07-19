@@ -39,7 +39,7 @@ pub struct BakeSceneIconsConfig {
     pub size: u32,
     /// 输出文件名，默认 `icon.png`；做 LOD 时可传 `icon_64.png` 等
     pub output: String,
-    /// 只 bake 指定 id；空则全部（场景 + 材料）
+    /// 只 bake 指定 id；空则全部（场景 + 材料 + 印花）
     pub only: Option<String>,
     /// 场景方块根目录（兼容旧参数；加载仍走全局 assets）
     pub root: PathBuf,
@@ -47,6 +47,8 @@ pub struct BakeSceneIconsConfig {
     pub bake_scene: bool,
     /// 是否 bake 材料方块
     pub bake_materials: bool,
+    /// 是否 bake 印花材料
+    pub bake_stamps: bool,
 }
 
 impl Default for BakeSceneIconsConfig {
@@ -58,6 +60,7 @@ impl Default for BakeSceneIconsConfig {
             root: PathBuf::from(platform::asset_path()).join("scene_blocks"),
             bake_scene: true,
             bake_materials: true,
+            bake_stamps: true,
         }
     }
 }
@@ -76,9 +79,10 @@ fn print_usage() {
     eprintln!(
         "Usage: bake_scene_icons [--size N] [--output NAME] [--only ID]\n\
          \n\
-         [--scene-only] [--materials-only]\n\
-         Defaults: --size 128 --output icon.png（默认同时 bake 场景与材料）\n\
+         [--scene-only] [--materials-only] [--stamps-only]\n\
+         Defaults: --size 128 --output icon.png（默认同时 bake 场景、材料与印花）\n\
          Example: bake_scene_icons --only iron\n\
+         Example: bake_scene_icons --stamps-only\n\
          Example (LOD): bake_scene_icons --size 64 --output icon_64.png"
     );
 }
@@ -128,10 +132,17 @@ fn parse_args(args: &[String]) -> Result<BakeSceneIconsConfig, String> {
             "--scene-only" => {
                 config.bake_scene = true;
                 config.bake_materials = false;
+                config.bake_stamps = false;
             }
             "--materials-only" => {
                 config.bake_scene = false;
                 config.bake_materials = true;
+                config.bake_stamps = false;
+            }
+            "--stamps-only" => {
+                config.bake_scene = false;
+                config.bake_materials = false;
+                config.bake_stamps = true;
             }
             other if other.starts_with("--size=") => {
                 let v = &other["--size=".len()..];
@@ -153,7 +164,7 @@ fn parse_args(args: &[String]) -> Result<BakeSceneIconsConfig, String> {
     Ok(config)
 }
 
-/// 启动无头 Bevy，把场景/材料方块渲成 PNG 后退出
+/// 启动无头 Bevy，把场景/材料/印花方块渲成 PNG 后退出
 pub fn run(config: BakeSceneIconsConfig) {
     let size = config.size;
     App::new()
@@ -206,7 +217,7 @@ fn setup_bake(
     let mut material_registry = MaterialBlockRegistry::default();
     let mut stamp_registry = StampMaterialRegistry::default();
     let mut paint_registry = PaintMaterialRegistry::default();
-    if config.bake_materials {
+    if config.bake_materials || config.bake_stamps {
         if let Err(err) = load_global_material_packs(MaterialPackRegistries {
             materials: &mut material_registry,
             stamps: &mut stamp_registry,
@@ -311,8 +322,41 @@ fn setup_bake(
         }
     }
 
+    if config.bake_stamps {
+        for presentation in stamp_registry.ordered() {
+            if let Some(only) = &config.only {
+                if presentation.string_id != *only {
+                    continue;
+                }
+            }
+            let pack_dir = presentation
+                .model_path
+                .as_ref()
+                .or(presentation.texture_path.as_ref())
+                .or(presentation.icon_path.as_ref())
+                .and_then(|p| p.parent())
+                .unwrap_or_else(|| Path::new("."));
+            push_bake_target(
+                &mut commands,
+                &mut images,
+                &mut meshes,
+                &assets,
+                &icon_world,
+                &icon_layer,
+                &mut targets,
+                &mut index,
+                BlockKind::Stamp(presentation.id),
+                pack_dir,
+                &config.output,
+                config.size,
+            );
+        }
+    }
+
     if targets.is_empty() {
-        eprintln!("no blocks to bake (check --only / --scene-only / --materials-only)");
+        eprintln!(
+            "no blocks to bake (check --only / --scene-only / --materials-only / --stamps-only)"
+        );
         std::process::exit(1);
     }
 

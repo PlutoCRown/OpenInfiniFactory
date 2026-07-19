@@ -232,6 +232,7 @@
   "generator.mode_period": "周期",
   "generator.period": "周期：{period} 回合",
   "generator.title": "生成块",
+  "goal.face_not_attachable": "材料该面无法附着",
   "goal.title": "验收器设置",
   "input.modifier_alt": "Alt",
   "input.modifier_command": "Command",

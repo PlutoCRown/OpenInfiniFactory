@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://openinfinifactory.local/schemas/stamp_material.meta.schema.json",
   "title": "StampMaterialMeta",
-  "description": "印花材料资源包元数据（与 texture.png 同目录的 meta.json）。外观贴图为同目录 texture.png；UI 图标为同目录 icon.png。游戏加载时忽略 $schema。",
+  "description": "印花材料资源包元数据（与 model.glb 同目录的 meta.json）。外观为同目录 model.glb；可选 texture.png 供重烘焙脚本；UI 图标为同目录 icon.png。游戏加载时忽略 $schema。",
   "type": "object",
   "additionalProperties": false,
   "required": [
