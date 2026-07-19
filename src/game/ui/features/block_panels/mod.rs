@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::game::block_editing::OpenBlockPanelDropdown;
+use crate::game::block_editing::color_slot_ui::update_color_select_dropdowns;
 use crate::game::block_editing::widgets::update_material_slot_hover;
 use crate::game::blocks::panels::register_all_panels;
 use crate::game::state::UiPanelId;
@@ -59,7 +60,14 @@ impl Plugin for BlockPanelsPlugin {
                 .after(PerfScope::Placement)
                 .before(PerfScope::Menus),
         )
-        .add_systems(Update, update_material_slot_hover.in_set(BlockPanelSystems));
+        .add_systems(
+            Update,
+            (
+                update_material_slot_hover,
+                update_color_select_dropdowns,
+            )
+                .in_set(BlockPanelSystems),
+        );
         register_all_panels(app);
     }
 }

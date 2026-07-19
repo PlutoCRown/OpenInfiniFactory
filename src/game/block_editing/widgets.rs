@@ -6,7 +6,7 @@ use crate::game::ui::access::UiMainThread;
 use crate::game::ui::components::{
     BUTTON_BG, BUTTON_PRESSED_BG, default_button_size, default_font_size, hover_border,
     inset_border, localized_text, menu_button, raised_border, styled_button, text,
-    ui_logical_bounds,
+    transparent_node, ui_logical_bounds,
 };
 use crate::game::ui::types::{CarriedItem, UiActionLabel};
 use crate::game::world::direction::Facing;
@@ -30,6 +30,34 @@ where
         .spawn((menu_button(36.0), action))
         .with_children(|button| {
             button.spawn(localized_text(action.label_key(), 14.0, Color::WHITE));
+        });
+}
+
+/// 面板上一行：左侧标签 + 右侧控件
+pub fn spawn_labeled_control_row(
+    panel: &mut ChildSpawnerCommands,
+    label_key: &'static str,
+    row_height: f32,
+    controls: impl FnOnce(&mut ChildSpawnerCommands),
+) {
+    panel
+        .spawn(transparent_node(Node {
+            width: Val::Percent(100.0),
+            height: Val::Px(default_button_size(row_height)),
+            display: Display::Flex,
+            align_items: AlignItems::Center,
+            column_gap: Val::Px(10.0),
+            ..default()
+        }))
+        .with_children(|row| {
+            row.spawn((
+                localized_text(label_key, 16.0, Color::srgb(0.86, 0.88, 0.86)),
+                Node {
+                    width: Val::Px(110.0),
+                    ..default()
+                },
+            ));
+            controls(row);
         });
 }
 

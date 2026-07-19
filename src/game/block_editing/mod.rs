@@ -1,3 +1,4 @@
+pub mod color_slot_ui;
 pub mod context;
 pub mod panel_state;
 pub mod widgets;
