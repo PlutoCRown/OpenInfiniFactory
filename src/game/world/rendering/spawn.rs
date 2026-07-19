@@ -22,7 +22,7 @@ use crate::game::world::animation::{
 };
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, WorldBlocks, grid_to_world};
-use crate::game::world::render_assets::WorldRenderAssets;
+use crate::game::world::render_assets::{FactoryVisual, WorldRenderAssets};
 use crate::scene::BlockEntityIndex;
 
 /// 按通电状态选择方块渲染材质
@@ -378,6 +378,8 @@ pub(crate) fn spawn_block_model(
     let debug_overlay = factory_debug.and_then(|structure_state| {
         factory_debug_overlay_material(assets, structure_state, pos, data.kind)
     });
+
+    // 变换：动画插值 / 朝向 / 图标偏移 / 材料壳缩放
     let mut transform = Transform::from_translation(grid_to_world(pos));
     if let Some(animation) = animation {
         let progress = animation.progress.unwrap_or(0.0).clamp(0.0, 1.0);
@@ -424,6 +426,8 @@ pub(crate) fn spawn_block_model(
     }
     let goal_material_kind =
         goal_settings.map(|settings| BlockKind::material_block_kind(settings.material));
+
+    // 根实体：验收器幽灵 / 零件壳 / 平台 / 场景或默认立方体
     let mut entity = if let Some(mat_kind) = goal_material_kind {
         if let Some(ghost) = assets.goal_ghost_material(mat_kind) {
             commands.spawn((
@@ -488,6 +492,7 @@ pub(crate) fn spawn_block_model(
         }
     };
 
+    // 根实体组件：图标层 / BlockEntity / 预览 / 动画
     if let Some((_, icon_layer)) = icon_render {
         entity.insert((
             icon_layer.clone(),
@@ -522,6 +527,7 @@ pub(crate) fn spawn_block_model(
         entity.insert(AnimatedBlock::new(animation, timing));
     }
 
+    // 子节点：模型零件 → 焊接杆 → 电线臂/灯板 → 材料漆 → 验收器附件 → 生成器预览 → 调试罩
     entity.with_children(|parent| {
         let mut model_root = parent.spawn((Transform::default(), Visibility::default()));
         if let Some((_, icon_layer)) = icon_render {
@@ -571,7 +577,7 @@ pub(crate) fn spawn_block_model(
             let use_factory_wire = data.kind == BlockKind::Wire
                 && matches!(
                     assets.factory_visual(BlockKind::Wire),
-                    Some(crate::game::world::render_assets::FactoryVisual::Wire { .. })
+                    Some(FactoryVisual::Wire { .. })
                 );
             let powered_wire = material == assets.active_wire_material;
             let mut connected_offsets = Vec::new();
