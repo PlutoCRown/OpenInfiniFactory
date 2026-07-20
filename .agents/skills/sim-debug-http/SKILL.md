@@ -75,7 +75,14 @@ curl 'http://127.0.0.1:8765/getPosBlock?x=&y=&z='   # 用本地坐标
   "steps": [
     { "op": "beginSimulation" },
     { "op": "run", "turns": 2 },
-    { "op": "assertBlock", "x": 1, "y": 1, "z": 0, "kind": "Platform", "layer": "factory" }
+    {
+      "op": "assertBlock",
+      "x": 1,
+      "y": 1,
+      "z": 0,
+      "kind": "Platform",
+      "layer": "factory"
+    }
   ]
 }
 ```
@@ -84,11 +91,11 @@ curl 'http://127.0.0.1:8765/getPosBlock?x=&y=&z='   # 用本地坐标
 
 **Step 类型**（`src/debug_http/fixture.rs`）：
 
-| op | 字段 | 说明 |
-|----|------|------|
-| `beginSimulation` | — | 拍快照，进入模拟 |
-| `run` | `turns` | 跑 N 回合（内部会先 beginSimulation） |
-| `assertBlock` | `x,y,z,kind`, 可选 `layer` | 断言方块；layer: `scene`/`factory`/`system`/`material`/`virtual` |
+| op                | 字段                       | 说明                                                             |
+| ----------------- | -------------------------- | ---------------------------------------------------------------- |
+| `beginSimulation` | —                          | 拍快照，进入模拟                                                 |
+| `run`             | `turns`                    | 跑 N 回合（内部会先 beginSimulation）                            |
+| `assertBlock`     | `x,y,z,kind`, 可选 `layer` | 断言方块；layer: `scene`/`factory`/`system`/`material`/`virtual` |
 
 `kind` / `facing` 与 Rust `BlockKind` / `Facing` 的 Debug 名一致（如 `Pusher`, `East`）。
 
@@ -143,24 +150,24 @@ curl -X POST 'http://127.0.0.1:8765/runFixture?path=sim/<case>.json'  # 含 step
 
 完整说明见 [http-api.md](http-api.md)。GET/POST 均可（query 传参）。
 
-| 方法 | 路径 | 作用 |
-|------|------|------|
-| GET | `/help` | 端点列表 JSON |
-| GET | `/getPosBlock?x=&y=&z=` | 查询坐标方块（headless 必填 xyz） |
-| GET | `/status` | 模拟状态（turn、running 等） |
-| GET | `/blockKinds` | 全部已注册 BlockKind + layer |
-| POST | `/world/reset` | 清空会话世界 |
-| POST | `/world/place?x=&y=&z=&kind=&facing=` | 放置单方块 |
-| POST | `/loadSave?name=` | 按存档名加载（合并 puzzle+solution） |
-| POST | `/loadFixture?path=` | 只应用 fixture 的 `setup` |
-| POST | `/runFixture?path=` | 加载并执行 `setup` + `steps` |
-| POST | `/runAllFixtures` | 跑 `e2e/fixtures/blocks/*.json` |
-| POST | `/beginSimulation` | 进入模拟快照 |
-| POST | `/runOneTurn` | 推进 1 回合（会先 beginSimulation） |
-| POST | `/runN?n=` | 推进 N 回合 |
-| POST | `/run` | headless 下立即跑 10 回合 |
-| GET | `/logs?limit=` | 最近模拟日志（默认 100） |
-| DELETE | `/logs` | 清空日志 |
+| 方法   | 路径                                  | 作用                                 |
+| ------ | ------------------------------------- | ------------------------------------ |
+| GET    | `/help`                               | 端点列表 JSON                        |
+| GET    | `/getPosBlock?x=&y=&z=`               | 查询坐标方块（headless 必填 xyz）    |
+| GET    | `/status`                             | 模拟状态（turn、running 等）         |
+| GET    | `/blockKinds`                         | 全部已注册 BlockKind + layer         |
+| POST   | `/world/reset`                        | 清空会话世界                         |
+| POST   | `/world/place?x=&y=&z=&kind=&facing=` | 放置单方块                           |
+| POST   | `/loadSave?name=`                     | 按存档名加载（合并 puzzle+solution） |
+| POST   | `/loadFixture?path=`                  | 只应用 fixture 的 `setup`            |
+| POST   | `/runFixture?path=`                   | 加载并执行 `setup` + `steps`         |
+| POST   | `/runAllFixtures`                     | 跑 `e2e/fixtures/blocks/*.json`      |
+| POST   | `/beginSimulation`                    | 进入模拟快照                         |
+| POST   | `/runOneTurn`                         | 推进 1 回合（会先 beginSimulation）  |
+| POST   | `/runN?n=`                            | 推进 N 回合                          |
+| POST   | `/run`                                | headless 下立即跑 10 回合            |
+| GET    | `/logs?limit=`                        | 最近模拟日志（默认 100）             |
+| DELETE | `/logs`                               | 清空日志                             |
 
 响应格式：`{ "ok": true, ... }` 或 `{ "ok": false, "error": "..." }`。
 
@@ -173,21 +180,21 @@ Fixture 路径相对 `e2e/fixtures/`（如 `sim/foo.json`、`blocks/Platform.jso
 1. 在 fixture 的 `steps` 里加 `assertBlock` 作回归
 2. 复杂结构可加 Rust 单元测试（`structure_state` 等）
 3. 跑 `curl -X POST .../runFixture?path=sim/<case>.json` 或 `cd e2e && bun test`
-4. 较大改动后：`bun scripts/log_rs_lines.js` 报告行数
+4. 较大改动后：跑 `scripts/rust_lines_history.ipynb` 更新 `logs/rust-lines.json` 行数历史
 
 ---
 
 ## 相关源码
 
-| 路径 | 说明 |
-|------|------|
-| `src/bin/oif-debug-http.rs` | 无头 HTTP 入口 |
-| `src/bin/export_fixture.rs` | 存档区域 → fixture |
-| `src/debug_http/protocol.rs` | 路由与 help_json |
-| `src/debug_http/fixture.rs` | fixture 格式与执行 |
-| `src/debug_http/headless.rs` | 命令处理 |
-| `e2e/fixtures/sim/` | 行为/回归用例 |
-| `e2e/README.md` | e2e 总览 |
+| 路径                         | 说明               |
+| ---------------------------- | ------------------ |
+| `src/bin/oif-debug-http.rs`  | 无头 HTTP 入口     |
+| `src/bin/export_fixture.rs`  | 存档区域 → fixture |
+| `src/debug_http/protocol.rs` | 路由与 help_json   |
+| `src/debug_http/fixture.rs`  | fixture 格式与执行 |
+| `src/debug_http/headless.rs` | 命令处理           |
+| `e2e/fixtures/sim/`          | 行为/回归用例      |
+| `e2e/README.md`              | e2e 总览           |
 
 ## 注意
 
