@@ -1,6 +1,5 @@
 //! 扫描材料 / 印花 / 滚刷资源目录并安装 catalog / 表现注册表
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::meta::{MaterialBlockMetaFile, PaintMaterialMetaFile, StampMaterialMetaFile};
@@ -13,7 +12,7 @@ use crate::game::blocks::{
     StampMaterialCatalog, StampMaterialDef, install_material_catalog, install_paint_catalog,
     install_stamp_catalog, leak_str, rgb, stamp_seed_color,
 };
-use crate::shared::platform;
+use crate::shared::{asset_io, platform};
 
 const MATERIAL_BLOCKS_DIR: &str = "material_blocks";
 const STAMP_MATERIALS_DIR: &str = "stamp_materials";
@@ -57,7 +56,7 @@ pub fn merge_puzzle_material_packs(
 
     let global_material = asset_root.join(MATERIAL_BLOCKS_DIR);
     let puzzle_material = puzzle_assets.join(MATERIAL_BLOCKS_DIR);
-    let material_roots: Vec<PathBuf> = if puzzle_material.is_dir() {
+    let material_roots: Vec<PathBuf> = if asset_io::is_dir(&puzzle_material) {
         vec![global_material, puzzle_material]
     } else {
         vec![global_material]
@@ -65,7 +64,7 @@ pub fn merge_puzzle_material_packs(
 
     let global_stamp = asset_root.join(STAMP_MATERIALS_DIR);
     let puzzle_stamp = puzzle_assets.join(STAMP_MATERIALS_DIR);
-    let stamp_roots: Vec<PathBuf> = if puzzle_stamp.is_dir() {
+    let stamp_roots: Vec<PathBuf> = if asset_io::is_dir(&puzzle_stamp) {
         vec![global_stamp, puzzle_stamp]
     } else {
         vec![global_stamp]
@@ -73,7 +72,7 @@ pub fn merge_puzzle_material_packs(
 
     let global_paint = asset_root.join(PAINT_MATERIALS_DIR);
     let puzzle_paint = puzzle_assets.join(PAINT_MATERIALS_DIR);
-    let paint_roots: Vec<PathBuf> = if puzzle_paint.is_dir() {
+    let paint_roots: Vec<PathBuf> = if asset_io::is_dir(&puzzle_paint) {
         vec![global_paint, puzzle_paint]
     } else {
         vec![global_paint]
@@ -145,26 +144,12 @@ fn scan_paint_roots(
 }
 
 fn list_pack_dirs(root: &Path) -> Result<Vec<PathBuf>, String> {
-    if !root.is_dir() {
-        return Ok(Vec::new());
-    }
-    let mut dirs: Vec<PathBuf> = fs::read_dir(root)
-        .map_err(|e| format!("read {}: {e}", root.display()))?
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .filter(|path| path.is_dir())
-        .collect();
-    dirs.sort_by(|a, b| {
-        let a_name = a.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        let b_name = b.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        a_name.cmp(b_name)
-    });
-    Ok(dirs)
+    asset_io::list_subdirs(root)
 }
 
 fn optional_file(dir: &Path, name: &str) -> Option<PathBuf> {
     let path = dir.join(name);
-    path.is_file().then_some(path)
+    asset_io::is_file(&path).then_some(path)
 }
 
 fn scan_material_into(
@@ -184,7 +169,7 @@ fn load_one_material(
     presentations: &mut Vec<MaterialBlockPresentation>,
 ) -> Result<(), String> {
     let meta_path = dir.join(META_FILE);
-    if !meta_path.is_file() {
+    if !asset_io::is_file(&meta_path) {
         return Err(format!("missing {META_FILE} in {}", dir.display()));
     }
     let model_path = optional_file(dir, MODEL_FILE);
@@ -196,8 +181,8 @@ fn load_one_material(
         ));
     }
 
-    let text =
-        fs::read_to_string(&meta_path).map_err(|e| format!("read {}: {e}", meta_path.display()))?;
+    let text = asset_io::read_to_string(&meta_path)
+        .map_err(|e| format!("read {}: {e}", meta_path.display()))?;
     let meta: MaterialBlockMetaFile =
         serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", meta_path.display()))?;
     if meta.id.is_empty() {
@@ -255,7 +240,7 @@ fn load_one_stamp(
     presentations: &mut Vec<StampMaterialPresentation>,
 ) -> Result<(), String> {
     let meta_path = dir.join(META_FILE);
-    if !meta_path.is_file() {
+    if !asset_io::is_file(&meta_path) {
         return Err(format!("missing {META_FILE} in {}", dir.display()));
     }
     let model_path = optional_file(dir, MODEL_FILE);
@@ -264,8 +249,8 @@ fn load_one_stamp(
     }
     let texture_path = optional_file(dir, TEXTURE_FILE);
 
-    let text =
-        fs::read_to_string(&meta_path).map_err(|e| format!("read {}: {e}", meta_path.display()))?;
+    let text = asset_io::read_to_string(&meta_path)
+        .map_err(|e| format!("read {}: {e}", meta_path.display()))?;
     let meta: StampMaterialMetaFile =
         serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", meta_path.display()))?;
     if meta.id.is_empty() {
@@ -320,16 +305,16 @@ fn load_one_paint(
     presentations: &mut Vec<PaintMaterialPresentation>,
 ) -> Result<(), String> {
     let meta_path = dir.join(META_FILE);
-    if !meta_path.is_file() {
+    if !asset_io::is_file(&meta_path) {
         return Err(format!("missing {META_FILE} in {}", dir.display()));
     }
     let texture_path = dir.join(TEXTURE_FILE);
-    if !texture_path.is_file() {
+    if !asset_io::is_file(&texture_path) {
         return Err(format!("missing {TEXTURE_FILE} in {}", dir.display()));
     }
 
-    let text =
-        fs::read_to_string(&meta_path).map_err(|e| format!("read {}: {e}", meta_path.display()))?;
+    let text = asset_io::read_to_string(&meta_path)
+        .map_err(|e| format!("read {}: {e}", meta_path.display()))?;
     let meta: PaintMaterialMetaFile =
         serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", meta_path.display()))?;
     if meta.id.is_empty() {

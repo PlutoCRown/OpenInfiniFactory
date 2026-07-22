@@ -1,5 +1,9 @@
 <resources>
     <style name="Theme.OpenInfiniFactory" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowFullscreen">true</item>
+        <!-- 横屏时允许内容伸入摄像头挖孔，避免 letterbox 黑边 -->
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 </resources>

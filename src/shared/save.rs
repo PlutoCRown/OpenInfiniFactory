@@ -425,17 +425,14 @@ fn load_template_text(file: &str) -> Option<String> {
     String::from_utf8(bytes).ok()
 }
 
-/// 读 assets/save_templates/default/ 下字节；wasm/android 走嵌入常量
+/// 读 assets/save_templates/default/ 下字节；失败则用嵌入常量（wasm 等）
 fn load_template_bytes(file: &str) -> Option<Vec<u8>> {
-    #[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
-    {
-        let path = std::path::PathBuf::from(crate::shared::platform::asset_path())
-            .join("save_templates")
-            .join("default")
-            .join(file);
-        if let Ok(bytes) = std::fs::read(&path) {
-            return Some(bytes);
-        }
+    let path = std::path::PathBuf::from(crate::shared::platform::asset_path())
+        .join("save_templates")
+        .join("default")
+        .join(file);
+    if let Ok(bytes) = crate::shared::asset_io::read_bytes(&path) {
+        return Some(bytes);
     }
     match file {
         META_FILE => Some(TEMPLATE_META_JSON.as_bytes().to_vec()),

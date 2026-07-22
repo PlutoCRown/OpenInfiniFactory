@@ -371,6 +371,7 @@ fn load_scene_blocks_on_startup(
 ) {
     #[cfg(target_arch = "wasm32")]
     {
+        // wasm 无同步列目录 API（HTTP AssetReader），打包资源扫盘不可用；与修 Android 前同类问题
         oif_sim::blocks::ensure_fallback_scene_catalog();
         oif_sim::blocks::ensure_fallback_material_catalog();
         oif_sim::blocks::ensure_fallback_stamp_catalog();
@@ -381,7 +382,9 @@ fn load_scene_blocks_on_startup(
             &mut stamp_registry,
             &mut paint_registry,
         );
-        bevy::log::info!("scene/material packs: wasm uses builtin catalogs (no directory scan)");
+        bevy::log::info!(
+            "scene/material packs: wasm has no sync packaged-asset scan; using fallback catalogs"
+        );
         return;
     }
     #[cfg(not(target_arch = "wasm32"))]

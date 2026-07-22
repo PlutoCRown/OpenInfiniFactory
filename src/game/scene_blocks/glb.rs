@@ -32,8 +32,9 @@ pub fn load_scene_glb(
     materials: &mut Assets<StandardMaterial>,
     images: &mut Assets<Image>,
 ) -> Result<SceneGltfHandles, String> {
+    let bytes = crate::shared::asset_io::read_bytes(path)?;
     let (document, buffers, gltf_images) =
-        gltf::import(path).map_err(|e| format!("import {}: {e}", path.display()))?;
+        gltf::import_slice(&bytes).map_err(|e| format!("import {}: {e}", path.display()))?;
 
     let primitive = document
         .meshes()
@@ -138,8 +139,9 @@ pub fn load_factory_glb(
     materials: &mut Assets<StandardMaterial>,
     images: &mut Assets<Image>,
 ) -> Result<Vec<FactoryGltfPart>, String> {
+    let bytes = crate::shared::asset_io::read_bytes(path)?;
     let (document, buffers, gltf_images) =
-        gltf::import(path).map_err(|e| format!("import {}: {e}", path.display()))?;
+        gltf::import_slice(&bytes).map_err(|e| format!("import {}: {e}", path.display()))?;
 
     // mesh 索引 → 引用该 mesh 的节点名（取第一个）
     let mut mesh_group: HashMap<usize, String> = HashMap::new();
@@ -282,8 +284,9 @@ fn standard_material_from_gltf(
 
 /// 从 collision.glb 读出局部空间三角形（与 model 同坐标系，中心在原点）
 pub fn load_collision_triangles(path: &Path) -> Result<Vec<[Vec3; 3]>, String> {
+    let bytes = crate::shared::asset_io::read_bytes(path)?;
     let (document, buffers, _) =
-        gltf::import(path).map_err(|e| format!("import {}: {e}", path.display()))?;
+        gltf::import_slice(&bytes).map_err(|e| format!("import {}: {e}", path.display()))?;
 
     let primitive = document
         .meshes()

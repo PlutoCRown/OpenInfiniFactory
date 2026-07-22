@@ -43,7 +43,8 @@ impl StoragePlatform {
 }
 
 pub fn asset_path() -> String {
-    // wasm 和 Android 的 assets 都不在文件系统上，直接返回目录名
+    // Android：返回相对键前缀 `assets`，由 asset_io 剥掉后走 AssetManager
+    // wasm：资源不在本地盘，目录扫描不可用；Bevy AssetServer 仍用此名作逻辑根
     #[cfg(any(target_arch = "wasm32", target_os = "android"))]
     {
         ASSET_DIR_NAME.to_string()
@@ -142,7 +143,15 @@ fn desktop_saves_directory() -> PathBuf {
 fn mobile_saves_directory() -> PathBuf {
     #[cfg(target_os = "android")]
     {
-        let dir = PathBuf::from("/data/data/dev.openinfinifactory.prototype/files/saves");
+        if let Some(app) = bevy::android::ANDROID_APP.get() {
+            if let Some(base) = app.internal_data_path() {
+                let dir = base.join(SAVE_DIR);
+                let _ = std::fs::create_dir_all(&dir);
+                return dir;
+            }
+        }
+        // ANDROID_APP 尚未就绪时的兜底（应极少走到）
+        let dir = PathBuf::from("/data/data/dev.openinfinifactory.prototype/files").join(SAVE_DIR);
         let _ = std::fs::create_dir_all(&dir);
         return dir;
     }

@@ -67,7 +67,7 @@ fn load_png_with_sampler(
     use bevy::asset::RenderAssetUsages;
     use bevy::prelude::*;
 
-    let bytes = std::fs::read(path).ok()?;
+    let bytes = crate::shared::asset_io::read_bytes(path).ok()?;
     let mut image = Image::from_buffer(
         &bytes,
         bevy::image::ImageType::Format(bevy::image::ImageFormat::Png),

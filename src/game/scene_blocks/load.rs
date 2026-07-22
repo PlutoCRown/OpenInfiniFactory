@@ -1,6 +1,5 @@
 //! 扫描场景方块资源目录并安装 catalog / 表现注册表
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::glb::load_collision_triangles;
@@ -9,7 +8,7 @@ use super::registry::{SceneBlockPresentation, SceneBlockRegistry};
 use crate::game::blocks::{
     ColorSpec, SceneBlockCatalog, SceneBlockDef, install_scene_catalog, leak_str, rgb,
 };
-use crate::shared::platform;
+use crate::shared::{asset_io, platform};
 
 const SCENE_BLOCKS_DIR: &str = "scene_blocks";
 const META_FILE: &str = "meta.json";
@@ -42,7 +41,7 @@ pub fn merge_puzzle_scene_blocks(
 ) -> Result<(), String> {
     let global_root = PathBuf::from(platform::asset_path()).join(SCENE_BLOCKS_DIR);
     let puzzle_assets = puzzle_dir.join("assets").join(SCENE_BLOCKS_DIR);
-    let roots: Vec<&Path> = if puzzle_assets.is_dir() {
+    let roots: Vec<&Path> = if asset_io::is_dir(&puzzle_assets) {
         vec![global_root.as_path(), puzzle_assets.as_path()]
     } else {
         vec![global_root.as_path()]
@@ -70,28 +69,15 @@ fn scan_into(
     catalog: &mut SceneBlockCatalog,
     presentations: &mut Vec<SceneBlockPresentation>,
 ) -> Result<(), String> {
-    if !root.is_dir() {
-        return Ok(());
-    }
-
-    let mut dirs: Vec<PathBuf> = fs::read_dir(root)
-        .map_err(|e| format!("read {}: {e}", root.display()))?
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .filter(|path| path.is_dir())
-        .collect();
-
-    // 仅按目录名排序，保证同一次扫描顺序稳定；编号本身不写入存档
-    dirs.sort_by(|a, b| {
-        let a_name = a.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        let b_name = b.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        a_name.cmp(b_name)
-    });
-
-    for dir in dirs {
+    for dir in asset_io::list_subdirs(root)? {
         load_one_pack(&dir, catalog, presentations)?;
     }
     Ok(())
+}
+
+fn optional_file(dir: &Path, name: &str) -> Option<PathBuf> {
+    let path = dir.join(name);
+    asset_io::is_file(&path).then_some(path)
 }
 
 fn load_one_pack(
@@ -100,18 +86,12 @@ fn load_one_pack(
     presentations: &mut Vec<SceneBlockPresentation>,
 ) -> Result<(), String> {
     let meta_path = dir.join(META_FILE);
-    if !meta_path.is_file() {
+    if !asset_io::is_file(&meta_path) {
         return Err(format!("missing {META_FILE} in {}", dir.display()));
     }
 
-    let model_path = {
-        let path = dir.join(MODEL_FILE);
-        path.is_file().then_some(path)
-    };
-    let texture_path = {
-        let path = dir.join(TEXTURE_FILE);
-        path.is_file().then_some(path)
-    };
+    let model_path = optional_file(dir, MODEL_FILE);
+    let texture_path = optional_file(dir, TEXTURE_FILE);
     if model_path.is_none() && texture_path.is_none() {
         return Err(format!(
             "missing {MODEL_FILE} and {TEXTURE_FILE} in {}",
@@ -119,8 +99,8 @@ fn load_one_pack(
         ));
     }
 
-    let text =
-        fs::read_to_string(&meta_path).map_err(|e| format!("read {}: {e}", meta_path.display()))?;
+    let text = asset_io::read_to_string(&meta_path)
+        .map_err(|e| format!("read {}: {e}", meta_path.display()))?;
     let meta: SceneBlockMetaFile =
         serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", meta_path.display()))?;
 
@@ -152,10 +132,7 @@ fn load_one_pack(
         }
     };
 
-    let collision_model_path = {
-        let path = dir.join(COLLISION_FILE);
-        path.is_file().then_some(path)
-    };
+    let collision_model_path = optional_file(dir, COLLISION_FILE);
     let collision_tris = match &collision_model_path {
         Some(path) => match load_collision_triangles(path) {
             Ok(tris) => Some(tris),
@@ -166,10 +143,7 @@ fn load_one_pack(
         },
         None => None,
     };
-    let icon_path = {
-        let path = dir.join(ICON_FILE);
-        path.is_file().then_some(path)
-    };
+    let icon_path = optional_file(dir, ICON_FILE);
 
     presentations.push(SceneBlockPresentation {
         id,
