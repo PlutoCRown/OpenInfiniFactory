@@ -118,7 +118,8 @@ fn default_virtual_controls() -> VirtualControlsLayout {
 /// 虚拟遥感单个控件相对固定锚点的偏移与缩放
 ///
 /// `offset_*` / 基准尺寸以 [`VIRTUAL_LAYOUT_REF_EDGE`] 为参考短边存档；
-/// 运行时按 `min(宽, 高) / VIRTUAL_LAYOUT_REF_EDGE` 等比换算（横屏引导下短边即竖向边）。
+/// 运行时用 `Val::VMin` 按视口短边比例显示（与 DPI / window.scale_factor 无关）。
+/// 竖屏时短边是宽，控件会随短边变小。
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 pub struct VirtualControlTransform {
     pub offset_x: f32,
@@ -126,7 +127,7 @@ pub struct VirtualControlTransform {
     pub scale: f32,
 }
 
-/// 遥感布局存档参考短边（逻辑像素；移动端横屏时即屏幕高度）
+/// 遥感布局存档参考短边（逻辑单位；`ref_px / 720 * 100%` → VMin）
 pub const VIRTUAL_LAYOUT_REF_EDGE: f32 = 720.0;
 
 impl VirtualControlTransform {

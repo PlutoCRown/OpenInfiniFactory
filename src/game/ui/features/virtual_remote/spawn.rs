@@ -4,8 +4,8 @@ use bevy::prelude::*;
 
 use crate::game::ui::components::{localized_text, pressed_border, raised_border, text};
 use crate::shared::config::{
-    VirtualControlAnchor, VirtualControlId, VirtualControlTransform, VirtualControlsLayout,
-    VIRTUAL_LAYOUT_REF_EDGE,
+    VIRTUAL_LAYOUT_REF_EDGE, VirtualControlAnchor, VirtualControlId, VirtualControlTransform,
+    VirtualControlsLayout,
 };
 use crate::shared::touch_profile::TouchProfile;
 
@@ -31,23 +31,33 @@ pub const KNOB_BG: Color = Color::srgba(0.75, 0.78, 0.82, 0.75);
 /// 摇杆芯按下色
 pub const KNOB_BG_PRESSED: Color = Color::srgba(0.55, 0.58, 0.62, 0.95);
 
-/// 屏幕短边 → 布局单位（横屏游玩时短边即高度）
+/// 屏幕短边 → 参考短边单位（仅指针位移换算用；控件 Node 走 VMin）
 pub fn layout_height_unit(short_edge: f32) -> f32 {
     (short_edge / VIRTUAL_LAYOUT_REF_EDGE).max(0.01)
 }
 
-/// 取窗口短边（宽高较小值）
+/// 取窗口短边（宽高较小值，逻辑像素）
 pub fn window_short_edge(window: &Window) -> f32 {
     window.width().min(window.height())
 }
 
-/// 控件最终像素边长
+/// 参考短边坐标 → 视口短边百分比（Bevy 按 physical viewport 解析，与 DPI 无关）
+pub fn ref_to_vmin(ref_px: f32) -> Val {
+    Val::VMin(ref_px / VIRTUAL_LAYOUT_REF_EDGE * 100.0)
+}
+
+/// 控件在参考短边（720）下的边长
+pub fn control_ref_size(id: VirtualControlId, transform: VirtualControlTransform) -> f32 {
+    control_base_size(id) * transform.scale.max(0.4)
+}
+
+/// 控件逻辑像素边长（指针命中 / 摇杆芯偏移用）
 pub fn control_pixel_size(
     id: VirtualControlId,
     transform: VirtualControlTransform,
     height_unit: f32,
 ) -> f32 {
-    control_base_size(id) * transform.scale.max(0.4) * height_unit
+    control_ref_size(id, transform) * height_unit
 }
 
 /// 在 PlayingUiRoot / 布局编辑器下生成虚拟遥感
@@ -178,12 +188,9 @@ fn spawn_control(
     label: Option<&'static str>,
     for_editor: bool,
 ) {
-    // 生成时先按参考短边；首帧 apply 会按窗口短边校正
     let transform = VirtualControlsLayout::DEFAULT.transform(id);
-    let size = control_pixel_size(id, transform, 1.0);
-    let mut node = anchor_node(id.anchor(), transform, size);
-    node.position_type = PositionType::Absolute;
-    node.border_radius = BorderRadius::all(Val::Px(size * 0.5));
+    let mut node = Node::default();
+    apply_layout_to_node(id, transform, &mut node);
 
     let mut entity = parent.spawn((
         node,
@@ -217,7 +224,8 @@ fn spawn_control(
     entity.with_children(|btn| {
         if id == VirtualControlId::Joystick {
             let mut knob = Node::default();
-            apply_knob_node(&mut knob, size, Vec2::ZERO);
+            // 生成时无窗口；offset=0 时 outer 仅作除数占位
+            apply_knob_node(&mut knob, control_ref_size(id, transform), Vec2::ZERO);
             btn.spawn((
                 knob,
                 BackgroundColor(KNOB_BG),
@@ -235,37 +243,38 @@ fn spawn_control(
     });
 }
 
-fn anchor_node(anchor: VirtualControlAnchor, t: VirtualControlTransform, size: f32) -> Node {
+fn anchor_node(anchor: VirtualControlAnchor, t: VirtualControlTransform, size_ref: f32) -> Node {
     let mut node = Node {
-        width: Val::Px(size),
-        height: Val::Px(size),
+        width: ref_to_vmin(size_ref),
+        height: ref_to_vmin(size_ref),
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
         border: UiRect::all(Val::Px(2.0)),
+        border_radius: BorderRadius::all(Val::Percent(50.0)),
         ..default()
     };
     match anchor {
         VirtualControlAnchor::BottomLeft => {
-            node.left = Val::Px(t.offset_x);
-            node.bottom = Val::Px(t.offset_y);
+            node.left = ref_to_vmin(t.offset_x);
+            node.bottom = ref_to_vmin(t.offset_y);
         }
         VirtualControlAnchor::BottomRight => {
-            node.right = Val::Px(t.offset_x);
-            node.bottom = Val::Px(t.offset_y);
+            node.right = ref_to_vmin(t.offset_x);
+            node.bottom = ref_to_vmin(t.offset_y);
         }
         VirtualControlAnchor::TopRight => {
-            node.right = Val::Px(t.offset_x);
-            node.top = Val::Px(t.offset_y);
+            node.right = ref_to_vmin(t.offset_x);
+            node.top = ref_to_vmin(t.offset_y);
         }
         VirtualControlAnchor::TopRightColumn => {
-            node.right = Val::Px(t.offset_x);
-            node.top = Val::Px(t.offset_y);
+            node.right = ref_to_vmin(t.offset_x);
+            node.top = ref_to_vmin(t.offset_y);
         }
         VirtualControlAnchor::BottomCenter => {
             node.left = Val::Percent(50.0);
-            node.bottom = Val::Px(t.offset_y);
+            node.bottom = ref_to_vmin(t.offset_y);
             node.margin = UiRect {
-                left: Val::Px(-size * 0.5 + t.offset_x),
+                left: ref_to_vmin(-size_ref * 0.5 + t.offset_x),
                 ..default()
             };
         }
@@ -273,34 +282,28 @@ fn anchor_node(anchor: VirtualControlAnchor, t: VirtualControlTransform, size: f
     node
 }
 
-/// 按存档变换 + 窗口短边单位刷新控件 Node
+/// 按存档变换刷新控件 Node（VMin = 视口短边比例，跨 DPI 占屏一致）
 pub fn apply_layout_to_node(
     id: VirtualControlId,
     transform: VirtualControlTransform,
-    height_unit: f32,
     node: &mut Node,
 ) {
-    let size = control_pixel_size(id, transform, height_unit);
-    let screen = VirtualControlTransform::new(
-        transform.offset_x * height_unit,
-        transform.offset_y * height_unit,
-        transform.scale,
-    );
-    *node = anchor_node(id.anchor(), screen, size);
+    let size_ref = control_ref_size(id, transform);
+    *node = anchor_node(id.anchor(), transform, size_ref);
     node.position_type = PositionType::Absolute;
-    node.border_radius = BorderRadius::all(Val::Px(size * 0.5));
 }
 
-/// 刷新摇杆芯尺寸与相对偏移（offset 为摇杆盘内像素位移）
-pub fn apply_knob_node(knob: &mut Node, outer_size: f32, stick_offset: Vec2) {
-    let knob_size = outer_size * 0.42;
-    let radius = outer_size * 0.5;
-    knob.width = Val::Px(knob_size);
-    knob.height = Val::Px(knob_size);
+/// 刷新摇杆芯（相对父盘百分比；stick_offset 为父盘逻辑像素位移）
+pub fn apply_knob_node(knob: &mut Node, outer_logical: f32, stick_offset: Vec2) {
+    const KNOB_FRAC: f32 = 0.42;
+    let base = (0.5 - KNOB_FRAC * 0.5) * 100.0;
+    let denom = outer_logical.max(1.0);
+    knob.width = Val::Percent(KNOB_FRAC * 100.0);
+    knob.height = Val::Percent(KNOB_FRAC * 100.0);
     knob.position_type = PositionType::Absolute;
-    knob.left = Val::Px(radius - knob_size * 0.5 + stick_offset.x);
-    knob.top = Val::Px(radius - knob_size * 0.5 + stick_offset.y);
-    knob.border_radius = BorderRadius::all(Val::Px(knob_size * 0.5));
+    knob.left = Val::Percent(base + stick_offset.x / denom * 100.0);
+    knob.top = Val::Percent(base + stick_offset.y / denom * 100.0);
+    knob.border_radius = BorderRadius::all(Val::Percent(50.0));
     knob.border = UiRect::all(Val::Px(2.0));
 }
 

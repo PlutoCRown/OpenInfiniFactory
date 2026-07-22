@@ -17,9 +17,10 @@ use super::types::{
     InlineTextEditState, InventoryItems, LocalizedText, OpenBlockPanelDropdown,
     OpenSettingsDropdown, PanelCloseButton, PanelDragState, PanelFlowLayout, PanelPosition,
     PanelTitleBar, PanelVisibility, PanelWindow, PendingKeyBind, SettingsTab, StatusText,
-    StatusTextKind,
-    TextPromptRoot, UiHost, UiHoverState, UiPanelBinding, UiRuntime,
+    StatusTextKind, TextPromptRoot, TextPromptState, UiHost, UiHoverState, UiPanelBinding,
+    UiRuntime,
 };
+use crate::game::ui::core::confirm_dialog::{ConfirmButtonId, ConfirmDialogState};
 include!("font.rs");
 include!("status.rs");
 include!("hover.rs");

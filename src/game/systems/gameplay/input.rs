@@ -5,11 +5,12 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
 use crate::game::state::{GameMode, PlacementState, PlayingUiState, SimulationState};
-use crate::game::ui::dismiss_playing_overlay;
 use crate::game::ui::UiHost;
+use crate::game::ui::core::confirm_dialog::ConfirmDialogState;
+use crate::game::ui::dismiss_playing_overlay;
 use crate::game::ui::{
-    CarriedItem, InlineTextEditState, OpenBlockPanelDropdown, OpenSettingsDropdown, PanelDragState,
-    PendingKeyBind, TextPromptState, UiRuntime, HOTBAR_SLOTS,
+    CarriedItem, HOTBAR_SLOTS, InlineTextEditState, OpenBlockPanelDropdown, OpenSettingsDropdown,
+    PanelDragState, PendingKeyBind, TextPromptState, UiRuntime,
 };
 
 /// 关闭覆盖层所需的 UI 资源集合
@@ -17,6 +18,8 @@ use crate::game::ui::{
 pub struct PanelCloseDeps<'w> {
     ui_runtime: ResMut<'w, UiRuntime>,
     ui_host: ResMut<'w, UiHost>,
+    confirm: ResMut<'w, ConfirmDialogState>,
+    text_prompt: ResMut<'w, TextPromptState>,
     open_block_dropdown: ResMut<'w, OpenBlockPanelDropdown>,
     open_settings_dropdown: ResMut<'w, OpenSettingsDropdown>,
     pending_key_bind: ResMut<'w, PendingKeyBind>,
@@ -37,6 +40,8 @@ impl PanelCloseDeps<'_> {
             carried,
             &mut self.ui_runtime,
             &mut self.ui_host,
+            &mut self.confirm,
+            &mut self.text_prompt,
             &mut self.open_block_dropdown,
             &mut self.open_settings_dropdown,
             &mut self.pending_key_bind,

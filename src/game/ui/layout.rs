@@ -10,10 +10,10 @@ use super::types::{
     Crosshair, InGameHudVisibility, PlayingUiRoot, StatusText, StatusTextKind, UiRoot,
 };
 use crate::game::cameras::{GameplayViewBackdrop, GameplayViewImage};
+use crate::game::session::SessionBusy;
 use crate::game::state::BuilderMode;
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHostMountRoot, UiRootEntity};
 use crate::game::ui::features::playing_overlays::PlayingOverlayMounts;
-use crate::game::session::SessionBusy;
 use crate::game::ui::features::session_busy::spawn_session_busy_overlay;
 use crate::game::ui::features::virtual_remote::spawn_virtual_remote;
 use crate::shared::touch_profile::TouchProfile;
@@ -101,7 +101,7 @@ pub fn setup_playing_ui(
                     Pickable::IGNORE,
                 ))
                 .with_children(|container| {
-                    spawn_inventory_panel(container, builder_mode);
+                    spawn_inventory_panel(container, builder_mode, touch);
                 })
                 .id(),
             );

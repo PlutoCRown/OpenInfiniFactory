@@ -682,7 +682,7 @@ pub fn update_layout_editor_ui(
         *visibility = Visibility::Visible;
         *z = GlobalZIndex(EDITOR_Z + 1);
         let transform = draft.layout.transform(control.0);
-        apply_layout_to_node(control.0, transform, height_unit, &mut node);
+        apply_layout_to_node(control.0, transform, &mut node);
         *bg = if editor.selected == Some(control.0) {
             Color::srgba(0.55, 0.72, 0.95, 0.75).into()
         } else {

@@ -489,7 +489,7 @@ pub fn apply_virtual_control_layout(
         .unwrap_or(1.0);
     for (control, mut node, mut bg, mut border, children) in &mut controls {
         let transform = config.virtual_controls.transform(control.0);
-        apply_layout_to_node(control.0, transform, height_unit, &mut node);
+        apply_layout_to_node(control.0, transform, &mut node);
         let pressed = runtime.pressed_controls.contains(&control.0);
         set_control_pressed_style(&mut bg, &mut border, pressed);
         if control.0 == VirtualControlId::Joystick {

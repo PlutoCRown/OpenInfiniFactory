@@ -1,4 +1,6 @@
 use crate::game::blocks::BlockPresent;
+
+/// 关闭 UiHost 上的活动面板（设置 / 系统方块）
 pub fn dismiss_active_panel(
     ui_runtime: &mut UiRuntime,
     ui_host: &mut UiHost,
@@ -24,9 +26,12 @@ pub fn dismiss_active_panel(
     true
 }
 
-pub fn close_active_closable_panel(
+/// 关闭模态与 UiHost 面板（确认/输入/下拉/设置/方块）
+fn dismiss_modals_and_host_panels(
     ui_runtime: &mut UiRuntime,
     ui_host: &mut UiHost,
+    confirm: &mut ConfirmDialogState,
+    text_prompt: &mut TextPromptState,
     open_block_dropdown: &mut OpenBlockPanelDropdown,
     open_settings_dropdown: &mut OpenSettingsDropdown,
     pending_key_bind: &mut PendingKeyBind,
@@ -34,11 +39,18 @@ pub fn close_active_closable_panel(
     drag: &mut PanelDragState,
     commands: &mut Commands,
 ) -> bool {
-    if !ui_runtime
-        .active_panel()
-        .is_some_and(UiPanelId::is_closable)
-    {
-        return false;
+    if text_prompt.is_open() {
+        text_prompt.cancel();
+        return true;
+    }
+    if confirm.is_open() {
+        confirm.resolve(ConfirmButtonId::Cancel);
+        return true;
+    }
+    if open_block_dropdown.0.is_some() || open_settings_dropdown.0.is_some() {
+        open_block_dropdown.0 = None;
+        open_settings_dropdown.0 = None;
+        return true;
     }
     dismiss_active_panel(
         ui_runtime,
@@ -52,12 +64,15 @@ pub fn close_active_closable_panel(
     )
 }
 
-/// Closes the topmost in-game overlay: block panel → inventory → pause menu.
+/// 关闭最顶层覆盖 UI（Esc / 关钮共用）
+/// 顺序：输入框 → 确认框 → 下拉 → UiHost 面板 → 背包 → 暂停
 pub fn dismiss_playing_overlay(
     playing_ui: &mut PlayingUiState,
     carried: &mut CarriedItem,
     ui_runtime: &mut UiRuntime,
     ui_host: &mut UiHost,
+    confirm: &mut ConfirmDialogState,
+    text_prompt: &mut TextPromptState,
     open_block_dropdown: &mut OpenBlockPanelDropdown,
     open_settings_dropdown: &mut OpenSettingsDropdown,
     pending_key_bind: &mut PendingKeyBind,
@@ -65,9 +80,11 @@ pub fn dismiss_playing_overlay(
     drag: &mut PanelDragState,
     commands: &mut Commands,
 ) -> bool {
-    if close_active_closable_panel(
+    if dismiss_modals_and_host_panels(
         ui_runtime,
         ui_host,
+        confirm,
+        text_prompt,
         open_block_dropdown,
         open_settings_dropdown,
         pending_key_bind,
@@ -84,6 +101,41 @@ pub fn dismiss_playing_overlay(
     }
     if playing_ui.paused {
         playing_ui.paused = false;
+        return true;
+    }
+    false
+}
+
+/// 主菜单 Esc：先关模态/设置，再从存档列表退回主菜单
+pub fn dismiss_start_menu_overlay(
+    start_menu_screen: &mut StartMenuScreen,
+    ui_runtime: &mut UiRuntime,
+    ui_host: &mut UiHost,
+    confirm: &mut ConfirmDialogState,
+    text_prompt: &mut TextPromptState,
+    open_block_dropdown: &mut OpenBlockPanelDropdown,
+    open_settings_dropdown: &mut OpenSettingsDropdown,
+    pending_key_bind: &mut PendingKeyBind,
+    inline_edit: &mut InlineTextEditState,
+    drag: &mut PanelDragState,
+    commands: &mut Commands,
+) -> bool {
+    if dismiss_modals_and_host_panels(
+        ui_runtime,
+        ui_host,
+        confirm,
+        text_prompt,
+        open_block_dropdown,
+        open_settings_dropdown,
+        pending_key_bind,
+        inline_edit,
+        drag,
+        commands,
+    ) {
+        return true;
+    }
+    if *start_menu_screen == StartMenuScreen::SaveList {
+        *start_menu_screen = StartMenuScreen::Main;
         return true;
     }
     false
@@ -177,8 +229,12 @@ pub fn update_panel_visibility(
 
 pub fn panel_close_clicked(
     mut click: On<Pointer<Click>>,
+    mut playing_ui: ResMut<PlayingUiState>,
+    mut carried: ResMut<CarriedItem>,
     mut ui_runtime: ResMut<UiRuntime>,
     mut ui_host: ResMut<UiHost>,
+    mut confirm: ResMut<ConfirmDialogState>,
+    mut text_prompt: ResMut<TextPromptState>,
     mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut open_settings_dropdown: ResMut<OpenSettingsDropdown>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
@@ -191,9 +247,13 @@ pub fn panel_close_clicked(
         return;
     }
     click.propagate(false);
-    dismiss_active_panel(
+    dismiss_playing_overlay(
+        &mut playing_ui,
+        &mut carried,
         &mut ui_runtime,
         &mut ui_host,
+        &mut confirm,
+        &mut text_prompt,
         &mut open_block_dropdown,
         &mut open_settings_dropdown,
         &mut pending_key_bind,

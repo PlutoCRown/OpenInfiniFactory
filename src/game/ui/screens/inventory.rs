@@ -2,8 +2,7 @@ use bevy::prelude::*;
 
 use super::super::components::{
     PanelOptions, compact_raised_panel, default_button_size, default_font_size,
-    inventory_tray_bundle, inventory_tray_row_bundle, localized_text, spawn_panel_with_title,
-    text,
+    inventory_tray_bundle, inventory_tray_row_bundle, localized_text, spawn_panel_with_title, text,
 };
 use super::super::types::{
     BACKPACK_SLOTS, CarriedItemPreview, GameplayHudVisibility, HOTBAR_SLOTS, InGameHudStyle,
@@ -13,6 +12,7 @@ use super::super::widgets::spawn_slot;
 use crate::game::state::BuilderMode;
 use crate::game::ui::access::i18n;
 use crate::game::ui::features::inventory::InventoryTitleText;
+use crate::shared::touch_profile::TouchProfile;
 
 pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
     root.spawn((
@@ -54,7 +54,11 @@ pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
     });
 }
 
-pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, builder_mode: BuilderMode) {
+pub fn spawn_inventory_panel(
+    root: &mut ChildSpawnerCommands,
+    builder_mode: BuilderMode,
+    touch: TouchProfile,
+) {
     let title = {
         let mode = i18n.t(match builder_mode {
             BuilderMode::Edit => "mode.edit",
@@ -62,9 +66,14 @@ pub fn spawn_inventory_panel(root: &mut ChildSpawnerCommands, builder_mode: Buil
         });
         i18n.fmt("inventory.title", &[("mode", mode.as_str())])
     };
+    let mut options = PanelOptions::new(640.0, "inventory.title").start_hidden();
+    // 触控无 Esc，标题栏需要关钮
+    if touch.enabled {
+        options = options.closable();
+    }
     spawn_panel_with_title(
         root,
-        PanelOptions::new(640.0, "inventory.title").start_hidden(),
+        options,
         PanelVisibility::Inventory,
         title,
         InventoryTitleText,
