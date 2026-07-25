@@ -62,6 +62,7 @@ pub(super) fn wire_connects_to(block: &BlockData, wire_from_block: IVec3) -> boo
     match block.kind.render_behavior(block.facing).wire_connector {
         Some(WireConnectorBehavior::Wire) => true,
         Some(WireConnectorBehavior::Device { blocked_offset }) => wire_from_block != blocked_offset,
+        Some(WireConnectorBehavior::AllowOnly { offset }) => wire_from_block == offset,
         None => false,
     }
 }

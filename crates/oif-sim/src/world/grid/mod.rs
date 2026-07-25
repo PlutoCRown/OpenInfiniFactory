@@ -52,6 +52,8 @@ pub struct WorldBlocks {
     pub next_acceptor_id: u64,
     /// 刚传送到达某格的材料 BlockId：同 id 留着则不传；空/换 id 则清标记再尝试
     pub teleport_arrivals: HashMap<IVec3, BlockId>,
+    /// 旋转器工作面刚转过的材料 BlockId：同 id 留着则不转；空/换 id 则清；通电也可清
+    pub rotator_arrivals: HashMap<IVec3, BlockId>,
 }
 
 /// 印花等占格附着：子材料挂在父材料的某一面上

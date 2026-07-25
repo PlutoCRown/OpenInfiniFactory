@@ -1,7 +1,7 @@
 use glam::IVec3;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::blocks::{BlockId, SignalBehavior};
+use crate::blocks::{BlockId, SignalBehavior, WireFacePolicy};
 use crate::world::grid::{MaterialFace, WorldBlocks};
 
 use super::signal_offsets;
@@ -89,8 +89,8 @@ impl SignalNetworkCache {
                 Some(SignalBehavior::Detector { detection_pos }) => {
                     self.cache_detector(world, block.id, pos, detection_pos);
                 }
-                Some(SignalBehavior::PoweredDevice) => {
-                    self.cache_powered_device(world, block.id, pos, block.facing.forward_ivec3());
+                Some(SignalBehavior::PoweredDevice { wire_face }) => {
+                    self.cache_powered_device(world, block.id, pos, wire_face);
                 }
                 Some(SignalBehavior::Wire) | None => {}
             }
@@ -104,8 +104,12 @@ impl SignalNetworkCache {
         pos: IVec3,
         blocked_offset: IVec3,
     ) {
-        for component in adjacent_wire_components(world, &self.wire_components, pos, blocked_offset)
-        {
+        for component in adjacent_wire_components(
+            world,
+            &self.wire_components,
+            pos,
+            WireFacePolicy::BlockOne(blocked_offset),
+        ) {
             self.component_detectors[component.0].push(id);
         }
     }
@@ -115,10 +119,9 @@ impl SignalNetworkCache {
         world: &WorldBlocks,
         id: BlockId,
         pos: IVec3,
-        blocked_offset: IVec3,
+        wire_face: WireFacePolicy,
     ) {
-        let components =
-            adjacent_wire_components(world, &self.wire_components, pos, blocked_offset);
+        let components = adjacent_wire_components(world, &self.wire_components, pos, wire_face);
         if !components.is_empty() {
             self.device_components.insert(id, components);
         }
@@ -191,17 +194,17 @@ impl SignalNetworkCache {
     }
 }
 
-/// 收集设备/传感器相邻导线所属的信号连通分量（跳过 blocked 面）
+/// 收集设备/传感器相邻导线所属的信号连通分量（按接线策略过滤面）
 fn adjacent_wire_components(
     world: &WorldBlocks,
     wire_components: &HashMap<BlockId, SignalComponentId>,
     pos: IVec3,
-    blocked_offset: IVec3,
+    wire_face: WireFacePolicy,
 ) -> Vec<SignalComponentId> {
     let mut components = Vec::new();
     let mut seen = HashSet::new();
     for offset in signal_offsets() {
-        if offset == blocked_offset {
+        if !wire_face.allows(offset) {
             continue;
         }
         let Some(wire) = world.blocks.get(&(pos + offset)) else {

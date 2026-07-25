@@ -1,7 +1,10 @@
 use super::CounterRotatorBlock;
 
 use crate::game::blocks::traits::BlockRender;
-use crate::game::blocks::{BlockModel, BlockModelPart, ModelMaterial, ModelMesh};
+use crate::game::blocks::{
+    BlockModel, BlockModelPart, ModelMaterial, ModelMesh, RenderBehavior, render_bottom_wire_device,
+};
+use crate::game::world::direction::Facing;
 
 const MODEL: &[BlockModelPart] = &[
     BlockModelPart::new(
@@ -14,15 +17,15 @@ const MODEL: &[BlockModelPart] = &[
         ModelMaterial::ConveyorBelt,
         [0.0, 0.50, 0.0],
     ),
-    BlockModelPart::new(
-        ModelMesh::RotatorRing,
-        ModelMaterial::Belt,
-        [0.0, 0.50, 0.0],
-    ),
+    BlockModelPart::new(ModelMesh::RotatorRing, ModelMaterial::Belt, [0.0, 0.50, 0.0]),
 ];
 
 impl BlockRender for CounterRotatorBlock {
     fn model(&self) -> BlockModel {
         BlockModel::PartsOnly(MODEL)
+    }
+
+    fn render_behavior(&self, _facing: Facing) -> RenderBehavior {
+        render_bottom_wire_device()
     }
 }

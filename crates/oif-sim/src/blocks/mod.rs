@@ -259,12 +259,30 @@ pub enum WeldBehavior {
     Node,
 }
 
+/// 用电器/传感器与导线的邻面接线策略
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WireFacePolicy {
+    /// 除该面外均可接（活塞等：禁工作面前方）
+    BlockOne(IVec3),
+    /// 仅该面可接（旋转器：仅底部）
+    AllowOnly(IVec3),
+}
+
+impl WireFacePolicy {
+    pub fn allows(self, offset: IVec3) -> bool {
+        match self {
+            Self::BlockOne(blocked) => offset != blocked,
+            Self::AllowOnly(only) => offset == only,
+        }
+    }
+}
+
 /// 信号行为：导线 / 传感器 / 用电器
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SignalBehavior {
     Wire,
     Detector { detection_pos: IVec3 },
-    PoweredDevice,
+    PoweredDevice { wire_face: WireFacePolicy },
 }
 
 /// 通电用电器的额外副作用（与运动/激光等阶段效果正交）

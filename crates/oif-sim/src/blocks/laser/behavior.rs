@@ -16,7 +16,9 @@ impl BlockBehavior for LaserBlock {
         })
     }
 
-    fn signal_behavior(&self, _facing: Facing) -> Option<SignalBehavior> {
-        Some(SignalBehavior::PoweredDevice)
+    fn signal_behavior(&self, facing: Facing) -> Option<SignalBehavior> {
+        Some(SignalBehavior::PoweredDevice {
+            wire_face: crate::blocks::WireFacePolicy::BlockOne(facing.forward_ivec3()),
+        })
     }
 }

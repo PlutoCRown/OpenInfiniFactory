@@ -184,6 +184,25 @@ impl WorldBlocks {
         });
     }
 
+    /// 标记旋转器刚转过工作面上的材料（同 id 留着则不连转）
+    pub fn mark_rotator_arrival(&mut self, rotator_pos: IVec3, id: BlockId) {
+        self.rotator_arrivals.insert(rotator_pos, id);
+    }
+
+    /// 工作面材料是否仍是该旋转器记录的「刚转过」方块
+    pub fn is_rotator_arrival(&self, rotator_pos: IVec3, id: BlockId) -> bool {
+        self.rotator_arrivals.get(&rotator_pos) == Some(&id)
+    }
+
+    /// 同步旋转锁：工作面（rotator+Y）空/换 id 则清
+    pub fn sync_rotator_arrivals(&mut self) {
+        self.rotator_arrivals.retain(|rotator_pos, id| {
+            self.blocks
+                .get(&(*rotator_pos + IVec3::Y))
+                .is_some_and(|block| block.kind.is_material() && block.id == *id)
+        });
+    }
+
     pub fn is_factory_at(&self, pos: IVec3) -> bool {
         self.blocks
             .get(&pos)

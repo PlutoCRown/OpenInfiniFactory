@@ -583,9 +583,10 @@ pub(crate) fn spawn_block_model(
         }
 
         if let Some(wire_connector) = render_behavior.wire_connector {
-            let blocked_offset = match wire_connector {
-                WireConnectorBehavior::Device { blocked_offset } => Some(blocked_offset),
-                WireConnectorBehavior::Wire => None,
+            let face_allowed = |offset: IVec3| match wire_connector {
+                WireConnectorBehavior::Device { blocked_offset } => offset != blocked_offset,
+                WireConnectorBehavior::AllowOnly { offset: only } => offset == only,
+                WireConnectorBehavior::Wire => true,
             };
             let factory_wire_ready = matches!(
                 assets.factory_visual(BlockKind::Wire),
@@ -598,7 +599,7 @@ pub(crate) fn spawn_block_model(
             let mut connected_offsets = Vec::new();
             let mut panel_face_indices = std::collections::HashSet::new();
             for (face_index, offset) in signal_neighbor_offsets().into_iter().enumerate() {
-                if blocked_offset == Some(offset) {
+                if !face_allowed(offset) {
                     continue;
                 }
                 // 本面有灯板：仍画该向臂（面板贴臂端）；信号隔断在 BFS，不在这里

@@ -135,12 +135,13 @@ impl PusherState {
 }
 
 pub(super) fn mark_structure_movement_phase(
-    world: &WorldBlocks,
+    world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
     structures: &StructureState,
     pusher_state: &mut PusherState,
     suction: &SuctionLinks,
 ) -> Vec<StructureMove> {
+    world.sync_rotator_arrivals();
     let mut movers: Vec<(IVec3, MovementRule)> = world
         .blocks
         .iter()
@@ -177,9 +178,14 @@ pub(super) fn mark_structure_movement_phase(
                 }
             }
             MovementRule::Rotate { clockwise } => {
-                if let Some(movement) =
-                    mark_rotate_material_structure(structures, pos, clockwise, suction)
-                {
+                if let Some(movement) = mark_rotate_material_structure(
+                    world,
+                    powered_devices,
+                    structures,
+                    pos,
+                    clockwise,
+                    suction,
+                ) {
                     if let Some(source_id) = source_id {
                         moves.push(movement.with_source(source_id, pos));
                     }
@@ -492,12 +498,26 @@ fn mark_lift_structure(
 }
 
 fn mark_rotate_material_structure(
+    world: &mut WorldBlocks,
+    powered_devices: &HashSet<IVec3>,
     structures: &StructureState,
     pos: IVec3,
     clockwise: bool,
     suction: &SuctionLinks,
 ) -> Option<StructureMove> {
+    // 通电清锁，同拍可再转工作面上同一块
+    if powered_devices.contains(&pos) {
+        world.rotator_arrivals.remove(&pos);
+    }
     let source = pos + IVec3::Y;
+    let material_id = world
+        .blocks
+        .get(&source)
+        .filter(|b| b.kind.is_material())?
+        .id;
+    if world.is_rotator_arrival(pos, material_id) {
+        return None;
+    }
     let structure_id = structures.id_at(source)?;
     // 粘连组含工厂时不允许旋转
     if structures.linked_contains_factory(suction, source) {

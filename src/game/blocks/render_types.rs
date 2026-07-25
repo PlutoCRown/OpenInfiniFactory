@@ -28,7 +28,20 @@ pub enum WeldConnectorBehavior {
 #[derive(Clone, Copy)]
 pub enum WireConnectorBehavior {
     Wire,
+    /// 除该面外可接
     Device { blocked_offset: IVec3 },
+    /// 仅该面可接
+    AllowOnly { offset: IVec3 },
+}
+
+/// 仅底面接线的用电器（旋转器）
+pub fn render_bottom_wire_device() -> RenderBehavior {
+    RenderBehavior {
+        wire_connector: Some(WireConnectorBehavior::AllowOnly {
+            offset: IVec3::NEG_Y,
+        }),
+        ..Default::default()
+    }
 }
 
 /// 方块模型网格枚举

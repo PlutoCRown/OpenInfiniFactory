@@ -49,7 +49,7 @@ pub use self::registry::{
 };
 pub use self::render_types::{
     BlockModel, BlockModelPart, ModelMaterial, ModelMesh, RenderBehavior, WeldConnectorBehavior,
-    WireConnectorBehavior, render_directional_wire_device,
+    WireConnectorBehavior, render_bottom_wire_device, render_directional_wire_device,
 };
 use crate::game::state::UiPanelId;
 pub use oif_sim::blocks::{
@@ -61,7 +61,7 @@ pub use oif_sim::blocks::{
     PaintMaterialCatalog, PaintMaterialDef, PaintMaterialId, PersistentLayer, PoweredSideEffect,
     SceneBlockCatalog,
     SceneBlockDef, SceneBlockId, SignalBehavior, StampMaterialCatalog, StampMaterialDef,
-    StampMaterialId, SystemBlock, VirtualBlock, WeldBehavior, ensure_fallback_material_catalog,
+    StampMaterialId, SystemBlock, VirtualBlock, WeldBehavior, WireFacePolicy, ensure_fallback_material_catalog,
     ensure_fallback_paint_catalog, ensure_fallback_scene_catalog, ensure_fallback_stamp_catalog,
     fallback_material_id, fallback_scene_id, install_material_catalog, install_paint_catalog,
     install_scene_catalog, install_stamp_catalog, leak_str, material_catalog, material_def,

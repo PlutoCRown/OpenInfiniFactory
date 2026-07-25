@@ -676,7 +676,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                 pivot,
                 clockwise,
                 source,
-                source_pos: _,
+                source_pos,
             } => {
                 let structure = with_factory_attachment_children(world, &structure);
                 if structure.iter().any(|pos| moved.contains(pos)) {
@@ -705,6 +705,16 @@ pub(super) fn execute_structure_moves_with_pushers(
                     }
                     moved.extend(structure.iter().copied());
                     rotate_structure(world, &structure, pivot, clockwise);
+                    if let Some(rotator_pos) = source_pos {
+                        if let Some(id) = world
+                            .blocks
+                            .get(&(rotator_pos + IVec3::Y))
+                            .filter(|block| block.kind.is_material())
+                            .map(|block| block.id)
+                        {
+                            world.mark_rotator_arrival(rotator_pos, id);
+                        }
+                    }
                     let target_structure: HashSet<IVec3> = targets.iter().copied().collect();
                     structures.replace_structure_positions(&structure, target_structure.clone());
                     if let Some(source) = source {
@@ -823,8 +833,7 @@ fn expanded_move_structure(
         }
     }
 
-    can_move_structure_without_push(world, &expanded, offset)
-        .then_some(expanded)
+    can_move_structure_without_push(world, &expanded, offset).then_some(expanded)
 }
 
 /// 把工厂附着子格（告示等）并入待移动集合
