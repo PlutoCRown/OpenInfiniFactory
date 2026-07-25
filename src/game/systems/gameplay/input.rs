@@ -57,7 +57,6 @@ pub fn gameplay_input(
     input: Res<crate::game::input::GameplayInputState>,
     mut mouse_wheel: MessageReader<MouseWheel>,
     keys: Res<ButtonInput<KeyCode>>,
-    text_prompt: Res<TextPromptState>,
     mode: Res<State<GameMode>>,
     mut playing_ui: ResMut<PlayingUiState>,
     mut placement: ResMut<PlacementState>,
@@ -67,7 +66,7 @@ pub fn gameplay_input(
     mut commands: Commands,
 ) {
     let typing = panel_close.pending_key_bind.0.is_some()
-        || text_prompt.is_open()
+        || panel_close.text_prompt.is_open()
         || panel_close.inline_edit.is_active();
     if typing {
         mouse_wheel.clear();
