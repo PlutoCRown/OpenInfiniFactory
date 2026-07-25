@@ -14,8 +14,6 @@ use crate::game::ui::components::{
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost};
 use crate::game::ui::core::text_input::primary_click;
 
-const TEXT_PROMPT_MAX_LEN: usize = 24;
-
 type TextPromptHandler = Box<dyn FnOnce(TextPromptResult, &mut World) + Send>;
 
 /// Stored as a [`NonSend`] resource because [`TextPromptHandler`] is not [`Sync`].

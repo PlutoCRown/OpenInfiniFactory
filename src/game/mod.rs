@@ -19,7 +19,7 @@ use bevy::light::{DirectionalLightShadowMap, GlobalAmbientLight};
 use bevy::prelude::*;
 use bevy::ui_widgets::slider_self_update;
 
-use crate::scene::BlockEntityIndex;
+use crate::scene::{BlockEntityIndex, apply_pending_teleport_snaps};
 use crate::shared::config::{GameConfig, load_config};
 use crate::shared::i18n::{I18n, resolve_language};
 use crate::shared::launch::LaunchOptions;
@@ -291,9 +291,11 @@ impl Plugin for GamePlugin {
                 Update,
                 (
                     animate_blocks,
+                    apply_pending_teleport_snaps,
                     scroll_conveyor_belts,
                     retire_block_icon_renderers,
                 )
+                    .chain()
                     .after(PerfScope::View)
                     .before(PerfScope::Animation),
             )

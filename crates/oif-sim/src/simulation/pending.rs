@@ -5,14 +5,12 @@ use crate::blocks::{BlockData, BlockId, BlockKind, PaintMaterialId, StampMateria
 use crate::world::direction::Facing;
 use crate::world::grid::MaterialFace;
 
-/// 跨回合挂起：生成、延后销毁、延后传送、延后漆/印花（等移动动画播完再落地）
+/// 跨回合挂起：生成、延后销毁、延后漆/印花（等移动动画播完再落地）
 #[derive(Default, Clone)]
 pub struct PendingGeneratedMaterials {
     pending: HashMap<IVec3, PendingGeneratedMaterial>,
     /// 钻头/验收销毁：本回合只标记，下一回合开始再移除
     pending_destroyed: HashMap<IVec3, PendingDestroyedMaterial>,
-    /// 传送：本回合只标记源口→目标口，下一回合开始再搬迁
-    pending_teleports: HashMap<IVec3, PendingTeleport>,
     /// 滚刷漆：本回合只标记，下一回合开始再写入
     pending_paints: HashMap<MaterialFace, PendingPaint>,
     /// 印花：按印花机格挂起，下一回合开始再生成附着
@@ -30,7 +28,6 @@ impl PendingGeneratedMaterials {
     pub fn clear(&mut self) {
         self.pending.clear();
         self.pending_destroyed.clear();
-        self.pending_teleports.clear();
         self.pending_paints.clear();
         self.pending_stamps.clear();
     }
@@ -59,12 +56,6 @@ impl PendingGeneratedMaterials {
                 ready_turn,
                 reason,
             });
-    }
-
-    pub(crate) fn mark_teleport(&mut self, from: IVec3, to: IVec3, ready_turn: u64) {
-        self.pending_teleports
-            .entry(from)
-            .or_insert(PendingTeleport { to, ready_turn });
     }
 
     pub(crate) fn mark_paint(
@@ -112,22 +103,6 @@ impl PendingGeneratedMaterials {
         for pos in ready {
             if let Some(pending) = self.pending_destroyed.remove(&pos) {
                 out.push((pos, pending.kind, pending.reason));
-            }
-        }
-        out
-    }
-
-    /// 取出本回合应落地的延后传送（源口 → 目标口）
-    pub(crate) fn take_ready_teleports(&mut self, turn: u64) -> Vec<(IVec3, IVec3)> {
-        let ready: Vec<IVec3> = self
-            .pending_teleports
-            .iter()
-            .filter_map(|(from, pending)| (pending.ready_turn <= turn).then_some(*from))
-            .collect();
-        let mut out = Vec::with_capacity(ready.len());
-        for from in ready {
-            if let Some(pending) = self.pending_teleports.remove(&from) {
-                out.push((from, pending.to));
             }
         }
         out
@@ -194,12 +169,6 @@ struct PendingDestroyedMaterial {
     kind: BlockKind,
     ready_turn: u64,
     reason: PendingDestroyReason,
-}
-
-#[derive(Clone)]
-struct PendingTeleport {
-    to: IVec3,
-    ready_turn: u64,
 }
 
 #[derive(Clone)]

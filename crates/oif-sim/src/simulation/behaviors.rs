@@ -103,12 +103,10 @@ pub(super) fn run_material_destroy_phase(
     destroy_powered_lasers(world, powered_laser_devices)
 }
 
-/// 阶段 4 传送：本回合只挂起，下一回合开始再搬迁（等移动动画完全进入传送口）
+/// 阶段 4 传送：本回合当场搬迁并拆焊（与焊接同拍；表现层瞬时到位，不走移动动画）
 pub(super) fn run_material_teleport_phase(
     world: &mut WorldBlocks,
-    pending_generated: &mut super::pending::PendingGeneratedMaterials,
-    ready_turn: u64,
-) {
+) -> Vec<(IVec3, IVec3, crate::blocks::BlockId)> {
     world.sync_teleport_arrivals();
 
     let portals: Vec<IVec3> = world
@@ -123,6 +121,7 @@ pub(super) fn run_material_teleport_phase(
         })
         .collect();
 
+    let mut flashes = Vec::new();
     let mut handled = HashSet::new();
     for portal in portals {
         if handled.contains(&portal) {
@@ -131,14 +130,18 @@ pub(super) fn run_material_teleport_phase(
         let Some(partner) = resolve_teleport_pair(world, portal) else {
             continue;
         };
-        // 两端同时有材料：目的地被占 → 双方都不挂起，留在原位下回合再试
+        // 两端同时有材料：目的地被占 → 双方都不传，留在原位下回合再试
         if world.is_material_at(partner) || !world.can_move_into(partner) {
             continue;
         }
-        pending_generated.mark_teleport(portal, partner, ready_turn);
+        if let Some(id) = teleport_material(world, portal, partner) {
+            world.mark_teleport_arrival(partner, id);
+            flashes.push((portal, partner, id));
+        }
         handled.insert(portal);
         handled.insert(partner);
     }
+    flashes
 }
 
 /// 解析传送对：本口有材料、未处于「刚到达」锁定、且存在配对口
@@ -596,15 +599,6 @@ fn mark_material_destroy(
         return;
     }
     pending_generated.mark_destroyed(pos, block.kind, ready_turn, reason);
-}
-
-/// 落地一笔挂起的传送（源口仍有材料且目标口可进）；成功返回到达目标格的材料 id
-pub(super) fn apply_pending_teleport(
-    world: &mut WorldBlocks,
-    from: IVec3,
-    to: IVec3,
-) -> Option<crate::blocks::BlockId> {
-    teleport_material(world, from, to)
 }
 
 fn detach_material_block(world: &mut WorldBlocks, pos: IVec3) {

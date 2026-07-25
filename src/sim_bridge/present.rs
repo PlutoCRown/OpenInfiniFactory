@@ -2,6 +2,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use std::collections::HashSet;
 
+use super::{CachedTurn, SimSnapshot, SimulationWorker, TurnCache};
 use crate::game::simulation::core::prepare_upcoming_generation;
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::pending::PendingGeneratedMaterials;
@@ -16,11 +17,10 @@ use crate::game::world::animation::{
 };
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    despawn_pending_generated_previews, spawn_pending_generated_block, PendingGeneratedPreview,
-    PortalFlashQueue, SceneChunkMeshes, WorldRenderAssets,
+    PendingGeneratedPreview, PortalFlashQueue, SceneChunkMeshes, WorldRenderAssets,
+    despawn_pending_generated_previews, spawn_pending_generated_block,
 };
-use crate::scene::{apply_turn_output, BlockEntityIndex};
-use super::{CachedTurn, SimSnapshot, SimulationWorker, TurnCache};
+use crate::scene::{BlockEntityIndex, apply_turn_output};
 
 /// 表现层提交状态：已提交世界与上次通电电线集
 #[derive(Resource, Default)]
@@ -275,11 +275,8 @@ fn present_turn(
         structure_state,
         sim_stats,
         scene_chunks,
+        portal_flash_queue,
     );
-    for &(from, to, _) in &cached.output.teleport_flashes {
-        portal_flash_queue.positions.push(from);
-        portal_flash_queue.positions.push(to);
-    }
     presentation.last_powered_wires = cached.output.powered_wires.clone();
     presentation.committed_world = world.clone();
 }

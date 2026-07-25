@@ -3,5 +3,5 @@ mod incremental;
 mod turn_visuals;
 
 pub use entity_index::BlockEntityIndex;
-pub use incremental::{block_data_at, refresh_edit_changes};
+pub use incremental::{apply_pending_teleport_snaps, block_data_at, refresh_edit_changes};
 pub use turn_visuals::apply_turn_output;

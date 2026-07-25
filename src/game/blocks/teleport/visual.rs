@@ -4,8 +4,8 @@ use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 
 use crate::game::world::render_assets::WorldRenderAssets;
-use crate::game::world::rendering::portal_material::TeleportPortalVisual;
 use crate::game::world::rendering::BlockIconRenderEntity;
+use crate::game::world::rendering::portal_material::TeleportPortalVisual;
 
 /// 生成传送门立方体（螺旋材质）
 pub fn spawn_teleport_visual(
@@ -17,7 +17,7 @@ pub fn spawn_teleport_visual(
     let mut entity = parent.spawn((
         Mesh3d(assets.portal_cube_mesh()),
         MeshMaterial3d(assets.portal_material_handle()),
-        Transform::from_scale(Vec3::splat(0.98)),
+        Transform::IDENTITY,
         TeleportPortalVisual { pos },
     ));
     if let Some(layer) = icon_layer {

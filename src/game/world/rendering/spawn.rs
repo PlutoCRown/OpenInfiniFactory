@@ -408,11 +408,6 @@ pub(crate) fn spawn_block_model(
         transform.translation += origin;
     }
 
-    let shell_scale = data.kind.material_shell_scale();
-    if shell_scale != 1.0 {
-        transform.scale *= shell_scale;
-    }
-
     let is_preview = edit_preview.is_some();
     let has_factory_visual = assets.factory_visual(data.kind).is_some();
     // 游玩态验收器：半透明目标材料 + 扫光；编辑/图标/放置预览仍用绿壳
@@ -445,12 +440,14 @@ pub(crate) fn spawn_block_model(
             ))
         }
     } else if data.kind == crate::game::blocks::BlockKind::Wire
+        || data.kind == BlockKind::Teleport
         || has_factory_visual
         || matches!(
             data.kind.model(),
             BlockModel::PartsOnly(_) | BlockModel::PusherParts(_)
         )
     {
+        // 传送只用子节点 Portal 立方体，勿再挂默认实心壳（否则会叠 1.05 壳）
         commands.spawn((transform, Visibility::default()))
     } else if data.kind == BlockKind::Platform {
         commands.spawn((
@@ -557,12 +554,7 @@ pub(crate) fn spawn_block_model(
                 );
             }
             if data.kind == BlockKind::Teleport {
-                spawn_teleport_visual(
-                    parent,
-                    assets,
-                    pos,
-                    icon_render.map(|(_, layer)| layer),
-                );
+                spawn_teleport_visual(parent, assets, pos, icon_render.map(|(_, layer)| layer));
             }
         });
 

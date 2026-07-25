@@ -30,10 +30,10 @@ pub mod reverse_conveyor;
 pub mod roller;
 pub mod roller_body;
 pub mod rotator;
+pub mod sign;
 pub mod splitter;
 pub mod stamper;
 pub mod stamper_body;
-pub mod sign;
 pub mod suction_cup;
 pub mod teleport;
 pub mod vertical_mirror;
@@ -45,27 +45,25 @@ use glam::IVec3;
 use serde::{Deserialize, Serialize};
 
 pub use self::material_catalog::{
+    FALLBACK_MATERIAL_STRING_ID, MaterialBlockCatalog, MaterialBlockDef, MaterialBlockId,
     ensure_fallback_material_catalog, fallback_material_id, install_material_catalog,
-    material_catalog, material_def, resolve_material_id, MaterialBlockCatalog, MaterialBlockDef,
-    MaterialBlockId, FALLBACK_MATERIAL_STRING_ID,
+    material_catalog, material_def, resolve_material_id,
 };
-pub use self::material_props::{
-    local_face_index, material_face_connectable, MaterialProps,
-};
+pub use self::material_props::{MaterialProps, local_face_index, material_face_connectable};
 pub use self::paint_catalog::{
-    ensure_fallback_paint_catalog, install_paint_catalog, paint_catalog, paint_def,
-    paint_id_by_string, PaintMaterialCatalog, PaintMaterialDef, PaintMaterialId,
+    PaintMaterialCatalog, PaintMaterialDef, PaintMaterialId, ensure_fallback_paint_catalog,
+    install_paint_catalog, paint_catalog, paint_def, paint_id_by_string,
 };
 pub use self::registry::{assert_registry_consistent, save_stores_facing};
 pub use self::scene_catalog::{
+    FALLBACK_SCENE_STRING_ID, SceneBlockCatalog, SceneBlockDef, SceneBlockId,
     ensure_fallback_scene_catalog, fallback_scene_id, install_scene_catalog, leak_str,
-    resolve_scene_id, scene_catalog, scene_def, SceneBlockCatalog, SceneBlockDef, SceneBlockId,
-    FALLBACK_SCENE_STRING_ID,
+    resolve_scene_id, scene_catalog, scene_def,
 };
 pub use self::stamp_catalog::{
+    FALLBACK_STAMP_SEED_COLORS, StampMaterialCatalog, StampMaterialDef, StampMaterialId,
     ensure_fallback_stamp_catalog, install_stamp_catalog, stamp_catalog, stamp_def,
-    stamp_id_by_string, stamp_seed_color, StampMaterialCatalog, StampMaterialDef, StampMaterialId,
-    FALLBACK_STAMP_SEED_COLORS,
+    stamp_id_by_string, stamp_seed_color,
 };
 pub use crate::world::direction::Facing;
 use crate::world::grid::BlockSettings;
@@ -174,12 +172,22 @@ pub enum BlockShape {
 
 #[derive(Clone, Copy)]
 pub enum MarkerBehavior {
-    WeldPoint { offset: IVec3, facing: Facing },
-    DrillHead { offset: IVec3, facing: Facing },
+    WeldPoint {
+        offset: IVec3,
+        facing: Facing,
+    },
+    DrillHead {
+        offset: IVec3,
+        facing: Facing,
+    },
     /// 滚刷机同格实体占位
-    RollerBody { facing: Facing },
+    RollerBody {
+        facing: Facing,
+    },
     /// 印花机同格实体占位（朝向与宿主一致，供 L4 透传）
-    StamperBody { facing: Facing },
+    StamperBody {
+        facing: Facing,
+    },
 }
 
 #[derive(Clone, Copy)]
@@ -787,14 +795,6 @@ impl BlockKind {
             return false;
         }
         self.block().shows_material_preview()
-    }
-
-    pub fn material_shell_scale(self) -> f32 {
-        if self.is_system_block() && self.persistent_layer() == Some(PersistentLayer::Puzzle) {
-            1.05
-        } else {
-            1.0
-        }
     }
 
     pub fn alternate(self) -> Option<Self> {

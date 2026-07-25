@@ -8,11 +8,12 @@ use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     AnimatedBlock, AnimationTiming, BlockAnimation, PusherAnimation,
 };
-use crate::game::world::grid::WorldBlocks;
+use crate::game::world::grid::{WorldBlocks, grid_to_world};
 use crate::game::world::rendering::{
-    BlockEntity, BlockEntityLayer, SceneChunkMeshes, WorldRenderAssets, signal_neighbor_offsets,
-    spawn_acceptance_sparks, spawn_break_debris, spawn_laser_beams, spawn_weld_bursts,
-    spawn_weld_sparks, spawn_world_block_entity, sync_scene_chunks_for_positions,
+    BlockEntity, BlockEntityLayer, PortalFlashQueue, SceneChunkMeshes, WorldRenderAssets,
+    signal_neighbor_offsets, spawn_acceptance_sparks, spawn_break_debris, spawn_laser_beams,
+    spawn_weld_bursts, spawn_weld_sparks, spawn_world_block_entity,
+    sync_scene_chunks_for_positions,
 };
 use crate::sim_bridge::TurnOutput;
 
@@ -30,6 +31,103 @@ fn despawn_animatable_at(commands: &mut Commands, index: &mut BlockEntityIndex, 
     if let Some(entity) = index.remove_animatable(pos) {
         commands.entity(entity).despawn();
     }
+}
+
+/// 移动动画结束后再把实体瞬移到传送出口（本回合逻辑已在出口）
+#[derive(Component)]
+pub struct PendingTeleportSnap {
+    from: IVec3,
+    to: IVec3,
+    block_id: crate::game::blocks::BlockId,
+    delay: f32,
+    elapsed: f32,
+}
+
+/// 每帧推进延迟传送瞬移，并触发传送口闪烁
+pub fn apply_pending_teleport_snaps(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut index: ResMut<BlockEntityIndex>,
+    after: Res<WorldBlocks>,
+    mut portal_flash_queue: ResMut<PortalFlashQueue>,
+    mut pending: Query<(Entity, &mut PendingTeleportSnap)>,
+) {
+    for (entity, mut snap) in &mut pending {
+        snap.elapsed += time.delta_secs();
+        if snap.elapsed < snap.delay {
+            continue;
+        }
+        let from = snap.from;
+        let to = snap.to;
+        let block_id = snap.block_id;
+        snap_teleport_entity(
+            &mut commands,
+            &mut index,
+            &after,
+            entity,
+            from,
+            to,
+            block_id,
+            &mut portal_flash_queue,
+        );
+        commands.entity(entity).remove::<PendingTeleportSnap>();
+    }
+}
+
+fn snap_teleport_entity(
+    commands: &mut Commands,
+    index: &mut BlockEntityIndex,
+    after: &WorldBlocks,
+    entity: Entity,
+    from: IVec3,
+    to: IVec3,
+    block_id: crate::game::blocks::BlockId,
+    portal_flash_queue: &mut PortalFlashQueue,
+) {
+    index.unbind_animatable_entity(entity);
+    if let Some(occupant) = index.get_animatable(to) {
+        if occupant != entity {
+            index.unbind_animatable_pos(to);
+        }
+    }
+    index.insert(to, block_id, BlockEntityLayer::Animatable, entity);
+
+    let rotation = after
+        .blocks
+        .values()
+        .find(|block| block.id == block_id)
+        .map(|data| {
+            if data.kind.is_directional()
+                || data
+                    .kind
+                    .material_props()
+                    .is_some_and(|props| props.is_stamp)
+            {
+                Quat::from_rotation_y(data.facing.yaw())
+            } else {
+                Quat::IDENTITY
+            }
+        })
+        .unwrap_or(Quat::IDENTITY);
+    let transform = Transform {
+        translation: grid_to_world(to),
+        rotation,
+        scale: Vec3::ONE,
+        ..Default::default()
+    };
+    if commands.get_entity(entity).is_ok() {
+        commands.entity(entity).insert((
+            BlockEntity {
+                pos: to,
+                id: block_id,
+                layer: BlockEntityLayer::Animatable,
+            },
+            transform,
+        ));
+        commands.entity(entity).remove::<AnimatedBlock>();
+    }
+    portal_flash_queue.positions.push(from);
+    portal_flash_queue.positions.push(to);
 }
 
 fn despawn_system_at(commands: &mut Commands, index: &mut BlockEntityIndex, pos: IVec3) {
@@ -233,7 +331,7 @@ pub fn collect_sim_refresh_positions(
     expand_weld_connectivity(after, &mut refresh);
     // 空头伸出/收回只改 PusherState 动画，世界格子不变；必须单独纳入刷新
     refresh.extend(output.pusher_animations.keys().copied());
-    // 传送：源口/目标口都刷，避免同回合再下落时漏刷
+    // 传送：源口/目标口都刷，瞬时挪完后清入口残影、对齐出口
     for &(from, to, _) in &output.teleport_flashes {
         refresh.insert(from);
         refresh.insert(to);
@@ -399,6 +497,8 @@ pub fn apply_structure_animations(
     pusher_animations: &HashMap<IVec3, PusherAnimation>,
     timing: AnimationTiming,
     paint_changed_ids: &HashSet<crate::game::blocks::BlockId>,
+    // 本回合已传到出口的源口 → 方块 id（仍要播进入源口的移动动画）
+    teleported_from: &HashMap<IVec3, crate::game::blocks::BlockId>,
 ) -> HashSet<IVec3> {
     let factory_debug = debug.factory_activity.then_some(structure_state);
     let mut handled = HashSet::new();
@@ -408,7 +508,13 @@ pub fn apply_structure_animations(
     // 先收集本回合所有可动画移动，避免 HashMap 迭代顺序导致「后到的目标格把先走的实体误删」
     let mut planned: Vec<(IVec3, BlockAnimation, BlockData, Option<Entity>)> = Vec::new();
     for (&pos, animation) in animations {
-        let Some(data) = world.blocks.get(&pos).copied() else {
+        let data = world.blocks.get(&pos).copied().or_else(|| {
+            let id = *teleported_from.get(&pos)?;
+            (animation.block_id == id)
+                .then(|| world.blocks.values().find(|block| block.id == id).copied())
+                .flatten()
+        });
+        let Some(data) = data else {
             continue;
         };
         if !(data.kind.is_factory() || data.kind.is_material()) {
@@ -425,7 +531,6 @@ pub fn apply_structure_animations(
     let moving_entities: HashSet<Entity> = planned.iter().filter_map(|(_, _, _, e)| *e).collect();
 
     // 阶段 1：全部从旧格解绑（不销毁、不清 by_id）
-    // 按实体解绑：传送落地后再重力时，动画 from_pos 是传送口，实体却仍挂在入口格
     for (_, _, _, entity) in &planned {
         let Some(entity) = entity else {
             continue;
@@ -570,6 +675,7 @@ pub fn apply_turn_output_incremental(
     structure_state: &StructureState,
     stats: &mut crate::game::simulation::stats::SimulationStepStats,
     scene_chunks: &mut SceneChunkMeshes,
+    portal_flash_queue: &mut PortalFlashQueue,
 ) {
     let render_start = bevy::platform::time::Instant::now();
     let timing = AnimationTiming::simulation(animation_duration);
@@ -597,6 +703,11 @@ pub fn apply_turn_output_incremental(
         .filter(|face| before.material_paints.get(face) != after.material_paints.get(face))
         .map(|face| face.block)
         .collect();
+    let teleported_from: HashMap<IVec3, crate::game::blocks::BlockId> = output
+        .teleport_flashes
+        .iter()
+        .map(|&(from, _, id)| (from, id))
+        .collect();
     let animated = apply_structure_animations(
         commands,
         meshes,
@@ -610,7 +721,52 @@ pub fn apply_turn_output_incremental(
         &pusher_animations,
         timing,
         &paint_changed_ids,
+        &teleported_from,
     );
+    // 有「进入源口」动画则等播完再瞬移出口；否则立刻到位（本回合逻辑已在出口）
+    let mut skip = animated;
+    let mut deferred_exit_ids = HashSet::new();
+    for &(from, to, block_id) in &output.teleport_flashes {
+        let has_enter_anim = animations
+            .get(&from)
+            .is_some_and(|animation| animation.block_id == block_id);
+        let delay = if has_enter_anim && animation_duration > 0.0 {
+            animation_duration
+        } else {
+            0.0
+        };
+        let Some(entity) = index
+            .get_by_id(block_id)
+            .or_else(|| index.get_animatable(from))
+        else {
+            continue;
+        };
+        if delay <= 0.0 {
+            snap_teleport_entity(
+                commands,
+                index,
+                after,
+                entity,
+                from,
+                to,
+                block_id,
+                portal_flash_queue,
+            );
+            continue;
+        }
+        skip.insert(from);
+        skip.insert(to);
+        deferred_exit_ids.insert(block_id);
+        if commands.get_entity(entity).is_ok() {
+            commands.entity(entity).insert(PendingTeleportSnap {
+                from,
+                to,
+                block_id,
+                delay,
+                elapsed: 0.0,
+            });
+        }
+    }
     let mut refresh = collect_sim_refresh_positions(before, after, output);
     refresh.extend(collect_wire_power_refresh_positions(
         after,
@@ -627,13 +783,17 @@ pub fn apply_turn_output_incremental(
         structure_state,
         &output.powered_wires,
         &refresh,
-        &animated,
+        &skip,
         &pusher_animations,
         timing,
         scene_chunks,
     );
     for (&pos, data) in &after.blocks {
         if !data.kind.is_material() || index.get_animatable(pos).is_some() {
+            continue;
+        }
+        // 延迟瞬移期间出口逻辑已有块，实体仍在源口动画中，禁止在出口重生
+        if deferred_exit_ids.contains(&data.id) {
             continue;
         }
         spawn_and_index(
