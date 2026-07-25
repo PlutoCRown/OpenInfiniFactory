@@ -21,9 +21,9 @@ pub(crate) use components::BlockIconRenderEntity;
 pub(crate) use components::GeneratorConfigMaterialPreview;
 pub use components::{
     AimFaceHighlight, BlockEntity, BlockEntityLayer, BlockIconAssets, BlockIconRenderCamera,
-    BlockIconRenderRoot, BlockIconRenderState, EditPreview, GameplayScene, HoverMarker,
-    HoverStructureBounds, PendingGeneratedPreview, PlacementPreview, StructureBounds,
-    block_face_highlight_transform,
+    BlockIconRenderRoot, BlockIconRenderState, DeleteBoundsOverlay, DeleteBoundsPart, EditPreview,
+    GameplayScene, HoverMarker, HoverStructureBounds, PendingGeneratedPreview, PlacementPreview,
+    SelectionBoundsOverlay, SelectionBoundsPart, StructureBounds, block_face_highlight_transform,
 };
 pub(crate) use connectors::{light_panel_transform, signal_neighbor_offsets};
 pub use fx::{
@@ -34,7 +34,7 @@ pub use goal_ghost::{GoalGhostMaterial, GoalGhostPlugin};
 pub use icons::{retire_block_icon_renderers, setup_block_icons};
 pub use previews::{
     despawn_edit_previews, despawn_pending_generated_previews, spawn_block_preview,
-    spawn_delete_bounds_preview, spawn_edit_preview, spawn_selection_bounds_preview,
+    spawn_edit_preview, update_delete_bounds_overlay, update_selection_bounds_overlay,
 };
 pub use scene::{setup_scene, sync_shadow_settings, sync_vsync_settings, teardown_playing_scene};
 pub use scene_chunks::{

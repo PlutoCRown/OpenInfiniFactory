@@ -103,7 +103,8 @@ def make_mat(
         tex.interpolation = "Closest"
         tex.extension = "REPEAT"
         nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
-        if "Alpha" in tex.outputs and "Alpha" in bsdf.inputs:
+        # 仅透明材质才接 Alpha；否则 glTF 会误标成 BLEND，游戏里看起来半透明
+        if alpha is not None and "Alpha" in tex.outputs and "Alpha" in bsdf.inputs:
             nt.links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
     else:
         col = color if alpha is None else (color[0], color[1], color[2], alpha)

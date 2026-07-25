@@ -385,27 +385,20 @@ def build_chassis(mat_orange: bpy.types.Material) -> bpy.types.Object:
 def build_belt_capsule(mat_belt: bpy.types.Material) -> bpy.types.Object:
     """胶囊棱柱：YZ 跑道外环挤出带宽。
 
-    UV：U=带宽[0,1]；V=弧长/带宽（可 >1，贴图 REPEAT）。
-    方图一格对应「宽×宽」的物理块，环向按比例循环，相对宽度不拉伸。
+    UV：U=带宽[0,1]；V 按折线弧长铺整数格贴图（闭合处 V 为整数，REPEAT 才无缝）。
     """
     L = BELT_HALF_LEN
     R = BELT_OUTER_R
     cz = ROLLER_Z
     half_w = (BELT_WIDTH - 0.02) * 0.5
     belt_w = half_w * 2.0
-    loop_len = 4.0 * L + 2.0 * math.pi * R
-    # 环向要铺几格方图：loop_len / belt_w
-    print(
-        f"  belt UV tiles V={loop_len / belt_w:.3f} (loop={loop_len:.3f} / width={belt_w:.3f})",
-        file=sys.stderr,
-    )
-
-    # 直线段与圆弧段取相近弦长，避免 V 向疏密不均
+    # 半圆每段弦长（正 n 边形半圆，不用 2πR）
     n_arc = 24
+    chord = 2.0 * R * math.sin(math.pi / (2.0 * n_arc))
     seg = math.pi * R / n_arc
     n_flat = max(2, round((2.0 * L) / seg))
 
-    # 外环折线 (y, z, s)，s∈[0, loop_len)；闭合边用 s=loop_len
+    # 外环折线 (y, z, s)，s 为折线弧长
     outline: list[tuple[float, float, float]] = []
     s = 0.0
 
@@ -419,7 +412,7 @@ def build_belt_capsule(mat_belt: bpy.types.Material) -> bpy.types.Object:
     # +Y 半圆：θ = π/2 → -π/2（不含起点）
     for i in range(1, n_arc + 1):
         theta = math.pi / 2.0 - math.pi * (i / n_arc)
-        s += (math.pi * R) / n_arc
+        s += chord
         outline.append((L + R * math.cos(theta), cz + R * math.sin(theta), s))
 
     # 底：+L → -L（不含起点）
@@ -431,8 +424,19 @@ def build_belt_capsule(mat_belt: bpy.types.Material) -> bpy.types.Object:
     # -Y 半圆：θ = -π/2 → -3π/2（不含起点与终点，终点=顶起点）
     for i in range(1, n_arc):
         theta = -math.pi / 2.0 - math.pi * (i / n_arc)
-        s += (math.pi * R) / n_arc
+        s += chord
         outline.append((-L + R * math.cos(theta), cz + R * math.sin(theta), s))
+
+    # 闭合弦计入周长（顶点不重复）
+    loop_len = s + chord
+    # 约「宽×宽」；取整后闭合 V 才是整数，贴图接缝才对齐
+    n_tiles = max(1, round(loop_len / belt_w))
+    print(
+        f"  belt UV tiles V={n_tiles} "
+        f"(loop={loop_len:.3f} / width={belt_w:.3f} → raw={loop_len / belt_w:.3f}, "
+        f"world_per_V={loop_len / n_tiles:.3f})",
+        file=sys.stderr,
+    )
 
     bm = bmesh.new()
     uv = bm.loops.layers.uv.new()
@@ -442,16 +446,19 @@ def build_belt_capsule(mat_belt: bpy.types.Material) -> bpy.types.Object:
 
     def set_uv(face: bmesh.types.BMFace, coords: list[tuple[float, float]]) -> None:
         for loop, (uu, vv) in zip(face.loops, coords):
-            # 整圈翻转，使人字尖朝传送方向
-            loop[uv].uv = (1.0 - uu, 1.0 - vv)
+            # 人字尖朝传送方向（与贴图 +V 一致）
+            loop[uv].uv = (uu, vv)
 
-    # 环带侧面：V = 弧长/带宽（方图循环）
+    def v_of(s_arc: float) -> float:
+        return s_arc / loop_len * n_tiles
+
+    # 环带侧面：V 按折线弧长比例铺整数格贴图
     for i in range(n):
         j = (i + 1) % n
         s0 = outline[i][2]
         s1 = outline[j][2] if j else loop_len
-        v0 = s0 / belt_w
-        v1 = s1 / belt_w
+        v0 = v_of(s0)
+        v1 = v_of(s1)
         face = bm.faces.new([v_l[i], v_r[i], v_r[j], v_l[j]])
         set_uv(face, [(0.0, v0), (1.0, v0), (1.0, v1), (0.0, v1)])
 
@@ -459,10 +466,10 @@ def build_belt_capsule(mat_belt: bpy.types.Material) -> bpy.types.Object:
     face_l = bm.faces.new(list(reversed(v_l)))
     set_uv(
         face_l,
-        [(0.0, outline[i][2] / belt_w) for i in range(n - 1, -1, -1)],
+        [(0.0, v_of(outline[i][2])) for i in range(n - 1, -1, -1)],
     )
     face_r = bm.faces.new(v_r)
-    set_uv(face_r, [(1.0, outline[i][2] / belt_w) for i in range(n)])
+    set_uv(face_r, [(1.0, v_of(outline[i][2])) for i in range(n)])
 
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     mesh = bpy.data.meshes.new("Belt")

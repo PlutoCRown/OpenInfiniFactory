@@ -140,6 +140,10 @@ pub struct AnimatedPusherRod {
 #[derive(Component, Default)]
 pub struct SpinningDrillHead;
 
+/// 传送带皮带：模拟激活后沿 V 平移材质 UV（albedo/normal 同步）
+#[derive(Component)]
+pub struct ScrollingConveyorBelt;
+
 #[derive(Component)]
 pub struct LaserBeamBurst {
     origin: Vec3,
@@ -550,6 +554,36 @@ pub fn animate_blocks(
         if t >= 1.0 {
             commands.entity(entity).despawn();
         }
+    }
+}
+
+/// 模拟运行时滚动传送带皮带 UV（独立系统，避免与 animate_blocks 的 Transform 查询冲突）
+pub fn scroll_conveyor_belts(
+    time: Res<Time>,
+    simulation: Res<crate::game::state::SimulationState>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    belts: Query<&MeshMaterial3d<StandardMaterial>, With<ScrollingConveyorBelt>>,
+) {
+    if !simulation.running {
+        return;
+    }
+    // 皮带动画的速度，数字越大，速度越慢。
+    const BELT_WORLD_PER_V: f32 = 1.21;
+    let delta_v = time.delta_secs()
+        * simulation.speed.max(0.001)
+        * (crate::game::blocks::BLOCK_SIZE / BELT_WORLD_PER_V)
+        / SIMULATION_TURN_SECONDS;
+    let mut updated = std::collections::HashSet::new();
+    for handle in &belts {
+        if !updated.insert(handle.id()) {
+            continue;
+        }
+        let Some(mut material) = materials.get_mut(handle.id()) else {
+            continue;
+        };
+        let y = material.uv_transform.translation.y;
+        // 正向：顶面纹理随传送方向走（与方块平移同向）
+        material.uv_transform.translation.y = (y + delta_v).rem_euclid(1.0);
     }
 }
 

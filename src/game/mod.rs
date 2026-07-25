@@ -42,12 +42,13 @@ use state::{
 };
 use systems::gameplay::{
     BlockSettingsClipboard, SelectionToolSwap, apply_fov, clipboard_input,
-    draw_hover_structure_bounds, gameplay_input, placement_input, update_hover,
+    draw_hover_structure_bounds, gameplay_input, placement_input, sync_edit_bounds_overlays,
+    update_hover,
 };
 use systems::perf::{PerfPlugin, PerfScope};
 use systems::simulation_controls::{simulation_controls, sync_generator_config_material_preview};
 use ui::{GameUiPlugin, InventoryItems};
-use world::animation::animate_blocks;
+use world::animation::{animate_blocks, scroll_conveyor_belts};
 use world::grid::WorldBlocks;
 use world::rendering::{
     GoalGhostPlugin, HoverStructureBounds, SkyboxPlugin, retire_block_icon_renderers,
@@ -244,6 +245,12 @@ impl Plugin for GamePlugin {
             )
             .add_systems(
                 Update,
+                sync_edit_bounds_overlays
+                    .after(placement_input)
+                    .after(PerfScope::Placement),
+            )
+            .add_systems(
+                Update,
                 simulation_controls
                     .after(PerfScope::Menus)
                     .before(crate::sim_bridge::tick_simulation),
@@ -278,7 +285,11 @@ impl Plugin for GamePlugin {
             )
             .add_systems(
                 Update,
-                (animate_blocks, retire_block_icon_renderers)
+                (
+                    animate_blocks,
+                    scroll_conveyor_belts,
+                    retire_block_icon_renderers,
+                )
                     .after(PerfScope::View)
                     .before(PerfScope::Animation),
             )

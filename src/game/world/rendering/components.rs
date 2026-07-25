@@ -63,6 +63,29 @@ pub struct HoverMarker;
 #[derive(Component)]
 pub struct AimFaceHighlight;
 
+/// 全局选区包围盒零件（唯一一套，靠显隐与 Transform 更新）
+#[derive(Component)]
+pub struct SelectionBoundsOverlay;
+
+/// 选区包围盒零件种类
+#[derive(Component, Clone, Copy)]
+pub enum SelectionBoundsPart {
+    Fill,
+    Edge(u8),
+    Corner(u8),
+}
+
+/// 全局删除包围盒零件（唯一一套，靠显隐与 Transform 更新）
+#[derive(Component)]
+pub struct DeleteBoundsOverlay;
+
+/// 删除包围盒零件种类
+#[derive(Component, Clone, Copy)]
+pub enum DeleteBoundsPart {
+    Fill,
+    Edge(u8),
+}
+
 /// 当前悬停结构的包围盒资源
 #[derive(Resource, Default, Clone, Copy)]
 pub struct HoverStructureBounds {

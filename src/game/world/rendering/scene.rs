@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use super::components::{AimFaceHighlight, GameplayScene, HoverMarker, PlacementPreview};
 use super::depth_bias;
 use super::goal_ghost::GoalGhostMaterial;
+use super::previews::spawn_bounds_overlays;
 use super::skybox::{spawn_sky_dome, transform_for_sun_direction, SkyMaterial};
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::shared::save::PuzzleLighting;
@@ -76,6 +77,7 @@ pub fn setup_scene(
         &paint_registry,
     );
     render_assets.install_goal_ghost_materials(&materials, &mut ghost_materials, &mut images);
+    spawn_bounds_overlays(&mut commands, &render_assets);
     commands.insert_resource(render_assets);
 
     let marker_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));

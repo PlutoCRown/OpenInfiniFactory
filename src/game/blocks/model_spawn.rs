@@ -3,7 +3,7 @@ use bevy::prelude::*;
 
 use crate::game::blocks::{BlockModel, BlockModelPart, ModelMesh};
 use crate::game::world::animation::{
-    AnimatedPusher, AnimatedPusherRod, PusherAnimation, SpinningDrillHead,
+    AnimatedPusher, AnimatedPusherRod, PusherAnimation, ScrollingConveyorBelt, SpinningDrillHead,
 };
 use crate::game::world::render_assets::{FactoryPartHandles, FactoryVisual, WorldRenderAssets};
 use crate::game::world::rendering::BlockIconRenderEntity;
@@ -189,6 +189,10 @@ fn spawn_factory_part(
     ));
     if let Some(icon_layer) = icon_layer {
         child.insert((icon_layer.clone(), BlockIconRenderEntity));
+    }
+    // 传送带皮带：模拟时滚动 UV（颜色+法线共用 uv_transform）
+    if !preview && icon_layer.is_none() && part.group.as_deref() == Some("Part_Belt") {
+        child.insert(ScrollingConveyorBelt);
     }
 }
 

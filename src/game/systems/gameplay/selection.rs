@@ -10,20 +10,24 @@ use crate::game::edit_history::{
 };
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{
-    BuilderMode, PlacementState, SelectionAxis, SelectionBounds, SelectionDrag, SelectionSnapshot,
+    BuilderMode, EditGestureKind, GameMode, PlacementState, PlayingUiState, SelectionAxis,
+    SelectionBounds, SelectionDrag, SelectionSnapshot, SimulationState,
 };
 use crate::game::systems::debug::DebugState;
+use crate::game::ui::{AreaKind, InventoryItems, UiRuntime};
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    BlockEntity, BlockEntityLayer, SceneChunkMeshes, WorldRenderAssets,
+    BlockEntity, BlockEntityLayer, DeleteBoundsOverlay, DeleteBoundsPart, SceneChunkMeshes,
+    SelectionBoundsOverlay, SelectionBoundsPart, WorldRenderAssets,
     rebuild_world_with_animations_for_debug_state, spawn_block_with_animation,
-    spawn_selection_bounds_preview, sync_scene_chunks_for_positions,
+    sync_scene_chunks_for_positions, update_delete_bounds_overlay, update_selection_bounds_overlay,
 };
 use crate::scene::BlockEntityIndex;
-use crate::shared::config::{ConfigChord, ConfigSelectionMode};
+use crate::shared::config::{ConfigChord, ConfigSelectionMode, GameConfig};
 
 use super::placement::despawn_block_entities;
+use super::rules::can_delete_at;
 
 /// 处理框选工具的点击与拖拽输入
 pub(super) fn handle_selection_area_input(
@@ -616,51 +620,32 @@ fn spawn_selection_result(
     }
 }
 
-/// 生成框选区域的包围盒预览
-pub(super) fn spawn_selection_previews(
+/// 根据当前框选状态算出选区包围盒显示参数（min, max, include_frame, valid）
+pub(super) fn selection_bounds_show(
     placement: &PlacementState,
     world: &WorldBlocks,
     builder_mode: BuilderMode,
     force_place: bool,
-    commands: &mut Commands,
-    render_assets: &WorldRenderAssets,
-) {
+) -> Option<(IVec3, IVec3, bool, bool)> {
     if let Some(first) = placement.selection.first_corner {
-        // 尚未成区：只画半透明填充
-        spawn_selection_bounds_preview(commands, render_assets, first, first, false, true);
+        return Some((first, first, false, true));
     }
 
-    if let Some(bounds) = placement.selection.bounds {
-        let offset = placement
-            .selection
-            .drag
-            .map(|drag| drag.offset)
-            .unwrap_or(IVec3::ZERO);
-        let moved = bounds.moved(offset);
-        // 拖动预览按「松手移动」规则着色；按住 Shift 时按强制覆盖判断
-        let valid = if offset == IVec3::ZERO {
-            true
-        } else {
-            let selected = selected_blocks(world, bounds, builder_mode);
-            selected.is_empty()
-                || selection_can_place(
-                    world,
-                    &selected,
-                    offset,
-                    true,
-                    builder_mode,
-                    force_place,
-                )
-        };
-        spawn_selection_bounds_preview(
-            commands,
-            render_assets,
-            moved.min,
-            moved.max,
-            true,
-            valid,
-        );
-    }
+    let bounds = placement.selection.bounds?;
+    let offset = placement
+        .selection
+        .drag
+        .map(|drag| drag.offset)
+        .unwrap_or(IVec3::ZERO);
+    let moved = bounds.moved(offset);
+    let valid = if offset == IVec3::ZERO {
+        true
+    } else {
+        let selected = selected_blocks(world, bounds, builder_mode);
+        selected.is_empty()
+            || selection_can_place(world, &selected, offset, true, builder_mode, force_place)
+    };
+    Some((moved.min, moved.max, true, valid))
 }
 
 /// 按点/线/面模式展开起止格之间的选区位置
@@ -718,4 +703,82 @@ fn plane_selection(start: IVec3, end: IVec3) -> Vec<IVec3> {
 /// 返回两整数的有序最小最大值
 fn min_max(a: i32, b: i32) -> (i32, i32) {
     if a <= b { (a, b) } else { (b, a) }
+}
+
+/// 每帧同步全局选区/删除包围盒（平移与显隐，不重建实体）
+pub fn sync_edit_bounds_overlays(
+    mode: Res<State<GameMode>>,
+    playing_ui: Res<PlayingUiState>,
+    ui_runtime: Res<UiRuntime>,
+    simulation: Res<SimulationState>,
+    placement: Res<PlacementState>,
+    inventory: Res<InventoryItems>,
+    builder_mode: Res<BuilderMode>,
+    config: Res<GameConfig>,
+    world: Res<WorldBlocks>,
+    keys: Res<ButtonInput<KeyCode>>,
+    render_assets: Option<Res<WorldRenderAssets>>,
+    mut selection_parts: Query<
+        (
+            &SelectionBoundsPart,
+            &mut Transform,
+            &mut Visibility,
+            &mut MeshMaterial3d<StandardMaterial>,
+        ),
+        (With<SelectionBoundsOverlay>, Without<DeleteBoundsOverlay>),
+    >,
+    mut delete_parts: Query<
+        (&DeleteBoundsPart, &mut Transform, &mut Visibility),
+        (With<DeleteBoundsOverlay>, Without<SelectionBoundsOverlay>),
+    >,
+) {
+    let Some(assets) = render_assets.as_ref() else {
+        return;
+    };
+
+    if *mode.get() != GameMode::Playing
+        || !playing_ui.active_play()
+        || ui_runtime.blocks_gameplay()
+        || simulation.is_active()
+    {
+        update_selection_bounds_overlay(&mut selection_parts, assets, None);
+        update_delete_bounds_overlay(&mut delete_parts, None);
+        return;
+    }
+
+    let selection_tool = inventory.hotbar[placement.selected].and_then(|item| item.area())
+        == Some(AreaKind::Selection);
+
+    if selection_tool {
+        let force_place = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+        let show = selection_bounds_show(&placement, &world, *builder_mode, force_place);
+        update_selection_bounds_overlay(&mut selection_parts, assets, show);
+        update_delete_bounds_overlay(&mut delete_parts, None);
+        return;
+    }
+
+    update_selection_bounds_overlay(&mut selection_parts, assets, None);
+
+    let delete_show = placement.edit_gesture.as_ref().and_then(|gesture| {
+        if gesture.canceled {
+            return None;
+        }
+        match gesture.kind {
+            EditGestureKind::Delete => {
+                let end = placement
+                    .target
+                    .map(|target| target.pos)
+                    .unwrap_or(gesture.start);
+                let positions =
+                    selection_positions(config.delete_selection_mode, gesture.start, end);
+                let deletable: Vec<IVec3> = positions
+                    .into_iter()
+                    .filter(|pos| can_delete_at(*pos, *builder_mode, &world))
+                    .collect();
+                SelectionBounds::from_positions(&deletable).map(|bounds| (bounds.min, bounds.max))
+            }
+            _ => None,
+        }
+    });
+    update_delete_bounds_overlay(&mut delete_parts, delete_show);
 }

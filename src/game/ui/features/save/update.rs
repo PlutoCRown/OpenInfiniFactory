@@ -220,7 +220,7 @@ pub fn update_save_list_cover(
         }
     }
 
-    for (mut image_node, mut node) in cover_images.iter_mut() {
+    for (image_node, mut node) in cover_images.iter_mut() {
         if node.display == Display::None {
             continue;
         }

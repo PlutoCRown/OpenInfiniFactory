@@ -8,7 +8,8 @@ mod placement;
 mod rules;
 mod selection;
 
-pub use clipboard::{clipboard_input, BlockSettingsClipboard, SelectionToolSwap};
+pub use clipboard::{BlockSettingsClipboard, SelectionToolSwap, clipboard_input};
 pub use hover::{apply_fov, draw_hover_structure_bounds, update_hover};
 pub use input::gameplay_input;
 pub use placement::placement_input;
+pub use selection::sync_edit_bounds_overlays;

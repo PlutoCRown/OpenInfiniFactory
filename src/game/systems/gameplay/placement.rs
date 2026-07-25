@@ -11,7 +11,7 @@ use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, PlacementState, PlayingUiState,
-    SelectionBounds, SimulationState, SolutionState,
+    SimulationState, SolutionState,
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::features::block_panels::PendingBlockPanelOpen;
@@ -20,7 +20,7 @@ use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, WorldBlocks};
 use crate::game::world::rendering::{
     BlockEntity, EditPreview, SceneChunkMeshes, WorldRenderAssets, despawn_edit_previews,
-    spawn_block_preview, spawn_delete_bounds_preview,
+    spawn_block_preview,
 };
 use crate::scene::{BlockEntityIndex, refresh_edit_changes};
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
@@ -29,9 +29,7 @@ use super::edit_ops::{
     alternate_block_at, pick_target_block, rotate_block_at, rotate_facing, shift_pressed,
 };
 use super::rules::{can_delete_at, can_place_block_at, can_place_in_mode, delete_block_at};
-use super::selection::{
-    handle_selection_area_input, selection_positions, spawn_selection_previews,
-};
+use super::selection::{handle_selection_area_input, selection_positions};
 
 /// 放置输入所需的查询与资源集合
 #[derive(SystemParam)]
@@ -192,14 +190,6 @@ pub fn placement_input(
             solution_state.dirty = true;
         }
         despawn_edit_previews(&mut commands, &edit_previews);
-        spawn_selection_previews(
-            &placement,
-            &world,
-            *builder_mode,
-            force_place,
-            &mut commands,
-            &render_assets,
-        );
         return;
     }
 
@@ -491,7 +481,6 @@ pub fn placement_input(
             spawn_gesture_previews(
                 gesture,
                 current_place_at,
-                current_delete_at,
                 &config,
                 &world,
                 *builder_mode,
@@ -709,11 +698,10 @@ fn commit_edit_gesture(
     true
 }
 
-/// 为进行中的放置/删除手势生成预览
+/// 为进行中的放置手势生成方块预览（删除框由 sync_edit_bounds_overlays 更新）
 fn spawn_gesture_previews(
     gesture: &EditGesture,
     current_place_at: Option<IVec3>,
-    current_delete_at: Option<IVec3>,
     config: &GameConfig,
     world: &WorldBlocks,
     builder_mode: BuilderMode,
@@ -722,45 +710,30 @@ fn spawn_gesture_previews(
     meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
 ) {
-    match gesture.kind {
-        EditGestureKind::Place { block } => {
-            let positions = selection_positions(
-                config.place_selection_mode,
-                gesture.start,
-                current_place_at.unwrap_or(gesture.start),
-            );
-            let positions: Vec<IVec3> = positions
-                .into_iter()
-                .filter(|pos| {
-                    can_place_block_at(
-                        *pos,
-                        block,
-                        builder_mode,
-                        world,
-                        player_pos,
-                        Some(gesture.plane_normal),
-                    )
-                })
-                .collect();
-            let preview_world = preview_world(world, &positions, block);
-            for pos in positions {
-                spawn_block_preview(commands, meshes, render_assets, &preview_world, pos, block);
-            }
-        }
-        EditGestureKind::Delete => {
-            let positions = selection_positions(
-                config.delete_selection_mode,
-                gesture.start,
-                current_delete_at.unwrap_or(gesture.start),
-            );
-            let deletable: Vec<IVec3> = positions
-                .into_iter()
-                .filter(|pos| can_delete_at(*pos, builder_mode, world))
-                .collect();
-            if let Some(bounds) = SelectionBounds::from_positions(&deletable) {
-                spawn_delete_bounds_preview(commands, render_assets, bounds.min, bounds.max);
-            }
-        }
+    let EditGestureKind::Place { block } = gesture.kind else {
+        return;
+    };
+    let positions = selection_positions(
+        config.place_selection_mode,
+        gesture.start,
+        current_place_at.unwrap_or(gesture.start),
+    );
+    let positions: Vec<IVec3> = positions
+        .into_iter()
+        .filter(|pos| {
+            can_place_block_at(
+                *pos,
+                block,
+                builder_mode,
+                world,
+                player_pos,
+                Some(gesture.plane_normal),
+            )
+        })
+        .collect();
+    let preview_world = preview_world(world, &positions, block);
+    for pos in positions {
+        spawn_block_preview(commands, meshes, render_assets, &preview_world, pos, block);
     }
 }
 

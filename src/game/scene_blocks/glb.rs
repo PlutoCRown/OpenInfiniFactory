@@ -81,15 +81,6 @@ pub fn load_scene_glb(
         None
     };
 
-    let mesh = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::default(),
-    )
-    .with_inserted_indices(Indices::U32(indices))
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-
     let gltf_material = primitive.material();
     let pbr = gltf_material.pbr_metallic_roughness();
     let factor = pbr.base_color_factor();
@@ -98,7 +89,12 @@ pub fn load_scene_glb(
     let base_color_texture = pbr.base_color_texture().and_then(|info| {
         let texture = info.texture();
         let image = gltf_images.get(texture.source().index())?;
-        Some(images.add(bevy_image_from_gltf(image, &texture.sampler())?))
+        Some(images.add(bevy_image_from_gltf(image, &texture.sampler(), true)?))
+    });
+    let normal_map_texture = gltf_material.normal_texture().and_then(|info| {
+        let texture = info.texture();
+        let image = gltf_images.get(texture.source().index())?;
+        Some(images.add(bevy_image_from_gltf(image, &texture.sampler(), false)?))
     });
 
     let alpha_mode = match gltf_material.alpha_mode() {
@@ -114,9 +110,22 @@ pub fn load_scene_glb(
         Some(bevy::render::render_resource::Face::Back)
     };
 
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_indices(Indices::U32(indices))
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    if normal_map_texture.is_some() {
+        let _ = mesh.generate_tangents();
+    }
+
     let material = StandardMaterial {
         base_color,
         base_color_texture,
+        normal_map_texture,
         perceptual_roughness: pbr.roughness_factor(),
         metallic: pbr.metallic_factor(),
         reflectance: 0.08,
@@ -195,7 +204,7 @@ pub fn load_factory_glb(
                 ));
             }
 
-            let bevy_mesh = Mesh::new(
+            let mut bevy_mesh = Mesh::new(
                 PrimitiveTopology::TriangleList,
                 RenderAssetUsages::default(),
             )
@@ -205,6 +214,9 @@ pub fn load_factory_glb(
             .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
 
             let gltf_material = primitive.material();
+            if gltf_material.normal_texture().is_some() {
+                let _ = bevy_mesh.generate_tangents();
+            }
             let material_handle = match gltf_material.index() {
                 Some(index) => {
                     if let Some(handle) = material_cache.get(&index) {
@@ -252,7 +264,13 @@ fn standard_material_from_gltf(
     let base_color_texture = pbr.base_color_texture().and_then(|info| {
         let texture = info.texture();
         let image = gltf_images.get(texture.source().index())?;
-        Some(images.add(bevy_image_from_gltf(image, &texture.sampler())?))
+        Some(images.add(bevy_image_from_gltf(image, &texture.sampler(), true)?))
+    });
+    // 法线贴图必须线性色域，否则凹凸方向会偏
+    let normal_map_texture = gltf_material.normal_texture().and_then(|info| {
+        let texture = info.texture();
+        let image = gltf_images.get(texture.source().index())?;
+        Some(images.add(bevy_image_from_gltf(image, &texture.sampler(), false)?))
     });
     let alpha_mode = match gltf_material.alpha_mode() {
         gltf::material::AlphaMode::Opaque => AlphaMode::Opaque,
@@ -273,6 +291,7 @@ fn standard_material_from_gltf(
     StandardMaterial {
         base_color,
         base_color_texture,
+        normal_map_texture,
         emissive,
         perceptual_roughness: pbr.roughness_factor(),
         metallic: pbr.metallic_factor(),
@@ -317,19 +336,25 @@ pub fn load_collision_triangles(path: &Path) -> Result<Vec<[Vec3; 3]>, String> {
     Ok(tris)
 }
 
-/// 按 glTF sampler 建 Bevy 贴图（NEAREST = 像素锐利，LINEAR = 平滑）
+/// 按 glTF sampler 建 Bevy 贴图；`srgb` 为颜色贴图，法线等数据贴图用 false
 fn bevy_image_from_gltf(
     image: &gltf::image::Data,
     sampler: &gltf::texture::Sampler<'_>,
+    srgb: bool,
 ) -> Option<Image> {
+    let rgba8 = if srgb {
+        TextureFormat::Rgba8UnormSrgb
+    } else {
+        TextureFormat::Rgba8Unorm
+    };
     let (format, pixels) = match image.format {
-        gltf::image::Format::R8G8B8A8 => (TextureFormat::Rgba8UnormSrgb, image.pixels.clone()),
+        gltf::image::Format::R8G8B8A8 => (rgba8, image.pixels.clone()),
         gltf::image::Format::R8G8B8 => {
             let mut rgba = Vec::with_capacity(image.pixels.len() / 3 * 4);
             for chunk in image.pixels.chunks_exact(3) {
                 rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
             }
-            (TextureFormat::Rgba8UnormSrgb, rgba)
+            (rgba8, rgba)
         }
         gltf::image::Format::R8 => (TextureFormat::R8Unorm, image.pixels.clone()),
         gltf::image::Format::R8G8 => (TextureFormat::Rg8Unorm, image.pixels.clone()),

@@ -15,6 +15,8 @@ pub struct FactoryPartHandles {
     pub mesh: Handle<Mesh>,
     pub material: Handle<StandardMaterial>,
     pub preview_material: Handle<StandardMaterial>,
+    /// 来自 glTF 节点名，如 Part_Belt / Head
+    pub group: Option<String>,
 }
 
 /// 工厂块从 assets/factory_blocks 加载的外观
@@ -198,6 +200,7 @@ fn factory_parts_with_preview(
                 mesh: part.mesh,
                 material: part.material,
                 preview_material,
+                group: part.group,
             }
         })
         .collect()
@@ -211,7 +214,7 @@ fn split_drill_parts(
     let mut body = Vec::new();
     let mut head = Vec::new();
     for part in raw {
-        let group = part.group.as_deref().unwrap_or("");
+        let group_name = part.group.clone().unwrap_or_default();
         let handles = {
             let preview_material = materials
                 .get(&part.material)
@@ -222,9 +225,10 @@ fn split_drill_parts(
                 mesh: part.mesh,
                 material: part.material,
                 preview_material,
+                group: part.group,
             }
         };
-        match group {
+        match group_name.as_str() {
             "Head" => head.push(handles),
             _ => body.push(handles),
         }
@@ -244,7 +248,7 @@ fn split_pusher_parts(
     let mut stage = Vec::new();
     let mut head = Vec::new();
     for part in raw {
-        let group = part.group.as_deref().unwrap_or("");
+        let group_name = part.group.clone().unwrap_or_default();
         let handles = {
             let preview_material = materials
                 .get(&part.material)
@@ -255,9 +259,10 @@ fn split_pusher_parts(
                 mesh: part.mesh,
                 material: part.material,
                 preview_material,
+                group: part.group,
             }
         };
-        match group {
+        match group_name.as_str() {
             "Body" => body.push(handles),
             "Stage" => stage.push(handles),
             "Head" => head.push(handles),
@@ -298,6 +303,7 @@ fn split_wire_faces(
                 mesh: part.mesh,
                 material: part.material,
                 preview_material,
+                group: part.group,
             }
         };
         // 通电条：白自发光（须 lit，否则 emissive 不进 HDR，Bloom 无效）

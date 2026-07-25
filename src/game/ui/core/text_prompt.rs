@@ -1,5 +1,5 @@
-use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::ButtonState;
+use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
@@ -8,8 +8,8 @@ use bevy::ui::widget::TextScroll;
 use bevy::window::PrimaryWindow;
 
 use crate::game::ui::components::{
-    auto_width_button, default_button_size, default_font_size, flex_row_auto, panel_bundle_auto,
-    panel_content, panel_title_bar, panel_title_label, raised_border, text, BUTTON_BG,
+    BUTTON_BG, auto_width_button, default_button_size, default_font_size, flex_row_auto,
+    inset_border, panel_bundle_auto, panel_content, panel_title_bar, panel_title_label, text,
 };
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost};
 use crate::game::ui::core::text_input::primary_click;
@@ -125,29 +125,35 @@ pub fn spawn_text_prompt(root: &mut ChildSpawnerCommands) -> Entity {
                         Node {
                             width: Val::Percent(100.0),
                             min_height: Val::Px(default_button_size(38.0)),
-                            padding: UiRect::horizontal(Val::Px(12.0)),
+                            padding: UiRect::axes(Val::Px(12.0), Val::Px(6.0)),
                             border: UiRect::all(Val::Px(1.0)),
                             align_items: AlignItems::Center,
                             overflow: Overflow::clip(),
                             ..default()
                         },
-                        raised_border(),
+                        inset_border(),
                         BackgroundColor(BUTTON_BG),
-                        EditableText {
-                            max_characters: Some(24),
-                            allow_newlines: false,
-                            visible_lines: Some(1.0),
-                            ..EditableText::new("")
-                        },
-                        TextScroll::default(),
-                        TextFont {
-                            font_size: default_font_size(16.0),
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                        TextLayout::no_wrap(),
-                        TextCursorStyle::default(),
-                        TextPromptInput,
+                        children![(
+                            Node {
+                                width: Val::Percent(100.0),
+                                ..default()
+                            },
+                            EditableText {
+                                max_characters: Some(24),
+                                allow_newlines: false,
+                                visible_lines: Some(1.0),
+                                ..EditableText::new("")
+                            },
+                            TextScroll::default(),
+                            TextFont {
+                                font_size: default_font_size(16.0),
+                                ..default()
+                            },
+                            TextColor(Color::WHITE),
+                            TextLayout::no_wrap(),
+                            TextCursorStyle::default(),
+                            TextPromptInput,
+                        )],
                     ),
                     (
                         flex_row_auto(34.0, 8.0),

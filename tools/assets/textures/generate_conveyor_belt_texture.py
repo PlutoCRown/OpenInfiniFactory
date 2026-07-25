@@ -25,12 +25,12 @@ OUT_NORMAL = OUT_DIR / "belt_chevron_normal.png"
 # 原图橡胶底色
 BASE = (0.07, 0.07, 0.08)
 SIZE = 512
-# 每张图沿 V 铺几道人字；period=1/N 保证上下无缝
-N_GROOVES = 5
+# 每张图沿 V 铺几道人字；必须是整数，否则上下接缝相位对不上
+N_GROOVES = 4
 # 人字臂相对水平的倾角（尖朝上）；约 32° 较钝，接近参考
 ARM_DEG = 32.0
-# 槽半宽（UV）；细槽
-GROOVE_HALF = 0.0045
+# 槽半宽（UV）；细槽（相对初版 ×2）
+GROOVE_HALF = 0.009
 NORMAL_STRENGTH = 6.0
 
 
