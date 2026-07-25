@@ -86,7 +86,7 @@ tools/assets/
 | 场景 | `assets/scene_blocks/<id>/`    | 同上；可选 `collision.glb`  | bake `--scene-only`     |
 | 印花 | `assets/stamp_materials/<id>/` | **必须** `model.glb`        | bake `--stamps-only`    |
 | 滚刷 | `assets/paint_materials/<id>/` | **仅** `texture.png`        | texture 可作预览        |
-| 工厂 | `assets/factory_blocks/<id>/`  | `model.glb`（bpy）          | 按块惯例                |
+| 工厂 | `assets/factory_blocks/<id>/`  | `model.glb`（bpy）          | bake `--factory-only`   |
 
 - **`texture.png`**：建议 32×32 像素风。
 - **`icon.png`**：128×128，bake 生成。
@@ -119,6 +119,8 @@ tools/assets/
 ./scripts/bake_scene_icons.sh --materials-only --only <id>
 ./scripts/bake_scene_icons.sh --scene-only --only <id>
 ./scripts/bake_scene_icons.sh --stamps-only --only <id>
+./scripts/bake_factory_icons.sh
+./scripts/bake_factory_icons.sh --only conveyor
 ```
 
 ---

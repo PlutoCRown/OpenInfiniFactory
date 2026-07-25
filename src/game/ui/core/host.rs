@@ -109,7 +109,8 @@ impl UiHostCommands<'_> {
         root: Option<Entity>,
         context: UiPanelContext,
         settings: &GameSettings,
-        scroll_height: f32,
+        panel_w: f32,
+        panel_h: f32,
     ) -> UiInstanceId {
         self.host.mount_settings(
             commands,
@@ -117,7 +118,8 @@ impl UiHostCommands<'_> {
             &mut self.runtime,
             context,
             settings,
-            scroll_height,
+            panel_w,
+            panel_h,
         )
     }
 
@@ -349,7 +351,8 @@ impl UiHost {
         runtime: &mut UiRuntime,
         context: UiPanelContext,
         settings: &GameSettings,
-        scroll_height: f32,
+        panel_w: f32,
+        panel_h: f32,
     ) -> UiInstanceId {
         let id = self.next_id();
         self.unmount_panel(UiPanelId::Settings, runtime, Some(commands));
@@ -369,7 +372,7 @@ impl UiHost {
                         UiHostMountRoot,
                     ))
                     .with_children(|container| {
-                        spawn_settings_panel(container, settings, scroll_height);
+                        spawn_settings_panel(container, settings, panel_w, panel_h);
                     })
                     .id();
                 container = Some(spawned);

@@ -1,14 +1,15 @@
-"""用 Blender 生成激光 / 镜子 / 分光镜 / 吸盘外观 GLB。
+"""用 Blender 生成激光 / 镜子 / 分光镜外观 GLB。
 
 几何对齐现有游戏零件（render_assets.rs），外观做成工厂块风格。
 Blender Z-up；export_yup 后前进方向 → 游戏局部 -Z（Blender +Y）。
+
+吸盘已拆到 generate_suction_cup_glb.py。
 
 产出：
   assets/factory_blocks/laser/model.glb
   assets/factory_blocks/mirror/model.glb
   assets/factory_blocks/vertical_mirror/model.glb
   assets/factory_blocks/splitter/model.glb
-  assets/factory_blocks/suction_cup/model.glb
 
 用法：
   /Applications/Blender.app/Contents/MacOS/Blender --background \\
@@ -261,49 +262,6 @@ def build_splitter() -> None:
     glass_clipped_to_cell("Glass", [game_to_blender(*p) for p in yawed], mat_glass)
 
 
-# ——— 吸盘 ———
-
-
-def build_suction_cup() -> None:
-    """开口四棱锥 + 前唇圈/吸垫错开高度，避免正面共面 z-fighting。"""
-    mat_cup = make_mat("Cup", (0.82, 0.84, 0.82, 1.0), metallic=0.05, roughness=0.65)
-    mat_lip = make_mat("Lip", (0.55, 0.58, 0.56, 1.0), metallic=0.15, roughness=0.55)
-    mat_pad = make_mat("Pad", (0.92, 0.40, 0.06, 1.0), metallic=0.05, roughness=0.5)
-
-    # 底口略收回，正面不封死，避免和唇圈共面
-    base = [
-        Vector((-0.48, 0.42, -0.48)),
-        Vector((0.48, 0.42, -0.48)),
-        Vector((0.48, 0.42, 0.48)),
-        Vector((-0.48, 0.42, 0.48)),
-    ]
-    apex = Vector((0, 0, 0))
-    positions = list(base) + [apex]
-    faces = [
-        [0, 1, 4],
-        [1, 2, 4],
-        [2, 3, 4],
-        [3, 0, 4],
-    ]
-    cup = mesh_from_faces("Cup", positions, faces)
-    apply_mat(cup, mat_cup)
-    apply_transforms(cup)
-
-    # 唇圈：外框挖孔，顶面贴齐格边
-    lip = mesh_cube("Lip", Vector((0.98, 0.08, 0.98)), Vector((0.0, 0.46, 0.0)))
-    apply_mat(lip, mat_lip)
-    apply_transforms(lip)
-    boolean_diff(
-        lip,
-        mesh_cube("LipCut", Vector((0.72, 0.12, 0.72)), Vector((0.0, 0.46, 0.0))),
-    )
-    apply_mat(lip, mat_lip)
-
-    # 吸垫沉在唇圈开口里，低于唇圈顶
-    pad = mesh_cylinder("Pad", 0.22, 0.035, Vector((0.0, 0.44, 0.0)), verts=24)
-    apply_mat(pad, mat_pad)
-
-
 def run_one(label: str, out_dir: Path, builder) -> None:
     clear_scene()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -318,7 +276,6 @@ def main() -> None:
     run_one("mirror", OUT_ROOT / "mirror", build_mirror)
     run_one("vertical_mirror", OUT_ROOT / "vertical_mirror", build_vertical_mirror)
     run_one("splitter", OUT_ROOT / "splitter", build_splitter)
-    run_one("suction_cup", OUT_ROOT / "suction_cup", build_suction_cup)
 
 
 if __name__ == "__main__":

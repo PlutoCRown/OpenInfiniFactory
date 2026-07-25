@@ -16,7 +16,7 @@ ui_icons/ SVG（Ant Design / 自绘）→ assets/ui/icons/*.png
 
 - 新建/大改 model.glb → models/ 下用 bpy
 - 只写贴图 → textures/ 下用 PIL
-- icon.png → ./scripts/bake_scene_icons.sh，禁止手绘
+- icon.png → ./scripts/bake_scene_icons.sh（场景/材料/印花）；工厂块 → ./scripts/bake_factory_icons.sh；禁止手绘
 - UI 图标 → `python3 tools/assets/ui_icons/generate_ui_icons.py`（需 cairo）
 
 示例：

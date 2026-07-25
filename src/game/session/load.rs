@@ -9,7 +9,7 @@ use crate::shared::save::{
     save_solution_as,
 };
 
-use super::busy::SessionBusy;
+use super::busy::{SessionBusy, SessionBusyCover};
 use super::messages::{CreateNewPuzzle, CreateNewSolution, LoadWorld};
 use super::world_access::{PlayingWorldParams, SessionStateParams};
 use super::world_ops::load_world_into_session;
@@ -24,6 +24,8 @@ pub struct PendingWorldLoad {
     hold_frames: u8,
     /// 进 Playing 的 OnEnter 重建完成后再清 SessionBusy
     release_busy_after_playing: bool,
+    /// Playing 后额外等待（离屏图标 / 天空盒首帧等）
+    post_playing_hold: u8,
 }
 
 pub fn handle_load_world(
@@ -38,6 +40,7 @@ pub fn handle_load_world(
         pending.hold_frames = 2;
         pending.ready = None;
         pending.release_busy_after_playing = false;
+        pending.post_playing_hold = 0;
         let slot = request.slot.clone();
         let entry = request.entry;
         pending.task = Some(
@@ -52,6 +55,7 @@ pub fn poll_pending_world_load(
     mut playing: PlayingWorldParams,
     mut session: SessionStateParams,
     mut busy: ResMut<SessionBusy>,
+    mut cover: ResMut<SessionBusyCover>,
     mut scene_registry: ResMut<crate::game::scene_blocks::SceneBlockRegistry>,
     mode: Res<State<GameMode>>,
     mut next_state: ResMut<NextState<GameMode>>,
@@ -82,6 +86,7 @@ pub fn poll_pending_world_load(
     let Some((slot, entry, loaded)) = outcome else {
         bevy::log::warn!("Failed to decode save");
         *busy = SessionBusy::None;
+        cover.clear();
         return;
     };
 
@@ -112,8 +117,11 @@ pub fn poll_pending_world_load(
     // StartMenu→Playing 的世界重建在下一帧 OnEnter；等进 Playing 后再清 busy
     if *mode.get() == GameMode::StartMenu {
         pending.release_busy_after_playing = true;
+        // 离屏图标 3 帧后再留几帧给天空盒读盘/首帧 GPU 上传
+        pending.post_playing_hold = 4;
     } else {
         *busy = SessionBusy::None;
+        cover.clear();
     }
 }
 
@@ -121,15 +129,26 @@ pub fn poll_pending_world_load(
 pub fn release_session_busy_after_playing(
     mut pending: ResMut<PendingWorldLoad>,
     mut busy: ResMut<SessionBusy>,
+    mut cover: ResMut<SessionBusyCover>,
     mode: Res<State<GameMode>>,
+    icon_state: Option<Res<crate::game::world::rendering::BlockIconRenderState>>,
 ) {
     if !pending.release_busy_after_playing || *mode.get() != GameMode::Playing {
+        return;
+    }
+    // 兼容遗留：若仍有离屏拍图标状态则等拍完（现已预烘焙，通常不会走到）
+    if icon_state.is_some_and(|state| state.is_rendering()) {
+        return;
+    }
+    if pending.post_playing_hold > 0 {
+        pending.post_playing_hold -= 1;
         return;
     }
     pending.release_busy_after_playing = false;
     if *busy == SessionBusy::Loading {
         *busy = SessionBusy::None;
     }
+    cover.clear();
 }
 
 pub fn handle_create_new_puzzle(

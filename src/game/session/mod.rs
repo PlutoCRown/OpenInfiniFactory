@@ -9,7 +9,7 @@ mod solution;
 mod world_access;
 mod world_ops;
 
-pub use busy::SessionBusy;
+pub use busy::{SessionBusy, SessionBusyCover};
 pub use dispatch::{
     create_new_puzzle_in_world, create_new_solution_in_world, exit_to_main_menu,
     exit_to_main_menu_in_world, load_world, puzzle_save_needs_confirm, reset_solution_in_world,
@@ -61,6 +61,7 @@ pub struct SessionPlugin;
 impl Plugin for SessionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SessionBusy>()
+            .init_resource::<SessionBusyCover>()
             .init_resource::<PendingMainMenuExit>()
             .init_resource::<PendingWorldLoad>()
             .init_resource::<PendingSave>()

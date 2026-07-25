@@ -1,14 +1,15 @@
 use bevy::prelude::*;
 
-use crate::shared::config::{ActionKeyName, ConfigSelectionMode};
+use crate::shared::config::{ActionKeyName, ConfigSelectionMode, ConfigWindowMode};
+use crate::shared::platform::StoragePlatform;
 
 use super::super::components::{
-    default_button_size, flex_row, localized_text, scroll_container, scroll_content, spawn_panel,
-    transparent_node, PanelOptions,
+    PanelOptions, default_button_size, flex_row, localized_text, scroll_container, scroll_content,
+    spawn_panel, transparent_node,
 };
 use super::super::types::{
-    PanelVisibility, SettingsAction, SettingsControl, SettingsDropdown, SettingsDropdownRow,
-    SettingsItem, SettingsTab, UiPanelBinding, GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS,
+    GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, PanelVisibility, SettingsAction, SettingsControl,
+    SettingsDropdown, SettingsDropdownRow, SettingsItem, SettingsTab, UiPanelBinding,
 };
 use super::super::widgets::{
     spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_dropdown_list,
@@ -17,25 +18,36 @@ use super::super::widgets::{
 use crate::game::state::{GameSettings, UiPanelId};
 use crate::game::ui::access::i18n;
 
-/// 标题栏 + Tab + 面板边距/间距，滚动区高度不超过窗口剩余空间
-pub const SETTINGS_SCROLL_CHROME: f32 = 168.0;
+/// 相对窗口逻辑像素的外边距（与存档列表一致）
+pub const SETTINGS_MARGIN: f32 = 48.0;
+
+/// 按窗口逻辑尺寸算出设置弹窗宽高（仅初始化用；不超过可用区域）
+pub fn settings_panel_size(window_w: f32, window_h: f32, ui_scale: f32) -> (f32, f32) {
+    let scale = ui_scale.max(0.01);
+    (
+        (window_w / scale - SETTINGS_MARGIN * 2.0).max(1.0),
+        (window_h / scale - SETTINGS_MARGIN * 2.0).max(1.0),
+    )
+}
 
 pub fn spawn_settings_panel(
     root: &mut ChildSpawnerCommands,
     settings: &GameSettings,
-    scroll_height: f32,
+    panel_w: f32,
+    panel_h: f32,
 ) {
     spawn_panel(
         root,
-        PanelOptions::new(840.0, "settings.title")
+        PanelOptions::new(panel_w, "settings.title")
+            .with_height(panel_h)
             .closable()
             .title_size(30.0),
         UiPanelBinding(UiPanelId::Settings),
         |panel| {
             spawn_settings_tabs(panel);
-            spawn_gameplay_settings(panel, settings, scroll_height);
-            spawn_graphics_settings(panel, settings, scroll_height);
-            spawn_key_bindings(panel, scroll_height);
+            spawn_gameplay_settings(panel, settings);
+            spawn_graphics_settings(panel, settings);
+            spawn_key_bindings(panel);
         },
     );
     spawn_settings_dropdown_layers(root);
@@ -48,6 +60,7 @@ fn spawn_settings_tabs(panel: &mut ChildSpawnerCommands) {
             height: Val::Px(default_button_size(42.0)),
             display: Display::Flex,
             column_gap: Val::Px(6.0),
+            flex_shrink: 0.0,
             ..default()
         }))
         .with_children(|tabs| {
@@ -85,14 +98,18 @@ fn spawn_settings_dropdown_row(
 }
 
 fn spawn_settings_dropdown_layers(root: &mut ChildSpawnerCommands) {
-    for dropdown in [
+    let mut dropdowns = vec![
         SettingsDropdown::Language,
         SettingsDropdown::PlaceSelectionMode,
         SettingsDropdown::DeleteSelectionMode,
         SettingsDropdown::Shadows,
         SettingsDropdown::Vsync,
         SettingsDropdown::Skybox,
-    ] {
+    ];
+    if StoragePlatform::current() == StoragePlatform::Desktop {
+        dropdowns.push(SettingsDropdown::WindowMode);
+    }
+    for dropdown in dropdowns {
         spawn_settings_dropdown_list(root, dropdown, settings_dropdown_options(dropdown));
     }
 }
@@ -182,13 +199,9 @@ fn spawn_settings_item(
     }
 }
 
-fn spawn_gameplay_settings(
-    panel: &mut ChildSpawnerCommands,
-    settings: &GameSettings,
-    scroll_height: f32,
-) {
+fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
     panel
-        .spawn(scroll_container(SETTINGS_SCROLL_CHROME, scroll_height))
+        .spawn(scroll_container())
         .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
         .with_children(|container| {
             container.spawn(scroll_content()).with_children(|content| {
@@ -200,26 +213,29 @@ fn spawn_gameplay_settings(
         });
 }
 
-fn spawn_graphics_settings(
-    panel: &mut ChildSpawnerCommands,
-    settings: &GameSettings,
-    scroll_height: f32,
-) {
+fn spawn_graphics_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
     panel
-        .spawn(scroll_container(SETTINGS_SCROLL_CHROME, scroll_height))
+        .spawn(scroll_container())
         .insert(PanelVisibility::SettingsTab(SettingsTab::Graphics))
         .with_children(|container| {
             container.spawn(scroll_content()).with_children(|content| {
                 for item in GRAPHICS_SETTINGS {
+                    if matches!(
+                        item.control,
+                        SettingsControl::Dropdown(SettingsDropdown::WindowMode)
+                    ) && StoragePlatform::current() != StoragePlatform::Desktop
+                    {
+                        continue;
+                    }
                     spawn_settings_item(content, *item, settings, SettingsTab::Graphics);
                 }
             });
         });
 }
 
-fn spawn_key_bindings(panel: &mut ChildSpawnerCommands, scroll_height: f32) {
+fn spawn_key_bindings(panel: &mut ChildSpawnerCommands) {
     panel
-        .spawn(scroll_container(SETTINGS_SCROLL_CHROME, scroll_height))
+        .spawn(scroll_container())
         .insert(PanelVisibility::SettingsTab(SettingsTab::KeyBindings))
         .with_children(|container| {
             container.spawn(scroll_content()).with_children(|content| {
@@ -265,9 +281,7 @@ fn spawn_settings_footer(panel: &mut ChildSpawnerCommands) {
         #[cfg(not(target_arch = "wasm32"))]
         actions.push(SettingsAction::StartDebugHttp);
         actions.push(SettingsAction::ResetDefaults);
-        if crate::shared::platform::StoragePlatform::current()
-            == crate::shared::platform::StoragePlatform::Desktop
-        {
+        if StoragePlatform::current() == StoragePlatform::Desktop {
             actions.push(SettingsAction::OpenFolder);
         }
         for action in actions {
@@ -346,5 +360,14 @@ fn settings_dropdown_options(dropdown: SettingsDropdown) -> Vec<(String, Setting
                 SettingsAction::SetSkyboxEnabled(false),
             ),
         ],
+        SettingsDropdown::WindowMode => ConfigWindowMode::ALL
+            .into_iter()
+            .map(|mode| {
+                (
+                    i18n.t(mode.label_key()),
+                    SettingsAction::SetWindowMode(mode),
+                )
+            })
+            .collect(),
     }
 }

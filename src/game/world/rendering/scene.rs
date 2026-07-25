@@ -175,3 +175,29 @@ pub fn sync_vsync_settings(
         }
     }
 }
+
+/// 把配置里的窗口模式同步到主窗口（仅桌面）
+pub fn sync_window_mode_settings(
+    config: Res<crate::shared::config::GameConfig>,
+    mut windows: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
+) {
+    if crate::shared::platform::StoragePlatform::current()
+        != crate::shared::platform::StoragePlatform::Desktop
+    {
+        return;
+    }
+    if !config.is_changed() {
+        return;
+    }
+    let mode = match config.window_mode {
+        crate::shared::config::ConfigWindowMode::Windowed => bevy::window::WindowMode::Windowed,
+        crate::shared::config::ConfigWindowMode::Borderless => {
+            bevy::window::WindowMode::BorderlessFullscreen(bevy::window::MonitorSelection::Current)
+        }
+    };
+    for mut window in &mut windows {
+        if window.mode != mode {
+            window.mode = mode;
+        }
+    }
+}

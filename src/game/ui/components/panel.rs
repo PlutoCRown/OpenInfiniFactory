@@ -19,6 +19,8 @@ const TITLE_FONT_SCALE: f32 = 0.8;
 #[derive(Clone, Copy)]
 pub struct PanelOptions {
     pub width: f32,
+    /// 固定高度；`None` 时按内容自适应
+    pub height: Option<f32>,
     pub title_key: &'static str,
     pub show_close: bool,
     pub title_size: f32,
@@ -30,11 +32,17 @@ impl PanelOptions {
     pub const fn new(width: f32, title_key: &'static str) -> Self {
         Self {
             width,
+            height: None,
             title_key,
             show_close: false,
             title_size: 26.0,
             start_hidden: false,
         }
+    }
+
+    pub const fn with_height(mut self, height: f32) -> Self {
+        self.height = Some(height);
+        self
     }
 
     pub const fn closable(mut self) -> Self {
@@ -102,6 +110,10 @@ pub fn spawn_panel_with_title(
     root.spawn((
         panel_window_bundle(
             Val::Px(options.width),
+            options
+                .height
+                .map(Val::Px)
+                .unwrap_or(Val::Auto),
             Val::Percent(100.0),
             options.start_hidden,
             true,
@@ -193,11 +205,12 @@ pub fn compact_raised_panel(style: Node) -> impl Bundle {
 }
 
 pub fn panel_bundle_auto(max_width_px: f32) -> impl Bundle {
-    panel_window_bundle(Val::Auto, Val::Px(max_width_px), false, true)
+    panel_window_bundle(Val::Auto, Val::Auto, Val::Px(max_width_px), false, true)
 }
 
 fn panel_window_bundle(
     width: Val,
+    height: Val,
     max_width: Val,
     start_hidden: bool,
     absolute: bool,
@@ -205,7 +218,7 @@ fn panel_window_bundle(
     (
         Node {
             width,
-            height: Val::Auto,
+            height,
             max_width,
             max_height: Val::Percent(100.0),
             position_type: if absolute {
@@ -330,9 +343,13 @@ pub fn panel_content() -> impl Bundle {
     (
         Node {
             width: Val::Percent(100.0),
+            flex_grow: 1.0,
+            flex_shrink: 1.0,
+            min_height: Val::Px(0.0),
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(12.0),
             padding: UiRect::all(Val::Px(8.0)),
+            overflow: Overflow::clip(),
             ..default()
         },
         BackgroundColor(Color::NONE),

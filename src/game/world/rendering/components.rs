@@ -160,3 +160,10 @@ pub struct BlockIconRenderCamera;
 pub struct BlockIconRenderState {
     pub(super) frames_remaining: u8,
 }
+
+impl BlockIconRenderState {
+    /// 离屏图标是否还在拍
+    pub fn is_rendering(&self) -> bool {
+        self.frames_remaining > 0
+    }
+}

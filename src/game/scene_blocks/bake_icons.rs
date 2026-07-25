@@ -1,4 +1,4 @@
-//! 开发工具：用与游戏相同的离屏相机把场景/材料方块 bake 成 icon.png
+//! 开发工具：用与游戏相同的离屏相机把场景/材料/工厂方块 bake 成 icon.png
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -22,7 +22,10 @@ use crate::game::world::animation::AnimationTiming;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::game::world::rendering::spawn::spawn_block_model;
-use crate::game::world::rendering::{BlockIconRenderEntity, BlockIconRenderRoot};
+use crate::game::world::rendering::{
+    BlockIconRenderEntity, BlockIconRenderRoot, bakeable_block_icon_kinds,
+    baked_block_icon_only_id, baked_block_icon_path, selection_icon_path,
+};
 use crate::shared::platform;
 
 const ICON_RENDER_LAYER: usize = 3;
@@ -37,9 +40,9 @@ const FRAMES_BEFORE_CAPTURE: u8 = 4;
 pub struct BakeSceneIconsConfig {
     /// 输出边长（像素），默认 128
     pub size: u32,
-    /// 输出文件名，默认 `icon.png`；做 LOD 时可传 `icon_64.png` 等
+    /// 输出文件名，默认 `icon.png`；仅场景/材料/印花用；工厂块路径由映射表决定
     pub output: String,
-    /// 只 bake 指定 id；空则全部（场景 + 材料 + 印花）
+    /// 只 bake 指定 id；空则全部
     pub only: Option<String>,
     /// 场景方块根目录（兼容旧参数；加载仍走全局 assets）
     pub root: PathBuf,
@@ -49,6 +52,8 @@ pub struct BakeSceneIconsConfig {
     pub bake_materials: bool,
     /// 是否 bake 印花材料
     pub bake_stamps: bool,
+    /// 是否 bake 工厂/系统块与选区工具
+    pub bake_factory: bool,
 }
 
 impl Default for BakeSceneIconsConfig {
@@ -61,6 +66,7 @@ impl Default for BakeSceneIconsConfig {
             bake_scene: true,
             bake_materials: true,
             bake_stamps: true,
+            bake_factory: false,
         }
     }
 }
@@ -79,10 +85,12 @@ fn print_usage() {
     eprintln!(
         "Usage: bake_scene_icons [--size N] [--output NAME] [--only ID]\n\
          \n\
-         [--scene-only] [--materials-only] [--stamps-only]\n\
-         Defaults: --size 128 --output icon.png（默认同时 bake 场景、材料与印花）\n\
+         [--scene-only] [--materials-only] [--stamps-only] [--factory-only]\n\
+         [--factory]  在默认场景/材料/印花之外也 bake 工厂块\n\
+         Defaults: --size 128 --output icon.png（默认 bake 场景、材料与印花）\n\
          Example: bake_scene_icons --only iron\n\
-         Example: bake_scene_icons --stamps-only\n\
+         Example: bake_scene_icons --factory-only\n\
+         Example: bake_scene_icons --factory-only --only conveyor\n\
          Example (LOD): bake_scene_icons --size 64 --output icon_64.png"
     );
 }
@@ -133,16 +141,28 @@ fn parse_args(args: &[String]) -> Result<BakeSceneIconsConfig, String> {
                 config.bake_scene = true;
                 config.bake_materials = false;
                 config.bake_stamps = false;
+                config.bake_factory = false;
             }
             "--materials-only" => {
                 config.bake_scene = false;
                 config.bake_materials = true;
                 config.bake_stamps = false;
+                config.bake_factory = false;
             }
             "--stamps-only" => {
                 config.bake_scene = false;
                 config.bake_materials = false;
                 config.bake_stamps = true;
+                config.bake_factory = false;
+            }
+            "--factory-only" => {
+                config.bake_scene = false;
+                config.bake_materials = false;
+                config.bake_stamps = false;
+                config.bake_factory = true;
+            }
+            "--factory" => {
+                config.bake_factory = true;
             }
             other if other.starts_with("--size=") => {
                 let v = &other["--size=".len()..];
@@ -164,7 +184,7 @@ fn parse_args(args: &[String]) -> Result<BakeSceneIconsConfig, String> {
     Ok(config)
 }
 
-/// 启动无头 Bevy，把场景/材料/印花方块渲成 PNG 后退出
+/// 启动无头 Bevy，把场景/材料/印花/工厂方块渲成 PNG 后退出
 pub fn run(config: BakeSceneIconsConfig) {
     let size = config.size;
     App::new()
@@ -207,7 +227,7 @@ fn setup_bake(
     config: Res<BakeSceneIconsConfig>,
 ) {
     let mut scene_registry = SceneBlockRegistry::default();
-    if config.bake_scene {
+    if config.bake_scene || config.bake_factory {
         if let Err(err) = load_global_scene_blocks(&mut scene_registry) {
             eprintln!("failed to load scene blocks: {err}");
             std::process::exit(1);
@@ -217,7 +237,7 @@ fn setup_bake(
     let mut material_registry = MaterialBlockRegistry::default();
     let mut stamp_registry = StampMaterialRegistry::default();
     let mut paint_registry = PaintMaterialRegistry::default();
-    if config.bake_materials || config.bake_stamps {
+    if config.bake_materials || config.bake_stamps || config.bake_factory {
         if let Err(err) = load_global_material_packs(MaterialPackRegistries {
             materials: &mut material_registry,
             stamps: &mut stamp_registry,
@@ -284,8 +304,7 @@ fn setup_bake(
                 &mut targets,
                 &mut index,
                 kind,
-                pack_dir,
-                &config.output,
+                &pack_dir.join(&config.output),
                 config.size,
             );
         }
@@ -315,8 +334,7 @@ fn setup_bake(
                 &mut targets,
                 &mut index,
                 BlockKind::Material(presentation.id),
-                pack_dir,
-                &config.output,
+                &pack_dir.join(&config.output),
                 config.size,
             );
         }
@@ -346,8 +364,53 @@ fn setup_bake(
                 &mut targets,
                 &mut index,
                 BlockKind::Stamp(presentation.id),
-                pack_dir,
-                &config.output,
+                &pack_dir.join(&config.output),
+                config.size,
+            );
+        }
+    }
+
+    if config.bake_factory {
+        for kind in bakeable_block_icon_kinds() {
+            if let Some(only) = &config.only {
+                let Some(id) = baked_block_icon_only_id(kind) else {
+                    continue;
+                };
+                if id != only.as_str() {
+                    continue;
+                }
+            }
+            let Some(out_path) = baked_block_icon_path(kind) else {
+                continue;
+            };
+            push_bake_target(
+                &mut commands,
+                &mut images,
+                &mut meshes,
+                &assets,
+                &icon_world,
+                &icon_layer,
+                &mut targets,
+                &mut index,
+                kind,
+                &out_path,
+                config.size,
+            );
+        }
+
+        let bake_selection = match &config.only {
+            None => true,
+            Some(only) => only == "selection",
+        };
+        if bake_selection {
+            push_selection_bake_target(
+                &mut commands,
+                &mut images,
+                &mut meshes,
+                &mut materials,
+                &icon_layer,
+                &mut targets,
+                &mut index,
                 config.size,
             );
         }
@@ -355,17 +418,16 @@ fn setup_bake(
 
     if targets.is_empty() {
         eprintln!(
-            "no blocks to bake (check --only / --scene-only / --materials-only / --stamps-only)"
+            "no blocks to bake (check --only / --scene-only / --materials-only / --stamps-only / --factory-only)"
         );
         std::process::exit(1);
     }
 
     println!(
-        "baking {} icon(s) at {}x{} → {}",
+        "baking {} icon(s) at {}x{}",
         targets.len(),
         config.size,
         config.size,
-        config.output
     );
 
     commands.insert_resource(assets);
@@ -388,11 +450,47 @@ fn push_bake_target(
     targets: &mut Vec<(Handle<Image>, PathBuf)>,
     index: &mut usize,
     kind: BlockKind,
-    pack_dir: &Path,
-    output: &str,
+    out_path: &Path,
     size: u32,
 ) {
-    let out_path = pack_dir.join(output);
+    let image = Image::new_target_texture(
+        size,
+        size,
+        TextureFormat::Rgba8Unorm,
+        Some(TextureFormat::Rgba8UnormSrgb),
+    );
+    let image_handle = images.add(image);
+    targets.push((image_handle.clone(), out_path.to_path_buf()));
+
+    let origin = Vec3::new(*index as f32 * ICON_SPACING, -100.0, 0.0);
+    spawn_bake_icon_model(
+        commands, meshes, assets, icon_world, kind, origin, icon_layer,
+    );
+    spawn_bake_camera(commands, image_handle, origin, icon_layer);
+    *index += 1;
+}
+
+/// 选区工具：单独加载 selection/model.glb
+fn push_selection_bake_target(
+    commands: &mut Commands,
+    images: &mut Assets<Image>,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    icon_layer: &RenderLayers,
+    targets: &mut Vec<(Handle<Image>, PathBuf)>,
+    index: &mut usize,
+    size: u32,
+) {
+    let glb_path = PathBuf::from(platform::asset_path()).join("factory_blocks/selection/model.glb");
+    let handles =
+        match crate::game::scene_blocks::load_scene_glb(&glb_path, meshes, materials, images) {
+            Ok(h) => h,
+            Err(err) => {
+                eprintln!("selection icon glb: {err}");
+                return;
+            }
+        };
+    let out_path = selection_icon_path();
     let image = Image::new_target_texture(
         size,
         size,
@@ -403,10 +501,24 @@ fn push_bake_target(
     targets.push((image_handle.clone(), out_path));
 
     let origin = Vec3::new(*index as f32 * ICON_SPACING, -100.0, 0.0);
-    spawn_bake_icon_model(
-        commands, meshes, assets, icon_world, kind, origin, icon_layer,
-    );
+    commands.spawn((
+        Mesh3d(handles.mesh),
+        MeshMaterial3d(handles.material),
+        Transform::from_translation(origin - Vec3::splat(0.5)),
+        icon_layer.clone(),
+        BlockIconRenderEntity,
+        BlockIconRenderRoot,
+    ));
+    spawn_bake_camera(commands, image_handle, origin, icon_layer);
+    *index += 1;
+}
 
+fn spawn_bake_camera(
+    commands: &mut Commands,
+    image_handle: Handle<Image>,
+    origin: Vec3,
+    icon_layer: &RenderLayers,
+) {
     commands.spawn((
         Camera3d::default(),
         Camera {
@@ -432,7 +544,6 @@ fn push_bake_target(
         BlockIconRenderEntity,
         BlockIconRenderRoot,
     ));
-    *index += 1;
 }
 
 fn spawn_bake_icon_model(

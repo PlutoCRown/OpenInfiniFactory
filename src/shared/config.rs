@@ -41,6 +41,7 @@ pub const DEFAULT_CONFIG: GameConfig = GameConfig {
     shadows_enabled: true,
     vsync_enabled: true,
     skybox_enabled: false,
+    window_mode: ConfigWindowMode::Windowed,
     language: None,
     place_selection_mode: ConfigSelectionMode::Point,
     delete_selection_mode: ConfigSelectionMode::Point,
@@ -65,6 +66,9 @@ pub struct GameConfig {
     pub vsync_enabled: bool,
     #[serde(default = "default_skybox_enabled")]
     pub skybox_enabled: bool,
+    /// 桌面窗口模式（Web/移动端忽略）
+    #[serde(default)]
+    pub window_mode: ConfigWindowMode,
     #[serde(default)]
     pub language: Option<Language>,
     #[serde(default)]
@@ -453,6 +457,27 @@ impl ConfigSelectionMode {
             Self::Point => "selection_mode.point",
             Self::Line => "selection_mode.line",
             Self::Plane => "selection_mode.plane",
+        }
+    }
+}
+
+/// 桌面窗口显示模式
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Reflect, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigWindowMode {
+    #[default]
+    Windowed,
+    /// 无边框（占满当前显示器）
+    Borderless,
+}
+
+impl ConfigWindowMode {
+    pub const ALL: [ConfigWindowMode; 2] = [ConfigWindowMode::Windowed, ConfigWindowMode::Borderless];
+
+    pub fn label_key(self) -> &'static str {
+        match self {
+            Self::Windowed => "settings.window_mode.windowed",
+            Self::Borderless => "settings.window_mode.borderless",
         }
     }
 }

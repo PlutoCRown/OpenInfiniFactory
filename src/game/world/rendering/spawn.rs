@@ -574,11 +574,13 @@ pub(crate) fn spawn_block_model(
                 WireConnectorBehavior::Device { blocked_offset } => Some(blocked_offset),
                 WireConnectorBehavior::Wire => None,
             };
-            let use_factory_wire = data.kind == BlockKind::Wire
-                && matches!(
-                    assets.factory_visual(BlockKind::Wire),
-                    Some(FactoryVisual::Wire { .. })
-                );
+            let factory_wire_ready = matches!(
+                assets.factory_visual(BlockKind::Wire),
+                Some(FactoryVisual::Wire { .. })
+            );
+            // 电线块 + 吸盘（中空，臂从腔内伸出）用工厂电线臂；其它设备仍用短黄柱
+            let use_factory_wire = factory_wire_ready
+                && (data.kind == BlockKind::Wire || data.kind == BlockKind::SuctionCup);
             let powered_wire = material == assets.active_wire_material;
             let mut connected_offsets = Vec::new();
             let mut panel_face_indices = std::collections::HashSet::new();
@@ -614,7 +616,20 @@ pub(crate) fn spawn_block_model(
                 if has_panel {
                     panel_face_indices.insert(face_index);
                 }
-                connected_offsets.push((face_index, offset));
+                // 有向块：工厂臂按局部面选；世界 face_index 只给电线块用
+                let arm_face = if data.kind == BlockKind::Wire {
+                    face_index
+                } else {
+                    match local_connector_offset(data, offset) {
+                        o if o == IVec3::X => 0,
+                        o if o == IVec3::NEG_X => 1,
+                        o if o == IVec3::Y => 2,
+                        o if o == IVec3::NEG_Y => 3,
+                        o if o == IVec3::Z => 4,
+                        _ => 5,
+                    }
+                };
+                connected_offsets.push((arm_face, offset));
                 if !use_factory_wire {
                     let local_offset = local_connector_offset(data, offset);
                     let arm_scale = if has_panel { 0.8 } else { 1.0 };
@@ -654,14 +669,15 @@ pub(crate) fn spawn_block_model(
             }
 
             if use_factory_wire {
-                // 孤立或图标：六向全画；单边连通时补对向臂（露出金属环端面）
-                let mut faces: Vec<usize> = if connected_offsets.is_empty() || icon_render.is_some()
+                // 电线块：孤立/图标六向全画，单边连通补对向；吸盘：只画实际连通面
+                let mut faces: Vec<usize> = if data.kind == BlockKind::Wire
+                    && (connected_offsets.is_empty() || icon_render.is_some())
                 {
                     (0..6).collect()
                 } else {
                     connected_offsets.iter().map(|(i, _)| *i).collect()
                 };
-                if connected_offsets.len() == 1 {
+                if data.kind == BlockKind::Wire && connected_offsets.len() == 1 {
                     let only = connected_offsets[0].0;
                     let opposite = only ^ 1;
                     if !faces.contains(&opposite) {
@@ -675,7 +691,7 @@ pub(crate) fn spawn_block_model(
                         face_index,
                         icon_render.map(|(_, layer)| layer),
                         is_preview,
-                        powered_wire,
+                        powered_wire && data.kind == BlockKind::Wire,
                         panel_face_indices.contains(&face_index),
                     );
                 }

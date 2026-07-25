@@ -215,6 +215,7 @@ impl Plugin for GamePlugin {
                     sync_gameplay_view_image_size,
                     world::rendering::sync_shadow_settings,
                     world::rendering::sync_vsync_settings,
+                    world::rendering::sync_window_mode_settings,
                 )
                     .after(PerfScope::Placement)
                     .before(PerfScope::Menus),

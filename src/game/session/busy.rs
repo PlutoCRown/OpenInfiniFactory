@@ -24,3 +24,15 @@ impl SessionBusy {
         }
     }
 }
+
+/// 加载遮罩用的封面（进档前从存档列表截取）
+#[derive(Resource, Default)]
+pub struct SessionBusyCover {
+    pub image: Option<Handle<Image>>,
+}
+
+impl SessionBusyCover {
+    pub fn clear(&mut self) {
+        self.image = None;
+    }
+}

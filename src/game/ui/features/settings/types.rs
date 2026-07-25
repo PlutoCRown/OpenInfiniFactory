@@ -5,7 +5,7 @@ use crate::game::{
     GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, MOUSE_SENSITIVITY_MAX, MOUSE_SENSITIVITY_MIN,
     UI_SCALE_MAX, UI_SCALE_MIN,
 };
-use crate::shared::config::{ActionKeyName, ConfigSelectionMode};
+use crate::shared::config::{ActionKeyName, ConfigSelectionMode, ConfigWindowMode};
 use crate::shared::i18n::Language;
 
 use crate::game::ui::core::action::UiActionLabel;
@@ -163,6 +163,10 @@ pub const GRAPHICS_SETTINGS: &[SettingsItem] = &[
         label_key: "settings.skybox",
         control: SettingsControl::Dropdown(SettingsDropdown::Skybox),
     },
+    SettingsItem {
+        label_key: "settings.window_mode",
+        control: SettingsControl::Dropdown(SettingsDropdown::WindowMode),
+    },
 ];
 
 impl SettingsField {
@@ -283,6 +287,7 @@ pub enum SettingsDropdown {
     Shadows,
     Vsync,
     Skybox,
+    WindowMode,
 }
 
 impl SettingsDropdown {
@@ -319,6 +324,7 @@ impl SettingsDropdown {
             } else {
                 "settings.option_off"
             }),
+            Self::WindowMode => i18n.t(config.window_mode.label_key()),
         }
     }
 }
@@ -335,6 +341,7 @@ pub enum SettingsAction {
     SetShadowsEnabled(bool),
     SetVsyncEnabled(bool),
     SetSkyboxEnabled(bool),
+    SetWindowMode(ConfigWindowMode),
     ToggleDropdown(SettingsDropdown),
     Bind(ActionKeyName),
     ResetDefaults,
@@ -359,6 +366,7 @@ impl UiActionLabel for SettingsAction {
             | Self::SetShadowsEnabled(_)
             | Self::SetVsyncEnabled(_)
             | Self::SetSkyboxEnabled(_)
+            | Self::SetWindowMode(_)
             | Self::ToggleDropdown(_) => "",
         }
     }

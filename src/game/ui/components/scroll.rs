@@ -1,31 +1,28 @@
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 
 /// 滚动容器状态
 #[derive(Component)]
 pub struct ScrollContainer {
     pub offset: f32,
     pub max_offset: f32,
-    /// 从窗口高度扣除的标题/Tab/内边距等，用于把容器限制在屏内
-    pub window_chrome: f32,
 }
 
 /// 滚动内容标记（通过改 top 实现滚动）
 #[derive(Component)]
 pub struct ScrollContent;
 
-/// 高度取 min(内容, 窗口 − chrome)，避免设置面板撑破屏幕。
-/// `initial_height` 在 spawn 时按窗口算好，避免首帧 Autolayout 再跳变。
-pub fn scroll_container(window_chrome: f32, initial_height: f32) -> (impl Bundle, ScrollContainer) {
+/// 占满父级剩余高度的滚动容器（设置三 Tab 等）
+pub fn scroll_container() -> (impl Bundle, ScrollContainer) {
     (
         (
             Node {
                 width: Val::Percent(100.0),
-                height: Val::Px(initial_height.max(80.0)),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                min_height: Val::Px(0.0),
                 position_type: PositionType::Relative,
                 overflow: Overflow::clip_y(),
-                flex_shrink: 0.0,
                 ..default()
             },
             BackgroundColor(Color::NONE),
@@ -37,7 +34,6 @@ pub fn scroll_container(window_chrome: f32, initial_height: f32) -> (impl Bundle
         ScrollContainer {
             offset: 0.0,
             max_offset: 0.0,
-            window_chrome,
         },
     )
 }
@@ -62,15 +58,11 @@ pub fn scroll_content() -> impl Bundle {
     )
 }
 
-/// 滚轮驱动滚动偏移，并按窗口剩余高度收紧容器
+/// 滚轮驱动滚动偏移；fill 容器以实际布局高度为视口
 pub fn update_scroll_containers(
     mut mouse_wheel: MessageReader<MouseWheel>,
-    windows: Query<&Window, With<PrimaryWindow>>,
     ui_scale: Res<UiScale>,
-    mut containers: Query<
-        (&mut ScrollContainer, &mut Node, &Children, &ComputedNode),
-        Without<ScrollContent>,
-    >,
+    mut containers: Query<(&mut ScrollContainer, &Children, &ComputedNode), Without<ScrollContent>>,
     mut contents: Query<
         (&mut Node, &ComputedNode),
         (With<ScrollContent>, Without<ScrollContainer>),
@@ -82,13 +74,8 @@ pub fn update_scroll_containers(
     }
     let wheel_delta: f32 = mouse_wheel.read().map(|event| event.y).sum();
     let scale = ui_scale.0.max(0.01);
-    let window_h = windows
-        .single()
-        .map(|window| window.height())
-        .unwrap_or(720.0);
-    let available_ui = (window_h / scale).max(80.0);
 
-    for (mut container, mut style, children, node) in &mut containers {
+    for (mut container, children, node) in &mut containers {
         if node.is_empty() {
             continue;
         }
@@ -101,16 +88,8 @@ pub fn update_scroll_containers(
 
         let inv = content_node.inverse_scale_factor();
         let content_ui = content_node.size().y * inv / scale;
-        let max_ui = (available_ui - container.window_chrome).max(80.0);
-        let height_ui = if content_ui <= 1.0 {
-            max_ui
-        } else {
-            content_ui.min(max_ui)
-        };
-        let next_height = Val::Px(height_ui);
-        if style.height != next_height {
-            style.height = next_height;
-        }
+        // 视口高度：用容器自己 layout 后的高度，避免写死 chrome 比面板还高
+        let height_ui = (node.size().y * node.inverse_scale_factor() / scale).max(1.0);
 
         container.max_offset = (content_ui - height_ui).max(0.0);
         if wheel_delta.abs() > f32::EPSILON {
@@ -156,8 +135,7 @@ pub fn scroll_dragged(
         return;
     };
     let scale = ui_scale.0.max(0.01);
-    container.offset =
-        (container.offset - drag.delta.y / scale).clamp(0.0, container.max_offset);
+    container.offset = (container.offset - drag.delta.y / scale).clamp(0.0, container.max_offset);
     let Ok(kids) = children.get(container_entity) else {
         return;
     };

@@ -210,6 +210,11 @@ pub fn dispatch_settings_actions(
                 open_dropdown.0 = None;
                 save_config(&config);
             }
+            SettingsAction::SetWindowMode(mode) => {
+                config.window_mode = mode;
+                open_dropdown.0 = None;
+                save_config(&config);
+            }
             SettingsAction::ToggleDropdown(dropdown) => {
                 open_dropdown.0 = if open_dropdown.0 == Some(dropdown) {
                     None

@@ -120,21 +120,21 @@ impl UiAccess {
                     mouse_sensitivity_y: settings.mouse_sensitivity_y,
                 }
             };
-            let scroll_height = {
-                use crate::game::ui::screens::SETTINGS_SCROLL_CHROME;
+            let (panel_w, panel_h) = {
+                use crate::game::ui::screens::settings_panel_size;
                 use bevy::window::PrimaryWindow;
                 let scale = world.resource::<UiScale>().0.max(0.01);
-                let window_h = world
+                let (window_w, window_h) = world
                     .query_filtered::<&Window, With<PrimaryWindow>>()
                     .iter(world)
                     .next()
-                    .map(|window| window.height())
-                    .unwrap_or(720.0);
-                (window_h / scale - SETTINGS_SCROLL_CHROME).max(80.0)
+                    .map(|window| (window.width(), window.height()))
+                    .unwrap_or((1280.0, 720.0));
+                settings_panel_size(window_w, window_h, scale)
             };
             let mut state = SystemState::<UiHostCommands>::new(world);
             let mut params = state.get_mut(world).unwrap();
-            params.mount_settings(commands, root, context, &settings, scroll_height)
+            params.mount_settings(commands, root, context, &settings, panel_w, panel_h)
         })
     }
 

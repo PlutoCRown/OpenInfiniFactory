@@ -1,5 +1,6 @@
 //! 世界渲染：场景实体、方块生成、预览与特效
 
+mod block_icons;
 mod components;
 mod connectors;
 pub(crate) mod depth_bias;
@@ -16,6 +17,11 @@ pub(crate) mod spawn;
 mod world_rebuild;
 
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
+
+pub use block_icons::{
+    SELECTION_ICON_RELPATH, bakeable_block_icon_kinds, baked_block_icon_only_id,
+    baked_block_icon_path, baked_block_icon_relpath, selection_icon_path,
+};
 
 pub(crate) use components::BlockIconRenderEntity;
 pub(crate) use components::GeneratorConfigMaterialPreview;
@@ -36,7 +42,10 @@ pub use previews::{
     despawn_edit_previews, despawn_pending_generated_previews, spawn_block_preview,
     spawn_edit_preview, update_delete_bounds_overlay, update_selection_bounds_overlay,
 };
-pub use scene::{setup_scene, sync_shadow_settings, sync_vsync_settings, teardown_playing_scene};
+pub use scene::{
+    setup_scene, sync_shadow_settings, sync_vsync_settings, sync_window_mode_settings,
+    teardown_playing_scene,
+};
 pub use scene_chunks::{
     SceneChunkMeshes, clear_scene_chunks, forget_scene_chunks, rebuild_all_scene_chunks,
     sync_scene_chunks_for_positions,
