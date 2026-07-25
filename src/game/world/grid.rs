@@ -1,11 +1,10 @@
 //! 世界网格：Bevy Resource 包装 `oif_sim::WorldBlocks`
 
 pub use oif_sim::world::grid::{
-    grid_to_world, raycast_blocks, raycast_infinite_plane, world_to_grid,
-    BlockSettings, ConverterMode, ConverterSettings, EditSelectionMode,
-    GeneratorMode, GeneratorSettings, GoalSettings, MaterialFace, MaterialWeld, REACH,
-    RollerSettings, SignDisplay, SignSettings, StamperSettings, StoredAcceptorStructure,
-    TargetHit, TeleportSettings,
+    BlockSettings, ConverterMode, ConverterSettings, EditSelectionMode, GeneratorMode,
+    GeneratorSettings, GoalSettings, MaterialFace, MaterialWeld, REACH, RollerSettings,
+    SignDisplay, SignSettings, StamperSettings, StoredAcceptorStructure, TargetHit,
+    TeleportSettings, grid_to_world, raycast_blocks, raycast_infinite_plane, world_to_grid,
 };
 
 use bevy::prelude::*;
@@ -23,7 +22,6 @@ pub fn raycast_edit_drag_grid(
     dir: Vec3,
     start: IVec3,
     mode: ConfigSelectionMode,
-    camera_dir: Vec3,
     plane_normal: IVec3,
 ) -> Option<IVec3> {
     let mode = match mode {
@@ -31,12 +29,5 @@ pub fn raycast_edit_drag_grid(
         ConfigSelectionMode::Line => SimEditSelectionMode::Line,
         ConfigSelectionMode::Plane => SimEditSelectionMode::Plane,
     };
-    oif_sim::world::grid::raycast_edit_drag_grid(
-        origin,
-        dir,
-        start,
-        mode,
-        camera_dir,
-        plane_normal,
-    )
+    oif_sim::world::grid::raycast_edit_drag_grid(origin, dir, start, mode, plane_normal)
 }

@@ -49,6 +49,7 @@ from mathutils import Euler, Vector
 OUT_DIR = REPO_ROOT / "assets" / "factory_blocks" / "conveyor"
 OUT_GLB = OUT_DIR / "model.glb"
 OUT_BELT_TEX = OUT_DIR / "belt_chevron.png"
+OUT_BELT_NORMAL = OUT_DIR / "belt_chevron_normal.png"
 
 CELL = 0.5
 # 橙主体：宽/深 1.0，高 0.98，底贴齐 z=-0.5，顶在 z=0.48
@@ -97,45 +98,11 @@ ARROW_SHAFT_H = ARROW_TOTAL_H * 0.48  # 杆加宽
 ARROW_DEPTH = 0.045
 
 
-def write_chevron_texture(path: Path, size: int = 256) -> bpy.types.Image:
-    """清晰单向人字：每排一个 ^ 尖朝 +V（传送方向），不相交成网。"""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    bg = (0.07, 0.07, 0.08)
-    fg = (0.55, 0.55, 0.58)
-    img = bpy.data.images.new("BeltChevron", width=size, height=size, alpha=False)
-    pixels = list(bg) + [1.0]
-    pixels = pixels * (size * size)
-
-    def set_px(x: int, y: int, rgb: tuple[float, float, float]) -> None:
-        if 0 <= x < size and 0 <= y < size:
-            i = (y * size + x) * 4
-            pixels[i], pixels[i + 1], pixels[i + 2] = rgb
-
-    def thick_line(x0: float, y0: float, x1: float, y1: float, w: int = 7) -> None:
-        steps = max(int(math.hypot(x1 - x0, y1 - y0)), 1)
-        for s in range(steps + 1):
-            t = s / steps
-            cx = x0 + (x1 - x0) * t
-            cy = y0 + (y1 - y0) * t
-            for dx in range(-w, w + 1):
-                for dy in range(-w, w + 1):
-                    if dx * dx + dy * dy <= w * w:
-                        set_px(int(cx) + dx, int(cy) + dy, fg)
-
-    # 4 排独立 V，尖朝 +V（传送 +Y），左右臂不相交成菱形网
-    for band in range(4):
-        base_y = size * (0.10 + band * 0.22)
-        tip_y = base_y + size * 0.14
-        mid = size * 0.5
-        half = size * 0.32
-        thick_line(mid, tip_y, mid - half, base_y, w=6)
-        thick_line(mid, tip_y, mid + half, base_y, w=6)
-
-    img.pixels = pixels
-    img.pack()
-    img.filepath_raw = str(path)
-    img.file_format = "PNG"
-    img.save()
+def load_image(path: Path, *, is_data: bool = False) -> bpy.types.Image:
+    """加载贴图；法线等数据贴图用 Non-Color。"""
+    img = bpy.data.images.load(str(path))
+    if is_data:
+        img.colorspace_settings.name = "Non-Color"
     return img
 
 
@@ -415,81 +382,97 @@ def build_chassis(mat_orange: bpy.types.Material) -> bpy.types.Object:
     return body
 
 
-def belt_loop_s(y: float, z: float) -> float:
-    """胶囊外环弧长：顶(-L→+L) → +Y半圆 → 底(+L→-L) → -Y半圆。"""
+def build_belt_capsule(mat_belt: bpy.types.Material) -> bpy.types.Object:
+    """胶囊棱柱：YZ 跑道外环挤出带宽。
+
+    UV：U=带宽[0,1]；V=弧长/带宽（可 >1，贴图 REPEAT）。
+    方图一格对应「宽×宽」的物理块，环向按比例循环，相对宽度不拉伸。
+    """
     L = BELT_HALF_LEN
     R = BELT_OUTER_R
     cz = ROLLER_Z
-
-    if y >= L:
-        ang = math.atan2(z - cz, y - L)
-        ang = max(-math.pi / 2, min(math.pi / 2, ang))
-        return 2 * L + R * (math.pi / 2 - ang)
-    if y <= -L:
-        vx, vz = y + L, z - cz
-        # 自底边顺时针经 -Y 到顶：0 → π
-        ang = math.atan2(-vx, -vz)
-        if ang < 0:
-            ang += 2 * math.pi
-        ang = max(0.0, min(math.pi, ang))
-        return 4 * L + math.pi * R + R * ang
-    if z >= cz:
-        return y + L
-    return 2 * L + math.pi * R + (L - y)
-
-
-def unwrap_belt_strip(obj: bpy.types.Object) -> None:
-    """整圈展开成一条带：U=宽度，V=环向弧长（可平移做传送动画）。"""
-    apply_transforms(obj)
-    L = BELT_HALF_LEN
-    R = BELT_OUTER_R
-    loop_len = 4 * L + 2 * math.pi * R
     half_w = (BELT_WIDTH - 0.02) * 0.5
+    belt_w = half_w * 2.0
+    loop_len = 4.0 * L + 2.0 * math.pi * R
+    # 环向要铺几格方图：loop_len / belt_w
+    print(
+        f"  belt UV tiles V={loop_len / belt_w:.3f} (loop={loop_len:.3f} / width={belt_w:.3f})",
+        file=sys.stderr,
+    )
 
-    mesh = obj.data
+    # 直线段与圆弧段取相近弦长，避免 V 向疏密不均
+    n_arc = 24
+    seg = math.pi * R / n_arc
+    n_flat = max(2, round((2.0 * L) / seg))
+
+    # 外环折线 (y, z, s)，s∈[0, loop_len)；闭合边用 s=loop_len
+    outline: list[tuple[float, float, float]] = []
+    s = 0.0
+
+    # 顶：-L → +L
+    for i in range(n_flat + 1):
+        y = -L + (2.0 * L) * (i / n_flat)
+        if i:
+            s += (2.0 * L) / n_flat
+        outline.append((y, cz + R, s))
+
+    # +Y 半圆：θ = π/2 → -π/2（不含起点）
+    for i in range(1, n_arc + 1):
+        theta = math.pi / 2.0 - math.pi * (i / n_arc)
+        s += (math.pi * R) / n_arc
+        outline.append((L + R * math.cos(theta), cz + R * math.sin(theta), s))
+
+    # 底：+L → -L（不含起点）
+    for i in range(1, n_flat + 1):
+        y = L - (2.0 * L) * (i / n_flat)
+        s += (2.0 * L) / n_flat
+        outline.append((y, cz - R, s))
+
+    # -Y 半圆：θ = -π/2 → -3π/2（不含起点与终点，终点=顶起点）
+    for i in range(1, n_arc):
+        theta = -math.pi / 2.0 - math.pi * (i / n_arc)
+        s += (math.pi * R) / n_arc
+        outline.append((-L + R * math.cos(theta), cz + R * math.sin(theta), s))
+
     bm = bmesh.new()
-    bm.from_mesh(mesh)
-    uv_layer = bm.loops.layers.uv.verify()
+    uv = bm.loops.layers.uv.new()
+    n = len(outline)
+    v_l = [bm.verts.new((-half_w, y, z)) for y, z, _ in outline]
+    v_r = [bm.verts.new((half_w, y, z)) for y, z, _ in outline]
 
-    for face in bm.faces:
-        for loop in face.loops:
-            p = loop.vert.co
-            u = (p.x / half_w) * 0.5 + 0.5
-            v = belt_loop_s(p.y, p.z) / loop_len
-            # 顶面箭头方向：整圈 UV 旋转 180°
-            loop[uv_layer].uv = (1.0 - u, 1.0 - v)
+    def set_uv(face: bmesh.types.BMFace, coords: list[tuple[float, float]]) -> None:
+        for loop, (uu, vv) in zip(face.loops, coords):
+            # 整圈翻转，使人字尖朝传送方向
+            loop[uv].uv = (1.0 - uu, 1.0 - vv)
 
+    # 环带侧面：V = 弧长/带宽（方图循环）
+    for i in range(n):
+        j = (i + 1) % n
+        s0 = outline[i][2]
+        s1 = outline[j][2] if j else loop_len
+        v0 = s0 / belt_w
+        v1 = s1 / belt_w
+        face = bm.faces.new([v_l[i], v_r[i], v_r[j], v_l[j]])
+        set_uv(face, [(0.0, v0), (1.0, v0), (1.0, v1), (0.0, v1)])
+
+    # ±X 端盖（夹在侧墙里，几乎不可见）
+    face_l = bm.faces.new(list(reversed(v_l)))
+    set_uv(
+        face_l,
+        [(0.0, outline[i][2] / belt_w) for i in range(n - 1, -1, -1)],
+    )
+    face_r = bm.faces.new(v_r)
+    set_uv(face_r, [(1.0, outline[i][2] / belt_w) for i in range(n)])
+
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new("Belt")
     bm.to_mesh(mesh)
     bm.free()
-    mesh.update()
-
-
-def build_belt_capsule(mat_belt: bpy.types.Material) -> bpy.types.Object:
-    """侧面胶囊：中间长方 + 两端圆柱；UV 展成连续环带。"""
-    mid = mesh_cube(
-        "BeltMid",
-        Vector((BELT_WIDTH - 0.02, BELT_HALF_LEN * 2, BELT_OUTER_R * 2)),
-        Vector((0, 0, ROLLER_Z)),
-    )
-    apply_mat(mid, mat_belt)
-    apply_transforms(mid)
-
-    rot = Euler((0, math.radians(90), 0))
-    for sign in (-1.0, 1.0):
-        cap = mesh_cylinder(
-            f"BeltCap_{sign}",
-            BELT_OUTER_R,
-            BELT_WIDTH - 0.02,
-            Vector((0, sign * BELT_HALF_LEN, ROLLER_Z)),
-            rot=rot,
-            verts=28,
-        )
-        apply_mat(cap, mat_belt)
-        boolean_union(mid, cap)
-
-    unwrap_belt_strip(mid)
-    apply_mat(mid, mat_belt)
-    return mid
+    obj = bpy.data.objects.new("Belt", mesh)
+    link(obj)
+    apply_mat(obj, mat_belt)
+    apply_transforms(obj)
+    return obj
 
 
 def build_rollers(mat_roller: bpy.types.Material) -> None:
@@ -513,7 +496,15 @@ def build_rollers(mat_roller: bpy.types.Material) -> None:
 def main() -> None:
     clear_scene()
 
-    chevron_img = write_chevron_texture(OUT_BELT_TEX)
+    # 先用贴图脚本生成无缝人字 albedo/normal
+    from textures.generate_conveyor_belt_texture import write_belt_textures
+
+    albedo_path, normal_path = write_belt_textures(OUT_DIR)
+    chevron_img = load_image(albedo_path)
+    chevron_img.pack()
+    normal_img = load_image(normal_path, is_data=True)
+    normal_img.pack()
+
     mat_orange = make_mat(
         "Orange", (0.92, 0.42, 0.08, 1.0), metallic=0.06, roughness=0.42
     )
@@ -523,7 +514,13 @@ def main() -> None:
         metallic=0.05,
         roughness=0.68,
         texture=chevron_img,
+        normal=normal_img,
+        normal_strength=1.15,
     )
+    # 细槽用平滑插值，避免 Closest 锯齿
+    for node in mat_belt.node_tree.nodes:
+        if getattr(node, "type", "") == "TEX_IMAGE":
+            node.interpolation = "Smart"
     mat_roller = make_mat(
         "Roller", (0.86, 0.87, 0.88, 1.0), metallic=0.65, roughness=0.28
     )

@@ -47,37 +47,25 @@ pub enum EditSelectionMode {
     Plane,
 }
 
-/// 编辑拖拽框选：线/面模式落到格子
+/// 编辑拖拽框选：线/面模式落到格子（首格三远侧面求交）
 pub fn raycast_edit_drag_grid(
     origin: Vec3,
     dir: Vec3,
     start: IVec3,
     mode: EditSelectionMode,
-    camera_dir: Vec3,
     plane_normal: IVec3,
 ) -> Option<IVec3> {
     if mode == EditSelectionMode::Point {
         return None;
     }
 
-    let plane_point = grid_to_world(start);
-    let plane_normal_vec = match mode {
-        EditSelectionMode::Plane => plane_normal.as_vec3(),
-        EditSelectionMode::Line => -camera_dir.normalize_or_zero(),
-        EditSelectionMode::Point => unreachable!(),
-    };
-    if plane_normal_vec == Vec3::ZERO {
-        return None;
-    }
-
-    let Some(hit) = raycast_infinite_plane(origin, dir, plane_point, plane_normal_vec) else {
-        return None;
-    };
+    let (hit, hit_axis) = raycast_far_faces(origin, dir, start)?;
 
     Some(match mode {
         EditSelectionMode::Plane => snap_plane_on_normal(hit, start, plane_normal),
         EditSelectionMode::Line => {
-            let raw = world_to_grid(hit);
+            let mut raw = world_to_grid(hit);
+            raw[hit_axis] = start[hit_axis];
             let delta = raw - start;
             if delta == IVec3::ZERO {
                 start
@@ -87,6 +75,38 @@ pub fn raycast_edit_drag_grid(
         }
         EditSelectionMode::Point => unreachable!(),
     })
+}
+
+/// 相对射线原点，取 start 格离原点更远的三个面，与射线求最近正向交点
+fn raycast_far_faces(origin: Vec3, dir: Vec3, start: IVec3) -> Option<(Vec3, usize)> {
+    let dir = dir.normalize_or_zero();
+    if dir == Vec3::ZERO {
+        return None;
+    }
+
+    let mut best: Option<(f32, usize, Vec3)> = None;
+    for axis in 0..3 {
+        let min = start[axis] as f32;
+        let max = min + 1.0;
+        let plane = if (origin[axis] - min).abs() >= (origin[axis] - max).abs() {
+            min
+        } else {
+            max
+        };
+        let d = dir[axis];
+        if d.abs() < 1e-6 {
+            continue;
+        }
+        let t = (plane - origin[axis]) / d;
+        if t < 1e-6 || t > REACH {
+            continue;
+        }
+        let hit = origin + dir * t;
+        if best.map_or(true, |(best_t, _, _)| t < best_t) {
+            best = Some((t, axis, hit));
+        }
+    }
+    best.map(|(_, axis, hit)| (hit, axis))
 }
 
 fn snap_plane_on_normal(hit: Vec3, start: IVec3, normal: IVec3) -> IVec3 {
@@ -228,4 +248,3 @@ fn axis_vec(axis: usize) -> IVec3 {
         _ => IVec3::Z,
     }
 }
-

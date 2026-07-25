@@ -74,6 +74,8 @@ def make_mat(
     metallic: float = 0.0,
     roughness: float = 0.55,
     texture: bpy.types.Image | None = None,
+    normal: bpy.types.Image | None = None,
+    normal_strength: float = 1.0,
     alpha: float | None = None,
     emission: tuple[float, float, float] | None = None,
     emission_strength: float = 0.0,
@@ -81,7 +83,7 @@ def make_mat(
     blend_method: str = "OPAQUE",
     alpha_cutoff: float = 0.5,
 ) -> bpy.types.Material:
-    """Principled BSDF 材质；可选贴图 / 透明 / 自发光。
+    """Principled BSDF 材质；可选贴图 / 法线 / 透明 / 自发光。
 
     blend_method: OPAQUE / BLEND / CLIP（对应 glTF OPAQUE / BLEND / MASK）
     """
@@ -99,12 +101,24 @@ def make_mat(
         tex.image = texture
         tex.location = (-200, 0)
         tex.interpolation = "Closest"
+        tex.extension = "REPEAT"
         nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
         if "Alpha" in tex.outputs and "Alpha" in bsdf.inputs:
             nt.links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
     else:
         col = color if alpha is None else (color[0], color[1], color[2], alpha)
         bsdf.inputs["Base Color"].default_value = col
+    if normal is not None:
+        tex_n = nt.nodes.new("ShaderNodeTexImage")
+        tex_n.image = normal
+        tex_n.location = (-200, -280)
+        tex_n.interpolation = "Smart"
+        tex_n.extension = "REPEAT"
+        nmap = nt.nodes.new("ShaderNodeNormalMap")
+        nmap.location = (0, -280)
+        nmap.inputs["Strength"].default_value = normal_strength
+        nt.links.new(tex_n.outputs["Color"], nmap.inputs["Color"])
+        nt.links.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
     bsdf.inputs["Metallic"].default_value = metallic
     bsdf.inputs["Roughness"].default_value = roughness
     if alpha is not None and alpha < 1.0 and "Alpha" in bsdf.inputs:

@@ -128,7 +128,6 @@ pub fn update_hover(
                     dir,
                     gesture.start,
                     selection_mode,
-                    dir,
                     gesture.plane_normal,
                 ) {
                     placement.target = Some(TargetHit {
@@ -141,6 +140,15 @@ pub fn update_hover(
             }
         } else {
             placement.target = raycast_blocks(origin, dir, &world);
+        }
+    } else if let Some(drag) = placement.selection.drag {
+        if let Some(cell) =
+            raycast_edit_drag_grid(origin, dir, drag.start, ConfigSelectionMode::Line, IVec3::Y)
+        {
+            placement.target = Some(TargetHit {
+                pos: cell,
+                normal: IVec3::ZERO,
+            });
         }
     } else {
         placement.target = raycast_blocks(origin, dir, &world);
