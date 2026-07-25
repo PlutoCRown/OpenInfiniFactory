@@ -144,6 +144,14 @@ pub struct SpinningDrillHead;
 #[derive(Component)]
 pub struct ScrollingConveyorBelt;
 
+/// 抬升器顶盘：模拟期微弱自发光，通电时熄灭
+#[derive(Component)]
+pub struct LifterDiskGlow {
+    pub block_id: crate::game::blocks::BlockId,
+    pub idle: Handle<StandardMaterial>,
+    pub lit: Handle<StandardMaterial>,
+}
+
 #[derive(Component)]
 pub struct LaserBeamBurst {
     origin: Vec3,
@@ -584,6 +592,33 @@ pub fn scroll_conveyor_belts(
         let y = material.uv_transform.translation.y;
         // 正向：顶面纹理随传送方向走（与方块平移同向）
         material.uv_transform.translation.y = (y + delta_v).rem_euclid(1.0);
+    }
+}
+
+/// 模拟期抬升器顶盘自发光；通电关闭时熄灭
+pub fn update_lifter_disk_glow(
+    simulation: Res<crate::game::state::SimulationState>,
+    world: Res<crate::game::world::grid::WorldBlocks>,
+    mut disks: Query<(
+        &LifterDiskGlow,
+        &mut MeshMaterial3d<StandardMaterial>,
+    )>,
+) {
+    let sim_active = simulation.is_active();
+    let id_to_pos: std::collections::HashMap<_, _> = world
+        .blocks
+        .iter()
+        .map(|(pos, block)| (block.id, *pos))
+        .collect();
+    for (glow, mut material) in &mut disks {
+        let lit = sim_active
+            && id_to_pos
+                .get(&glow.block_id)
+                .is_some_and(|pos| !simulation.last_powered_devices.contains(pos));
+        let target = if lit { &glow.lit } else { &glow.idle };
+        if material.0 != *target {
+            material.0 = target.clone();
+        }
     }
 }
 

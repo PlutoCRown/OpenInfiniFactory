@@ -242,6 +242,8 @@ pub struct SimulationState {
     pub accumulator: f32,
     pub start_snapshot: Option<crate::game::world::grid::WorldBlocks>,
     pub start_structures: Option<crate::game::simulation::structure_state::StructureState>,
+    /// 上一回合通电的用电器格（抬升器顶盘等表现用）
+    pub last_powered_devices: std::collections::HashSet<IVec3>,
 }
 
 impl Default for SimulationState {
@@ -254,6 +256,7 @@ impl Default for SimulationState {
             accumulator: 0.0,
             start_snapshot: None,
             start_structures: None,
+            last_powered_devices: std::collections::HashSet::new(),
         }
     }
 }

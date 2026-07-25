@@ -95,6 +95,8 @@ pub struct WorldRenderAssets {
     model_preview_materials: HashMap<ModelMaterial, Handle<StandardMaterial>>,
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
     pub(crate) active_wire_material: Handle<StandardMaterial>,
+    /// 抬升器顶盘：模拟期微弱白自发光（通电关闭时切回 GLB 原材质）
+    pub(crate) lifter_disk_lit_material: Handle<StandardMaterial>,
     pub(crate) weld_connector_material: Handle<StandardMaterial>,
     /// 焊接扩散粒子：白底 + 黄自发光（与焊点同风格，须 lit）
     pub(crate) weld_burst_material: Handle<StandardMaterial>,
@@ -588,6 +590,14 @@ impl WorldRenderAssets {
             active_wire_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.08, 0.04),
                 emissive: Color::srgb(0.17, 0.01, 0.005).into(),
+                ..default()
+            }),
+            // 抬升顶盘：弱白自发光（须 lit，强度低于电线通电条）
+            lifter_disk_lit_material: materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                emissive: LinearRgba::new(2.2, 2.2, 2.2, 1.0),
+                perceptual_roughness: 0.5,
+                metallic: 0.08,
                 ..default()
             }),
             // 白杆 + 黄自发光（须 lit：unlit 会丢掉 emissive，Bloom 看不到）

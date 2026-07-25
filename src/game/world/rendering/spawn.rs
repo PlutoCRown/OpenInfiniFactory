@@ -537,6 +537,7 @@ pub(crate) fn spawn_block_model(
                 parent,
                 assets,
                 data.kind,
+                data.id,
                 data.kind.model(),
                 pusher_animation,
                 icon_render.map(|(_, layer)| layer),

@@ -48,7 +48,7 @@ use systems::gameplay::{
 use systems::perf::{PerfPlugin, PerfScope};
 use systems::simulation_controls::{simulation_controls, sync_generator_config_material_preview};
 use ui::{GameUiPlugin, InventoryItems};
-use world::animation::{animate_blocks, scroll_conveyor_belts};
+use world::animation::{animate_blocks, scroll_conveyor_belts, update_lifter_disk_glow};
 use world::grid::WorldBlocks;
 use world::rendering::{
     GoalGhostPlugin, HoverStructureBounds, PortalMaterialPlugin, SkyboxPlugin,
@@ -293,6 +293,7 @@ impl Plugin for GamePlugin {
                     animate_blocks,
                     apply_pending_teleport_snaps,
                     scroll_conveyor_belts,
+                    update_lifter_disk_glow,
                     retire_block_icon_renderers,
                 )
                     .chain()

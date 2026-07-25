@@ -32,6 +32,8 @@ pub struct TurnOutput {
     pub animations: HashMap<IVec3, BlockMotion>,
     pub pusher_animations: HashMap<IVec3, PusherMotion>,
     pub powered_wires: HashSet<IVec3>,
+    /// 本回合通电的用电器格（抬升器顶盘熄灭等）
+    pub powered_devices: HashSet<IVec3>,
     /// 成功焊接的焊点对（两端格心连线中点播扩散粒子）
     pub weld_sparks: Vec<(IVec3, IVec3)>,
     /// 本回合成功落地的传送（源口、目标口、方块 id）；表现层闪烁并瞬时挪实体，不走移动动画
@@ -266,6 +268,7 @@ pub fn simulate_turn(
         animations,
         pusher_animations,
         powered_wires,
+        powered_devices,
         weld_sparks,
         teleport_flashes,
         behavior_sparks,

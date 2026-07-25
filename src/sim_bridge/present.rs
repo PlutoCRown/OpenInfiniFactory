@@ -149,6 +149,7 @@ pub fn tick_simulation(
                 cached,
                 animation_duration_for(simulation.running, simulation.speed),
                 &mut deps.presentation,
+                &mut simulation.last_powered_devices,
                 &mut deps.world,
                 &mut deps.pending_generated,
                 &mut deps.signal_cache,
@@ -195,6 +196,7 @@ pub fn tick_simulation(
                 cached,
                 animation_duration_for(simulation.running, simulation.speed),
                 &mut deps.presentation,
+                &mut simulation.last_powered_devices,
                 &mut deps.world,
                 &mut deps.pending_generated,
                 &mut deps.signal_cache,
@@ -235,6 +237,7 @@ fn present_turn(
     cached: CachedTurn,
     animation_duration: f32,
     presentation: &mut SimulationPresentationState,
+    last_powered_devices: &mut HashSet<IVec3>,
     world: &mut WorldBlocks,
     pending_generated: &mut PendingGeneratedMaterials,
     signal_cache: &mut SignalNetworkCache,
@@ -278,6 +281,7 @@ fn present_turn(
         portal_flash_queue,
     );
     presentation.last_powered_wires = cached.output.powered_wires.clone();
+    *last_powered_devices = cached.output.powered_devices.clone();
     presentation.committed_world = world.clone();
 }
 

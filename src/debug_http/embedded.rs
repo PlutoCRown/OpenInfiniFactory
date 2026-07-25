@@ -1,12 +1,12 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use std::sync::{mpsc, Mutex};
+use std::sync::{Mutex, mpsc};
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread::{self, JoinHandle};
 
 use crate::debug_http::protocol::{
-    help_json, json_error, json_ok, DebugHttpCommand, DebugHttpRequest,
+    DebugHttpCommand, DebugHttpRequest, help_json, json_error, json_ok,
 };
 use crate::debug_http::snapshot::{
     block_json, cursor_target_json, embedded_status_json, perf_stats_json, pos_json,
@@ -14,13 +14,13 @@ use crate::debug_http::snapshot::{
 };
 use crate::debug_http::world_ops::{block_kinds_json, parse_block_kind, parse_facing, place_block};
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
+use crate::game::debug::SimulationDebugLog;
 use crate::game::edit_history::EditHistory;
 use crate::game::player::controller::FlyCamera;
 use crate::game::session::PlayingWorldParams;
 use crate::game::simulation::pending::PendingGeneratedMaterials;
 use crate::game::simulation::signals::SignalNetworkCache;
 use crate::game::simulation::stats::SimulationStepStats;
-use crate::sim_bridge::SimulationPresentationState;
 use crate::game::state::{
     BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
 };
@@ -31,10 +31,10 @@ use crate::game::systems::simulation_controls::{
 use crate::game::ui::UiRuntime;
 use crate::game::world::animation::{AnimatedBlock, AnimatedPusherRod};
 use crate::game::world::rendering::BlockEntity;
-use crate::shared::launch::{LaunchOptions, DEFAULT_DEBUG_HTTP_PORT};
+use crate::shared::launch::{DEFAULT_DEBUG_HTTP_PORT, LaunchOptions};
 use crate::shared::save::SaveState;
+use crate::sim_bridge::SimulationPresentationState;
 use crate::sim_bridge::{SimSnapshot, SimulationWorker, TurnCache};
-use crate::game::debug::SimulationDebugLog;
 
 #[derive(Resource)]
 pub struct DebugHttpBridge {
@@ -402,6 +402,7 @@ fn handle_embedded_debug_command(
             if starting {
                 presentation.committed_world = playing.world.clone();
                 presentation.last_powered_wires.clear();
+                simulation.last_powered_devices.clear();
                 turn_cache.reset_to_turn(simulation.turn);
                 if let Some(worker) = worker {
                     worker.reset(
@@ -446,6 +447,7 @@ fn handle_embedded_debug_command(
             if starting {
                 presentation.committed_world = playing.world.clone();
                 presentation.last_powered_wires.clear();
+                simulation.last_powered_devices.clear();
                 turn_cache.reset_to_turn(simulation.turn);
                 if let Some(worker) = worker {
                     worker.reset(

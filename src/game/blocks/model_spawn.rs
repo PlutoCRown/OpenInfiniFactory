@@ -3,7 +3,8 @@ use bevy::prelude::*;
 
 use crate::game::blocks::{BlockModel, BlockModelPart, ModelMesh};
 use crate::game::world::animation::{
-    AnimatedPusher, AnimatedPusherRod, PusherAnimation, ScrollingConveyorBelt, SpinningDrillHead,
+    AnimatedPusher, AnimatedPusherRod, LifterDiskGlow, PusherAnimation, ScrollingConveyorBelt,
+    SpinningDrillHead,
 };
 use crate::game::world::render_assets::{FactoryPartHandles, FactoryVisual, WorldRenderAssets};
 use crate::game::world::rendering::BlockIconRenderEntity;
@@ -13,6 +14,7 @@ pub fn spawn_model_parts(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
     kind: crate::game::blocks::BlockKind,
+    block_id: crate::game::blocks::BlockId,
     model: BlockModel,
     pusher_animation: Option<PusherAnimation>,
     icon_layer: Option<&RenderLayers>,
@@ -24,14 +26,23 @@ pub fn spawn_model_parts(
                 parts,
                 local_rotation,
             } => {
-                spawn_factory_static(parent, parts, *local_rotation, icon_layer, preview);
+                spawn_factory_static(
+                    parent,
+                    assets,
+                    parts,
+                    *local_rotation,
+                    block_id,
+                    icon_layer,
+                    preview,
+                );
             }
             FactoryVisual::Drill { body, head } => {
-                spawn_factory_drill(parent, body, head, icon_layer, preview);
+                spawn_factory_drill(parent, assets, body, head, icon_layer, preview);
             }
             FactoryVisual::Pusher { body, stage, head } => {
                 spawn_factory_pusher(
                     parent,
+                    assets,
                     body,
                     stage,
                     head,
@@ -62,14 +73,24 @@ pub fn spawn_model_parts(
 /// 生成静态工厂 GLB 零件（可选额外局部旋转）
 fn spawn_factory_static(
     parent: &mut ChildSpawnerCommands,
+    assets: &WorldRenderAssets,
     parts: &[FactoryPartHandles],
     local_rotation: Quat,
+    block_id: crate::game::blocks::BlockId,
     icon_layer: Option<&RenderLayers>,
     preview: bool,
 ) {
     if local_rotation == Quat::IDENTITY {
         for part in parts {
-            spawn_factory_part(parent, part, Transform::default(), icon_layer, preview);
+            spawn_factory_part(
+                parent,
+                assets,
+                part,
+                Transform::default(),
+                Some(block_id),
+                icon_layer,
+                preview,
+            );
         }
         return;
     }
@@ -82,7 +103,15 @@ fn spawn_factory_static(
     }
     root.with_children(|parent| {
         for part in parts {
-            spawn_factory_part(parent, part, Transform::default(), icon_layer, preview);
+            spawn_factory_part(
+                parent,
+                assets,
+                part,
+                Transform::default(),
+                Some(block_id),
+                icon_layer,
+                preview,
+            );
         }
     });
 }
@@ -90,13 +119,22 @@ fn spawn_factory_static(
 /// 生成钻头 Body / Head；Head 挂持续旋转组件
 fn spawn_factory_drill(
     parent: &mut ChildSpawnerCommands,
+    assets: &WorldRenderAssets,
     body: &[FactoryPartHandles],
     head: &[FactoryPartHandles],
     icon_layer: Option<&RenderLayers>,
     preview: bool,
 ) {
     for part in body {
-        spawn_factory_part(parent, part, Transform::default(), icon_layer, preview);
+        spawn_factory_part(
+            parent,
+            assets,
+            part,
+            Transform::default(),
+            None,
+            icon_layer,
+            preview,
+        );
     }
 
     let mut head_root = parent.spawn((Transform::default(), Visibility::default()));
@@ -108,7 +146,15 @@ fn spawn_factory_drill(
     }
     head_root.with_children(|parent| {
         for part in head {
-            spawn_factory_part(parent, part, Transform::default(), icon_layer, preview);
+            spawn_factory_part(
+                parent,
+                assets,
+                part,
+                Transform::default(),
+                None,
+                icon_layer,
+                preview,
+            );
         }
     });
 }
@@ -116,6 +162,7 @@ fn spawn_factory_drill(
 /// 生成活塞 Body / Stage / Head
 fn spawn_factory_pusher(
     parent: &mut ChildSpawnerCommands,
+    assets: &WorldRenderAssets,
     body: &[FactoryPartHandles],
     stage: &[FactoryPartHandles],
     head: &[FactoryPartHandles],
@@ -124,7 +171,15 @@ fn spawn_factory_pusher(
     preview: bool,
 ) {
     for part in body {
-        spawn_factory_part(parent, part, Transform::default(), icon_layer, preview);
+        spawn_factory_part(
+            parent,
+            assets,
+            part,
+            Transform::default(),
+            None,
+            icon_layer,
+            preview,
+        );
     }
 
     let extension = pusher_animation
@@ -148,7 +203,15 @@ fn spawn_factory_pusher(
     }
     stage_root.with_children(|parent| {
         for part in stage {
-            spawn_factory_part(parent, part, Transform::default(), icon_layer, preview);
+            spawn_factory_part(
+                parent,
+                assets,
+                part,
+                Transform::default(),
+                None,
+                icon_layer,
+                preview,
+            );
         }
     });
 
@@ -165,7 +228,15 @@ fn spawn_factory_pusher(
     }
     head_root.with_children(|parent| {
         for part in head {
-            spawn_factory_part(parent, part, Transform::default(), icon_layer, preview);
+            spawn_factory_part(
+                parent,
+                assets,
+                part,
+                Transform::default(),
+                None,
+                icon_layer,
+                preview,
+            );
         }
     });
 }
@@ -173,18 +244,21 @@ fn spawn_factory_pusher(
 /// 生成单段工厂 GLB 网格
 fn spawn_factory_part(
     parent: &mut ChildSpawnerCommands,
+    assets: &WorldRenderAssets,
     part: &FactoryPartHandles,
     transform: Transform,
+    block_id: Option<crate::game::blocks::BlockId>,
     icon_layer: Option<&RenderLayers>,
     preview: bool,
 ) {
+    let material = if preview {
+        part.preview_material.clone()
+    } else {
+        part.material.clone()
+    };
     let mut child = parent.spawn((
         Mesh3d(part.mesh.clone()),
-        MeshMaterial3d(if preview {
-            part.preview_material.clone()
-        } else {
-            part.material.clone()
-        }),
+        MeshMaterial3d(material.clone()),
         transform,
     ));
     if let Some(icon_layer) = icon_layer {
@@ -193,6 +267,16 @@ fn spawn_factory_part(
     // 传送带皮带：模拟时滚动 UV（颜色+法线共用 uv_transform）
     if !preview && icon_layer.is_none() && part.group.as_deref() == Some("Part_Belt") {
         child.insert(ScrollingConveyorBelt);
+    }
+    // 抬升器顶盘：模拟期自发光，通电关闭
+    if !preview && icon_layer.is_none() && part.group.as_deref() == Some("Part_Disk") {
+        if let Some(block_id) = block_id.filter(|id| !id.is_none()) {
+            child.insert(LifterDiskGlow {
+                block_id,
+                idle: material,
+                lit: assets.lifter_disk_lit_material.clone(),
+            });
+        }
     }
 }
 

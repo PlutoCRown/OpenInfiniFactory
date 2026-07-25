@@ -34,7 +34,7 @@ pub enum WireConnectorBehavior {
     AllowOnly { offset: IVec3 },
 }
 
-/// 仅底面接线的用电器（旋转器）
+/// 仅底面接线的用电器（旋转器、抬升器）
 pub fn render_bottom_wire_device() -> RenderBehavior {
     RenderBehavior {
         wire_connector: Some(WireConnectorBehavior::AllowOnly {

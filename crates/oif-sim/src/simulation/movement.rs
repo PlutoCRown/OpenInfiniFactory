@@ -170,6 +170,10 @@ pub(super) fn mark_structure_movement_phase(
                 }
             }
             MovementRule::Lift { range } => {
+                // 通电关闭：本回合不打抬升标签
+                if powered_devices.contains(&pos) {
+                    continue;
+                }
                 // 与参考实现一致：range 内每个可动结构各自打抬升标签（叠层同拍一起抬）
                 for movement in mark_lift_structures(world, structures, pos, range, suction) {
                     if let Some(source_id) = source_id {
