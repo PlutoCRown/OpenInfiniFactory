@@ -3,6 +3,7 @@
 # 用法:
 #   ./scripts/bake_factory_icons.sh
 #   ./scripts/bake_factory_icons.sh --only conveyor
+#   ./scripts/bake_factory_icons.sh --only light_panel
 #   ./scripts/bake_factory_icons.sh --only selection
 set -euo pipefail
 cd "$(dirname "$0")/.."

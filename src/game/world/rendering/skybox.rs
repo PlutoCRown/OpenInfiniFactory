@@ -81,7 +81,7 @@ pub fn resolved_sun_direction(dir: Option<Vec3>) -> Vec3 {
 
 /// 环境贴图强度：给金属镜面反射，略低于环境光以免整景过曝
 pub fn environment_map_intensity(lighting: &PuzzleLighting) -> f32 {
-    (lighting.ambient_brightness * 0.6).clamp(200.0, 900.0)
+    (lighting.ambient_brightness * 0.6).clamp(100.0, 450.0)
 }
 
 /// 简易半球环境贴图（金属 PBR 需要可反射的环境，否则金属度几乎看不见）

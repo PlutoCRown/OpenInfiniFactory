@@ -120,7 +120,9 @@ pub fn update_inventory_slots(
             InventoryItem::Area(AreaKind::Selection) => {
                 block_icons.as_deref().and_then(|icons| icons.selection())
             }
-            InventoryItem::LightPanel => None,
+            InventoryItem::LightPanel => {
+                block_icons.as_deref().and_then(|icons| icons.light_panel())
+            }
         });
         let has_icon = icon_handle.is_some();
         let hovered = *interaction == Interaction::Hovered;
@@ -272,7 +274,9 @@ pub fn update_carried_item_ui(
         InventoryItem::Area(AreaKind::Selection) => {
             block_icons.as_deref().and_then(|icons| icons.selection())
         }
-        InventoryItem::LightPanel => None,
+        InventoryItem::LightPanel => {
+            block_icons.as_deref().and_then(|icons| icons.light_panel())
+        }
     };
     for child in children.iter() {
         if let Ok(mut image) = preview_images.get_mut(child) {

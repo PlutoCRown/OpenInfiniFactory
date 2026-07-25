@@ -310,7 +310,7 @@ fn split_wire_faces(
         if is_power {
             handles.material = materials.add(StandardMaterial {
                 base_color: Color::WHITE,
-                emissive: LinearRgba::new(16.0, 16.0, 16.0, 1.0),
+                emissive: LinearRgba::new(8.0, 8.0, 8.0, 1.0),
                 perceptual_roughness: 1.0,
                 metallic: 0.0,
                 ..default()

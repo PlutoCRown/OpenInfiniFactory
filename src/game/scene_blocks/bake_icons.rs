@@ -24,7 +24,7 @@ use crate::game::world::render_assets::WorldRenderAssets;
 use crate::game::world::rendering::spawn::spawn_block_model;
 use crate::game::world::rendering::{
     BlockIconRenderEntity, BlockIconRenderRoot, bakeable_block_icon_kinds,
-    baked_block_icon_only_id, baked_block_icon_path, selection_icon_path,
+    baked_block_icon_only_id, baked_block_icon_path, light_panel_icon_path, selection_icon_path,
 };
 use crate::shared::platform;
 
@@ -414,6 +414,23 @@ fn setup_bake(
                 config.size,
             );
         }
+
+        let bake_light_panel = match &config.only {
+            None => true,
+            Some(only) => only == "light_panel",
+        };
+        if bake_light_panel {
+            push_light_panel_bake_target(
+                &mut commands,
+                &mut images,
+                &mut meshes,
+                &mut materials,
+                &icon_layer,
+                &mut targets,
+                &mut index,
+                config.size,
+            );
+        }
     }
 
     if targets.is_empty() {
@@ -505,6 +522,65 @@ fn push_selection_bake_target(
         Mesh3d(handles.mesh),
         MeshMaterial3d(handles.material),
         Transform::from_translation(origin - Vec3::splat(0.5)),
+        icon_layer.clone(),
+        BlockIconRenderEntity,
+        BlockIconRenderRoot,
+    ));
+    spawn_bake_camera(commands, image_handle, origin, icon_layer);
+    *index += 1;
+}
+
+/// 灯面板物品：通电白材质拍 icon（黑底几乎看不见）
+fn push_light_panel_bake_target(
+    commands: &mut Commands,
+    images: &mut Assets<Image>,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    icon_layer: &RenderLayers,
+    targets: &mut Vec<(Handle<Image>, PathBuf)>,
+    index: &mut usize,
+    size: u32,
+) {
+    let glb_path =
+        PathBuf::from(platform::asset_path()).join("factory_blocks/light_panel/model.glb");
+    let handles =
+        match crate::game::scene_blocks::load_factory_glb(&glb_path, meshes, materials, images) {
+            Ok(mut parts) => match parts.pop() {
+                Some(part) => part,
+                None => {
+                    eprintln!("light_panel icon glb: no mesh");
+                    return;
+                }
+            },
+            Err(err) => {
+                eprintln!("light_panel icon glb: {err}");
+                return;
+            }
+        };
+    // 图标用通电态白面板，未通电黑几乎拍不出来
+    let lit = materials.add(StandardMaterial {
+        base_color: Color::WHITE,
+        perceptual_roughness: 0.9,
+        metallic: 0.0,
+        cull_mode: None,
+        ..default()
+    });
+    let out_path = light_panel_icon_path();
+    let image = Image::new_target_texture(
+        size,
+        size,
+        TextureFormat::Rgba8Unorm,
+        Some(TextureFormat::Rgba8UnormSrgb),
+    );
+    let image_handle = images.add(image);
+    targets.push((image_handle.clone(), out_path));
+
+    let origin = Vec3::new(*index as f32 * ICON_SPACING, -100.0, 0.0);
+    // 板心约在局部 +Y 0.45，挪到取景原点
+    commands.spawn((
+        Mesh3d(handles.mesh),
+        MeshMaterial3d(lit),
+        Transform::from_translation(origin - Vec3::new(0.0, 0.45, 0.0)),
         icon_layer.clone(),
         BlockIconRenderEntity,
         BlockIconRenderRoot,

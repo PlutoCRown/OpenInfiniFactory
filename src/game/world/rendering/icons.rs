@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 
-use super::block_icons::{bakeable_block_icon_kinds, baked_block_icon_path, selection_icon_path};
+use super::block_icons::{
+    bakeable_block_icon_kinds, baked_block_icon_path, light_panel_icon_path, selection_icon_path,
+};
 use super::components::{
     BlockIconAssets, BlockIconRenderCamera, BlockIconRenderRoot, BlockIconRenderState,
 };
@@ -126,6 +128,19 @@ pub fn setup_block_icons(
             bevy::log::warn!(
                 "selection icon missing {} (run bake_scene_icons --factory-only)",
                 selection_path.display()
+            );
+        }
+    }
+
+    let light_panel_path = light_panel_icon_path();
+    match load_icon_png(&light_panel_path, &mut images) {
+        Some(handle) => {
+            icon_assets.light_panel = Some(handle);
+        }
+        None => {
+            bevy::log::warn!(
+                "light_panel icon missing {} (run bake_factory_icons.sh --only light_panel)",
+                light_panel_path.display()
             );
         }
     }

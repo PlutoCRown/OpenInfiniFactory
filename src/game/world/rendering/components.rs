@@ -122,6 +122,8 @@ pub struct BlockIconAssets {
     pub(super) icons: HashMap<BlockKind, Handle<Image>>,
     /// 选区工具图标（非 BlockKind）
     pub(super) selection: Option<Handle<Image>>,
+    /// 灯面板物品图标（非 BlockKind）
+    pub(super) light_panel: Option<Handle<Image>>,
     /// 滚刷漆用 texture 作为选择格图标
     pub(super) paints: HashMap<crate::game::blocks::PaintMaterialId, Handle<Image>>,
 }
@@ -135,6 +137,11 @@ impl BlockIconAssets {
     /// 选区工具图标
     pub fn selection(&self) -> Option<Handle<Image>> {
         self.selection.clone()
+    }
+
+    /// 灯面板物品图标
+    pub fn light_panel(&self) -> Option<Handle<Image>> {
+        self.light_panel.clone()
     }
 
     /// 滚刷漆图标

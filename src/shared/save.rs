@@ -290,9 +290,9 @@ impl Default for PuzzleLighting {
             direction: None,
             illuminance: 9500.0,
             color: Color::srgb(1.0, 0.97, 0.92),
-            skybox_brightness: 1000.0,
+            skybox_brightness: 500.0,
             ambient_color: Color::srgb(0.90, 0.94, 1.0),
-            ambient_brightness: 680.0,
+            ambient_brightness: 340.0,
         }
     }
 }

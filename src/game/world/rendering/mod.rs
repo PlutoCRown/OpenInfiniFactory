@@ -19,8 +19,9 @@ mod world_rebuild;
 pub use crate::game::world::render_assets::{EditPreviewKind, WorldRenderAssets};
 
 pub use block_icons::{
-    SELECTION_ICON_RELPATH, bakeable_block_icon_kinds, baked_block_icon_only_id,
-    baked_block_icon_path, baked_block_icon_relpath, selection_icon_path,
+    LIGHT_PANEL_ICON_RELPATH, SELECTION_ICON_RELPATH, bakeable_block_icon_kinds,
+    baked_block_icon_only_id, baked_block_icon_path, baked_block_icon_relpath,
+    light_panel_icon_path, selection_icon_path,
 };
 
 pub(crate) use components::BlockIconRenderEntity;

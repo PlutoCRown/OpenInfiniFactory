@@ -322,12 +322,30 @@ impl WorldRenderAssets {
             })
             .collect();
         let model_materials = [
-            (ModelMaterial::ConveyorBase, materials::srgb_material(0.16, 0.18, 0.18)),
-            (ModelMaterial::ConveyorBelt, materials::srgb_material(0.02, 0.02, 0.02)),
-            (ModelMaterial::DrillTip, materials::srgb_material(0.82, 0.84, 0.82)),
-            (ModelMaterial::Frame, materials::srgb_material(0.42, 0.44, 0.44)),
-            (ModelMaterial::DarkFrame, materials::srgb_material(0.12, 0.13, 0.15)),
-            (ModelMaterial::Belt, materials::srgb_material(0.86, 0.46, 0.14)),
+            (
+                ModelMaterial::ConveyorBase,
+                materials::srgb_material(0.16, 0.18, 0.18),
+            ),
+            (
+                ModelMaterial::ConveyorBelt,
+                materials::srgb_material(0.02, 0.02, 0.02),
+            ),
+            (
+                ModelMaterial::DrillTip,
+                materials::srgb_material(0.82, 0.84, 0.82),
+            ),
+            (
+                ModelMaterial::Frame,
+                materials::srgb_material(0.42, 0.44, 0.44),
+            ),
+            (
+                ModelMaterial::DarkFrame,
+                materials::srgb_material(0.12, 0.13, 0.15),
+            ),
+            (
+                ModelMaterial::Belt,
+                materials::srgb_material(0.86, 0.46, 0.14),
+            ),
             (
                 ModelMaterial::BeltStripe,
                 materials::emissive_material(1.0, 0.76, 0.28, 0.18, 0.10, 0.02),
@@ -356,7 +374,10 @@ impl WorldRenderAssets {
                 ModelMaterial::DetectorBody,
                 materials::block_material(BlockKind::Detector),
             ),
-            (ModelMaterial::Pusher, materials::srgb_material(0.54, 0.56, 0.54)),
+            (
+                ModelMaterial::Pusher,
+                materials::srgb_material(0.54, 0.56, 0.54),
+            ),
             (
                 ModelMaterial::Platform,
                 materials::textured_model_material(Color::WHITE, platform_texture.clone()),
@@ -365,7 +386,10 @@ impl WorldRenderAssets {
                 ModelMaterial::PlatformBase,
                 materials::block_material(BlockKind::Platform),
             ),
-            (ModelMaterial::Wood, materials::srgb_material(0.72, 0.46, 0.22)),
+            (
+                ModelMaterial::Wood,
+                materials::srgb_material(0.72, 0.46, 0.22),
+            ),
             (
                 ModelMaterial::WoodTexture,
                 materials::textured_model_material(Color::WHITE, wood_texture),
@@ -386,7 +410,10 @@ impl WorldRenderAssets {
                 ModelMaterial::Rotation,
                 materials::emissive_material(0.70, 0.36, 1.0, 0.11, 0.04, 0.20),
             ),
-            (ModelMaterial::Drill, materials::srgb_material(0.06, 0.07, 0.08)),
+            (
+                ModelMaterial::Drill,
+                materials::srgb_material(0.06, 0.07, 0.08),
+            ),
             (
                 ModelMaterial::Laser,
                 materials::emissive_material(1.0, 0.10, 0.22, 0.35, 0.01, 0.04),
@@ -403,7 +430,10 @@ impl WorldRenderAssets {
                     ..default()
                 },
             ),
-            (ModelMaterial::System, materials::srgb_material(0.35, 0.28, 0.48)),
+            (
+                ModelMaterial::System,
+                materials::srgb_material(0.35, 0.28, 0.48),
+            ),
             (
                 ModelMaterial::SystemAccent,
                 materials::emissive_material(0.72, 0.58, 1.0, 0.12, 0.08, 0.24),
@@ -416,7 +446,10 @@ impl WorldRenderAssets {
                 ModelMaterial::TeleportOut,
                 materials::emissive_material(1.0, 0.54, 0.18, 0.34, 0.10, 0.02),
             ),
-            (ModelMaterial::SuctionCup, materials::srgb_material(0.82, 0.84, 0.82)),
+            (
+                ModelMaterial::SuctionCup,
+                materials::srgb_material(0.82, 0.84, 0.82),
+            ),
         ]
         .into_iter()
         .map(|(kind, material)| (kind, materials.add(material)))
@@ -428,7 +461,10 @@ impl WorldRenderAssets {
                     .get(handle)
                     .expect("model material exists")
                     .clone();
-                (*kind, materials.add(materials::preview_model_material(source)))
+                (
+                    *kind,
+                    materials.add(materials::preview_model_material(source)),
+                )
             })
             .collect();
 
@@ -512,7 +548,7 @@ impl WorldRenderAssets {
             goal_play_visual_initialized: false,
             goal_ghost_materials: HashMap::new(),
             face_mark_materials,
-            // 未通电：黑；通电：白 + 轻度自发光（须 lit，Bloom 阈值约 10）；bias 用默认 0
+            // 未通电：黑；通电：白 + 轻度自发光（须 lit，Bloom 阈值约 5）；bias 用默认 0
             light_panel_material: materials.add(StandardMaterial {
                 base_color: Color::BLACK,
                 unlit: true,
@@ -521,7 +557,7 @@ impl WorldRenderAssets {
             }),
             light_panel_lit_material: materials.add(StandardMaterial {
                 base_color: Color::WHITE,
-                emissive: LinearRgba::new(12.0, 12.0, 12.0, 1.0),
+                emissive: LinearRgba::new(6.0, 6.0, 6.0, 1.0),
                 perceptual_roughness: 1.0,
                 metallic: 0.0,
                 cull_mode: None,
@@ -531,25 +567,25 @@ impl WorldRenderAssets {
             model_preview_materials,
             wire_connector_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.88, 0.30),
-                emissive: Color::srgb(0.20, 0.12, 0.02).into(),
+                emissive: Color::srgb(0.10, 0.06, 0.01).into(),
                 ..default()
             }),
             active_wire_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.08, 0.04),
-                emissive: Color::srgb(0.34, 0.02, 0.01).into(),
+                emissive: Color::srgb(0.17, 0.01, 0.005).into(),
                 ..default()
             }),
             // 白杆 + 黄自发光（须 lit：unlit 会丢掉 emissive，Bloom 看不到）
             weld_connector_material: materials.add(StandardMaterial {
                 base_color: Color::WHITE,
-                emissive: LinearRgba::new(22.0, 14.0, 0.6, 1.0),
+                emissive: LinearRgba::new(11.0, 7.0, 0.3, 1.0),
                 perceptual_roughness: 1.0,
                 metallic: 0.0,
                 ..default()
             }),
             weld_burst_material: materials.add(StandardMaterial {
                 base_color: Color::WHITE,
-                emissive: LinearRgba::new(22.0, 14.0, 0.6, 1.0),
+                emissive: LinearRgba::new(11.0, 7.0, 0.3, 1.0),
                 perceptual_roughness: 1.0,
                 metallic: 0.0,
                 cull_mode: None,
@@ -557,7 +593,7 @@ impl WorldRenderAssets {
             }),
             laser_beam_material: materials.add(StandardMaterial {
                 base_color: Color::srgba(1.0, 0.12, 0.26, 0.92),
-                emissive: LinearRgba::new(0.55, 0.02, 0.10, 1.0),
+                emissive: LinearRgba::new(0.275, 0.01, 0.05, 1.0),
                 alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 ..default()

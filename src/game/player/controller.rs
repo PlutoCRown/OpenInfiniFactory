@@ -107,7 +107,7 @@ pub fn spawn_player(
                 low_frequency_boost_curvature: 0.85,
                 high_pass_frequency: 0.85,
                 prefilter: BloomPrefilter {
-                    threshold: 10.0,
+                    threshold: 5.0,
                     threshold_softness: 0.5,
                 },
                 composite_mode: BloomCompositeMode::Additive,

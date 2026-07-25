@@ -170,7 +170,7 @@
         "brightness": {
           "type": "number",
           "minimum": 0,
-          "description": "环境光亮度。默认 680。",
+          "description": "环境光亮度。默认约 220。",
           "examples": [
             680,
             200,

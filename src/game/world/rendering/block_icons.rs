@@ -8,6 +8,9 @@ use crate::shared::platform;
 /// 选区工具图标（非 BlockKind）
 pub const SELECTION_ICON_RELPATH: &str = "factory_blocks/selection/icon.png";
 
+/// 灯面板物品图标（非 BlockKind）
+pub const LIGHT_PANEL_ICON_RELPATH: &str = "factory_blocks/light_panel/icon.png";
+
 /// 预烘焙图标相对 `assets/` 的路径；场景/材料/印花走各自 registry，不在此列
 pub fn baked_block_icon_relpath(kind: BlockKind) -> Option<&'static str> {
     match kind {
@@ -57,6 +60,11 @@ pub fn baked_block_icon_path(kind: BlockKind) -> Option<PathBuf> {
 /// 选区工具图标绝对路径
 pub fn selection_icon_path() -> PathBuf {
     PathBuf::from(platform::asset_path()).join(SELECTION_ICON_RELPATH)
+}
+
+/// 灯面板物品图标绝对路径
+pub fn light_panel_icon_path() -> PathBuf {
+    PathBuf::from(platform::asset_path()).join(LIGHT_PANEL_ICON_RELPATH)
 }
 
 /// `--only` 匹配用短 id（目录名或 block_icons 文件名）
