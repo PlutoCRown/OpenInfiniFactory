@@ -5,8 +5,8 @@ use bevy::window::PrimaryWindow;
 
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
-    spawn_labeled_control_row, spawn_material_icon_list, spawn_material_icon_toggle,
-    sync_dropdown_overlay, update_slot_icon,
+    hover_tooltip_paint, hover_tooltip_stamp, set_hover_tooltip, spawn_labeled_control_row,
+    spawn_material_icon_list, spawn_material_icon_toggle, sync_dropdown_overlay, update_slot_icon,
 };
 use crate::game::blocks::{BlockKind, PaintMaterialId, StampMaterialId};
 use crate::game::state::UiPanelId;
@@ -58,11 +58,12 @@ pub fn spawn_color_select_list<A, Id>(
     root: &mut ChildSpawnerCommands,
     options: impl IntoIterator<Item = (Id, A)>,
     to_option: fn(Id) -> ColorSelectOption,
+    tooltip_of: fn(Id) -> Option<crate::game::ui::types::HoverTooltip>,
 ) where
     A: Component + Copy,
     Id: Copy,
 {
-    spawn_material_icon_list(root, ColorSelectList, options, to_option);
+    spawn_material_icon_list(root, ColorSelectList, options, to_option, tooltip_of);
 }
 
 /// 同步颜色下拉显隐与槽位/选项图标
@@ -72,8 +73,9 @@ pub(crate) fn update_color_select_dropdowns(
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
+    mut commands: Commands,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut slots: Query<(&ColorSelectSlot, &Children)>,
+    mut slots: Query<(Entity, &ColorSelectSlot, &Children)>,
     mut options: Query<(&ColorSelectOption, &Children)>,
     mut icons: Query<&mut ImageNode>,
     mut lists: Query<(&ColorSelectList, &mut Node, &ComputedNode)>,
@@ -116,11 +118,16 @@ pub(crate) fn update_color_select_dropdowns(
         }
         _ => None,
     });
-    for (_, children) in &mut slots {
+    let tip = selected.map(|opt| match opt {
+        ColorSelectOption::Stamp(id) => hover_tooltip_stamp(id),
+        ColorSelectOption::Paint(id) => hover_tooltip_paint(id),
+    });
+    for (entity, _, children) in &mut slots {
         update_slot_icon(
             children,
             selected.and_then(|opt| opt.icon(block_icons)),
             &mut icons,
         );
+        set_hover_tooltip(&mut commands, entity, tip);
     }
 }

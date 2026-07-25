@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 
-use crate::game::blocks::{BlockKind, MaterialBlockId};
+use crate::game::blocks::{
+    material_def, paint_def, stamp_def, BlockKind, MaterialBlockId, PaintMaterialId, StampMaterialId,
+};
 use crate::game::state::UiPanelId;
 use crate::game::ui::access::UiMainThread;
 use crate::game::ui::components::{
@@ -8,7 +10,7 @@ use crate::game::ui::components::{
     inset_border, localized_text, menu_button, raised_border, styled_button, text,
     transparent_node, ui_logical_bounds,
 };
-use crate::game::ui::types::{CarriedItem, UiActionLabel};
+use crate::game::ui::types::{CarriedItem, HoverTooltip, UiActionLabel};
 use crate::game::world::direction::Facing;
 use crate::game::world::rendering::BlockIconAssets;
 
@@ -226,6 +228,43 @@ pub fn spawn_text_dropdown_list<A, L>(
         });
 }
 
+/// 材料 / 印花 / 涂料的悬停提示
+pub fn hover_tooltip_material(id: MaterialBlockId) -> HoverTooltip {
+    let def = material_def(id);
+    HoverTooltip {
+        name_key: def.name_key,
+        description_key: def.description_key,
+    }
+}
+
+pub fn hover_tooltip_stamp(id: StampMaterialId) -> HoverTooltip {
+    let def = stamp_def(id);
+    HoverTooltip {
+        name_key: def.name_key,
+        description_key: def.description_key,
+    }
+}
+
+pub fn hover_tooltip_paint(id: PaintMaterialId) -> HoverTooltip {
+    let def = paint_def(id);
+    HoverTooltip {
+        name_key: def.name_key,
+        description_key: def.description_key,
+    }
+}
+
+/// 写入或清除悬停提示
+pub fn set_hover_tooltip(commands: &mut Commands, entity: Entity, tip: Option<HoverTooltip>) {
+    match tip {
+        Some(tip) => {
+            commands.entity(entity).insert(tip);
+        }
+        None => {
+            commands.entity(entity).remove::<HoverTooltip>();
+        }
+    }
+}
+
 pub fn spawn_material_icon_toggle<A, S>(
     parent: &mut ChildSpawnerCommands,
     slot_marker: S,
@@ -246,6 +285,7 @@ pub fn spawn_material_icon_list<A, O, L, Id>(
     list_marker: L,
     options: impl IntoIterator<Item = (Id, A)>,
     option_marker: fn(Id) -> O,
+    tooltip_of: fn(Id) -> Option<HoverTooltip>,
 ) where
     A: Component + Copy,
     O: Component + Copy,
@@ -256,10 +296,17 @@ pub fn spawn_material_icon_list<A, O, L, Id>(
         .spawn((icon_dropdown_list_node(), GlobalZIndex(20_000), list_marker))
         .with_children(|list| {
             for (material, action) in options {
-                list.spawn((material_slot_button(), option_marker(material), action))
-                    .with_children(|slot| {
-                        slot.spawn(material_icon_node());
-                    });
+                let mut entity = list.spawn((
+                    material_slot_button(),
+                    option_marker(material),
+                    action,
+                ));
+                if let Some(tip) = tooltip_of(material) {
+                    entity.insert(tip);
+                }
+                entity.with_children(|slot| {
+                    slot.spawn(material_icon_node());
+                });
             }
         });
 }

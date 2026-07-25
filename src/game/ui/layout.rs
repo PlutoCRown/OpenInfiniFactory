@@ -4,7 +4,7 @@ use crate::game::ui::access::{bind_ui_scope, unbind_ui_scope};
 
 use super::components::{STATUS_TEXT, absolute_text_bundle, root_node};
 use super::screens::{
-    spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_inventory_tooltip,
+    spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_item_tooltip,
 };
 use super::types::{
     Crosshair, InGameHudVisibility, PlayingUiRoot, StatusText, StatusTextKind, UiRoot,
@@ -87,7 +87,7 @@ pub fn setup_playing_ui(
             spawn_status_overlays(root);
             spawn_hotbar(root);
             spawn_carried_label(root);
-            spawn_inventory_tooltip(root);
+            spawn_item_tooltip(root);
             spawn_session_busy_overlay(root, busy);
             spawn_virtual_remote(root, &touch, false);
             inventory_mount = Some(

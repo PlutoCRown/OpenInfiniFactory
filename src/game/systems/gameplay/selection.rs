@@ -21,12 +21,12 @@ use crate::game::world::rendering::{
     BlockEntity, BlockEntityLayer, DeleteBoundsOverlay, DeleteBoundsPart, SceneChunkMeshes,
     SelectionBoundsOverlay, SelectionBoundsPart, WorldRenderAssets,
     rebuild_world_with_animations_for_debug_state, spawn_block_with_animation,
-    sync_scene_chunks_for_positions, update_delete_bounds_overlay, update_selection_bounds_overlay,
+    update_delete_bounds_overlay, update_selection_bounds_overlay,
 };
-use crate::scene::BlockEntityIndex;
+use crate::scene::{BlockEntityIndex, refresh_edit_changes};
 use crate::shared::config::{ConfigChord, ConfigSelectionMode, GameConfig};
 
-use super::placement::despawn_block_entities;
+use super::placement::{despawn_block_entities, refresh_edit_generated_markers};
 use super::rules::can_delete_at;
 
 /// 处理框选工具的点击与拖拽输入
@@ -559,7 +559,7 @@ fn copy_selection(
     true
 }
 
-/// 选区搬移/复制后刷新实体
+/// 选区搬移/复制后刷新实体（含焊点等静态虚方块 marker）
 fn spawn_selection_result(
     world: &mut WorldBlocks,
     block_entities: &Query<(Entity, &BlockEntity)>,
@@ -573,7 +573,13 @@ fn spawn_selection_result(
     animations: HashMap<IVec3, BlockAnimation>,
     also_dirty: impl IntoIterator<Item = IVec3>,
 ) {
-    let mut scene_dirty: HashSet<IVec3> = also_dirty.into_iter().collect();
+    // 宿主搬移后须重建焊点/钻头等生成 marker，否则会留在原地
+    refresh_edit_generated_markers(world);
+
+    let mut dirty: HashSet<IVec3> = also_dirty.into_iter().collect();
+    dirty.extend(animations.keys().copied());
+    dirty.extend(animations.values().map(|animation| animation.from_pos));
+
     if debug.factory_activity {
         despawn_block_entities(commands, meshes, block_entities, block_index, scene_chunks);
         rebuild_world_with_animations_for_debug_state(
@@ -587,36 +593,41 @@ fn spawn_selection_result(
             block_index,
             scene_chunks,
         );
-    } else {
-        for (target, animation) in &animations {
-            let block = world.blocks[target];
-            if block.kind.is_scene() {
-                scene_dirty.insert(*target);
-                scene_dirty.insert(animation.from_pos);
-                continue;
-            }
-            spawn_block_with_animation(
-                commands,
-                meshes,
-                render_assets,
-                world,
-                *target,
-                block,
-                Some(*animation),
-                None,
-                block_index,
-            );
+        return;
+    }
+
+    refresh_edit_changes(
+        commands,
+        meshes,
+        block_index,
+        world,
+        render_assets,
+        debug,
+        structure_state,
+        &dirty,
+        scene_chunks,
+    );
+
+    // 增量刷新会无动画生成搬移目标，再叠一层移动动画
+    for (target, animation) in &animations {
+        let block = world.blocks[target];
+        if block.kind.is_scene() {
+            continue;
         }
-        if !scene_dirty.is_empty() {
-            sync_scene_chunks_for_positions(
-                commands,
-                meshes,
-                world,
-                render_assets,
-                scene_chunks,
-                scene_dirty,
-            );
+        if let Some(entity) = block_index.remove_animatable(*target) {
+            commands.entity(entity).despawn();
         }
+        spawn_block_with_animation(
+            commands,
+            meshes,
+            render_assets,
+            world,
+            *target,
+            block,
+            Some(*animation),
+            None,
+            block_index,
+        );
     }
 }
 

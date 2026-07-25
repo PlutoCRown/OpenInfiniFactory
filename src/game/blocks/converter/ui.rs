@@ -6,8 +6,8 @@ use super::ConverterBlock;
 
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
-    click_material_slot, spawn_material_icon_list, spawn_material_icon_toggle,
-    sync_dropdown_overlay, update_material_icon,
+    click_material_slot, hover_tooltip_material, set_hover_tooltip, spawn_material_icon_list,
+    spawn_material_icon_toggle, sync_dropdown_overlay, update_material_icon,
 };
 use crate::game::block_editing::world_refresh::apply_block_settings_edit;
 use crate::game::blocks::panels::BlockPanelHooks;
@@ -120,6 +120,7 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
             .iter()
             .map(|(id, _)| (id, ConverterAction::SetInput(id))),
         ConverterMaterialOption,
+        |id| Some(hover_tooltip_material(id)),
     );
     spawn_material_icon_list(
         root,
@@ -128,6 +129,7 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
             .iter()
             .map(|(id, _)| (id, ConverterAction::SetOutput(id))),
         ConverterMaterialOption,
+        |id| Some(hover_tooltip_material(id)),
     );
 }
 
@@ -268,9 +270,10 @@ fn update_dropdowns(
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
+    mut commands: Commands,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut material_slots: Query<(&ConverterInputSlot, &Children)>,
-    mut output_slots: Query<(&ConverterOutputSlot, &Children)>,
+    mut material_slots: Query<(Entity, &ConverterInputSlot, &Children)>,
+    mut output_slots: Query<(Entity, &ConverterOutputSlot, &Children)>,
     mut material_options: Query<(&ConverterMaterialOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
     mut list_queries: ParamSet<(
@@ -324,11 +327,21 @@ fn update_dropdowns(
             (Some(settings.input), Some(settings.output))
         })
         .unwrap_or((None, None));
-    for (_, children) in &mut material_slots {
+    for (entity, _, children) in &mut material_slots {
         update_material_icon(children, slot_materials.0, block_icons, &mut material_icons);
+        set_hover_tooltip(
+            &mut commands,
+            entity,
+            slot_materials.0.map(hover_tooltip_material),
+        );
     }
-    for (_, children) in &mut output_slots {
+    for (entity, _, children) in &mut output_slots {
         update_material_icon(children, slot_materials.1, block_icons, &mut material_icons);
+        set_hover_tooltip(
+            &mut commands,
+            entity,
+            slot_materials.1.map(hover_tooltip_material),
+        );
     }
 }
 

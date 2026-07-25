@@ -8,8 +8,7 @@ pub use actions::{
     dispatch_inventory_slot_actions, emit_inventory_slot_actions, inventory_hotbar_digit_input,
 };
 pub use render::{
-    update_carried_item_ui, update_inventory_slots, update_inventory_title,
-    update_inventory_tooltip,
+    update_carried_item_ui, update_inventory_slots, update_inventory_title, update_item_tooltip,
 };
 pub use types::InventoryTitleText;
 
@@ -34,7 +33,7 @@ impl Plugin for InventoryPlugin {
             // 热栏 / tooltip 常驻，不能绑 inventory_open，否则关背包后不刷新、tooltip 残留
             .add_systems(
                 Update,
-                (update_inventory_slots, update_inventory_tooltip)
+                (update_inventory_slots, update_item_tooltip)
                     .run_if(|mode: Res<State<GameMode>>| *mode.get() == GameMode::Playing)
                     .in_set(UiAccessScope)
                     .after(PerfScope::Animation)

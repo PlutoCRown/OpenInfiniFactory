@@ -12,8 +12,8 @@ pub use raycast::{
     raycast_infinite_plane, world_to_grid,
 };
 pub use settings::{
-    BlockSettings, ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings, GoalSettings,
-    RollerSettings, SignDisplay, SignSettings, StamperSettings, TeleportSettings,
+    BlockSettings, ConverterMode, ConverterSettings, GeneratorMode, GeneratorSettings,
+    GoalSettings, RollerSettings, SignDisplay, SignSettings, StamperSettings, TeleportSettings,
 };
 
 use glam::IVec3;
@@ -137,7 +137,7 @@ impl WorldBlocks {
         if !self.block_settings.contains_key(&pos) {
             if let Some(mut settings) = kind.default_settings(pos) {
                 if let BlockSettings::Teleport(teleport_settings) = &mut settings {
-                    teleport_settings.name = self.next_teleport_name(kind);
+                    teleport_settings.name = self.next_teleport_name();
                 }
                 self.block_settings.insert(pos, settings);
             }

@@ -11,7 +11,7 @@ pub use confirm_dialog::ConfirmButtonId;
 pub use host::UiHost;
 pub use panel::{
     PanelCloseButton, PanelDragState, PanelFlowLayout, PanelPosition, PanelTitleBar,
-    PanelVisibility, PanelWindow, UiHoverState,
+    PanelTitleText, PanelVisibility, PanelWindow, UiHoverState,
 };
 pub use runtime::{UiPanelBinding, UiRuntime};
 pub use text_input::InlineTextEditState;

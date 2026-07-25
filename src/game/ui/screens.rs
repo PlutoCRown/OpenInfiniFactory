@@ -4,7 +4,7 @@ mod save_list;
 mod settings;
 
 pub use inventory::{
-    spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_inventory_tooltip,
+    spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_item_tooltip,
 };
 pub use menu::{spawn_main_menu, spawn_pause_panel};
 pub use save_list::{

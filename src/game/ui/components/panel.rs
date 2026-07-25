@@ -1,12 +1,14 @@
 use bevy::prelude::*;
 
 use super::super::types::{
-    LocalizedText, PanelCloseButton, PanelPosition, PanelTitleBar, PanelWindow,
+    LocalizedText, PanelCloseButton, PanelFlowLayout, PanelPosition, PanelTitleBar, PanelTitleText,
+    PanelWindow,
 };
-use super::button::{HoverButton, raised_border};
-use super::icon::{UiIconAssets, spawn_close_icon};
+use super::button::{BUTTON_BG, HoverButton, button_border, raised_border};
+use super::icon::{UiIconAssets, spawn_ui_icon};
 use super::text::default_font_size;
 use crate::game::ui::access::{i18n, with_ui_world};
+use crate::game::ui::systems::UiFont;
 
 pub const PANEL_BG: Color = Color::srgb(0.192, 0.188, 0.192);
 pub const PANEL_LIGHT_EDGE: Color = Color::srgb(0.40, 0.38, 0.36);
@@ -14,7 +16,11 @@ pub const PANEL_DARK_EDGE: Color = Color::srgb(0.08, 0.06, 0.05);
 pub const PANEL_SHADOW: Color = Color::srgba(0.125, 0.094, 0.082, 0.85);
 pub const TITLE_TEXT: Color = Color::srgb(1.0, 0.902, 0.753);
 pub const STATUS_TEXT: Color = Color::srgb(0.90, 0.84, 0.76);
-const TITLE_FONT_SCALE: f32 = 0.8;
+const TITLE_FONT_SIZE: f32 = 14.0;
+const TITLE_BAR_PAD: f32 = 2.0;
+/// 关闭钮边长（可视与热区一致）
+const TITLE_CLOSE_SIZE: f32 = 36.0;
+const TITLE_CLOSE_ICON: f32 = 16.0;
 
 #[derive(Clone, Copy)]
 pub struct PanelOptions {
@@ -23,9 +29,10 @@ pub struct PanelOptions {
     pub height: Option<f32>,
     pub title_key: &'static str,
     pub show_close: bool,
-    pub title_size: f32,
     /// 为 true 时以 Display::None 生成（常驻面板先藏着）
     pub start_hidden: bool,
+    /// 父级 flex 居中：Relative + PanelFlowLayout，拖动后再切 Absolute
+    pub flow: bool,
 }
 
 impl PanelOptions {
@@ -35,8 +42,8 @@ impl PanelOptions {
             height: None,
             title_key,
             show_close: false,
-            title_size: 26.0,
             start_hidden: false,
+            flow: false,
         }
     }
 
@@ -50,13 +57,13 @@ impl PanelOptions {
         self
     }
 
-    pub const fn title_size(mut self, title_size: f32) -> Self {
-        self.title_size = title_size;
+    pub const fn start_hidden(mut self) -> Self {
+        self.start_hidden = true;
         self
     }
 
-    pub const fn start_hidden(mut self) -> Self {
-        self.start_hidden = true;
+    pub const fn flow(mut self) -> Self {
+        self.flow = true;
         self
     }
 }
@@ -75,6 +82,7 @@ pub fn spawn_panel(
         LocalizedText {
             key: options.title_key,
         },
+        PanelCloseButton,
         content,
     );
 }
@@ -92,41 +100,47 @@ pub fn spawn_panel_with_title_marker(
         markers,
         i18n.t(options.title_key),
         title_marker,
+        PanelCloseButton,
         content,
     );
 }
 
-/// 标题文案在 spawn 时写好（须已 bind_ui_scope）
+/// 标题文案在 spawn 时写好（须已 bind_ui_scope）；`close_extras` 在 show_close 时挂到关闭钮
 pub fn spawn_panel_with_title(
     root: &mut ChildSpawnerCommands,
     options: PanelOptions,
     markers: impl Bundle,
     title: impl Into<String>,
     title_marker: impl Component,
+    close_extras: impl Bundle,
     content: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
     let title = title.into();
-    let close_icon = with_ui_world(|world| world.resource::<UiIconAssets>().close.clone());
-    root.spawn((
+    let close_icon = options
+        .show_close
+        .then(|| with_ui_world(|world| world.resource::<UiIconAssets>().close.clone()));
+    let mut entity = root.spawn((
         panel_window_bundle(
             Val::Px(options.width),
-            options
-                .height
-                .map(Val::Px)
-                .unwrap_or(Val::Auto),
+            options.height.map(Val::Px).unwrap_or(Val::Auto),
             Val::Percent(100.0),
             options.start_hidden,
-            true,
+            !options.flow,
         ),
         GlobalZIndex(0),
         markers,
-    ))
-    .with_children(|panel| {
+    ));
+    if options.flow {
+        entity.insert(PanelFlowLayout);
+    }
+    entity.with_children(|panel| {
         panel.spawn(panel_title_bar()).with_children(|bar| {
-            bar.spawn((panel_title_label(title, options.title_size), title_marker));
-            if options.show_close {
-                bar.spawn(panel_close_button())
-                    .with_children(|btn| spawn_close_icon(btn, close_icon.clone()));
+            bar.spawn((panel_title_label(title), title_marker));
+            match close_icon {
+                Some(close_icon) => spawn_panel_close(bar, close_icon, close_extras),
+                None => {
+                    let _ = close_extras;
+                }
             }
         });
         panel.spawn(panel_content()).with_children(content);
@@ -155,30 +169,14 @@ pub const PANEL_INSET_BG: Color = Color::srgb(0.14, 0.137, 0.141);
 pub const INVENTORY_TRAY_PADDING: f32 = 8.0;
 pub const INVENTORY_SLOT_GAP: f32 = 6.0;
 const INVENTORY_TRAY_BORDER: f32 = 3.0;
+/// 面板主体内凹边框厚度
+const PANEL_BODY_BORDER: f32 = 3.0;
 
 pub fn inventory_tray_row_bundle() -> impl Bundle {
     (
         Node {
             display: Display::Flex,
             flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(INVENTORY_SLOT_GAP),
-            padding: UiRect::all(Val::Px(INVENTORY_TRAY_PADDING)),
-            border: UiRect::all(Val::Px(INVENTORY_TRAY_BORDER)),
-            ..default()
-        },
-        BackgroundColor(PANEL_INSET_BG),
-        panel_inset_border(),
-    )
-}
-
-pub fn inventory_tray_bundle() -> impl Bundle {
-    (
-        Node {
-            width: Val::Percent(100.0),
-            display: Display::Flex,
-            flex_direction: FlexDirection::Row,
-            flex_wrap: FlexWrap::Wrap,
-            row_gap: Val::Px(INVENTORY_SLOT_GAP),
             column_gap: Val::Px(INVENTORY_SLOT_GAP),
             padding: UiRect::all(Val::Px(INVENTORY_TRAY_PADDING)),
             border: UiRect::all(Val::Px(INVENTORY_TRAY_BORDER)),
@@ -206,6 +204,17 @@ pub fn compact_raised_panel(style: Node) -> impl Bundle {
 
 pub fn panel_bundle_auto(max_width_px: f32) -> impl Bundle {
     panel_window_bundle(Val::Auto, Val::Auto, Val::Px(max_width_px), false, true)
+}
+
+/// 固定宽度、高度随内容（文本输入等需要稳定宽栏时用）
+pub fn panel_bundle(width_px: f32) -> impl Bundle {
+    panel_window_bundle(
+        Val::Px(width_px),
+        Val::Auto,
+        Val::Percent(100.0),
+        false,
+        true,
+    )
 }
 
 fn panel_window_bundle(
@@ -243,7 +252,7 @@ fn panel_window_bundle(
                 Display::Flex
             },
             flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(12.0),
+            row_gap: Val::Px(8.0),
             overflow: Overflow::clip(),
             ..default()
         },
@@ -275,26 +284,18 @@ pub fn panel_title_bar() -> impl Bundle {
         Button,
         Node {
             width: Val::Percent(100.0),
-            min_height: Val::Px(38.0),
-            padding: UiRect::horizontal(Val::Px(10.0)),
-            border: UiRect {
-                bottom: Val::Px(2.0),
-                ..default()
-            },
+            // 四周等距，避免关闭按钮顶距与右边距不一致
+            padding: UiRect::all(Val::Px(TITLE_BAR_PAD)),
             display: Display::Flex,
             align_items: AlignItems::Center,
             justify_content: JustifyContent::SpaceBetween,
-            column_gap: Val::Px(10.0),
+            column_gap: Val::Px(8.0),
             flex_shrink: 0.0,
             ..default()
         },
         PanelTitleBar,
         ZIndex(10),
         BackgroundColor(Color::NONE),
-        BorderColor {
-            bottom: PANEL_DARK_EDGE,
-            ..Default::default()
-        },
         Pickable {
             should_block_lower: true,
             is_hoverable: true,
@@ -302,14 +303,19 @@ pub fn panel_title_bar() -> impl Bundle {
     )
 }
 
-pub fn panel_title_label(value: impl Into<String>, font_size: f32) -> impl Bundle {
+/// 面板标题文案（字号/加粗字重统一在此；MiSansVF 用 SEMIBOLD）
+pub fn panel_title_label(value: impl Into<String>) -> impl Bundle {
+    let font = with_ui_world(|world| world.resource::<UiFont>().0.clone());
     (
         Text::new(value),
         TextFont {
-            font_size: default_font_size(font_size * TITLE_FONT_SCALE),
+            font: font.into(),
+            font_size: default_font_size(TITLE_FONT_SIZE),
+            weight: FontWeight::SEMIBOLD,
             ..default()
         },
         TextColor(TITLE_TEXT),
+        PanelTitleText,
         Node {
             flex_grow: 1.0,
             ..default()
@@ -317,26 +323,32 @@ pub fn panel_title_label(value: impl Into<String>, font_size: f32) -> impl Bundl
     )
 }
 
-pub fn panel_close_button() -> impl Bundle {
-    (panel_title_button(), PanelCloseButton)
-}
-
-pub fn panel_title_button() -> impl Bundle {
-    (
-        Button,
-        Node {
-            width: Val::Px(28.0),
-            height: Val::Px(28.0),
-            border: super::button::button_border(),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            flex_shrink: 0.0,
-            ..default()
-        },
-        HoverButton,
-        raised_border(),
-        BackgroundColor(super::button::BUTTON_BG),
-    )
+/// 面板关闭钮
+pub fn spawn_panel_close(
+    parent: &mut ChildSpawnerCommands,
+    image: Handle<Image>,
+    extras: impl Bundle,
+) {
+    parent
+        .spawn((
+            Button,
+            Node {
+                width: Val::Px(TITLE_CLOSE_SIZE),
+                height: Val::Px(TITLE_CLOSE_SIZE),
+                border: button_border(),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                flex_shrink: 0.0,
+                ..default()
+            },
+            HoverButton,
+            raised_border(),
+            BackgroundColor(BUTTON_BG),
+            extras,
+        ))
+        .with_children(|btn| {
+            spawn_ui_icon(btn, image, TITLE_CLOSE_ICON);
+        });
 }
 
 pub fn panel_content() -> impl Bundle {
@@ -349,10 +361,12 @@ pub fn panel_content() -> impl Bundle {
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(12.0),
             padding: UiRect::all(Val::Px(8.0)),
+            border: UiRect::all(Val::Px(PANEL_BODY_BORDER)),
             overflow: Overflow::clip(),
             ..default()
         },
-        BackgroundColor(Color::NONE),
+        BackgroundColor(PANEL_INSET_BG),
+        panel_inset_border(),
     )
 }
 

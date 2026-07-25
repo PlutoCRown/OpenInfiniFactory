@@ -13,7 +13,8 @@ use super::super::types::{
 };
 use super::super::widgets::{
     spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_dropdown_list,
-    spawn_settings_slider, spawn_settings_slider_value, spawn_settings_tab,
+    spawn_settings_radio_group, spawn_settings_slider, spawn_settings_slider_value,
+    spawn_settings_tab,
 };
 use crate::game::state::{GameSettings, UiPanelId};
 use crate::game::ui::access::i18n;
@@ -40,8 +41,7 @@ pub fn spawn_settings_panel(
         root,
         PanelOptions::new(panel_w, "settings.title")
             .with_height(panel_h)
-            .closable()
-            .title_size(30.0),
+            .closable(),
         UiPanelBinding(UiPanelId::Settings),
         |panel| {
             spawn_settings_tabs(panel);
@@ -86,7 +86,7 @@ fn spawn_settings_dropdown_row(
         .with_children(|row| {
             spawn_settings_label(row, label_key);
             row.spawn(transparent_node({
-                let mut cell = settings_cell(530.0);
+                let mut cell = settings_control_cell();
                 cell.flex_direction = FlexDirection::Column;
                 cell.justify_content = JustifyContent::Center;
                 cell
@@ -97,21 +97,31 @@ fn spawn_settings_dropdown_row(
         });
 }
 
+fn spawn_settings_radio_row(
+    panel: &mut ChildSpawnerCommands,
+    label_key: &'static str,
+    group: SettingsDropdown,
+    tab: SettingsTab,
+) {
+    panel
+        .spawn((settings_row_node(), PanelVisibility::SettingsTab(tab)))
+        .with_children(|row| {
+            spawn_settings_label(row, label_key);
+            row.spawn(transparent_node(settings_control_cell()))
+                .with_children(|controls| {
+                    spawn_settings_radio_group(controls, settings_choice_options(group));
+                });
+        });
+}
+
 fn spawn_settings_dropdown_layers(root: &mut ChildSpawnerCommands) {
-    let mut dropdowns = vec![
-        SettingsDropdown::Language,
-        SettingsDropdown::PlaceSelectionMode,
-        SettingsDropdown::DeleteSelectionMode,
-        SettingsDropdown::Shadows,
-        SettingsDropdown::Ssao,
-        SettingsDropdown::Vsync,
-        SettingsDropdown::Skybox,
-    ];
+    // 仅保留仍为下拉的项；单选组不再挂列表层
+    let mut dropdowns = vec![SettingsDropdown::Language, SettingsDropdown::Ssao];
     if StoragePlatform::current() == StoragePlatform::Desktop {
         dropdowns.push(SettingsDropdown::WindowMode);
     }
     for dropdown in dropdowns {
-        spawn_settings_dropdown_list(root, dropdown, settings_dropdown_options(dropdown));
+        spawn_settings_dropdown_list(root, dropdown, settings_choice_options(dropdown));
     }
 }
 
@@ -128,7 +138,7 @@ fn spawn_settings_slider_row(
         .with_children(|row| {
             spawn_settings_label(row, label_key);
             row.spawn(transparent_node({
-                let mut cell = settings_cell(360.0);
+                let mut cell = settings_control_cell();
                 cell.justify_content = JustifyContent::Center;
                 cell
             }))
@@ -160,10 +170,24 @@ fn settings_row_node() -> impl Bundle {
     })
 }
 
-fn settings_cell(width: f32) -> Node {
+fn settings_control_cell() -> Node {
     Node {
-        width: Val::Px(width),
-        min_width: Val::Px(width),
+        width: Val::Percent(100.0),
+        flex_grow: 1.0,
+        flex_shrink: 1.0,
+        min_width: Val::Px(0.0),
+        height: Val::Percent(100.0),
+        display: Display::Flex,
+        align_items: AlignItems::Center,
+        justify_content: JustifyContent::FlexStart,
+        ..default()
+    }
+}
+
+fn settings_label_cell() -> Node {
+    Node {
+        width: Val::Px(220.0),
+        min_width: Val::Px(220.0),
         height: Val::Percent(100.0),
         flex_shrink: 0.0,
         display: Display::Flex,
@@ -174,7 +198,7 @@ fn settings_cell(width: f32) -> Node {
 }
 
 fn spawn_settings_label(row: &mut ChildSpawnerCommands, label_key: &'static str) {
-    row.spawn(transparent_node(settings_cell(220.0)))
+    row.spawn(transparent_node(settings_label_cell()))
         .with_children(|cell| {
             cell.spawn(localized_text(
                 label_key,
@@ -196,6 +220,9 @@ fn spawn_settings_item(
         }
         SettingsControl::Dropdown(dropdown) => {
             spawn_settings_dropdown_row(panel, item.label_key, dropdown, tab)
+        }
+        SettingsControl::Radio(group) => {
+            spawn_settings_radio_row(panel, item.label_key, group, tab)
         }
     }
 }
@@ -302,7 +329,7 @@ fn key_bindings_columns_bundle() -> impl Bundle {
     })
 }
 
-fn settings_dropdown_options(dropdown: SettingsDropdown) -> Vec<(String, SettingsAction)> {
+fn settings_choice_options(dropdown: SettingsDropdown) -> Vec<(String, SettingsAction)> {
     match dropdown {
         SettingsDropdown::Language => crate::shared::i18n::Language::ALL
             .into_iter()

@@ -9,7 +9,7 @@ use bevy::window::PrimaryWindow;
 
 use crate::game::ui::components::{
     BUTTON_BG, auto_width_button, default_button_size, default_font_size, flex_row_auto,
-    inset_border, panel_bundle_auto, panel_content, panel_title_bar, panel_title_label, text,
+    inset_border, panel_bundle, panel_content, panel_title_bar, panel_title_label, text,
 };
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost};
 use crate::game::ui::core::text_input::primary_click;
@@ -110,13 +110,13 @@ impl TextPromptState {
 /// 按需生成文本输入对话框
 pub fn spawn_text_prompt(root: &mut ChildSpawnerCommands) -> Entity {
     root.spawn((
-        panel_bundle_auto(420.0),
+        panel_bundle(1050.0),
         GlobalZIndex(30_000),
         TextPromptRoot,
         children![
             (
                 panel_title_bar(),
-                children![(panel_title_label("", 20.0), TextPromptTitle)]
+                children![(panel_title_label(""), TextPromptTitle)]
             ),
             (
                 panel_content(),
@@ -160,12 +160,12 @@ pub fn spawn_text_prompt(root: &mut ChildSpawnerCommands) -> Entity {
                         children![
                             (
                                 auto_width_button(34.0),
-                                TextPromptButtonId::Save,
+                                TextPromptButtonId::Cancel,
                                 children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
                             ),
                             (
                                 auto_width_button(34.0),
-                                TextPromptButtonId::Cancel,
+                                TextPromptButtonId::Save,
                                 children![(text("", 15.0, Color::WHITE), TextLayout::no_wrap())]
                             ),
                         ]

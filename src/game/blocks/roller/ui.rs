@@ -64,6 +64,7 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
             .iter()
             .map(|(id, _)| (id, RollerAction::SetPaint(id))),
         ColorSelectOption::Paint,
+        |id| Some(crate::game::block_editing::widgets::hover_tooltip_paint(id)),
     );
 }
 

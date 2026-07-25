@@ -1,18 +1,42 @@
 use bevy::prelude::*;
 
 use super::super::components::{
-    PanelOptions, compact_raised_panel, default_button_size, default_font_size,
-    inventory_tray_bundle, inventory_tray_row_bundle, localized_text, spawn_panel_with_title, text,
+    INVENTORY_SLOT_GAP, INVENTORY_TRAY_PADDING, PanelOptions, compact_raised_panel,
+    default_button_size, inventory_tray_row_bundle, spawn_panel_with_title, text,
 };
 use super::super::types::{
     BACKPACK_SLOTS, CarriedItemPreview, GameplayHudVisibility, HOTBAR_SLOTS, InGameHudStyle,
-    InventoryTooltip, InventoryTooltipDescription, InventoryTooltipName, PanelVisibility, SlotArea,
+    ItemTooltip, ItemTooltipDescription, ItemTooltipName, PanelCloseButton, PanelVisibility,
+    SlotArea,
 };
 use super::super::widgets::spawn_slot;
 use crate::game::state::BuilderMode;
 use crate::game::ui::access::i18n;
 use crate::game::ui::features::inventory::InventoryTitleText;
 use crate::shared::touch_profile::TouchProfile;
+
+/// 背包一行格数；面板宽度按此精确排满
+const BACKPACK_COLS: usize = 10;
+/// 与 spawn_slot 一致
+const SLOT_BASE: f32 = 54.0;
+/// 与 panel_content / panel_window 一致
+const PANEL_PAD: f32 = 8.0;
+const PANEL_BORDER: f32 = 4.0;
+const PANEL_BODY_BORDER: f32 = 3.0;
+
+/// 使一行刚好放下 BACKPACK_COLS 个格子（含 gap、内外边距与边框）
+fn inventory_panel_width() -> f32 {
+    let slot = default_button_size(SLOT_BASE);
+    let cols = BACKPACK_COLS as f32;
+    let gaps = (BACKPACK_COLS.saturating_sub(1) as f32) * INVENTORY_SLOT_GAP;
+    cols * slot
+        + gaps
+        + INVENTORY_TRAY_PADDING * 2.0
+        + PANEL_PAD * 2.0
+        + PANEL_BODY_BORDER * 2.0
+        + PANEL_PAD * 2.0
+        + PANEL_BORDER * 2.0
+}
 
 pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
     root.spawn((
@@ -66,7 +90,7 @@ pub fn spawn_inventory_panel(
         });
         i18n.fmt("inventory.title", &[("mode", mode.as_str())])
     };
-    let mut options = PanelOptions::new(640.0, "inventory.title").start_hidden();
+    let mut options = PanelOptions::new(inventory_panel_width(), "inventory.title").start_hidden();
     // 触控无 Esc，标题栏需要关钮
     if touch.enabled {
         options = options.closable();
@@ -77,74 +101,55 @@ pub fn spawn_inventory_panel(
         PanelVisibility::Inventory,
         title,
         InventoryTitleText,
+        PanelCloseButton,
         |panel| {
-            panel.spawn(inventory_tray_bundle()).with_children(|grid| {
-                for index in 0..BACKPACK_SLOTS {
-                    spawn_slot(grid, SlotArea::Backpack, index);
-                }
-            });
-            panel.spawn(localized_text(
-                "inventory.help",
-                15.0,
-                Color::srgb(0.78, 0.78, 0.76),
-            ));
+            // Panel 已有内凹，格子直接排，不再套一层凹陷框
+            panel
+                .spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        display: Display::Flex,
+                        flex_direction: FlexDirection::Row,
+                        flex_wrap: FlexWrap::Wrap,
+                        row_gap: Val::Px(INVENTORY_SLOT_GAP),
+                        column_gap: Val::Px(INVENTORY_SLOT_GAP),
+                        padding: UiRect::all(Val::Px(INVENTORY_TRAY_PADDING)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::NONE),
+                ))
+                .with_children(|grid| {
+                    for index in 0..BACKPACK_SLOTS {
+                        spawn_slot(grid, SlotArea::Backpack, index);
+                    }
+                });
         },
     );
 }
 
+/// 手持物品预览：纯 Icon，居中跟在光标下
 pub fn spawn_carried_label(root: &mut ChildSpawnerCommands) {
+    let size = default_button_size(46.0);
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
             left: Val::Px(0.0),
             top: Val::Px(0.0),
-            width: Val::Px(default_button_size(46.0)),
-            height: Val::Px(default_button_size(46.0)),
+            width: Val::Px(size),
+            height: Val::Px(size),
             display: Display::None,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            border: UiRect::all(Val::Px(2.0)),
             ..default()
         },
-        BorderColor::all(Color::srgb(1.0, 1.0, 1.0)),
-        BackgroundColor(Color::srgba(0.18, 0.18, 0.19, 0.86)),
+        ImageNode::default(),
+        BackgroundColor(Color::NONE),
         ZIndex(10_000),
         GlobalZIndex(10_000),
         Pickable::IGNORE,
         CarriedItemPreview,
-    ))
-    .with_children(|icon| {
-        const ICON_INSET: f32 = 4.0;
-        icon.spawn((
-            ImageNode::default(),
-            Pickable::IGNORE,
-            Node {
-                position_type: PositionType::Absolute,
-                left: Val::Px(ICON_INSET),
-                right: Val::Px(ICON_INSET),
-                top: Val::Px(ICON_INSET),
-                bottom: Val::Px(ICON_INSET),
-                ..default()
-            },
-        ));
-        icon.spawn((
-            Text::new(""),
-            Pickable::IGNORE,
-            TextFont {
-                font_size: default_font_size(12.0),
-                ..default()
-            },
-            TextColor(Color::WHITE),
-            TextLayout::justify(Justify::Center),
-            Node {
-                margin: UiRect::all(Val::Px(2.0)),
-                ..default()
-            },
-        ));
-    });
+    ));
 }
 
-pub fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
+pub fn spawn_item_tooltip(root: &mut ChildSpawnerCommands) {
     // 约十余汉字宽，超出换行
     const MAX_WIDTH: f32 = 252.0;
     root.spawn((
@@ -165,12 +170,12 @@ pub fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
         GlobalZIndex(30_000),
         Visibility::Hidden,
         Pickable::IGNORE,
-        InventoryTooltip,
+        ItemTooltip,
     ))
     .with_children(|tooltip| {
         tooltip.spawn((
             text("", 14.0, Color::WHITE),
-            InventoryTooltipName,
+            ItemTooltipName,
             Pickable::IGNORE,
             Node {
                 max_width: Val::Percent(100.0),
@@ -179,7 +184,7 @@ pub fn spawn_inventory_tooltip(root: &mut ChildSpawnerCommands) {
         ));
         tooltip.spawn((
             text("", 12.0, Color::srgb(0.62, 0.62, 0.60)),
-            InventoryTooltipDescription,
+            ItemTooltipDescription,
             Pickable::IGNORE,
             Node {
                 max_width: Val::Percent(100.0),

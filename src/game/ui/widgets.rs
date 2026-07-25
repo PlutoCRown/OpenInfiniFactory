@@ -166,6 +166,8 @@ pub(super) fn spawn_settings_slider_value(parent: &mut ChildSpawnerCommands, fie
 }
 
 const DROPDOWN_CHEVRON_COLOR: Color = Color::srgb(0.72, 0.80, 0.84);
+/// 设置下拉约五字宽（含内边距与箭头）
+const SETTINGS_DROPDOWN_MAX_WIDTH: f32 = 160.0;
 
 pub(super) fn spawn_settings_dropdown(
     parent: &mut ChildSpawnerCommands,
@@ -174,7 +176,11 @@ pub(super) fn spawn_settings_dropdown(
     parent
         .spawn((
             plain_node(Node {
-                width: Val::Px(260.0),
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                display: Display::Flex,
+                justify_content: JustifyContent::FlexEnd,
+                align_items: AlignItems::Center,
                 position_type: PositionType::Relative,
                 ..default()
             }),
@@ -185,8 +191,11 @@ pub(super) fn spawn_settings_dropdown(
                 .spawn((
                     text_button(
                         Node {
-                            width: Val::Percent(100.0),
+                            width: Val::Auto,
+                            max_width: Val::Px(SETTINGS_DROPDOWN_MAX_WIDTH),
+                            min_width: Val::Px(SETTINGS_DROPDOWN_MAX_WIDTH),
                             height: Val::Px(default_button_size(36.0)),
+                            flex_shrink: 0.0,
                             ..default()
                         },
                         raised_border(),
@@ -203,6 +212,7 @@ pub(super) fn spawn_settings_dropdown(
                             align_items: AlignItems::Center,
                             justify_content: JustifyContent::SpaceBetween,
                             column_gap: Val::Px(10.0),
+                            overflow: Overflow::clip(),
                             ..default()
                         }))
                         .with_children(|row| {
@@ -220,6 +230,43 @@ pub(super) fn spawn_settings_dropdown(
                             spawn_dropdown_chevron(row);
                         });
                 });
+        });
+}
+
+/// 横向单选按钮组（内容宽，靠右对齐）
+pub(super) fn spawn_settings_radio_group(
+    parent: &mut ChildSpawnerCommands,
+    options: impl IntoIterator<Item = (String, SettingsAction)>,
+) {
+    parent
+        .spawn(plain_node(Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            display: Display::Flex,
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(6.0),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::FlexEnd,
+            ..default()
+        }))
+        .with_children(|row| {
+            for (label, action) in options {
+                row.spawn((
+                    text_button(
+                        Node {
+                            height: Val::Px(default_button_size(36.0)),
+                            flex_shrink: 0.0,
+                            ..default()
+                        },
+                        raised_border(),
+                        BUTTON_BG,
+                    ),
+                    action,
+                ))
+                .with_children(|button| {
+                    button.spawn(label_text(label, 14.0, Color::WHITE));
+                });
+            }
         });
 }
 
@@ -272,7 +319,7 @@ pub(super) fn spawn_settings_dropdown_list(
 ) {
     parent
         .spawn((
-            dropdown_list_node(260.0),
+            dropdown_list_node(),
             GlobalZIndex(20_000),
             SettingsDropdownList(dropdown),
         ))
@@ -283,10 +330,10 @@ pub(super) fn spawn_settings_dropdown_list(
         });
 }
 
-fn dropdown_list_node(width: f32) -> impl Bundle {
+fn dropdown_list_node() -> impl Bundle {
     (
         Node {
-            width: Val::Px(width),
+            width: Val::Px(260.0),
             display: Display::None,
             position_type: PositionType::Absolute,
             left: Val::Px(0.0),

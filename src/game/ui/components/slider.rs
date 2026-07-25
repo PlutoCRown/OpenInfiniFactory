@@ -14,7 +14,7 @@ pub fn slider_bundle(action: impl Component + Copy, initial_value: f32) -> impl 
     (
         styled_button(
             Node {
-                width: Val::Px(360.0),
+                width: Val::Percent(100.0),
                 height: Val::Px(default_button_size(22.0)),
                 padding: UiRect::all(Val::Px(3.0)),
                 border: UiRect::all(Val::Px(1.0)),

@@ -4,8 +4,8 @@ use bevy::prelude::*;
 pub use crate::game::block_editing::OpenBlockPanelDropdown;
 pub use crate::game::ui::core::{
     ConfirmButtonId, InlineTextEditState, PanelCloseButton, PanelDragState, PanelFlowLayout,
-    PanelPosition, PanelTitleBar, PanelVisibility, PanelWindow, TextPromptRoot, TextPromptState,
-    UiActionLabel, UiHost, UiHoverState, UiPanelBinding, UiRuntime,
+    PanelPosition, PanelTitleBar, PanelTitleText, PanelVisibility, PanelWindow, TextPromptRoot,
+    TextPromptState, UiActionLabel, UiHost, UiHoverState, UiPanelBinding, UiRuntime,
 };
 pub use crate::game::ui::features::save::types::{
     SaveListAction, SaveListCloseButton, SaveListCoverHost, SaveListCoverImage,
@@ -28,16 +28,16 @@ pub const HOTBAR_SLOTS: usize = 9;
 pub(super) const BACKPACK_SLOTS: usize = 27;
 pub type HotbarItems = [Option<InventoryItem>; HOTBAR_SLOTS];
 
-const PLAY_HOTBAR_BLOCKS: [BlockKind; HOTBAR_SLOTS] = [
-    BlockKind::Platform,
-    BlockKind::Welder,
-    BlockKind::Conveyor,
-    BlockKind::Detector,
-    BlockKind::Wire,
-    BlockKind::Pusher,
-    BlockKind::Lifter,
-    BlockKind::Rotator,
-    BlockKind::Drill,
+const PLAY_HOTBAR_ITEMS: [InventoryItem; HOTBAR_SLOTS] = [
+    InventoryItem::Block(BlockKind::Platform),
+    InventoryItem::Block(BlockKind::Conveyor),
+    InventoryItem::Block(BlockKind::Welder),
+    InventoryItem::Block(BlockKind::Detector),
+    InventoryItem::Block(BlockKind::Wire),
+    InventoryItem::Block(BlockKind::Pusher),
+    InventoryItem::Block(BlockKind::Rotator),
+    InventoryItem::Block(BlockKind::Drill),
+    InventoryItem::Area(AreaKind::Selection),
 ];
 
 #[derive(Component)]
@@ -79,15 +79,22 @@ pub struct LocalizedText {
 }
 
 #[derive(Component)]
-pub struct InventoryTooltip;
+pub struct ItemTooltip;
 
-/// 背包悬停标签的名称文字
+/// 悬停提示的名称文字
 #[derive(Component)]
-pub struct InventoryTooltipName;
+pub struct ItemTooltipName;
 
-/// 背包悬停标签的描述文字
+/// 悬停提示的描述文字
 #[derive(Component)]
-pub struct InventoryTooltipDescription;
+pub struct ItemTooltipDescription;
+
+/// 任意可悬停控件的提示文案（i18n key）；有此组件且 Hovered 时展示 ItemTooltip
+#[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HoverTooltip {
+    pub name_key: &'static str,
+    pub description_key: &'static str,
+}
 
 #[derive(Component)]
 pub struct CarriedItemPreview;
@@ -183,13 +190,18 @@ impl InventoryItems {
             BuilderMode::Play => &PLAY_BLOCKS,
         };
 
-        let hotbar_blocks: &[BlockKind] = match mode {
-            BuilderMode::Edit => blocks,
-            BuilderMode::Play => &PLAY_HOTBAR_BLOCKS,
-        };
         let mut hotbar = [None; HOTBAR_SLOTS];
-        for (index, kind) in hotbar_blocks.iter().take(HOTBAR_SLOTS).enumerate() {
-            hotbar[index] = Some(InventoryItem::Block(*kind));
+        match mode {
+            BuilderMode::Edit => {
+                for (index, kind) in blocks.iter().take(HOTBAR_SLOTS).enumerate() {
+                    hotbar[index] = Some(InventoryItem::Block(*kind));
+                }
+            }
+            BuilderMode::Play => {
+                for (index, item) in PLAY_HOTBAR_ITEMS.iter().enumerate() {
+                    hotbar[index] = Some(*item);
+                }
+            }
         }
 
         let mut backpack = [None; BACKPACK_SLOTS];

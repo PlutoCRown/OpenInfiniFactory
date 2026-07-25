@@ -17,6 +17,10 @@ pub struct PanelPosition {
 #[derive(Component)]
 pub struct PanelTitleBar;
 
+/// 面板标题文案（使用加粗字体，勿被常规 UI 字体覆盖）
+#[derive(Component)]
+pub struct PanelTitleText;
+
 #[derive(Component)]
 pub struct PanelCloseButton;
 

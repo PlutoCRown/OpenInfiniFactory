@@ -6,8 +6,9 @@ use super::SignBlock;
 
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
-    click_material_slot, spawn_labeled_panel_button, spawn_material_icon_list,
-    spawn_material_icon_toggle, sync_dropdown_overlay, update_material_icon,
+    click_material_slot, hover_tooltip_material, set_hover_tooltip, spawn_labeled_panel_button,
+    spawn_material_icon_list, spawn_material_icon_toggle, sync_dropdown_overlay,
+    update_material_icon,
 };
 use crate::game::block_editing::world_refresh::apply_block_settings_edit;
 use crate::game::blocks::panels::BlockPanelHooks;
@@ -101,6 +102,7 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
             .iter()
             .map(|(id, _)| (id, SignAction::SetMaterial(id))),
         SignMaterialOption,
+        |id| Some(hover_tooltip_material(id)),
     );
 }
 
@@ -308,8 +310,9 @@ fn update_dropdowns(
     open_dropdown: Res<OpenBlockPanelDropdown>,
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
+    mut commands: Commands,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut display_slots: Query<(&SignDisplaySlot, &Children)>,
+    mut display_slots: Query<(Entity, &SignDisplaySlot, &Children)>,
     mut material_options: Query<(&SignMaterialOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
     mut lists: Query<(&SignDisplayList, &mut Node, &ComputedNode)>,
@@ -350,7 +353,12 @@ fn update_dropdowns(
                 Some(SignDisplay::Material(material)) => Some(material),
                 _ => None,
             });
-    for (_, children) in &mut display_slots {
+    for (entity, _, children) in &mut display_slots {
         update_material_icon(children, material, block_icons, &mut material_icons);
+        set_hover_tooltip(
+            &mut commands,
+            entity,
+            material.map(hover_tooltip_material),
+        );
     }
 }

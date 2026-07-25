@@ -183,3 +183,9 @@ cargo run --bin oif-debug-http -- --load-fixture=blocks/platform.json
 ## 项目状态
 
 核心玩法、工厂与系统方块、增量渲染与 HTTP 调试已贯通；关卡工具和跨平台体验仍在打磨中。
+
+---
+
+## 借物表
+
+- UI 字体使用 [MiSans](https://hyperos.mi.com/font/zh/details/sc/)

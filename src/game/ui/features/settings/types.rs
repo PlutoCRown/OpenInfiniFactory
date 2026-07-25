@@ -67,6 +67,8 @@ pub enum SettingsControl {
         config: SettingsSliderConfig,
     },
     Dropdown(SettingsDropdown),
+    /// 横向单选按钮组（选项与同名 Dropdown 一致）
+    Radio(SettingsDropdown),
 }
 
 #[derive(Clone, Copy)]
@@ -142,18 +144,18 @@ pub const GAMEPLAY_SETTINGS: &[SettingsItem] = &[
     },
     SettingsItem {
         label_key: "settings.place_selection_mode",
-        control: SettingsControl::Dropdown(SettingsDropdown::PlaceSelectionMode),
+        control: SettingsControl::Radio(SettingsDropdown::PlaceSelectionMode),
     },
     SettingsItem {
         label_key: "settings.delete_selection_mode",
-        control: SettingsControl::Dropdown(SettingsDropdown::DeleteSelectionMode),
+        control: SettingsControl::Radio(SettingsDropdown::DeleteSelectionMode),
     },
 ];
 
 pub const GRAPHICS_SETTINGS: &[SettingsItem] = &[
     SettingsItem {
         label_key: "settings.shadows",
-        control: SettingsControl::Dropdown(SettingsDropdown::Shadows),
+        control: SettingsControl::Radio(SettingsDropdown::Shadows),
     },
     SettingsItem {
         label_key: "settings.ssao",
@@ -161,11 +163,11 @@ pub const GRAPHICS_SETTINGS: &[SettingsItem] = &[
     },
     SettingsItem {
         label_key: "settings.vsync",
-        control: SettingsControl::Dropdown(SettingsDropdown::Vsync),
+        control: SettingsControl::Radio(SettingsDropdown::Vsync),
     },
     SettingsItem {
         label_key: "settings.skybox",
-        control: SettingsControl::Dropdown(SettingsDropdown::Skybox),
+        control: SettingsControl::Radio(SettingsDropdown::Skybox),
     },
     SettingsItem {
         label_key: "settings.window_mode",
@@ -388,6 +390,18 @@ impl SettingsAction {
                 | (Self::TabGraphics, SettingsTab::Graphics)
                 | (Self::TabKeyBindings, SettingsTab::KeyBindings)
         )
+    }
+
+    /// 单选选项是否对应当前配置
+    pub fn radio_selected(self, config: &crate::shared::config::GameConfig) -> bool {
+        match self {
+            Self::SetPlaceSelectionMode(mode) => config.place_selection_mode == mode,
+            Self::SetDeleteSelectionMode(mode) => config.delete_selection_mode == mode,
+            Self::SetShadowsEnabled(enabled) => config.shadows_enabled == enabled,
+            Self::SetVsyncEnabled(enabled) => config.vsync_enabled == enabled,
+            Self::SetSkyboxEnabled(enabled) => config.skybox_enabled == enabled,
+            _ => false,
+        }
     }
 
     pub fn is_tab(self) -> bool {

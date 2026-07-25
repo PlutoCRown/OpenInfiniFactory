@@ -16,6 +16,9 @@ pub const BUTTON_HOVER_LIGHT_EDGE: Color = Color::srgb(1.0, 1.0, 1.0);
 pub const BUTTON_HOVER_LIGHT_EDGE_SOFT: Color = Color::srgb(0.94, 0.94, 0.94);
 pub const BUTTON_HOVER_DARK_EDGE: Color = Color::srgb(0.22, 0.22, 0.22);
 pub const BUTTON_HOVER_DARK_EDGE_SOFT: Color = Color::srgb(0.26, 0.26, 0.26);
+/// 禁用态内凹亮边（勿用 BUTTON_LIGHT_EDGE，在深底上会过白）
+pub const BUTTON_DISABLED_LIGHT_EDGE: Color = Color::srgb(0.36, 0.36, 0.36);
+pub const BUTTON_DISABLED_DARK_EDGE: Color = Color::srgb(0.16, 0.16, 0.16);
 
 /// 按钮边框厚度（略不对称保留立体感）
 pub const BUTTON_BORDER_X: f32 = 2.0;
@@ -29,6 +32,10 @@ pub const BUTTON_SHADOW_BLUR: f32 = 3.0;
 
 #[derive(Component)]
 pub struct HoverButton;
+
+/// 禁用中的按钮：不响应悬停/按下视觉反馈
+#[derive(Component)]
+pub struct DisabledButton;
 
 /// 凸起按钮的边框宽度
 pub fn button_border() -> UiRect {
@@ -156,9 +163,22 @@ pub fn inset_border() -> BorderColor {
     }
 }
 
+/// 禁用按钮内凹边：右下亮边压暗，避免过白
+pub fn disabled_border() -> BorderColor {
+    BorderColor {
+        top: BUTTON_DISABLED_DARK_EDGE,
+        left: BUTTON_DISABLED_DARK_EDGE,
+        right: BUTTON_DISABLED_LIGHT_EDGE,
+        bottom: BUTTON_DISABLED_LIGHT_EDGE,
+    }
+}
+
 pub fn button_hovered(
     mut event: On<Pointer<Over>>,
-    mut buttons: Query<(&mut BackgroundColor, &mut BorderColor), With<HoverButton>>,
+    mut buttons: Query<
+        (&mut BackgroundColor, &mut BorderColor),
+        (With<HoverButton>, Without<DisabledButton>),
+    >,
 ) {
     let Ok((mut background, mut border)) = buttons.get_mut(event.entity) else {
         return;
@@ -170,7 +190,10 @@ pub fn button_hovered(
 
 pub fn button_unhovered(
     mut event: On<Pointer<Out>>,
-    mut buttons: Query<(&mut BackgroundColor, &mut BorderColor), With<HoverButton>>,
+    mut buttons: Query<
+        (&mut BackgroundColor, &mut BorderColor),
+        (With<HoverButton>, Without<DisabledButton>),
+    >,
 ) {
     let Ok((mut background, mut border)) = buttons.get_mut(event.entity) else {
         return;
@@ -182,7 +205,10 @@ pub fn button_unhovered(
 
 pub fn button_pressed(
     mut event: On<Pointer<Press>>,
-    mut buttons: Query<(&mut BackgroundColor, &mut BorderColor), With<HoverButton>>,
+    mut buttons: Query<
+        (&mut BackgroundColor, &mut BorderColor),
+        (With<HoverButton>, Without<DisabledButton>),
+    >,
 ) {
     if event.event.button != PointerButton::Primary {
         return;
@@ -197,7 +223,10 @@ pub fn button_pressed(
 
 pub fn button_released(
     mut event: On<Pointer<Release>>,
-    mut buttons: Query<(&mut BackgroundColor, &mut BorderColor), With<HoverButton>>,
+    mut buttons: Query<
+        (&mut BackgroundColor, &mut BorderColor),
+        (With<HoverButton>, Without<DisabledButton>),
+    >,
 ) {
     if event.event.button != PointerButton::Primary {
         return;

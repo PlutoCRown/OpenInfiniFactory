@@ -3,10 +3,10 @@ use bevy::window::PrimaryWindow;
 
 use crate::game::state::{BuilderMode, PlacementState};
 use crate::game::ui::access::{UiMainThread, i18n};
-use crate::game::ui::components::{hover_border, inset_border};
+use crate::game::ui::components::{default_button_size, hover_border, inset_border};
 use crate::game::ui::types::{
-    AreaKind, CarriedItem, CarriedItemPreview, InventoryItem, InventoryItems, InventorySlot,
-    InventoryTooltip, InventoryTooltipDescription, InventoryTooltipName, SlotArea,
+    AreaKind, CarriedItem, CarriedItemPreview, HoverTooltip, InventoryItem, InventoryItems,
+    InventorySlot, ItemTooltip, ItemTooltipDescription, ItemTooltipName, SlotArea,
 };
 use crate::game::ui::widgets::{short_item_name, slot_color};
 use crate::game::world::rendering::BlockIconAssets;
@@ -41,6 +41,7 @@ pub fn update_inventory_slots(
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
     block_icons: Option<Res<BlockIconAssets>>,
+    mut commands: Commands,
     mut initialized: Local<bool>,
     mut last_selected: Local<usize>,
     mut had_block_icons: Local<bool>,
@@ -55,15 +56,16 @@ pub fn update_inventory_slots(
             &mut Node,
             &mut BackgroundColor,
             &mut BorderColor,
+            Option<&HoverTooltip>,
         ),
-        (With<Button>, Without<InventoryTooltip>),
+        (With<Button>, Without<ItemTooltip>),
     >,
     mut slot_texts: Query<
         &mut Text,
         (
             Without<CarriedItemPreview>,
-            Without<InventoryTooltipName>,
-            Without<InventoryTooltipDescription>,
+            Without<ItemTooltipName>,
+            Without<ItemTooltipDescription>,
         ),
     >,
     mut icons: Query<&mut ImageNode>,
@@ -101,7 +103,9 @@ pub fn update_inventory_slots(
     let refresh_content =
         inventory_changed || icons_changed || icons_became_ready || slots_changed;
 
-    for (_, slot, interaction, children, mut node, mut background, mut border) in &mut slot_query {
+    for (entity, slot, interaction, children, mut node, mut background, mut border, tip) in
+        &mut slot_query
+    {
         let item = match slot.area {
             SlotArea::Hotbar => inventory.hotbar[slot.index],
             SlotArea::Backpack => inventory.backpack[slot.index],
@@ -131,6 +135,23 @@ pub fn update_inventory_slots(
         *background = slot_background(item, has_icon, hovered);
         *border = slot_border(selected_hotbar, hovered);
 
+        let next_tip = item.map(|item| HoverTooltip {
+            name_key: item.name_key(),
+            description_key: item.description_key(),
+        });
+        match (tip.copied(), next_tip) {
+            (Some(old), Some(new)) if old != new => {
+                commands.entity(entity).insert(new);
+            }
+            (None, Some(new)) => {
+                commands.entity(entity).insert(new);
+            }
+            (Some(_), None) => {
+                commands.entity(entity).remove::<HoverTooltip>();
+            }
+            _ => {}
+        }
+
         if !refresh_content {
             continue;
         }
@@ -150,58 +171,59 @@ pub fn update_inventory_slots(
     }
 }
 
-/// 物品格 tooltip：跟随光标；用 Button 的 Interaction 判定悬停（不依赖全局 UiHoverState）
-pub fn update_inventory_tooltip(
+/// 通用悬停提示：任意挂了 HoverTooltip 的按钮；手持物品时隐藏
+pub fn update_item_tooltip(
     _ui_thread: UiMainThread,
-    inventory: Res<InventoryItems>,
-    slots: Query<(&InventorySlot, &Interaction)>,
+    carried: Res<CarriedItem>,
+    targets: Query<(&HoverTooltip, &Interaction)>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut last_item: Local<Option<InventoryItem>>,
-    mut tooltip: Query<(&mut Node, &mut Visibility), (With<InventoryTooltip>, Without<Button>)>,
+    mut last_keys: Local<Option<HoverTooltip>>,
+    mut tooltip: Query<(&mut Node, &mut Visibility), (With<ItemTooltip>, Without<Button>)>,
     mut tooltip_name: Query<
         &mut Text,
-        (
-            With<InventoryTooltipName>,
-            Without<InventoryTooltipDescription>,
-        ),
+        (With<ItemTooltipName>, Without<ItemTooltipDescription>),
     >,
     mut tooltip_desc: Query<
         &mut Text,
-        (
-            With<InventoryTooltipDescription>,
-            Without<InventoryTooltipName>,
-        ),
+        (With<ItemTooltipDescription>, Without<ItemTooltipName>),
     >,
 ) {
     let Ok((mut tooltip_node, mut tooltip_visibility)) = tooltip.single_mut() else {
         return;
     };
 
-    let hovered_item = slots.iter().find_map(|(slot, interaction)| {
-        (*interaction == Interaction::Hovered).then(|| match slot.area {
-            SlotArea::Hotbar => inventory.hotbar[slot.index],
-            SlotArea::Backpack => inventory.backpack[slot.index],
-        })?
-    });
-
-    let Some(item) = hovered_item else {
+    // 手里拿着东西时不显示，避免和悬浮 Icon 叠在一起
+    if carried.item().is_some() {
         if tooltip_node.display != Display::None {
             tooltip_node.display = Display::None;
         }
         tooltip_visibility.set_if_neq(Visibility::Hidden);
-        *last_item = None;
+        *last_keys = None;
+        return;
+    }
+
+    let hovered = targets.iter().find_map(|(tip, interaction)| {
+        (*interaction == Interaction::Hovered).then_some(*tip)
+    });
+
+    let Some(tip) = hovered else {
+        if tooltip_node.display != Display::None {
+            tooltip_node.display = Display::None;
+        }
+        tooltip_visibility.set_if_neq(Visibility::Hidden);
+        *last_keys = None;
         return;
     };
     let Ok(window) = windows.single() else {
         tooltip_node.display = Display::None;
         tooltip_visibility.set_if_neq(Visibility::Hidden);
-        *last_item = None;
+        *last_keys = None;
         return;
     };
     let Some(cursor) = window.cursor_position() else {
         tooltip_node.display = Display::None;
         tooltip_visibility.set_if_neq(Visibility::Hidden);
-        *last_item = None;
+        *last_keys = None;
         return;
     };
 
@@ -210,42 +232,33 @@ pub fn update_inventory_tooltip(
     tooltip_node.display = Display::Flex;
     tooltip_node.left = Val::Px(cursor.x + 16.0);
     tooltip_node.top = Val::Px(cursor.y + 16.0);
-    if was_hidden || last_item.as_ref() != Some(&item) {
+    if was_hidden || last_keys.as_ref() != Some(&tip) {
         if let Ok(mut text) = tooltip_name.single_mut() {
-            text.0 = i18n.t(item.name_key());
+            text.0 = i18n.t(tip.name_key);
         }
         if let Ok(mut text) = tooltip_desc.single_mut() {
-            text.0 = i18n.t(item.description_key());
+            text.0 = i18n.t(tip.description_key);
         }
-        *last_item = Some(item);
+        *last_keys = Some(tip);
     }
 }
 
-/// 手持物品预览：有手持时跟随光标，图标只在手持变化时更新
+/// 手持物品预览：纯 Icon 居中跟光标，图标只在手持变化时更新
 pub fn update_carried_item_ui(
     _ui_thread: UiMainThread,
     carried: Res<CarriedItem>,
     block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut preview: Query<(&mut Node, &mut BackgroundColor, &Children), With<CarriedItemPreview>>,
-    mut preview_images: Query<&mut ImageNode>,
-    mut preview_text: Query<&mut Text>,
+    mut preview: Query<(&mut Node, &mut ImageNode), With<CarriedItemPreview>>,
 ) {
-    let Ok((mut style, mut background, children)) = preview.single_mut() else {
+    let Ok((mut style, mut image)) = preview.single_mut() else {
         return;
     };
 
     let Some(item) = carried.item() else {
         if style.display != Display::None {
             style.display = Display::None;
-            for child in children.iter() {
-                if let Ok(mut image) = preview_images.get_mut(child) {
-                    *image = ImageNode::default();
-                }
-                if let Ok(mut text) = preview_text.get_mut(child) {
-                    text.0.clear();
-                }
-            }
+            *image = ImageNode::default();
         }
         return;
     };
@@ -260,15 +273,16 @@ pub fn update_carried_item_ui(
         return;
     };
 
+    // 图标中心对准光标，避免偏右下显得「不跟手」
+    let half = default_button_size(46.0) * 0.5;
     style.display = Display::Flex;
-    style.left = Val::Px(cursor.x + 4.0);
-    style.top = Val::Px(cursor.y + 4.0);
+    style.left = Val::Px(cursor.x - half);
+    style.top = Val::Px(cursor.y - half);
 
     if !carried.is_changed() && !block_icons.as_ref().is_some_and(|icons| icons.is_changed()) {
         return;
     }
 
-    *background = slot_color(item).with_alpha(0.9).into();
     let icon_handle = match item {
         InventoryItem::Block(kind) => block_icons.as_deref().and_then(|icons| icons.get(kind)),
         InventoryItem::Area(AreaKind::Selection) => {
@@ -278,17 +292,9 @@ pub fn update_carried_item_ui(
             block_icons.as_deref().and_then(|icons| icons.light_panel())
         }
     };
-    for child in children.iter() {
-        if let Ok(mut image) = preview_images.get_mut(child) {
-            *image = icon_handle
-                .as_ref()
-                .map(|handle| ImageNode::new(handle.clone()))
-                .unwrap_or_default();
-        }
-        if let Ok(mut text) = preview_text.get_mut(child) {
-            text.0.clear();
-        }
-    }
+    *image = icon_handle
+        .map(|handle| ImageNode::new(handle.clone()))
+        .unwrap_or_default();
 }
 
 fn slot_background(item: Option<InventoryItem>, has_icon: bool, hovered: bool) -> BackgroundColor {

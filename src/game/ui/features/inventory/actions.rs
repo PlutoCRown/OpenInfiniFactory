@@ -180,7 +180,7 @@ fn dispatch_inventory_slot_action(
     placement.edit_gesture = None;
 }
 
-/// 背包打开时操作快捷栏：有手持则覆盖放下，空手则拿起并清空该格
+/// 背包打开时操作快捷栏：有手持则覆盖放下，空手则拿起并清空该格（不切换当前选中）
 fn apply_open_inventory_hotbar(
     index: usize,
     inventory: &mut InventoryItems,
@@ -191,13 +191,9 @@ fn apply_open_inventory_hotbar(
     let before = inventory.hotbar;
     if let Some(item) = carried.take() {
         inventory.hotbar[index] = Some(item);
-        placement.selected = index;
     } else if let Some(item) = inventory.hotbar[index] {
         inventory.hotbar[index] = None;
         carried.set(Some(item));
-        placement.selected = index;
-    } else {
-        placement.selected = index;
     }
     if inventory.hotbar != before {
         solution_state.dirty = true;

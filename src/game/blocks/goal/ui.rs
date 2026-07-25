@@ -6,7 +6,8 @@ use super::GoalBlock;
 
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
-    MaterialIconSlotBlocked, click_material_slot, spawn_facing_radio_row, spawn_material_icon_list,
+    MaterialIconSlotBlocked, click_material_slot, hover_tooltip_material, hover_tooltip_paint,
+    hover_tooltip_stamp, set_hover_tooltip, spawn_facing_radio_row, spawn_material_icon_list,
     spawn_material_icon_toggle, sync_dropdown_overlay, sync_facing_radio_buttons,
     update_material_icon, update_slot_icon,
 };
@@ -160,6 +161,7 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
             .iter()
             .map(|(id, _)| (id, GoalAction::SetMaterial(id))),
         GoalMaterialOption,
+        |id| Some(hover_tooltip_material(id)),
     );
     // 首项空槽 = 清空；其后为各印花
     spawn_material_icon_list(
@@ -171,6 +173,7 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
                 .map(|(id, _)| (Some(id), GoalAction::SetStamp(Some(id)))),
         ),
         GoalStampOption,
+        |id| id.map(hover_tooltip_stamp),
     );
     spawn_material_icon_list(
         root,
@@ -181,6 +184,7 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
                 .map(|(id, _)| (Some(id), GoalAction::SetPaint(Some(id)))),
         ),
         GoalPaintOption,
+        |id| id.map(hover_tooltip_paint),
     );
     spawn_face_tooltip(root);
 }
@@ -539,11 +543,22 @@ fn update_slot_icons(
     ui_runtime: Res<UiRuntime>,
     world: Res<WorldBlocks>,
     block_icons: Option<Res<BlockIconAssets>>,
-    mut material_slots: Query<(&GoalMaterialSlot, &Children)>,
+    mut commands: Commands,
+    mut material_slots: Query<(Entity, &GoalMaterialSlot, &Children)>,
     mut material_options: Query<(&GoalMaterialOption, &Children)>,
-    mut stamp_slots: Query<(&GoalStampSlot, &Children)>,
+    mut stamp_slots: Query<(
+        Entity,
+        &GoalStampSlot,
+        &Children,
+        Option<&MaterialIconSlotBlocked>,
+    )>,
     mut stamp_options: Query<(&GoalStampOption, &Children)>,
-    mut paint_slots: Query<(&GoalPaintSlot, &Children)>,
+    mut paint_slots: Query<(
+        Entity,
+        &GoalPaintSlot,
+        &Children,
+        Option<&MaterialIconSlotBlocked>,
+    )>,
     mut paint_options: Query<(&GoalPaintOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
 ) {
@@ -578,28 +593,46 @@ fn update_slot_icons(
     let settings = ui_runtime
         .active_block_pos()
         .map(|pos| world.goal_settings(pos));
-    for (_, children) in &mut material_slots {
-        update_material_icon(
-            children,
-            settings.map(|s| s.material),
-            block_icons,
-            &mut material_icons,
+    for (entity, _, children) in &mut material_slots {
+        let material = settings.map(|s| s.material);
+        update_material_icon(children, material, block_icons, &mut material_icons);
+        set_hover_tooltip(
+            &mut commands,
+            entity,
+            material.map(hover_tooltip_material),
         );
     }
-    for (slot, children) in &mut stamp_slots {
+    for (entity, slot, children, blocked) in &mut stamp_slots {
         let stamp = settings.and_then(|s| s.stamps[slot.0 as usize]);
         update_slot_icon(
             children,
             stamp.and_then(|id| block_icons.get(BlockKind::stamp_block_kind(id))),
             &mut material_icons,
         );
+        // 不可附着面留给 face tooltip，不挂材料名
+        set_hover_tooltip(
+            &mut commands,
+            entity,
+            blocked
+                .is_none()
+                .then(|| stamp.map(hover_tooltip_stamp))
+                .flatten(),
+        );
     }
-    for (slot, children) in &mut paint_slots {
+    for (entity, slot, children, blocked) in &mut paint_slots {
         let paint = settings.and_then(|s| s.paints[slot.0 as usize]);
         update_slot_icon(
             children,
             paint.and_then(|id| block_icons.paint(id)),
             &mut material_icons,
+        );
+        set_hover_tooltip(
+            &mut commands,
+            entity,
+            blocked
+                .is_none()
+                .then(|| paint.map(hover_tooltip_paint))
+                .flatten(),
         );
     }
 }

@@ -2,8 +2,8 @@ use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
 use crate::game::ui::components::{
-    auto_width_button, flex_row_auto, panel_bundle_auto, panel_content, panel_title_bar,
-    panel_title_label, text, STATUS_TEXT,
+    STATUS_TEXT, auto_width_button, flex_row_auto, panel_bundle_auto, panel_content,
+    panel_title_bar, panel_title_label, text,
 };
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost};
 use crate::game::ui::core::panel::PanelVisibility;
@@ -107,7 +107,7 @@ pub fn spawn_confirm_dialog(root: &mut ChildSpawnerCommands) -> Entity {
         children![
             (
                 panel_title_bar(),
-                children![(panel_title_label("", 24.0), ConfirmTitleText)]
+                children![(panel_title_label(""), ConfirmTitleText)]
             ),
             (
                 panel_content(),

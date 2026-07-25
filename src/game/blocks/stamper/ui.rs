@@ -64,6 +64,7 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
             .iter()
             .map(|(id, _)| (id, StamperAction::SetStamp(id))),
         ColorSelectOption::Stamp,
+        |id| Some(crate::game::block_editing::widgets::hover_tooltip_stamp(id)),
     );
 }
 

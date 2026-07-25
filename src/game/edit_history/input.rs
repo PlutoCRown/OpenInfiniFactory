@@ -1,16 +1,18 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::game::simulation::structure_state::StructureState;
-use crate::game::state::{GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState};
-use crate::game::systems::debug::DebugState;
 use crate::game::simulation::markers::refresh_static_generated_markers;
-use crate::game::ui::core::text_input::InlineTextEditState;
+use crate::game::simulation::structure_state::StructureState;
+use crate::game::state::{
+    GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
+};
+use crate::game::systems::debug::DebugState;
 use crate::game::ui::core::runtime::UiRuntime;
+use crate::game::ui::core::text_input::InlineTextEditState;
 use crate::game::world::grid::WorldBlocks;
-use crate::game::world::rendering::WorldRenderAssets;
 use crate::game::world::rendering::SceneChunkMeshes;
-use crate::scene::{refresh_edit_changes, BlockEntityIndex};
+use crate::game::world::rendering::WorldRenderAssets;
+use crate::scene::{BlockEntityIndex, refresh_edit_changes};
 use crate::shared::config::{ActionKeyName, GameConfig};
 
 use super::EditHistory;
@@ -66,7 +68,8 @@ pub fn edit_history_input(
         return;
     };
 
-    if patch.touches_goal_or_generator() {
+    // 格子变更后重建焊点等虚方块；验收/生成器仍走同一刷新
+    if !patch.cells.is_empty() || patch.touches_goal_or_generator() {
         refresh_static_generated_markers(&mut world);
     }
     refresh_edit_changes(

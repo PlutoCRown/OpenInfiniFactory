@@ -7,7 +7,8 @@ use bevy::tasks::{AsyncComputeTaskPool, block_on, futures_lite::future};
 use crate::game::state::{GameMode, StartMenuScreen};
 use crate::game::ui::access::UiMainThread;
 use crate::game::ui::components::{
-    BUTTON_BG, BUTTON_HOVER_BG, hover_border, inset_border, pressed_border, raised_border,
+    BUTTON_BG, BUTTON_HOVER_BG, DisabledButton, disabled_border, hover_border, pressed_border,
+    raised_border,
 };
 use crate::game::ui::screens::{spawn_save_puzzle_row, spawn_save_solution_card};
 use crate::game::ui::types::{
@@ -311,6 +312,7 @@ pub fn update_save_list_styles(
     save_state: Res<SaveState>,
     hover: Res<UiHoverState>,
     mut render_state: ResMut<SaveListRenderState>,
+    mut commands: Commands,
     mut texts: Query<&mut Text, Without<SaveListTitleText>>,
     mut buttons: Query<
         (
@@ -319,6 +321,7 @@ pub fn update_save_list_styles(
             &Children,
             &mut BackgroundColor,
             &mut BorderColor,
+            Option<&DisabledButton>,
         ),
         (With<Button>, Without<SaveListCloseButton>),
     >,
@@ -342,7 +345,7 @@ pub fn update_save_list_styles(
         save_state: &save_state,
     };
     render_state.last_hover = hover.entity;
-    for (entity, action, children, mut background, mut border) in &mut buttons {
+    for (entity, action, children, mut background, mut border, disabled) in &mut buttons {
         let view = action.button_view(&ctx);
         let hovered = view.enabled && hover.entity == Some(entity);
 
@@ -362,8 +365,19 @@ pub fn update_save_list_styles(
         } else if view.enabled {
             raised_border()
         } else {
-            inset_border()
+            disabled_border()
         };
+
+        // 同步禁用标记，挡住全局 HoverButton 的按下/悬停反馈
+        match (view.enabled, disabled.is_some()) {
+            (false, false) => {
+                commands.entity(entity).insert(DisabledButton);
+            }
+            (true, true) => {
+                commands.entity(entity).remove::<DisabledButton>();
+            }
+            _ => {}
+        }
 
         if paint_labels {
             for child in children.iter() {

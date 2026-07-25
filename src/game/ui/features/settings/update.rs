@@ -314,7 +314,7 @@ pub fn update_settings_dropdowns_ui(
         if !open {
             continue;
         }
-        if let Some((left, top)) = dropdown_position(
+        if let Some((left, top, width)) = dropdown_position(
             SettingsAction::ToggleDropdown(list.0),
             &triggers,
             list_node,
@@ -322,6 +322,7 @@ pub fn update_settings_dropdowns_ui(
         ) {
             style.left = Val::Px(left);
             style.top = Val::Px(top);
+            style.width = Val::Px(width);
         }
     }
 }
@@ -331,12 +332,13 @@ fn dropdown_position(
     triggers: &Query<(&SettingsAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
     list_node: &ComputedNode,
     viewport: Vec2,
-) -> Option<(f32, f32)> {
+) -> Option<(f32, f32, f32)> {
     let (_, trigger_node, transform) = triggers
         .iter()
         .find(|(action, node, _)| **action == target && !node.is_empty())?;
     let trigger = ui_logical_bounds(trigger_node, transform);
     let list_size = list_node.size() * list_node.inverse_scale_factor();
+    let trigger_width = (trigger.max.x - trigger.min.x).max(120.0);
     let below = trigger.max.y + 4.0;
     let above = trigger.min.y - list_size.y - 4.0;
     let top = if below + list_size.y <= viewport.y - 10.0 || above < 10.0 {
@@ -348,13 +350,14 @@ fn dropdown_position(
     let left = trigger
         .min
         .x
-        .clamp(10.0, (viewport.x - list_size.x - 10.0).max(10.0));
-    Some((left, top))
+        .clamp(10.0, (viewport.x - trigger_width - 10.0).max(10.0));
+    Some((left, top, trigger_width))
 }
 
 pub fn update_settings_tabs_ui(
     ui_runtime: Res<UiRuntime>,
     settings_tab: Res<SettingsTab>,
+    config: Res<GameConfig>,
     hover: Res<UiHoverState>,
     mut initialized: Local<bool>,
     mut last_hover: Local<Option<Entity>>,
@@ -377,6 +380,7 @@ pub fn update_settings_tabs_ui(
 
     let full_refresh = !*initialized
         || settings_tab.is_changed()
+        || config.is_changed()
         || ui_runtime.is_changed()
         || !added.is_empty();
     if !full_refresh && hover.entity == *last_hover {
@@ -386,7 +390,7 @@ pub fn update_settings_tabs_ui(
 
     if full_refresh {
         for (entity, action, mut background, mut border) in &mut tab_buttons {
-            let selected = action.tab_selected(*settings_tab);
+            let selected = action.tab_selected(*settings_tab) || action.radio_selected(&config);
             let hovered = hover.entity == Some(entity);
             if selected {
                 *background = Color::srgb(0.56, 0.56, 0.56).into();
@@ -411,7 +415,7 @@ pub fn update_settings_tabs_ui(
         let Ok((_, action, mut background, mut border)) = tab_buttons.get_mut(entity) else {
             continue;
         };
-        let selected = action.tab_selected(*settings_tab);
+        let selected = action.tab_selected(*settings_tab) || action.radio_selected(&config);
         let hovered = next == Some(entity);
         if selected {
             *background = Color::srgb(0.56, 0.56, 0.56).into();
