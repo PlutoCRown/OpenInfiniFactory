@@ -23,16 +23,20 @@ else
   APK_PATH="release/app-release.apk"
 fi
 
-# 1. 用 cargo-ndk 编译 .so 到 jniLibs
+# 1. 刷新启动器图标（源：assets/app_icon.png）
+echo "==> Generating Android launcher icons..."
+"$ROOT_DIR/scripts/generate_app_icons.sh"
+
+# 2. 用 cargo-ndk 编译 .so 到 jniLibs
 echo "==> Building .so with cargo-ndk..."
 cargo ndk -t "$TARGET" -P 26 -o "$JNI_DIR" build $CARGO_FLAGS
 
-# 2. 用 Gradle 打包 APK
+# 3. 用 Gradle 打包 APK
 echo "==> Building APK with Gradle..."
 cd "$ANDROID_DIR"
 ./gradlew "$GRADLE_TASK" --no-daemon
 
-# 3. 收集产物
+# 4. 收集产物
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 cp "$ANDROID_DIR/app/build/outputs/apk/$APK_PATH" "$DIST_DIR/OpenInfiniFactory.apk"

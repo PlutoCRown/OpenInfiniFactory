@@ -380,9 +380,20 @@ fn setup_bake(
                     continue;
                 }
             }
-            let Some(out_path) = baked_block_icon_path(kind) else {
+            let Some(mut out_path) = baked_block_icon_path(kind) else {
                 continue;
             };
+            // 非默认文件名时改写输出路径（例如 --size 512 --output app_icon.png）
+            if config.output != "icon.png" {
+                let custom = Path::new(&config.output);
+                out_path = if custom.is_absolute() {
+                    custom.to_path_buf()
+                } else if config.output.contains('/') || config.output.contains('\\') {
+                    PathBuf::from(platform::asset_path()).join(custom)
+                } else {
+                    out_path.with_file_name(custom)
+                };
+            }
             push_bake_target(
                 &mut commands,
                 &mut images,

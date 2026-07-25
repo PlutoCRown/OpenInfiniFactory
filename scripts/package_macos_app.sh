@@ -21,6 +21,10 @@ BIN_PATH="$ROOT_DIR/target/release/$BIN_NAME"
 cp "$BIN_PATH" "$MACOS_DIR/$APP_NAME"
 cp -R "$ROOT_DIR/assets" "$RESOURCES_DIR/assets"
 
+# 应用图标（Finder / Dock）
+echo "==> Generating AppIcon.icns..."
+"$ROOT_DIR/scripts/generate_app_icons.sh" --icns "$RESOURCES_DIR/AppIcon.icns"
+
 # cargo strip=true 已去符号；再跑一遍系统 strip 兜底（幂等）
 strip "$MACOS_DIR/$APP_NAME" 2>/dev/null || true
 echo "binary: $(du -h "$MACOS_DIR/$APP_NAME" | awk '{print $1}') (release: lto + codegen-units=1)"
@@ -37,6 +41,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
   <string>$APP_NAME</string>
   <key>CFBundleExecutable</key>
   <string>$APP_NAME</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleIdentifier</key>
   <string>dev.openinfinifactory.prototype</string>
   <key>CFBundleInfoDictionaryVersion</key>
