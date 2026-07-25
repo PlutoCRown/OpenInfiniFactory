@@ -152,22 +152,14 @@ impl StructureState {
         Some(positions)
     }
 
-    /// 粘连分量是否含工厂结构（旋转器遇此则失败）
-    pub fn linked_contains_factory(
-        &self,
-        links: &SuctionLinks,
-        seed_pos: IVec3,
-    ) -> bool {
+    /// 粘连分量是否含工厂结构（材料旋转遇此则失败；工厂结构本身可转）
+    pub fn linked_contains_factory(&self, links: &SuctionLinks, seed_pos: IVec3) -> bool {
         let Some(seed_id) = self.id_at(seed_pos) else {
             return false;
         };
-        links
-            .component_ids(self, [seed_id])
-            .into_iter()
-            .any(|id| {
-                self.structure_by_id(id)
-                    .is_some_and(|s| s.kind == StructureKind::Factory)
-            })
+        links.component_ids(self, [seed_id]).into_iter().any(|id| {
+            self.structure_by_id(id)
+                .is_some_and(|s| s.kind == StructureKind::Factory)
+        })
     }
 }
-

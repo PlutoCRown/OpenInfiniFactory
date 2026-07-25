@@ -199,7 +199,9 @@ impl WorldBlocks {
         self.rotator_arrivals.retain(|rotator_pos, id| {
             self.blocks
                 .get(&(*rotator_pos + IVec3::Y))
-                .is_some_and(|block| block.kind.is_material() && block.id == *id)
+                .is_some_and(|block| {
+                    (block.kind.is_material() || block.kind.is_factory()) && block.id == *id
+                })
         });
     }
 

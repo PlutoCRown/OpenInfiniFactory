@@ -5,7 +5,7 @@ use crate::blocks::{BlockId, MovementRule};
 use crate::world::grid::WorldBlocks;
 
 use super::motion::PusherMotion;
-use super::structure_state::StructureState;
+use super::structure_state::{StructureKind, StructureState};
 use super::structures::{
     MovementMark, PusherActor, PusherAnimationKind, StructureMove, can_translate_structure,
 };
@@ -178,7 +178,7 @@ pub(super) fn mark_structure_movement_phase(
                 }
             }
             MovementRule::Rotate { clockwise } => {
-                if let Some(movement) = mark_rotate_material_structure(
+                if let Some(movement) = mark_rotate_structure(
                     world,
                     powered_devices,
                     structures,
@@ -497,7 +497,7 @@ fn mark_lift_structure(
     )
 }
 
-fn mark_rotate_material_structure(
+fn mark_rotate_structure(
     world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
     structures: &StructureState,
@@ -510,17 +510,18 @@ fn mark_rotate_material_structure(
         world.rotator_arrivals.remove(&pos);
     }
     let source = pos + IVec3::Y;
-    let material_id = world
-        .blocks
-        .get(&source)
-        .filter(|b| b.kind.is_material())?
-        .id;
-    if world.is_rotator_arrival(pos, material_id) {
+    let block = world.blocks.get(&source)?;
+    if !(block.kind.is_material() || block.kind.is_factory()) {
+        return None;
+    }
+    if world.is_rotator_arrival(pos, block.id) {
         return None;
     }
     let structure_id = structures.id_at(source)?;
-    // 粘连组含工厂时不允许旋转
-    if structures.linked_contains_factory(suction, source) {
+    // 材料被吸盘粘到工厂时不转；纯工厂结构可以转
+    if structures.kind_at(source) == Some(StructureKind::Material)
+        && structures.linked_contains_factory(suction, source)
+    {
         return None;
     }
     let structure = structures.linked_pushable_at(suction, source, IVec3::ZERO)?;

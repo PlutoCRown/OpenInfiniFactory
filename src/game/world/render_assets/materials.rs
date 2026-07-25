@@ -2,7 +2,8 @@
 
 use bevy::prelude::*;
 
-use crate::game::blocks::{BlockKind, BlockPresent};
+use crate::game::blocks::{BlockKind, BlockPresent, PersistentLayer};
+use crate::game::world::rendering::depth_bias;
 
 /// 纯色方块材质
 pub(super) fn block_material(kind: BlockKind) -> StandardMaterial {
@@ -16,17 +17,27 @@ pub(super) fn block_material(kind: BlockKind) -> StandardMaterial {
         material.alpha_mode = AlphaMode::Blend;
         material.unlit = kind.is_generated_marker();
     }
+    apply_system_shell_bias(&mut material, kind);
     material
 }
 
 /// 带贴图的方块材质
 pub(super) fn textured_block_material(kind: BlockKind, texture: Handle<Image>) -> StandardMaterial {
-    StandardMaterial {
+    let mut material = StandardMaterial {
         base_color: kind.material(),
         base_color_texture: Some(texture),
         perceptual_roughness: 0.94,
         reflectance: 0.10,
         ..default()
+    };
+    apply_system_shell_bias(&mut material, kind);
+    material
+}
+
+/// 谜题系统满格壳：与邻接工厂/材料共面时用 bias 分层（替代旧 1.05 缩放）
+fn apply_system_shell_bias(material: &mut StandardMaterial, kind: BlockKind) {
+    if kind.is_system_block() && kind.persistent_layer() == Some(PersistentLayer::Puzzle) {
+        material.depth_bias = depth_bias::SYSTEM_SHELL;
     }
 }
 

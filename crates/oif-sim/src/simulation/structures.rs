@@ -709,7 +709,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                         if let Some(id) = world
                             .blocks
                             .get(&(rotator_pos + IVec3::Y))
-                            .filter(|block| block.kind.is_material())
+                            .filter(|block| block.kind.is_material() || block.kind.is_factory())
                             .map(|block| block.id)
                         {
                             world.mark_rotator_arrival(rotator_pos, id);

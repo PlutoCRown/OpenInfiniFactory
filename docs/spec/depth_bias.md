@@ -20,6 +20,7 @@ Bevy `StandardMaterial.depth_bias` / `Material::depth_bias()` 会：
 |------|----|------|
 | （默认 / 本体） | `0` | 普通方块；`StandardMaterial` 默认，代码里一般不写常量 |
 | `GOAL_GHOST` | `-1000` | 验收器游玩态目标材料虚影（`GoalGhostMaterial`） |
+| `SYSTEM_SHELL` | `500` | 谜题系统满格壳（生成器等）；抗与工厂/材料共面，替代旧 `1.05` 放大 |
 | `PORTAL` | `1000` | 传送门半透明立方体（满格 `1×1×1`，`PortalMaterial`） |
 | `PAINT` | `1000` | 滚刷漆等零厚度面贴片（`face_mark_*`）；灯面板用默认 `0` |
 | `OVERLAY` | `2000` | 瞄准面高亮、选区/删除包围盒、结构悬停线框等叠层 |
