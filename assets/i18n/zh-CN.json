@@ -242,6 +242,7 @@
   "inventory.holding": "拿着：{item}",
   "inventory.title": "背包 - {mode} 模式",
   "item.light_panel": "灯面板",
+  "toast.cannot_place_on_surface": "该表面不可放置 {item}",
   "labeler.color": "颜色：{color}",
   "labeler.title": "标记设置",
   "main.title": "OpenInfiniFactory",

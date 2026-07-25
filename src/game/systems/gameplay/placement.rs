@@ -14,6 +14,7 @@ use crate::game::state::{
     SimulationState, SolutionState,
 };
 use crate::game::systems::debug::DebugState;
+use crate::game::ui::features::GameplayToast;
 use crate::game::ui::features::block_panels::PendingBlockPanelOpen;
 use crate::game::ui::{AreaKind, InventoryItems, UiRuntime};
 use crate::game::world::direction::Facing;
@@ -24,6 +25,7 @@ use crate::game::world::rendering::{
 };
 use crate::scene::{BlockEntityIndex, refresh_edit_changes};
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
+use crate::shared::i18n::I18n;
 
 use super::edit_ops::{
     alternate_block_at, pick_target_block, rotate_block_at, rotate_facing, shift_pressed,
@@ -46,6 +48,8 @@ pub struct PlacementQueries<'w, 's> {
     input: Res<'w, crate::game::input::GameplayInputState>,
     touch: Res<'w, crate::shared::touch_profile::TouchProfile>,
     pending_block_panel: ResMut<'w, PendingBlockPanelOpen>,
+    locale: Res<'w, I18n>,
+    toast: ResMut<'w, GameplayToast>,
 }
 
 /// 处理放置/删除手势、取块、旋转与框选入口
@@ -79,6 +83,8 @@ pub fn placement_input(
         input,
         touch,
         mut pending_block_panel,
+        locale,
+        mut toast,
     } = queries;
 
     if *mode.get() != GameMode::Playing || !playing_ui.active_play() {
@@ -371,6 +377,8 @@ pub fn placement_input(
     if input.place.just_pressed {
         // 灯面板：点在电线表面即时粘贴，不走占格手势
         if inventory.hotbar[placement.selected].is_some_and(|item| item.is_light_panel()) {
+            let item_name = locale.t("item.light_panel").to_string();
+            let mut placed = false;
             if let Some(target) = placement
                 .target
                 .filter(|target| target.normal != IVec3::ZERO)
@@ -413,9 +421,15 @@ pub fn placement_input(
                                 &mut scene_chunks,
                             );
                             solution_state.dirty = true;
+                            placed = true;
+                        } else {
+                            placed = true;
                         }
                     }
                 }
+            }
+            if !placed {
+                toast.show_cannot_place_on_surface(&locale, &item_name);
             }
             placement.edit_gesture = None;
             despawn_edit_previews(&mut commands, &edit_previews);
@@ -435,6 +449,12 @@ pub fn placement_input(
                                 (target.normal != IVec3::ZERO).then_some(target.normal)
                             })
                             .unwrap_or(IVec3::Y);
+                        if block.kind.attaches_to_factory_face()
+                            && !world.can_place_sign_on_face(start - plane_normal, plane_normal)
+                        {
+                            let item_name = locale.t(block.kind.name_key()).to_string();
+                            toast.show_cannot_place_on_surface(&locale, &item_name);
+                        }
                         placement.edit_gesture = Some(EditGesture {
                             kind: EditGestureKind::Place { block },
                             start,
@@ -463,6 +483,12 @@ pub fn placement_input(
     if should_finish {
         if let Some(gesture) = placement.edit_gesture.take() {
             if !gesture.canceled {
+                let surface_item = match &gesture.kind {
+                    EditGestureKind::Place { block } if block.kind.attaches_to_factory_face() => {
+                        Some(block.kind.name_key())
+                    }
+                    _ => None,
+                };
                 if commit_edit_gesture(
                     gesture,
                     current_place_at,
@@ -481,6 +507,9 @@ pub fn placement_input(
                     &mut scene_chunks,
                 ) {
                     solution_state.dirty = true;
+                } else if let Some(name_key) = surface_item {
+                    let item_name = locale.t(name_key).to_string();
+                    toast.show_cannot_place_on_surface(&locale, &item_name);
                 }
             }
         }

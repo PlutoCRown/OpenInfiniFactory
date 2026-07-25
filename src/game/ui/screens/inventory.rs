@@ -47,8 +47,10 @@ pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
             bottom: Val::Px(0.0),
             width: Val::Percent(100.0),
             display: Display::Flex,
-            justify_content: JustifyContent::Center,
+            flex_direction: FlexDirection::Column,
+            justify_content: JustifyContent::FlexEnd,
             align_items: AlignItems::Center,
+            padding: UiRect::bottom(Val::Px(0.0)),
             ..default()
         },
         Pickable::IGNORE,
@@ -56,6 +58,7 @@ pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
         GameplayHudVisibility,
     ))
     .with_children(|anchor| {
+        crate::game::ui::features::gameplay_toast::spawn_gameplay_toast(anchor);
         // 高于视角层(0)、低于虚拟按键(10)，触屏才能点到快捷栏
         anchor
             .spawn((

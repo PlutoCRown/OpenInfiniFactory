@@ -242,6 +242,7 @@
   "inventory.holding": "Holding: {item}",
   "inventory.title": "Inventory - {mode} Mode",
   "item.light_panel": "Light Panel",
+  "toast.cannot_place_on_surface": "Cannot place {item} on this surface",
   "labeler.color": "Color: {color}",
   "labeler.title": "Labeler",
   "main.title": "OpenInfiniFactory",

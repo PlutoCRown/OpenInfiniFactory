@@ -1,4 +1,5 @@
 pub mod block_panels;
+pub mod gameplay_toast;
 pub mod inventory;
 pub mod pause_menu;
 pub mod playing_overlays;
@@ -17,6 +18,7 @@ use settings::settings_menu_actions;
 use crate::game::ui::core::host::{dispatch_ui_action, dispatch_ui_host_completions};
 
 pub use block_panels::BlockPanelsPlugin;
+pub use gameplay_toast::{GameplayToast, GameplayToastPlugin};
 pub use inventory::InventoryPlugin;
 pub use pause_menu::PauseMenuPlugin;
 pub use playing_overlays::PlayingOverlaysPlugin;
@@ -43,6 +45,7 @@ impl Plugin for UiFeaturesPlugin {
             SettingsPlugin,
             BlockPanelsPlugin,
             InventoryPlugin,
+            GameplayToastPlugin,
             SessionBusyUiPlugin,
             VirtualRemotePlugin,
         ))
