@@ -277,7 +277,7 @@ impl StructureMove {
     }
 }
 
-/// 合并重力与设备运动标签：保留全部重叠标签，按优先级排序，执行时再 fallback
+/// 合并重力与设备运动标签：抬升覆盖重力；其余重叠保留，按优先级排序，执行时再 fallback
 pub(super) fn merge_structure_movement_plan(
     mut planned_moves: Vec<StructureMove>,
     device_moves: Vec<StructureMove>,
@@ -289,6 +289,33 @@ pub(super) fn merge_structure_movement_plan(
     let living_blocks: HashSet<BlockId> = world.blocks.values().map(|block| block.id).collect();
     influence_cache.prune_missing(&living_structures, &living_blocks);
     planned_moves.extend(device_moves);
+    // 抬升标签本身表达「压住重力」：重叠格子上的重力标签直接丢掉
+    let lift_positions: HashSet<IVec3> = planned_moves
+        .iter()
+        .filter_map(|movement| match movement {
+            StructureMove::Translate {
+                mark: MovementMark::Vertical,
+                source: Some(_),
+                structure,
+                ..
+            } => Some(structure.iter().copied()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    if !lift_positions.is_empty() {
+        planned_moves.retain(|movement| {
+            !matches!(
+                movement,
+                StructureMove::Translate {
+                    mark: MovementMark::Vertical,
+                    source: None,
+                    structure,
+                    ..
+                } if structure.iter().any(|pos| lift_positions.contains(pos))
+            )
+        });
+    }
     planned_moves.sort_by(|a, b| compare_movement_priority(a, b, influence_cache));
     // 同结构同位移的 Push 合并推杆，粘头也能同回合同步推
     coalesce_same_push_moves(planned_moves)
@@ -432,11 +459,13 @@ impl ConveyorSourcePriority {
     }
 }
 
+/// 抬到 range 上一格（range=5 时为第 6 格）后悬停：已出抬升标记范围，靠此抑制重力，避免边缘上下弹跳
 fn structure_supported_by_lifter(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
     world.blocks.iter().any(|(pos, block)| {
         matches!(
             block.kind.movement_rule(block.facing),
-            Some(MovementRule::Lift { range }) if structure.contains(&(*pos + IVec3::Y * (range + 1)))
+            Some(MovementRule::Lift { range })
+                if structure.contains(&(*pos + IVec3::Y * (range + 1)))
         )
     })
 }
@@ -528,6 +557,7 @@ pub(super) fn apply_fragile_shatter_before_execute(
 /// 按序执行运动标签：失败则试下一个；种子判占用，成功后标记展开后的格子。
 /// `hard_pusher_head_occupancy` 为本回合开始时已伸出的头；执行中随 Push 伸出/收回更新。
 /// `moved`：本回合真实平移过的格子；`gravity_held`：空头/推杆本体，只抑重力不挡其它 Push。
+/// 抬升与重力的互斥在 merge 阶段完成（有抬升标签则丢掉重叠重力），此处不再为抬升失败写 gravity_held。
 pub(super) fn execute_structure_moves_with_pushers(
     world: &mut WorldBlocks,
     moves: Vec<StructureMove>,

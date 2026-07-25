@@ -102,9 +102,20 @@ pub fn placement_input(
         .mouse_button()
         .unwrap_or(MouseButton::Middle);
 
-    if ui_runtime.blocks_gameplay() || simulation.is_active() {
+    if ui_runtime.blocks_gameplay() {
         placement.edit_gesture = None;
         despawn_edit_previews(&mut commands, &edit_previews);
+        return;
+    }
+
+    // 模拟期禁止编辑，但仍允许右键传送玩家
+    if simulation.is_active() {
+        placement.edit_gesture = None;
+        despawn_edit_previews(&mut commands, &edit_previews);
+        if *builder_mode == BuilderMode::Play && input.delete.just_pressed {
+            let current_target_pos = placement.target.map(|target| target.pos);
+            try_player_teleport(current_target_pos, &world, &mut player);
+        }
         return;
     }
 

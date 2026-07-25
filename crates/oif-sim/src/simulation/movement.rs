@@ -170,8 +170,8 @@ pub(super) fn mark_structure_movement_phase(
                 }
             }
             MovementRule::Lift { range } => {
-                if let Some(movement) = mark_lift_structure(world, structures, pos, range, suction)
-                {
+                // 与参考实现一致：range 内每个可动结构各自打抬升标签（叠层同拍一起抬）
+                for movement in mark_lift_structures(world, structures, pos, range, suction) {
                     if let Some(source_id) = source_id {
                         moves.push(movement.with_source(source_id, pos));
                     }
@@ -470,31 +470,52 @@ fn mark_structure_translate(
     ))
 }
 
-fn mark_lift_structure(
+/// 抬升器 range 内每个可动结构各打一条抬升标签（不并成一条，避免只抬底层）
+fn mark_lift_structures(
     world: &WorldBlocks,
     structures: &StructureState,
     pos: IVec3,
     range: i32,
     suction: &SuctionLinks,
-) -> Option<StructureMove> {
-    let source = (1..=range)
-        .map(|height| pos + IVec3::Y * height)
-        .find(|candidate| {
-            world.is_material_at(*candidate)
-                || structures
-                    .linked_pushable_at(suction, *candidate, IVec3::Y)
-                    .is_some()
-        })?;
-
-    mark_structure_translate(
-        world,
-        structures,
-        pos,
-        source,
-        IVec3::Y,
-        MovementMark::Vertical,
-        suction,
-    )
+) -> Vec<StructureMove> {
+    let mut moves = Vec::new();
+    let mut seen_ids = HashSet::new();
+    for height in 1..=range {
+        let candidate = pos + IVec3::Y * height;
+        let Some(id) = structures.id_at(candidate) else {
+            continue;
+        };
+        if !seen_ids.insert(id) {
+            continue;
+        }
+        let eligible = world.is_material_at(candidate)
+            || structures
+                .linked_pushable_at(suction, candidate, IVec3::Y)
+                .is_some();
+        if !eligible {
+            seen_ids.remove(&id);
+            continue;
+        }
+        let Some(movement) = mark_structure_translate(
+            world,
+            structures,
+            pos,
+            candidate,
+            IVec3::Y,
+            MovementMark::Vertical,
+            suction,
+        ) else {
+            seen_ids.remove(&id);
+            continue;
+        };
+        for member in movement.structure() {
+            if let Some(member_id) = structures.id_at(*member) {
+                seen_ids.insert(member_id);
+            }
+        }
+        moves.push(movement);
+    }
+    moves
 }
 
 fn mark_rotate_structure(
