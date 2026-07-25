@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared::persistent_storage;
 use crate::shared::save_format::{
-    self, BLOCKS_FILE, META_FILE, SKYBOX_FILE, SaveBlocksData, SavedBlock,
+    self, BLOCKS_FILE, COVER_FILE, META_FILE, SKYBOX_FILE, SaveBlocksData, SavedBlock,
 };
 
 /// 存档快捷栏格数（与 UI 快捷栏一致）
@@ -101,12 +101,35 @@ impl SaveSlot {
     }
 }
 
+/// 读取存档封面 PNG（vault 优先；桌面再回退磁盘截图路径）
+pub fn read_cover_png(slot: &SaveSlot) -> Option<Vec<u8>> {
+    let path = slot.storage_path();
+    if let Some(bytes) = persistent_storage::read_save_bytes(&path, COVER_FILE) {
+        if !bytes.is_empty() {
+            return Some(bytes);
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let disk = crate::shared::platform::saves_directory()
+            .join(&path)
+            .join(COVER_FILE);
+        return std::fs::read(disk).ok().filter(|bytes| !bytes.is_empty());
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        None
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct SaveState {
     pub current: Option<SaveSlot>,
     pub current_kind: Option<SaveKind>,
     pub entries: Vec<SaveEntry>,
     pub selected_puzzle: Option<String>,
+    /// 存档列表中选中的方案（storage 名）
+    pub selected_solution: Option<String>,
     selected_puzzle_solutions: Vec<SaveEntry>,
 }
 
@@ -114,6 +137,7 @@ impl SaveState {
     pub fn refresh(&mut self) {
         self.entries = list_save_entries();
         self.refresh_selected_puzzle_solutions();
+        self.prune_selected_solution();
     }
 
     pub fn puzzles(&self) -> Vec<&SaveEntry> {
@@ -128,7 +152,15 @@ impl SaveState {
             return;
         }
         self.selected_puzzle = puzzle;
+        self.selected_solution = None;
         self.refresh_selected_puzzle_solutions();
+    }
+
+    pub fn select_solution(&mut self, solution: Option<String>) {
+        if self.selected_solution == solution {
+            return;
+        }
+        self.selected_solution = solution;
     }
 
     pub fn selected_puzzle_solutions(&self) -> &[SaveEntry] {
@@ -145,6 +177,20 @@ impl SaveState {
                 .collect(),
             None => Vec::new(),
         };
+        self.prune_selected_solution();
+    }
+
+    fn prune_selected_solution(&mut self) {
+        let Some(selected) = self.selected_solution.as_deref() else {
+            return;
+        };
+        let still_there = self
+            .selected_puzzle_solutions
+            .iter()
+            .any(|entry| entry.slot.solution.as_deref() == Some(selected));
+        if !still_there {
+            self.selected_solution = None;
+        }
     }
 }
 

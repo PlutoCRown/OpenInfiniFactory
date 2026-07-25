@@ -1,54 +1,317 @@
+use bevy::asset::RenderAssetUsages;
+use bevy::image::{CompressedImageFormats, ImageFormat, ImageType};
+use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
+use bevy::tasks::{AsyncComputeTaskPool, block_on, futures_lite::future};
 
-use crate::game::state::{GameMode, SolutionState, StartMenuScreen, WorldEntryMode};
-use crate::game::ui::access::{UiMainThread, i18n};
+use crate::game::state::{GameMode, StartMenuScreen};
+use crate::game::ui::access::UiMainThread;
 use crate::game::ui::components::{
     BUTTON_BG, BUTTON_HOVER_BG, hover_border, inset_border, pressed_border, raised_border,
 };
-use crate::game::ui::screens::{spawn_save_management_row, spawn_save_select_row};
+use crate::game::ui::screens::{spawn_save_puzzle_row, spawn_save_solution_card};
 use crate::game::ui::types::{
-    SaveListAction, SaveListCloseButton, SaveListCreateButton, SaveListPrompt,
-    SaveListPuzzleColumn, SaveListPuzzleRows, SaveListRenderState, SaveListSolutionColumn,
-    SaveListSolutionRows, SaveListTitleText, UiHoverState,
+    SaveListAction, SaveListCloseButton, SaveListCoverHost, SaveListCoverImage,
+    SaveListCoverLoading, SaveListPuzzleRows, SaveListPuzzleScroll, SaveListRenderState,
+    SaveListSolutionRows, SaveListSolutionScroll, SaveListTitleText, UiHoverState,
 };
-use crate::shared::save::SaveState;
+use crate::shared::save::{SaveSlot, SaveState, read_cover_png};
 
-use super::view::{SaveListColumn, SaveListViewCtx, save_list_puzzle_rows, save_list_title};
+use super::view::{SaveListViewCtx, save_list_puzzle_rows, save_list_title};
 
-pub fn update_save_list_ui(
+fn save_list_visible(mode: &State<GameMode>, screen: &StartMenuScreen) -> bool {
+    *mode.get() == GameMode::StartMenu && *screen == StartMenuScreen::SaveList
+}
+
+/// 重建谜题/方案行，并刷新标题
+pub fn update_save_list_rows(
     _ui_thread: UiMainThread,
     mode: Res<State<GameMode>>,
     start_menu_screen: Res<StartMenuScreen>,
     save_state: Res<SaveState>,
-    solution_state: Res<SolutionState>,
-    hover: Res<UiHoverState>,
     mut render_state: ResMut<SaveListRenderState>,
     mut commands: Commands,
-    mut texts: ParamSet<(
-        Query<&mut Text, With<SaveListTitleText>>,
-        Query<&mut Text, (Without<SaveListTitleText>, Without<SaveListPrompt>)>,
-        Query<&mut Text, With<SaveListPrompt>>,
-    )>,
-    mut column_nodes: ParamSet<(
-        Query<&mut Node, (With<SaveListPuzzleColumn>, Without<SaveListSolutionColumn>)>,
-        Query<
-            (&mut Node, &mut Visibility),
-            (With<SaveListSolutionColumn>, Without<SaveListPuzzleColumn>),
-        >,
-        Query<
-            (&SaveListAction, &mut Node),
-            (
-                With<SaveListCreateButton>,
-                With<Button>,
-                Without<SaveListPuzzleColumn>,
-                Without<SaveListSolutionColumn>,
-            ),
-        >,
-    )>,
-    added_titles: Query<(), Added<SaveListTitleText>>,
-    puzzle_rows_query: Query<Entity, (With<SaveListPuzzleRows>, Without<SaveListSolutionRows>)>,
-    solution_rows_query: Query<Entity, (With<SaveListSolutionRows>, Without<SaveListPuzzleRows>)>,
+    mut titles: Query<&mut Text, With<SaveListTitleText>>,
+    puzzle_rows_query: Query<Entity, With<SaveListPuzzleRows>>,
+    solution_rows_query: Query<Entity, With<SaveListSolutionRows>>,
     children_query: Query<&Children>,
+) {
+    if !save_list_visible(&mode, &start_menu_screen) {
+        return;
+    }
+
+    let puzzle_rows = save_list_puzzle_rows(&save_state);
+    let solution_rows = save_state
+        .selected_puzzle_solutions()
+        .iter()
+        .filter_map(|entry| entry.slot.solution.clone())
+        .collect::<Vec<_>>();
+
+    let structure_changed =
+        mode.is_changed() || start_menu_screen.is_changed() || save_state.is_changed();
+
+    let puzzle_rows_stale =
+        row_hosts_stale(puzzle_rows_query.iter(), &children_query, puzzle_rows.len())
+            || render_state.puzzle_keys != puzzle_rows;
+    let solution_expected = if save_state.selected_puzzle.is_some() {
+        solution_rows.len() + 1
+    } else {
+        0
+    };
+    let solution_rows_stale = row_hosts_stale(
+        solution_rows_query.iter(),
+        &children_query,
+        solution_expected,
+    ) || render_state.solution_keys != solution_rows;
+
+    if structure_changed {
+        let title = save_list_title();
+        for mut text in &mut titles {
+            if text.0 != title {
+                text.0 = title.clone();
+            }
+        }
+    }
+
+    let mut rebuilt = false;
+    if puzzle_rows_stale {
+        if puzzle_rows_query.is_empty() {
+            render_state.paint_buttons = true;
+        } else {
+            for entity in &puzzle_rows_query {
+                commands.entity(entity).despawn_related::<Children>();
+                commands.entity(entity).with_children(|parent| {
+                    for name in &puzzle_rows {
+                        spawn_save_puzzle_row(parent, name.clone());
+                    }
+                });
+            }
+            render_state.puzzle_keys = puzzle_rows;
+            rebuilt = true;
+        }
+    }
+
+    if solution_rows_stale {
+        if solution_rows_query.is_empty() {
+            render_state.paint_buttons = true;
+        } else {
+            for entity in &solution_rows_query {
+                commands.entity(entity).despawn_related::<Children>();
+                commands.entity(entity).with_children(|parent| {
+                    for name in &solution_rows {
+                        spawn_save_solution_card(parent, Some(name.clone()));
+                    }
+                    if save_state.selected_puzzle.is_some() {
+                        spawn_save_solution_card(parent, None);
+                    }
+                });
+            }
+            render_state.solution_keys = solution_rows;
+            rebuilt = true;
+        }
+    }
+
+    if rebuilt {
+        render_state.paint_buttons = true;
+        render_state.rows_rebuilt = true;
+    } else {
+        render_state.rows_rebuilt = false;
+    }
+}
+
+/// 刷新封面图（后台读盘解码，不阻塞点选；含 object-fit: cover 尺寸）
+pub fn update_save_list_cover(
+    mode: Res<State<GameMode>>,
+    start_menu_screen: Res<StartMenuScreen>,
+    save_state: Res<SaveState>,
+    mut render_state: ResMut<SaveListRenderState>,
+    mut images: ResMut<Assets<Image>>,
+    mut cover_images: Query<(&mut ImageNode, &mut Node), With<SaveListCoverImage>>,
+    mut cover_loading: Query<&mut Visibility, With<SaveListCoverLoading>>,
+    cover_hosts: Query<&ComputedNode, With<SaveListCoverHost>>,
+) {
+    if !save_list_visible(&mode, &start_menu_screen) {
+        render_state.cover_task = None;
+        return;
+    }
+
+    let cover_slot = if let Some(solution) = save_state.selected_solution.as_ref() {
+        save_state
+            .selected_puzzle
+            .as_ref()
+            .map(|puzzle| SaveSlot::solution(puzzle.clone(), solution.clone()))
+    } else {
+        save_state
+            .selected_puzzle
+            .as_ref()
+            .map(|puzzle| SaveSlot::puzzle(puzzle.clone()))
+    };
+    let next_key = cover_slot
+        .as_ref()
+        .map(|slot| slot.storage_path())
+        .unwrap_or_default();
+    let key_changed = render_state.cover_key.as_deref() != Some(next_key.as_str());
+
+    if key_changed {
+        render_state.cover_key = Some(next_key.clone());
+        render_state.cover_task = None;
+        for (mut image_node, mut node) in cover_images.iter_mut() {
+            *image_node = ImageNode::default();
+            node.display = Display::None;
+        }
+        let show_loading = !next_key.is_empty();
+        for mut visibility in cover_loading.iter_mut() {
+            *visibility = if show_loading {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            };
+        }
+        if let Some(slot) = cover_slot {
+            let key = next_key.clone();
+            render_state.cover_task = Some(AsyncComputeTaskPool::get().spawn(async move {
+                let image = read_cover_png(&slot).and_then(|bytes| {
+                    Image::from_buffer(
+                        &bytes,
+                        ImageType::Format(ImageFormat::Png),
+                        CompressedImageFormats::NONE,
+                        true,
+                        bevy::image::ImageSampler::Default,
+                        RenderAssetUsages::default(),
+                    )
+                    .ok()
+                });
+                (key, image)
+            }));
+        }
+    }
+
+    if let Some(mut task) = render_state.cover_task.take() {
+        match block_on(future::poll_once(&mut task)) {
+            Some((done_key, image_opt)) => {
+                if render_state.cover_key.as_deref() == Some(done_key.as_str()) {
+                    for mut visibility in cover_loading.iter_mut() {
+                        *visibility = Visibility::Hidden;
+                    }
+                    match image_opt {
+                        Some(image) => {
+                            let handle = images.add(image);
+                            for (mut image_node, mut node) in cover_images.iter_mut() {
+                                *image_node = ImageNode {
+                                    image: handle.clone(),
+                                    image_mode: NodeImageMode::Stretch,
+                                    ..default()
+                                };
+                                node.display = Display::Flex;
+                            }
+                        }
+                        None => {
+                            for (mut image_node, mut node) in cover_images.iter_mut() {
+                                *image_node = ImageNode::default();
+                                node.display = Display::None;
+                            }
+                        }
+                    }
+                }
+            }
+            None => {
+                render_state.cover_task = Some(task);
+            }
+        }
+    }
+
+    for (mut image_node, mut node) in cover_images.iter_mut() {
+        if node.display == Display::None {
+            continue;
+        }
+        let Some(host) = cover_hosts.iter().next() else {
+            continue;
+        };
+        if host.is_empty() {
+            continue;
+        }
+        let Some(image) = images.get(&image_node.image) else {
+            continue;
+        };
+        let size = image.size();
+        if size.x == 0 || size.y == 0 {
+            continue;
+        }
+        let inv = host.inverse_scale_factor();
+        let host_w = host.size().x * inv;
+        let host_h = host.size().y * inv;
+        if host_w <= 1.0 || host_h <= 1.0 {
+            continue;
+        }
+        let img_aspect = size.x as f32 / size.y as f32;
+        let host_aspect = host_w / host_h;
+        let (w, h) = if host_aspect > img_aspect {
+            (host_w, host_w / img_aspect)
+        } else {
+            (host_h * img_aspect, host_h)
+        };
+        node.width = Val::Px(w);
+        node.height = Val::Px(h);
+        node.left = Val::Px((host_w - w) * 0.5);
+        node.top = Val::Px((host_h - h) * 0.5);
+        node.position_type = PositionType::Absolute;
+    }
+}
+
+/// 谜题纵滑 + 方案横滑
+pub fn update_save_list_scroll(
+    mode: Res<State<GameMode>>,
+    start_menu_screen: Res<StartMenuScreen>,
+    hover: Res<UiHoverState>,
+    children_query: Query<&Children>,
+    parents: Query<&ChildOf>,
+    mut mouse_wheel: MessageReader<MouseWheel>,
+    mut puzzle_scroll: Query<(Entity, &mut SaveListPuzzleScroll, &ComputedNode, &Children)>,
+    mut puzzle_content: Query<&mut Node, (With<SaveListPuzzleRows>, Without<SaveListSolutionRows>)>,
+    mut solution_scroll: Query<(
+        Entity,
+        &mut SaveListSolutionScroll,
+        &ComputedNode,
+        &Children,
+    )>,
+    mut solution_content: Query<
+        &mut Node,
+        (With<SaveListSolutionRows>, Without<SaveListPuzzleRows>),
+    >,
+) {
+    if !save_list_visible(&mode, &start_menu_screen) {
+        mouse_wheel.clear();
+        return;
+    }
+
+    let wheel: f32 = mouse_wheel.read().map(|e| e.y).sum();
+    update_puzzle_vscroll(
+        wheel,
+        &mut puzzle_scroll,
+        &mut puzzle_content,
+        hover.entity,
+        &children_query,
+        &parents,
+    );
+    update_solution_hscroll(
+        wheel,
+        &mut solution_scroll,
+        &mut solution_content,
+        hover.entity,
+        &children_query,
+        &parents,
+    );
+}
+
+/// 刷新按钮样式与文案
+pub fn update_save_list_styles(
+    _ui_thread: UiMainThread,
+    mode: Res<State<GameMode>>,
+    start_menu_screen: Res<StartMenuScreen>,
+    save_state: Res<SaveState>,
+    hover: Res<UiHoverState>,
+    mut render_state: ResMut<SaveListRenderState>,
+    mut texts: Query<&mut Text, Without<SaveListTitleText>>,
     mut buttons: Query<
         (
             Entity,
@@ -57,205 +320,27 @@ pub fn update_save_list_ui(
             &mut BackgroundColor,
             &mut BorderColor,
         ),
-        (
-            With<Button>,
-            Without<SaveListCloseButton>,
-            Without<SaveListPuzzleColumn>,
-            Without<SaveListSolutionColumn>,
-            Without<SaveListPuzzleRows>,
-            Without<SaveListSolutionRows>,
-        ),
+        (With<Button>, Without<SaveListCloseButton>),
     >,
 ) {
-    // 存档列表未显示时不刷
-    if *mode.get() != GameMode::StartMenu || *start_menu_screen != StartMenuScreen::SaveList {
+    if !save_list_visible(&mode, &start_menu_screen) {
         return;
     }
 
-    let play_flow = solution_state.save_list_entry == WorldEntryMode::PlaySolution;
-    let edit_flow = solution_state.save_list_entry == WorldEntryMode::EditPuzzle;
-    let puzzle_rows = save_list_puzzle_rows(&save_state);
-    let solution_rows = save_state
-        .selected_puzzle_solutions()
-        .iter()
-        .filter_map(|entry| entry.slot.solution.clone())
-        .collect::<Vec<_>>();
-    let show_solutions = play_flow && save_state.selected_puzzle.is_some();
-
-    let structure_changed = mode.is_changed()
-        || start_menu_screen.is_changed()
-        || save_state.is_changed()
-        || solution_state.is_changed()
-        || render_state.paint_buttons
-        || !added_titles.is_empty();
-    let mut rebuilt_rows = false;
-
-    let entry = solution_state.save_list_entry;
-    let puzzle_column = if edit_flow {
-        SaveListColumn::PuzzleEdit
-    } else {
-        SaveListColumn::PuzzlePlay
-    };
-    // 按需挂载后行容器是空壳；或挂载当帧实体尚未出现时，不能信 keys 缓存
-    let puzzle_rows_stale =
-        row_hosts_stale(puzzle_rows_query.iter(), &children_query, puzzle_rows.len())
-            || render_state.entry != Some(entry)
-            || render_state.puzzle_keys != puzzle_rows;
-    let solution_rows_stale = row_hosts_stale(
-        solution_rows_query.iter(),
-        &children_query,
-        solution_rows.len(),
-    ) || render_state.entry != Some(entry)
-        || render_state.solution_keys != solution_rows;
-
-    if structure_changed {
-        let title = save_list_title(
-            *mode.get(),
-            *start_menu_screen,
-            solution_state.save_list_entry,
-        );
-        for mut text in &mut texts.p0() {
-            if text.0 != title {
-                text.0 = title.clone();
-            }
-        }
-
-        for mut node in &mut column_nodes.p0() {
-            if node.display != Display::Flex {
-                node.display = Display::Flex;
-            }
-        }
-        let solution_display = if show_solutions {
-            Display::Flex
-        } else {
-            Display::None
-        };
-        let solution_visibility = if show_solutions {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
-        for (mut node, mut visibility) in &mut column_nodes.p1() {
-            if node.display != solution_display {
-                node.display = solution_display;
-            }
-            visibility.set_if_neq(solution_visibility);
-        }
-        for (action, mut node) in &mut column_nodes.p2() {
-            let next = match action {
-                SaveListAction::NewPuzzle => {
-                    if edit_flow {
-                        Display::Flex
-                    } else {
-                        Display::None
-                    }
-                }
-                SaveListAction::NewSolution => {
-                    // 方案面板本身会显隐；按钮保持可见即可
-                    Display::Flex
-                }
-                _ => node.display,
-            };
-            if node.display != next {
-                node.display = next;
-            }
-        }
-
-        let prompt = if play_flow && save_state.selected_puzzle.is_none() {
-            i18n.t("save.choose_puzzle_prompt")
-        } else {
-            String::new()
-        };
-        for mut text in &mut texts.p2() {
-            if text.0 != prompt {
-                text.0 = prompt.clone();
-            }
-        }
-    }
-
-    if puzzle_rows_stale {
-        if puzzle_rows_query.is_empty() {
-            // 挂载命令尚未生效，下一帧再重建；勿写 cache
-            render_state.paint_buttons = true;
-        } else {
-            for entity in &puzzle_rows_query {
-                rebuild_rows(&mut commands, entity, puzzle_column, &puzzle_rows);
-            }
-            render_state.puzzle_keys = puzzle_rows.clone();
-            rebuilt_rows = true;
-        }
-    }
-    if solution_rows_stale {
-        if solution_rows_query.is_empty() {
-            render_state.paint_buttons = true;
-        } else {
-            for entity in &solution_rows_query {
-                rebuild_rows(
-                    &mut commands,
-                    entity,
-                    SaveListColumn::Solution,
-                    &solution_rows,
-                );
-            }
-            render_state.solution_keys = solution_rows;
-            rebuilt_rows = true;
-        }
-    }
-    if rebuilt_rows || structure_changed {
-        render_state.entry = Some(entry);
-    }
-    if rebuilt_rows {
-        render_state.paint_buttons = true;
-    }
-
+    let structure_changed =
+        mode.is_changed() || start_menu_screen.is_changed() || save_state.is_changed();
+    let paint_labels = structure_changed || render_state.paint_buttons;
     let style_changed = structure_changed || hover.is_changed() || render_state.paint_buttons;
+    if !render_state.rows_rebuilt {
+        render_state.paint_buttons = false;
+    }
     if !style_changed {
         return;
-    }
-    let paint_labels = structure_changed || render_state.paint_buttons;
-    // 本帧刚排队重建时实体尚未生成，留到下一帧再清标记
-    if !rebuilt_rows {
-        render_state.paint_buttons = false;
     }
 
     let ctx = SaveListViewCtx {
         save_state: &save_state,
-        edit_flow,
-        play_flow,
     };
-    let hover_only = !structure_changed && !paint_labels && hover.is_changed();
-    if hover_only {
-        let prev = render_state.last_hover;
-        let next = hover.entity;
-        render_state.last_hover = next;
-        for entity in [prev, next].into_iter().flatten() {
-            let Ok((_, action, _, mut background, mut border)) = buttons.get_mut(entity) else {
-                continue;
-            };
-            let view = action.button_view(&ctx);
-            let hovered = view.enabled && next == Some(entity);
-            *background = if view.enabled && view.selected {
-                Color::srgba(0.22, 0.35, 0.32, 0.96).into()
-            } else if hovered {
-                BUTTON_HOVER_BG.into()
-            } else if view.enabled {
-                BUTTON_BG.into()
-            } else {
-                Color::srgba(0.12, 0.12, 0.13, 0.82).into()
-            };
-            *border = if view.selected {
-                pressed_border()
-            } else if hovered {
-                hover_border()
-            } else if view.enabled {
-                raised_border()
-            } else {
-                inset_border()
-            };
-        }
-        return;
-    }
-
     render_state.last_hover = hover.entity;
     for (entity, action, children, mut background, mut border) in &mut buttons {
         let view = action.button_view(&ctx);
@@ -282,7 +367,7 @@ pub fn update_save_list_ui(
 
         if paint_labels {
             for child in children.iter() {
-                if let Ok(mut text) = texts.p1().get_mut(child) {
+                if let Ok(mut text) = texts.get_mut(child) {
                     if text.0 != view.label {
                         text.0 = view.label.clone();
                     }
@@ -292,7 +377,114 @@ pub fn update_save_list_ui(
     }
 }
 
-/// 行容器缺失，或子节点数量与期望不一致（含刚挂载的空壳）
+fn update_puzzle_vscroll(
+    wheel: f32,
+    puzzle_scroll: &mut Query<(Entity, &mut SaveListPuzzleScroll, &ComputedNode, &Children)>,
+    puzzle_content: &mut Query<
+        &mut Node,
+        (With<SaveListPuzzleRows>, Without<SaveListSolutionRows>),
+    >,
+    hover_entity: Option<Entity>,
+    children_query: &Query<&Children>,
+    parents: &Query<&ChildOf>,
+) {
+    for (scroll_entity, mut scroll, host, children) in puzzle_scroll.iter_mut() {
+        let Some(content_entity) = children
+            .iter()
+            .find(|child| puzzle_content.get(*child).is_ok())
+        else {
+            continue;
+        };
+        let Ok(mut content) = puzzle_content.get_mut(content_entity) else {
+            continue;
+        };
+        let row_count = children_query
+            .get(content_entity)
+            .map(|c| c.len())
+            .unwrap_or(0) as f32;
+        let content_h = row_count * 44.0 + 8.0;
+        let host_h = if host.is_empty() {
+            0.0
+        } else {
+            host.size().y * host.inverse_scale_factor()
+        };
+        scroll.max_offset = (content_h - host_h).max(0.0);
+        let over = hover_entity.is_some_and(|entity| is_descendant(entity, scroll_entity, parents));
+        if wheel.abs() > f32::EPSILON && over {
+            scroll.offset = (scroll.offset - wheel * 32.0).clamp(0.0, scroll.max_offset);
+        } else {
+            scroll.offset = scroll.offset.clamp(0.0, scroll.max_offset);
+        }
+        let next = Val::Px(-scroll.offset);
+        if content.top != next {
+            content.top = next;
+        }
+    }
+}
+
+fn update_solution_hscroll(
+    wheel: f32,
+    solution_scroll: &mut Query<(
+        Entity,
+        &mut SaveListSolutionScroll,
+        &ComputedNode,
+        &Children,
+    )>,
+    solution_content: &mut Query<
+        &mut Node,
+        (With<SaveListSolutionRows>, Without<SaveListPuzzleRows>),
+    >,
+    hover_entity: Option<Entity>,
+    children_query: &Query<&Children>,
+    parents: &Query<&ChildOf>,
+) {
+    for (scroll_entity, mut scroll, host, children) in solution_scroll.iter_mut() {
+        let Some(content_entity) = children
+            .iter()
+            .find(|child| solution_content.get(*child).is_ok())
+        else {
+            continue;
+        };
+        let Ok(mut content) = solution_content.get_mut(content_entity) else {
+            continue;
+        };
+        let card_count = children_query
+            .get(content_entity)
+            .map(|c| c.len())
+            .unwrap_or(0) as f32;
+        let content_w = card_count * 148.0 + 12.0;
+        let host_w = if host.is_empty() {
+            0.0
+        } else {
+            host.size().x * host.inverse_scale_factor()
+        };
+        scroll.max_offset = (content_w - host_w).max(0.0);
+        let over = hover_entity.is_some_and(|entity| is_descendant(entity, scroll_entity, parents));
+        if wheel.abs() > f32::EPSILON && over {
+            scroll.offset = (scroll.offset - wheel * 40.0).clamp(0.0, scroll.max_offset);
+        } else {
+            scroll.offset = scroll.offset.clamp(0.0, scroll.max_offset);
+        }
+        let next = Val::Px(-scroll.offset);
+        if content.left != next {
+            content.left = next;
+        }
+    }
+}
+
+fn is_descendant(entity: Entity, ancestor: Entity, parents: &Query<&ChildOf>) -> bool {
+    let mut current = entity;
+    loop {
+        if current == ancestor {
+            return true;
+        }
+        let Ok(parent) = parents.get(current) else {
+            return false;
+        };
+        current = parent.parent();
+    }
+}
+
 fn row_hosts_stale(
     hosts: impl IntoIterator<Item = Entity>,
     children: &Query<&Children>,
@@ -306,30 +498,5 @@ fn row_hosts_stale(
             return true;
         }
     }
-    // 期望有行但宿主还没出现
     !any && expected_len > 0
-}
-
-fn rebuild_rows(
-    commands: &mut Commands,
-    rows_entity: Entity,
-    column: SaveListColumn,
-    names: &[String],
-) {
-    // 空行容器可能尚无 Children，重建时直接清子树再挂行
-    commands.entity(rows_entity).despawn_related::<Children>();
-    commands.entity(rows_entity).with_children(|parent| {
-        for name in names {
-            if column.is_management() {
-                spawn_save_management_row(
-                    parent,
-                    column.load(name.clone()),
-                    column.rename(name.clone()),
-                    column.delete(name.clone()),
-                );
-            } else {
-                spawn_save_select_row(parent, column.load(name.clone()));
-            }
-        }
-    });
 }

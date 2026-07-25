@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::game::session;
 use crate::game::ui::access::{i18n, ui};
 use crate::game::ui::core::text_prompt::{TextPromptProps, TextPromptResult};
-use crate::shared::save::{rename_save_to, SaveSlot, SaveState};
+use crate::shared::save::{SaveSlot, SaveState, rename_save_to};
 
 pub fn text_prompt_spec(title_key: &'static str, default_value: &str) -> TextPromptProps {
     TextPromptProps {
@@ -42,44 +42,57 @@ pub fn open_new_solution_prompt(puzzle: String) {
     });
 }
 
-pub fn open_rename_puzzle_prompt(slot: SaveSlot, name: String) {
-    let spec = text_prompt_spec("save.prompt.rename_puzzle", name.as_str());
+/// 重命名选中谜题（改显示名，必要时跟着改文件夹）
+pub fn open_rename_puzzle_prompt(slot: SaveSlot, current_name: String) {
+    let spec = text_prompt_spec("save.prompt.rename_puzzle", &current_name);
     ui.open_text_prompt_then(spec, move |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
-        if requested.trim() == name {
+        let name = requested.trim().to_string();
+        if name.is_empty() || name == current_name {
             return;
         }
-        let mut save_state = world.resource_mut::<SaveState>();
-        let Some(new_slot) = rename_save_to(&slot, &requested) else {
+        let Some(new_slot) = rename_save_to(&slot, &name) else {
             return;
         };
+        let mut save_state = world.resource_mut::<SaveState>();
         if save_state.current.as_ref() == Some(&slot) {
             save_state.current = Some(new_slot.clone());
+        } else if let Some(current) = save_state.current.as_mut() {
+            if current.puzzle == slot.puzzle {
+                current.puzzle = new_slot.puzzle.clone();
+            }
         }
         if save_state.selected_puzzle.as_deref() == Some(slot.puzzle.as_str()) {
-            save_state.select_puzzle(Some(new_slot.puzzle.clone()));
+            save_state.selected_puzzle = Some(new_slot.puzzle);
         }
         save_state.refresh();
     });
 }
 
-pub fn open_rename_solution_prompt(slot: SaveSlot, name: String) {
-    let spec = text_prompt_spec("save.prompt.rename_solution", name.as_str());
+/// 重命名选中方案
+pub fn open_rename_solution_prompt(slot: SaveSlot, current_name: String) {
+    let spec = text_prompt_spec("save.prompt.rename_solution", &current_name);
     ui.open_text_prompt_then(spec, move |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
-        if requested.trim() == name {
+        let name = requested.trim().to_string();
+        if name.is_empty() || name == current_name {
             return;
         }
-        let mut save_state = world.resource_mut::<SaveState>();
-        let Some(new_slot) = rename_save_to(&slot, &requested) else {
+        let Some(new_slot) = rename_save_to(&slot, &name) else {
             return;
         };
+        let mut save_state = world.resource_mut::<SaveState>();
         if save_state.current.as_ref() == Some(&slot) {
-            save_state.current = Some(new_slot);
+            save_state.current = Some(new_slot.clone());
+        }
+        if save_state.selected_puzzle.as_deref() == Some(slot.puzzle.as_str())
+            && save_state.selected_solution.as_deref() == slot.solution.as_deref()
+        {
+            save_state.selected_solution = new_slot.solution;
         }
         save_state.refresh();
     });

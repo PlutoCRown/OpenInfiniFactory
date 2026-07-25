@@ -11,10 +11,11 @@ pub use actions::{dispatch_save_list_actions, emit_save_list_actions};
 pub use confirm::{EXTRA_SAVE_AS, open_save_puzzle_confirm, open_save_puzzle_confirm_before_exit};
 pub use prompt::open_save_as_new_puzzle_prompt;
 pub use types::*;
-pub use update::update_save_list_ui;
+pub use update::{
+    update_save_list_cover, update_save_list_rows, update_save_list_scroll, update_save_list_styles,
+};
 pub use view::save_list_title;
 
-use crate::game::state::{GameMode, StartMenuScreen};
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::UiAccessScope;
 
@@ -31,11 +32,13 @@ impl Plugin for SavePlugin {
                         .in_set(UiAccessScope)
                         .after(PerfScope::Placement)
                         .before(PerfScope::Menus),
-                    update_save_list_ui
-                        .run_if(|mode: Res<State<GameMode>>, screen: Res<StartMenuScreen>| {
-                            *mode.get() == GameMode::StartMenu
-                                && *screen == StartMenuScreen::SaveList
-                        })
+                    (
+                        update_save_list_rows,
+                        update_save_list_cover,
+                        update_save_list_scroll,
+                        update_save_list_styles,
+                    )
+                        .chain()
                         .in_set(UiAccessScope)
                         .after(PerfScope::Animation)
                         .before(PerfScope::Ui),

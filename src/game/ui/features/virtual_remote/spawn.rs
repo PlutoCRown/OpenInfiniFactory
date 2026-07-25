@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 
-use crate::game::ui::components::{localized_text, pressed_border, raised_border, text};
+use crate::game::ui::components::{
+    BUTTON_BORDER_X, localized_text, pressed_border, raised_border, text,
+};
 use crate::shared::config::{
     VIRTUAL_LAYOUT_REF_EDGE, VirtualControlAnchor, VirtualControlId, VirtualControlTransform,
     VirtualControlsLayout,
@@ -249,7 +251,7 @@ fn anchor_node(anchor: VirtualControlAnchor, t: VirtualControlTransform, size_re
         height: ref_to_vmin(size_ref),
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
-        border: UiRect::all(Val::Px(2.0)),
+        border: UiRect::all(Val::Px(BUTTON_BORDER_X)),
         border_radius: BorderRadius::all(Val::Percent(50.0)),
         ..default()
     };

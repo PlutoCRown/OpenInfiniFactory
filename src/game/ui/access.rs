@@ -59,6 +59,11 @@ fn with_world_immut<R>(f: impl FnOnce(&World) -> R) -> R {
     })
 }
 
+/// 在 UiAccessScope 内只读访问 World（spawn 图标等）
+pub fn with_ui_world<R>(f: impl FnOnce(&World) -> R) -> R {
+    with_world_immut(f)
+}
+
 fn with_ui<R>(f: impl FnOnce(&mut UiHostCommands) -> R) -> R {
     with_world(|world| {
         let mut state = SystemState::<UiHostCommands>::new(world);

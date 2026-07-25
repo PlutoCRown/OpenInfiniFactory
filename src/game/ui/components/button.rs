@@ -7,11 +7,49 @@ use super::text::default_button_size;
 pub const BUTTON_BG: Color = Color::srgb(0.56, 0.56, 0.56);
 pub const BUTTON_HOVER_BG: Color = Color::srgb(0.68, 0.68, 0.68);
 pub const BUTTON_PRESSED_BG: Color = Color::srgb(0.40, 0.40, 0.40);
+/// 凸起亮边（左/上）
 pub const BUTTON_LIGHT_EDGE: Color = Color::srgb(0.89, 0.89, 0.89);
-pub const BUTTON_DARK_EDGE: Color = Color::srgb(0.02, 0.02, 0.02);
+/// 凸起暗边（右/下），刻意不要纯黑
+pub const BUTTON_DARK_EDGE: Color = Color::srgb(0.30, 0.30, 0.30);
+/// 悬停时更亮/更暗的边
+pub const BUTTON_HOVER_LIGHT_EDGE: Color = Color::srgb(1.0, 1.0, 1.0);
+pub const BUTTON_HOVER_LIGHT_EDGE_SOFT: Color = Color::srgb(0.94, 0.94, 0.94);
+pub const BUTTON_HOVER_DARK_EDGE: Color = Color::srgb(0.22, 0.22, 0.22);
+pub const BUTTON_HOVER_DARK_EDGE_SOFT: Color = Color::srgb(0.26, 0.26, 0.26);
+
+/// 按钮边框厚度（略不对称保留立体感）
+pub const BUTTON_BORDER_X: f32 = 2.0;
+pub const BUTTON_BORDER_TOP: f32 = 2.0;
+pub const BUTTON_BORDER_BOTTOM: f32 = 2.5;
+pub const BUTTON_PAD_X: f32 = 14.0;
+
+/// 按钮外阴影（右下角落下感）
+pub const BUTTON_SHADOW: Color = Color::srgba(0.0, 0.0, 0.0, 0.28);
+pub const BUTTON_SHADOW_BLUR: f32 = 3.0;
 
 #[derive(Component)]
 pub struct HoverButton;
+
+/// 凸起按钮的边框宽度
+pub fn button_border() -> UiRect {
+    UiRect {
+        left: Val::Px(BUTTON_BORDER_X),
+        right: Val::Px(BUTTON_BORDER_X),
+        top: Val::Px(BUTTON_BORDER_TOP),
+        bottom: Val::Px(BUTTON_BORDER_BOTTOM),
+    }
+}
+
+/// 凸起按钮的外阴影
+pub fn button_shadow() -> BoxShadow {
+    BoxShadow::new(
+        BUTTON_SHADOW,
+        Val::Px(0.0),
+        Val::Px(0.0),
+        Val::Px(0.0),
+        Val::Px(BUTTON_SHADOW_BLUR),
+    )
+}
 
 pub fn styled_button(
     style: Node,
@@ -69,13 +107,8 @@ pub fn text_button(style: Node, border: impl Into<BorderColor>, background: Colo
     (
         styled_button(
             Node {
-                border: UiRect {
-                    left: Val::Px(3.0),
-                    right: Val::Px(3.0),
-                    top: Val::Px(4.0),
-                    bottom: Val::Px(5.0),
-                },
-                padding: UiRect::horizontal(Val::Px(14.0)),
+                border: button_border(),
+                padding: UiRect::horizontal(Val::Px(BUTTON_PAD_X)),
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
                 ..style
@@ -83,13 +116,7 @@ pub fn text_button(style: Node, border: impl Into<BorderColor>, background: Colo
             border,
             background,
         ),
-        BoxShadow::new(
-            Color::srgba(0.0, 0.0, 0.0, 0.62),
-            Val::Px(0.0),
-            Val::Px(0.0),
-            Val::Px(0.0),
-            Val::Px(4.0),
-        ),
+        button_shadow(),
     )
 }
 
@@ -113,10 +140,10 @@ pub fn pressed_border() -> BorderColor {
 
 pub fn hover_border() -> BorderColor {
     BorderColor {
-        top: Color::srgb(1.0, 1.0, 1.0),
-        left: Color::srgb(0.92, 0.92, 0.92),
-        right: Color::srgb(0.08, 0.08, 0.08),
-        bottom: Color::srgb(0.04, 0.04, 0.04),
+        top: BUTTON_HOVER_LIGHT_EDGE,
+        left: BUTTON_HOVER_LIGHT_EDGE_SOFT,
+        right: BUTTON_HOVER_DARK_EDGE,
+        bottom: BUTTON_HOVER_DARK_EDGE_SOFT,
     }
 }
 

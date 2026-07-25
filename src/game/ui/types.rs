@@ -8,9 +8,9 @@ pub use crate::game::ui::core::{
     UiActionLabel, UiHost, UiHoverState, UiPanelBinding, UiRuntime,
 };
 pub use crate::game::ui::features::save::types::{
-    SaveListAction, SaveListCloseButton, SaveListCreateButton, SaveListPanel, SaveListPrompt,
-    SaveListPuzzleColumn, SaveListPuzzleRows, SaveListRenderState, SaveListSolutionColumn,
-    SaveListSolutionRows, SaveListTitleText,
+    SaveListAction, SaveListCloseButton, SaveListCoverHost, SaveListCoverImage,
+    SaveListCoverLoading, SaveListPanel, SaveListPuzzleRows, SaveListPuzzleScroll,
+    SaveListRenderState, SaveListSolutionRows, SaveListSolutionScroll, SaveListTitleText,
 };
 pub use crate::game::ui::features::settings::types::{
     GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, OpenSettingsDropdown, PendingKeyBind, SettingsAction,

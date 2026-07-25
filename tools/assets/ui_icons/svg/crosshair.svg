@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="white">
+  <!-- 准心：简单十字 -->
+  <rect x="472" y="160" width="80" height="704" rx="12"/>
+  <rect x="160" y="472" width="704" height="80" rx="12"/>
+</svg>

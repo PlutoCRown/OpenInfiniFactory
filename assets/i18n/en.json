@@ -137,7 +137,7 @@
   "button.sign_edit_text": "Edit Text",
   "button.sim_play": "Play",
   "button.start_debug_http": "Start HTTP Debugger",
-  "button.start_playing": "Start Playing",
+  "button.start_playing": "Start Game",
   "button.switch_save": "Switch Save",
   "button.teleport_pair": "Pair",
   "button.teleport_rename": "Rename",
@@ -270,6 +270,7 @@
   "panel.sign_text": "Text",
   "panel.stamp": "Stamp",
   "roller.title": "Roller Settings",
+  "save.cover_loading": "Loading…",
   "save.choose_puzzle_prompt": "Select a puzzle first.",
   "save.confirm_delete": "Delete {name}?",
   "save.kind.puzzle": "Puzzle",
@@ -289,7 +290,7 @@
   "save.title.edit_puzzle": "Edit Puzzle",
   "save.title.main": "Load Save",
   "save.title.pause": "Switch Save",
-  "save.title.play_solution": "Start Playing",
+  "save.title.play_solution": "Select Save",
   "save.title.select_solution": "Select Solution",
   "save.world": "World: {name}",
   "selection_mode.line": "Line",
@@ -447,5 +448,8 @@
   "virtual.sim_pause": "Pause Sim",
   "block.fallback": "Unknown Block",
   "short.fallback": "Unknown",
-  "desc.fallback": "Fallback used when a material or scene pack is missing"
+  "desc.fallback": "Fallback used when a material or scene pack is missing",
+  "button.start_game": "Start Game",
+  "button.delete_puzzle": "Delete Puzzle",
+  "save.title.select_puzzle_list": "Puzzles"
 }

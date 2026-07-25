@@ -10,12 +10,14 @@ models/material/ 材料块 → model.glb（bpy）
 models/scene/ 场景块 → model.glb（bpy）
 models/stamp/ 印花薄板 → model.glb（bpy）
 textures/ 只写 texture.png / normal.png（PIL）
+ui_icons/ SVG（Ant Design / 自绘）→ assets/ui/icons/*.png
 
 约定：
 
 - 新建/大改 model.glb → models/ 下用 bpy
 - 只写贴图 → textures/ 下用 PIL
 - icon.png → ./scripts/bake_scene_icons.sh，禁止手绘
+- UI 图标 → `python3 tools/assets/ui_icons/generate_ui_icons.py`（需 cairo）
 
 示例：
 /Applications/Blender.app/Contents/MacOS/Blender --background \\

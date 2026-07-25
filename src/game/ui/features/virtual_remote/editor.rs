@@ -6,7 +6,9 @@ use bevy::picking::prelude::{Click, Drag, Pointer, Press, Release};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::game::ui::components::{BUTTON_BG, localized_text, raised_border, ui_logical_bounds};
+use crate::game::ui::components::{
+    BUTTON_BG, BUTTON_BORDER_X, button_border, localized_text, raised_border, ui_logical_bounds,
+};
 use crate::game::ui::core::confirm_dialog::{
     ConfirmDialogState, ConfirmExtraButton, ConfirmProps, ConfirmResult, PendingConfirmHandler,
 };
@@ -264,7 +266,7 @@ fn chrome_button(label_key: &'static str) -> impl Bundle {
             padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            border: UiRect::all(Val::Px(2.0)),
+            border: button_border(),
             border_radius: BorderRadius::all(Val::Px(5.0)),
             ..default()
         },
@@ -290,7 +292,7 @@ fn spawn_editor_chrome(parent: &mut ChildSpawnerCommands) {
                 align_items: AlignItems::Center,
                 column_gap: Val::Px(10.0),
                 padding: UiRect::all(Val::Px(6.0)),
-                border: UiRect::all(Val::Px(2.0)),
+                border: UiRect::all(Val::Px(BUTTON_BORDER_X)),
                 border_radius: BorderRadius::all(Val::Px(8.0)),
                 ..default()
             },

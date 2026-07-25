@@ -35,19 +35,11 @@ const START_MENU_BUTTONS: &[StartMenuButton] = list_ui_config!(
     StartMenuButton,
     ctx: StartMenuCtx<'_>,
     {
-        key: "button.edit_puzzle"
-        on_click(ctx, _commands) {
-            ctx.save_state.refresh();
-            ctx.save_state.select_puzzle(None);
-            ctx.solution_state.save_list_entry = WorldEntryMode::EditPuzzle;
-            *ctx.start_menu_screen = StartMenuScreen::SaveList;
-        }
-    };
-    {
         key: "button.start_playing"
         on_click(ctx, _commands) {
             ctx.save_state.refresh();
             ctx.save_state.select_puzzle(None);
+            ctx.save_state.select_solution(None);
             ctx.solution_state.save_list_entry = WorldEntryMode::PlaySolution;
             *ctx.start_menu_screen = StartMenuScreen::SaveList;
         }

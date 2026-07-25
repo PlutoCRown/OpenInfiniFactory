@@ -1,15 +1,21 @@
 //! 主菜单 / 存档列表按需挂载
 
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 
 use crate::game::session::SessionBusy;
-use crate::game::state::{GameMode, SolutionState, StartMenuScreen};
+use crate::game::state::{GameMode, StartMenuScreen};
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::UiAccessScope;
+use crate::game::ui::access::{i18n, with_ui_world};
+use crate::game::ui::components::UiIconAssets;
 use crate::game::ui::core::host::{UiHostMountRoot, UiRootEntity};
+use crate::game::ui::features::save::save_list_title;
 use crate::game::ui::features::save::types::SaveListRenderState;
 use crate::game::ui::features::session_busy::spawn_session_busy_overlay;
-use crate::game::ui::screens::{spawn_main_menu, spawn_save_list};
+use crate::game::ui::screens::{
+    SaveListSpawnCtx, save_list_panel_size, spawn_main_menu, spawn_save_list,
+};
 
 /// 菜单态已挂载的覆盖层
 #[derive(Resource, Default)]
@@ -24,9 +30,10 @@ pub fn sync_start_menu_mounts(
     _ui_thread: crate::game::ui::access::UiMainThread,
     mode: Res<State<GameMode>>,
     screen: Res<StartMenuScreen>,
-    solution_state: Res<SolutionState>,
     busy: Res<SessionBusy>,
     root: Option<Res<UiRootEntity>>,
+    ui_scale: Res<UiScale>,
+    windows: Query<&Window, With<PrimaryWindow>>,
     mut mounts: ResMut<StartMenuMounts>,
     mut save_list_render: ResMut<SaveListRenderState>,
     mut commands: Commands,
@@ -113,6 +120,18 @@ pub fn sync_start_menu_mounts(
 
     match (want_save, mounts.save_list) {
         (true, None) => {
+            let (win_w, win_h) = windows
+                .single()
+                .map(|window| (window.width(), window.height()))
+                .unwrap_or((1280.0, 720.0));
+            let (panel_w, panel_h) = save_list_panel_size(win_w, win_h, ui_scale.0);
+            // 须在 with_children 延后执行前解析完（延后阶段已离开 UiAccessScope）
+            let spawn_ctx = SaveListSpawnCtx {
+                title: save_list_title(),
+                puzzle_heading: i18n.t("save.title.select_puzzle_list"),
+                solution_heading: i18n.t("save.title.select_solution"),
+                icons: with_ui_world(|world| world.resource::<UiIconAssets>().clone()),
+            };
             let mut entity = None;
             commands.entity(root).with_children(|root| {
                 entity = Some(
@@ -128,7 +147,7 @@ pub fn sync_start_menu_mounts(
                         Pickable::IGNORE,
                     ))
                     .with_children(|c| {
-                        spawn_save_list(c, solution_state.save_list_entry);
+                        spawn_save_list(c, panel_w, panel_h, spawn_ctx);
                     })
                     .id(),
                 );

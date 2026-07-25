@@ -1,28 +1,56 @@
 use bevy::prelude::*;
 
-use crate::game::state::{GameMode, StartMenuScreen, WorldEntryMode};
-use crate::game::ui::access::i18n;
-use crate::game::ui::features::save::save_list_title;
-
-use super::super::components::{
-    BUTTON_BG, default_button_size, flex_row, full_width_button, panel_bundle_responsive_flow,
-    panel_content, panel_title_bar, panel_title_button, panel_title_label, raised_border,
-    spawn_close_icon, styled_button, text, text_button, transparent_node,
+use crate::game::state::StartMenuScreen;
+use crate::game::ui::components::{
+    BUTTON_BG, PANEL_BG, PANEL_SHADOW, UiIconAssets, button_border, button_shadow,
+    default_button_size, panel_raised_border, panel_title_bar, panel_title_button,
+    panel_title_label, raised_border, spawn_ui_icon, styled_button, text, text_button,
+    transparent_node,
 };
+
 use super::super::types::{
-    LocalizedText, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListCreateButton,
-    SaveListPanel, SaveListPrompt, SaveListPuzzleColumn, SaveListPuzzleRows,
-    SaveListSolutionColumn, SaveListSolutionRows, SaveListTitleText,
+    LocalizedText, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListCoverHost,
+    SaveListCoverImage, SaveListCoverLoading, SaveListPanel, SaveListPuzzleRows,
+    SaveListPuzzleScroll, SaveListSolutionRows, SaveListSolutionScroll, SaveListTitleText,
 };
 
-pub const SAVE_LIST_PANEL_WIDTH_PERCENT: f32 = 46.0;
-pub const SAVE_LIST_PANEL_MAX_WIDTH: f32 = 480.0;
-const SAVE_LIST_ACTION_BUTTON_WIDTH: f32 = 72.0;
+/// 相对窗口逻辑像素的外边距
+const SAVE_LIST_MARGIN: f32 = 48.0;
+const PUZZLE_COL_WIDTH_PERCENT: f32 = 25.0;
+const SOLUTION_CARD_WIDTH: f32 = 140.0;
+/// 方案横滑区内边距（与卡片高度一起决定条带高度）
+const SOLUTION_STRIP_PAD: f32 = 6.0;
 
-/// 挂载存档选择：Puzzle / Solution 各一块独立面板（须已 bind_ui_scope）
-pub fn spawn_save_list(root: &mut ChildSpawnerCommands, entry: WorldEntryMode) {
-    let title = save_list_title(GameMode::StartMenu, StartMenuScreen::SaveList, entry);
-    let edit_flow = entry == WorldEntryMode::EditPuzzle;
+/// 存档弹窗挂载时预解析的文案与图标（须在 UiAccessScope 内算好再传入）
+pub struct SaveListSpawnCtx {
+    pub title: String,
+    pub puzzle_heading: String,
+    pub solution_heading: String,
+    pub icons: UiIconAssets,
+}
+
+/// 按窗口逻辑尺寸算出弹窗宽高（仅初始化用）
+pub fn save_list_panel_size(window_w: f32, window_h: f32, ui_scale: f32) -> (f32, f32) {
+    let scale = ui_scale.max(0.01);
+    (
+        (window_w / scale - SAVE_LIST_MARGIN * 2.0).max(480.0),
+        (window_h / scale - SAVE_LIST_MARGIN * 2.0).max(320.0),
+    )
+}
+
+/// 挂载统一存档选择弹窗（文案/图标须已在外部解析好）
+pub fn spawn_save_list(
+    root: &mut ChildSpawnerCommands,
+    panel_w: f32,
+    panel_h: f32,
+    ctx: SaveListSpawnCtx,
+) {
+    let SaveListSpawnCtx {
+        title,
+        puzzle_heading,
+        solution_heading,
+        icons,
+    } = ctx;
 
     root.spawn((
         Node {
@@ -32,195 +60,383 @@ pub fn spawn_save_list(root: &mut ChildSpawnerCommands, entry: WorldEntryMode) {
             display: Display::Flex,
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            column_gap: Val::Px(16.0),
-            padding: UiRect::all(Val::Px(12.0)),
+            padding: UiRect::all(Val::Px(SAVE_LIST_MARGIN)),
             ..default()
         },
-        BackgroundColor(Color::NONE),
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.35)),
         Pickable::IGNORE,
         PanelVisibility::StartMenuScreen(StartMenuScreen::SaveList),
     ))
-    .with_children(|row| {
-        spawn_puzzle_panel(row, title, edit_flow);
-        spawn_solution_panel(row);
-    });
-}
-
-fn spawn_puzzle_panel(row: &mut ChildSpawnerCommands, title: String, edit_flow: bool) {
-    row.spawn((
-        panel_bundle_responsive_flow(
-            SAVE_LIST_PANEL_WIDTH_PERCENT,
-            SAVE_LIST_PANEL_MAX_WIDTH,
-            false,
-        ),
-        GlobalZIndex(0),
-        SaveListPanel,
-        SaveListPuzzleColumn,
-    ))
-    .with_children(|panel| {
-        panel.spawn(panel_title_bar()).with_children(|bar| {
-            bar.spawn((panel_title_label(title, 26.0), SaveListTitleText));
-            bar.spawn((
-                panel_title_button(),
-                SaveListAction::Back,
-                SaveListCloseButton,
-            ))
-            .with_children(spawn_close_icon);
-        });
-        panel.spawn(panel_content()).with_children(|content| {
-            content
-                .spawn((
-                    create_list_button(
-                        34.0,
-                        if edit_flow {
-                            Display::Flex
-                        } else {
-                            Display::None
-                        },
-                    ),
-                    SaveListAction::NewPuzzle,
-                    SaveListCreateButton,
-                ))
-                .with_children(|button| {
-                    button.spawn(text("", 15.0, Color::WHITE));
-                });
-            content.spawn((transparent_node(save_rows_node()), SaveListPuzzleRows));
-            content.spawn((
-                text("", 16.0, Color::srgb(0.82, 0.86, 0.88)),
-                SaveListPrompt,
-            ));
-        });
-    });
-}
-
-fn spawn_solution_panel(row: &mut ChildSpawnerCommands) {
-    // 默认 Hidden：编辑流永不打开；游玩流等选中谜题后再由 update 打开
-    row.spawn((
-        panel_bundle_responsive_flow(
-            SAVE_LIST_PANEL_WIDTH_PERCENT,
-            SAVE_LIST_PANEL_MAX_WIDTH,
-            true,
-        ),
-        GlobalZIndex(0),
-        SaveListSolutionColumn,
-    ))
-    .with_children(|panel| {
-        panel.spawn(panel_title_bar()).with_children(|bar| {
-            bar.spawn((
-                panel_title_label(i18n.t("save.title.select_solution"), 26.0),
-                LocalizedText {
-                    key: "save.title.select_solution",
+    .with_children(|overlay| {
+        overlay
+            .spawn((
+                Node {
+                    width: Val::Px(panel_w),
+                    height: Val::Px(panel_h),
+                    max_width: Val::Percent(100.0),
+                    max_height: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(12.0),
+                    padding: UiRect::all(Val::Px(8.0)),
+                    border: UiRect::all(Val::Px(4.0)),
+                    overflow: Overflow::clip(),
+                    ..default()
                 },
-            ));
-        });
-        panel.spawn(panel_content()).with_children(|content| {
-            content
-                .spawn((
-                    create_list_button(34.0, Display::Flex),
-                    SaveListAction::NewSolution,
-                    SaveListCreateButton,
-                ))
-                .with_children(|button| {
-                    button.spawn(text("", 15.0, Color::WHITE));
+                BackgroundColor(PANEL_BG),
+                panel_raised_border(),
+                BoxShadow::new(
+                    PANEL_SHADOW,
+                    Val::Px(0.0),
+                    Val::Px(0.0),
+                    Val::Px(0.0),
+                    Val::Px(3.0),
+                ),
+                GlobalZIndex(0),
+                SaveListPanel,
+                Pickable {
+                    should_block_lower: true,
+                    is_hoverable: false,
+                },
+            ))
+            .with_children(|panel| {
+                panel.spawn(panel_title_bar()).with_children(|bar| {
+                    bar.spawn((panel_title_label(title, 26.0), SaveListTitleText));
+                    bar.spawn((
+                        panel_title_button(),
+                        SaveListAction::Back,
+                        SaveListCloseButton,
+                    ))
+                    .with_children(|btn| {
+                        spawn_ui_icon(btn, icons.close.clone(), 12.0);
+                    });
                 });
-            content.spawn((transparent_node(save_rows_node()), SaveListSolutionRows));
-        });
+
+                panel
+                    .spawn(Node {
+                        width: Val::Percent(100.0),
+                        flex_grow: 1.0,
+                        flex_shrink: 1.0,
+                        min_height: Val::Px(0.0),
+                        flex_direction: FlexDirection::Row,
+                        column_gap: Val::Px(12.0),
+                        overflow: Overflow::clip(),
+                        ..default()
+                    })
+                    .with_children(|body| {
+                        spawn_puzzle_column(body, puzzle_heading);
+                        spawn_right_column(body, solution_heading);
+                    });
+
+                spawn_footer(panel, &icons);
+            });
     });
 }
 
-fn save_rows_node() -> Node {
-    Node {
-        width: Val::Percent(100.0),
-        flex_direction: FlexDirection::Column,
-        row_gap: Val::Px(6.0),
-        flex_grow: 0.0,
-        ..default()
-    }
-}
-
-fn create_list_button(height: f32, display: Display) -> impl Bundle {
-    text_button(
+fn spawn_puzzle_column(body: &mut ChildSpawnerCommands, heading: String) {
+    body.spawn((
         Node {
-            width: Val::Percent(100.0),
-            flex_grow: 0.0,
-            flex_shrink: 0.0,
-            height: Val::Px(default_button_size(height)),
-            display,
+            width: Val::Percent(PUZZLE_COL_WIDTH_PERCENT),
+            height: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(8.0),
+            min_width: Val::Px(0.0),
+            overflow: Overflow::clip(),
             ..default()
         },
-        raised_border(),
-        BUTTON_BG,
-    )
-}
-
-pub fn spawn_save_management_row(
-    parent: &mut ChildSpawnerCommands,
-    load: SaveListAction,
-    rename: SaveListAction,
-    delete: SaveListAction,
-) {
-    parent.spawn(flex_row(32.0, 6.0)).with_children(|row| {
-        spawn_save_row_button(row, load, SaveRowButtonLayout::Flex);
-        spawn_save_row_button(
-            row,
-            rename,
-            SaveRowButtonLayout::Fixed(SAVE_LIST_ACTION_BUTTON_WIDTH),
-        );
-        spawn_save_row_button(
-            row,
-            delete,
-            SaveRowButtonLayout::Fixed(SAVE_LIST_ACTION_BUTTON_WIDTH),
-        );
+        BackgroundColor(Color::NONE),
+    ))
+    .with_children(|col| {
+        col.spawn((
+            text(heading, 14.0, Color::srgb(0.85, 0.88, 0.9)),
+            LocalizedText {
+                key: "save.title.select_puzzle_list",
+            },
+        ));
+        col.spawn((
+            Node {
+                width: Val::Percent(100.0),
+                flex_grow: 1.0,
+                min_height: Val::Px(0.0),
+                position_type: PositionType::Relative,
+                overflow: Overflow::clip(),
+                ..default()
+            },
+            BackgroundColor(Color::NONE),
+            SaveListPuzzleScroll {
+                offset: 0.0,
+                max_offset: 0.0,
+            },
+            Pickable {
+                should_block_lower: true,
+                is_hoverable: true,
+            },
+        ))
+        .with_children(|viewport| {
+            viewport.spawn((
+                transparent_node(Node {
+                    width: Val::Percent(100.0),
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Px(0.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(6.0),
+                    flex_shrink: 0.0,
+                    overflow: Overflow::clip(),
+                    ..default()
+                }),
+                SaveListPuzzleRows,
+            ));
+        });
     });
 }
 
-pub fn spawn_save_select_row(parent: &mut ChildSpawnerCommands, load: SaveListAction) {
-    parent
-        .spawn(full_width_button(32.0))
-        .insert(load)
-        .with_children(|button| {
-            button.spawn(save_row_label("", 13.0));
-        });
-}
-
-#[derive(Clone, Copy)]
-enum SaveRowButtonLayout {
-    Flex,
-    Fixed(f32),
-}
-
-fn spawn_save_row_button(
-    parent: &mut ChildSpawnerCommands,
-    action: SaveListAction,
-    layout: SaveRowButtonLayout,
-) {
-    let mut style = Node {
-        height: Val::Px(default_button_size(30.0)),
-        border: UiRect::all(Val::Px(1.0)),
-        align_items: AlignItems::Center,
-        justify_content: JustifyContent::Center,
+fn spawn_right_column(body: &mut ChildSpawnerCommands, heading: String) {
+    body.spawn(Node {
+        width: Val::Percent(100.0 - PUZZLE_COL_WIDTH_PERCENT),
+        height: Val::Percent(100.0),
+        flex_grow: 1.0,
+        flex_direction: FlexDirection::Column,
+        row_gap: Val::Px(8.0),
+        min_width: Val::Px(0.0),
         overflow: Overflow::clip(),
         ..default()
-    };
-    match layout {
-        SaveRowButtonLayout::Flex => {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.min_width = Val::Px(0.0);
-        }
-        SaveRowButtonLayout::Fixed(width) => {
-            let width = default_button_size(width);
-            style.width = Val::Px(width);
-            style.min_width = Val::Px(width);
-            style.flex_shrink = 0.0;
-        }
-    }
+    })
+    .with_children(|col| {
+        col.spawn((
+            text(heading, 14.0, Color::srgb(0.85, 0.88, 0.9)),
+            LocalizedText {
+                key: "save.title.select_solution",
+            },
+        ));
 
+        col.spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(solution_card_height() + SOLUTION_STRIP_PAD * 2.0),
+                overflow: Overflow::clip(),
+                position_type: PositionType::Relative,
+                flex_shrink: 0.0,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.18)),
+            SaveListSolutionScroll {
+                offset: 0.0,
+                max_offset: 0.0,
+            },
+            Pickable {
+                should_block_lower: true,
+                is_hoverable: true,
+            },
+        ))
+        .with_children(|viewport| {
+            viewport.spawn((
+                Node {
+                    height: Val::Percent(100.0),
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Px(0.0),
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(8.0),
+                    padding: UiRect::all(Val::Px(SOLUTION_STRIP_PAD)),
+                    align_items: AlignItems::Stretch,
+                    overflow: Overflow::clip(),
+                    ..default()
+                },
+                BackgroundColor(Color::NONE),
+                SaveListSolutionRows,
+            ));
+        });
+
+        col.spawn((
+            Node {
+                width: Val::Percent(100.0),
+                flex_grow: 1.0,
+                min_height: Val::Px(0.0),
+                overflow: Overflow::clip(),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                position_type: PositionType::Relative,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.22)),
+            SaveListCoverHost,
+        ))
+        .with_children(|host| {
+            host.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    display: Display::None,
+                    ..default()
+                },
+                ImageNode {
+                    image_mode: NodeImageMode::Stretch,
+                    ..default()
+                },
+                SaveListCoverImage,
+                Pickable::IGNORE,
+            ));
+            host.spawn((
+                text("…", 16.0, Color::srgb(0.72, 0.76, 0.8)),
+                LocalizedText {
+                    key: "save.cover_loading",
+                },
+                SaveListCoverLoading,
+                Visibility::Hidden,
+                Pickable::IGNORE,
+            ));
+        });
+    });
+}
+
+fn spawn_footer(panel: &mut ChildSpawnerCommands, icons: &UiIconAssets) {
+    let btn_node = Node {
+        width: Val::Auto,
+        height: Val::Px(default_button_size(34.0)),
+        ..default()
+    };
+    panel
+        .spawn(Node {
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceBetween,
+            align_items: AlignItems::Center,
+            column_gap: Val::Px(8.0),
+            flex_shrink: 0.0,
+            padding: UiRect::axes(Val::Px(4.0), Val::Px(2.0)),
+            ..default()
+        })
+        .with_children(|footer| {
+            footer
+                .spawn(Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(8.0),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|left| {
+                    left.spawn((
+                        text_button(btn_node.clone(), raised_border(), BUTTON_BG),
+                        SaveListAction::NewPuzzle,
+                    ))
+                    .with_children(|button| {
+                        button.spawn(text("", 15.0, Color::WHITE));
+                    });
+                    left.spawn((
+                        text_button(btn_node.clone(), raised_border(), BUTTON_BG),
+                        SaveListAction::EditSelectedPuzzle,
+                    ))
+                    .with_children(|button| {
+                        button.spawn(text("", 15.0, Color::WHITE));
+                    });
+                    left.spawn((
+                        text_button(btn_node.clone(), raised_border(), BUTTON_BG),
+                        SaveListAction::RenameSelectedPuzzle,
+                    ))
+                    .with_children(|button| {
+                        spawn_ui_icon(button, icons.edit.clone(), 16.0);
+                    });
+                    left.spawn((
+                        text_button(btn_node.clone(), raised_border(), BUTTON_BG),
+                        SaveListAction::DeleteSelectedPuzzle,
+                    ))
+                    .with_children(|button| {
+                        spawn_ui_icon(button, icons.delete.clone(), 16.0);
+                    });
+                });
+
+            footer
+                .spawn(Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(8.0),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|right| {
+                    right
+                        .spawn((
+                            text_button(btn_node.clone(), raised_border(), BUTTON_BG),
+                            SaveListAction::DeleteSelectedSolution,
+                        ))
+                        .with_children(|button| {
+                            spawn_ui_icon(button, icons.delete.clone(), 16.0);
+                        });
+                    right
+                        .spawn((
+                            text_button(btn_node.clone(), raised_border(), BUTTON_BG),
+                            SaveListAction::RenameSelectedSolution,
+                        ))
+                        .with_children(|button| {
+                            spawn_ui_icon(button, icons.edit.clone(), 16.0);
+                        });
+                    right
+                        .spawn((
+                            text_button(btn_node, raised_border(), BUTTON_BG),
+                            SaveListAction::StartGame,
+                        ))
+                        .with_children(|button| {
+                            button.spawn(text("", 15.0, Color::WHITE));
+                        });
+                });
+        });
+}
+
+/// 挂载一条谜题选择行
+pub fn spawn_save_puzzle_row(parent: &mut ChildSpawnerCommands, storage: String) {
     parent
-        .spawn((styled_button(style, raised_border(), BUTTON_BG), action))
+        .spawn((
+            text_button(
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(default_button_size(32.0)),
+                    flex_shrink: 0.0,
+                    ..default()
+                },
+                raised_border(),
+                BUTTON_BG,
+            ),
+            SaveListAction::SelectPuzzle(storage),
+        ))
         .with_children(|button| {
             button.spawn(save_row_label("", 13.0));
         });
+}
+
+/// 挂载一张方案卡片
+pub fn spawn_save_solution_card(parent: &mut ChildSpawnerCommands, storage: Option<String>) {
+    let action = match storage {
+        Some(name) => SaveListAction::SelectSolution(name),
+        None => SaveListAction::NewSolution,
+    };
+    parent
+        .spawn((
+            styled_button(
+                Node {
+                    width: Val::Px(SOLUTION_CARD_WIDTH),
+                    height: Val::Px(solution_card_height()),
+                    border: button_border(),
+                    padding: UiRect::all(Val::Px(8.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    flex_shrink: 0.0,
+                    overflow: Overflow::clip(),
+                    ..default()
+                },
+                raised_border(),
+                BUTTON_BG,
+            ),
+            button_shadow(),
+            action,
+        ))
+        .with_children(|card| {
+            card.spawn(save_row_label("", 13.0));
+        });
+}
+
+/// 方案卡高度：与左侧 4 个谜题行按钮等高
+fn solution_card_height() -> f32 {
+    4.0 * default_button_size(32.0)
 }
 
 fn save_row_label(value: impl Into<String>, font_size: f32) -> impl Bundle {

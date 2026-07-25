@@ -159,6 +159,7 @@ impl Plugin for GamePlugin {
                     load_scene_blocks_on_startup,
                     spawn_ui_camera,
                     ui::load_ui_font,
+                    ui::load_ui_icons,
                     systems::debug::load_debug_font,
                     ui::setup_menu_ui,
                 )

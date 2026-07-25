@@ -22,6 +22,7 @@ use super::types::{
 };
 use crate::game::ui::core::confirm_dialog::{ConfirmButtonId, ConfirmDialogState};
 include!("font.rs");
+include!("icons.rs");
 include!("status.rs");
 include!("hover.rs");
 include!("localized.rs");

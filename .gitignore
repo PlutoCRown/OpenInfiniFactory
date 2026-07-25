@@ -5,6 +5,10 @@
 /dist
 /logs
 
+# Python
+__pycache__/
+*.py[cod]
+
 # Android
 /mobile/android/local.properties
 /mobile/android/app/src/main/jniLibs/

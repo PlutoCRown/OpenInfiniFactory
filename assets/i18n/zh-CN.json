@@ -137,7 +137,7 @@
   "button.sign_edit_text": "编辑文字",
   "button.sim_play": "播放",
   "button.start_debug_http": "启动 HTTP 调试器",
-  "button.start_playing": "开始游玩",
+  "button.start_playing": "开始游戏",
   "button.switch_save": "切换存档",
   "button.teleport_pair": "配对",
   "button.teleport_rename": "重命名",
@@ -270,6 +270,7 @@
   "panel.sign_text": "文字",
   "panel.stamp": "印花",
   "roller.title": "滚刷机设置",
+  "save.cover_loading": "加载中…",
   "save.choose_puzzle_prompt": "请先选择一个谜题。",
   "save.confirm_delete": "删除 {name}？",
   "save.kind.puzzle": "谜题",
@@ -289,7 +290,7 @@
   "save.title.edit_puzzle": "编辑谜题",
   "save.title.main": "读取存档",
   "save.title.pause": "切换存档",
-  "save.title.play_solution": "开始游玩",
+  "save.title.play_solution": "选择存档",
   "save.title.select_solution": "选择方案",
   "save.world": "世界：{name}",
   "selection_mode.line": "线",
@@ -447,5 +448,8 @@
   "virtual.sim_pause": "暂停模拟",
   "block.fallback": "未知方块",
   "short.fallback": "未知",
-  "desc.fallback": "找不到对应资源时的兜底方块"
+  "desc.fallback": "找不到对应资源时的兜底方块",
+  "button.start_game": "开始游戏",
+  "button.delete_puzzle": "删除谜题",
+  "save.title.select_puzzle_list": "谜题"
 }

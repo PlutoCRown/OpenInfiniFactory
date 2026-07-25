@@ -1,12 +1,12 @@
 use bevy::prelude::*;
 
 use super::super::types::{
-    LocalizedText, PanelCloseButton, PanelFlowLayout, PanelPosition, PanelTitleBar, PanelWindow,
+    LocalizedText, PanelCloseButton, PanelPosition, PanelTitleBar, PanelWindow,
 };
 use super::button::{HoverButton, raised_border};
-use super::icon::spawn_close_icon;
+use super::icon::{UiIconAssets, spawn_close_icon};
 use super::text::default_font_size;
-use crate::game::ui::access::i18n;
+use crate::game::ui::access::{i18n, with_ui_world};
 
 pub const PANEL_BG: Color = Color::srgb(0.192, 0.188, 0.192);
 pub const PANEL_LIGHT_EDGE: Color = Color::srgb(0.40, 0.38, 0.36);
@@ -98,6 +98,7 @@ pub fn spawn_panel_with_title(
     content: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
     let title = title.into();
+    let close_icon = with_ui_world(|world| world.resource::<UiIconAssets>().close.clone());
     root.spawn((
         panel_window_bundle(
             Val::Px(options.width),
@@ -113,7 +114,7 @@ pub fn spawn_panel_with_title(
             bar.spawn((panel_title_label(title, options.title_size), title_marker));
             if options.show_close {
                 bar.spawn(panel_close_button())
-                    .with_children(spawn_close_icon);
+                    .with_children(|btn| spawn_close_icon(btn, close_icon.clone()));
             }
         });
         panel.spawn(panel_content()).with_children(content);
@@ -193,23 +194,6 @@ pub fn compact_raised_panel(style: Node) -> impl Bundle {
 
 pub fn panel_bundle_auto(max_width_px: f32) -> impl Bundle {
     panel_window_bundle(Val::Auto, Val::Px(max_width_px), false, true)
-}
-
-/// 流式布局面板（相对定位），用于并排的多个面板
-pub fn panel_bundle_responsive_flow(
-    width_percent: f32,
-    max_width_px: f32,
-    start_hidden: bool,
-) -> impl Bundle {
-    (
-        panel_window_bundle(
-            Val::Percent(width_percent),
-            Val::Px(max_width_px),
-            start_hidden,
-            false,
-        ),
-        PanelFlowLayout,
-    )
 }
 
 fn panel_window_bundle(
@@ -330,7 +314,7 @@ pub fn panel_title_button() -> impl Bundle {
         Node {
             width: Val::Px(28.0),
             height: Val::Px(28.0),
-            border: UiRect::all(Val::Px(2.0)),
+            border: super::button::button_border(),
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
             flex_shrink: 0.0,

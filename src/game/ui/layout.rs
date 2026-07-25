@@ -12,6 +12,8 @@ use super::types::{
 use crate::game::cameras::{GameplayViewBackdrop, GameplayViewImage};
 use crate::game::session::SessionBusy;
 use crate::game::state::BuilderMode;
+use crate::game::ui::access::with_ui_world;
+use crate::game::ui::components::UiIconAssets;
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHostMountRoot, UiRootEntity};
 use crate::game::ui::features::playing_overlays::PlayingOverlayMounts;
 use crate::game::ui::features::session_busy::spawn_session_busy_overlay;
@@ -111,11 +113,10 @@ pub fn setup_playing_ui(
     inventory_mount.expect("inventory mount")
 }
 
-const CROSSHAIR_ARM: f32 = 12.0;
-const CROSSHAIR_THICKNESS: f32 = 2.0;
+const CROSSHAIR_SIZE: f32 = 28.0;
 
 fn spawn_crosshair(root: &mut ChildSpawnerCommands) {
-    let offset = (CROSSHAIR_ARM - CROSSHAIR_THICKNESS) * 0.5;
+    let image = with_ui_world(|world| world.resource::<UiIconAssets>().crosshair.clone());
 
     root.spawn((
         Node {
@@ -137,39 +138,19 @@ fn spawn_crosshair(root: &mut ChildSpawnerCommands) {
         },
     ))
     .with_children(|overlay| {
-        // 先放一个被 Flex 居中的锚点，再在其内画十字（绝对定位相对锚点）
-        overlay
-            .spawn(Node {
-                width: Val::Px(CROSSHAIR_ARM),
-                height: Val::Px(CROSSHAIR_ARM),
+        overlay.spawn((
+            Node {
+                width: Val::Px(CROSSHAIR_SIZE),
+                height: Val::Px(CROSSHAIR_SIZE),
                 ..default()
-            })
-            .with_children(|mark| {
-                mark.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(0.0),
-                        top: Val::Px(offset),
-                        width: Val::Px(CROSSHAIR_ARM),
-                        height: Val::Px(CROSSHAIR_THICKNESS),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.85)),
-                    Pickable::IGNORE,
-                ));
-                mark.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(offset),
-                        top: Val::Px(0.0),
-                        width: Val::Px(CROSSHAIR_THICKNESS),
-                        height: Val::Px(CROSSHAIR_ARM),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.85)),
-                    Pickable::IGNORE,
-                ));
-            });
+            },
+            ImageNode {
+                image,
+                color: Color::srgba(1.0, 1.0, 1.0, 0.85),
+                ..default()
+            },
+            Pickable::IGNORE,
+        ));
     });
 }
 
