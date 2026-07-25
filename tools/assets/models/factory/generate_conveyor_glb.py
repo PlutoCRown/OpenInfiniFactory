@@ -31,7 +31,7 @@ from common.bpy_util import (
     boolean_diff,
     boolean_union,
     clear_scene,
-    export_glb,
+    export_factory_glb,
     join_by_material,
     link,
     make_mat,
@@ -548,7 +548,7 @@ def main() -> None:
     join_by_material()
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    export_glb(OUT_GLB)
+    export_factory_glb(OUT_GLB)
     print(f"Wrote {OUT_GLB}", file=sys.stderr)
 
 

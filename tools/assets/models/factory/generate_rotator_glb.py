@@ -18,11 +18,25 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+import tempfile
+
 _TOOLS = Path(__file__).resolve().parents[2]
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 from common.paths import REPO_ROOT
-from common.bpy_util import apply_mat, apply_transforms, boolean_diff, clear_scene, export_glb, join_by_material, link, make_mat, mesh_cube, mesh_cylinder, set_active
+from common.bpy_util import (
+    apply_mat,
+    apply_transforms,
+    boolean_diff,
+    clear_scene,
+    export_factory_glb,
+    join_by_material,
+    link,
+    make_mat,
+    mesh_cube,
+    mesh_cylinder,
+    set_active,
+)
 from common.png_util import write_png_rgba
 
 import math
@@ -322,8 +336,9 @@ def main() -> None:
     for clockwise, out_dir in ((True, OUT_ROTATOR), (False, OUT_COUNTER)):
         label = "rotator (CW)" if clockwise else "counter_rotator (CCW)"
         clear_scene()
-        disk_path = out_dir / "disk_albedo.png"
         glb_path = out_dir / "model.glb"
+        tmp_dir = Path(tempfile.mkdtemp(prefix="oif_rotator_disk_"))
+        disk_path = tmp_dir / "disk_albedo.png"
 
         disk_img = write_disk_texture(disk_path, clockwise=clockwise)
         mat_base = make_mat(
@@ -343,8 +358,13 @@ def main() -> None:
         build_base(mat_base, clockwise=clockwise)
         build_top(mat_orange, mat_disk, mat_rivet)
         join_by_material()
-        export_glb(glb_path)
+        export_factory_glb(glb_path)
         print(f"Wrote {glb_path}", file=sys.stderr)
+        try:
+            disk_path.unlink(missing_ok=True)
+            tmp_dir.rmdir()
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":

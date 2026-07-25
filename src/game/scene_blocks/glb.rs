@@ -190,6 +190,11 @@ pub fn load_factory_glb(
                 .read_tex_coords(0)
                 .map(|iter| iter.into_f32().collect())
                 .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
+            let colors: Option<Vec<[f32; 4]>> = reader.read_colors(0).map(|iter| {
+                iter.into_rgba_f32()
+                    .map(|c| [c[0], c[1], c[2], c[3]])
+                    .collect()
+            });
             let indices: Vec<u32> = match reader.read_indices() {
                 Some(iter) => iter.into_u32().collect(),
                 None => (0..positions.len() as u32).collect(),
@@ -203,6 +208,16 @@ pub fn load_factory_glb(
                     uvs.len()
                 ));
             }
+            if let Some(ref colors) = colors {
+                if colors.len() != positions.len() {
+                    return Err(format!(
+                        "{}: COLOR length mismatch (pos={} color={})",
+                        path.display(),
+                        positions.len(),
+                        colors.len()
+                    ));
+                }
+            }
 
             let mut bevy_mesh = Mesh::new(
                 PrimitiveTopology::TriangleList,
@@ -212,6 +227,9 @@ pub fn load_factory_glb(
             .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
             .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
             .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+            if let Some(colors) = colors {
+                bevy_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
+            }
 
             let gltf_material = primitive.material();
             if gltf_material.normal_texture().is_some() {

@@ -3,7 +3,6 @@ use bevy::camera::{Hdr, RenderTarget};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
 use bevy::light::ShadowFilteringMethod;
-use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
 use bevy::post_process::bloom::{Bloom, BloomCompositeMode, BloomPrefilter};
 use bevy::prelude::*;
 use bevy::render::camera::TemporalJitter;
@@ -18,7 +17,7 @@ use crate::game::simulation::movement::PusherState;
 use crate::game::state::{GameMode, GameSettings, PlayingUiState};
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::{WorldBlocks, grid_to_world};
-use crate::game::world::rendering::{GameplayScene, environment_map_light};
+use crate::game::world::rendering::{GameplayScene, environment_map_light, gameplay_ssao};
 use crate::shared::config::GameConfig;
 use crate::shared::save::PuzzleLighting;
 
@@ -69,7 +68,7 @@ pub fn spawn_player(
         ClearColorConfig::Custom(MENU_CLEAR)
     };
 
-    commands
+    let camera = commands
         .spawn((
             Camera3d::default(),
             Camera {
@@ -114,17 +113,19 @@ pub fn spawn_player(
                 composite_mode: BloomCompositeMode::Additive,
                 ..Bloom::NATURAL
             },
-            ScreenSpaceAmbientOcclusion {
-                quality_level: ScreenSpaceAmbientOcclusionQualityLevel::Medium,
-                ..default()
-            },
             TemporalAntiAliasing::default(),
             TemporalJitter::default(),
             DepthPrepass,
             NormalPrepass,
             MotionVectorPrepass,
             ShadowFilteringMethod::Temporal,
-        ));
+        ))
+        .id();
+
+    // SSAO：接缝/贴地接触变暗；只吃环境光，强阳光下会偏淡
+    if let Some(ssao) = gameplay_ssao(config.ssao_quality) {
+        commands.entity(camera).insert(ssao);
+    }
 
     commands.spawn((
         Camera2d,

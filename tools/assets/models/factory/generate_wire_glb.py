@@ -22,7 +22,7 @@ _TOOLS = Path(__file__).resolve().parents[2]
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 from common.paths import REPO_ROOT
-from common.bpy_util import apply_mat, apply_transforms, boolean_diff, clear_scene, export_glb, finish, join_objects, link, make_mat, mesh_cube, mesh_cylinder, mesh_torus, set_active
+from common.bpy_util import apply_mat, apply_transforms, boolean_diff, clear_scene, export_factory_glb, finish, join_objects, link, make_mat, mesh_cube, mesh_cylinder, mesh_torus, set_active
 
 import math
 
@@ -247,7 +247,7 @@ def main() -> None:
         if power_parts:
             join_objects(f"{name}_Power", power_parts)
 
-    export_glb(OUT_GLB)
+    export_factory_glb(OUT_GLB)
     print(f"Wrote {OUT_GLB}", file=sys.stderr)
 
 

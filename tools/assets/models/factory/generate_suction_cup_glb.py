@@ -24,7 +24,7 @@ from common.bpy_util import (
     apply_transforms,
     boolean_diff,
     clear_scene,
-    export_glb,
+    export_factory_glb,
     join_by_material,
     link,
     make_mat,
@@ -127,7 +127,7 @@ def main() -> None:
     print("building suction_cup…", file=sys.stderr)
     build_suction_cup()
     join_by_material()
-    export_glb(OUT_GLB)
+    export_factory_glb(OUT_GLB)
     print(f"Wrote {OUT_GLB}", file=sys.stderr)
 
 

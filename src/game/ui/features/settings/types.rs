@@ -156,6 +156,10 @@ pub const GRAPHICS_SETTINGS: &[SettingsItem] = &[
         control: SettingsControl::Dropdown(SettingsDropdown::Shadows),
     },
     SettingsItem {
+        label_key: "settings.ssao",
+        control: SettingsControl::Dropdown(SettingsDropdown::Ssao),
+    },
+    SettingsItem {
         label_key: "settings.vsync",
         control: SettingsControl::Dropdown(SettingsDropdown::Vsync),
     },
@@ -285,6 +289,7 @@ pub enum SettingsDropdown {
     PlaceSelectionMode,
     DeleteSelectionMode,
     Shadows,
+    Ssao,
     Vsync,
     Skybox,
     WindowMode,
@@ -314,6 +319,7 @@ impl SettingsDropdown {
             } else {
                 "settings.option_off"
             }),
+            Self::Ssao => i18n.t(config.ssao_quality.label_key()),
             Self::Vsync => i18n.t(if config.vsync_enabled {
                 "settings.option_on"
             } else {
@@ -339,6 +345,7 @@ pub enum SettingsAction {
     SetDeleteSelectionMode(ConfigSelectionMode),
     SetLanguage(Language),
     SetShadowsEnabled(bool),
+    SetSsaoQuality(crate::shared::config::ConfigSsaoQuality),
     SetVsyncEnabled(bool),
     SetSkyboxEnabled(bool),
     SetWindowMode(ConfigWindowMode),
@@ -364,6 +371,7 @@ impl UiActionLabel for SettingsAction {
             | Self::SetDeleteSelectionMode(_)
             | Self::SetLanguage(_)
             | Self::SetShadowsEnabled(_)
+            | Self::SetSsaoQuality(_)
             | Self::SetVsyncEnabled(_)
             | Self::SetSkyboxEnabled(_)
             | Self::SetWindowMode(_)

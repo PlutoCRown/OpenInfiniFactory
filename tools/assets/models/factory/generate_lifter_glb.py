@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 import math
 import sys
+import tempfile
 
 _TOOLS = Path(__file__).resolve().parents[2]
 if str(_TOOLS) not in sys.path:
@@ -23,7 +24,7 @@ from common.bpy_util import (
     apply_transforms,
     boolean_diff,
     clear_scene,
-    export_glb,
+    export_factory_glb,
     join_by_material,
     link,
     make_mat,
@@ -38,7 +39,6 @@ from mathutils import Vector
 
 OUT_DIR = REPO_ROOT / "assets" / "factory_blocks" / "lifter"
 OUT_GLB = OUT_DIR / "model.glb"
-OUT_DISK_TEX = OUT_DIR / "disk_albedo.png"
 
 CELL = 0.5
 Z_BOT = -CELL
@@ -216,7 +216,9 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     print("writing disk albedo…", file=sys.stderr)
-    disk_img = write_disk_albedo(OUT_DISK_TEX)
+    tmp_dir = Path(tempfile.mkdtemp(prefix="oif_lifter_disk_"))
+    disk_path = tmp_dir / "disk_albedo.png"
+    disk_img = write_disk_albedo(disk_path)
 
     mat_base = make_mat("Base", (0.28, 0.38, 0.48, 1.0), metallic=0.12, roughness=0.55)
     mat_orange = make_mat(
@@ -234,9 +236,13 @@ def main() -> None:
     build_orange(mat_orange, disk_img)
     print("joining…", file=sys.stderr)
     join_by_material()
-    export_glb(OUT_GLB)
-    print(f"Wrote {OUT_DISK_TEX}", file=sys.stderr)
+    export_factory_glb(OUT_GLB)
     print(f"Wrote {OUT_GLB}", file=sys.stderr)
+    try:
+        disk_path.unlink(missing_ok=True)
+        tmp_dir.rmdir()
+    except OSError:
+        pass
 
 
 if __name__ == "__main__":

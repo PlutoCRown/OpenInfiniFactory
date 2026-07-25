@@ -200,6 +200,11 @@ pub fn dispatch_settings_actions(
                 open_dropdown.0 = None;
                 save_config(&config);
             }
+            SettingsAction::SetSsaoQuality(quality) => {
+                config.ssao_quality = quality;
+                open_dropdown.0 = None;
+                save_config(&config);
+            }
             SettingsAction::SetVsyncEnabled(enabled) => {
                 config.vsync_enabled = enabled;
                 open_dropdown.0 = None;

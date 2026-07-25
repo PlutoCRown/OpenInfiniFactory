@@ -39,6 +39,7 @@ pub const DEFAULT_CONFIG: GameConfig = GameConfig {
     mouse_sensitivity_x: 1.0,
     mouse_sensitivity_y: 1.0,
     shadows_enabled: true,
+    ssao_quality: ConfigSsaoQuality::High,
     vsync_enabled: true,
     skybox_enabled: false,
     window_mode: ConfigWindowMode::Windowed,
@@ -62,6 +63,8 @@ pub struct GameConfig {
     pub mouse_sensitivity_y: f32,
     #[serde(default = "default_shadows_enabled")]
     pub shadows_enabled: bool,
+    #[serde(default = "default_ssao_quality")]
+    pub ssao_quality: ConfigSsaoQuality,
     #[serde(default = "default_vsync_enabled")]
     pub vsync_enabled: bool,
     #[serde(default = "default_skybox_enabled")]
@@ -101,6 +104,10 @@ fn default_mouse_sensitivity() -> f32 {
 
 fn default_shadows_enabled() -> bool {
     DEFAULT_CONFIG.shadows_enabled
+}
+
+fn default_ssao_quality() -> ConfigSsaoQuality {
+    DEFAULT_CONFIG.ssao_quality
 }
 
 fn default_vsync_enabled() -> bool {
@@ -461,6 +468,38 @@ impl ConfigSelectionMode {
     }
 }
 
+/// 屏幕空间环境光遮蔽（SSAO）质量档
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Reflect, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigSsaoQuality {
+    Off,
+    Low,
+    Medium,
+    #[default]
+    High,
+    Ultra,
+}
+
+impl ConfigSsaoQuality {
+    pub const ALL: [ConfigSsaoQuality; 5] = [
+        ConfigSsaoQuality::Off,
+        ConfigSsaoQuality::Low,
+        ConfigSsaoQuality::Medium,
+        ConfigSsaoQuality::High,
+        ConfigSsaoQuality::Ultra,
+    ];
+
+    pub fn label_key(self) -> &'static str {
+        match self {
+            Self::Off => "settings.option_off",
+            Self::Low => "settings.ssao.low",
+            Self::Medium => "settings.ssao.medium",
+            Self::High => "settings.ssao.high",
+            Self::Ultra => "settings.ssao.ultra",
+        }
+    }
+}
+
 /// 桌面窗口显示模式
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Reflect, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -472,7 +511,8 @@ pub enum ConfigWindowMode {
 }
 
 impl ConfigWindowMode {
-    pub const ALL: [ConfigWindowMode; 2] = [ConfigWindowMode::Windowed, ConfigWindowMode::Borderless];
+    pub const ALL: [ConfigWindowMode; 2] =
+        [ConfigWindowMode::Windowed, ConfigWindowMode::Borderless];
 
     pub fn label_key(self) -> &'static str {
         match self {

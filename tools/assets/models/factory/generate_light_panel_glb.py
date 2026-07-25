@@ -19,7 +19,7 @@ _TOOLS = Path(__file__).resolve().parents[2]
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 from common.paths import REPO_ROOT
-from common.bpy_util import apply_transforms, clear_scene, export_glb, link, make_mat, set_active
+from common.bpy_util import apply_transforms, clear_scene, export_factory_glb, link, make_mat, set_active
 
 import bpy
 import bmesh
@@ -60,7 +60,7 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     mat = make_mat("LightPanel", (0.0, 0.0, 0.0, 1.0), roughness=1.0)
     build_panel(mat)
-    export_glb(OUT_GLB)
+    export_factory_glb(OUT_GLB)
     print(f"Wrote {OUT_GLB}", file=sys.stderr)
 
 

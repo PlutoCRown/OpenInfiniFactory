@@ -15,7 +15,7 @@ _TOOLS = Path(__file__).resolve().parents[2]
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 from common.paths import REPO_ROOT
-from common.bpy_util import apply_transforms, boolean_diff, clear_scene, export_glb, link, mesh_cube, set_active
+from common.bpy_util import apply_transforms, boolean_diff, clear_scene, export_factory_glb, link, mesh_cube, set_active
 from common.png_util import write_png_rgba
 
 import math
@@ -306,7 +306,7 @@ def main() -> None:
     print("building platform mesh…", file=sys.stderr)
     build_platform(mat_side, mat_top)
 
-    export_glb(OUT_GLB)
+    export_factory_glb(OUT_GLB)
     print(f"Wrote {OUT_GLB}", file=sys.stderr)
     print(f"Wrote {OUT_ALBEDO}", file=sys.stderr)
     print(f"Wrote {OUT_NORMAL}", file=sys.stderr)

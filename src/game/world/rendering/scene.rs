@@ -1,12 +1,13 @@
 use bevy::gizmos::config::{DefaultGizmoConfigGroup, GizmoConfigStore};
 use bevy::light::CascadeShadowConfigBuilder;
+use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
 use bevy::prelude::*;
 
 use super::components::{AimFaceHighlight, GameplayScene, HoverMarker, PlacementPreview};
 use super::depth_bias;
 use super::goal_ghost::GoalGhostMaterial;
 use super::previews::spawn_bounds_overlays;
-use super::skybox::{spawn_sky_dome, transform_for_sun_direction, SkyMaterial};
+use super::skybox::{SkyMaterial, spawn_sky_dome, transform_for_sun_direction};
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::shared::save::PuzzleLighting;
 
@@ -26,7 +27,10 @@ pub fn setup_scene(
     config: Res<crate::shared::config::GameConfig>,
     lighting: Res<PuzzleLighting>,
 ) {
-    gizmo_config.config_mut::<DefaultGizmoConfigGroup>().0.depth_bias = depth_bias::GIZMO_OVERLAY;
+    gizmo_config
+        .config_mut::<DefaultGizmoConfigGroup>()
+        .0
+        .depth_bias = depth_bias::GIZMO_OVERLAY;
     commands.spawn((
         PointLight {
             intensity: 1100.0,
@@ -154,6 +158,53 @@ pub fn sync_shadow_settings(
             light.shadow_maps_enabled = config.shadows_enabled;
         }
     }
+}
+
+/// 把配置里的 SSAO 质量同步到游玩相机
+pub fn sync_ssao_settings(
+    mut commands: Commands,
+    config: Res<crate::shared::config::GameConfig>,
+    cameras: Query<
+        (Entity, Option<&ScreenSpaceAmbientOcclusion>),
+        With<crate::game::cameras::GameplayCamera>,
+    >,
+) {
+    if !config.is_changed() {
+        return;
+    }
+    for (entity, existing) in &cameras {
+        match (gameplay_ssao(config.ssao_quality), existing.is_some()) {
+            (Some(ssao), _) => {
+                commands.entity(entity).insert(ssao);
+            }
+            (None, true) => {
+                commands
+                    .entity(entity)
+                    .remove::<ScreenSpaceAmbientOcclusion>();
+            }
+            (None, false) => {}
+        }
+    }
+}
+
+/// 按配置档位生成游玩相机用的 SSAO 组件；Off 返回 None
+pub fn gameplay_ssao(
+    quality: crate::shared::config::ConfigSsaoQuality,
+) -> Option<ScreenSpaceAmbientOcclusion> {
+    use crate::shared::config::ConfigSsaoQuality;
+
+    let quality_level = match quality {
+        ConfigSsaoQuality::Off => return None,
+        ConfigSsaoQuality::Low => ScreenSpaceAmbientOcclusionQualityLevel::Low,
+        ConfigSsaoQuality::Medium => ScreenSpaceAmbientOcclusionQualityLevel::Medium,
+        ConfigSsaoQuality::High => ScreenSpaceAmbientOcclusionQualityLevel::High,
+        ConfigSsaoQuality::Ultra => ScreenSpaceAmbientOcclusionQualityLevel::Ultra,
+    };
+    Some(ScreenSpaceAmbientOcclusion {
+        quality_level,
+        constant_object_thickness: 0.75,
+        ..default()
+    })
 }
 
 /// 把配置里的垂直同步开关同步到主窗口

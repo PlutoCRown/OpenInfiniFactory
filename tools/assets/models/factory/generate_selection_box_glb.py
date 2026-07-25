@@ -16,7 +16,7 @@ _TOOLS = Path(__file__).resolve().parents[2]
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 from common.paths import REPO_ROOT
-from common.bpy_util import apply_transforms, clear_scene, export_glb, link, set_active
+from common.bpy_util import apply_transforms, clear_scene, export_factory_glb, link, set_active
 from common.png_util import write_png_rgba
 
 import struct
@@ -171,7 +171,7 @@ def main() -> None:
     mat = make_face_mat(img)
     build_cube(mat)
 
-    export_glb(OUT_GLB)
+    export_factory_glb(OUT_GLB)
     print(f"Wrote {OUT_GLB}", file=sys.stderr)
     print(f"Wrote {OUT_FACE}", file=sys.stderr)
 

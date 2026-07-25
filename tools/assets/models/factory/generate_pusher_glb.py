@@ -24,7 +24,7 @@ _TOOLS = Path(__file__).resolve().parents[2]
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 from common.paths import REPO_ROOT
-from common.bpy_util import apply_mat, apply_transforms, boolean_diff, clear_scene, export_glb, finish, join_objects, link, make_mat, mesh_cube, mesh_cylinder, mesh_torus, set_active
+from common.bpy_util import apply_mat, apply_transforms, boolean_diff, clear_scene, export_factory_glb, finish, join_objects, link, make_mat, mesh_cube, mesh_cylinder, mesh_torus, set_active
 
 import math
 
@@ -524,7 +524,7 @@ def build_and_export(
     join_objects("Head", head_parts)
 
     out = out_dir / filename
-    export_glb(out)
+    export_factory_glb(out)
     print(f"Wrote {out}", file=sys.stderr)
 
 

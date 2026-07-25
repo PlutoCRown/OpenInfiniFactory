@@ -14,11 +14,25 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+
 _TOOLS = Path(__file__).resolve().parents[2]
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 from common.paths import REPO_ROOT
-from common.bpy_util import apply_mat, apply_transforms, boolean_diff, boolean_union, clear_scene, export_glb, join_by_material, link, make_mat, mesh_cube, mesh_cylinder, set_active
+from common.bpy_util import (
+    apply_mat,
+    apply_transforms,
+    boolean_diff,
+    boolean_union,
+    clear_scene,
+    export_factory_glb,
+    join_by_material,
+    link,
+    make_mat,
+    mesh_cube,
+    mesh_cylinder,
+    set_active,
+)
 
 import math
 
@@ -155,7 +169,9 @@ def build_body(mat: bpy.types.Material) -> bpy.types.Object:
                 )
             )
 
-    cutter = boolean_union(cutters)
+    cutter = cutters[0]
+    for other in cutters[1:]:
+        boolean_union(cutter, other)
     boolean_diff(body, cutter)
     clean_mesh(body)
     apply_mat(body, mat)
@@ -246,7 +262,7 @@ def main() -> None:
     build_front(mat_orange, mat_silver, mat_dark)
     print("joining…", file=sys.stderr)
     join_by_material()
-    export_glb(OUT_GLB)
+    export_factory_glb(OUT_GLB)
     print(f"Wrote {OUT_GLB}", file=sys.stderr)
 
 

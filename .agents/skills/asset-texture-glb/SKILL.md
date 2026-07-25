@@ -63,7 +63,7 @@ tools/assets/
 ```
 
 - 脚本开头把 `tools/assets` 加入 `sys.path`，再 `from common.bpy_util import ...`、`from common.paths import REPO_ROOT`
-- 清空场景 → 建 mesh/mat →（可选）join → `export_glb(...)`（内部 `export_yup=True`）
+- 清空场景 → 建 mesh/mat →（可选）join → 工厂块用 `export_factory_glb(...)`（`export_yup=True`；默认烘**顶点色 AO** 到 COLOR_0，不用贴图乘色）
 - **坐标系**：Blender Z-up；导出后与游戏一致。块心原点，约 `[-0.5, 0.5]^3`
 - 贴图：嵌入 GLB；有 `model.glb` 后通常删掉外部临时贴图（铝块脚本即如此）
 

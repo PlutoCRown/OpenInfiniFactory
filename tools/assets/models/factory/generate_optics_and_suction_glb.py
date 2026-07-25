@@ -24,7 +24,7 @@ _TOOLS = Path(__file__).resolve().parents[2]
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 from common.paths import REPO_ROOT
-from common.bpy_util import apply_mat, apply_transforms, boolean_diff, clear_scene, export_glb, join_by_material, link, make_mat, mesh_cube, set_active
+from common.bpy_util import apply_mat, apply_transforms, boolean_diff, clear_scene, export_factory_glb, join_by_material, link, make_mat, mesh_cube, set_active
 
 import math
 
@@ -268,7 +268,7 @@ def run_one(label: str, out_dir: Path, builder) -> None:
     print(f"building {label}…", file=sys.stderr)
     builder()
     join_by_material()
-    export_glb(out_dir / "model.glb")
+    export_factory_glb(out_dir / "model.glb")
 
 
 def main() -> None:

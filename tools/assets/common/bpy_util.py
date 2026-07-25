@@ -130,6 +130,9 @@ def make_mat(
         mat.blend_method = blend_method
         if blend_method == "CLIP" and hasattr(mat, "alpha_threshold"):
             mat.alpha_threshold = alpha_cutoff
+    else:
+        # Blender 5 默认可能是 HASHED；显式 OPAQUE 避免 glTF/AO 误判
+        mat.blend_method = "OPAQUE"
     if emission is not None:
         if "Emission Color" in bsdf.inputs:
             bsdf.inputs["Emission Color"].default_value = (*emission, 1.0)
@@ -300,3 +303,29 @@ def export_glb(
         kwargs["export_tangents"] = True
     bpy.ops.export_scene.gltf(**kwargs)
     print(f"Wrote {path}", file=sys.stderr)
+
+
+def export_factory_glb(
+    path: Path,
+    *,
+    export_tangents: bool = False,
+    export_image_format: str = "AUTO",
+    ao_samples: int = 64,
+    ao_max_ray_distance: float = 0.22,
+    ao_strength: float = 0.42,
+    bake_vertex_ao: bool = True,
+) -> None:
+    """工厂块导出 GLB；默认烘顶点色 AO（COLOR_0），不走贴图乘色以免 UV 串面。"""
+    if bake_vertex_ao:
+        from common.ao_bake import bake_vertex_ao as _bake_vertex_ao
+
+        _bake_vertex_ao(
+            samples=ao_samples,
+            max_ray_distance=ao_max_ray_distance,
+            strength=ao_strength,
+        )
+    export_glb(
+        path,
+        export_tangents=export_tangents,
+        export_image_format=export_image_format,
+    )

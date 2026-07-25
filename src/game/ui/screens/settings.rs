@@ -103,6 +103,7 @@ fn spawn_settings_dropdown_layers(root: &mut ChildSpawnerCommands) {
         SettingsDropdown::PlaceSelectionMode,
         SettingsDropdown::DeleteSelectionMode,
         SettingsDropdown::Shadows,
+        SettingsDropdown::Ssao,
         SettingsDropdown::Vsync,
         SettingsDropdown::Skybox,
     ];
@@ -340,6 +341,15 @@ fn settings_dropdown_options(dropdown: SettingsDropdown) -> Vec<(String, Setting
                 SettingsAction::SetShadowsEnabled(false),
             ),
         ],
+        SettingsDropdown::Ssao => crate::shared::config::ConfigSsaoQuality::ALL
+            .into_iter()
+            .map(|quality| {
+                (
+                    i18n.t(quality.label_key()),
+                    SettingsAction::SetSsaoQuality(quality),
+                )
+            })
+            .collect(),
         SettingsDropdown::Vsync => vec![
             (
                 i18n.t("settings.option_on"),
