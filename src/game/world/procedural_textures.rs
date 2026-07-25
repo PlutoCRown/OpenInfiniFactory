@@ -78,6 +78,20 @@ pub fn wood_pixel(x: u32, y: u32) -> [u8; 3] {
     }
 }
 
+/// MC 白桦木：浅奶油底 + 细竖纹
+pub fn birch_wood_pixel(x: u32, y: u32) -> [u8; 3] {
+    let noise = texture_noise(x, y, 307);
+    let grain = ((x * 3 + noise as u32 / 22) % 11) < 3;
+    let knot = ((x * 13 + y * 17 + 41) % 47) < 2;
+    if knot {
+        shade([168, 148, 110], noise, -18)
+    } else if grain {
+        shade([214, 198, 158], noise, -14)
+    } else {
+        shade([232, 220, 186], noise, 12)
+    }
+}
+
 /// MC 缺失贴图：洋红 / 黑 2×2 交替
 pub fn missing_texture_pixel(x: u32, y: u32) -> [u8; 3] {
     let cell = SIZE / 2;

@@ -11,6 +11,7 @@ pub fn text_prompt_spec(title_key: &'static str, default_value: &str) -> TextPro
         default_value: default_value.to_string(),
         save_text: i18n.t("button.confirm"),
         cancel_text: i18n.t("button.cancel"),
+        max_characters: Some(24),
     }
 }
 

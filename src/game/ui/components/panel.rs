@@ -61,11 +61,6 @@ impl PanelOptions {
         self.start_hidden = true;
         self
     }
-
-    pub const fn flow(mut self) -> Self {
-        self.flow = true;
-        self
-    }
 }
 
 pub fn spawn_panel(

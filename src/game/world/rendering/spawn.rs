@@ -11,6 +11,7 @@ use super::connectors::{
 };
 use super::scene_mesh::scene_block_mesh;
 use crate::game::blocks::BlockPresent;
+use crate::game::blocks::sign::visual::spawn_sign_visual;
 use crate::game::blocks::{
     BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
     spawn_factory_wire_arm, spawn_model_parts,
@@ -543,6 +544,17 @@ pub(crate) fn spawn_block_model(
                 icon_render.map(|(_, layer)| layer),
                 is_preview,
             );
+            if data.kind == BlockKind::Sign {
+                spawn_sign_visual(
+                    parent,
+                    assets,
+                    world,
+                    pos,
+                    data,
+                    icon_render.map(|(_, layer)| layer),
+                    is_preview,
+                );
+            }
         });
 
         let render_behavior = data.kind.render_behavior(data.facing);

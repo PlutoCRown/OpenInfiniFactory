@@ -8,16 +8,20 @@ use super::block_icons::{
 use super::components::{
     BlockIconAssets, BlockIconRenderCamera, BlockIconRenderRoot, BlockIconRenderState,
 };
+use super::depth_bias;
 use crate::game::blocks::BlockKind;
 use crate::game::material_blocks::{
     MaterialBlockRegistry, PaintMaterialRegistry, StampMaterialRegistry,
 };
 use crate::game::scene_blocks::{SceneBlockRegistry, load_icon_png};
+use crate::game::world::render_assets::WorldRenderAssets;
 
-/// 为 UI 准备方块图标：一律加载预烘焙 PNG，不再离屏渲染
+/// 为 UI 准备方块图标：一律加载预烘焙 PNG，并生成告示正面展示材质
 pub fn setup_block_icons(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut render_assets: ResMut<WorldRenderAssets>,
     scene_registry: Res<SceneBlockRegistry>,
     material_registry: Res<MaterialBlockRegistry>,
     stamp_registry: Res<StampMaterialRegistry>,
@@ -143,6 +147,24 @@ pub fn setup_block_icons(
                 light_panel_path.display()
             );
         }
+    }
+
+    // 告示正面 icon：材料/印花，depth_bias = PAINT
+    for (kind, image) in &icon_assets.icons {
+        if !matches!(kind, BlockKind::Material(_) | BlockKind::Stamp(_)) {
+            continue;
+        }
+        let material = materials.add(StandardMaterial {
+            base_color_texture: Some(image.clone()),
+            depth_bias: depth_bias::PAINT,
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            cull_mode: None,
+            perceptual_roughness: 1.0,
+            reflectance: 0.0,
+            ..default()
+        });
+        render_assets.insert_sign_display_material(*kind, material);
     }
 
     commands.insert_resource(icon_assets);

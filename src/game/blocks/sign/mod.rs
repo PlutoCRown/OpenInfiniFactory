@@ -9,8 +9,12 @@ use crate::game::blocks::BlockKind;
 
 pub static BLOCK: BlockImpl<SignBlock> = BlockImpl(SignBlock);
 
+mod nametag;
 mod render;
 mod ui;
+pub(crate) mod visual;
+
+pub use nametag::{spawn_sign_nametag, sync_sign_nametag};
 
 impl PlaceableBlock for SignBlock {
     fn item_slot_color(&self) -> Color {

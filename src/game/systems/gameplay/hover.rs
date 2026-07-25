@@ -23,7 +23,7 @@ use crate::game::world::rendering::{
 };
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
-use super::placement::{preview_world, selected_place_block};
+use super::placement::{attachment_place_block, preview_world, selected_place_block};
 use super::rules::can_place_block_at;
 
 /// 根据设置同步玩家相机 FOV
@@ -227,6 +227,7 @@ pub fn update_hover(
                     player_pos,
                     Some(target.normal),
                 ) {
+                    let block = attachment_place_block(block, target.normal);
                     let preview_world = preview_world(&world, &[place_at], block);
                     spawn_block_preview(
                         &mut preview_deps.commands,

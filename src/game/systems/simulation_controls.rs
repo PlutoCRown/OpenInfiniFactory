@@ -48,6 +48,8 @@ pub fn simulation_controls(
     mut deps: SimulationControlDeps,
     mut block_index: ResMut<crate::scene::BlockEntityIndex>,
     mut scene_chunks: ResMut<SceneChunkMeshes>,
+    // 用 F 从停/暂停启动后，同一次按住不算加速，松手后再按才加速
+    mut suppress_sim_fast_until_release: Local<bool>,
 ) {
     if *deps.builder_mode != BuilderMode::Play
         || *deps.mode.get() != GameMode::Playing
@@ -61,6 +63,7 @@ pub fn simulation_controls(
     };
 
     if input.simulate {
+        let was_running = deps.simulation.running;
         start_simulation_if_needed(
             &mut deps.simulation,
             &deps.world,
@@ -84,6 +87,10 @@ pub fn simulation_controls(
             );
         }
         request_continuous_run(&mut deps.simulation);
+        // 未运行/暂停时按 F 是启动；与加速同键时需松手再按才加速
+        if !was_running {
+            *suppress_sim_fast_until_release = true;
+        }
     }
 
     if input.sim_step {
@@ -98,11 +105,16 @@ pub fn simulation_controls(
         }
     }
 
-    deps.simulation.speed = if deps.simulation.running && input.sim_fast {
-        4.0
-    } else {
-        1.0
-    };
+    if !input.sim_fast {
+        *suppress_sim_fast_until_release = false;
+    }
+
+    deps.simulation.speed =
+        if deps.simulation.running && input.sim_fast && !*suppress_sim_fast_until_release {
+            4.0
+        } else {
+            1.0
+        };
 
     if input.rollback && deps.simulation.is_active() {
         let factory_snapshot = rollback_simulation(&mut deps.simulation, &mut deps.world);

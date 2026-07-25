@@ -526,6 +526,14 @@ pub fn refresh_edit_changes(
         if world.system_blocks.contains_key(&pos) {
             despawn_system_at(commands, index, pos);
         }
+        // 告示正面 icon 只读 settings：强制拆再建
+        if world
+            .blocks
+            .get(&pos)
+            .is_some_and(|block| block.kind == BlockKind::Sign)
+        {
+            despawn_animatable_at(commands, index, pos);
+        }
     }
     refresh_positions(
         commands,

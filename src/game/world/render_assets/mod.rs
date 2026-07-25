@@ -44,6 +44,9 @@ pub struct WorldRenderAssets {
     part_small: Handle<Mesh>,
     part_plate: Handle<Mesh>,
     part_sign_board: Handle<Mesh>,
+    part_sign_pole: Handle<Mesh>,
+    /// 告示正面 icon 四边形（XY，法线 +Z）
+    part_sign_icon: Handle<Mesh>,
     part_rotator_base: Handle<Mesh>,
     part_rotator_disk: Handle<Mesh>,
     part_rotator_ring: Handle<Mesh>,
@@ -78,6 +81,8 @@ pub struct WorldRenderAssets {
     goal_ghost_materials:
         HashMap<BlockKind, Handle<crate::game::world::rendering::GoalGhostMaterial>>,
     face_mark_materials: HashMap<PaintMaterialId, Handle<StandardMaterial>>,
+    /// 告示牌正面展示用的方块 icon 材质（depth_bias = PAINT）
+    sign_display_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     /// 灯面板未通电材质
     pub(crate) light_panel_material: Handle<StandardMaterial>,
     /// 灯面板通电发光材质
@@ -123,17 +128,18 @@ impl WorldRenderAssets {
             .into_iter()
             .filter_map(|kind| kind.block_texture().map(|image| (kind, images.add(image))))
             .collect();
+        // 告示等用浅色白桦纹（勿用深色 oak 材料贴图）
+        let wood_texture = images.add(crate::game::world::procedural_textures::from_fn(
+            crate::game::world::procedural_textures::birch_wood_pixel,
+        ));
+        let bordered_wood_texture = images.add(texture::bordered_wood());
+        let stone_texture = images.add(crate::game::world::procedural_textures::from_fn(|x, y| {
+            crate::game::world::procedural_textures::material_pixel(x, y, [124, 128, 132], 89)
+        }));
         let platform_texture = block_textures
             .get(&BlockKind::Platform)
             .expect("platform defines a texture")
             .clone();
-        let stone_texture = images.add(crate::game::world::procedural_textures::from_fn(|x, y| {
-            crate::game::world::procedural_textures::material_pixel(x, y, [124, 128, 132], 89)
-        }));
-        let wood_texture = images.add(crate::game::world::procedural_textures::from_fn(
-            crate::game::world::procedural_textures::wood_pixel,
-        ));
-        let bordered_wood_texture = images.add(texture::bordered_wood());
         let block_materials: HashMap<BlockKind, Handle<StandardMaterial>> = all_blocks()
             .into_iter()
             .map(|kind| {
@@ -508,8 +514,10 @@ impl WorldRenderAssets {
             part_medium: meshes.add(Cuboid::new(0.44, 0.20, 0.44)),
             part_small: meshes.add(Cuboid::new(0.22, 0.22, 0.22)),
             part_plate: meshes.add(Cuboid::new(0.78, 0.06, 0.78)),
-            // 告示竖板：薄在 Z，大面朝 ±Z（局部 +Z 贴宿主）
-            part_sign_board: meshes.add(Cuboid::new(0.78, 0.72, 0.06)),
+            // 告示竖板：宽 1、高 0.6、薄在 Z（局部 +Z 贴宿主）
+            part_sign_board: meshes.add(Cuboid::new(1.0, 0.6, 0.05)),
+            part_sign_pole: meshes.add(Cuboid::new(0.1, 0.5, 0.1)),
+            part_sign_icon: meshes.add(Rectangle::new(1.0, 1.0)),
             part_rotator_base: meshes.add(Cuboid::new(1.0, 0.80, 1.0)),
             part_rotator_disk: meshes.add(Cylinder::new(0.40, 0.20).mesh().resolution(48)),
             part_rotator_ring: meshes.add(meshes::rotator_ring_mesh(0.50, 0.40, 0.20, 64)),
@@ -548,6 +556,7 @@ impl WorldRenderAssets {
             goal_play_visual_initialized: false,
             goal_ghost_materials: HashMap::new(),
             face_mark_materials,
+            sign_display_materials: HashMap::new(),
             // 未通电：黑；通电：白 + 轻度自发光（须 lit，Bloom 阈值约 5）；bias 用默认 0
             light_panel_material: materials.add(StandardMaterial {
                 base_color: Color::BLACK,
@@ -807,6 +816,11 @@ impl WorldRenderAssets {
         }
     }
 
+    /// 告示正面 icon 网格（单位正方形）
+    pub(crate) fn sign_icon_mesh(&self) -> Handle<Mesh> {
+        self.part_sign_icon.clone()
+    }
+
     pub(crate) fn face_mark_mesh(&self, _normal: IVec3) -> Handle<Mesh> {
         self.face_mark.clone()
     }
@@ -822,6 +836,23 @@ impl WorldRenderAssets {
             .clone()
     }
 
+    /// 告示牌正面 icon 材质（未烘焙则无）
+    pub(crate) fn sign_display_material(
+        &self,
+        kind: BlockKind,
+    ) -> Option<Handle<StandardMaterial>> {
+        self.sign_display_materials.get(&kind).cloned()
+    }
+
+    /// 写入告示展示 icon 材质（由 setup_block_icons 填充）
+    pub(crate) fn insert_sign_display_material(
+        &mut self,
+        kind: BlockKind,
+        material: Handle<StandardMaterial>,
+    ) {
+        self.sign_display_materials.insert(kind, material);
+    }
+
     pub(crate) fn model_mesh(&self, mesh: ModelMesh) -> Handle<Mesh> {
         match mesh {
             ModelMesh::ConveyorBase => self.part_conveyor_base.clone(),
@@ -833,6 +864,7 @@ impl WorldRenderAssets {
             ModelMesh::Small => self.part_small.clone(),
             ModelMesh::Plate => self.part_plate.clone(),
             ModelMesh::SignBoard => self.part_sign_board.clone(),
+            ModelMesh::SignPole => self.part_sign_pole.clone(),
             ModelMesh::RotatorBase => self.part_rotator_base.clone(),
             ModelMesh::RotatorDisk => self.part_rotator_disk.clone(),
             ModelMesh::RotatorRing => self.part_rotator_ring.clone(),

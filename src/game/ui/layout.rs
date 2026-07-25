@@ -88,6 +88,7 @@ pub fn setup_playing_ui(
             spawn_hotbar(root);
             spawn_carried_label(root);
             spawn_item_tooltip(root);
+            crate::game::blocks::sign::spawn_sign_nametag(root);
             spawn_session_busy_overlay(root, busy);
             spawn_virtual_remote(root, &touch, false);
             inventory_mount = Some(

@@ -44,8 +44,10 @@ pub enum ModelMesh {
     Medium,
     Small,
     Plate,
-    /// 竖立告示板（薄在 Z，大面朝 ±Z）
+    /// 竖立告示板（宽 1、高 0.6、薄在 Z，大面朝 ±Z）
     SignBoard,
+    /// 立地告示杆（局部 Y，截面细）
+    SignPole,
     RotatorBase,
     RotatorDisk,
     RotatorRing,

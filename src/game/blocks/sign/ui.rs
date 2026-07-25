@@ -6,9 +6,8 @@ use super::SignBlock;
 
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
-    click_material_slot, hover_tooltip_material, set_hover_tooltip, spawn_labeled_panel_button,
-    spawn_material_icon_list, spawn_material_icon_toggle, sync_dropdown_overlay,
-    update_material_icon,
+    click_material_slot, hover_tooltip_material, set_hover_tooltip, spawn_material_icon_list,
+    spawn_material_icon_toggle, sync_dropdown_overlay, update_material_icon,
 };
 use crate::game::block_editing::world_refresh::apply_block_settings_edit;
 use crate::game::blocks::panels::BlockPanelHooks;
@@ -16,11 +15,12 @@ use crate::game::blocks::traits::BlockUi;
 use crate::game::blocks::{MaterialBlockId, material_catalog};
 use crate::game::edit_history::EditHistory;
 use crate::game::session::PlayingWorldParams;
-use crate::game::state::{SolutionState, UiPanelId};
-use crate::game::ui::access::{UiMainThread, i18n, ui};
+use crate::game::state::{GameMode, SolutionState, UiPanelId};
+use crate::game::ui::access::{UiMainThread, i18n, ui, with_ui_world};
 use crate::game::ui::components::{
-    PanelOptions, default_button_size, localized_text, spawn_panel as spawn_ui_panel, text,
-    transparent_node,
+    BUTTON_BG, PanelOptions, UiIconAssets, button_border, button_shadow, default_button_size,
+    localized_text, raised_border, spawn_panel as spawn_ui_panel, spawn_ui_icon, styled_button,
+    text, transparent_node,
 };
 use crate::game::ui::core::host::UiHost;
 use crate::game::ui::core::runtime::UiRuntime;
@@ -36,10 +36,8 @@ const DISPLAY_SLOT: u8 = 0;
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SignAction {
     EditText,
-    ClearText,
     ToggleDisplay,
     SetMaterial(MaterialBlockId),
-    ClearDisplay,
 }
 
 #[derive(Component, Clone, Copy)]
@@ -58,13 +56,15 @@ struct SignMaterialOption(MaterialBlockId);
 #[derive(Resource, Default)]
 struct PendingSignTextEdit(Option<IVec3>);
 
+/// 文本提示改完后重建告示渲染（清掉板上 icon）
+#[derive(Resource, Default)]
+struct PendingSignVisualRefresh(Option<IVec3>);
+
 impl UiActionLabel for SignAction {
     fn label_key(self) -> &'static str {
         match self {
             Self::EditText => "button.sign_edit_text",
-            Self::ClearText => "button.sign_clear_text",
             Self::ToggleDisplay | Self::SetMaterial(_) => "button.sign_display",
-            Self::ClearDisplay => "button.sign_clear_display",
         }
     }
 }
@@ -82,13 +82,11 @@ pub fn spawn_panel(root: &mut ChildSpawnerCommands) {
         UiPanelBinding(UiPanelId::Sign),
         |panel| {
             spawn_row(panel, "panel.sign_text", |row| {
-                spawn_labeled_panel_button(row, SignAction::EditText);
                 row.spawn((text("-", 16.0, Color::WHITE), SignTextPreview));
-                spawn_labeled_panel_button(row, SignAction::ClearText);
+                spawn_edit_text_button(row);
             });
             spawn_row(panel, "panel.sign_display", |row| {
                 spawn_material_icon_toggle(row, SignDisplaySlot, SignAction::ToggleDisplay);
-                spawn_labeled_panel_button(row, SignAction::ClearDisplay);
             });
         },
     );
@@ -108,12 +106,21 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
 
 pub fn register(app: &mut App) {
     app.init_resource::<PendingSignTextEdit>()
+        .init_resource::<PendingSignVisualRefresh>()
         .add_observer(on_click)
         .add_systems(
             Update,
             (process_sign_text_prompt, update_panel, update_dropdowns)
                 .chain()
                 .in_set(BlockPanelSystems),
+        )
+        .add_systems(
+            Update,
+            (flush_sign_visual_refresh, super::nametag::sync_sign_nametag)
+                .chain()
+                .run_if(in_state(GameMode::Playing))
+                .after(crate::game::systems::perf::PerfScope::Hover)
+                .before(crate::game::systems::perf::PerfScope::Placement),
         );
 }
 
@@ -134,21 +141,48 @@ fn spawn_row(
     panel
         .spawn(transparent_node(Node {
             width: Val::Percent(100.0),
-            height: Val::Px(default_button_size(40.0)),
+            min_height: Val::Px(default_button_size(40.0)),
             display: Display::Flex,
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             column_gap: Val::Px(10.0),
             ..default()
         }))
         .with_children(|row| {
-            row.spawn((
-                localized_text(label_key, 16.0, Color::srgb(0.86, 0.88, 0.86)),
-                Node {
-                    width: Val::Px(110.0),
-                    ..default()
-                },
+            row.spawn(localized_text(
+                label_key,
+                16.0,
+                Color::srgb(0.86, 0.88, 0.86),
             ));
             controls(row);
+        });
+}
+
+/// 文本后的编辑图标按钮
+fn spawn_edit_text_button(parent: &mut ChildSpawnerCommands) {
+    let edit = with_ui_world(|world| world.resource::<UiIconAssets>().edit.clone());
+    let size = default_button_size(36.0);
+    parent
+        .spawn((
+            styled_button(
+                Node {
+                    width: Val::Px(size),
+                    height: Val::Px(size),
+                    border: button_border(),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    flex_shrink: 0.0,
+                    ..default()
+                },
+                raised_border(),
+                BUTTON_BG,
+            ),
+            button_shadow(),
+            SignAction::EditText,
+        ))
+        .with_children(|button| {
+            spawn_ui_icon(button, edit, 16.0);
         });
 }
 
@@ -186,10 +220,6 @@ fn on_click(
     let mut settings = world.world.sign_settings(pos);
     let changed = match action {
         SignAction::EditText => unreachable!(),
-        SignAction::ClearText => {
-            settings.text = None;
-            true
-        }
         SignAction::ToggleDisplay => {
             if let Some(material) = click_material_slot(
                 UiPanelId::Sign,
@@ -208,10 +238,6 @@ fn on_click(
             settings.display = Some(SignDisplay::Material(material));
             settings.text = None;
             open_dropdown.close();
-            true
-        }
-        SignAction::ClearDisplay => {
-            settings.display = None;
             true
         }
     };
@@ -241,6 +267,7 @@ fn process_sign_text_prompt(
         default_value: current,
         save_text: i18n.t("button.confirm"),
         cancel_text: i18n.t("button.cancel"),
+        max_characters: None,
     };
     ui.open_text_prompt_then(spec, move |result, world| {
         let TextPromptResult::Saved(requested) = result else {
@@ -250,7 +277,7 @@ fn process_sign_text_prompt(
         let text = if trimmed.is_empty() {
             None
         } else {
-            Some(trimmed.chars().take(64).collect::<String>())
+            Some(trimmed.to_string())
         };
         if !world.resource::<WorldBlocks>().blocks.contains_key(&pos) {
             return;
@@ -276,7 +303,19 @@ fn process_sign_text_prompt(
             history.record_settings(pos, before, after);
         }
         world.resource_mut::<SolutionState>().dirty = true;
+        world.resource_mut::<PendingSignVisualRefresh>().0 = Some(pos);
     });
+}
+
+/// 消费文本编辑后的告示视觉刷新
+fn flush_sign_visual_refresh(
+    mut pending: ResMut<PendingSignVisualRefresh>,
+    mut world: PlayingWorldParams,
+) {
+    let Some(pos) = pending.0.take() else {
+        return;
+    };
+    crate::game::block_editing::world_refresh::refresh_world_after_edit(&mut world, pos);
 }
 
 fn update_panel(
@@ -355,10 +394,6 @@ fn update_dropdowns(
             });
     for (entity, _, children) in &mut display_slots {
         update_material_icon(children, material, block_icons, &mut material_icons);
-        set_hover_tooltip(
-            &mut commands,
-            entity,
-            material.map(hover_tooltip_material),
-        );
+        set_hover_tooltip(&mut commands, entity, material.map(hover_tooltip_material));
     }
 }

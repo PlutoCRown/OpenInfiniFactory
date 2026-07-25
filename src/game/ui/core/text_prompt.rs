@@ -47,6 +47,8 @@ pub struct TextPromptProps {
     pub default_value: String,
     pub save_text: String,
     pub cancel_text: String,
+    /// `None` 表示不限制字数（告示牌等长文本）
+    pub max_characters: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -62,6 +64,7 @@ pub struct TextPromptState {
     pub value: String,
     pub save_text: String,
     pub cancel_text: String,
+    max_characters: Option<usize>,
     result: Option<TextPromptResult>,
     /// 打开时需要把默认值写入 EditableText
     seed_input: bool,
@@ -75,11 +78,11 @@ impl TextPromptState {
     pub(crate) fn reset_for_open(&mut self, spec: TextPromptProps) {
         self.open = true;
         self.title = spec.title;
-        self.value = spec
-            .default_value
-            .chars()
-            .take(TEXT_PROMPT_MAX_LEN)
-            .collect();
+        self.max_characters = spec.max_characters;
+        self.value = match spec.max_characters {
+            Some(limit) => spec.default_value.chars().take(limit).collect(),
+            None => spec.default_value,
+        };
         self.save_text = spec.save_text;
         self.cancel_text = spec.cancel_text;
         self.result = None;
@@ -110,7 +113,7 @@ impl TextPromptState {
 /// 按需生成文本输入对话框
 pub fn spawn_text_prompt(root: &mut ChildSpawnerCommands) -> Entity {
     root.spawn((
-        panel_bundle(1050.0),
+        panel_bundle(525.0),
         GlobalZIndex(30_000),
         TextPromptRoot,
         children![
@@ -333,9 +336,10 @@ pub fn update_text_prompt_ui(
     if prompt.seed_input {
         prompt.seed_input = false;
         let value = prompt.value.clone();
+        let max_characters = prompt.max_characters;
         for (entity, mut editable) in &mut inputs {
             editable.clear();
-            editable.max_characters = Some(TEXT_PROMPT_MAX_LEN);
+            editable.max_characters = max_characters;
             editable.allow_newlines = false;
             editable.editor.set_text(&value);
             editable.queue_edit(TextEdit::TextEnd(false));

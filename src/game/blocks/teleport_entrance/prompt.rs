@@ -12,6 +12,7 @@ pub fn open_teleport_rename_prompt(pos: IVec3, current_name: String) {
         default_value: current_name,
         save_text: i18n.t("button.confirm"),
         cancel_text: i18n.t("button.cancel"),
+        max_characters: Some(24),
     };
     ui.open_text_prompt_then(spec, move |result, world| {
         let TextPromptResult::Saved(requested) = result else {

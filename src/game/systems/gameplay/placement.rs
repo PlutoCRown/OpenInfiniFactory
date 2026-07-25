@@ -630,24 +630,11 @@ fn commit_edit_gesture(
             if positions.is_empty() {
                 return false;
             }
+            let placed = attachment_place_block(block, gesture.plane_normal);
             build_cell_patch(world, &positions, |world| {
                 for pos in &positions {
-                    let mut placed = block;
-                    // 侧贴：朝向取贴面法线；顶立：保留预览朝向
-                    if block.kind.attaches_to_factory_face() {
-                        let normal = gesture.plane_normal;
-                        if normal.y == 0 {
-                            placed.facing = match (normal.x, normal.z) {
-                                (1, 0) => Facing::East,
-                                (-1, 0) => Facing::West,
-                                (0, 1) => Facing::South,
-                                (0, -1) => Facing::North,
-                                _ => placed.facing,
-                            };
-                        }
-                    }
                     world.insert(*pos, placed);
-                    if block.kind.attaches_to_factory_face() {
+                    if placed.kind.attaches_to_factory_face() {
                         let host_pos = *pos - gesture.plane_normal;
                         if let Some(host) = world.blocks.get(&host_pos).copied() {
                             if let Some(sign) = world.blocks.get(pos).copied() {
@@ -698,6 +685,22 @@ fn commit_edit_gesture(
     true
 }
 
+/// 侧贴附着块朝向取贴面法线；顶/底立保留原朝向（预览与真正放下一致）
+pub(super) fn attachment_place_block(block: BlockData, plane_normal: IVec3) -> BlockData {
+    if !block.kind.attaches_to_factory_face() || plane_normal.y != 0 {
+        return block;
+    }
+    let mut placed = block;
+    placed.facing = match (plane_normal.x, plane_normal.z) {
+        (1, 0) => Facing::East,
+        (-1, 0) => Facing::West,
+        (0, 1) => Facing::South,
+        (0, -1) => Facing::North,
+        _ => placed.facing,
+    };
+    placed
+}
+
 /// 为进行中的放置手势生成方块预览（删除框由 sync_edit_bounds_overlays 更新）
 fn spawn_gesture_previews(
     gesture: &EditGesture,
@@ -713,6 +716,7 @@ fn spawn_gesture_previews(
     let EditGestureKind::Place { block } = gesture.kind else {
         return;
     };
+    let block = attachment_place_block(block, gesture.plane_normal);
     let positions = selection_positions(
         config.place_selection_mode,
         gesture.start,
