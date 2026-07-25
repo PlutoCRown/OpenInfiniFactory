@@ -3,8 +3,8 @@ use bevy::picking::prelude::{Click, Drag, DragEnd, DragStart, Out, Over, Pointer
 use bevy::prelude::*;
 
 use crate::game::state::{
-    BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, StartMenuScreen,
-    UiPanelId,
+    BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
+    StartMenuScreen, UiPanelId,
 };
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::save::SaveState;

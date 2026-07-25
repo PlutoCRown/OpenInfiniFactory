@@ -4,13 +4,15 @@ use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
-use crate::game::state::{GameMode, PlacementState, PlayingUiState, SimulationState};
+use crate::game::state::{
+    GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
+};
 use crate::game::ui::UiHost;
 use crate::game::ui::core::confirm_dialog::ConfirmDialogState;
 use crate::game::ui::dismiss_playing_overlay;
 use crate::game::ui::{
-    CarriedItem, HOTBAR_SLOTS, InlineTextEditState, OpenBlockPanelDropdown, OpenSettingsDropdown,
-    PanelDragState, PendingKeyBind, TextPromptState, UiRuntime,
+    CarriedItem, HOTBAR_SLOTS, InlineTextEditState, InventoryItems, OpenBlockPanelDropdown,
+    OpenSettingsDropdown, PanelDragState, PendingKeyBind, TextPromptState, UiRuntime,
 };
 
 /// 关闭覆盖层所需的 UI 资源集合
@@ -33,11 +35,17 @@ impl PanelCloseDeps<'_> {
         &mut self,
         playing_ui: &mut PlayingUiState,
         carried: &mut CarriedItem,
+        inventory: &mut InventoryItems,
+        placement: &PlacementState,
+        solution_state: &mut SolutionState,
         commands: &mut Commands,
     ) -> bool {
         dismiss_playing_overlay(
             playing_ui,
             carried,
+            inventory,
+            placement,
+            solution_state,
             &mut self.ui_runtime,
             &mut self.ui_host,
             &mut self.confirm,
@@ -61,6 +69,8 @@ pub fn gameplay_input(
     mut playing_ui: ResMut<PlayingUiState>,
     mut placement: ResMut<PlacementState>,
     mut carried: ResMut<CarriedItem>,
+    mut inventory: ResMut<InventoryItems>,
+    mut solution_state: ResMut<SolutionState>,
     mut panel_close: PanelCloseDeps,
     mut simulation: ResMut<SimulationState>,
     mut commands: Commands,
@@ -79,7 +89,14 @@ pub fn gameplay_input(
     }
 
     if input.pause {
-        if panel_close.dismiss_overlay(&mut playing_ui, &mut carried, &mut commands) {
+        if panel_close.dismiss_overlay(
+            &mut playing_ui,
+            &mut carried,
+            &mut inventory,
+            &placement,
+            &mut solution_state,
+            &mut commands,
+        ) {
             // Overlay dismissed.
         } else {
             playing_ui.paused = !playing_ui.paused;
@@ -92,7 +109,14 @@ pub fn gameplay_input(
     }
 
     if input.inventory {
-        if panel_close.dismiss_overlay(&mut playing_ui, &mut carried, &mut commands) {
+        if panel_close.dismiss_overlay(
+            &mut playing_ui,
+            &mut carried,
+            &mut inventory,
+            &placement,
+            &mut solution_state,
+            &mut commands,
+        ) {
             // Overlay dismissed.
         } else {
             playing_ui.inventory_open = true;

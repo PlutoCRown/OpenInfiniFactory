@@ -69,6 +69,9 @@ fn dismiss_modals_and_host_panels(
 pub fn dismiss_playing_overlay(
     playing_ui: &mut PlayingUiState,
     carried: &mut CarriedItem,
+    inventory: &mut InventoryItems,
+    placement: &PlacementState,
+    solution_state: &mut SolutionState,
     ui_runtime: &mut UiRuntime,
     ui_host: &mut UiHost,
     confirm: &mut ConfirmDialogState,
@@ -96,7 +99,14 @@ pub fn dismiss_playing_overlay(
     }
     if playing_ui.inventory_open {
         playing_ui.inventory_open = false;
-        carried.clear();
+        // 手里有东西时放进当前激活快捷栏，而不是丢掉
+        if let Some(item) = carried.take() {
+            let slot = &mut inventory.hotbar[placement.selected];
+            if *slot != Some(item) {
+                *slot = Some(item);
+                solution_state.dirty = true;
+            }
+        }
         return true;
     }
     if playing_ui.paused {
@@ -231,6 +241,9 @@ pub fn panel_close_clicked(
     mut click: On<Pointer<Click>>,
     mut playing_ui: ResMut<PlayingUiState>,
     mut carried: ResMut<CarriedItem>,
+    mut inventory: ResMut<InventoryItems>,
+    placement: Res<PlacementState>,
+    mut solution_state: ResMut<SolutionState>,
     mut ui_runtime: ResMut<UiRuntime>,
     mut ui_host: ResMut<UiHost>,
     mut confirm: ResMut<ConfirmDialogState>,
@@ -250,6 +263,9 @@ pub fn panel_close_clicked(
     dismiss_playing_overlay(
         &mut playing_ui,
         &mut carried,
+        &mut inventory,
+        &placement,
+        &mut solution_state,
         &mut ui_runtime,
         &mut ui_host,
         &mut confirm,

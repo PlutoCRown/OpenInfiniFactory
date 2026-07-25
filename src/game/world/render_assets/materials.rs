@@ -47,16 +47,22 @@ pub(super) fn preview_block_material(
     }
 }
 
-/// 工厂零件预览：幽灵色但不透明，避免多零件闪烁
+/// 模型/场景预览：幽灵色；原本不透明的保持 Opaque（多零件不闪），Blend/Mask 保留镂空
 pub(super) fn preview_model_material(material: StandardMaterial) -> StandardMaterial {
-    // 不用 Blend：多零件 GLB 每帧重建时透明排序会闪；Opaque 幽灵色更稳
     let c = material.base_color.to_srgba();
+    // 源材质已是透明/镂空时必须保留 alpha_mode，否则贴图透明区会按 RGB（常为黑）实心画出
+    let keep_cutout = !matches!(material.alpha_mode, AlphaMode::Opaque);
+    let alpha = if matches!(material.alpha_mode, AlphaMode::Blend) {
+        c.alpha * 0.46
+    } else {
+        1.0
+    };
     StandardMaterial {
         base_color: Color::srgba(
             c.red * 0.55 + 0.28,
             c.green * 0.55 + 0.30,
             c.blue * 0.55 + 0.34,
-            1.0,
+            alpha,
         ),
         base_color_texture: material.base_color_texture,
         normal_map_texture: material.normal_map_texture,
@@ -64,7 +70,11 @@ pub(super) fn preview_model_material(material: StandardMaterial) -> StandardMate
         metallic: material.metallic * 0.35,
         perceptual_roughness: material.perceptual_roughness.max(0.75),
         reflectance: material.reflectance,
-        alpha_mode: AlphaMode::Opaque,
+        alpha_mode: if keep_cutout {
+            material.alpha_mode
+        } else {
+            AlphaMode::Opaque
+        },
         cull_mode: material.cull_mode,
         unlit: false,
         ..default()
