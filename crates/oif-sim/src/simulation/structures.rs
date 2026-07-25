@@ -49,12 +49,6 @@ pub(super) fn gravity_moves(
         {
             continue;
         }
-        if structure
-            .iter()
-            .any(|pos| world.anchors_material_at_teleport_entrance(*pos))
-        {
-            continue;
-        }
         if structure_supported_by_lifter(world, &structure) {
             for pos in &structure {
                 if let Some(sid) = structures.id_at(*pos) {
@@ -831,11 +825,6 @@ fn expanded_move_structure(
 
     can_move_structure_without_push(world, &expanded, offset)
         .then_some(expanded)
-        .filter(|expanded| {
-            !expanded
-                .iter()
-                .any(|pos| world.anchors_material_at_teleport_entrance(*pos))
-        })
 }
 
 /// 把工厂附着子格（告示等）并入待移动集合

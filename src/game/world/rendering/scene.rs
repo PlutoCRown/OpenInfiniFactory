@@ -6,6 +6,7 @@ use bevy::prelude::*;
 use super::components::{AimFaceHighlight, GameplayScene, HoverMarker, PlacementPreview};
 use super::depth_bias;
 use super::goal_ghost::GoalGhostMaterial;
+use super::portal_material::PortalMaterial;
 use super::previews::spawn_bounds_overlays;
 use super::skybox::{SkyMaterial, spawn_sky_dome, transform_for_sun_direction};
 use crate::game::world::render_assets::WorldRenderAssets;
@@ -17,6 +18,7 @@ pub fn setup_scene(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut ghost_materials: ResMut<Assets<GoalGhostMaterial>>,
+    mut portal_materials: ResMut<Assets<PortalMaterial>>,
     mut sky_materials: ResMut<Assets<SkyMaterial>>,
     mut images: ResMut<Assets<Image>>,
     mut gizmo_config: ResMut<GizmoConfigStore>,
@@ -81,6 +83,7 @@ pub fn setup_scene(
         &paint_registry,
     );
     render_assets.install_goal_ghost_materials(&materials, &mut ghost_materials, &mut images);
+    render_assets.install_portal_material(&mut portal_materials);
     spawn_bounds_overlays(&mut commands, &render_assets);
     commands.insert_resource(render_assets);
 

@@ -51,7 +51,8 @@ use ui::{GameUiPlugin, InventoryItems};
 use world::animation::{animate_blocks, scroll_conveyor_belts};
 use world::grid::WorldBlocks;
 use world::rendering::{
-    GoalGhostPlugin, HoverStructureBounds, SkyboxPlugin, retire_block_icon_renderers,
+    GoalGhostPlugin, HoverStructureBounds, PortalMaterialPlugin, SkyboxPlugin,
+    retire_block_icon_renderers,
 };
 
 pub struct GamePlugin;
@@ -150,7 +151,8 @@ impl Plugin for GamePlugin {
             .add_plugins(GameUiPlugin)
             .add_plugins(PerfPlugin)
             .add_plugins(SkyboxPlugin)
-            .add_plugins(GoalGhostPlugin);
+            .add_plugins(GoalGhostPlugin)
+            .add_plugins(PortalMaterialPlugin);
         #[cfg(not(target_arch = "wasm32"))]
         app.add_plugins(DebugToolsPlugin);
         app.add_observer(slider_self_update)

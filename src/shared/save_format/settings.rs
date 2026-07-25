@@ -27,7 +27,7 @@ pub fn write_settings(out: &mut Vec<u8>, kind: oif_sim::BlockKind, settings: &Bl
             write_converter(out, *value)
         }
         (
-            oif_sim::BlockKind::TeleportEntrance | oif_sim::BlockKind::TeleportExit,
+            oif_sim::BlockKind::Teleport,
             BlockSettings::Teleport(value),
         ) => write_teleport(out, value),
         (oif_sim::BlockKind::Sign, BlockSettings::Sign(value)) => write_sign(out, value),
@@ -51,7 +51,7 @@ pub fn read_settings(
         oif_sim::BlockKind::Converter => {
             BlockSettings::Converter(read_converter(cursor, string_ids)?)
         }
-        oif_sim::BlockKind::TeleportEntrance | oif_sim::BlockKind::TeleportExit => {
+        oif_sim::BlockKind::Teleport => {
             BlockSettings::Teleport(read_teleport(cursor)?)
         }
         oif_sim::BlockKind::Sign => BlockSettings::Sign(read_sign(cursor, string_ids)?),

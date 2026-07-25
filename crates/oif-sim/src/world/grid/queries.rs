@@ -2,7 +2,7 @@
 
 use glam::IVec3;
 
-use crate::blocks::{BlockData, BlockKind};
+use crate::blocks::{BlockData, BlockId, BlockKind};
 
 use super::WorldBlocks;
 
@@ -152,17 +152,36 @@ impl WorldBlocks {
             .is_some_and(|block| block.kind.is_material())
     }
 
-    pub fn is_teleport_entrance_at(&self, pos: IVec3) -> bool {
+    pub fn is_teleport_at(&self, pos: IVec3) -> bool {
         self.system_blocks.get(&pos).is_some_and(|block| {
-            matches!(
-                block.kind.material_processor(),
-                Some(crate::blocks::MaterialProcessor::TeleportEntrance)
-            )
+            block
+                .kind
+                .material_processor()
+                .is_some_and(|processor| processor.is_teleport())
         })
     }
 
-    pub fn anchors_material_at_teleport_entrance(&self, pos: IVec3) -> bool {
-        self.is_material_at(pos) && self.is_teleport_entrance_at(pos)
+    pub fn anchors_material_at_teleport(&self, pos: IVec3) -> bool {
+        self.is_material_at(pos) && self.is_teleport_at(pos)
+    }
+
+    /// 标记材料刚传送到达（同 id 留在口内时下回合不传；换 id / 变空则清标记）
+    pub fn mark_teleport_arrival(&mut self, pos: IVec3, id: BlockId) {
+        self.teleport_arrivals.insert(pos, id);
+    }
+
+    /// 材料是否仍是本口记录的「刚到达」方块
+    pub fn is_teleport_arrival(&self, pos: IVec3, id: BlockId) -> bool {
+        self.teleport_arrivals.get(&pos) == Some(&id)
+    }
+
+    /// 同步到达标记：空则清除；仍是原 id 则保留；已换成别的 id 则清除以便尝试传送
+    pub fn sync_teleport_arrivals(&mut self) {
+        self.teleport_arrivals.retain(|pos, id| {
+            self.blocks
+                .get(pos)
+                .is_some_and(|block| block.kind.is_material() && block.id == *id)
+        });
     }
 
     pub fn is_factory_at(&self, pos: IVec3) -> bool {

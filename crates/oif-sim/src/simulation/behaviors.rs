@@ -103,54 +103,64 @@ pub(super) fn run_material_destroy_phase(
     destroy_powered_lasers(world, powered_laser_devices)
 }
 
-/// 阶段 4 传送：本回合只挂起，下一回合开始再搬迁（等移动动画完全进入入口）
+/// 阶段 4 传送：本回合只挂起，下一回合开始再搬迁（等移动动画完全进入传送口）
 pub(super) fn run_material_teleport_phase(
-    world: &WorldBlocks,
+    world: &mut WorldBlocks,
     pending_generated: &mut super::pending::PendingGeneratedMaterials,
     ready_turn: u64,
 ) {
-    let entrances: Vec<IVec3> = world
+    world.sync_teleport_arrivals();
+
+    let portals: Vec<IVec3> = world
         .system_blocks
         .iter()
         .filter_map(|(pos, block)| {
-            matches!(
-                block.kind.material_processor(),
-                Some(MaterialProcessor::TeleportEntrance)
-            )
-            .then_some(*pos)
+            block
+                .kind
+                .material_processor()
+                .is_some_and(|processor| processor.is_teleport())
+                .then_some(*pos)
         })
         .collect();
 
     let mut handled = HashSet::new();
-    for entrance in entrances {
-        if handled.contains(&entrance) {
+    for portal in portals {
+        if handled.contains(&portal) {
             continue;
         }
-        let Some(exit) = resolve_teleport_pair(world, entrance) else {
+        let Some(partner) = resolve_teleport_pair(world, portal) else {
             continue;
         };
-        if world.is_material_at(exit) || !world.can_move_into(exit) {
+        // 两端同时有材料：目的地被占 → 双方都不挂起，留在原位下回合再试
+        if world.is_material_at(partner) || !world.can_move_into(partner) {
             continue;
         }
-        pending_generated.mark_teleport(entrance, exit, ready_turn);
-        handled.insert(entrance);
-        handled.insert(exit);
+        pending_generated.mark_teleport(portal, partner, ready_turn);
+        handled.insert(portal);
+        handled.insert(partner);
     }
 }
 
-/// 解析传送入口对应的有效出口（有材料锚定且配对出口存在）
-fn resolve_teleport_pair(world: &WorldBlocks, entrance: IVec3) -> Option<IVec3> {
-    if !world.anchors_material_at_teleport_entrance(entrance) {
+/// 解析传送对：本口有材料、未处于「刚到达」锁定、且存在配对口
+fn resolve_teleport_pair(world: &WorldBlocks, portal: IVec3) -> Option<IVec3> {
+    if !world.anchors_material_at_teleport(portal) {
         return None;
     }
-    let exit = world.teleport_partner(entrance)?;
+    let id = world.blocks.get(&portal)?.id;
+    if world.is_teleport_arrival(portal, id) {
+        return None;
+    }
+    let partner = world.teleport_partner(portal)?;
     world
         .system_blocks
-        .get(&exit)
+        .get(&partner)
         .filter(|block| {
-            block.kind.material_processor() == Some(MaterialProcessor::TeleportExit)
+            block
+                .kind
+                .material_processor()
+                .is_some_and(|processor| processor.is_teleport())
         })
-        .map(|_| exit)
+        .map(|_| partner)
 }
 
 /// 阶段 4 焊接：本回合移动结束后把相邻焊点上的材料焊成一体；返回成功焊点对
@@ -588,13 +598,13 @@ fn mark_material_destroy(
     pending_generated.mark_destroyed(pos, block.kind, ready_turn, reason);
 }
 
-/// 落地一笔挂起的传送（入口仍有材料且出口可进）
+/// 落地一笔挂起的传送（源口仍有材料且目标口可进）；成功返回到达目标格的材料 id
 pub(super) fn apply_pending_teleport(
     world: &mut WorldBlocks,
-    entrance: IVec3,
-    exit: IVec3,
-) -> bool {
-    teleport_entrance_material(world, entrance, exit)
+    from: IVec3,
+    to: IVec3,
+) -> Option<crate::blocks::BlockId> {
+    teleport_material(world, from, to)
 }
 
 fn detach_material_block(world: &mut WorldBlocks, pos: IVec3) {
@@ -603,22 +613,25 @@ fn detach_material_block(world: &mut WorldBlocks, pos: IVec3) {
     }
 }
 
-fn teleport_entrance_material(world: &mut WorldBlocks, entrance: IVec3, exit: IVec3) -> bool {
-    if !world.anchors_material_at_teleport_entrance(entrance) {
-        return false;
+fn teleport_material(
+    world: &mut WorldBlocks,
+    from: IVec3,
+    to: IVec3,
+) -> Option<crate::blocks::BlockId> {
+    if !world.anchors_material_at_teleport(from) {
+        return None;
     }
-    if world.is_material_at(exit) || !world.can_move_into(exit) {
-        return false;
+    if world.is_material_at(to) || !world.can_move_into(to) {
+        return None;
     }
 
-    detach_material_block(world, entrance);
+    detach_material_block(world, from);
 
     // 面附着按 BlockId，搬迁无需改写；用 relocate 避免 remove 清掉附着
-    let Some(block) = world.blocks.get(&entrance).copied() else {
-        return false;
-    };
-    world.relocate_blocks(vec![(entrance, exit, block)]);
-    true
+    let block = world.blocks.get(&from).copied()?;
+    let id = block.id;
+    world.relocate_blocks(vec![(from, to, block)]);
+    Some(id)
 }
 
 fn trace_laser(

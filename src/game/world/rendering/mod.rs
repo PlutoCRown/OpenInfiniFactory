@@ -6,6 +6,7 @@ mod connectors;
 pub(crate) mod depth_bias;
 mod fx;
 pub(crate) mod goal_ghost;
+pub(crate) mod portal_material;
 mod goal_visual_sync;
 mod icons;
 mod previews;
@@ -38,6 +39,7 @@ pub use fx::{
     spawn_weld_sparks,
 };
 pub use goal_ghost::{GoalGhostMaterial, GoalGhostPlugin};
+pub use portal_material::{PortalFlashQueue, PortalMaterial, PortalMaterialPlugin};
 pub use icons::{retire_block_icon_renderers, setup_block_icons};
 pub use previews::{
     despawn_edit_previews, despawn_pending_generated_previews, spawn_block_preview,

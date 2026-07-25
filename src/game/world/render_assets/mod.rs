@@ -80,6 +80,10 @@ pub struct WorldRenderAssets {
     /// 游玩态验收器幽灵材质（按目标材料种类）
     goal_ghost_materials:
         HashMap<BlockKind, Handle<crate::game::world::rendering::GoalGhostMaterial>>,
+    /// 传送门流动材质（模板；实体 spawn 后会 uniquify）
+    portal_material: Handle<crate::game::world::rendering::PortalMaterial>,
+    /// 传送门立方体网格
+    portal_cube_mesh: Handle<Mesh>,
     face_mark_materials: HashMap<PaintMaterialId, Handle<StandardMaterial>>,
     /// 告示牌正面展示用的方块 icon 材质（depth_bias = PAINT）
     sign_display_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
@@ -555,6 +559,8 @@ impl WorldRenderAssets {
             goal_play_visual: false,
             goal_play_visual_initialized: false,
             goal_ghost_materials: HashMap::new(),
+            portal_material: Handle::default(),
+            portal_cube_mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
             face_mark_materials,
             sign_display_materials: HashMap::new(),
             // 未通电：黑；通电：白 + 轻度自发光（须 lit，Bloom 阈值约 5）；bias 用默认 0
@@ -762,6 +768,15 @@ impl WorldRenderAssets {
         self.goal_ghost_materials = map;
     }
 
+    /// 安装传送门流动材质
+    pub(crate) fn install_portal_material(
+        &mut self,
+        portal_materials: &mut Assets<crate::game::world::rendering::PortalMaterial>,
+    ) {
+        use crate::game::world::rendering::portal_material::default_portal_material;
+        self.portal_material = portal_materials.add(default_portal_material());
+    }
+
     pub(crate) fn goal_ghost_material(
         &self,
         kind: BlockKind,
@@ -772,6 +787,16 @@ impl WorldRenderAssets {
     pub(crate) fn goal_ghost_mesh(&self, kind: BlockKind) -> Handle<Mesh> {
         self.scene_mesh(kind)
             .unwrap_or_else(|| self.block_mesh(kind))
+    }
+
+    pub(crate) fn portal_material_handle(
+        &self,
+    ) -> Handle<crate::game::world::rendering::PortalMaterial> {
+        self.portal_material.clone()
+    }
+
+    pub(crate) fn portal_cube_mesh(&self) -> Handle<Mesh> {
+        self.portal_cube_mesh.clone()
     }
 
     pub(crate) fn scene_material(&self, kind: BlockKind) -> Option<Handle<StandardMaterial>> {

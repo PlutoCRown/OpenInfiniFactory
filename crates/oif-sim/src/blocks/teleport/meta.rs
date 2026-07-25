@@ -1,22 +1,22 @@
-use super::TeleportEntranceBlock;
+use super::TeleportBlock;
 
 use crate::blocks::traits::BlockMeta;
 use crate::blocks::{BlockDefinition, BlockKind, rgb};
 use glam::IVec3;
 use crate::world::grid::{BlockSettings, TeleportSettings};
 
-impl BlockMeta for TeleportEntranceBlock {
+impl BlockMeta for TeleportBlock {
     fn id(&self) -> BlockKind {
-        BlockKind::TeleportEntrance
+        BlockKind::Teleport
     }
 
     fn definition(&self) -> BlockDefinition {
         BlockDefinition::puzzle_system(
             self.id(),
-            "block.teleport_entrance",
-            "short.teleport_entrance",
-            "desc.teleport_entrance",
-            rgb(0.12, 0.62, 0.92),
+            "block.teleport",
+            "short.teleport",
+            "desc.teleport",
+            rgb(0.55, 0.18, 0.92),
         )
         .no_collision()
     }
@@ -25,4 +25,3 @@ impl BlockMeta for TeleportEntranceBlock {
         Some(BlockSettings::Teleport(TeleportSettings::unnamed(pos)))
     }
 }
-

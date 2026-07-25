@@ -17,7 +17,7 @@ use crate::game::world::animation::{
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     despawn_pending_generated_previews, spawn_pending_generated_block, PendingGeneratedPreview,
-    SceneChunkMeshes, WorldRenderAssets,
+    PortalFlashQueue, SceneChunkMeshes, WorldRenderAssets,
 };
 use crate::scene::{apply_turn_output, BlockEntityIndex};
 use super::{CachedTurn, SimSnapshot, SimulationWorker, TurnCache};
@@ -96,6 +96,7 @@ pub struct SimulationTickDeps<'w> {
     scene_chunks: ResMut<'w, SceneChunkMeshes>,
     meshes: ResMut<'w, Assets<Mesh>>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
+    portal_flash_queue: ResMut<'w, PortalFlashQueue>,
     debug: Res<'w, DebugState>,
 }
 
@@ -159,6 +160,7 @@ pub fn tick_simulation(
                 &mut deps.block_index,
                 &mut deps.scene_chunks,
                 render_assets,
+                &mut deps.portal_flash_queue,
                 &deps.debug,
                 &mut deps.sim_stats,
             );
@@ -204,6 +206,7 @@ pub fn tick_simulation(
                 &mut deps.block_index,
                 &mut deps.scene_chunks,
                 render_assets,
+                &mut deps.portal_flash_queue,
                 &deps.debug,
                 &mut deps.sim_stats,
             );
@@ -243,6 +246,7 @@ fn present_turn(
     block_index: &mut BlockEntityIndex,
     scene_chunks: &mut SceneChunkMeshes,
     render_assets: &WorldRenderAssets,
+    portal_flash_queue: &mut PortalFlashQueue,
     debug: &DebugState,
     sim_stats: &mut SimulationStepStats,
 ) {
@@ -272,6 +276,10 @@ fn present_turn(
         sim_stats,
         scene_chunks,
     );
+    for &(from, to, _) in &cached.output.teleport_flashes {
+        portal_flash_queue.positions.push(from);
+        portal_flash_queue.positions.push(to);
+    }
     presentation.last_powered_wires = cached.output.powered_wires.clone();
     presentation.committed_world = world.clone();
 }

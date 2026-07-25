@@ -32,8 +32,7 @@ pub fn encode_kind(kind: BlockKind) -> u8 {
         BlockKind::Stamper => 23,
         BlockKind::Roller => 24,
         BlockKind::Converter => 25,
-        BlockKind::TeleportEntrance => 26,
-        BlockKind::TeleportExit => 27,
+        BlockKind::Teleport => 26,
         BlockKind::Goal => 28,
         // 种类标记后跟字符串 id
         BlockKind::Material(_) => 29,
@@ -72,8 +71,8 @@ pub fn decode_kind(id: u8) -> Result<BlockKind, SaveFormatError> {
         23 => BlockKind::Stamper,
         24 => BlockKind::Roller,
         25 => BlockKind::Converter,
-        26 => BlockKind::TeleportEntrance,
-        27 => BlockKind::TeleportExit,
+        // 26=传送块；27=旧传送出口，一并读成传送块
+        26 | 27 => BlockKind::Teleport,
         28 => BlockKind::Goal,
         // 旧材料数字 id → 兜底（v5 会再读字符串覆盖）
         29 | 30 | 31 | 35 => BlockKind::Material(oif_sim::blocks::fallback_material_id()),

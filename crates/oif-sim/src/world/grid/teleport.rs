@@ -108,15 +108,19 @@ impl WorldBlocks {
         let Some(block) = self.system_blocks.get(&pos) else {
             return false;
         };
-        let Some(role) = block.kind.material_processor() else {
-            return false;
-        };
-        role.teleport_partner_role() == other_kind.material_processor() && pos != other
+        block
+            .kind
+            .material_processor()
+            .is_some_and(|processor| processor.is_teleport())
+            && other_kind
+                .material_processor()
+                .is_some_and(|processor| processor.is_teleport())
+            && pos != other
     }
 
     pub(super) fn next_teleport_name(&self) -> String {
         let names = CULTURE_SHIP_NAMES.as_slice();
-        // 入口/出口共用一名单，已占用名全局唯一
+        // 传送口共用一名单，已占用名全局唯一
         let used: HashSet<&str> = self
             .block_settings
             .iter()

@@ -12,6 +12,7 @@ use super::connectors::{
 use super::scene_mesh::scene_block_mesh;
 use crate::game::blocks::BlockPresent;
 use crate::game::blocks::sign::visual::spawn_sign_visual;
+use crate::game::blocks::teleport::visual::spawn_teleport_visual;
 use crate::game::blocks::{
     BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
     spawn_factory_wire_arm, spawn_model_parts,
@@ -555,6 +556,14 @@ pub(crate) fn spawn_block_model(
                     is_preview,
                 );
             }
+            if data.kind == BlockKind::Teleport {
+                spawn_teleport_visual(
+                    parent,
+                    assets,
+                    pos,
+                    icon_render.map(|(_, layer)| layer),
+                );
+            }
         });
 
         let render_behavior = data.kind.render_behavior(data.facing);
@@ -655,21 +664,9 @@ pub(crate) fn spawn_block_model(
                         Transform {
                             translation: local_offset.as_vec3() * (0.174 * arm_scale),
                             scale: Vec3::new(
-                                if local_offset.x != 0 {
-                                    arm_scale
-                                } else {
-                                    1.0
-                                },
-                                if local_offset.y != 0 {
-                                    arm_scale
-                                } else {
-                                    1.0
-                                },
-                                if local_offset.z != 0 {
-                                    arm_scale
-                                } else {
-                                    1.0
-                                },
+                                if local_offset.x != 0 { arm_scale } else { 1.0 },
+                                if local_offset.y != 0 { arm_scale } else { 1.0 },
+                                if local_offset.z != 0 { arm_scale } else { 1.0 },
                             ),
                             ..default()
                         },

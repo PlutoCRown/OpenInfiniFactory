@@ -40,8 +40,7 @@ pub fn baked_block_icon_relpath(kind: BlockKind) -> Option<&'static str> {
         BlockKind::Converter => Some("block_icons/converter.png"),
         BlockKind::Stamper => Some("block_icons/stamper.png"),
         BlockKind::Roller => Some("block_icons/roller.png"),
-        BlockKind::TeleportEntrance => Some("block_icons/teleport_entrance.png"),
-        BlockKind::TeleportExit => Some("block_icons/teleport_exit.png"),
+        BlockKind::Teleport => Some("block_icons/teleport.png"),
         BlockKind::Scene(_)
         | BlockKind::Material(_)
         | BlockKind::Stamp(_)
@@ -95,8 +94,7 @@ pub fn baked_block_icon_only_id(kind: BlockKind) -> Option<&'static str> {
         BlockKind::Converter => Some("converter"),
         BlockKind::Stamper => Some("stamper"),
         BlockKind::Roller => Some("roller"),
-        BlockKind::TeleportEntrance => Some("teleport_entrance"),
-        BlockKind::TeleportExit => Some("teleport_exit"),
+        BlockKind::Teleport => Some("teleport"),
         _ => None,
     }
 }

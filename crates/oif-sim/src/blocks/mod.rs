@@ -35,8 +35,7 @@ pub mod stamper;
 pub mod stamper_body;
 pub mod sign;
 pub mod suction_cup;
-pub mod teleport_entrance;
-pub mod teleport_exit;
+pub mod teleport;
 pub mod vertical_mirror;
 pub mod weld_point;
 pub mod welder;
@@ -154,8 +153,7 @@ pub enum SystemBlock {
     Stamper,
     Roller,
     Converter,
-    TeleportEntrance,
-    TeleportExit,
+    Teleport,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -225,27 +223,17 @@ pub enum MaterialLabeler {
     Roller { target: IVec3 },
 }
 
-/// 材料处理器：转换器 / 传送入口 / 传送出口
+/// 材料处理器：转换器 / 传送块
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MaterialProcessor {
     Converter,
-    TeleportEntrance,
-    TeleportExit,
+    Teleport,
 }
 
 impl MaterialProcessor {
-    /// 是否为传送口（入口或出口）
+    /// 是否为传送块
     pub fn is_teleport(self) -> bool {
-        matches!(self, Self::TeleportEntrance | Self::TeleportExit)
-    }
-
-    /// 配对另一端角色；非传送口返回 None
-    pub fn teleport_partner_role(self) -> Option<Self> {
-        match self {
-            Self::TeleportEntrance => Some(Self::TeleportExit),
-            Self::TeleportExit => Some(Self::TeleportEntrance),
-            Self::Converter => None,
-        }
+        matches!(self, Self::Teleport)
     }
 }
 
@@ -530,8 +518,7 @@ pub enum BlockKind {
     Stamper,
     Roller,
     Converter,
-    TeleportEntrance,
-    TeleportExit,
+    Teleport,
     Goal,
     /// 配置式材料方块（basic/iron/copper/glass 等）
     Material(MaterialBlockId),
@@ -610,8 +597,7 @@ impl BlockKind {
             BlockKind::Stamper => BlockLayer::System(SystemBlock::Stamper),
             BlockKind::Roller => BlockLayer::System(SystemBlock::Roller),
             BlockKind::Converter => BlockLayer::System(SystemBlock::Converter),
-            BlockKind::TeleportEntrance => BlockLayer::System(SystemBlock::TeleportEntrance),
-            BlockKind::TeleportExit => BlockLayer::System(SystemBlock::TeleportExit),
+            BlockKind::Teleport => BlockLayer::System(SystemBlock::Teleport),
             BlockKind::WeldPoint => BlockLayer::Virtual(VirtualBlock::WeldPoint),
             BlockKind::DrillHead => BlockLayer::Virtual(VirtualBlock::DrillHead),
             BlockKind::RollerBody => BlockLayer::Virtual(VirtualBlock::RollerBody),

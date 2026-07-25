@@ -55,6 +55,12 @@ impl BlockEntityIndex {
         self.animatable_pos.remove(&pos)
     }
 
+    /// 解绑实体当前所占的任意格子（传送后再重力时 from_pos 可能对不上）
+    pub fn unbind_animatable_entity(&mut self, entity: Entity) {
+        self.animatable_pos
+            .retain(|_, existing| *existing != entity);
+    }
+
     pub fn remove_animatable(&mut self, pos: IVec3) -> Option<Entity> {
         let entity = self.animatable_pos.remove(&pos)?;
         self.by_id.retain(|_, existing| *existing != entity);

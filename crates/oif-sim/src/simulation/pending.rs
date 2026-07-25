@@ -11,7 +11,7 @@ pub struct PendingGeneratedMaterials {
     pending: HashMap<IVec3, PendingGeneratedMaterial>,
     /// 钻头/验收销毁：本回合只标记，下一回合开始再移除
     pending_destroyed: HashMap<IVec3, PendingDestroyedMaterial>,
-    /// 传送：本回合只标记入口→出口，下一回合开始再搬迁
+    /// 传送：本回合只标记源口→目标口，下一回合开始再搬迁
     pending_teleports: HashMap<IVec3, PendingTeleport>,
     /// 滚刷漆：本回合只标记，下一回合开始再写入
     pending_paints: HashMap<MaterialFace, PendingPaint>,
@@ -61,10 +61,10 @@ impl PendingGeneratedMaterials {
             });
     }
 
-    pub(crate) fn mark_teleport(&mut self, entrance: IVec3, exit: IVec3, ready_turn: u64) {
+    pub(crate) fn mark_teleport(&mut self, from: IVec3, to: IVec3, ready_turn: u64) {
         self.pending_teleports
-            .entry(entrance)
-            .or_insert(PendingTeleport { exit, ready_turn });
+            .entry(from)
+            .or_insert(PendingTeleport { to, ready_turn });
     }
 
     pub(crate) fn mark_paint(
@@ -117,17 +117,17 @@ impl PendingGeneratedMaterials {
         out
     }
 
-    /// 取出本回合应落地的延后传送（入口 → 出口）
+    /// 取出本回合应落地的延后传送（源口 → 目标口）
     pub(crate) fn take_ready_teleports(&mut self, turn: u64) -> Vec<(IVec3, IVec3)> {
         let ready: Vec<IVec3> = self
             .pending_teleports
             .iter()
-            .filter_map(|(entrance, pending)| (pending.ready_turn <= turn).then_some(*entrance))
+            .filter_map(|(from, pending)| (pending.ready_turn <= turn).then_some(*from))
             .collect();
         let mut out = Vec::with_capacity(ready.len());
-        for entrance in ready {
-            if let Some(pending) = self.pending_teleports.remove(&entrance) {
-                out.push((entrance, pending.exit));
+        for from in ready {
+            if let Some(pending) = self.pending_teleports.remove(&from) {
+                out.push((from, pending.to));
             }
         }
         out
@@ -198,7 +198,7 @@ struct PendingDestroyedMaterial {
 
 #[derive(Clone)]
 struct PendingTeleport {
-    exit: IVec3,
+    to: IVec3,
     ready_turn: u64,
 }
 

@@ -2,23 +2,22 @@ use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use super::TeleportEntranceBlock;
+use super::TeleportBlock;
 use super::prompt::open_teleport_rename_prompt;
 
 use crate::game::block_editing::OpenBlockPanelDropdown;
-use crate::game::block_editing::widgets::{
-    spawn_labeled_panel_button, spawn_text_dropdown_toggle, sync_dropdown_overlay,
-};
+use crate::game::block_editing::widgets::{spawn_text_dropdown_toggle, sync_dropdown_overlay};
 use crate::game::block_editing::world_refresh::apply_teleport_pair_edit;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
 use crate::game::edit_history::EditHistory;
 use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
-use crate::game::ui::access::{UiMainThread, i18n};
+use crate::game::ui::access::{UiMainThread, i18n, with_ui_world};
 use crate::game::ui::components::{
-    PanelOptions, default_button_size, default_font_size, localized_text, menu_button,
-    spawn_panel as spawn_ui_panel, text, transparent_node,
+    BUTTON_BG, PanelOptions, UiIconAssets, button_border, button_shadow, default_button_size,
+    default_font_size, localized_text, menu_button, raised_border, spawn_panel as spawn_ui_panel,
+    spawn_ui_icon, styled_button, text, transparent_node,
 };
 use crate::game::ui::core::host::UiHost;
 use crate::game::ui::core::runtime::UiRuntime;
@@ -57,7 +56,7 @@ impl UiActionLabel for TeleportAction {
     }
 }
 
-impl BlockUi for TeleportEntranceBlock {
+impl BlockUi for TeleportBlock {
     fn ui_panel(&self) -> Option<UiPanelId> {
         Some(UiPanelId::Teleport)
     }
@@ -70,8 +69,8 @@ pub fn spawn_panel(root: &mut ChildSpawnerCommands) {
         UiPanelBinding(UiPanelId::Teleport),
         |panel| {
             spawn_row(panel, "panel.name", |row| {
-                spawn_labeled_panel_button(row, TeleportAction::StartRename);
                 row.spawn((text("", 18.0, Color::WHITE), TeleportNameText));
+                spawn_rename_icon_button(row);
             });
             spawn_row(panel, "panel.pair", |row| {
                 spawn_text_dropdown_toggle(row, TeleportAction::TogglePair, TeleportPairLabel);
@@ -170,6 +169,33 @@ fn spawn_row(
                 },
             ));
             controls(row);
+        });
+}
+
+/// 名字后的编辑图标按钮
+fn spawn_rename_icon_button(parent: &mut ChildSpawnerCommands) {
+    let edit = with_ui_world(|world| world.resource::<UiIconAssets>().edit.clone());
+    let size = default_button_size(36.0);
+    parent
+        .spawn((
+            styled_button(
+                Node {
+                    width: Val::Px(size),
+                    height: Val::Px(size),
+                    border: button_border(),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    flex_shrink: 0.0,
+                    ..default()
+                },
+                raised_border(),
+                BUTTON_BG,
+            ),
+            button_shadow(),
+            TeleportAction::StartRename,
+        ))
+        .with_children(|button| {
+            spawn_ui_icon(button, edit, 16.0);
         });
 }
 
@@ -353,21 +379,18 @@ fn spawn_pair_option(parent: &mut ChildSpawnerCommands, label: String, pair: Opt
 }
 
 fn pair_candidates(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
-    let Some(block) = world.system_blocks.get(&pos) else {
-        return Vec::new();
-    };
-    let Some(target_role) = block
-        .kind
-        .material_processor()
-        .and_then(|role| role.teleport_partner_role())
-    else {
-        return Vec::new();
-    };
     let mut candidates: Vec<IVec3> = world
         .system_blocks
         .iter()
         .filter_map(|(candidate_pos, candidate)| {
-            (candidate.kind.material_processor() == Some(target_role)).then_some(*candidate_pos)
+            if *candidate_pos == pos {
+                return None;
+            }
+            candidate
+                .kind
+                .material_processor()
+                .is_some_and(|processor| processor.is_teleport())
+                .then_some(*candidate_pos)
         })
         .collect();
     candidates.sort_by_key(|candidate| world.teleport_settings(*candidate).name);

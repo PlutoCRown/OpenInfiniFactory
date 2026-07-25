@@ -13,7 +13,7 @@ use super::behaviors::{
 };
 use super::gravity::mark_gravity_phase;
 use super::markers::run_static_marker_phase;
-use super::motion::{BlockMotion, PusherMotion};
+use super::motion::{BlockMotion, BlockMotionKind, PusherMotion};
 use super::movement::{PusherState, mark_structure_movement_phase};
 use super::pending::{PendingDestroyReason, PendingGeneratedMaterials};
 use super::signals::SignalNetworkCache;
@@ -34,6 +34,8 @@ pub struct TurnOutput {
     pub powered_wires: HashSet<IVec3>,
     /// 成功焊接的焊点对（两端格心连线中点播扩散粒子）
     pub weld_sparks: Vec<(IVec3, IVec3)>,
+    /// 本回合成功落地的传送（源口、目标口、方块 id），表现层闪烁并修正动画起点
+    pub teleport_flashes: Vec<(IVec3, IVec3, crate::blocks::BlockId)>,
     /// 激光打镜等非破坏火花
     pub behavior_sparks: Vec<IVec3>,
     /// 钻头/激光毁掉的材料碎片
@@ -88,9 +90,12 @@ pub fn simulate_turn(
             }
         }
     }
-    // 上一回合挂起的传送：材料已在入口停稳后再搬到出口
-    for (entrance, exit) in pending_generated.take_ready_teleports(turn) {
-        if apply_pending_teleport(world, entrance, exit) {
+    // 上一回合挂起的传送：材料已在源口停稳后再搬到配对口
+    let mut teleport_flashes = Vec::new();
+    for (from, to) in pending_generated.take_ready_teleports(turn) {
+        if let Some(id) = apply_pending_teleport(world, from, to) {
+            world.mark_teleport_arrival(to, id);
+            teleport_flashes.push((from, to, id));
             structures_dirty = true;
         }
     }
@@ -208,6 +213,38 @@ pub fn simulate_turn(
         &hard_pusher_head_occupancy,
         &suction,
     );
+    // 传送在回合初已落地：后续下落/推动动画的起点应接到真正入口，否则实体仍挂在入口格会被误删
+    let mut animations = animations;
+    for &(from, to, block_id) in &teleport_flashes {
+        let mut chained = false;
+        for motion in animations.values_mut() {
+            if motion.block_id == block_id && motion.from_pos == to {
+                motion.from_pos = from;
+                chained = true;
+            }
+        }
+        if chained {
+            continue;
+        }
+        if let Some(block) = world.blocks.get(&to).copied().filter(|b| b.id == block_id) {
+            animations.insert(
+                to,
+                BlockMotion {
+                    block_id,
+                    from_pos: from,
+                    to_pos: to,
+                    from_facing: block.facing,
+                    to_facing: block.facing,
+                    kind: BlockMotionKind::Move,
+                },
+            );
+            continue;
+        }
+        // 已离开传送口：把该方块本回合动画的起点改到入口
+        if let Some((_, motion)) = animations.iter_mut().find(|(_, m)| m.block_id == block_id) {
+            motion.from_pos = from;
+        }
+    }
     // 粘头/空头推动只有执行成功才提交伸出/收回
     for (pos, animation) in &pusher_animations {
         if let Some(block) = world.blocks.get(pos) {
@@ -236,7 +273,7 @@ pub fn simulate_turn(
     behavior_sparks.extend(laser_destroy_sparks);
     break_debris.extend(laser_debris);
 
-    // 传送：挂起至 turn+1，等本回合移动动画完全进入入口后再传
+    // 传送：挂起至 turn+1，等本回合移动动画完全进入传送口后再传
     run_material_teleport_phase(world, pending_generated, turn + 1);
     run_material_conversion_phase(world);
 
@@ -271,6 +308,7 @@ pub fn simulate_turn(
         pusher_animations,
         powered_wires,
         weld_sparks,
+        teleport_flashes,
         behavior_sparks,
         break_debris,
         laser_beams,

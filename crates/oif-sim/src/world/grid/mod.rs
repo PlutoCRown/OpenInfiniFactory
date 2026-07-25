@@ -50,6 +50,8 @@ pub struct WorldBlocks {
     pub next_block_id: u64,
     /// 下一个可分配的验收结构 ID
     pub next_acceptor_id: u64,
+    /// 刚传送到达某格的材料 BlockId：同 id 留着则不传；空/换 id 则清标记再尝试
+    pub teleport_arrivals: HashMap<IVec3, BlockId>,
 }
 
 /// 印花等占格附着：子材料挂在父材料的某一面上

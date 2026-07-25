@@ -233,6 +233,11 @@ pub fn collect_sim_refresh_positions(
     expand_weld_connectivity(after, &mut refresh);
     // 空头伸出/收回只改 PusherState 动画，世界格子不变；必须单独纳入刷新
     refresh.extend(output.pusher_animations.keys().copied());
+    // 传送：源口/目标口都刷，避免同回合再下落时漏刷
+    for &(from, to, _) in &output.teleport_flashes {
+        refresh.insert(from);
+        refresh.insert(to);
+    }
 
     // 装饰漆变化：材料格未动也要重建
     let id_to_pos: HashMap<crate::game::blocks::BlockId, IVec3> = after
@@ -420,13 +425,12 @@ pub fn apply_structure_animations(
     let moving_entities: HashSet<Entity> = planned.iter().filter_map(|(_, _, _, e)| *e).collect();
 
     // 阶段 1：全部从旧格解绑（不销毁、不清 by_id）
-    for (_, animation, _, entity) in &planned {
+    // 按实体解绑：传送落地后再重力时，动画 from_pos 是传送口，实体却仍挂在入口格
+    for (_, _, _, entity) in &planned {
         let Some(entity) = entity else {
             continue;
         };
-        if index.get_animatable(animation.from_pos) == Some(*entity) {
-            index.unbind_animatable_pos(animation.from_pos);
-        }
+        index.unbind_animatable_entity(*entity);
     }
 
     // 阶段 2：绑定到目标格并挂上动画
