@@ -10,8 +10,8 @@ use crate::game::ui::InventoryItems;
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    rebuild_world_for_debug_state, rebuild_world_with_animations,
-    rebuild_world_with_animations_for_debug_state, BlockEntity, SceneChunkMeshes, WorldRenderAssets,
+    BlockEntity, SceneChunkMeshes, WorldRenderAssets, rebuild_world_for_debug_state,
+    rebuild_world_with_animations, rebuild_world_with_animations_for_debug_state,
 };
 use crate::scene::BlockEntityIndex;
 
@@ -40,6 +40,10 @@ pub(super) fn pick_target_block(
         placement.selected = index;
     } else {
         inventory.set_hotbar_block(placement.selected, kind);
+    }
+    // 中键取有向块时，放置朝向跟它对齐
+    if kind.is_directional() {
+        placement.preview_facing = block.facing;
     }
     placement.selection.clear();
     placement.edit_gesture = None;

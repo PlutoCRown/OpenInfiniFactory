@@ -242,6 +242,10 @@ pub fn placement_input(
                 &mut scene_chunks,
             ) {
                 solution_state.dirty = true;
+                // C 切变体后：后续放置朝向跟这个方块对齐
+                if let Some(block) = world.blocks.get(&pos) {
+                    placement.preview_facing = block.facing;
+                }
             }
         }
         placement.edit_gesture = None;
@@ -280,6 +284,8 @@ pub fn placement_input(
                     .map(|block| block.facing);
                 if let Some(facing) = facing {
                     edit_history.finish_rotation(pos, facing);
+                    // R 转世界上的方块后：放置朝向跟它对齐
+                    placement.preview_facing = facing;
                 }
                 solution_state.dirty = true;
             } else if selected_place_block(&inventory, *builder_mode, &placement)
