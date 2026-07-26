@@ -544,11 +544,13 @@ pub fn apply_structure_animations(
         // 本回合漆刚变过：子节点需重建，不能只搬旧实体
         let paint_dirty = paint_changed_ids.contains(&animation.block_id);
         // 反推等：本体既平移又伸出，复用会丢掉子节点上的推杆动画，必须重建
-        let pusher_anim = pusher_animations.get(&pos).copied();
-        let pusher_anim_dirty = pusher_anim.is_some_and(|anim| {
-            anim.duration.is_some_and(|duration| duration > 0.0)
-                && anim.from_extension != anim.to_extension
-        });
+        // 同拍双伸出时动画表可能只挂在 from/to 一侧，两侧都查
+        let pusher_anim = pusher_animations
+            .get(&pos)
+            .or_else(|| pusher_animations.get(&animation.from_pos))
+            .copied();
+        let pusher_anim_dirty =
+            pusher_anim.is_some_and(|anim| anim.from_extension != anim.to_extension);
         let reuse = entity
             .filter(|entity| !despawned.contains(entity) && commands.get_entity(*entity).is_ok())
             .filter(|_| !paint_dirty && !pusher_anim_dirty);

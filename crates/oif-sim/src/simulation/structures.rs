@@ -626,9 +626,15 @@ pub(super) fn execute_structure_moves_with_pushers(
                 } else if offset != IVec3::ZERO && structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
                 }
-                // 活塞头是实体：本回合已提交的头会挡住后续更低优先级移动
+                // 活塞头是实体：本回合已提交的头会挡住后续更低优先级移动（自带头随结构走，不挡自己）
                 if offset != IVec3::ZERO
-                    && hard_pusher_head_blocks_move(&structure, offset, &heads_for_check)
+                    && (hard_pusher_head_blocks_move(world, &structure, offset, &heads_for_check)
+                        || !can_move_own_extended_heads(
+                            world,
+                            &structure,
+                            offset,
+                            &heads_for_check,
+                        ))
                 {
                     continue;
                 }
@@ -637,6 +643,11 @@ pub(super) fn execute_structure_moves_with_pushers(
                 {
                     continue;
                 }
+                let own_heads_before = if offset != IVec3::ZERO {
+                    own_extended_heads(world, &structure, &heads)
+                } else {
+                    HashSet::new()
+                };
                 if offset != IVec3::ZERO {
                     for pos in &structure {
                         if let Some(block) = world.blocks.get(pos) {
@@ -656,6 +667,11 @@ pub(super) fn execute_structure_moves_with_pushers(
                     moved.extend(structure.iter().copied());
                     move_structure(world, &structure, offset);
                     structures.move_positions(&structure, offset);
+                    // 已伸出的头随本体平移
+                    for head in own_heads_before {
+                        heads.remove(&head);
+                        heads.insert(head + offset);
+                    }
                     let target_structure: HashSet<IVec3> =
                         structure.iter().map(|pos| *pos + offset).collect();
                     moved.extend(target_structure);
@@ -674,13 +690,15 @@ pub(super) fn execute_structure_moves_with_pushers(
                         PusherAnimationKind::Extend => (0.0, 1.0),
                         PusherAnimationKind::Retract => (1.0, 0.0),
                     };
-                    pusher_animations.insert(
-                        actor_pos,
-                        PusherMotion {
-                            from_extension,
-                            to_extension,
-                        },
-                    );
+                    let motion = PusherMotion {
+                        from_extension,
+                        to_extension,
+                    };
+                    pusher_animations.insert(actor_pos, motion);
+                    // 反推：表现层按目标格取动画；同时挂一份到旧格，避免同拍多伸出时漏查
+                    if actor_pos != actor.pos {
+                        pusher_animations.entry(actor.pos).or_insert(motion);
+                    }
                     if let Some(block) = world.blocks.get(&actor_pos) {
                         let head = actor_pos + block.facing.forward_ivec3();
                         match actor.animation {
@@ -752,7 +770,11 @@ pub(super) fn execute_structure_moves_with_pushers(
                         }
                     }
                     let target_structure: HashSet<IVec3> = targets.iter().copied().collect();
-                    structures.replace_structure_positions(world, &structure, target_structure.clone());
+                    structures.replace_structure_positions(
+                        world,
+                        &structure,
+                        target_structure.clone(),
+                    );
                     if let Some(source) = source {
                         executed.push(ExecutedMovement {
                             structure_id,
@@ -788,7 +810,8 @@ fn can_move_gravity_structure(
     ) else {
         return false;
     };
-    !hard_pusher_head_blocks_move(&expanded, IVec3::NEG_Y, hard_pusher_head_occupancy)
+    !hard_pusher_head_blocks_move(world, &expanded, IVec3::NEG_Y, hard_pusher_head_occupancy)
+        && can_move_own_extended_heads(world, &expanded, IVec3::NEG_Y, hard_pusher_head_occupancy)
 }
 
 fn hard_pusher_head_blocked_below(
@@ -814,19 +837,65 @@ fn hard_pusher_head_blocked_below(
         // 活塞头是实体：下方有方块或其它活塞头都算挡住
         target.y < 0
             || (!structure.contains(&target)
+                && !own_extended_heads(world, structure, hard_pusher_head_occupancy)
+                    .contains(&target)
                 && (!world.can_move_into_yielding_fragile(target)
                     || hard_pusher_head_occupancy.contains(&target)))
     })
 }
 
+/// 结构内已伸出推杆的头格（随结构一起平移）
+fn own_extended_heads(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
+) -> HashSet<IVec3> {
+    structure
+        .iter()
+        .filter_map(|pos| {
+            let block = world.blocks.get(pos)?;
+            if !matches!(
+                block.kind.movement_rule(block.facing),
+                Some(crate::blocks::MovementRule::PoweredTranslate { .. })
+            ) {
+                return None;
+            }
+            let head = *pos + block.facing.forward_ivec3();
+            hard_pusher_head_occupancy.contains(&head).then_some(head)
+        })
+        .collect()
+}
+
+/// 平移体积（体格 ∪ 自带头）是否会撞上外来活塞头
 fn hard_pusher_head_blocks_move(
+    world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> bool {
-    structure.iter().any(|pos| {
+    let own = own_extended_heads(world, structure, hard_pusher_head_occupancy);
+    let volume: HashSet<IVec3> = structure.iter().chain(own.iter()).copied().collect();
+    volume.iter().any(|pos| {
         let target = *pos + offset;
-        !structure.contains(&target) && hard_pusher_head_occupancy.contains(&target)
+        !volume.contains(&target) && hard_pusher_head_occupancy.contains(&target)
+    })
+}
+
+/// 自带头平移后是否有落脚处（不钻进实心/外来头）
+fn can_move_own_extended_heads(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+    offset: IVec3,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
+) -> bool {
+    let own = own_extended_heads(world, structure, hard_pusher_head_occupancy);
+    let volume: HashSet<IVec3> = structure.iter().chain(own.iter()).copied().collect();
+    own.iter().all(|head| {
+        let target = *head + offset;
+        volume.contains(&target)
+            || (target.y >= 0
+                && world.can_move_into_yielding_fragile(target)
+                && !hard_pusher_head_occupancy.contains(&target))
     })
 }
 
@@ -909,16 +978,20 @@ pub(super) fn can_translate_structure(
     offset: IVec3,
     structures: &StructureState,
     suction: &SuctionLinks,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
 ) -> bool {
-    expanded_move_structure(
+    let Some(expanded) = expanded_move_structure(
         world,
         structure,
         offset,
         structures,
         MovementExpansionMode::Normal,
         suction,
-    )
-    .is_some()
+    ) else {
+        return false;
+    };
+    !hard_pusher_head_blocks_move(world, &expanded, offset, hard_pusher_head_occupancy)
+        && can_move_own_extended_heads(world, &expanded, offset, hard_pusher_head_occupancy)
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
