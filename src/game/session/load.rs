@@ -164,7 +164,7 @@ pub fn handle_create_new_puzzle(
             bevy::log::warn!("failed to create puzzle `{}` from template", request.name);
             continue;
         };
-        session.save_state.refresh();
+        // 马上进 Playing，不必 refresh 列表（会触发存档页无意义重建）
         edit_history.clear();
         let Some(loaded) = decode_save_slot(&slot) else {
             continue;
@@ -205,7 +205,7 @@ pub fn handle_create_new_solution(
         ) else {
             continue;
         };
-        session.save_state.refresh();
+        // 马上进 Playing，不必 refresh 列表（会触发存档页无意义重建）
         edit_history.clear();
         let Some(loaded) = decode_save_slot(&solution_slot) else {
             continue;
