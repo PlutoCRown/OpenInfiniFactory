@@ -11,6 +11,9 @@ use super::structures::{
 };
 use super::suction::SuctionLinks;
 
+/// 活塞/拦截器工作面推/拉失败时是否反推自身（图预拆仍保留，仅跳过反推尝试）
+pub const PUSHER_REVERSE_ENABLED: bool = true;
+
 /// 活塞/拦截器伸出状态，按方块运行时 ID 索引（随实体移动，不跟格子走）
 #[derive(Default, Clone)]
 pub struct PusherState {
@@ -409,6 +412,9 @@ fn mark_pusher_reverse_self(
     reverse: IVec3,
     animation: PusherAnimationKind,
 ) -> Option<StructureMove> {
+    if !PUSHER_REVERSE_ENABLED {
+        return None;
+    }
     // 与正推对称：切断头前边，只带动活塞本体一侧；头前子结构留在原地
     let subset = structures.pusher_actor_structure(world, pos, reverse)?;
     let structure = structures.linked_expand_pusher_subset(suction, &subset, reverse)?;
