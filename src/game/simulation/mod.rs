@@ -19,12 +19,14 @@ pub mod pending {
 
     /// 跨回合挂起的生成材料（Bevy Resource）
     #[derive(Resource, Deref, DerefMut, Clone, Default)]
-    pub struct PendingGeneratedMaterials(pub oif_sim::simulation::pending::PendingGeneratedMaterials);
+    pub struct PendingGeneratedMaterials(
+        pub oif_sim::simulation::pending::PendingGeneratedMaterials,
+    );
 }
 
 pub mod signals {
-    pub use oif_sim::simulation::signals::SignalComponentId;
     use bevy::prelude::*;
+    pub use oif_sim::simulation::signals::SignalComponentId;
 
     /// 信号网络缓存（Bevy Resource）
     #[derive(Resource, Deref, DerefMut, Clone, Default)]
@@ -40,11 +42,11 @@ pub mod stats {
 }
 
 pub mod structure_state {
-    pub use oif_sim::simulation::structure_state::{
-        material_structure, query_factory_structure, FactoryActivity, StructureFreedom,
-        StructureId, StructureKind,
-    };
     use bevy::prelude::*;
+    pub use oif_sim::simulation::structure_state::{
+        BreakableSplit, FactoryActivity, StructureFreedom, StructureId, StructureKind,
+        material_structure, query_factory_structure,
+    };
 
     /// 结构运行时状态（Bevy Resource）
     #[derive(Resource, Deref, DerefMut, Clone, Default)]

@@ -539,7 +539,7 @@ pub(super) fn apply_fragile_shatter_before_execute(
             continue;
         };
         let new_positions: HashSet<IVec3> = old.difference(&removed).copied().collect();
-        structures.replace_structure_positions(&old, new_positions);
+        structures.replace_structure_positions(world, &old, new_positions);
     }
     for movement in moves.iter_mut() {
         match movement {
@@ -752,7 +752,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                         }
                     }
                     let target_structure: HashSet<IVec3> = targets.iter().copied().collect();
-                    structures.replace_structure_positions(&structure, target_structure.clone());
+                    structures.replace_structure_positions(world, &structure, target_structure.clone());
                     if let Some(source) = source {
                         executed.push(ExecutedMovement {
                             structure_id,

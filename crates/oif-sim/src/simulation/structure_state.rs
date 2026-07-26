@@ -2,6 +2,7 @@ use glam::IVec3;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::blocks::{AcceptorId, BlockId, MovementRule};
+use crate::world::direction::Facing;
 use crate::world::grid::WorldBlocks;
 
 use super::signal_offsets;
@@ -45,6 +46,19 @@ impl StructureFreedom {
 /// Relative contact from a structure member toward a supporting cell.
 pub type GravitySupportContact = (IVec3, IVec3);
 
+/// 可断裂边预拆结果：活塞头前边若为图桥，则可分成本体侧 / 头前侧两子集
+#[derive(Clone, Debug)]
+pub struct BreakableSplit {
+    /// 构建时的朝向（观测用；查找以 BlockId 为 key）
+    pub facing: Facing,
+    /// 切断头前边后图是否分成两块
+    pub is_bridge: bool,
+    /// 含活塞本体的一侧（反推用）
+    pub actor_side: HashSet<IVec3>,
+    /// 头前一侧（正推用）；非桥或空头时为空
+    pub target_side: HashSet<IVec3>,
+}
+
 #[derive(Clone)]
 pub struct Structure {
     pub id: StructureId,
@@ -54,6 +68,8 @@ pub struct Structure {
     pub freedom: StructureFreedom,
     pub pushable: bool,
     gravity_support: Vec<GravitySupportContact>,
+    /// 可断裂预拆：key = 活塞/拦截器 BlockId
+    pub breakable_splits: HashMap<BlockId, BreakableSplit>,
 }
 
 #[derive(Clone, Debug)]
@@ -91,6 +107,7 @@ impl StructureState {
         *self = Self::default();
         self.append_factory_structures(world);
         self.apply_factory_inactive_propagation(world);
+        self.rebuild_breakable_splits(world);
         self.append_acceptor_structures(world);
         self.append_material_structures(world, &HashMap::new(), &HashMap::new());
     }
@@ -110,6 +127,7 @@ impl StructureState {
         self.retain_factory_only();
         self.append_factory_structures(world);
         self.apply_factory_inactive_propagation(world);
+        self.rebuild_breakable_splits(world);
     }
 
     pub fn refresh_material_structures(&mut self, world: &WorldBlocks) {
@@ -210,6 +228,7 @@ impl StructureState {
                     freedom: StructureFreedom::All,
                     pushable: true,
                     gravity_support,
+                    breakable_splits: HashMap::new(),
                 },
             );
         }
@@ -248,6 +267,7 @@ impl StructureState {
                     freedom: StructureFreedom::All,
                     pushable: true,
                     gravity_support: Vec::new(),
+                    breakable_splits: HashMap::new(),
                 },
             );
         }
@@ -363,19 +383,31 @@ impl StructureState {
         if target.kind != StructureKind::Factory {
             return None;
         }
-        // 可推性看开局结构标记，不因中途掉到 scene 上就当场判死（掉落落地仍应可推）
-        if !target.pushable || !target.freedom.can_translate(offset) {
+        let actor_id = self.id_at(pusher_pos)?;
+        // 不同结构：整坨推（材料/已分离的工厂），仍看对方 pushable
+        if actor_id != target.id {
+            if !target.pushable || !target.freedom.can_translate(offset) {
+                return None;
+            }
+            return Some(target.positions.clone());
+        }
+        // 同结构：查预计算桥边拆分；是桥才能推头前子集（不看整坨 pushable）
+        let block = world.blocks.get(&pusher_pos)?;
+        let split = target.breakable_splits.get(&block.id)?;
+        if !split.is_bridge || split.target_side.is_empty() {
             return None;
         }
-        let structure =
-            connected_subset_with_blocked_edge(world, target, target_pos, Some(pusher_pos));
-        if structure.contains(&pusher_pos) || structure.is_empty() {
+        if !split.target_side.contains(&target_pos) {
             return None;
         }
-        Some(structure)
+        // 头前子集若贴地/贴场景，视为锚死：不可正推，交给反推本体侧
+        if touches_scene(world, &split.target_side) {
+            return None;
+        }
+        Some(split.target_side.clone())
     }
 
-    /// 反推用：从活塞起 BFS，切断头前边，只要本体一侧（头前粘连子结构不跟）
+    /// 反推用：预计算的本体侧子集；非桥则整结构（仍可能因 pushable 失败）
     pub fn pusher_actor_structure(
         &self,
         world: &WorldBlocks,
@@ -386,12 +418,17 @@ impl StructureState {
         if seed.kind != StructureKind::Factory {
             return None;
         }
+        let block = world.blocks.get(&pusher_pos)?;
+        if let Some(split) = seed.breakable_splits.get(&block.id) {
+            if split.is_bridge && !split.actor_side.is_empty() {
+                // 桥边本体侧可不看整坨 pushable（脚下锚死时仍可只退本体+线）
+                return Some(split.actor_side.clone());
+            }
+        }
         if !seed.pushable || !seed.freedom.can_translate(offset) {
             return None;
         }
-        let structure =
-            connected_subset_with_blocked_edge(world, seed, pusher_pos, Some(pusher_pos));
-        (!structure.is_empty()).then_some(structure)
+        Some(seed.positions.clone())
     }
 
     /// 按结构 ID 取结构（调试/查询）
@@ -499,6 +536,31 @@ impl StructureState {
                     *member += offset;
                 }
             }
+            // 预拆子集坐标随成员平移
+            for split in structure.breakable_splits.values_mut() {
+                split.actor_side = split
+                    .actor_side
+                    .iter()
+                    .map(|pos| {
+                        if positions.contains(pos) {
+                            *pos + offset
+                        } else {
+                            *pos
+                        }
+                    })
+                    .collect();
+                split.target_side = split
+                    .target_side
+                    .iter()
+                    .map(|pos| {
+                        if positions.contains(pos) {
+                            *pos + offset
+                        } else {
+                            *pos
+                        }
+                    })
+                    .collect();
+            }
             for pos in &structure.positions {
                 self.structure_by_pos.insert(*pos, id);
             }
@@ -507,6 +569,7 @@ impl StructureState {
 
     pub fn replace_structure_positions(
         &mut self,
+        world: &WorldBlocks,
         old_positions: &HashSet<IVec3>,
         new_positions: HashSet<IVec3>,
     ) {
@@ -526,6 +589,62 @@ impl StructureState {
         structure.gravity_support.clear();
         for pos in &structure.positions {
             self.structure_by_pos.insert(*pos, id);
+        }
+        self.rebuild_breakable_splits_for(world, id);
+    }
+
+    /// 为所有工厂结构预计算可断裂桥边子集
+    fn rebuild_breakable_splits(&mut self, world: &WorldBlocks) {
+        let ids: Vec<StructureId> = self
+            .structures
+            .iter()
+            .filter(|(_, structure)| structure.kind == StructureKind::Factory)
+            .map(|(id, _)| *id)
+            .collect();
+        for id in ids {
+            self.rebuild_breakable_splits_for(world, id);
+        }
+    }
+
+    /// 单结构：找出 PoweredTranslate，按头前边是否为桥缓存两侧子集
+    fn rebuild_breakable_splits_for(&mut self, world: &WorldBlocks, id: StructureId) {
+        let Some(structure) = self.structures.get(&id) else {
+            return;
+        };
+        if structure.kind != StructureKind::Factory {
+            return;
+        }
+        let positions = structure.positions.clone();
+        let mut splits = HashMap::new();
+        for &pos in &positions {
+            let Some(block) = world.blocks.get(&pos) else {
+                continue;
+            };
+            let Some(MovementRule::PoweredTranslate { source, .. }) =
+                block.kind.movement_rule(block.facing)
+            else {
+                continue;
+            };
+            let front = pos + source;
+            let actor_side = connected_factory_subset(world, &positions, pos, Some(pos));
+            let is_bridge = positions.contains(&front) && !actor_side.contains(&front);
+            let target_side = if is_bridge {
+                connected_factory_subset(world, &positions, front, Some(pos))
+            } else {
+                HashSet::new()
+            };
+            splits.insert(
+                block.id,
+                BreakableSplit {
+                    facing: block.facing,
+                    is_bridge,
+                    actor_side,
+                    target_side,
+                },
+            );
+        }
+        if let Some(structure) = self.structures.get_mut(&id) {
+            structure.breakable_splits = splits;
         }
     }
 
@@ -681,15 +800,6 @@ fn factory_structure_with_blocked_edge(
     connected_factory_subset(world, &allowed, start, blocked_pusher_pos)
 }
 
-fn connected_subset_with_blocked_edge(
-    world: &WorldBlocks,
-    structure: &Structure,
-    start: IVec3,
-    blocked_pusher_pos: Option<IVec3>,
-) -> HashSet<IVec3> {
-    connected_factory_subset(world, &structure.positions, start, blocked_pusher_pos)
-}
-
 fn connected_factory_subset(
     world: &WorldBlocks,
     allowed: &HashSet<IVec3>,
@@ -750,7 +860,8 @@ fn pusher_front_neighbor(world: &WorldBlocks, pos: IVec3) -> Option<IVec3> {
     })
 }
 
-fn touches_scene(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
+/// 子集是否贴着场景格（脚下锚死等）；调试与活塞头前可推判定共用
+pub fn touches_scene(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
     structure.iter().any(|pos| {
         signal_offsets().into_iter().any(|offset| {
             let neighbor = *pos + offset;

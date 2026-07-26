@@ -185,7 +185,10 @@ pub fn structure_json(
         .positions
         .iter()
         .map(|pos| {
-            let block = world.blocks.get(pos).or_else(|| world.system_blocks.get(pos));
+            let block = world
+                .blocks
+                .get(pos)
+                .or_else(|| world.system_blocks.get(pos));
             json!({
                 "pos": pos_json(*pos),
                 "kind": block.map(|b| format!("{:?}", b.kind)),
@@ -212,6 +215,31 @@ pub fn structure_json(
             && structure.freedom != oif_sim::simulation::structure_state::StructureFreedom::None,
         "size": structure.positions.len(),
         "blocks": blocks,
+        "breakable_splits": structure
+            .breakable_splits
+            .iter()
+            .map(|(block_id, split)| {
+                let mut actor: Vec<_> = split.actor_side.iter().copied().collect();
+                let mut target: Vec<_> = split.target_side.iter().copied().collect();
+                actor.sort_by_key(|p| (p.x, p.y, p.z));
+                target.sort_by_key(|p| (p.x, p.y, p.z));
+                json!({
+                    "block_id": block_id.0,
+                    "facing": format!("{:?}", split.facing),
+                    "is_bridge": split.is_bridge,
+                    "actor_anchored": oif_sim::simulation::structure_state::touches_scene(
+                        world,
+                        &split.actor_side,
+                    ),
+                    "target_anchored": oif_sim::simulation::structure_state::touches_scene(
+                        world,
+                        &split.target_side,
+                    ),
+                    "actor_side": actor.iter().map(|p| pos_json(*p)).collect::<Vec<_>>(),
+                    "target_side": target.iter().map(|p| pos_json(*p)).collect::<Vec<_>>(),
+                })
+            })
+            .collect::<Vec<_>>(),
     }))
 }
 
@@ -239,9 +267,12 @@ pub fn resolve_structure_query(
             .find(|(_, block)| block.id.0 == block_id)
             .map(|(pos, _)| *pos)
             .ok_or_else(|| format!("no block with id={block_id}"))?;
-        structures
-            .structure_id_at(pos)
-            .ok_or_else(|| format!("block id={block_id} at ({}, {}, {}) has no structure", pos.x, pos.y, pos.z))?
+        structures.structure_id_at(pos).ok_or_else(|| {
+            format!(
+                "block id={block_id} at ({}, {}, {}) has no structure",
+                pos.x, pos.y, pos.z
+            )
+        })?
     } else if let (Some(x), Some(y), Some(z)) = (x, y, z) {
         let pos = IVec3::new(x, y, z);
         structures
