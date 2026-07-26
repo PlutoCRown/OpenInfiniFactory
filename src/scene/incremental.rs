@@ -555,9 +555,11 @@ pub fn apply_structure_animations(
             .copied();
         let pusher_anim_dirty =
             pusher_anim.is_some_and(|anim| anim.from_extension != anim.to_extension);
+        // 电线通电材质只在 spawn/refresh 时绑定；移动复用会带走旧暗材质，且 skip 掉功率刷新
+        let wire_power_dirty = data.kind == BlockKind::Wire;
         let reuse = entity
             .filter(|entity| !despawned.contains(entity) && commands.get_entity(*entity).is_ok())
-            .filter(|_| !paint_dirty && !pusher_anim_dirty);
+            .filter(|_| !paint_dirty && !pusher_anim_dirty && !wire_power_dirty);
         if let Some(entity) = reuse {
             if let Some(occupant) = index.get_animatable(pos) {
                 if occupant != entity {

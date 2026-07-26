@@ -116,6 +116,15 @@ pub fn simulate_turn(
     let powered_components = signal_cache.powered_components(world, &laser_hit_detectors);
     let powered_devices = signal_cache.powered_devices(world, &powered_components);
     let powered_wires = signal_cache.powered_wires(world, &powered_components);
+    // 通电判定在位移前；输出给表现层前再按 BlockId 映射到移动后坐标（否则反推带着电线走会晚一拍才亮）
+    let powered_wire_ids: HashSet<crate::blocks::BlockId> = powered_wires
+        .iter()
+        .filter_map(|pos| world.blocks.get(pos).map(|block| block.id))
+        .collect();
+    let powered_device_ids: HashSet<crate::blocks::BlockId> = powered_devices
+        .iter()
+        .filter_map(|pos| world.blocks.get(pos).map(|block| block.id))
+        .collect();
     sample.signal_ms = mark_elapsed_ms(&mut mark);
     if let Some(sim_log) = sim_log.as_mut() {
         sim_log.log(
@@ -260,6 +269,18 @@ pub fn simulate_turn(
     if let Some(stats) = stats {
         *stats = sample.clone();
     }
+
+    // 表现用通电格：同一批通电 BlockId，落到本回合结束后的坐标
+    let powered_wires: HashSet<IVec3> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| powered_wire_ids.contains(&block.id).then_some(*pos))
+        .collect();
+    let powered_devices: HashSet<IVec3> = world
+        .blocks
+        .iter()
+        .filter_map(|(pos, block)| powered_device_ids.contains(&block.id).then_some(*pos))
+        .collect();
 
     TurnOutput {
         turn,
