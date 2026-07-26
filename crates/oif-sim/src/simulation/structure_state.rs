@@ -363,12 +363,40 @@ impl StructureState {
         if target.kind != StructureKind::Factory {
             return None;
         }
+        // 可推性看开局结构标记，不因中途掉到 scene 上就当场判死（掉落落地仍应可推）
+        if !target.pushable || !target.freedom.can_translate(offset) {
+            return None;
+        }
         let structure =
             connected_subset_with_blocked_edge(world, target, target_pos, Some(pusher_pos));
-        if structure.contains(&pusher_pos) || !factory_subset_pushable(world, &structure, offset) {
+        if structure.contains(&pusher_pos) || structure.is_empty() {
             return None;
         }
         Some(structure)
+    }
+
+    /// 反推用：从活塞起 BFS，切断头前边，只要本体一侧（头前粘连子结构不跟）
+    pub fn pusher_actor_structure(
+        &self,
+        world: &WorldBlocks,
+        pusher_pos: IVec3,
+        offset: IVec3,
+    ) -> Option<HashSet<IVec3>> {
+        let seed = self.structure(pusher_pos)?;
+        if seed.kind != StructureKind::Factory {
+            return None;
+        }
+        if !seed.pushable || !seed.freedom.can_translate(offset) {
+            return None;
+        }
+        let structure =
+            connected_subset_with_blocked_edge(world, seed, pusher_pos, Some(pusher_pos));
+        (!structure.is_empty()).then_some(structure)
+    }
+
+    /// 按结构 ID 取结构（调试/查询）
+    pub fn get(&self, id: StructureId) -> Option<&Structure> {
+        self.structures.get(&id)
     }
 
     pub fn falling_structure_at(
@@ -730,10 +758,3 @@ fn touches_scene(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
         })
     })
 }
-
-fn factory_subset_pushable(world: &WorldBlocks, subset: &HashSet<IVec3>, offset: IVec3) -> bool {
-    !subset.is_empty()
-        && !touches_scene(world, subset)
-        && StructureFreedom::All.can_translate(offset)
-}
-

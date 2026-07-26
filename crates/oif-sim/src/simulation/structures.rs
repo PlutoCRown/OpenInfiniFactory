@@ -664,19 +664,25 @@ pub(super) fn execute_structure_moves_with_pushers(
                     gravity_held.extend(structure.iter().copied());
                 }
                 for actor in actors {
+                    // 反推时推杆在位移结构内，执行后要用新坐标提交动画/头占位
+                    let actor_pos = if structure.contains(&actor.pos) {
+                        actor.pos + offset
+                    } else {
+                        actor.pos
+                    };
                     let (from_extension, to_extension) = match actor.animation {
                         PusherAnimationKind::Extend => (0.0, 1.0),
                         PusherAnimationKind::Retract => (1.0, 0.0),
                     };
                     pusher_animations.insert(
-                        actor.pos,
+                        actor_pos,
                         PusherMotion {
                             from_extension,
                             to_extension,
                         },
                     );
-                    if let Some(block) = world.blocks.get(&actor.pos) {
-                        let head = actor.pos + block.facing.forward_ivec3();
+                    if let Some(block) = world.blocks.get(&actor_pos) {
+                        let head = actor_pos + block.facing.forward_ivec3();
                         match actor.animation {
                             PusherAnimationKind::Extend => {
                                 heads.insert(head);
@@ -687,7 +693,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                         }
                     }
                     // 粘头推动的是前方结构：活塞本体只抑重力，不挡同结构其它推杆
-                    if let Some(actor_id) = structures.id_at(actor.pos) {
+                    if let Some(actor_id) = structures.id_at(actor_pos) {
                         if let Some(actor_structure) = structures.structure_positions(actor_id) {
                             gravity_held.extend(actor_structure.iter().copied());
                         }

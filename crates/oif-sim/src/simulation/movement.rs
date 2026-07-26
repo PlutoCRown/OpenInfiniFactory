@@ -288,7 +288,15 @@ fn mark_pusher_movement(
 
     let head = pos + source;
     let front_is_fragile = world.is_fragile_material_at(head);
-    let movement = if desired_extended {
+    let animation = if desired_extended {
+        PusherAnimationKind::Extend
+    } else {
+        PusherAnimationKind::Retract
+    };
+    // 伸出推 +offset，收回拉 -offset；失败时自身走反方向
+    let attempt_offset = if desired_extended { offset } else { -offset };
+
+    let work = if desired_extended {
         // 前方脆弱：压碎而非推动其所在结构
         if front_is_fragile {
             None
@@ -297,7 +305,7 @@ fn mark_pusher_movement(
                 world,
                 structures,
                 pos,
-                pos + source,
+                pos + offset,
                 offset,
                 MovementMark::Push,
                 suction,
@@ -309,7 +317,7 @@ fn mark_pusher_movement(
             world,
             structures,
             pos,
-            pos + source + offset,
+            pos + offset + offset,
             -offset,
             MovementMark::Push,
             suction,
@@ -318,33 +326,60 @@ fn mark_pusher_movement(
         None
     };
 
-    let animation = if desired_extended {
-        PusherAnimationKind::Extend
-    } else {
-        PusherAnimationKind::Retract
-    };
-
-    // 粘了方块的伸出/收回：状态等执行成功后再提交
-    if let Some(movement) = movement {
-        return Some(
-            movement
-                .with_pusher_actor(pos, MovementMark::Push, animation)
-                .with_source(id, pos),
+    // 工作面标到结构：能走则推/拉对方，否则反推自身（对齐传送带）
+    if let Some(movement) = work {
+        if can_translate_structure(
+            world,
+            movement.structure(),
+            attempt_offset,
+            structures,
+            suction,
+        ) {
+            return Some(
+                movement
+                    .with_pusher_actor(pos, MovementMark::Push, animation)
+                    .with_source(id, pos),
+            );
+        }
+        return mark_pusher_reverse_self(
+            world,
+            structures,
+            suction,
+            pos,
+            id,
+            -attempt_offset,
+            animation,
         );
     }
 
     if desired_extended {
-        // 空头伸出：脆弱格视为可压碎让出；实心占用或头格争用则失败
+        // 空头伸出：脆弱格视为可压碎让出；实心占用或头格争用则反推自身
         if front_is_fragile {
             if !claimed_heads.insert(head) {
                 return None;
             }
         } else if world.is_occupied(head) || !claimed_heads.insert(head) {
-            return None;
+            return mark_pusher_reverse_self(
+                world,
+                structures,
+                suction,
+                pos,
+                id,
+                -attempt_offset,
+                animation,
+            );
         }
     } else if entry.bound_front {
-        // 粘着方块却推不动：保持伸出
-        return None;
+        // 粘着却标不出可拉结构：反推自身
+        return mark_pusher_reverse_self(
+            world,
+            structures,
+            suction,
+            pos,
+            id,
+            -attempt_offset,
+            animation,
+        );
     } else {
         claimed_heads.remove(&head);
     }
@@ -357,6 +392,34 @@ fn mark_pusher_movement(
             structure_id,
             structure,
             IVec3::ZERO,
+            PusherActor { pos, animation },
+            MovementMark::Push,
+        )
+        .with_source(id, pos),
+    )
+}
+
+/// 活塞/拦截器工作面失败时：自身反向平移并完成伸出/收回
+fn mark_pusher_reverse_self(
+    world: &WorldBlocks,
+    structures: &StructureState,
+    suction: &SuctionLinks,
+    pos: IVec3,
+    id: BlockId,
+    reverse: IVec3,
+    animation: PusherAnimationKind,
+) -> Option<StructureMove> {
+    // 与正推对称：切断头前边，只带动活塞本体一侧；头前子结构留在原地
+    let subset = structures.pusher_actor_structure(world, pos, reverse)?;
+    let structure = structures.linked_expand_pusher_subset(suction, &subset, reverse)?;
+    if !can_translate_structure(world, &structure, reverse, structures, suction) {
+        return None;
+    }
+    Some(
+        StructureMove::translate_by_pusher_actor(
+            structures.id_at(pos)?,
+            structure,
+            reverse,
             PusherActor { pos, animation },
             MovementMark::Push,
         )
