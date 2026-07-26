@@ -203,6 +203,8 @@ pub fn placement_input(
             &mut structure_state,
             &mut block_index,
             &mut scene_chunks,
+            &locale,
+            &mut toast,
         ) {
             solution_state.dirty = true;
         }

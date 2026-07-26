@@ -243,6 +243,8 @@
   "inventory.title": "Inventory - {mode} Mode",
   "item.light_panel": "Light Panel",
   "toast.cannot_place_on_surface": "Cannot place {item} on this surface",
+  "toast.selection_empty": "No selection",
+  "toast.selection_pick_end": "Select the end of the region",
   "labeler.color": "Color: {color}",
   "labeler.title": "Labeler",
   "main.title": "OpenInfiniFactory",

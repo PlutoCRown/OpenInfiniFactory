@@ -14,6 +14,7 @@ use crate::game::state::{
     SelectionBounds, SelectionDrag, SelectionSnapshot, SimulationState,
 };
 use crate::game::systems::debug::DebugState;
+use crate::game::ui::features::GameplayToast;
 use crate::game::ui::{AreaKind, InventoryItems, UiRuntime};
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::WorldBlocks;
@@ -25,6 +26,7 @@ use crate::game::world::rendering::{
 };
 use crate::scene::{BlockEntityIndex, refresh_edit_changes};
 use crate::shared::config::{ConfigChord, ConfigSelectionMode, GameConfig};
+use crate::shared::i18n::I18n;
 
 use super::placement::{despawn_block_entities, refresh_edit_generated_markers};
 use super::rules::can_delete_at;
@@ -50,6 +52,8 @@ pub(super) fn handle_selection_area_input(
     structure_state: &mut StructureState,
     block_index: &mut BlockEntityIndex,
     scene_chunks: &mut SceneChunkMeshes,
+    locale: &I18n,
+    toast: &mut GameplayToast,
 ) -> bool {
     let mut changed = false;
 
@@ -59,6 +63,8 @@ pub(super) fn handle_selection_area_input(
             placement.selection.clear();
             let after = SelectionSnapshot::from_state(&placement.selection);
             edit_history.record_with_selection(Default::default(), before, after);
+        } else {
+            toast.show(locale.t("toast.selection_empty").to_string());
         }
         return false;
     }
@@ -172,6 +178,7 @@ pub(super) fn handle_selection_area_input(
         placement.selection.first_corner = Some(pos);
         placement.selection.bounds = None;
         placement.selection.drag = None;
+        toast.show(locale.t("toast.selection_pick_end").to_string());
     }
     false
 }

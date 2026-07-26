@@ -6,7 +6,7 @@ use bevy::light::ShadowFilteringMethod;
 use bevy::post_process::bloom::{Bloom, BloomCompositeMode, BloomPrefilter};
 use bevy::prelude::*;
 use bevy::render::camera::TemporalJitter;
-use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
+use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow, WindowFocused};
 
 use crate::game::cameras::{
     GameplayCamera, GameplayViewImage, MENU_CLEAR, PlayingUiCamera, gameplay_view_size,
@@ -361,11 +361,17 @@ pub fn sync_cursor_grab(
     playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
     mut look_baseline: ResMut<MouseLookBaseline>,
-    mut windows: Query<(&mut Window, &mut CursorOptions), With<PrimaryWindow>>,
+    mut focus_events: MessageReader<WindowFocused>,
+    mut windows: Query<(Entity, &mut Window, &mut CursorOptions), With<PrimaryWindow>>,
 ) {
-    let Ok((mut window, mut cursor)) = windows.single_mut() else {
+    let Ok((window_entity, mut window, mut cursor)) = windows.single_mut() else {
         return;
     };
+
+    // 快捷键失焦后再点回窗口时，系统光标可能仍在窗外；需要重新回中
+    let regained_focus = focus_events
+        .read()
+        .any(|event| event.window == window_entity && event.focused);
 
     if touch.enabled {
         cursor.grab_mode = CursorGrabMode::None;
@@ -381,8 +387,8 @@ pub fn sync_cursor_grab(
         let just_locked = cursor.grab_mode != CursorGrabMode::Locked;
         cursor.grab_mode = CursorGrabMode::Locked;
         cursor.visible = false;
-        // 锁回准心时把系统光标移到窗口中心，避免解锁后再锁时光标还在边上
-        if just_locked {
+        // 新上锁，或失焦后重新获得焦点：把系统光标移回窗口中心
+        if just_locked || regained_focus {
             let center = window.size() * 0.5;
             window.set_cursor_position(Some(center));
             // 程序化回中本身不转镜头；OS 常把这段位移并进「下一次真移动」里，
