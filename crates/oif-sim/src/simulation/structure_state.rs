@@ -46,17 +46,22 @@ impl StructureFreedom {
 /// Relative contact from a structure member toward a supporting cell.
 pub type GravitySupportContact = (IVec3, IVec3);
 
-/// 可断裂边预拆结果：活塞头前边若为图桥，则可分成本体侧 / 头前侧两子集
+/// 可断裂预拆：可断裂块在结构图里是「体 + 头」两节点，中间边为候选桥
+/// （普通块一格一节点、至多六度；头只连工作面邻格，体连其余五面）
 #[derive(Clone, Debug)]
 pub struct BreakableSplit {
     /// 构建时的朝向（观测用；查找以 BlockId 为 key）
     pub facing: Facing,
-    /// 切断头前边后图是否分成两块
+    /// 切断体–头边后是否分成两连通分量（无回环则为桥，含头前不在本结构）
     pub is_bridge: bool,
-    /// 含活塞本体的一侧（反推用）
+    /// 体侧方块格（反推用）；头前不在本结构时为整结构
     pub actor_side: HashSet<IVec3>,
-    /// 头前一侧（正推用）；非桥或空头时为空
+    /// 头侧方块格（正推用）；头空或头前属其它结构时为空
     pub target_side: HashSet<IVec3>,
+    /// 构建时本体侧是否贴场景（开局快照，不随中途落地改写）
+    pub actor_anchored: bool,
+    /// 构建时头前侧是否贴场景
+    pub target_anchored: bool,
 }
 
 #[derive(Clone)]
@@ -400,35 +405,34 @@ impl StructureState {
         if !split.target_side.contains(&target_pos) {
             return None;
         }
-        // 头前子集若贴地/贴场景，视为锚死：不可正推，交给反推本体侧
-        if touches_scene(world, &split.target_side) {
+        // 开局已锚死的头前子集不可正推 → 交给反推
+        if split.target_anchored {
             return None;
         }
         Some(split.target_side.clone())
     }
 
-    /// 反推用：预计算的本体侧子集；非桥则整结构（仍可能因 pushable 失败）
+    /// 反推用：体–头边为桥时返回体侧子集；有回环（非桥）不可拆边反推
     pub fn pusher_actor_structure(
         &self,
         world: &WorldBlocks,
         pusher_pos: IVec3,
-        offset: IVec3,
+        _offset: IVec3,
     ) -> Option<HashSet<IVec3>> {
         let seed = self.structure(pusher_pos)?;
         if seed.kind != StructureKind::Factory {
             return None;
         }
         let block = world.blocks.get(&pusher_pos)?;
-        if let Some(split) = seed.breakable_splits.get(&block.id) {
-            if split.is_bridge && !split.actor_side.is_empty() {
-                // 桥边本体侧可不看整坨 pushable（脚下锚死时仍可只退本体+线）
-                return Some(split.actor_side.clone());
-            }
-        }
-        if !seed.pushable || !seed.freedom.can_translate(offset) {
+        let split = seed.breakable_splits.get(&block.id)?;
+        if !split.is_bridge || split.actor_side.is_empty() {
             return None;
         }
-        Some(seed.positions.clone())
+        // 开局已锚死的本体侧不可反推
+        if split.actor_anchored {
+            return None;
+        }
+        Some(split.actor_side.clone())
     }
 
     /// 按结构 ID 取结构（调试/查询）
@@ -606,7 +610,7 @@ impl StructureState {
         }
     }
 
-    /// 单结构：找出 PoweredTranslate，按头前边是否为桥缓存两侧子集
+    /// 单结构：按「体–头」双节点模型预拆；体–头边为桥则缓存两侧格点子集
     fn rebuild_breakable_splits_for(&mut self, world: &WorldBlocks, id: StructureId) {
         let Some(structure) = self.structures.get(&id) else {
             return;
@@ -625,14 +629,25 @@ impl StructureState {
             else {
                 continue;
             };
+            // 体–头边：切断后从体侧 BFS；头前格在本结构内则从头前 BFS 得头侧
+            // 头前不在本结构（空/其它结构）⇔ 头节点无其它邻边 ⇔ 无回环 ⇔ 必为桥
             let front = pos + source;
             let actor_side = connected_factory_subset(world, &positions, pos, Some(pos));
-            let is_bridge = positions.contains(&front) && !actor_side.contains(&front);
-            let target_side = if is_bridge {
-                connected_factory_subset(world, &positions, front, Some(pos))
+            let front_in_structure = positions.contains(&front);
+            let is_bridge = !front_in_structure || !actor_side.contains(&front);
+            let (actor_side, target_side) = if is_bridge {
+                let target_side = if front_in_structure {
+                    connected_factory_subset(world, &positions, front, Some(pos))
+                } else {
+                    HashSet::new()
+                };
+                (actor_side, target_side)
             } else {
-                HashSet::new()
+                // 有回环：切断体–头后仍连通，不可拆推
+                (HashSet::new(), HashSet::new())
             };
+            let actor_anchored = !actor_side.is_empty() && touches_scene(world, &actor_side);
+            let target_anchored = !target_side.is_empty() && touches_scene(world, &target_side);
             splits.insert(
                 block.id,
                 BreakableSplit {
@@ -640,6 +655,8 @@ impl StructureState {
                     is_bridge,
                     actor_side,
                     target_side,
+                    actor_anchored,
+                    target_anchored,
                 },
             );
         }
@@ -800,6 +817,7 @@ fn factory_structure_with_blocked_edge(
     connected_factory_subset(world, &allowed, start, blocked_pusher_pos)
 }
 
+/// 切断指定活塞的体–头边后，从 start 在 allowed 内可达的方块格
 fn connected_factory_subset(
     world: &WorldBlocks,
     allowed: &HashSet<IVec3>,
@@ -829,6 +847,7 @@ fn connected_factory_subset(
     structure
 }
 
+/// 是否为该活塞的体–头边（工作面一侧）；预拆 BFS 时禁止穿越
 fn is_blocked_pusher_edge(
     world: &WorldBlocks,
     pusher_pos: Option<IVec3>,

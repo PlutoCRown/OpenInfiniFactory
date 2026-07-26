@@ -227,14 +227,8 @@ pub fn structure_json(
                     "block_id": block_id.0,
                     "facing": format!("{:?}", split.facing),
                     "is_bridge": split.is_bridge,
-                    "actor_anchored": oif_sim::simulation::structure_state::touches_scene(
-                        world,
-                        &split.actor_side,
-                    ),
-                    "target_anchored": oif_sim::simulation::structure_state::touches_scene(
-                        world,
-                        &split.target_side,
-                    ),
+                    "actor_anchored": split.actor_anchored,
+                    "target_anchored": split.target_anchored,
                     "actor_side": actor.iter().map(|p| pos_json(*p)).collect::<Vec<_>>(),
                     "target_side": target.iter().map(|p| pos_json(*p)).collect::<Vec<_>>(),
                 })

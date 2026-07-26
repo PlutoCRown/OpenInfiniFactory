@@ -499,6 +499,51 @@ fn handle_embedded_debug_command(
                 Err(error) => json_error(error),
             }
         }
+        DebugHttpCommand::BeginSimulation => {
+            if builder_mode != BuilderMode::Play {
+                return json_error("switch to Play mode first");
+            }
+            if !playing_ui.active_play() || ui_runtime.blocks_gameplay() {
+                return json_error("gameplay UI is blocking simulation controls");
+            }
+            if !render_ready {
+                return json_error("world render assets are not ready");
+            }
+            let starting = !simulation.is_active();
+            start_simulation_if_needed(
+                simulation,
+                &playing.world,
+                &mut playing.structure_state,
+                &mut playing.pusher_state,
+                edit_history,
+            );
+            if starting {
+                presentation.committed_world = playing.world.clone();
+                presentation.last_powered_wires.clear();
+                simulation.last_powered_devices.clear();
+                turn_cache.reset_to_turn(simulation.turn);
+                if let Some(worker) = worker {
+                    worker.reset(
+                        SimSnapshot::from_world(
+                            &playing.world,
+                            pending_generated,
+                            signal_cache,
+                            &playing.structure_state,
+                            &playing.movement_influence,
+                            &playing.pusher_state,
+                        ),
+                        simulation.turn,
+                    );
+                }
+            }
+            sim_log.log(simulation.turn, "HTTP /beginSimulation");
+            serde_json::json!({
+                "ok": true,
+                "simulation": simulation_status_json(simulation, builder_mode, animating),
+                "started": starting,
+            })
+            .to_string()
+        }
         DebugHttpCommand::GetLogs { limit } => sim_log.recent_json(limit),
         DebugHttpCommand::ClearLogs => {
             sim_log.clear();
@@ -506,7 +551,6 @@ fn handle_embedded_debug_command(
         }
         DebugHttpCommand::RunN { .. }
         | DebugHttpCommand::WorldReset
-        | DebugHttpCommand::BeginSimulation
         | DebugHttpCommand::LoadSave { .. }
         | DebugHttpCommand::LoadFixture { .. }
         | DebugHttpCommand::RunFixture { .. }

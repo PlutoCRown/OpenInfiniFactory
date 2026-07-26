@@ -263,7 +263,8 @@ impl Default for SimulationState {
 
 impl SimulationState {
     pub fn is_active(&self) -> bool {
-        self.running || self.turn > 0
+        // 已拍开局快照即算进入模拟（可停在 turn=0 回合边界，供调试器 beginSimulation）
+        self.start_snapshot.is_some() || self.running || self.turn > 0
     }
 
     pub fn authoring_world<'a>(
