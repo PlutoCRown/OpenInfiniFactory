@@ -198,7 +198,7 @@ pub fn simulate_turn(
         apply_fragile_shatter_before_execute(world, &mut movement_plan, structure_state);
 
     // —— 阶段 3b 执行运动：位姿/推杆，再重生静态 marker ——
-    let (animations, pusher_animations) = execute_structure_moves_with_pushers(
+    let (animations, pusher_animations, extension_commits) = execute_structure_moves_with_pushers(
         world,
         movement_plan,
         structure_state,
@@ -206,11 +206,9 @@ pub fn simulate_turn(
         &hard_pusher_head_occupancy,
         &suction,
     );
-    // 粘头/空头推动只有执行成功才提交伸出/收回
-    for (pos, animation) in &pusher_animations {
-        if let Some(block) = world.blocks.get(pos) {
-            pusher_state.set_extended(block.id, animation.to_extension > 0.5);
-        }
+    // 粘头/空头推动只有执行成功才提交伸出/收回（按 BlockId，避免互推后坐标过期）
+    for (id, extended) in extension_commits {
+        pusher_state.set_extended(id, extended);
     }
     let mut pusher_animations = pusher_animations;
     for (pos, animation) in pusher_state.sustained_animations(world) {

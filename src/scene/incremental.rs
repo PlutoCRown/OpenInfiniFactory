@@ -411,7 +411,11 @@ pub fn refresh_positions(
                 let same_instance = index
                     .get_by_id(data.id)
                     .is_some_and(|entity| index.get_animatable(pos) == Some(entity));
-                if !(same_instance && can_preserve_animatable(data)) {
+                let pusher_anim = pusher_animations.get(&pos).copied();
+                // 有伸出/收回过渡时不能原地保留，否则会丢推杆动画（与 apply_structure_animations 一致）
+                let pusher_anim_dirty =
+                    pusher_anim.is_some_and(|anim| anim.from_extension != anim.to_extension);
+                if !(same_instance && can_preserve_animatable(data) && !pusher_anim_dirty) {
                     despawn_animatable_at(commands, index, pos);
                     spawn_and_index(
                         commands,
@@ -422,7 +426,7 @@ pub fn refresh_positions(
                         pos,
                         data,
                         None,
-                        pusher_animations.get(&pos).copied(),
+                        pusher_anim,
                         timing,
                         powered_wires.contains(&pos),
                         factory_debug,

@@ -116,6 +116,7 @@ pub(super) enum MovementMark {
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct PusherActor {
+    pub(super) id: BlockId,
     pub(super) pos: IVec3,
     pub(super) animation: PusherAnimationKind,
 }
@@ -556,8 +557,10 @@ pub(super) fn apply_fragile_shatter_before_execute(
 
 /// 按序执行运动标签：失败则试下一个；种子判占用，成功后标记展开后的格子。
 /// `hard_pusher_head_occupancy` 为本回合开始时已伸出的头；执行中随 Push 伸出/收回更新。
-/// `moved`：本回合真实平移过的格子；`gravity_held`：空头/推杆本体，只抑重力不挡其它 Push。
-/// 抬升与重力的互斥在 merge 阶段完成（有抬升标签则丢掉重叠重力），此处不再为抬升失败写 gravity_held。
+/// `moved`：本回合真实平移过的格子。
+/// `gravity_held`：已有推杆动画的整坨，只抑重力。
+/// `actuated_facing`：同结构同朝向本回合已有推杆动作则挡后续非零 Push（同向链不并发；不同向仍可各自动）。
+/// 抬升与重力的互斥在 merge 阶段完成（有抬升标签则丢掉重叠重力）。
 pub(super) fn execute_structure_moves_with_pushers(
     world: &mut WorldBlocks,
     moves: Vec<StructureMove>,
@@ -565,11 +568,18 @@ pub(super) fn execute_structure_moves_with_pushers(
     influence_cache: &mut MovementInfluenceCache,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
     suction: &SuctionLinks,
-) -> (HashMap<IVec3, BlockMotion>, HashMap<IVec3, PusherMotion>) {
+) -> (
+    HashMap<IVec3, BlockMotion>,
+    HashMap<IVec3, PusherMotion>,
+    HashMap<BlockId, bool>,
+) {
     let mut moved = HashSet::new();
     let mut gravity_held = HashSet::new();
+    // 结构 ID → 本回合已启动过动画的推杆朝向
+    let mut actuated_facing: HashMap<StructureId, HashSet<Facing>> = HashMap::new();
     let mut animations = HashMap::new();
     let mut pusher_animations = HashMap::new();
+    let mut extension_commits = HashMap::new();
     let mut executed = Vec::new();
     let mut heads = hard_pusher_head_occupancy.clone();
     for movement in moves {
@@ -594,13 +604,32 @@ pub(super) fn execute_structure_moves_with_pushers(
                     }
                 } else if offset != IVec3::ZERO && structure.iter().any(|pos| moved.contains(pos)) {
                     continue;
+                } else if offset != IVec3::ZERO
+                    && actors.iter().any(|actor| {
+                        let Some(pos) = block_pos_by_id(world, actor.id) else {
+                            return false;
+                        };
+                        let Some(facing) = world.blocks.get(&pos).map(|block| block.facing) else {
+                            return false;
+                        };
+                        let Some(sid) = structures.id_at(pos) else {
+                            return false;
+                        };
+                        actuated_facing
+                            .get(&sid)
+                            .is_some_and(|set| set.contains(&facing))
+                    })
+                {
+                    // 同结构同朝向已有推杆动过：本条非零 Push 延后到下回合
+                    continue;
                 }
                 // 收回标签检查时忽略自己的头，否则粘头拉回会撞上尚未释放的头占位
                 let mut heads_for_check = heads.clone();
                 for actor in &actors {
                     if matches!(actor.animation, PusherAnimationKind::Retract) {
-                        if let Some(block) = world.blocks.get(&actor.pos) {
-                            heads_for_check.remove(&(actor.pos + block.facing.forward_ivec3()));
+                        let actor_pos = block_pos_by_id(world, actor.id).unwrap_or(actor.pos);
+                        if let Some(block) = world.blocks.get(&actor_pos) {
+                            heads_for_check.remove(&(actor_pos + block.facing.forward_ivec3()));
                         }
                     }
                 }
@@ -615,7 +644,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                 ) else {
                     continue;
                 };
-                // 展开卷入的格子若本回合已真实平移过，本标签失败（可 fallback）
+                // 展开卷入的格子若本回合已真实平移过 / 重力 hold，本标签失败
                 if is_gravity {
                     if structure
                         .iter()
@@ -648,6 +677,29 @@ pub(super) fn execute_structure_moves_with_pushers(
                 } else {
                     HashSet::new()
                 };
+                // 平移前筛推杆：仅伸出时，伸头终点若落在同标签其它成员落点上则丢掉（A/B 同推 {B,C}）。
+                // 收回把物体拉进头格是预期，不能用同一规则滤掉收回动画。
+                let actors: Vec<PusherActor> = actors
+                    .into_iter()
+                    .filter(|actor| {
+                        if matches!(actor.animation, PusherAnimationKind::Retract) {
+                            return block_pos_by_id(world, actor.id).is_some();
+                        }
+                        let Some(actor_pos) = block_pos_by_id(world, actor.id) else {
+                            return false;
+                        };
+                        let Some(block) = world.blocks.get(&actor_pos) else {
+                            return false;
+                        };
+                        let forward = block.facing.forward_ivec3();
+                        let head_final = if structure.contains(&actor_pos) {
+                            actor_pos + offset + forward
+                        } else {
+                            actor_pos + forward
+                        };
+                        !(offset != IVec3::ZERO && structure.contains(&(head_final - offset)))
+                    })
+                    .collect();
                 if offset != IVec3::ZERO {
                     for pos in &structure {
                         if let Some(block) = world.blocks.get(pos) {
@@ -664,6 +716,12 @@ pub(super) fn execute_structure_moves_with_pushers(
                             );
                         }
                     }
+                    // 同回合稍后还会动这块：先把已挂上的推杆动画键挪到新格
+                    for pos in &structure {
+                        if let Some(motion) = pusher_animations.remove(pos) {
+                            pusher_animations.insert(*pos + offset, motion);
+                        }
+                    }
                     moved.extend(structure.iter().copied());
                     move_structure(world, &structure, offset);
                     structures.move_positions(&structure, offset);
@@ -675,44 +733,44 @@ pub(super) fn execute_structure_moves_with_pushers(
                     let target_structure: HashSet<IVec3> =
                         structure.iter().map(|pos| *pos + offset).collect();
                     moved.extend(target_structure);
-                } else {
-                    // 空头伸出/收回：零位移 Push，只抑制本结构重力 fallback
-                    gravity_held.extend(structure.iter().copied());
                 }
                 for actor in actors {
-                    // 反推时推杆在位移结构内，执行后要用新坐标提交动画/头占位
-                    let actor_pos = if structure.contains(&actor.pos) {
-                        actor.pos + offset
-                    } else {
-                        actor.pos
+                    let Some(actor_pos) = block_pos_by_id(world, actor.id) else {
+                        continue;
+                    };
+                    let Some(block) = world.blocks.get(&actor_pos).copied() else {
+                        continue;
                     };
                     let (from_extension, to_extension) = match actor.animation {
                         PusherAnimationKind::Extend => (0.0, 1.0),
                         PusherAnimationKind::Retract => (1.0, 0.0),
                     };
-                    let motion = PusherMotion {
-                        from_extension,
-                        to_extension,
-                    };
-                    pusher_animations.insert(actor_pos, motion);
-                    // 反推：表现层按目标格取动画；同时挂一份到旧格，避免同拍多伸出时漏查
-                    if actor_pos != actor.pos {
-                        pusher_animations.entry(actor.pos).or_insert(motion);
-                    }
-                    if let Some(block) = world.blocks.get(&actor_pos) {
-                        let head = actor_pos + block.facing.forward_ivec3();
-                        match actor.animation {
-                            PusherAnimationKind::Extend => {
-                                heads.insert(head);
-                            }
-                            PusherAnimationKind::Retract => {
-                                heads.remove(&head);
-                            }
+                    pusher_animations.insert(
+                        actor_pos,
+                        PusherMotion {
+                            from_extension,
+                            to_extension,
+                        },
+                    );
+                    extension_commits.insert(actor.id, to_extension > 0.5);
+                    let head = actor_pos + block.facing.forward_ivec3();
+                    match actor.animation {
+                        PusherAnimationKind::Extend => {
+                            heads.insert(head);
+                        }
+                        PusherAnimationKind::Retract => {
+                            heads.remove(&head);
                         }
                     }
-                    // 粘头推动的是前方结构：活塞本体只抑重力，不挡同结构其它推杆
-                    if let Some(actor_id) = structures.id_at(actor_pos) {
-                        if let Some(actor_structure) = structures.structure_positions(actor_id) {
+                    // 推杆开启动画：记朝向（挡同向后续非零 Push）+ 整坨抑重力
+                    if let Some(actor_structure_id) = structures.id_at(actor_pos) {
+                        actuated_facing
+                            .entry(actor_structure_id)
+                            .or_default()
+                            .insert(block.facing);
+                        if let Some(actor_structure) =
+                            structures.structure_positions(actor_structure_id)
+                        {
                             gravity_held.extend(actor_structure.iter().copied());
                         }
                     }
@@ -787,7 +845,15 @@ pub(super) fn execute_structure_moves_with_pushers(
         }
     }
     influence_cache.record_executed(executed);
-    (animations, pusher_animations)
+    (animations, pusher_animations, extension_commits)
+}
+
+/// 按运行时 BlockId 查找当前坐标
+fn block_pos_by_id(world: &WorldBlocks, id: BlockId) -> Option<IVec3> {
+    world
+        .blocks
+        .iter()
+        .find_map(|(pos, block)| (block.id == id).then_some(*pos))
 }
 
 fn can_move_gravity_structure(

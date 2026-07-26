@@ -409,10 +409,25 @@ impl StructureState {
         if split.target_anchored {
             return None;
         }
+        // 头前子集含不同朝向的其它推杆：不当正推货物（各自伸缩），改走反推。
+        // 同向链仍可把前方同朝向推杆当 target（否则同向三连无法拆推）。
+        if split.target_side.iter().any(|pos| {
+            world.blocks.get(pos).is_some_and(|other| {
+                other.id != block.id
+                    && other.facing != block.facing
+                    && matches!(
+                        other.kind.movement_rule(other.facing),
+                        Some(MovementRule::PoweredTranslate { .. })
+                    )
+            })
+        }) {
+            return None;
+        }
         Some(split.target_side.clone())
     }
 
-    /// 反推用：体–头边为桥时返回体侧子集；有回环（非桥）不可拆边反推
+    /// 反推用：体–头边为桥时返回体侧子集；有回环（非桥）不可拆边反推。
+    /// 不把其它推杆拖进反推集；正推 target 仅允许同朝向推杆（见 `pusher_target_structure`）。
     pub fn pusher_actor_structure(
         &self,
         world: &WorldBlocks,
@@ -432,7 +447,29 @@ impl StructureState {
         if split.actor_anchored {
             return None;
         }
-        Some(split.actor_side.clone())
+        let mut subset = HashSet::from([pusher_pos]);
+        let mut queue = VecDeque::from([pusher_pos]);
+        while let Some(pos) = queue.pop_front() {
+            for offset in signal_offsets() {
+                let neighbor = pos + offset;
+                if subset.contains(&neighbor) || !split.actor_side.contains(&neighbor) {
+                    continue;
+                }
+                let is_other_pusher = world.blocks.get(&neighbor).is_some_and(|other| {
+                    other.id != block.id
+                        && matches!(
+                            other.kind.movement_rule(other.facing),
+                            Some(MovementRule::PoweredTranslate { .. })
+                        )
+                });
+                if is_other_pusher {
+                    continue;
+                }
+                subset.insert(neighbor);
+                queue.push_back(neighbor);
+            }
+        }
+        Some(subset)
     }
 
     /// 按结构 ID 取结构（调试/查询）

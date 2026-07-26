@@ -374,32 +374,43 @@ fn mark_pusher_movement(
         None
     };
 
-    // 工作面标到结构：能走则推/拉对方，否则反推自身（对齐传送带）
+    // 工作面标到结构：能走则推/拉对方；伸出失败才反推；收回失败只缩头
     if let Some(movement) = work {
+        // 收回时头会让出，被拉块可进原头格——校验忽略本推杆头占位
+        let mut heads_for_check = claimed_heads.clone();
+        if !desired_extended {
+            heads_for_check.remove(&head);
+        }
         if can_translate_structure(
             world,
             movement.structure(),
             attempt_offset,
             structures,
             suction,
-            claimed_heads,
+            &heads_for_check,
         ) {
+            if !desired_extended {
+                claimed_heads.remove(&head);
+            }
             return Some(
                 movement
-                    .with_pusher_actor(pos, MovementMark::Push, animation)
+                    .with_pusher_actor(id, pos, MovementMark::Push, animation)
                     .with_source(id, pos),
             );
         }
-        return mark_pusher_reverse_self(
-            world,
-            structures,
-            suction,
-            claimed_heads,
-            pos,
-            id,
-            -attempt_offset,
-            animation,
-        );
+        if desired_extended {
+            return mark_pusher_reverse_self(
+                world,
+                structures,
+                suction,
+                claimed_heads,
+                pos,
+                id,
+                -attempt_offset,
+                animation,
+            );
+        }
+        // 收回拉不动：不反推，下面走零位移缩头
     }
 
     if desired_extended {
@@ -420,19 +431,8 @@ fn mark_pusher_movement(
                 animation,
             );
         }
-    } else if bound_front {
-        // 粘着却标不出可拉结构：反推自身
-        return mark_pusher_reverse_self(
-            world,
-            structures,
-            suction,
-            claimed_heads,
-            pos,
-            id,
-            -attempt_offset,
-            animation,
-        );
     } else {
+        // 收回（含粘头但拉不动 / 未粘头）：释放头占位，零位移缩头
         claimed_heads.remove(&head);
     }
 
@@ -444,7 +444,7 @@ fn mark_pusher_movement(
             structure_id,
             structure,
             IVec3::ZERO,
-            PusherActor { pos, animation },
+            PusherActor { id, pos, animation },
             MovementMark::Push,
         )
         .with_source(id, pos),
@@ -476,7 +476,7 @@ fn mark_pusher_reverse_self(
             structures.id_at(pos)?,
             structure,
             reverse,
-            PusherActor { pos, animation },
+            PusherActor { id, pos, animation },
             MovementMark::Push,
         )
         .with_source(id, pos),
@@ -486,6 +486,7 @@ fn mark_pusher_reverse_self(
 trait StructureMoveActorExt {
     fn with_pusher_actor(
         self,
+        actor_id: BlockId,
         actor: IVec3,
         mark: MovementMark,
         animation: PusherAnimationKind,
@@ -495,6 +496,7 @@ trait StructureMoveActorExt {
 impl StructureMoveActorExt for StructureMove {
     fn with_pusher_actor(
         self,
+        actor_id: BlockId,
         actor: IVec3,
         mark: MovementMark,
         animation: PusherAnimationKind,
@@ -510,6 +512,7 @@ impl StructureMoveActorExt for StructureMove {
                 ..
             } => {
                 actors.push(PusherActor {
+                    id: actor_id,
                     pos: actor,
                     animation,
                 });

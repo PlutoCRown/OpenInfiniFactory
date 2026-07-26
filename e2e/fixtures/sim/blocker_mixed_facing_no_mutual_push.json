@@ -1,0 +1,59 @@
+{
+  "name": "blocker_mixed_facing_no_mutual_push",
+  "setup": [
+    {
+      "x": 0,
+      "y": 1,
+      "z": 1,
+      "kind": "Blocker",
+      "facing": "North"
+    },
+    {
+      "x": 0,
+      "y": 1,
+      "z": 0,
+      "kind": "Blocker",
+      "facing": "East"
+    },
+    {
+      "x": 1,
+      "y": 1,
+      "z": 0,
+      "kind": "Blocker",
+      "facing": "South"
+    }
+  ],
+  "steps": [
+    {
+      "op": "beginSimulation"
+    },
+    {
+      "op": "run",
+      "turns": 1
+    },
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 1,
+      "z": 2,
+      "kind": "Blocker",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": -1,
+      "y": 1,
+      "z": 0,
+      "kind": "Blocker",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": 1,
+      "y": 1,
+      "z": 0,
+      "kind": "Blocker",
+      "layer": "factory"
+    }
+  ]
+}
