@@ -9,8 +9,8 @@ use crate::debug_http::protocol::{
     DebugHttpCommand, DebugHttpRequest, help_json, json_error, json_ok,
 };
 use crate::debug_http::snapshot::{
-    block_json, cursor_target_json, embedded_status_json, perf_stats_json, pos_json,
-    simulation_status_json,
+    block_json, block_json_with_structure, cursor_target_json, embedded_status_json,
+    perf_stats_json, pos_json, resolve_structure_query, simulation_status_json,
 };
 use crate::debug_http::world_ops::{block_kinds_json, parse_block_kind, parse_facing, place_block};
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
@@ -326,7 +326,11 @@ fn handle_embedded_debug_command(
                 serde_json::json!({
                     "ok": true,
                     "pos": pos_json(pos),
-                    "block": block_json(&playing.world, pos),
+                    "block": block_json_with_structure(
+                        &playing.world,
+                        Some(&playing.structure_state),
+                        pos,
+                    ),
                     "cursor": cursor_target_json(placement, &playing.world),
                 })
                 .to_string()
@@ -338,6 +342,24 @@ fn handle_embedded_debug_command(
                 .to_string()
             }
         }
+        DebugHttpCommand::GetStructure {
+            x,
+            y,
+            z,
+            block_id,
+            structure_id,
+        } => match resolve_structure_query(
+            &playing.world,
+            &mut playing.structure_state,
+            x,
+            y,
+            z,
+            block_id,
+            structure_id,
+        ) {
+            Ok(structure) => json_ok(serde_json::json!({ "structure": structure })),
+            Err(error) => json_error(&error),
+        },
         DebugHttpCommand::PlaceBlock {
             x,
             y,

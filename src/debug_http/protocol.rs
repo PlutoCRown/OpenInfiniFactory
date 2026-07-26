@@ -7,6 +7,13 @@ pub enum DebugHttpCommand {
         y: Option<i32>,
         z: Option<i32>,
     },
+    GetStructure {
+        x: Option<i32>,
+        y: Option<i32>,
+        z: Option<i32>,
+        block_id: Option<u64>,
+        structure_id: Option<u64>,
+    },
     GetStatus,
     GetPerf,
     Run,
@@ -62,6 +69,20 @@ pub fn parse_http_request(request: &tiny_http::Request) -> DebugHttpCommand {
             x: params.get("x").and_then(|v| v.parse().ok()),
             y: params.get("y").and_then(|v| v.parse().ok()),
             z: params.get("z").and_then(|v| v.parse().ok()),
+        },
+        ("GET", "/getstructure") | ("GET", "/structure") => DebugHttpCommand::GetStructure {
+            x: params.get("x").and_then(|v| v.parse().ok()),
+            y: params.get("y").and_then(|v| v.parse().ok()),
+            z: params.get("z").and_then(|v| v.parse().ok()),
+            block_id: params
+                .get("blockid")
+                .or_else(|| params.get("block_id"))
+                .and_then(|v| v.parse().ok()),
+            structure_id: params
+                .get("id")
+                .or_else(|| params.get("structureid"))
+                .or_else(|| params.get("structure_id"))
+                .and_then(|v| v.parse().ok()),
         },
         ("GET", "/status") => DebugHttpCommand::GetStatus,
         ("GET", "/perf") => DebugHttpCommand::GetPerf,
@@ -130,6 +151,7 @@ pub fn help_json() -> String {
         "ok": true,
         "endpoints": [
             {"method": "GET", "path": "/getPosBlock?x=&y=&z=", "desc": "full block info at coordinate (facing/paints/stamps/settings)"},
+            {"method": "GET", "path": "/getStructure?id=|/blockId=|x=&y=&z=", "desc": "structure by id / block id / position (members + movable)"},
             {"method": "GET", "path": "/status", "desc": "session + simulation snapshot (any game mode)"},
             {"method": "GET", "path": "/perf", "desc": "frame timing stats (in-game overlay)"},
             {"method": "GET", "path": "/blockKinds", "desc": "all registered block kinds"},

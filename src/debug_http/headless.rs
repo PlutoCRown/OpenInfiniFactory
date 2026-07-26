@@ -1,8 +1,10 @@
 use bevy::prelude::IVec3;
 
 use super::fixture::{apply_fixture_setup, load_fixture_file, run_fixture_dir, run_fixture_file};
-use super::protocol::{help_json, json_error, json_ok, DebugHttpCommand};
-use super::snapshot::{block_json, pos_json, session_status_json};
+use super::protocol::{DebugHttpCommand, help_json, json_error, json_ok};
+use super::snapshot::{
+    block_json, block_json_with_structure, pos_json, resolve_structure_query, session_status_json,
+};
 use super::standalone::HeadlessDebugState;
 use super::world_ops::{
     block_kinds_json, fixture_root, load_save_into_session, parse_block_kind, parse_facing,
@@ -20,15 +22,41 @@ pub fn handle_headless_command(
         DebugHttpCommand::GetPosBlock { x, y, z } => {
             if let (Some(x), Some(y), Some(z)) = (x, y, z) {
                 let pos = IVec3::new(x, y, z);
-                let world = state.session.world_blocks();
-                json_ok(serde_json::json!({
-                    "pos": pos_json(pos),
-                    "block": block_json(world, pos),
-                }))
+                state.with_core(|core| {
+                    json_ok(serde_json::json!({
+                        "pos": pos_json(pos),
+                        "block": block_json_with_structure(
+                            core.world_blocks(),
+                            Some(&core.structure_state),
+                            pos,
+                        ),
+                    }))
+                })
             } else {
                 json_error("headless mode requires ?x=&y=&z= for /getPosBlock")
             }
         }
+        DebugHttpCommand::GetStructure {
+            x,
+            y,
+            z,
+            block_id,
+            structure_id,
+        } => state.with_core(|core| {
+            // 拆字段借用：world_blocks() 会借走整个 core
+            match resolve_structure_query(
+                &core.world,
+                &mut core.structure_state,
+                x,
+                y,
+                z,
+                block_id,
+                structure_id,
+            ) {
+                Ok(structure) => json_ok(serde_json::json!({ "structure": structure })),
+                Err(error) => json_error(&error),
+            }
+        }),
         DebugHttpCommand::GetStatus => {
             let control = state.session.control();
             json_ok(serde_json::json!({
@@ -92,15 +120,13 @@ pub fn handle_headless_command(
                 return json_error("loadFixture requires ?path=");
             }
             match load_fixture_file(&path) {
-                Ok(fixture) => {
-                    state.with_core(|core| match apply_fixture_setup(core, &fixture) {
-                        Ok(()) => json_ok(serde_json::json!({
-                            "fixture": fixture.name,
-                            "simulation": session_status_json(core.control()),
-                        })),
-                        Err(error) => json_error(&error),
-                    })
-                }
+                Ok(fixture) => state.with_core(|core| match apply_fixture_setup(core, &fixture) {
+                    Ok(()) => json_ok(serde_json::json!({
+                        "fixture": fixture.name,
+                        "simulation": session_status_json(core.control()),
+                    })),
+                    Err(error) => json_error(&error),
+                }),
                 Err(error) => json_error(&error),
             }
         }

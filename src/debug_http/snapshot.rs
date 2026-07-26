@@ -21,8 +21,16 @@ use oif_sim::world::grid::{
     BlockSettings, ConverterMode, GeneratorMode, GoalSettings, SignDisplay,
 };
 
-/// 查询坐标上方块的完整调试信息（含朝向、漆、印花附着、设定等）
 pub fn block_json(world: &oif_sim::WorldBlocks, pos: IVec3) -> Value {
+    block_json_with_structure(world, None, pos)
+}
+
+/// 方块调试信息；可选附带结构摘要
+pub fn block_json_with_structure(
+    world: &oif_sim::WorldBlocks,
+    structures: Option<&oif_sim::simulation::structure_state::StructureState>,
+    pos: IVec3,
+) -> Value {
     let material_block = world.blocks.get(&pos).copied();
     let system_block = world.system_blocks.get(&pos).copied();
     let machine_body = world.machine_bodies.get(&pos).copied();
@@ -123,6 +131,20 @@ pub fn block_json(world: &oif_sim::WorldBlocks, pos: IVec3) -> Value {
 
     let acceptor_id = world.acceptor_id_at(pos).map(|id| id.0);
 
+    let structure_summary = structures.and_then(|state| {
+        let id = state.structure_id_at(pos)?;
+        let structure = state.get(id)?;
+        Some(json!({
+            "id": id.0,
+            "kind": format!("{:?}", structure.kind),
+            "activity": format!("{:?}", structure.activity),
+            "pushable": structure.pushable,
+            "freedom": format!("{:?}", structure.freedom),
+            "movable": structure.pushable && structure.freedom != oif_sim::simulation::structure_state::StructureFreedom::None,
+            "size": structure.positions.len(),
+        }))
+    });
+
     json!({
         "layer": layer,
         "kind": format!("{:?}", block.kind),
@@ -138,6 +160,7 @@ pub fn block_json(world: &oif_sim::WorldBlocks, pos: IVec3) -> Value {
         "wire_panels": wire_panels,
         "settings": settings,
         "acceptor_id": acceptor_id,
+        "structure": structure_summary,
         "machine_body": machine_body.map(|body| json!({
             "kind": format!("{:?}", body.kind),
             "facing": format!("{:?}", body.facing),
@@ -149,6 +172,86 @@ pub fn block_json(world: &oif_sim::WorldBlocks, pos: IVec3) -> Value {
             "id": sys.id.0,
         }))).flatten(),
     })
+}
+
+/// 结构完整调试信息（成员方块 + 可移动性）
+pub fn structure_json(
+    world: &oif_sim::WorldBlocks,
+    structures: &oif_sim::simulation::structure_state::StructureState,
+    id: oif_sim::simulation::structure_state::StructureId,
+) -> Option<Value> {
+    let structure = structures.get(id)?;
+    let mut blocks: Vec<Value> = structure
+        .positions
+        .iter()
+        .map(|pos| {
+            let block = world.blocks.get(pos).or_else(|| world.system_blocks.get(pos));
+            json!({
+                "pos": pos_json(*pos),
+                "kind": block.map(|b| format!("{:?}", b.kind)),
+                "id": block.map(|b| b.id.0),
+                "facing": block.map(|b| format!("{:?}", b.facing)),
+            })
+        })
+        .collect();
+    blocks.sort_by_key(|value| {
+        let pos = value.get("pos").cloned().unwrap_or(Value::Null);
+        (
+            pos.get("x").and_then(|v| v.as_i64()).unwrap_or(0),
+            pos.get("y").and_then(|v| v.as_i64()).unwrap_or(0),
+            pos.get("z").and_then(|v| v.as_i64()).unwrap_or(0),
+        )
+    });
+    Some(json!({
+        "id": id.0,
+        "kind": format!("{:?}", structure.kind),
+        "activity": format!("{:?}", structure.activity),
+        "pushable": structure.pushable,
+        "freedom": format!("{:?}", structure.freedom),
+        "movable": structure.pushable
+            && structure.freedom != oif_sim::simulation::structure_state::StructureFreedom::None,
+        "size": structure.positions.len(),
+        "blocks": blocks,
+    }))
+}
+
+/// 按坐标 / 方块 ID / 结构 ID 解析结构查询
+pub fn resolve_structure_query(
+    world: &oif_sim::WorldBlocks,
+    structures: &mut oif_sim::simulation::structure_state::StructureState,
+    x: Option<i32>,
+    y: Option<i32>,
+    z: Option<i32>,
+    block_id: Option<u64>,
+    structure_id: Option<u64>,
+) -> Result<Value, String> {
+    if structures.is_empty() && !world.blocks.is_empty() {
+        structures.rebuild_factory_for_debug(world);
+    }
+
+    let id = if let Some(structure_id) = structure_id {
+        oif_sim::simulation::structure_state::StructureId(structure_id)
+    } else if let Some(block_id) = block_id {
+        let pos = world
+            .blocks
+            .iter()
+            .chain(world.system_blocks.iter())
+            .find(|(_, block)| block.id.0 == block_id)
+            .map(|(pos, _)| *pos)
+            .ok_or_else(|| format!("no block with id={block_id}"))?;
+        structures
+            .structure_id_at(pos)
+            .ok_or_else(|| format!("block id={block_id} at ({}, {}, {}) has no structure", pos.x, pos.y, pos.z))?
+    } else if let (Some(x), Some(y), Some(z)) = (x, y, z) {
+        let pos = IVec3::new(x, y, z);
+        structures
+            .structure_id_at(pos)
+            .ok_or_else(|| format!("no structure at ({x}, {y}, {z})"))?
+    } else {
+        return Err("getStructure requires ?id= or ?blockId= or ?x=&y=&z=".into());
+    };
+
+    structure_json(world, structures, id).ok_or_else(|| format!("structure id={} not found", id.0))
 }
 
 fn kind_detail(kind: BlockKind) -> Value {
