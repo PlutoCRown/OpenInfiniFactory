@@ -18,12 +18,14 @@ use super::world_ops::{save_current_world, save_current_world_invalidate_solutio
 #[cfg(not(target_arch = "wasm32"))]
 use crate::game::cameras::GameplayViewImage;
 
-/// 排队中的显式保存（先亮「保存中」，下一帧再写盘）
+/// 排队中的显式保存（先亮「保存中」，再写盘；封面截完后再关遮罩）
 #[derive(Resource, Default)]
 pub struct PendingSave {
     pub hold_frames: u8,
     pub invalidate_solutions: bool,
     pub active: bool,
+    /// 局内保存：已写档，等封面截图回调后再清 SessionBusy
+    pub waiting_cover: bool,
 }
 
 pub fn handle_save_current_world(
@@ -35,6 +37,7 @@ pub fn handle_save_current_world(
         *busy = SessionBusy::Saving;
         pending.active = true;
         pending.invalidate_solutions = false;
+        pending.waiting_cover = false;
         pending.hold_frames = 2;
     }
 }
@@ -48,11 +51,12 @@ pub fn handle_save_current_world_invalidate_solutions(
         *busy = SessionBusy::Saving;
         pending.active = true;
         pending.invalidate_solutions = true;
+        pending.waiting_cover = false;
         pending.hold_frames = 2;
     }
 }
 
-/// 真正执行排队中的保存，并在成功后更新封面
+/// 真正执行排队中的保存；若要更新封面则保持「保存中」直到截图完成
 pub fn process_pending_save(
     mut pending: ResMut<PendingSave>,
     mut busy: ResMut<SessionBusy>,
@@ -65,7 +69,7 @@ pub fn process_pending_save(
     mut commands: Commands,
     #[cfg(not(target_arch = "wasm32"))] view_image: Option<Res<GameplayViewImage>>,
 ) {
-    if !pending.active {
+    if pending.waiting_cover || !pending.active {
         return;
     }
     if pending.hold_frames > 0 {
@@ -108,9 +112,27 @@ pub fn process_pending_save(
                 save_state.current.as_ref().unwrap(),
                 view_image,
             );
+            pending.waiting_cover = true;
+            return;
         }
     }
     *busy = SessionBusy::None;
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+/// 局内保存的封面截到后关掉「保存中」
+pub fn on_save_cover_captured(
+    _: On<bevy::render::view::screenshot::ScreenshotCaptured>,
+    mut pending: ResMut<PendingSave>,
+    mut busy: ResMut<SessionBusy>,
+) {
+    if !pending.waiting_cover {
+        return;
+    }
+    pending.waiting_cover = false;
+    if *busy == SessionBusy::Saving {
+        *busy = SessionBusy::None;
+    }
 }
 
 pub fn handle_save_world_as_new_puzzle(

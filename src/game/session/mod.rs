@@ -50,6 +50,8 @@ use messages::{
 use navigation::{
     handle_exit_to_main_menu, process_deferred_main_menu_exit, release_session_busy_after_menu,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use save::on_save_cover_captured;
 use save::{
     PendingSave, handle_save_current_world, handle_save_current_world_invalidate_solutions,
     handle_save_world_as_new_puzzle, process_pending_save,
@@ -76,7 +78,8 @@ impl Plugin for SessionPlugin {
             .add_message::<CreateNewSolution>();
         #[cfg(not(target_arch = "wasm32"))]
         app.add_message::<CoverScreenshotComplete>()
-            .add_observer(on_screenshot_saved_for_exit);
+            .add_observer(on_screenshot_saved_for_exit)
+            .add_observer(on_save_cover_captured);
         app.add_systems(
             Update,
             (
