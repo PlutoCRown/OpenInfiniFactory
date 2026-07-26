@@ -29,6 +29,7 @@ pub fn spawn_model_parts(
                 spawn_factory_static(
                     parent,
                     assets,
+                    kind,
                     parts,
                     *local_rotation,
                     block_id,
@@ -74,6 +75,7 @@ pub fn spawn_model_parts(
 fn spawn_factory_static(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
+    kind: crate::game::blocks::BlockKind,
     parts: &[FactoryPartHandles],
     local_rotation: Quat,
     block_id: crate::game::blocks::BlockId,
@@ -85,6 +87,7 @@ fn spawn_factory_static(
             spawn_factory_part(
                 parent,
                 assets,
+                kind,
                 part,
                 Transform::default(),
                 Some(block_id),
@@ -106,6 +109,7 @@ fn spawn_factory_static(
             spawn_factory_part(
                 parent,
                 assets,
+                kind,
                 part,
                 Transform::default(),
                 Some(block_id),
@@ -129,6 +133,7 @@ fn spawn_factory_drill(
         spawn_factory_part(
             parent,
             assets,
+            crate::game::blocks::BlockKind::Drill,
             part,
             Transform::default(),
             None,
@@ -149,6 +154,7 @@ fn spawn_factory_drill(
             spawn_factory_part(
                 parent,
                 assets,
+                crate::game::blocks::BlockKind::Drill,
                 part,
                 Transform::default(),
                 None,
@@ -174,6 +180,7 @@ fn spawn_factory_pusher(
         spawn_factory_part(
             parent,
             assets,
+            crate::game::blocks::BlockKind::Pusher,
             part,
             Transform::default(),
             None,
@@ -206,6 +213,7 @@ fn spawn_factory_pusher(
             spawn_factory_part(
                 parent,
                 assets,
+                crate::game::blocks::BlockKind::Pusher,
                 part,
                 Transform::default(),
                 None,
@@ -231,6 +239,7 @@ fn spawn_factory_pusher(
             spawn_factory_part(
                 parent,
                 assets,
+                crate::game::blocks::BlockKind::Pusher,
                 part,
                 Transform::default(),
                 None,
@@ -245,6 +254,7 @@ fn spawn_factory_pusher(
 fn spawn_factory_part(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
+    kind: crate::game::blocks::BlockKind,
     part: &FactoryPartHandles,
     transform: Transform,
     block_id: Option<crate::game::blocks::BlockId>,
@@ -268,8 +278,12 @@ fn spawn_factory_part(
     if !preview && icon_layer.is_none() && part.group.as_deref() == Some("Part_Belt") {
         child.insert(ScrollingConveyorBelt);
     }
-    // 抬升器顶盘：模拟期自发光，通电关闭
-    if !preview && icon_layer.is_none() && part.group.as_deref() == Some("Part_Disk") {
+    // 仅抬升器顶盘：模拟期自发光，通电关闭（旋转器也有 Part_Disk，不能共用）
+    if !preview
+        && icon_layer.is_none()
+        && kind == crate::game::blocks::BlockKind::Lifter
+        && part.group.as_deref() == Some("Part_Disk")
+    {
         if let Some(block_id) = block_id.filter(|id| !id.is_none()) {
             child.insert(LifterDiskGlow {
                 block_id,

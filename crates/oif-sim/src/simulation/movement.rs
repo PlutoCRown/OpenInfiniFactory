@@ -610,7 +610,6 @@ fn mark_lift_structures(
     range: i32,
     suction: &SuctionLinks,
 ) -> Vec<StructureMove> {
-    let heads = pusher_state.hard_head_occupancy(world);
     let mut moves = Vec::new();
     let mut seen_ids = HashSet::new();
     for height in 1..=range {
@@ -649,17 +648,8 @@ fn mark_lift_structures(
             seen_ids.remove(&id);
             continue;
         };
-        if !can_translate_structure(
-            world,
-            movement.structure(),
-            IVec3::Y,
-            structures,
-            suction,
-            &heads,
-        ) {
-            seen_ids.remove(&id);
-            continue;
-        }
+        // 不在标记期用 can_translate 过滤：抬不动也要打标签，merge 才能压住重力，
+        // 否则被挡住时下落→再抬→上下弹（65ff7b1）。执行阶段推不动则原地不动。
         for member in movement.structure() {
             if let Some(member_id) = structures.id_at(*member) {
                 seen_ids.insert(member_id);
