@@ -40,9 +40,7 @@ impl SaveListAction {
                 .iter()
                 .any(|entry| entry.slot.solution.as_deref() == Some(storage.as_str())),
             Self::NewPuzzle | Self::NewFree | Self::Back => true,
-            Self::NewSolution => {
-                selected_top_level_kind(save_state) == Some(SaveKind::Puzzle)
-            }
+            Self::NewSolution => selected_top_level_kind(save_state) == Some(SaveKind::Puzzle),
             Self::EditSelectedPuzzle => {
                 selected_top_level_kind(save_state) == Some(SaveKind::Puzzle)
             }
@@ -128,7 +126,7 @@ fn top_level_display_label(save_state: &SaveState, storage: &str) -> String {
         SaveKind::Free => "save.kind.free",
         SaveKind::Solution => "save.kind.solution",
     };
-    format!("{} · {}", entry.name, i18n.t(kind_key))
+    format!("{} · {}", i18n.t(kind_key), entry.name)
 }
 
 fn solution_display_name(save_state: &SaveState, storage: &str) -> String {

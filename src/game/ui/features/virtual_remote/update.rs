@@ -438,7 +438,11 @@ pub fn on_virtual_click(
     click.propagate(false);
     match control.0 {
         VirtualControlId::Pause => input.virtual_pause = true,
-        VirtualControlId::Inventory => input.virtual_inventory = true,
+        VirtualControlId::Inventory => {
+            if !simulation.is_active() {
+                input.virtual_inventory = true;
+            }
+        }
         VirtualControlId::Simulate => input.virtual_simulate = true,
         // 暂停模拟：回滚并退出模拟态（与 R 回滚一致，回到可编辑的非模拟 HUD）
         VirtualControlId::SimPause => input.virtual_rollback = true,
@@ -589,8 +593,10 @@ pub fn sync_virtual_remote_visibility(
             show && play_mode && sim_active
         } else if play_only.is_some() {
             show && play_mode && !sim_active
+        } else if control.0 == VirtualControlId::Inventory {
+            // 模拟期隐藏背包按钮
+            show && !sim_active
         } else {
-            let _ = control;
             show
         };
         *visibility = if visible {

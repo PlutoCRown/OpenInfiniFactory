@@ -401,6 +401,7 @@ fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<Cel
     let _ = world.system_blocks.remove(&pos);
     let removed_factory = world.blocks.remove(&pos);
     if let Some(block) = removed_factory {
+        world.adjust_block_count(block.kind, -1);
         if !block.id.is_none() {
             world
                 .material_paints
@@ -422,8 +423,10 @@ fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<Cel
                     .find(|(_, b)| b.id == child_id)
                     .map(|(p, _)| *p)
                 {
-                    world.blocks.remove(&child_pos);
-                    world.block_settings.remove(&child_pos);
+                    if let Some(child) = world.blocks.remove(&child_pos) {
+                        world.adjust_block_count(child.kind, -1);
+                        world.block_settings.remove(&child_pos);
+                    }
                 }
             }
         }
@@ -442,6 +445,7 @@ fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<Cel
     match snapshot.layer {
         BlockLayer::Factory => {
             world.blocks.insert(pos, block);
+            world.adjust_block_count(block.kind, 1);
             if let Some(settings) = snapshot.settings {
                 world.block_settings.insert(pos, settings);
             } else if let Some(default_settings) = block.kind.default_settings(pos) {
@@ -459,4 +463,3 @@ fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<Cel
     }
     world.topology_revision = world.topology_revision.wrapping_add(1);
 }
-

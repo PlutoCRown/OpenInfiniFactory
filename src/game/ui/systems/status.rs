@@ -9,6 +9,8 @@ use crate::shared::save::SaveKind;
 /// 游戏状态栏缓存：世界/手持很少变，瞄准行才跟视角每帧变
 pub struct GameplayStatusCache {
     world_line: String,
+    blocks_line: String,
+    blocks_tpl: String,
     held_line: String,
     aim_tpl: String,
     place_tpl: String,
@@ -25,6 +27,9 @@ pub struct GameplayStatusCache {
     num_x: String,
     num_y: String,
     num_z: String,
+    num_scene: String,
+    num_factory: String,
+    num_material: String,
     /// 模拟 overlay 嵌套模板缓冲
     overlay_controls: String,
     overlay_out: String,
@@ -35,6 +40,8 @@ impl Default for GameplayStatusCache {
     fn default() -> Self {
         Self {
             world_line: String::new(),
+            blocks_line: String::new(),
+            blocks_tpl: String::new(),
             held_line: String::new(),
             aim_tpl: String::new(),
             place_tpl: String::new(),
@@ -51,6 +58,9 @@ impl Default for GameplayStatusCache {
             num_x: String::new(),
             num_y: String::new(),
             num_z: String::new(),
+            num_scene: String::new(),
+            num_factory: String::new(),
+            num_material: String::new(),
             overlay_controls: String::new(),
             overlay_out: String::new(),
             turn_buf: String::new(),
@@ -116,6 +126,10 @@ pub fn update_status_ui(
                 &structure_state,
             );
         }
+        // 只在世界方块变化时重扫数量，避免转视角也 O(n)
+        if force || world.is_changed() {
+            write_blocks_status_line(&mut gameplay_cache, &world);
+        }
         compose_gameplay_status(&mut gameplay_cache);
     }
 
@@ -177,6 +191,10 @@ fn refresh_gameplay_headers(
         cache
             .scene_label
             .push_str(locale.t("status.gameplay.scene"));
+        cache.blocks_tpl.clear();
+        cache
+            .blocks_tpl
+            .push_str(locale.t("status.gameplay.blocks"));
         cache.last_block_kind = None;
     }
     write_world_status_line(&mut cache.world_line, locale, save_state);
@@ -262,6 +280,8 @@ fn compose_gameplay_status(cache: &mut GameplayStatusCache) {
     cache.composed.clear();
     cache.composed.push_str(&cache.world_line);
     cache.composed.push('\n');
+    cache.composed.push_str(&cache.blocks_line);
+    cache.composed.push('\n');
     cache.composed.push_str(&cache.held_line);
     cache.composed.push('\n');
     cache.composed.push_str(&cache.aim_line);
@@ -273,6 +293,25 @@ fn compose_gameplay_status(cache: &mut GameplayStatusCache) {
         cache.composed.push('\n');
         cache.composed.push_str(&cache.place_line);
     }
+}
+
+/// 统计场景 / 工厂 / 材料三层方块数量（读 WorldBlocks 增量计数，O(1)）
+fn write_blocks_status_line(cache: &mut GameplayStatusCache, world: &WorldBlocks) {
+    write_usize(&mut cache.num_scene, world.scene_count);
+    write_usize(&mut cache.num_factory, world.factory_count);
+    write_usize(&mut cache.num_material, world.material_count);
+    if cache.blocks_tpl.is_empty() {
+        return;
+    }
+    subst_template(
+        &cache.blocks_tpl,
+        &[
+            ("scene", cache.num_scene.as_str()),
+            ("factory", cache.num_factory.as_str()),
+            ("material", cache.num_material.as_str()),
+        ],
+        &mut cache.blocks_line,
+    );
 }
 
 fn write_simulation_overlay(
@@ -377,6 +416,11 @@ fn write_i32(buf: &mut String, value: i32) {
 }
 
 fn write_u64(buf: &mut String, value: u64) {
+    buf.clear();
+    let _ = write!(buf, "{value}");
+}
+
+fn write_usize(buf: &mut String, value: usize) {
     buf.clear();
     let _ = write!(buf, "{value}");
 }

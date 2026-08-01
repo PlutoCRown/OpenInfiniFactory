@@ -88,6 +88,11 @@ pub fn gameplay_input(
         return;
     }
 
+    // 模拟中若背包仍开着则关掉，并禁止再次打开
+    if simulation.is_active() && playing_ui.inventory_open {
+        playing_ui.inventory_open = false;
+    }
+
     if input.pause {
         if panel_close.dismiss_overlay(
             &mut playing_ui,
@@ -118,7 +123,8 @@ pub fn gameplay_input(
             &mut commands,
         ) {
             // Overlay dismissed.
-        } else {
+        } else if !simulation.is_active() {
+            // 模拟期禁止打开背包
             playing_ui.inventory_open = true;
         }
     }

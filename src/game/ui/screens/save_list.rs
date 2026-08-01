@@ -293,7 +293,7 @@ fn spawn_right_column(
         col.spawn((
             text("", 18.0, Color::srgb(0.85, 0.88, 0.9)),
             LocalizedText {
-                key: "save.kind.free",
+                key: "save.title.free_mode",
             },
             SaveListFreeHint,
             Visibility::Hidden,
@@ -472,16 +472,21 @@ fn spawn_footer(panel: &mut ChildSpawnerCommands, icons: &UiIconAssets) {
 pub fn spawn_save_puzzle_row(parent: &mut ChildSpawnerCommands, storage: String) {
     parent
         .spawn((
-            text_button(
+            styled_button(
                 Node {
                     width: Val::Percent(100.0),
                     height: Val::Px(default_button_size(32.0)),
+                    border: button_border(),
+                    padding: UiRect::horizontal(Val::Px(10.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::FlexStart,
                     flex_shrink: 0.0,
                     ..default()
                 },
                 raised_border(),
                 BUTTON_BG,
             ),
+            button_shadow(),
             SaveListAction::SelectPuzzle(storage),
         ))
         .with_children(|button| {

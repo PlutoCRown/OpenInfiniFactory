@@ -20,7 +20,7 @@ use glam::IVec3;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::blocks::{AcceptorId, BlockData, BlockId, PaintMaterialId};
+use crate::blocks::{AcceptorId, BlockData, BlockId, BlockKind, PaintMaterialId};
 
 /// 编辑瞄准最远距离（世界单位）
 pub const REACH: f32 = 12.0;
@@ -54,6 +54,12 @@ pub struct WorldBlocks {
     pub teleport_arrivals: HashMap<IVec3, BlockId>,
     /// 旋转器工作面刚转过的材料 BlockId：同 id 留着则不转；空/换 id 则清；通电也可清
     pub rotator_arrivals: HashMap<IVec3, BlockId>,
+    /// blocks 层场景方块数量（随 insert/remove 增量维护，供 UI/调试 O(1) 读取）
+    pub scene_count: usize,
+    /// blocks 层工厂方块数量
+    pub factory_count: usize,
+    /// blocks 层材料方块数量
+    pub material_count: usize,
 }
 
 /// 印花等占格附着：子材料挂在父材料的某一面上
@@ -130,6 +136,43 @@ impl WorldBlocks {
         }
     }
 
+    /// 按方块类型增减 blocks 层分层计数（系统层不计入）
+    pub fn adjust_block_count(&mut self, kind: BlockKind, delta: i32) {
+        let slot = if kind.is_scene() {
+            &mut self.scene_count
+        } else if kind.is_factory() {
+            &mut self.factory_count
+        } else if kind.is_material() {
+            &mut self.material_count
+        } else {
+            return;
+        };
+        if delta >= 0 {
+            *slot = slot.saturating_add(delta as usize);
+        } else {
+            *slot = slot.saturating_sub((-delta) as usize);
+        }
+    }
+
+    /// 从 blocks 全表重建分层计数（retain 等批量路径用）
+    pub fn recount_block_counts(&mut self) {
+        let mut scene = 0usize;
+        let mut factory = 0usize;
+        let mut material = 0usize;
+        for block in self.blocks.values() {
+            if block.kind.is_scene() {
+                scene += 1;
+            } else if block.kind.is_factory() {
+                factory += 1;
+            } else if block.kind.is_material() {
+                material += 1;
+            }
+        }
+        self.scene_count = scene;
+        self.factory_count = factory;
+        self.material_count = material;
+    }
+
     pub fn insert(&mut self, pos: IVec3, mut block: BlockData) -> Option<BlockData> {
         self.assign_block_id(&mut block);
         let kind = block.kind;
@@ -138,6 +181,14 @@ impl WorldBlocks {
         } else {
             self.blocks.insert(pos, block)
         };
+        if let Some(ref prev) = previous {
+            if !prev.kind.is_system_layer() {
+                self.adjust_block_count(prev.kind, -1);
+            }
+        }
+        if !kind.is_system_layer() {
+            self.adjust_block_count(kind, 1);
+        }
         if !self.block_settings.contains_key(&pos) {
             if let Some(mut settings) = kind.default_settings(pos) {
                 if let BlockSettings::Teleport(teleport_settings) = &mut settings {
@@ -158,6 +209,7 @@ impl WorldBlocks {
     pub fn remove(&mut self, pos: &IVec3) -> Option<BlockData> {
         let removed = self.blocks.remove(pos);
         if let Some(ref block) = removed {
+            self.adjust_block_count(block.kind, -1);
             let id = block.id;
             // 材料可与系统块同格；有系统宿主时保留其 settings（如传送门配对）
             if !self.system_blocks.contains_key(pos) {
@@ -186,8 +238,10 @@ impl WorldBlocks {
                         .find(|(_, b)| b.id == child_id)
                         .map(|(p, _)| *p)
                     {
-                        self.blocks.remove(&child_pos);
-                        self.block_settings.remove(&child_pos);
+                        if let Some(child) = self.blocks.remove(&child_pos) {
+                            self.adjust_block_count(child.kind, -1);
+                            self.block_settings.remove(&child_pos);
+                        }
                     }
                 }
                 let factory_children: Vec<BlockId> = self
@@ -204,8 +258,10 @@ impl WorldBlocks {
                         .find(|(_, b)| b.id == child_id)
                         .map(|(p, _)| *p)
                     {
-                        self.blocks.remove(&child_pos);
-                        self.block_settings.remove(&child_pos);
+                        if let Some(child) = self.blocks.remove(&child_pos) {
+                            self.adjust_block_count(child.kind, -1);
+                            self.block_settings.remove(&child_pos);
+                        }
                     }
                 }
             }
@@ -257,6 +313,9 @@ impl WorldBlocks {
             self.block_settings.clear();
             self.acceptor_structures.clear();
             self.next_acceptor_id = 0;
+            self.scene_count = 0;
+            self.factory_count = 0;
+            self.material_count = 0;
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -279,6 +338,7 @@ impl WorldBlocks {
             self.block_settings.retain(|pos, _| {
                 self.blocks.contains_key(pos) || self.system_blocks.contains_key(pos)
             });
+            self.recount_block_counts();
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -296,6 +356,9 @@ impl WorldBlocks {
             || self.system_blocks.len() != system_before
             || bodies_before != 0
         {
+            if self.blocks.len() != blocks_before {
+                self.recount_block_counts();
+            }
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }

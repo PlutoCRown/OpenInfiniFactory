@@ -10,7 +10,7 @@ use crate::game::simulation::structure_state::{
 };
 use crate::game::state::{
     BuilderMode, EditGestureKind, GameMode, GameSettings, PlacementState, PlayingUiState,
-    SolutionState,
+    SimulationState, SolutionState,
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{InventoryItems, UiRuntime};
@@ -66,6 +66,7 @@ pub fn update_hover(
     mode: Res<State<GameMode>>,
     playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
+    simulation: Res<SimulationState>,
     debug: Res<DebugState>,
     camera: Query<
         &Transform,
@@ -167,6 +168,13 @@ pub fn update_hover(
     let Ok((mut face_transform, mut face_visibility)) = aim_face.single_mut() else {
         return;
     };
+    // 模拟期不显示瞄准面高亮与放置预览（仍保留 target 供传送等）
+    if simulation.is_active() {
+        *face_visibility = Visibility::Hidden;
+        hover_bounds.bounds = None;
+        despawn_edit_previews(&mut preview_deps.commands, &preview_deps.edit_previews);
+        return;
+    }
     if let Some(target) = placement.target {
         *face_transform = block_face_highlight_transform(target.pos, target.normal);
         *face_visibility = Visibility::Visible;

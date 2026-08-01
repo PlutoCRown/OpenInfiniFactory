@@ -161,11 +161,13 @@ fn spawn_crosshair(root: &mut ChildSpawnerCommands) {
 }
 
 fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
+    // 与斜杠调试面板 DEBUG_FONT_SIZE(16) 同像素；text 管线会再 ×1.5
+    const STATUS_FONT: f32 = 16.0 / 1.5;
     spawn_crosshair(root);
     root.spawn((
         absolute_text_bundle(
             "",
-            16.0,
+            STATUS_FONT,
             STATUS_TEXT,
             Some(Val::Px(18.0)),
             None,
@@ -179,7 +181,7 @@ fn spawn_status_overlays(root: &mut ChildSpawnerCommands) {
     root.spawn((
         absolute_text_bundle(
             "",
-            16.0,
+            STATUS_FONT,
             STATUS_TEXT,
             None,
             Some(Val::Px(18.0)),
