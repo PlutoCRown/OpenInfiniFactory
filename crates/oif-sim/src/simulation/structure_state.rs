@@ -128,15 +128,23 @@ impl BreakableGraph {
                 {
                     continue;
                 }
-                // 工作面：Cell(body)—Head—Cell(front)，不直连体与头前格
+                // 工作面：不直连体与头前格
                 if forward_of.get(&pos) == Some(&offset) {
-                    let id = world.blocks.get(&pos).map(|block| block.id);
-                    if let Some(id) = id {
+                    let Some(id) = world.blocks.get(&pos).map(|block| block.id) else {
+                        continue;
+                    };
+                    // 贴脸对向：Cell—Head—Head—Cell，勿经对方 Cell 成环
+                    if forward_of.get(&neighbor) == Some(&(-offset)) {
+                        if let Some(other_id) = world.blocks.get(&neighbor).map(|block| block.id) {
+                            graph.link(BreakableNode::Head(id), BreakableNode::Head(other_id));
+                        }
+                    } else {
                         graph.link(BreakableNode::Head(id), BreakableNode::Cell(neighbor));
                     }
                     continue;
                 }
                 if forward_of.get(&neighbor) == Some(&(-offset)) {
+                    // 仅对方工作面朝向本格（本格未朝向对方）
                     let id = world.blocks.get(&neighbor).map(|block| block.id);
                     if let Some(id) = id {
                         graph.link(BreakableNode::Head(id), BreakableNode::Cell(pos));
@@ -144,6 +152,27 @@ impl BreakableGraph {
                     continue;
                 }
                 graph.link(BreakableNode::Cell(pos), BreakableNode::Cell(neighbor));
+            }
+        }
+        // 未伸出时体与头同格：五面邻接走 Cell，工作面邻接走 Head。
+        // 仅当多杆的工作面都对着同一空格（格内无成员）时 Head 互通；
+        // 若工作面顶在对方本体上，已由上方 Head—Head / Head—Cell 处理，不可再按「同坐标」误连。
+        let mut heads_at: HashMap<IVec3, Vec<BlockId>> = HashMap::new();
+        for (&body, &forward) in &forward_of {
+            let face = body + forward;
+            if positions.contains(&face) {
+                continue;
+            }
+            let Some(block) = world.blocks.get(&body) else {
+                continue;
+            };
+            heads_at.entry(face).or_default().push(block.id);
+        }
+        for ids in heads_at.values() {
+            for i in 0..ids.len() {
+                for j in (i + 1)..ids.len() {
+                    graph.link(BreakableNode::Head(ids[i]), BreakableNode::Head(ids[j]));
+                }
             }
         }
         graph

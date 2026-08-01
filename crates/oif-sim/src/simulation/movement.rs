@@ -479,9 +479,37 @@ fn mark_pusher_movement(
                 ))
             }
         } else if let Some(body) = extended_head_body {
-            // 顶到静止/刚伸出的头：推动该杆整坨（头+体）；直接用本体格，不依赖 extended 状态
+            // 顶到未 held 的伸出头：与是否同结构无关，按货物推整坨
             if motion_held.contains(&body) || motion_held.contains(&head) {
                 None
+            } else if structures
+                .id_at(pos)
+                .zip(structures.id_at(body))
+                .is_some_and(|(a, b)| a == b)
+            {
+                match sides.as_ref() {
+                    Some(sides)
+                        if sides.separated
+                            && !sides.target_side.is_empty()
+                            && sides.target_side.contains(&body)
+                            && !sides.target_anchored
+                            && !sides.target_side.iter().any(|p| motion_held.contains(p)) =>
+                    {
+                        let structure_id = structures.id_at(body)?;
+                        let structure = structures.linked_expand_pusher_subset(
+                            suction,
+                            &sides.target_side,
+                            offset,
+                        )?;
+                        Some(StructureMove::translate_marked(
+                            structure_id,
+                            structure,
+                            offset,
+                            MovementMark::Push,
+                        ))
+                    }
+                    _ => None,
+                }
             } else {
                 mark_structure_translate(
                     world,

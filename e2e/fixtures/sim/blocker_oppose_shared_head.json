@@ -1,0 +1,51 @@
+{
+  "name": "blocker_oppose_shared_head",
+  "setup": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": -12,
+      "kind": "fallback",
+      "facing": "North"
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": -13,
+      "kind": "Blocker",
+      "facing": "North"
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": -15,
+      "kind": "Blocker",
+      "facing": "South"
+    }
+  ],
+  "steps": [
+    {
+      "op": "beginSimulation"
+    },
+    {
+      "op": "run",
+      "turns": 2
+    },
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 0,
+      "z": -13,
+      "kind": "Blocker",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 0,
+      "z": -16,
+      "kind": "Blocker",
+      "layer": "factory"
+    }
+  ]
+}

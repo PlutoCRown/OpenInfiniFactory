@@ -1,0 +1,72 @@
+{
+  "name": "blocker_face_to_face",
+  "setup": [
+    {
+      "x": 11,
+      "y": 1,
+      "z": -7,
+      "kind": "Platform",
+      "facing": "North"
+    },
+    {
+      "x": 11,
+      "y": 1,
+      "z": -6,
+      "kind": "Wire",
+      "facing": "North"
+    },
+    {
+      "x": 11,
+      "y": 1,
+      "z": -5,
+      "kind": "Blocker",
+      "facing": "South"
+    },
+    {
+      "x": 11,
+      "y": 1,
+      "z": -4,
+      "kind": "Blocker",
+      "facing": "North"
+    },
+    {
+      "x": 11,
+      "y": 1,
+      "z": -3,
+      "kind": "Wire",
+      "facing": "North"
+    },
+    {
+      "x": 12,
+      "y": 1,
+      "z": -4,
+      "kind": "Platform",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "beginSimulation"
+    },
+    {
+      "op": "run",
+      "turns": 1
+    },
+    {
+      "op": "assertBlock",
+      "x": 11,
+      "y": 1,
+      "z": -5,
+      "kind": "Blocker",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": 11,
+      "y": 1,
+      "z": -3,
+      "kind": "Blocker",
+      "layer": "factory"
+    }
+  ]
+}
