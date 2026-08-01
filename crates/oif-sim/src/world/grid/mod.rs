@@ -8,7 +8,8 @@ mod settings;
 mod teleport;
 
 pub use raycast::{
-    EditSelectionMode, TargetHit, grid_to_world, raycast_blocks, raycast_edit_drag_grid,
+    EditDragFace, EditDragFaceHit, EditDragFaces, EditSelectionMode, FAR_FACE_PRIORITY_PENALTY,
+    TargetHit, edit_drag_faces, grid_to_world, raycast_blocks, raycast_edit_drag_grid,
     raycast_infinite_plane, world_to_grid,
 };
 pub use settings::{

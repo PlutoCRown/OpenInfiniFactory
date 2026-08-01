@@ -47,7 +47,88 @@ pub enum EditSelectionMode {
     Plane,
 }
 
-/// 编辑拖拽框选：线/面模式落到格子（首格三远侧面求交）
+/// 远侧面焦点优先级惩罚（世界单位 / 格）：远交点须再远这么多才能压过近交点
+pub const FAR_FACE_PRIORITY_PENALTY: f32 = 5.0;
+
+/// 起始格某一侧面（相对玩家为近或远）
+#[derive(Clone, Copy, Debug)]
+pub struct EditDragFace {
+    pub axis: usize,
+    /// 该轴世界坐标上的平面位置（格的 min 或 max）
+    pub plane: f32,
+    /// 相对射线原点是否为远侧面
+    pub far: bool,
+}
+
+/// 射线与某个近/远侧面的正向交点
+#[derive(Clone, Copy, Debug)]
+pub struct EditDragFaceHit {
+    pub t: f32,
+    pub axis: usize,
+    pub point: Vec3,
+    pub far: bool,
+}
+
+/// 起始格六侧面（3 近 + 3 远）及其与射线的交点
+#[derive(Clone, Debug)]
+pub struct EditDragFaces {
+    pub faces: [EditDragFace; 6],
+    pub hits: Vec<EditDragFaceHit>,
+}
+
+/// 相对玩家所在卦限：取起始格 3 近侧面 + 3 远侧面，并求所有正向交点
+pub fn edit_drag_faces(origin: Vec3, dir: Vec3, start: IVec3) -> EditDragFaces {
+    let dir = dir.normalize_or_zero();
+    let mut faces = [EditDragFace {
+        axis: 0,
+        plane: 0.0,
+        far: false,
+    }; 6];
+    let mut hits = Vec::with_capacity(6);
+    if dir == Vec3::ZERO {
+        return EditDragFaces { faces, hits };
+    }
+
+    for axis in 0..3 {
+        let min = start[axis] as f32;
+        let max = min + 1.0;
+        let (near_plane, far_plane) = if (origin[axis] - min).abs() <= (origin[axis] - max).abs() {
+            (min, max)
+        } else {
+            (max, min)
+        };
+        faces[axis * 2] = EditDragFace {
+            axis,
+            plane: near_plane,
+            far: false,
+        };
+        faces[axis * 2 + 1] = EditDragFace {
+            axis,
+            plane: far_plane,
+            far: true,
+        };
+
+        let d = dir[axis];
+        if d.abs() < 1e-6 {
+            continue;
+        }
+        for (plane, far) in [(near_plane, false), (far_plane, true)] {
+            let t = (plane - origin[axis]) / d;
+            if t < 1e-6 || t > REACH {
+                continue;
+            }
+            hits.push(EditDragFaceHit {
+                t,
+                axis,
+                point: origin + dir * t,
+                far,
+            });
+        }
+    }
+    EditDragFaces { faces, hits }
+}
+
+/// 编辑拖拽框选：线/面模式落到格子（近/远侧面求交，远侧面带距离惩罚）
 pub fn raycast_edit_drag_grid(
     origin: Vec3,
     dir: Vec3,
@@ -59,79 +140,42 @@ pub fn raycast_edit_drag_grid(
         return None;
     }
 
-    let hits = raycast_far_faces(origin, dir, start);
+    let hits = edit_drag_faces(origin, dir, start).hits;
     if hits.is_empty() {
         return None;
     }
 
-    Some(match mode {
-        // 面选仍用最近交点，保持拖在附着面上的手感
-        EditSelectionMode::Plane => {
-            let (_, _, hit) = hits
-                .iter()
-                .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
-                .copied()
-                .unwrap();
-            snap_plane_on_normal(hit, start, plane_normal)
-        }
-        // 线选：每个远侧面交点各算一条轴延伸，取最长的
-        EditSelectionMode::Line => {
-            let mut best: Option<(i32, Vec3, IVec3)> = None;
-            for &(_, hit_axis, hit) in &hits {
-                let mut raw = world_to_grid(hit);
-                raw[hit_axis] = start[hit_axis];
-                let delta = raw - start;
-                if delta == IVec3::ZERO {
-                    continue;
-                }
-                let axis = strongest_axis_vec(delta);
-                let extent = if axis.x != 0 {
-                    delta.x.abs()
-                } else if axis.y != 0 {
-                    delta.y.abs()
+    // 焦点优先级：score = t - (远侧面 ? 5 : 0)，取最大；远交点须比近交点再远 5 格才夺权
+    let hit = *hits
+        .iter()
+        .max_by(|a, b| {
+            let score = |h: &EditDragFaceHit| {
+                if h.far {
+                    h.t - FAR_FACE_PRIORITY_PENALTY
                 } else {
-                    delta.z.abs()
-                };
-                if best.map_or(true, |(best_extent, _, _)| extent > best_extent) {
-                    best = Some((extent, hit, axis));
+                    h.t
                 }
-            }
-            match best {
-                Some((_, hit, axis)) => snap_line_on_plane(hit, start, axis),
-                None => start,
+            };
+            score(a)
+                .partial_cmp(&score(b))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .unwrap();
+
+    Some(match mode {
+        EditSelectionMode::Plane => snap_plane_on_normal(hit.point, start, plane_normal),
+        EditSelectionMode::Line => {
+            let mut raw = world_to_grid(hit.point);
+            raw[hit.axis] = start[hit.axis];
+            let delta = raw - start;
+            if delta == IVec3::ZERO {
+                start
+            } else {
+                snap_line_on_plane(hit.point, start, strongest_axis_vec(delta))
             }
         }
         EditSelectionMode::Point => unreachable!(),
     })
-}
-
-/// 相对射线原点，取 start 格离原点更远的三个面，与射线求所有正向交点
-fn raycast_far_faces(origin: Vec3, dir: Vec3, start: IVec3) -> Vec<(f32, usize, Vec3)> {
-    let dir = dir.normalize_or_zero();
-    if dir == Vec3::ZERO {
-        return Vec::new();
-    }
-
-    let mut hits = Vec::with_capacity(3);
-    for axis in 0..3 {
-        let min = start[axis] as f32;
-        let max = min + 1.0;
-        let plane = if (origin[axis] - min).abs() >= (origin[axis] - max).abs() {
-            min
-        } else {
-            max
-        };
-        let d = dir[axis];
-        if d.abs() < 1e-6 {
-            continue;
-        }
-        let t = (plane - origin[axis]) / d;
-        if t < 1e-6 || t > REACH {
-            continue;
-        }
-        hits.push((t, axis, origin + dir * t));
-    }
-    hits
 }
 
 fn snap_plane_on_normal(hit: Vec3, start: IVec3, normal: IVec3) -> IVec3 {
