@@ -7,24 +7,21 @@ use crate::blocks::{BlockData, BlockId, BlockKind};
 use super::WorldBlocks;
 
 impl WorldBlocks {
+    /// 模拟占用：与玩家碰撞 `has_collision` 分离；blocks 层有块即占格
     pub fn is_occupied(&self, pos: IVec3) -> bool {
         self.system_blocks
             .get(&pos)
             .is_some_and(|block| block.kind.has_collision())
-            || self
-                .blocks
-                .get(&pos)
-                .is_some_and(|block| block.kind.has_collision())
+            || self.blocks.contains_key(&pos)
             || self
                 .machine_bodies
                 .get(&pos)
                 .is_some_and(|block| block.kind.has_collision())
     }
 
+    /// 平台/工厂放置占用（blocks 层有块即占）
     pub fn is_platform_occupied(&self, pos: IVec3) -> bool {
-        self.blocks
-            .get(&pos)
-            .is_some_and(|block| block.kind.has_collision())
+        self.blocks.contains_key(&pos)
             || self
                 .machine_bodies
                 .get(&pos)

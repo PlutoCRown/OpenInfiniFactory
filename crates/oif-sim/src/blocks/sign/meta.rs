@@ -19,7 +19,8 @@ impl BlockMeta for SignBlock {
             "desc.sign",
             rgb(0.72, 0.58, 0.32),
         )
-        // 占格工厂块：挡材料/结构运动；勿 no_collision（否则下落会挤占并覆盖本格）
+        // 无玩家碰撞；模拟占用由 is_occupied（工厂恒占格）负责，下落不会覆盖
+        .no_collision()
     }
 
     fn default_settings(&self, _pos: IVec3) -> Option<BlockSettings> {
