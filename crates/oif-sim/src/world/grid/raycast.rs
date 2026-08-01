@@ -59,32 +59,60 @@ pub fn raycast_edit_drag_grid(
         return None;
     }
 
-    let (hit, hit_axis) = raycast_far_faces(origin, dir, start)?;
+    let hits = raycast_far_faces(origin, dir, start);
+    if hits.is_empty() {
+        return None;
+    }
 
     Some(match mode {
-        EditSelectionMode::Plane => snap_plane_on_normal(hit, start, plane_normal),
+        // 面选仍用最近交点，保持拖在附着面上的手感
+        EditSelectionMode::Plane => {
+            let (_, _, hit) = hits
+                .iter()
+                .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+                .copied()
+                .unwrap();
+            snap_plane_on_normal(hit, start, plane_normal)
+        }
+        // 线选：每个远侧面交点各算一条轴延伸，取最长的
         EditSelectionMode::Line => {
-            let mut raw = world_to_grid(hit);
-            raw[hit_axis] = start[hit_axis];
-            let delta = raw - start;
-            if delta == IVec3::ZERO {
-                start
-            } else {
-                snap_line_on_plane(hit, start, strongest_axis_vec(delta))
+            let mut best: Option<(i32, Vec3, IVec3)> = None;
+            for &(_, hit_axis, hit) in &hits {
+                let mut raw = world_to_grid(hit);
+                raw[hit_axis] = start[hit_axis];
+                let delta = raw - start;
+                if delta == IVec3::ZERO {
+                    continue;
+                }
+                let axis = strongest_axis_vec(delta);
+                let extent = if axis.x != 0 {
+                    delta.x.abs()
+                } else if axis.y != 0 {
+                    delta.y.abs()
+                } else {
+                    delta.z.abs()
+                };
+                if best.map_or(true, |(best_extent, _, _)| extent > best_extent) {
+                    best = Some((extent, hit, axis));
+                }
+            }
+            match best {
+                Some((_, hit, axis)) => snap_line_on_plane(hit, start, axis),
+                None => start,
             }
         }
         EditSelectionMode::Point => unreachable!(),
     })
 }
 
-/// 相对射线原点，取 start 格离原点更远的三个面，与射线求最近正向交点
-fn raycast_far_faces(origin: Vec3, dir: Vec3, start: IVec3) -> Option<(Vec3, usize)> {
+/// 相对射线原点，取 start 格离原点更远的三个面，与射线求所有正向交点
+fn raycast_far_faces(origin: Vec3, dir: Vec3, start: IVec3) -> Vec<(f32, usize, Vec3)> {
     let dir = dir.normalize_or_zero();
     if dir == Vec3::ZERO {
-        return None;
+        return Vec::new();
     }
 
-    let mut best: Option<(f32, usize, Vec3)> = None;
+    let mut hits = Vec::with_capacity(3);
     for axis in 0..3 {
         let min = start[axis] as f32;
         let max = min + 1.0;
@@ -101,12 +129,9 @@ fn raycast_far_faces(origin: Vec3, dir: Vec3, start: IVec3) -> Option<(Vec3, usi
         if t < 1e-6 || t > REACH {
             continue;
         }
-        let hit = origin + dir * t;
-        if best.map_or(true, |(best_t, _, _)| t < best_t) {
-            best = Some((t, axis, hit));
-        }
+        hits.push((t, axis, origin + dir * t));
     }
-    best.map(|(_, axis, hit)| (hit, axis))
+    hits
 }
 
 fn snap_plane_on_normal(hit: Vec3, start: IVec3, normal: IVec3) -> IVec3 {
