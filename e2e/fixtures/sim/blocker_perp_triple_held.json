@@ -1,0 +1,77 @@
+{
+  "name": "blocker_perp_triple_held",
+  "source": {
+    "save": "world_2/solutions/solution",
+    "min": [
+      8,
+      2,
+      -13
+    ],
+    "max": [
+      9,
+      2,
+      -12
+    ],
+    "origin": [
+      8,
+      2,
+      -13
+    ]
+  },
+  "setup": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Blocker",
+      "facing": "East"
+    },
+    {
+      "x": 1,
+      "y": 0,
+      "z": 0,
+      "kind": "Blocker",
+      "facing": "South"
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 1,
+      "kind": "Blocker",
+      "facing": "North"
+    }
+  ],
+  "steps": [
+    {
+      "op": "beginSimulation"
+    },
+    {
+      "op": "run",
+      "turns": 1
+    },
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "kind": "Blocker",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": 0,
+      "y": 0,
+      "z": 1,
+      "kind": "Blocker",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": 2,
+      "y": 0,
+      "z": 0,
+      "kind": "Blocker",
+      "layer": "factory"
+    }
+  ]
+}

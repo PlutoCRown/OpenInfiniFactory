@@ -390,6 +390,10 @@ fn mark_pusher_movement(
     if desired_extended == current_extended {
         return None;
     }
+    // 已被本回合其它运动 held（正推货物/空头伸缩锁结构）：不再伸缩或反推
+    if motion_held.contains(&pos) {
+        return None;
+    }
 
     let head = pos + source;
     let front_is_fragile = world.is_fragile_material_at(head);
