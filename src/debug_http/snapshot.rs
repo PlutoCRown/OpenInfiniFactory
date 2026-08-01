@@ -130,6 +130,15 @@ pub fn block_json_with_structure(
         .unwrap_or(Value::Null);
 
     let acceptor_id = world.acceptor_id_at(pos).map(|id| id.0);
+    let acceptor_count = acceptor_id.and_then(|aid| {
+        structures.and_then(|state| {
+            state
+                .acceptor_structures()
+                .iter()
+                .find(|a| a.id.0 == aid)
+                .map(|a| a.count)
+        })
+    });
 
     let structure_summary = structures.and_then(|state| {
         let id = state.structure_id_at(pos)?;
@@ -160,6 +169,7 @@ pub fn block_json_with_structure(
         "wire_panels": wire_panels,
         "settings": settings,
         "acceptor_id": acceptor_id,
+        "acceptor_count": acceptor_count,
         "structure": structure_summary,
         "machine_body": machine_body.map(|body| json!({
             "kind": format!("{:?}", body.kind),
@@ -277,6 +287,146 @@ pub fn resolve_structure_query(
     };
 
     structure_json(world, structures, id).ok_or_else(|| format!("structure id={} not found", id.0))
+}
+
+/// 按方块 ID 查找坐标
+pub fn find_block_pos(world: &oif_sim::WorldBlocks, block_id: u64) -> Option<IVec3> {
+    world
+        .blocks
+        .iter()
+        .chain(world.system_blocks.iter())
+        .chain(world.machine_bodies.iter())
+        .find(|(_, block)| block.id.0 == block_id)
+        .map(|(pos, _)| *pos)
+}
+
+/// 解析坐标或方块 ID 为格子位置
+pub fn resolve_pos_query(
+    world: &oif_sim::WorldBlocks,
+    x: Option<i32>,
+    y: Option<i32>,
+    z: Option<i32>,
+    block_id: Option<u64>,
+) -> Result<IVec3, String> {
+    if let Some(block_id) = block_id {
+        return find_block_pos(world, block_id)
+            .ok_or_else(|| format!("no block with id={block_id}"));
+    }
+    if let (Some(x), Some(y), Some(z)) = (x, y, z) {
+        return Ok(IVec3::new(x, y, z));
+    }
+    Err("requires ?x=&y=&z= or ?id=".into())
+}
+
+/// 电力网络调试 JSON
+pub fn power_query_json(
+    cache: &mut oif_sim::simulation::signals::SignalNetworkCache,
+    world: &oif_sim::WorldBlocks,
+    pos: IVec3,
+) -> Value {
+    match cache.query_power_at(world, pos) {
+        Some(query) => json!({
+            "pos": pos_json(pos),
+            "component_id": query.component.0,
+            "powered": query.powered,
+            "wires": query.wires.iter().map(|p| pos_json(*p)).collect::<Vec<_>>(),
+            "devices": query.devices.iter().map(|p| pos_json(*p)).collect::<Vec<_>>(),
+        }),
+        None => json!({
+            "pos": pos_json(pos),
+            "component_id": null,
+            "powered": false,
+            "wires": [],
+            "devices": [],
+        }),
+    }
+}
+
+/// 验收结构列表；有 StructureState 用其 count，否则从世界列出且 count=0
+pub fn acceptors_json(
+    world: &oif_sim::WorldBlocks,
+    structures: &oif_sim::simulation::structure_state::StructureState,
+) -> Value {
+    let list: Vec<Value> = if !structures.acceptor_structures().is_empty() {
+        let mut items: Vec<_> = structures.acceptor_structures().iter().collect();
+        items.sort_by_key(|a| a.id.0);
+        items
+            .into_iter()
+            .map(|a| {
+                let mut positions: Vec<_> = a.positions.iter().copied().collect();
+                positions.sort_by_key(|p| (p.x, p.y, p.z));
+                json!({
+                    "id": a.id.0,
+                    "positions": positions.iter().map(|p| pos_json(*p)).collect::<Vec<_>>(),
+                    "count": a.count,
+                })
+            })
+            .collect()
+    } else {
+        world
+            .acceptor_structures
+            .iter()
+            .map(|a| {
+                json!({
+                    "id": a.id.0,
+                    "positions": a.positions.iter().map(|p| pos_json(*p)).collect::<Vec<_>>(),
+                    "count": 0,
+                })
+            })
+            .collect()
+    };
+    json!(list)
+}
+
+/// 玩家条目：相机位置 + 准星目标
+pub fn player_entry_json(position: Vec3, look_target: Value) -> Value {
+    json!({
+        "position": {
+            "x": position.x,
+            "y": position.y,
+            "z": position.z,
+        },
+        "look_target": look_target,
+    })
+}
+
+/// 单回合模拟耗时采样 JSON
+pub fn sim_turn_stats_json(stats: &oif_sim::simulation::stats::SimulationStepStats) -> Value {
+    if !stats.has_sample {
+        return Value::Null;
+    }
+    json!({
+        "total_ms": stats.total_ms,
+        "prep_ms": stats.prep_ms,
+        "gravity_ms": stats.gravity_ms,
+        "signal_ms": stats.signal_ms,
+        "marker_before_move_ms": stats.marker_before_move_ms,
+        "movement_mark_ms": stats.movement_mark_ms,
+        "movement_execute_ms": stats.movement_execute_ms,
+        "marker_after_move_ms": stats.marker_after_move_ms,
+        "behavior_ms": stats.behavior_ms,
+        "signal_refresh_ms": stats.signal_refresh_ms,
+        "render_rebuild_ms": stats.render_rebuild_ms,
+        "render_anim_ms": stats.render_anim_ms,
+        "render_teleport_ms": stats.render_teleport_ms,
+        "render_collect_ms": stats.render_collect_ms,
+        "render_refresh_ms": stats.render_refresh_ms,
+        "render_scene_ms": stats.render_scene_ms,
+        "render_fill_ms": stats.render_fill_ms,
+        "render_fx_ms": stats.render_fx_ms,
+    })
+}
+
+/// 无头 /perf：load_ms + 最近回合，无帧计时
+pub fn headless_perf_json(
+    load_ms: Option<f64>,
+    stats: &oif_sim::simulation::stats::SimulationStepStats,
+) -> Value {
+    json!({
+        "load_ms": load_ms,
+        "sim_turn": sim_turn_stats_json(stats),
+        "frame": null,
+    })
 }
 
 fn kind_detail(kind: BlockKind) -> Value {
@@ -456,11 +606,13 @@ pub fn save_status_json(save_state: &SaveState, solution_state: &SolutionState) 
         "path": slot.storage_path(),
         "kind": match kind {
             SaveKind::Puzzle => "puzzle",
+            SaveKind::Free => "free",
             SaveKind::Solution => "solution",
         },
         "entry": match solution_state.entry {
             WorldEntryMode::EditPuzzle => "edit_puzzle",
             WorldEntryMode::PlaySolution => "play_solution",
+            WorldEntryMode::Free => "free",
         },
         "puzzle_id": solution_state.puzzle_id,
         "dirty": solution_state.dirty,
@@ -480,11 +632,23 @@ pub fn embedded_status_json(
     animating: bool,
     cursor: Value,
 ) -> Value {
+    let in_world = mode == GameMode::Playing;
     json!({
         "ok": true,
+        "mode": "embedded",
+        "in_world": in_world,
         "game_mode": match mode {
             GameMode::StartMenu => "start_menu",
             GameMode::Playing => "playing",
+        },
+        "builder_mode": match builder_mode {
+            BuilderMode::Edit => "Edit",
+            BuilderMode::Play => "Play",
+        },
+        "world_entry": match solution_state.entry {
+            WorldEntryMode::EditPuzzle => "edit_puzzle",
+            WorldEntryMode::PlaySolution => "play_solution",
+            WorldEntryMode::Free => "free",
         },
         "paused": playing_ui.paused,
         "inventory_open": playing_ui.inventory_open,
@@ -494,6 +658,48 @@ pub fn embedded_status_json(
         "save": save_status_json(save_state, solution_state),
         "simulation": simulation_status_json(simulation, builder_mode, animating),
         "cursor": cursor,
+    })
+}
+
+/// 无头会话 /status
+pub fn headless_status_json(
+    control: &SimulationControl,
+    current_save: Option<&str>,
+) -> Value {
+    let phase = if !control.is_active() {
+        "idle"
+    } else if control.running {
+        "running"
+    } else {
+        "between_turns"
+    };
+    json!({
+        "ok": true,
+        "mode": "headless",
+        "in_world": true,
+        "game_mode": "headless",
+        "builder_mode": null,
+        "world_entry": null,
+        "paused": false,
+        "inventory_open": false,
+        "active_play": true,
+        "ui_blocks_gameplay": false,
+        "render_ready": true,
+        "save": current_save.map(|name| json!({
+            "name": name,
+            "kind": null,
+            "path": name,
+        })),
+        "simulation": {
+            "mode": "headless",
+            "active": control.is_active(),
+            "running": control.running,
+            "step_requested": control.step_requested,
+            "turn": control.turn,
+            "speed": control.speed,
+            "sim_phase": phase,
+        },
+        "cursor": null,
     })
 }
 
@@ -538,48 +744,31 @@ pub fn perf_stats_json(
             })
         })
         .collect();
-    let sim_turn = (builder_mode == BuilderMode::Play
-        && simulation.running
-        && sim_stats.has_sample)
-        .then(|| {
-            json!({
-                "total_ms": sim_stats.total_ms,
-                "prep_ms": sim_stats.prep_ms,
-                "gravity_ms": sim_stats.gravity_ms,
-                "signal_ms": sim_stats.signal_ms,
-                "marker_before_move_ms": sim_stats.marker_before_move_ms,
-                "movement_mark_ms": sim_stats.movement_mark_ms,
-                "movement_execute_ms": sim_stats.movement_execute_ms,
-                "marker_after_move_ms": sim_stats.marker_after_move_ms,
-                "behavior_ms": sim_stats.behavior_ms,
-                "signal_refresh_ms": sim_stats.signal_refresh_ms,
-                "render_rebuild_ms": sim_stats.render_rebuild_ms,
-                "render_anim_ms": sim_stats.render_anim_ms,
-                "render_teleport_ms": sim_stats.render_teleport_ms,
-                "render_collect_ms": sim_stats.render_collect_ms,
-                "render_refresh_ms": sim_stats.render_refresh_ms,
-                "render_scene_ms": sim_stats.render_scene_ms,
-                "render_fill_ms": sim_stats.render_fill_ms,
-                "render_fx_ms": sim_stats.render_fx_ms,
-            })
-        });
     json!({
-        "fps": fps,
-        "frame_ms": perf.frame_ms(),
-        "main_ms": perf.main_ms(),
-        "main_other_us": perf.main_other_ms() * 1000.0,
-        "render_ms": perf.render_other_ms(),
-        "render_gap_ms": perf.render_gap_ms(),
-        "render_remainder_ms": render_remainder_ms,
-        "scopes": scopes,
-        "sim_turn": sim_turn,
-        "blocks": block_count,
-        "entities": entity_count,
-        "player": player.map(|pos| json!({
-            "x": pos.x,
-            "y": pos.y,
-            "z": pos.z,
-        })),
+        "load_ms": null,
+        "sim_turn": sim_turn_stats_json(&**sim_stats),
+        "frame": {
+            "fps": fps,
+            "frame_ms": perf.frame_ms(),
+            "main_ms": perf.main_ms(),
+            "main_other_us": perf.main_other_ms() * 1000.0,
+            "render_ms": perf.render_other_ms(),
+            "render_gap_ms": perf.render_gap_ms(),
+            "render_remainder_ms": render_remainder_ms,
+            "scopes": scopes,
+            "blocks": block_count,
+            "entities": entity_count,
+            "builder_mode": match builder_mode {
+                BuilderMode::Edit => "Edit",
+                BuilderMode::Play => "Play",
+            },
+            "simulation_active": simulation.is_active(),
+            "player": player.map(|pos| json!({
+                "x": pos.x,
+                "y": pos.y,
+                "z": pos.z,
+            })),
+        },
     })
 }
 

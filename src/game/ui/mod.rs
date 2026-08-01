@@ -54,6 +54,7 @@ impl Plugin for GameUiPlugin {
             .insert_non_send(PendingConfirmHandler::default())
             .insert_non_send(PendingTextPromptHandler::default())
             .insert_resource(CarriedItem::default())
+            .insert_resource(FreeInventoryTab::default())
             .insert_resource(PanelDragState::default())
             .insert_resource(UiHoverState::default())
             .add_plugins(UiFeaturesPlugin);

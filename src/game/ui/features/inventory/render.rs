@@ -1,12 +1,13 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::game::state::{BuilderMode, PlacementState};
+use crate::game::state::{BuilderMode, PlacementState, SolutionState, WorldEntryMode};
 use crate::game::ui::access::{UiMainThread, i18n};
 use crate::game::ui::components::{default_button_size, hover_border, inset_border};
+use crate::game::ui::features::inventory::InventoryTabButton;
 use crate::game::ui::types::{
-    AreaKind, CarriedItem, CarriedItemPreview, HoverTooltip, InventoryItem, InventoryItems,
-    InventorySlot, ItemTooltip, ItemTooltipDescription, ItemTooltipName, SlotArea,
+    AreaKind, CarriedItem, CarriedItemPreview, FreeInventoryTab, HoverTooltip, InventoryItem,
+    InventoryItems, InventorySlot, ItemTooltip, ItemTooltipDescription, ItemTooltipName, SlotArea,
 };
 use crate::game::ui::widgets::{short_item_name, slot_color};
 use crate::game::world::rendering::BlockIconAssets;
@@ -23,15 +24,48 @@ fn builder_mode_key(mode: BuilderMode) -> &'static str {
 pub fn update_inventory_title(
     _ui_thread: UiMainThread,
     builder_mode: Res<BuilderMode>,
+    solution_state: Res<SolutionState>,
     mut titles: Query<&mut Text, With<InventoryTitleText>>,
     added: Query<(), Added<InventoryTitleText>>,
 ) {
-    if !builder_mode.is_changed() && added.is_empty() {
+    if !builder_mode.is_changed() && !solution_state.is_changed() && added.is_empty() {
         return;
     }
-    let mode = i18n.t(builder_mode_key(*builder_mode));
+    let mode = i18n.t(match solution_state.entry {
+        WorldEntryMode::Free => "save.kind.free",
+        _ => builder_mode_key(*builder_mode),
+    });
     for mut text in &mut titles {
         text.0 = i18n.fmt("inventory.title", &[("mode", mode.as_str())]);
+    }
+}
+
+/// Free 背包页签选中样式
+pub fn update_inventory_tabs(
+    _ui_thread: UiMainThread,
+    free_tab: Res<FreeInventoryTab>,
+    solution_state: Res<SolutionState>,
+    mut tabs: Query<(&InventoryTabButton, &mut BackgroundColor, &mut BorderColor)>,
+    added: Query<(), Added<InventoryTabButton>>,
+) {
+    if solution_state.entry != WorldEntryMode::Free {
+        return;
+    }
+    if !free_tab.is_changed() && added.is_empty() {
+        return;
+    }
+    for (button, mut background, mut border) in &mut tabs {
+        let selected = button.0 == *free_tab;
+        *background = if selected {
+            Color::srgba(0.22, 0.35, 0.32, 0.96).into()
+        } else {
+            Color::srgb(0.22, 0.24, 0.26).into()
+        };
+        *border = if selected {
+            BorderColor::all(Color::srgb(1.0, 0.94, 0.80))
+        } else {
+            BorderColor::all(Color::srgb(0.4, 0.42, 0.45))
+        };
     }
 }
 

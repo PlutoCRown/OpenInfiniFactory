@@ -2,8 +2,11 @@ use bevy::picking::pointer::PointerButton;
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
-use crate::game::state::{GameMode, PlacementState, PlayingUiState, SolutionState};
+use crate::game::state::{GameMode, PlacementState, PlayingUiState, SolutionState, WorldEntryMode};
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
+use crate::game::ui::core::text_input::primary_click;
+use crate::game::ui::features::inventory::InventoryTabButton;
+use crate::game::ui::types::FreeInventoryTab;
 use crate::game::ui::{
     CarriedItem, HOTBAR_SLOTS, InlineTextEditState, InventoryItems, InventorySlot, PendingKeyBind,
     SlotArea, TextPromptState, UiRuntime,
@@ -39,6 +42,34 @@ pub fn emit_inventory_slot_actions(
     });
 }
 
+/// Free 背包页签点击
+pub fn emit_inventory_tab_actions(
+    mut click: On<Pointer<Click>>,
+    mut writer: MessageWriter<UiAction>,
+    tabs: Query<&InventoryTabButton>,
+    mode: Res<State<GameMode>>,
+    playing_ui: Res<PlayingUiState>,
+    solution_state: Res<SolutionState>,
+    ui_host: Res<UiHost>,
+) {
+    if ui_host.modal_open()
+        || *mode.get() != GameMode::Playing
+        || !playing_ui.inventory_open
+        || solution_state.entry != WorldEntryMode::Free
+        || !primary_click(&mut click)
+    {
+        return;
+    }
+    let Ok(tab) = tabs.get(click.entity) else {
+        return;
+    };
+    click.propagate(false);
+    writer.write(UiAction {
+        instance: UiInstanceId::INVENTORY,
+        kind: UiActionKind::InventoryTab(tab.0),
+    });
+}
+
 pub fn dispatch_inventory_slot_actions(
     mut actions: MessageReader<UiAction>,
     config: Res<GameConfig>,
@@ -46,25 +77,35 @@ pub fn dispatch_inventory_slot_actions(
     mut carried: ResMut<CarriedItem>,
     mut placement: ResMut<PlacementState>,
     mut solution_state: ResMut<SolutionState>,
+    mut free_tab: ResMut<FreeInventoryTab>,
     playing_ui: Res<PlayingUiState>,
 ) {
     for action in actions.read() {
         if action.instance != UiInstanceId::INVENTORY {
             continue;
         }
-        let UiActionKind::InventorySlot { slot, button } = action.kind.clone() else {
-            continue;
-        };
-        dispatch_inventory_slot_action(
-            slot,
-            button,
-            playing_ui.inventory_open,
-            &config,
-            &mut inventory,
-            &mut carried,
-            &mut placement,
-            &mut solution_state,
-        );
+        match action.kind.clone() {
+            UiActionKind::InventoryTab(tab) => {
+                if solution_state.entry != WorldEntryMode::Free || *free_tab == tab {
+                    continue;
+                }
+                *free_tab = tab;
+                inventory.fill_free_backpack(tab);
+            }
+            UiActionKind::InventorySlot { slot, button } => {
+                dispatch_inventory_slot_action(
+                    slot,
+                    button,
+                    playing_ui.inventory_open,
+                    &config,
+                    &mut inventory,
+                    &mut carried,
+                    &mut placement,
+                    &mut solution_state,
+                );
+            }
+            _ => {}
+        }
     }
 }
 

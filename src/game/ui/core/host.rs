@@ -55,6 +55,7 @@ pub enum UiActionKind {
         slot: InventorySlot,
         button: PointerButton,
     },
+    InventoryTab(crate::game::ui::types::FreeInventoryTab),
     ConfirmDialog(super::confirm_dialog::ConfirmButtonId),
     TextPromptSubmit {
         value: String,
@@ -603,7 +604,8 @@ pub fn dispatch_ui_action(
             UiActionKind::TextPromptCancel => text_prompt.cancel(),
             UiActionKind::SaveList(_)
             | UiActionKind::Settings(_)
-            | UiActionKind::InventorySlot { .. } => {}
+            | UiActionKind::InventorySlot { .. }
+            | UiActionKind::InventoryTab(_) => {}
             UiActionKind::PanelClose => {}
         }
     }

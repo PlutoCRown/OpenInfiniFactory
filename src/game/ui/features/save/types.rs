@@ -4,22 +4,23 @@ use bevy::tasks::Task;
 #[derive(Component, Clone, Debug, Eq, PartialEq)]
 pub enum SaveListAction {
     NewPuzzle,
+    NewFree,
     NewSolution,
-    /// 选中左侧谜题
+    /// 选中左侧顶层世界（Puzzle / Free）
     SelectPuzzle(String),
     /// 选中上方方案卡片
     SelectSolution(String),
     /// 页脚左：编辑当前选中谜题
     EditSelectedPuzzle,
-    /// 页脚左：重命名当前选中谜题
+    /// 页脚左：重命名当前选中顶层世界
     RenameSelectedPuzzle,
-    /// 页脚左：删除当前选中谜题
+    /// 页脚左：删除当前选中顶层世界
     DeleteSelectedPuzzle,
     /// 页脚右：重命名当前选中方案
     RenameSelectedSolution,
     /// 页脚右：删除当前选中方案
     DeleteSelectedSolution,
-    /// 页脚右：用当前选中方案开始游戏
+    /// 页脚右：开始游戏（Free 或 Puzzle+方案）
     StartGame,
     Back,
 }
@@ -37,6 +38,14 @@ pub struct SaveListPuzzleRows;
 /// 右侧方案横滑内容容器
 #[derive(Component, Clone, Copy)]
 pub struct SaveListSolutionRows;
+
+/// 方案区（标题+横滑），Free 选中时隐藏
+#[derive(Component)]
+pub struct SaveListSolutionSection;
+
+/// Free 选中时显示的中央提示
+#[derive(Component)]
+pub struct SaveListFreeHint;
 
 /// 方案横向滚动视口
 #[derive(Component)]

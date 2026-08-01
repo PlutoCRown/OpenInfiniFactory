@@ -11,9 +11,10 @@ mod world_ops;
 
 pub use busy::{SessionBusy, SessionBusyCover};
 pub use dispatch::{
-    create_new_puzzle_in_world, create_new_solution_in_world, exit_to_main_menu,
-    exit_to_main_menu_in_world, load_world, puzzle_save_needs_confirm, reset_solution_in_world,
-    save_current_world, save_current_world_in_world, save_current_world_invalidate_in_world,
+    create_new_free_in_world, create_new_puzzle_in_world, create_new_solution_in_world,
+    exit_to_main_menu, exit_to_main_menu_in_world, export_as_puzzle_in_world, load_world,
+    puzzle_save_needs_confirm, reset_solution_in_world, save_current_world,
+    save_current_world_in_world, save_current_world_invalidate_in_world,
     save_current_world_invalidate_resources, save_current_world_resources,
     save_world_as_new_puzzle_in_world, switch_to_edit_mode_in_world,
 };
@@ -40,12 +41,13 @@ use crate::game::world::rendering::{
 };
 
 use load::{
-    PendingWorldLoad, handle_create_new_puzzle, handle_create_new_solution, handle_load_world,
-    poll_pending_world_load, release_session_busy_after_playing,
+    PendingWorldLoad, handle_create_new_free, handle_create_new_puzzle, handle_create_new_solution,
+    handle_load_world, poll_pending_world_load, release_session_busy_after_playing,
 };
 use messages::{
-    CreateNewPuzzle, CreateNewSolution, ExitToMainMenu, ResetSolution, SaveCurrentWorld,
-    SaveCurrentWorldInvalidateSolutions, SaveWorldAsNewPuzzle, SwitchToEditMode,
+    CreateNewFree, CreateNewPuzzle, CreateNewSolution, ExitToMainMenu, ExportAsPuzzle,
+    ResetSolution, SaveCurrentWorld, SaveCurrentWorldInvalidateSolutions, SaveWorldAsNewPuzzle,
+    SwitchToEditMode,
 };
 use navigation::{
     handle_exit_to_main_menu, process_deferred_main_menu_exit, release_session_busy_after_menu,
@@ -53,8 +55,9 @@ use navigation::{
 #[cfg(not(target_arch = "wasm32"))]
 use save::on_save_cover_captured;
 use save::{
-    PendingSave, handle_save_current_world, handle_save_current_world_invalidate_solutions,
-    handle_save_world_as_new_puzzle, process_pending_save,
+    PendingSave, handle_export_as_puzzle, handle_save_current_world,
+    handle_save_current_world_invalidate_solutions, handle_save_world_as_new_puzzle,
+    process_pending_save,
 };
 use solution::{handle_reset_solution, handle_switch_to_edit_mode};
 
@@ -70,11 +73,13 @@ impl Plugin for SessionPlugin {
             .add_message::<SaveCurrentWorld>()
             .add_message::<SaveCurrentWorldInvalidateSolutions>()
             .add_message::<SaveWorldAsNewPuzzle>()
+            .add_message::<ExportAsPuzzle>()
             .add_message::<ExitToMainMenu>()
             .add_message::<ResetSolution>()
             .add_message::<SwitchToEditMode>()
             .add_message::<LoadWorld>()
             .add_message::<CreateNewPuzzle>()
+            .add_message::<CreateNewFree>()
             .add_message::<CreateNewSolution>();
         #[cfg(not(target_arch = "wasm32"))]
         app.add_message::<CoverScreenshotComplete>()
@@ -87,6 +92,7 @@ impl Plugin for SessionPlugin {
                 handle_save_current_world_invalidate_solutions,
                 process_pending_save,
                 handle_save_world_as_new_puzzle,
+                handle_export_as_puzzle,
                 handle_exit_to_main_menu,
                 process_deferred_main_menu_exit,
                 handle_reset_solution,
@@ -96,6 +102,7 @@ impl Plugin for SessionPlugin {
                 release_session_busy_after_playing,
                 release_session_busy_after_menu,
                 handle_create_new_puzzle,
+                handle_create_new_free,
                 handle_create_new_solution,
             )
                 .chain()

@@ -72,7 +72,9 @@ pub fn clipboard_input(
         return;
     }
 
-    if *builder_mode != BuilderMode::Edit {
+    if *builder_mode != BuilderMode::Edit
+        && solution_state.entry != crate::game::state::WorldEntryMode::Free
+    {
         return;
     }
 

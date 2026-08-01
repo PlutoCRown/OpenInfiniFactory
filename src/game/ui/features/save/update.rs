@@ -13,12 +13,13 @@ use crate::game::ui::components::{
 use crate::game::ui::screens::{spawn_save_puzzle_row, spawn_save_solution_card};
 use crate::game::ui::types::{
     SaveListAction, SaveListCloseButton, SaveListCoverHost, SaveListCoverImage,
-    SaveListCoverLoading, SaveListPuzzleRows, SaveListPuzzleScroll, SaveListRenderState,
-    SaveListSolutionRows, SaveListSolutionScroll, SaveListTitleText, UiHoverState,
+    SaveListCoverLoading, SaveListFreeHint, SaveListPuzzleRows, SaveListPuzzleScroll,
+    SaveListRenderState, SaveListSolutionRows, SaveListSolutionScroll, SaveListSolutionSection,
+    SaveListTitleText, UiHoverState,
 };
-use crate::shared::save::{SaveSlot, SaveState, read_cover_png};
+use crate::shared::save::{SaveKind, SaveSlot, SaveState, read_cover_png};
 
-use super::view::{SaveListViewCtx, save_list_puzzle_rows, save_list_title};
+use super::view::{SaveListViewCtx, save_list_puzzle_rows, save_list_title, selected_top_level_kind};
 
 fn save_list_visible(mode: &State<GameMode>, screen: &StartMenuScreen) -> bool {
     *mode.get() == GameMode::StartMenu && *screen == StartMenuScreen::SaveList
@@ -42,11 +43,16 @@ pub fn update_save_list_rows(
     }
 
     let puzzle_rows = save_list_puzzle_rows(&save_state);
-    let solution_rows = save_state
-        .selected_puzzle_solutions()
-        .iter()
-        .filter_map(|entry| entry.slot.solution.clone())
-        .collect::<Vec<_>>();
+    let free_selected = selected_top_level_kind(&save_state) == Some(SaveKind::Free);
+    let solution_rows = if free_selected {
+        Vec::new()
+    } else {
+        save_state
+            .selected_puzzle_solutions()
+            .iter()
+            .filter_map(|entry| entry.slot.solution.clone())
+            .collect::<Vec<_>>()
+    };
 
     let structure_changed =
         mode.is_changed() || start_menu_screen.is_changed() || save_state.is_changed();
@@ -54,7 +60,9 @@ pub fn update_save_list_rows(
     let puzzle_rows_stale =
         row_hosts_stale(puzzle_rows_query.iter(), &children_query, puzzle_rows.len())
             || render_state.puzzle_keys != puzzle_rows;
-    let solution_expected = if save_state.selected_puzzle.is_some() {
+    let solution_expected = if free_selected {
+        0
+    } else if save_state.selected_puzzle.is_some() {
         solution_rows.len() + 1
     } else {
         0
@@ -102,7 +110,7 @@ pub fn update_save_list_rows(
                     for name in &solution_rows {
                         spawn_save_solution_card(parent, Some(name.clone()));
                     }
-                    if save_state.selected_puzzle.is_some() {
+                    if !free_selected && save_state.selected_puzzle.is_some() {
                         spawn_save_solution_card(parent, None);
                     }
                 });
@@ -136,16 +144,25 @@ pub fn update_save_list_cover(
         return;
     }
 
-    let cover_slot = if let Some(solution) = save_state.selected_solution.as_ref() {
-        save_state
+    let cover_slot = match selected_top_level_kind(&save_state) {
+        Some(SaveKind::Free) => save_state
             .selected_puzzle
             .as_ref()
-            .map(|puzzle| SaveSlot::solution(puzzle.clone(), solution.clone()))
-    } else {
-        save_state
-            .selected_puzzle
-            .as_ref()
-            .map(|puzzle| SaveSlot::puzzle(puzzle.clone()))
+            .map(|name| SaveSlot::free(name.clone())),
+        Some(SaveKind::Puzzle) => {
+            if let Some(solution) = save_state.selected_solution.as_ref() {
+                save_state
+                    .selected_puzzle
+                    .as_ref()
+                    .map(|puzzle| SaveSlot::solution(puzzle.clone(), solution.clone()))
+            } else {
+                save_state
+                    .selected_puzzle
+                    .as_ref()
+                    .map(|puzzle| SaveSlot::puzzle(puzzle.clone()))
+            }
+        }
+        _ => None,
     };
     let next_key = cover_slot
         .as_ref()
@@ -304,7 +321,7 @@ pub fn update_save_list_scroll(
     );
 }
 
-/// 刷新按钮样式与文案
+/// 刷新按钮样式与文案，并同步 Free/Puzzle 区域显隐
 pub fn update_save_list_styles(
     _ui_thread: UiMainThread,
     mode: Res<State<GameMode>>,
@@ -321,9 +338,15 @@ pub fn update_save_list_styles(
             &Children,
             &mut BackgroundColor,
             &mut BorderColor,
+            &mut Node,
             Option<&DisabledButton>,
         ),
         (With<Button>, Without<SaveListCloseButton>),
+    >,
+    mut solution_sections: Query<&mut Node, (With<SaveListSolutionSection>, Without<Button>)>,
+    mut free_hints: Query<
+        (&mut Node, &mut Visibility),
+        (With<SaveListFreeHint>, Without<Button>, Without<SaveListSolutionSection>),
     >,
 ) {
     if !save_list_visible(&mode, &start_menu_screen) {
@@ -337,6 +360,27 @@ pub fn update_save_list_styles(
     if !render_state.rows_rebuilt {
         render_state.paint_buttons = false;
     }
+
+    let free_selected = selected_top_level_kind(&save_state) == Some(SaveKind::Free);
+    if structure_changed {
+        for mut node in &mut solution_sections {
+            node.display = if free_selected {
+                Display::None
+            } else {
+                Display::Flex
+            };
+        }
+        for (mut node, mut visibility) in &mut free_hints {
+            if free_selected {
+                node.display = Display::Flex;
+                *visibility = Visibility::Visible;
+            } else {
+                node.display = Display::None;
+                *visibility = Visibility::Hidden;
+            }
+        }
+    }
+
     if !style_changed {
         return;
     }
@@ -345,8 +389,15 @@ pub fn update_save_list_styles(
         save_state: &save_state,
     };
     render_state.last_hover = hover.entity;
-    for (entity, action, children, mut background, mut border, disabled) in &mut buttons {
+    for (entity, action, children, mut background, mut border, mut node, disabled) in &mut buttons {
         let view = action.button_view(&ctx);
+        if let Some(display) = view.display {
+            if node.display != display {
+                node.display = display;
+            }
+        } else if node.display == Display::None {
+            node.display = Display::Flex;
+        }
         let hovered = view.enabled && hover.entity == Some(entity);
 
         *background = if view.enabled && view.selected {

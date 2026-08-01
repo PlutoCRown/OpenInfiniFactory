@@ -381,6 +381,7 @@ fn apply_launch_load_save_when_ready(
     let entry = match slot.kind() {
         crate::shared::save::SaveKind::Puzzle => state::WorldEntryMode::EditPuzzle,
         crate::shared::save::SaveKind::Solution => state::WorldEntryMode::PlaySolution,
+        crate::shared::save::SaveKind::Free => state::WorldEntryMode::Free,
     };
     session::load_world(&mut commands, slot, entry);
 }

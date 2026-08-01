@@ -7,14 +7,15 @@ use crate::game::ui::access::UiMainThread;
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::types::{SaveListCoverImage, SaveListRenderState};
-use crate::shared::save::{SaveSlot, SaveState};
+use crate::shared::save::{SaveKind, SaveSlot, SaveState};
 
 use super::confirm::open_delete_confirm;
 use super::prompt::{
-    open_new_puzzle_prompt, open_new_solution_prompt, open_rename_puzzle_prompt,
-    open_rename_solution_prompt,
+    open_new_free_prompt, open_new_puzzle_prompt, open_new_solution_prompt,
+    open_rename_puzzle_prompt, open_rename_solution_prompt,
 };
 use super::types::SaveListAction;
+use super::view::selected_top_level_kind;
 
 pub fn emit_save_list_actions(
     mut click: On<Pointer<Click>>,
@@ -85,7 +86,11 @@ pub fn dispatch_save_list_actions(
         };
         match action {
             SaveListAction::NewPuzzle => open_new_puzzle_prompt(),
+            SaveListAction::NewFree => open_new_free_prompt(),
             SaveListAction::NewSolution => {
+                if selected_top_level_kind(&save_state) != Some(SaveKind::Puzzle) {
+                    continue;
+                }
                 let Some(puzzle_name) = save_state.selected_puzzle.clone() else {
                     continue;
                 };
@@ -96,7 +101,7 @@ pub fn dispatch_save_list_actions(
             }
             SaveListAction::SelectPuzzle(storage) => {
                 if save_state
-                    .puzzles()
+                    .top_level_worlds()
                     .iter()
                     .any(|entry| entry.slot.puzzle == storage)
                 {
@@ -116,11 +121,7 @@ pub fn dispatch_save_list_actions(
                 let Some(puzzle) = save_state.selected_puzzle.clone() else {
                     continue;
                 };
-                if !save_state
-                    .puzzles()
-                    .iter()
-                    .any(|entry| entry.slot.puzzle == puzzle)
-                {
+                if selected_top_level_kind(&save_state) != Some(SaveKind::Puzzle) {
                     continue;
                 }
                 capture_busy_cover(&cover_images, &render_state, &save_state, &mut busy_cover);
@@ -134,26 +135,28 @@ pub fn dispatch_save_list_actions(
                     continue;
                 };
                 let Some(entry) = save_state
-                    .puzzles()
+                    .top_level_worlds()
                     .iter()
                     .find(|entry| entry.slot.puzzle == puzzle)
                     .map(|entry| (*entry).clone())
                 else {
                     continue;
                 };
-                open_rename_puzzle_prompt(entry.slot, entry.name);
+                open_rename_puzzle_prompt(entry.slot.clone(), entry.name);
             }
             SaveListAction::DeleteSelectedPuzzle => {
                 let Some(puzzle) = save_state.selected_puzzle.clone() else {
                     continue;
                 };
-                if save_state
-                    .puzzles()
-                    .iter()
-                    .any(|entry| entry.slot.puzzle == puzzle)
-                {
-                    open_delete_confirm(SaveSlot::puzzle(puzzle));
-                }
+                let Some(kind) = selected_top_level_kind(&save_state) else {
+                    continue;
+                };
+                let slot = match kind {
+                    SaveKind::Puzzle => SaveSlot::puzzle(puzzle),
+                    SaveKind::Free => SaveSlot::free(puzzle),
+                    SaveKind::Solution => continue,
+                };
+                open_delete_confirm(slot);
             }
             SaveListAction::RenameSelectedSolution => {
                 let Some(puzzle) = save_state.selected_puzzle.clone() else {
@@ -191,24 +194,46 @@ pub fn dispatch_save_list_actions(
                 }
             }
             SaveListAction::StartGame => {
-                let Some(puzzle) = save_state.selected_puzzle.clone() else {
+                let Some(name) = save_state.selected_puzzle.clone() else {
                     continue;
                 };
-                let Some(solution) = save_state.selected_solution.clone() else {
-                    continue;
-                };
-                if !save_state
-                    .selected_puzzle_solutions()
-                    .iter()
-                    .any(|entry| entry.slot.solution.as_deref() == Some(solution.as_str()))
-                {
-                    continue;
+                match selected_top_level_kind(&save_state) {
+                    Some(SaveKind::Free) => {
+                        capture_busy_cover(
+                            &cover_images,
+                            &render_state,
+                            &save_state,
+                            &mut busy_cover,
+                        );
+                        load_requests.write(LoadWorld {
+                            slot: SaveSlot::free(name),
+                            entry: WorldEntryMode::Free,
+                        });
+                    }
+                    Some(SaveKind::Puzzle) => {
+                        let Some(solution) = save_state.selected_solution.clone() else {
+                            continue;
+                        };
+                        if !save_state
+                            .selected_puzzle_solutions()
+                            .iter()
+                            .any(|entry| entry.slot.solution.as_deref() == Some(solution.as_str()))
+                        {
+                            continue;
+                        }
+                        capture_busy_cover(
+                            &cover_images,
+                            &render_state,
+                            &save_state,
+                            &mut busy_cover,
+                        );
+                        load_requests.write(LoadWorld {
+                            slot: SaveSlot::solution(name, solution),
+                            entry: WorldEntryMode::PlaySolution,
+                        });
+                    }
+                    _ => continue,
                 }
-                capture_busy_cover(&cover_images, &render_state, &save_state, &mut busy_cover);
-                load_requests.write(LoadWorld {
-                    slot: SaveSlot::solution(puzzle, solution),
-                    entry: WorldEntryMode::PlaySolution,
-                });
             }
         }
     }
@@ -221,16 +246,25 @@ fn capture_busy_cover(
     save_state: &SaveState,
     busy_cover: &mut SessionBusyCover,
 ) {
-    let expected = if let Some(solution) = save_state.selected_solution.as_ref() {
-        save_state
+    let expected = match selected_top_level_kind(save_state) {
+        Some(SaveKind::Free) => save_state
             .selected_puzzle
             .as_ref()
-            .map(|puzzle| SaveSlot::solution(puzzle.clone(), solution.clone()).storage_path())
-    } else {
-        save_state
-            .selected_puzzle
-            .as_ref()
-            .map(|puzzle| SaveSlot::puzzle(puzzle.clone()).storage_path())
+            .map(|name| SaveSlot::free(name.clone()).storage_path()),
+        Some(SaveKind::Puzzle) => {
+            if let Some(solution) = save_state.selected_solution.as_ref() {
+                save_state
+                    .selected_puzzle
+                    .as_ref()
+                    .map(|puzzle| SaveSlot::solution(puzzle.clone(), solution.clone()).storage_path())
+            } else {
+                save_state
+                    .selected_puzzle
+                    .as_ref()
+                    .map(|puzzle| SaveSlot::puzzle(puzzle.clone()).storage_path())
+            }
+        }
+        _ => None,
     };
     let Some(expected) = expected else {
         busy_cover.clear();

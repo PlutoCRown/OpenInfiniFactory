@@ -10,9 +10,10 @@ use super::super::types::{
     SlotArea,
 };
 use super::super::widgets::spawn_slot;
-use crate::game::state::BuilderMode;
+use crate::game::state::{BuilderMode, WorldEntryMode};
 use crate::game::ui::access::i18n;
-use crate::game::ui::features::inventory::InventoryTitleText;
+use crate::game::ui::features::inventory::{InventoryTabButton, InventoryTitleText};
+use crate::game::ui::types::FreeInventoryTab;
 use crate::shared::touch_profile::TouchProfile;
 
 /// 背包一行格数；面板宽度按此精确排满
@@ -84,12 +85,14 @@ pub fn spawn_hotbar(root: &mut ChildSpawnerCommands) {
 pub fn spawn_inventory_panel(
     root: &mut ChildSpawnerCommands,
     builder_mode: BuilderMode,
+    entry: WorldEntryMode,
     touch: TouchProfile,
 ) {
     let title = {
-        let mode = i18n.t(match builder_mode {
-            BuilderMode::Edit => "mode.edit",
-            BuilderMode::Play => "mode.play",
+        let mode = i18n.t(match (entry, builder_mode) {
+            (WorldEntryMode::Free, _) => "save.kind.free",
+            (_, BuilderMode::Edit) => "mode.edit",
+            (_, BuilderMode::Play) => "mode.play",
         });
         i18n.fmt("inventory.title", &[("mode", mode.as_str())])
     };
@@ -106,6 +109,41 @@ pub fn spawn_inventory_panel(
         InventoryTitleText,
         PanelCloseButton,
         |panel| {
+            if entry == WorldEntryMode::Free {
+                panel
+                    .spawn(Node {
+                        width: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Row,
+                        column_gap: Val::Px(6.0),
+                        margin: UiRect::bottom(Val::Px(8.0)),
+                        ..default()
+                    })
+                    .with_children(|tabs| {
+                        for (tab, key) in [
+                            (FreeInventoryTab::Edit, "mode.edit"),
+                            (FreeInventoryTab::Play, "mode.play"),
+                            (FreeInventoryTab::Material, "inventory.tab.material"),
+                        ] {
+                            tabs.spawn((
+                                Button,
+                                Node {
+                                    height: Val::Px(default_button_size(28.0)),
+                                    padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
+                                    border: UiRect::all(Val::Px(2.0)),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    ..default()
+                                },
+                                BackgroundColor(Color::srgb(0.22, 0.24, 0.26)),
+                                BorderColor::all(Color::srgb(0.4, 0.42, 0.45)),
+                                InventoryTabButton(tab),
+                            ))
+                            .with_children(|button| {
+                                button.spawn(text(i18n.t(key), 13.0, Color::WHITE));
+                            });
+                        }
+                    });
+            }
             // Panel 已有内凹，格子直接排，不再套一层凹陷框
             panel
                 .spawn((

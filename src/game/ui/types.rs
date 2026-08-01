@@ -9,8 +9,9 @@ pub use crate::game::ui::core::{
 };
 pub use crate::game::ui::features::save::types::{
     SaveListAction, SaveListCloseButton, SaveListCoverHost, SaveListCoverImage,
-    SaveListCoverLoading, SaveListPanel, SaveListPuzzleRows, SaveListPuzzleScroll,
-    SaveListRenderState, SaveListSolutionRows, SaveListSolutionScroll, SaveListTitleText,
+    SaveListCoverLoading, SaveListFreeHint, SaveListPanel, SaveListPuzzleRows,
+    SaveListPuzzleScroll, SaveListRenderState, SaveListSolutionRows, SaveListSolutionScroll,
+    SaveListSolutionSection, SaveListTitleText,
 };
 pub use crate::game::ui::features::settings::types::{
     GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
@@ -20,9 +21,10 @@ pub use crate::game::ui::features::settings::types::{
 };
 
 use crate::game::blocks::{BlockKind, PLAY_BLOCKS, edit_blocks};
-use crate::game::state::BuilderMode;
+use crate::game::state::{BuilderMode, WorldEntryMode};
 use crate::shared::config::ActionKeyName;
 use crate::shared::save::{SavedAreaKind, SavedHotbar, SavedHotbarItem};
+use oif_sim::blocks::{FALLBACK_MATERIAL_STRING_ID, material_catalog};
 
 pub const HOTBAR_SLOTS: usize = 9;
 pub(super) const BACKPACK_SLOTS: usize = 27;
@@ -176,10 +178,13 @@ pub struct InventoryItems {
     stashed_edit_hotbar: Option<HotbarItems>,
 }
 
-impl Default for InventoryItems {
-    fn default() -> Self {
-        Self::for_mode(BuilderMode::default())
-    }
+/// Free 模式下背包页签（编辑块 / 工厂块 / 材料）
+#[derive(Resource, Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum FreeInventoryTab {
+    #[default]
+    Edit,
+    Play,
+    Material,
 }
 
 impl InventoryItems {
@@ -225,6 +230,54 @@ impl InventoryItems {
             hotbar,
             backpack,
             stashed_edit_hotbar: None,
+        }
+    }
+
+    /// 按进入模式构建物品栏（Free 用三页签默认 Edit 页签）
+    pub fn for_entry(entry: WorldEntryMode, builder_mode: BuilderMode) -> Self {
+        if entry == WorldEntryMode::Free {
+            let mut items = Self::for_mode(BuilderMode::Play);
+            items.fill_free_backpack(FreeInventoryTab::Edit);
+            items
+        } else {
+            Self::for_mode(builder_mode)
+        }
+    }
+
+    /// 仅刷新 Free 背包页签内容，不改快捷栏
+    pub fn fill_free_backpack(&mut self, tab: FreeInventoryTab) {
+        self.backpack = [None; BACKPACK_SLOTS];
+        match tab {
+            FreeInventoryTab::Edit => {
+                let edit_blocks = edit_blocks();
+                for (index, kind) in edit_blocks.iter().take(BACKPACK_SLOTS).enumerate() {
+                    self.backpack[index] = Some(InventoryItem::Block(*kind));
+                }
+                if let Some(slot) = self.backpack.iter_mut().find(|slot| slot.is_none()) {
+                    *slot = Some(InventoryItem::Area(AreaKind::Selection));
+                }
+            }
+            FreeInventoryTab::Play => {
+                for (index, kind) in PLAY_BLOCKS.iter().take(BACKPACK_SLOTS).enumerate() {
+                    self.backpack[index] = Some(InventoryItem::Block(*kind));
+                }
+                if let Some(slot) = self.backpack.iter_mut().find(|slot| slot.is_none()) {
+                    *slot = Some(InventoryItem::Area(AreaKind::Selection));
+                }
+                if let Some(slot) = self.backpack.iter_mut().find(|slot| slot.is_none()) {
+                    *slot = Some(InventoryItem::LightPanel);
+                }
+            }
+            FreeInventoryTab::Material => {
+                let materials: Vec<BlockKind> = material_catalog()
+                    .iter()
+                    .filter(|(_, def)| def.string_id != FALLBACK_MATERIAL_STRING_ID)
+                    .map(|(id, _)| BlockKind::Material(id))
+                    .collect();
+                for (index, kind) in materials.iter().take(BACKPACK_SLOTS).enumerate() {
+                    self.backpack[index] = Some(InventoryItem::Block(*kind));
+                }
+            }
         }
     }
 
@@ -284,6 +337,12 @@ impl InventoryItems {
                 SavedHotbarItem::LightPanel => InventoryItem::LightPanel,
             })
         });
+    }
+}
+
+impl Default for InventoryItems {
+    fn default() -> Self {
+        Self::for_mode(BuilderMode::default())
     }
 }
 

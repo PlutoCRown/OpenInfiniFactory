@@ -11,7 +11,7 @@ use crate::game::edit_history::{
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{
     BuilderMode, EditGestureKind, GameMode, PlacementState, PlayingUiState, SelectionAxis,
-    SelectionBounds, SelectionDrag, SelectionSnapshot, SimulationState,
+    SelectionBounds, SelectionDrag, SelectionSnapshot, SimulationState, WorldEntryMode,
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::features::GameplayToast;
@@ -40,6 +40,7 @@ pub(super) fn handle_selection_area_input(
     copy_chord: ConfigChord,
     force_place: bool,
     builder_mode: BuilderMode,
+    entry: WorldEntryMode,
     placement: &mut PlacementState,
     world: &mut WorldBlocks,
     edit_history: &mut EditHistory,
@@ -95,6 +96,7 @@ pub(super) fn handle_selection_area_input(
                         drag.offset,
                         force_place,
                         builder_mode,
+                        entry,
                         &before,
                     ) {
                         placement.selection.bounds = Some(bounds.moved(drag.offset));
@@ -130,6 +132,7 @@ pub(super) fn handle_selection_area_input(
                         drag.offset,
                         force_place,
                         builder_mode,
+                        entry,
                         &before,
                     ) {
                         placement.selection.bounds = Some(bounds.moved(drag.offset));
@@ -207,21 +210,22 @@ fn strongest_axis(delta: IVec3) -> SelectionAxis {
     }
 }
 
-/// 收集选区内可移动/可复制的方块（游玩模式仅工厂）
+/// 收集选区内可移动/可复制的方块（游玩方案仅工厂；Free/Edit 含场景与材料）
 fn selected_blocks(
     world: &WorldBlocks,
     bounds: SelectionBounds,
     mode: BuilderMode,
+    entry: WorldEntryMode,
 ) -> Vec<(IVec3, BlockData)> {
     bounds
         .positions()
         .iter()
         .filter_map(|pos| {
             let block = world.blocks.get(pos).copied()?;
-            match mode {
-                BuilderMode::Play => block.kind.is_factory().then_some((*pos, block)),
-                BuilderMode::Edit => Some((*pos, block)),
+            if entry == WorldEntryMode::Free || mode == BuilderMode::Edit {
+                return Some((*pos, block));
             }
+            block.kind.is_factory().then_some((*pos, block))
         })
         .collect()
 }
@@ -233,6 +237,7 @@ fn selection_can_place(
     offset: IVec3,
     vacate_sources: bool,
     mode: BuilderMode,
+    entry: WorldEntryMode,
     force: bool,
 ) -> bool {
     let selected_positions: HashSet<IVec3> = selected.iter().map(|(pos, _)| *pos).collect();
@@ -253,10 +258,10 @@ fn selection_can_place(
         if !force {
             return !occupant.kind.has_collision();
         }
-        match mode {
-            BuilderMode::Edit => true,
-            BuilderMode::Play => occupant.kind.is_factory(),
+        if entry == WorldEntryMode::Free || mode == BuilderMode::Edit {
+            return true;
         }
+        occupant.kind.is_factory()
     })
 }
 
@@ -327,9 +332,10 @@ fn move_selection(
     offset: IVec3,
     force: bool,
     builder_mode: BuilderMode,
+    entry: WorldEntryMode,
     selection_before: &SelectionSnapshot,
 ) -> bool {
-    let selected = selected_blocks(world, bounds, builder_mode);
+    let selected = selected_blocks(world, bounds, builder_mode, entry);
     if selected.is_empty() {
         let mut after = selection_before.clone();
         after.bounds = Some(bounds.moved(offset));
@@ -337,7 +343,7 @@ fn move_selection(
         return true;
     }
 
-    if !selection_can_place(world, &selected, offset, true, builder_mode, force) {
+    if !selection_can_place(world, &selected, offset, true, builder_mode, entry, force) {
         return false;
     }
 
@@ -440,9 +446,10 @@ fn copy_selection(
     offset: IVec3,
     force: bool,
     builder_mode: BuilderMode,
+    entry: WorldEntryMode,
     selection_before: &SelectionSnapshot,
 ) -> bool {
-    let selected = selected_blocks(world, bounds, builder_mode);
+    let selected = selected_blocks(world, bounds, builder_mode, entry);
     if selected.is_empty() {
         let mut after = selection_before.clone();
         after.bounds = Some(bounds.moved(offset));
@@ -450,7 +457,7 @@ fn copy_selection(
         return true;
     }
 
-    if !selection_can_place(world, &selected, offset, false, builder_mode, force) {
+    if !selection_can_place(world, &selected, offset, false, builder_mode, entry, force) {
         return false;
     }
 
@@ -623,6 +630,7 @@ pub(super) fn selection_bounds_show(
     placement: &PlacementState,
     world: &WorldBlocks,
     builder_mode: BuilderMode,
+    entry: WorldEntryMode,
     force_place: bool,
 ) -> Option<(IVec3, IVec3, bool, bool)> {
     if let Some(first) = placement.selection.first_corner {
@@ -639,9 +647,17 @@ pub(super) fn selection_bounds_show(
     let valid = if offset == IVec3::ZERO {
         true
     } else {
-        let selected = selected_blocks(world, bounds, builder_mode);
+        let selected = selected_blocks(world, bounds, builder_mode, entry);
         selected.is_empty()
-            || selection_can_place(world, &selected, offset, true, builder_mode, force_place)
+            || selection_can_place(
+                world,
+                &selected,
+                offset,
+                true,
+                builder_mode,
+                entry,
+                force_place,
+            )
     };
     Some((moved.min, moved.max, true, valid))
 }
@@ -712,6 +728,7 @@ pub fn sync_edit_bounds_overlays(
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
     builder_mode: Res<BuilderMode>,
+    solution_state: Res<crate::game::state::SolutionState>,
     config: Res<GameConfig>,
     world: Res<WorldBlocks>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -749,7 +766,13 @@ pub fn sync_edit_bounds_overlays(
 
     if selection_tool {
         let force_place = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
-        let show = selection_bounds_show(&placement, &world, *builder_mode, force_place);
+        let show = selection_bounds_show(
+            &placement,
+            &world,
+            *builder_mode,
+            solution_state.entry,
+            force_place,
+        );
         update_selection_bounds_overlay(&mut selection_parts, assets, show);
         update_delete_bounds_overlay(&mut delete_parts, None);
         return;
@@ -771,7 +794,7 @@ pub fn sync_edit_bounds_overlays(
                     selection_positions(config.delete_selection_mode, gesture.start, end);
                 let deletable: Vec<IVec3> = positions
                     .into_iter()
-                    .filter(|pos| can_delete_at(*pos, *builder_mode, &world))
+                    .filter(|pos| can_delete_at(*pos, *builder_mode, solution_state.entry, &world))
                     .collect();
                 SelectionBounds::from_positions(&deletable).map(|bounds| (bounds.min, bounds.max))
             }

@@ -11,7 +11,7 @@ use super::types::{
 };
 use crate::game::cameras::{GameplayViewBackdrop, GameplayViewImage};
 use crate::game::session::SessionBusy;
-use crate::game::state::BuilderMode;
+use crate::game::state::{BuilderMode, SolutionState, WorldEntryMode};
 use crate::game::ui::access::with_ui_world;
 use crate::game::ui::components::UiIconAssets;
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHostMountRoot, UiRootEntity};
@@ -58,12 +58,16 @@ pub fn setup_playing_ui_system(world: &mut World) {
         .get_resource::<BuilderMode>()
         .copied()
         .unwrap_or(BuilderMode::Edit);
+    let entry = world
+        .get_resource::<SolutionState>()
+        .map(|state| state.entry)
+        .unwrap_or(WorldEntryMode::EditPuzzle);
     let busy = world
         .get_resource::<SessionBusy>()
         .copied()
         .unwrap_or_default();
     let mut commands = world.commands();
-    let inventory = setup_playing_ui(&mut commands, image, touch, builder_mode, busy);
+    let inventory = setup_playing_ui(&mut commands, image, touch, builder_mode, entry, busy);
     commands.insert_resource(PlayingOverlayMounts {
         inventory: Some(inventory),
         pause: None,
@@ -77,6 +81,7 @@ pub fn setup_playing_ui(
     view_image: Handle<Image>,
     touch: TouchProfile,
     builder_mode: BuilderMode,
+    entry: WorldEntryMode,
     busy: SessionBusy,
 ) -> Entity {
     let mut inventory_mount = None;
@@ -104,7 +109,7 @@ pub fn setup_playing_ui(
                     Pickable::IGNORE,
                 ))
                 .with_children(|container| {
-                    spawn_inventory_panel(container, builder_mode, touch);
+                    spawn_inventory_panel(container, builder_mode, entry, touch);
                 })
                 .id(),
             );

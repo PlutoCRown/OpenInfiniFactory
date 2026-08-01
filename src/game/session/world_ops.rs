@@ -4,12 +4,12 @@ use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::state::{
     BuilderMode, GameMode, SimulationState, SolutionState, StartMenuScreen, WorldEntryMode,
 };
-use crate::game::ui::InventoryItems;
+use crate::game::ui::{FreeInventoryTab, InventoryItems};
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::save::{
     LoadedSave, PlayerSave, SaveKind, SaveSlot, SaveState, has_solutions_for_puzzle,
-    invalidate_solutions_for_puzzle, next_named_save, puzzle_names, reset_solution_world,
-    save_puzzle, save_solution, solution_names_for_puzzle,
+    invalidate_solutions_for_puzzle, next_named_save, reset_solution_world, save_free, save_puzzle,
+    save_solution, solution_names_for_puzzle, top_level_world_names,
 };
 
 use super::world_access::{PlayingWorldParams, SessionStateParams};
@@ -85,7 +85,11 @@ fn commit_save_current_world(
     let world = simulation.authoring_world(world);
     let kind = save_state.current_kind.unwrap_or(SaveKind::Puzzle);
     let mut slot = save_state.current.clone().unwrap_or_else(|| {
-        SaveSlot::puzzle(next_named_save(&puzzle_names(&save_state.entries), "world"))
+        let name = next_named_save(&top_level_world_names(&save_state.entries), "world");
+        match kind {
+            SaveKind::Free => SaveSlot::free(name),
+            _ => SaveSlot::puzzle(name),
+        }
     });
     let saved = match kind {
         SaveKind::Puzzle => {
@@ -94,6 +98,7 @@ fn commit_save_current_world(
             }
             save_puzzle(world, &slot, &inventory.to_saved_hotbar(), player)
         }
+        SaveKind::Free => save_free(world, &slot, &inventory.to_saved_hotbar(), player),
         SaveKind::Solution => {
             if slot.solution.is_none() {
                 let Some(puzzle_id) = solution_state
@@ -198,9 +203,9 @@ pub fn load_world_into_session(
 
     *session.builder_mode = match entry {
         WorldEntryMode::EditPuzzle => BuilderMode::Edit,
-        WorldEntryMode::PlaySolution => BuilderMode::Play,
+        WorldEntryMode::PlaySolution | WorldEntryMode::Free => BuilderMode::Play,
     };
-    *session.inventory = InventoryItems::for_mode(*session.builder_mode);
+    *session.inventory = InventoryItems::for_entry(entry, *session.builder_mode);
     if let Some(hotbar) = loaded.hotbar {
         session.inventory.apply_saved_hotbar(hotbar);
     }
@@ -210,14 +215,16 @@ pub fn load_world_into_session(
     session.save_state.current_kind = Some(match entry {
         WorldEntryMode::EditPuzzle => SaveKind::Puzzle,
         WorldEntryMode::PlaySolution => SaveKind::Solution,
+        WorldEntryMode::Free => SaveKind::Free,
     });
     session.save_state.select_puzzle(None);
 
     session.solution_state.entry = entry;
     session.solution_state.dirty = false;
+    *session.free_inventory_tab = FreeInventoryTab::default();
     session.solution_state.puzzle_id = loaded.puzzle_id;
     session.solution_state.puzzle_snapshot = match entry {
-        WorldEntryMode::EditPuzzle => None,
+        WorldEntryMode::EditPuzzle | WorldEntryMode::Free => None,
         WorldEntryMode::PlaySolution => loaded
             .puzzle_snapshot
             .map(crate::game::world::grid::WorldBlocks),

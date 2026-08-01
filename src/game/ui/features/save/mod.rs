@@ -9,7 +9,7 @@ use bevy::prelude::*;
 
 pub use actions::{dispatch_save_list_actions, emit_save_list_actions};
 pub use confirm::{EXTRA_SAVE_AS, open_save_puzzle_confirm, open_save_puzzle_confirm_before_exit};
-pub use prompt::open_save_as_new_puzzle_prompt;
+pub use prompt::{open_export_as_puzzle_prompt, open_save_as_new_puzzle_prompt};
 pub use types::*;
 pub use update::{
     update_save_list_cover, update_save_list_rows, update_save_list_scroll, update_save_list_styles,

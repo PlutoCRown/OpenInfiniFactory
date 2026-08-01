@@ -1,5 +1,4 @@
 use bevy::prelude::IVec3;
-use std::path::{Path, PathBuf};
 
 use crate::game::blocks::{all_blocks, BlockData, BlockKind};
 use crate::game::simulation::markers::refresh_static_generated_markers;
@@ -76,8 +75,9 @@ pub fn place_block(
     Ok(())
 }
 
-/// 把存档载入无头会话
-pub fn load_save_into_session(core: &mut SimSession, name: &str) -> Result<(), String> {
+/// 把存档载入无头会话，返回加载耗时毫秒
+pub fn load_save_into_session(core: &mut SimSession, name: &str) -> Result<f64, String> {
+    let started = std::time::Instant::now();
     reset_session(core);
     let mut world = WorldBlocks(std::mem::take(&mut core.world));
     let slot = SaveSlot::from_storage_path(name)
@@ -85,22 +85,7 @@ pub fn load_save_into_session(core: &mut SimSession, name: &str) -> Result<(), S
     load_world(&mut world, &slot).ok_or_else(|| format!("save `{name}` not found"))?;
     refresh_static_generated_markers(&mut world);
     core.world = world.0;
-    Ok(())
-}
-
-/// e2e fixture 根目录
-pub fn fixture_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("e2e/fixtures")
-}
-
-/// 解析 fixture 路径（相对则相对 fixture 根）
-pub fn resolve_fixture_path(path: &str) -> PathBuf {
-    let path = Path::new(path);
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        fixture_root().join(path)
-    }
+    Ok(started.elapsed().as_secs_f64() * 1000.0)
 }
 
 use super::snapshot::block_layer;

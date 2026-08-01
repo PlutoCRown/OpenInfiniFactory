@@ -289,6 +289,8 @@ pub enum WorldEntryMode {
     #[default]
     EditPuzzle,
     PlaySolution,
+    /// Free 世界：Play 建造模式，无父谜题
+    Free,
 }
 
 use crate::shared::save::PlayerSave;

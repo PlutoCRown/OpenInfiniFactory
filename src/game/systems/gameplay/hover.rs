@@ -10,6 +10,7 @@ use crate::game::simulation::structure_state::{
 };
 use crate::game::state::{
     BuilderMode, EditGestureKind, GameMode, GameSettings, PlacementState, PlayingUiState,
+    SolutionState,
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::{InventoryItems, UiRuntime};
@@ -53,6 +54,7 @@ pub struct HoverPreviewDeps<'w, 's> {
     render_assets: Option<Res<'w, WorldRenderAssets>>,
     inventory: Res<'w, InventoryItems>,
     builder_mode: Res<'w, BuilderMode>,
+    solution_state: Res<'w, SolutionState>,
     player: Query<'w, 's, &'static Transform, With<FlyCamera>>,
     edit_previews: Query<'w, 's, Entity, With<EditPreview>>,
 }
@@ -212,6 +214,7 @@ pub fn update_hover(
             selected_place_block(
                 &preview_deps.inventory,
                 *preview_deps.builder_mode,
+                preview_deps.solution_state.entry,
                 &placement,
             ),
         ) {
@@ -226,6 +229,7 @@ pub fn update_hover(
                     place_at,
                     block,
                     *preview_deps.builder_mode,
+                    preview_deps.solution_state.entry,
                     &world,
                     player_pos,
                     Some(target.normal),

@@ -106,7 +106,6 @@ pub(super) fn rotate_block_at(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
-    debug: &DebugState,
     structure_state: &mut StructureState,
     block_index: &mut BlockEntityIndex,
     scene_chunks: &mut SceneChunkMeshes,

@@ -10,6 +10,16 @@ use super::signal_offsets;
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct SignalComponentId(pub usize);
 
+/// 触达某格的信号连通分量查询结果（导线 + 接在该分量上的用电器）
+#[derive(Clone, Debug)]
+pub struct PowerQuery {
+    pub component: SignalComponentId,
+    pub wires: Vec<IVec3>,
+    pub devices: Vec<IVec3>,
+    /// 当前是否通电（仅占位类传感器，不含激光二次供电）
+    pub powered: bool,
+}
+
 /// 信号网络缓存：导线/用电器按 BlockId 索引，移动后身份仍有效
 #[derive(Default, Clone)]
 pub struct SignalNetworkCache {
@@ -21,7 +31,8 @@ pub struct SignalNetworkCache {
 }
 
 impl SignalNetworkCache {
-    pub(super) fn refresh(&mut self, world: &WorldBlocks) {
+    /// 按世界拓扑重建导线连通分量与用电器接线
+    pub fn refresh(&mut self, world: &WorldBlocks) {
         if self.initialized && self.topology_revision == world.topology_revision {
             return;
         }
@@ -127,8 +138,8 @@ impl SignalNetworkCache {
         }
     }
 
-    // 传感器激活：激光打中工作面 ∪ 检测格占位（材料 / Behavior 声明目标）
-    pub(super) fn powered_components(
+    /// 传感器激活：激光打中工作面 ∪ 检测格占位（材料 / Behavior 声明目标）
+    pub fn powered_components(
         &self,
         world: &WorldBlocks,
         laser_hit_detectors: &HashSet<IVec3>,
@@ -155,7 +166,8 @@ impl SignalNetworkCache {
             .collect()
     }
 
-    pub(super) fn powered_devices(
+    /// 通电连通分量上的用电器格
+    pub fn powered_devices(
         &self,
         world: &WorldBlocks,
         powered_components: &HashSet<SignalComponentId>,
@@ -176,7 +188,8 @@ impl SignalNetworkCache {
             .collect()
     }
 
-    pub(super) fn powered_wires(
+    /// 通电连通分量上的导线格
+    pub fn powered_wires(
         &self,
         world: &WorldBlocks,
         powered_components: &HashSet<SignalComponentId>,
@@ -191,6 +204,64 @@ impl SignalNetworkCache {
                     .map(|_| *pos)
             })
             .collect()
+    }
+
+    /// 刷新缓存并查询触达 `pos` 的信号网络（导线 + 用电器）
+    pub fn query_power_at(&mut self, world: &WorldBlocks, pos: IVec3) -> Option<PowerQuery> {
+        self.refresh(world);
+        let component = self.component_touching(world, pos)?;
+        let mut wires: Vec<IVec3> = world
+            .blocks
+            .iter()
+            .filter_map(|(p, block)| {
+                self.wire_components
+                    .get(&block.id)
+                    .filter(|c| **c == component)
+                    .map(|_| *p)
+            })
+            .collect();
+        wires.sort_by_key(|p| (p.x, p.y, p.z));
+        let mut devices: Vec<IVec3> = world
+            .blocks
+            .iter()
+            .filter_map(|(p, block)| {
+                self.device_components
+                    .get(&block.id)
+                    .filter(|cs| cs.contains(&component))
+                    .map(|_| *p)
+            })
+            .collect();
+        devices.sort_by_key(|p| (p.x, p.y, p.z));
+        let powered = self
+            .powered_components(world, &HashSet::new())
+            .contains(&component);
+        Some(PowerQuery {
+            component,
+            wires,
+            devices,
+            powered,
+        })
+    }
+
+    /// 导线格、用电器格或其邻接导线所属的连通分量
+    fn component_touching(&self, world: &WorldBlocks, pos: IVec3) -> Option<SignalComponentId> {
+        if let Some(block) = world.blocks.get(&pos) {
+            if let Some(&component) = self.wire_components.get(&block.id) {
+                return Some(component);
+            }
+            if let Some(components) = self.device_components.get(&block.id) {
+                return components.first().copied();
+            }
+        }
+        for offset in signal_offsets() {
+            let Some(block) = world.blocks.get(&(pos + offset)) else {
+                continue;
+            };
+            if let Some(&component) = self.wire_components.get(&block.id) {
+                return Some(component);
+            }
+        }
+        None
     }
 }
 

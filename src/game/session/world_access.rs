@@ -8,7 +8,7 @@ use crate::game::state::{
     BuilderMode, PendingPlayerSpawn, PlacementState, PlayingUiState, SimulationState, SolutionState,
 };
 use crate::game::systems::debug::DebugState;
-use crate::game::ui::{CarriedItem, InventoryItems};
+use crate::game::ui::{CarriedItem, FreeInventoryTab, InventoryItems};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     BlockEntity, SceneChunkMeshes, WorldRenderAssets, despawn_world, rebuild_world_for_debug_state,
@@ -70,6 +70,7 @@ impl PlayingWorldParams<'_, '_> {
 pub struct SessionStateParams<'w> {
     pub builder_mode: ResMut<'w, BuilderMode>,
     pub inventory: ResMut<'w, InventoryItems>,
+    pub free_inventory_tab: ResMut<'w, FreeInventoryTab>,
     pub carried: ResMut<'w, CarriedItem>,
     pub placement: ResMut<'w, PlacementState>,
     pub playing_ui: ResMut<'w, PlayingUiState>,

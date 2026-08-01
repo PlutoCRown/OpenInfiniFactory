@@ -11,7 +11,7 @@ use super::busy::SessionBusy;
 use super::cover::begin_cover_capture;
 use super::cover::should_capture_cover;
 use super::messages::{
-    SaveCurrentWorld, SaveCurrentWorldInvalidateSolutions, SaveWorldAsNewPuzzle,
+    ExportAsPuzzle, SaveCurrentWorld, SaveCurrentWorldInvalidateSolutions, SaveWorldAsNewPuzzle,
 };
 use super::world_ops::{save_current_world, save_current_world_invalidate_solutions};
 
@@ -161,6 +161,34 @@ pub fn handle_save_world_as_new_puzzle(
             solution_state.dirty = false;
             solution_state.puzzle_id = None;
             solution_state.puzzle_snapshot = None;
+            save_state.refresh();
+        }
+    }
+}
+
+/// Free：导出场景+系统为新谜题，保持当前 Free 会话不变
+pub fn handle_export_as_puzzle(
+    mut requests: MessageReader<ExportAsPuzzle>,
+    world: Res<WorldBlocks>,
+    inventory: Res<InventoryItems>,
+    player: Query<(&FlyCamera, &Transform)>,
+    mut save_state: ResMut<SaveState>,
+    simulation: Res<SimulationState>,
+) {
+    for request in requests.read() {
+        let player_save = player
+            .single()
+            .ok()
+            .map(|(camera, transform)| capture_player_save(camera, transform));
+        let snapshot = simulation.authoring_world(&world);
+        if save_puzzle_as(
+            snapshot,
+            &request.name,
+            &inventory.to_saved_hotbar(),
+            player_save,
+        )
+        .is_some()
+        {
             save_state.refresh();
         }
     }

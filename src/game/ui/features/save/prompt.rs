@@ -29,6 +29,20 @@ pub fn open_new_puzzle_prompt() {
     });
 }
 
+pub fn open_new_free_prompt() {
+    let spec = text_prompt_spec("save.prompt.new_free", "free");
+    ui.open_text_prompt_then(spec, |result, world| {
+        let TextPromptResult::Saved(requested) = result else {
+            return;
+        };
+        let name = requested.trim().to_string();
+        if name.is_empty() {
+            return;
+        }
+        session::create_new_free_in_world(world, name);
+    });
+}
+
 pub fn open_new_solution_prompt(puzzle: String) {
     let spec = text_prompt_spec("save.prompt.new_solution", "solution");
     ui.open_text_prompt_then(spec, move |result, world| {
@@ -110,5 +124,20 @@ pub fn open_save_as_new_puzzle_prompt() {
             return;
         }
         session::save_world_as_new_puzzle_in_world(world, name);
+    });
+}
+
+/// Free：导出为新谜题（不离开当前 Free 会话）
+pub fn open_export_as_puzzle_prompt() {
+    let spec = text_prompt_spec("save.prompt.export_as_puzzle", "puzzle");
+    ui.open_text_prompt_then(spec, |result, world| {
+        let TextPromptResult::Saved(requested) = result else {
+            return;
+        };
+        let name = requested.trim().to_string();
+        if name.is_empty() {
+            return;
+        }
+        session::export_as_puzzle_in_world(world, name);
     });
 }

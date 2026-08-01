@@ -5,12 +5,12 @@ use crate::game::edit_history::EditHistory;
 use crate::game::state::{BuilderMode, GameMode, WorldEntryMode};
 use crate::game::ui::InventoryItems;
 use crate::shared::save::{
-    LoadedSave, SaveSlot, create_puzzle_from_default_template, decode_save_slot, load_world,
-    save_solution_as,
+    LoadedSave, SaveSlot, create_free_from_default_template, create_puzzle_from_default_template,
+    decode_save_slot, load_world, save_solution_as,
 };
 
 use super::busy::{SessionBusy, SessionBusyCover};
-use super::messages::{CreateNewPuzzle, CreateNewSolution, LoadWorld};
+use super::messages::{CreateNewFree, CreateNewPuzzle, CreateNewSolution, LoadWorld};
 use super::world_access::{PlayingWorldParams, SessionStateParams};
 use super::world_ops::load_world_into_session;
 
@@ -174,6 +174,35 @@ pub fn handle_create_new_puzzle(
             &mut session,
             &slot,
             WorldEntryMode::EditPuzzle,
+            loaded,
+            *mode.get(),
+            &mut next_state,
+        );
+    }
+}
+
+pub fn handle_create_new_free(
+    mut requests: MessageReader<CreateNewFree>,
+    mut playing: PlayingWorldParams,
+    mut session: SessionStateParams,
+    mut edit_history: ResMut<EditHistory>,
+    mode: Res<State<GameMode>>,
+    mut next_state: ResMut<NextState<GameMode>>,
+) {
+    for request in requests.read() {
+        let Some(slot) = create_free_from_default_template(&request.name) else {
+            bevy::log::warn!("failed to create free `{}` from template", request.name);
+            continue;
+        };
+        edit_history.clear();
+        let Some(loaded) = decode_save_slot(&slot) else {
+            continue;
+        };
+        load_world_into_session(
+            &mut playing,
+            &mut session,
+            &slot,
+            WorldEntryMode::Free,
             loaded,
             *mode.get(),
             &mut next_state,

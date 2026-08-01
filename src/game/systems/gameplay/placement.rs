@@ -11,7 +11,7 @@ use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, GameMode, PlacementState, PlayingUiState,
-    SimulationState, SolutionState,
+    SimulationState, SolutionState, WorldEntryMode,
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::features::GameplayToast;
@@ -139,6 +139,7 @@ pub fn placement_input(
             current_target_pos,
             &world,
             *builder_mode,
+            solution_state.entry,
             &mut pending_block_panel,
         ) {
             placement.edit_gesture = None;
@@ -174,6 +175,7 @@ pub fn placement_input(
             current_target_pos,
             &world,
             *builder_mode,
+            solution_state.entry,
             &mut pending_block_panel,
         )
     {
@@ -194,6 +196,7 @@ pub fn placement_input(
             copy_chord,
             force_place,
             *builder_mode,
+            solution_state.entry,
             &mut placement,
             &mut world,
             &mut edit_history,
@@ -274,7 +277,6 @@ pub fn placement_input(
                 &mut commands,
                 &mut meshes,
                 &render_assets,
-                &debug,
                 &mut structure_state,
                 &mut block_index,
                 &mut scene_chunks,
@@ -290,13 +292,18 @@ pub fn placement_input(
                     placement.preview_facing = facing;
                 }
                 solution_state.dirty = true;
-            } else if selected_place_block(&inventory, *builder_mode, &placement)
-                .is_some_and(|block| can_manual_rotate(block.kind))
+            } else if selected_place_block(
+                &inventory,
+                *builder_mode,
+                solution_state.entry,
+                &placement,
+            )
+            .is_some_and(|block| can_manual_rotate(block.kind))
             {
                 placement.preview_facing =
                     rotate_facing(placement.preview_facing, reverse_rotation);
             }
-        } else if selected_place_block(&inventory, *builder_mode, &placement)
+        } else if selected_place_block(&inventory, *builder_mode, solution_state.entry, &placement)
             .is_some_and(|block| can_manual_rotate(block.kind))
         {
             placement.preview_facing = rotate_facing(placement.preview_facing, reverse_rotation);
@@ -451,8 +458,12 @@ pub fn placement_input(
             }
             None => {
                 if let Some(start) = current_place_at {
-                    if let Some(block) = selected_place_block(&inventory, *builder_mode, &placement)
-                    {
+                    if let Some(block) = selected_place_block(
+                        &inventory,
+                        *builder_mode,
+                        solution_state.entry,
+                        &placement,
+                    ) {
                         let plane_normal = placement
                             .target
                             .and_then(|target| {
@@ -506,6 +517,7 @@ pub fn placement_input(
                     &config,
                     &mut world,
                     *builder_mode,
+                    solution_state.entry,
                     player_pos,
                     &mut edit_history,
                     &mut commands,
@@ -534,6 +546,7 @@ pub fn placement_input(
                 &config,
                 &world,
                 *builder_mode,
+                solution_state.entry,
                 player_pos,
                 &mut commands,
                 &mut meshes,
@@ -549,11 +562,13 @@ pub fn placement_input(
 pub(super) fn selected_place_block(
     inventory: &InventoryItems,
     builder_mode: BuilderMode,
+    entry: WorldEntryMode,
     placement: &PlacementState,
 ) -> Option<BlockData> {
     let kind = inventory.hotbar[placement.selected]?;
     let kind = kind.block()?;
-    can_place_in_mode(kind, builder_mode).then_some(BlockData::new(kind, placement.preview_facing))
+    can_place_in_mode(kind, builder_mode, entry)
+        .then_some(BlockData::new(kind, placement.preview_facing))
 }
 
 /// 取当前快捷栏选中的区域工具种类
@@ -595,17 +610,20 @@ fn open_target_block_ui(
     target: Option<IVec3>,
     world: &WorldBlocks,
     builder_mode: BuilderMode,
+    entry: WorldEntryMode,
     pending: &mut PendingBlockPanelOpen,
 ) -> bool {
     let Some(pos) = target else {
         return false;
     };
-    let block = match builder_mode {
-        BuilderMode::Edit => world
+    // Free / Edit：系统层优先；PlaySolution 的 Play：只看工厂层
+    let block = if entry == WorldEntryMode::Free || builder_mode == BuilderMode::Edit {
+        world
             .system_blocks
             .get(&pos)
-            .or_else(|| world.blocks.get(&pos)),
-        BuilderMode::Play => world.blocks.get(&pos),
+            .or_else(|| world.blocks.get(&pos))
+    } else {
+        world.blocks.get(&pos)
     };
     let Some(block) = block else {
         return false;
@@ -647,6 +665,7 @@ fn commit_edit_gesture(
     config: &GameConfig,
     world: &mut WorldBlocks,
     builder_mode: BuilderMode,
+    entry: WorldEntryMode,
     player_pos: Option<Vec3>,
     edit_history: &mut EditHistory,
     commands: &mut Commands,
@@ -671,6 +690,7 @@ fn commit_edit_gesture(
                         *pos,
                         block,
                         builder_mode,
+                        entry,
                         world,
                         player_pos,
                         Some(gesture.plane_normal),
@@ -703,14 +723,14 @@ fn commit_edit_gesture(
             );
             let positions: Vec<IVec3> = positions
                 .into_iter()
-                .filter(|pos| can_delete_at(*pos, builder_mode, world))
+                .filter(|pos| can_delete_at(*pos, builder_mode, entry, world))
                 .collect();
             if positions.is_empty() {
                 return false;
             }
             build_cell_patch(world, &positions, |world| {
                 for pos in &positions {
-                    delete_block_at(*pos, builder_mode, world);
+                    delete_block_at(*pos, builder_mode, entry, world);
                 }
             })
         }
@@ -759,6 +779,7 @@ fn spawn_gesture_previews(
     config: &GameConfig,
     world: &WorldBlocks,
     builder_mode: BuilderMode,
+    entry: WorldEntryMode,
     player_pos: Option<Vec3>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -780,6 +801,7 @@ fn spawn_gesture_previews(
                 *pos,
                 block,
                 builder_mode,
+                entry,
                 world,
                 player_pos,
                 Some(gesture.plane_normal),

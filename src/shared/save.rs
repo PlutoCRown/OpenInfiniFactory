@@ -39,11 +39,12 @@ const TEMPLATE_META_JSON: &str = include_str!("../../assets/save_templates/defau
 const TEMPLATE_BLOCKS_BIN: &[u8] = include_bytes!("../../assets/save_templates/default/blocks.bin");
 const TEMPLATE_SKYBOX_PNG: &[u8] = include_bytes!("../../assets/save_templates/default/skybox.png");
 
-/// 存档寻址：Puzzle 为顶层目录，Solution 在其 `solutions/` 子目录下
+/// 存档寻址：Puzzle/Free 为顶层目录，Solution 在 Puzzle 的 `solutions/` 子目录下
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SaveSlot {
     pub puzzle: String,
     pub solution: Option<String>,
+    kind: SaveKind,
 }
 
 impl SaveSlot {
@@ -51,6 +52,16 @@ impl SaveSlot {
         Self {
             puzzle: normalized_save_name(&name.into()),
             solution: None,
+            kind: SaveKind::Puzzle,
+        }
+    }
+
+    /// Free 与 Puzzle 同为顶层目录，靠 meta.kind 区分
+    pub fn free(name: impl Into<String>) -> Self {
+        Self {
+            puzzle: normalized_save_name(&name.into()),
+            solution: None,
+            kind: SaveKind::Free,
         }
     }
 
@@ -58,15 +69,12 @@ impl SaveSlot {
         Self {
             puzzle: normalized_save_name(&puzzle.into()),
             solution: Some(normalized_save_name(&solution.into())),
+            kind: SaveKind::Solution,
         }
     }
 
     pub fn kind(&self) -> SaveKind {
-        if self.solution.is_some() {
-            SaveKind::Solution
-        } else {
-            SaveKind::Puzzle
-        }
+        self.kind
     }
 
     pub fn storage_path(&self) -> String {
@@ -92,7 +100,13 @@ impl SaveSlot {
     pub fn from_storage_path(path: &str) -> Option<Self> {
         let parts: Vec<&str> = path.split('/').collect();
         match parts.as_slice() {
-            [puzzle] => Some(Self::puzzle(*puzzle)),
+            [name] if !name.is_empty() => {
+                // 单段路径：读 meta.kind 区分 Puzzle / Free；无 meta 默认 Puzzle
+                match persistent_storage::save_meta_kind(name) {
+                    Some("free") => Some(Self::free(*name)),
+                    _ => Some(Self::puzzle(*name)),
+                }
+            }
             [puzzle, "solutions", solution] if !puzzle.is_empty() && !solution.is_empty() => {
                 Some(Self::solution(*puzzle, *solution))
             }
@@ -144,6 +158,14 @@ impl SaveState {
         self.entries
             .iter()
             .filter(|entry| entry.kind == SaveKind::Puzzle)
+            .collect()
+    }
+
+    /// 左侧列表用的顶层世界（Puzzle + Free）
+    pub fn top_level_worlds(&self) -> Vec<&SaveEntry> {
+        self.entries
+            .iter()
+            .filter(|entry| matches!(entry.kind, SaveKind::Puzzle | SaveKind::Free))
             .collect()
     }
 
@@ -207,9 +229,10 @@ impl SaveEntry {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum SaveKind {
     Puzzle,
+    Free,
     Solution,
 }
 
@@ -217,6 +240,7 @@ pub enum SaveKind {
 #[serde(rename_all = "lowercase")]
 enum SaveMetaKind {
     Puzzle,
+    Free,
     Solution,
 }
 
@@ -318,12 +342,28 @@ pub fn save_puzzle(
     hotbar: &SavedHotbar,
     player: Option<PlayerSave>,
 ) -> bool {
-    if slot.solution.is_some() {
+    if slot.kind() != SaveKind::Puzzle || slot.solution.is_some() {
         return false;
     }
     write_save(
         slot,
         SaveFile::puzzle(capture_puzzle_layer(world, hotbar), player),
+    )
+}
+
+/// 保存 Free 世界（scene + system + factory + panels；不含材料）
+pub fn save_free(
+    world: &WorldBlocks,
+    slot: &SaveSlot,
+    hotbar: &SavedHotbar,
+    player: Option<PlayerSave>,
+) -> bool {
+    if slot.kind() != SaveKind::Free || slot.solution.is_some() {
+        return false;
+    }
+    write_save(
+        slot,
+        SaveFile::free(capture_free_world(world, hotbar), player),
     )
 }
 
@@ -342,11 +382,30 @@ pub fn save_puzzle_as(
 
 /// 从默认模板新建谜题；成功返回槽位（创建时写入名字）
 pub fn create_puzzle_from_default_template(name: &str) -> Option<SaveSlot> {
-    let slot = allocate_puzzle_slot(name)?;
+    create_top_level_from_template(name, SaveKind::Puzzle)
+}
+
+/// 从默认模板新建 Free 世界；成功返回槽位（创建时写入名字）
+pub fn create_free_from_default_template(name: &str) -> Option<SaveSlot> {
+    create_top_level_from_template(name, SaveKind::Free)
+}
+
+/// 用默认模板写顶层 Puzzle/Free 存档
+fn create_top_level_from_template(name: &str, kind: SaveKind) -> Option<SaveSlot> {
+    let slot = match kind {
+        SaveKind::Puzzle => allocate_puzzle_slot(name)?,
+        SaveKind::Free => allocate_free_slot(name)?,
+        SaveKind::Solution => return None,
+    };
     let path = slot.storage_path();
     let meta_text = load_template_text(META_FILE).unwrap_or_else(|| TEMPLATE_META_JSON.to_string());
     let meta = match serde_json::from_str::<SaveMeta>(&meta_text) {
         Ok(mut meta) => {
+            meta.kind = match kind {
+                SaveKind::Puzzle => SaveMetaKind::Puzzle,
+                SaveKind::Free => SaveMetaKind::Free,
+                SaveKind::Solution => return None,
+            };
             meta.name = Some(name.trim().to_string());
             match serde_json::to_string_pretty(&meta) {
                 Ok(serialized) => serialized,
@@ -406,6 +465,7 @@ pub fn rename_save_to(old: &SaveSlot, name: &str) -> Option<SaveSlot> {
     if !sanitized.is_empty() {
         let candidate = match old.kind() {
             SaveKind::Puzzle => SaveSlot::puzzle(&sanitized),
+            SaveKind::Free => SaveSlot::free(&sanitized),
             SaveKind::Solution => SaveSlot::solution(&old.puzzle, &sanitized),
         };
         if candidate.storage_path() != old.storage_path()
@@ -434,15 +494,28 @@ pub fn rename_save_to(old: &SaveSlot, name: &str) -> Option<SaveSlot> {
 }
 
 fn allocate_puzzle_slot(name: &str) -> Option<SaveSlot> {
+    allocate_top_level_slot(name, SaveKind::Puzzle)
+}
+
+fn allocate_free_slot(name: &str) -> Option<SaveSlot> {
+    allocate_top_level_slot(name, SaveKind::Free)
+}
+
+/// 在 Puzzle/Free 共享命名空间中分配顶层槽位
+fn allocate_top_level_slot(name: &str, kind: SaveKind) -> Option<SaveSlot> {
     let name = name.trim();
     if name.is_empty() {
         return None;
     }
-    let storage = next_named_save(&persistent_storage::list_puzzles(), name);
+    let storage = next_named_save(&persistent_storage::list_top_level_names(), name);
     if storage.is_empty() {
         return None;
     }
-    let slot = SaveSlot::puzzle(&storage);
+    let slot = match kind {
+        SaveKind::Puzzle => SaveSlot::puzzle(&storage),
+        SaveKind::Free => SaveSlot::free(&storage),
+        SaveKind::Solution => return None,
+    };
     if persistent_storage::save_exists(&slot.storage_path()) {
         return None;
     }
@@ -608,6 +681,28 @@ impl SaveFile {
         }
     }
 
+    fn free(world: FreeWorldCapture, player: Option<PlayerSave>) -> Self {
+        Self {
+            meta: SaveMeta {
+                version: SAVE_VERSION,
+                kind: SaveMetaKind::Free,
+                name: None,
+                puzzle_id: None,
+                hotbar: world.hotbar,
+                player,
+                sun: None,
+                ambient: None,
+                sun_direction: None,
+            },
+            blocks: SaveBlocksData {
+                scene_blocks: world.scene_blocks,
+                system_blocks: world.system_blocks,
+                factory_blocks: world.factory_blocks,
+                wire_face_panels: world.wire_face_panels,
+            },
+        }
+    }
+
     fn solution(
         puzzle_id: &str,
         factory_blocks: Vec<SavedBlock>,
@@ -639,13 +734,14 @@ impl SaveFile {
         match self.meta.kind {
             SaveMetaKind::Solution => SaveKind::Solution,
             SaveMetaKind::Puzzle => SaveKind::Puzzle,
+            SaveMetaKind::Free => SaveKind::Free,
         }
     }
 
     fn into_loaded(self, slot: &SaveSlot) -> Option<LoadedSave> {
         match self.meta.kind {
             SaveMetaKind::Solution => {
-                if slot.solution.is_none() {
+                if slot.kind() != SaveKind::Solution || slot.solution.is_none() {
                     return None;
                 }
                 let puzzle_id = slot.puzzle.clone();
@@ -676,7 +772,7 @@ impl SaveFile {
                 })
             }
             SaveMetaKind::Puzzle => {
-                if slot.solution.is_some() {
+                if slot.kind() != SaveKind::Puzzle || slot.solution.is_some() {
                     return None;
                 }
                 let lighting = resolve_lighting(&self.meta);
@@ -685,6 +781,32 @@ impl SaveFile {
                 let hotbar = layer.hotbar;
                 let mut world = WorldBlocks::default();
                 apply_layer(&mut world, layer);
+                Some(LoadedSave {
+                    world,
+                    puzzle_snapshot: None,
+                    puzzle_id: None,
+                    hotbar,
+                    player: self.meta.player,
+                    lighting,
+                })
+            }
+            SaveMetaKind::Free => {
+                if slot.kind() != SaveKind::Free || slot.solution.is_some() {
+                    return None;
+                }
+                let lighting = resolve_lighting(&self.meta);
+                let hotbar = self.meta.hotbar;
+                let mut world = WorldBlocks::default();
+                apply_layer(
+                    &mut world,
+                    PuzzleLayer {
+                        scene_blocks: self.blocks.scene_blocks,
+                        system_blocks: self.blocks.system_blocks,
+                        hotbar: None,
+                    },
+                );
+                apply_factory_blocks(&mut world, self.blocks.factory_blocks);
+                apply_wire_face_panels(&mut world, self.blocks.wire_face_panels);
                 Some(LoadedSave {
                     world,
                     puzzle_snapshot: None,
@@ -889,6 +1011,26 @@ fn capture_puzzle_layer(world: &WorldBlocks, hotbar: &SavedHotbar) -> PuzzleLaye
     }
 }
 
+/// Free：谜题层 + 工厂块 + 灯面板（不含材料）
+struct FreeWorldCapture {
+    scene_blocks: Vec<SavedBlock>,
+    system_blocks: Vec<SavedBlock>,
+    factory_blocks: Vec<SavedBlock>,
+    wire_face_panels: Vec<save_format::SavedWireFacePanel>,
+    hotbar: Option<SavedHotbar>,
+}
+
+fn capture_free_world(world: &WorldBlocks, hotbar: &SavedHotbar) -> FreeWorldCapture {
+    let layer = capture_puzzle_layer(world, hotbar);
+    FreeWorldCapture {
+        scene_blocks: layer.scene_blocks,
+        system_blocks: layer.system_blocks,
+        factory_blocks: capture_factory_blocks(world),
+        wire_face_panels: capture_wire_face_panels(world),
+        hotbar: layer.hotbar,
+    }
+}
+
 fn capture_factory_blocks(world: &WorldBlocks) -> Vec<SavedBlock> {
     world
         .blocks
@@ -990,6 +1132,14 @@ pub fn list_save_entries() -> Vec<SaveEntry> {
             });
         }
     }
+    for free in persistent_storage::list_frees() {
+        let slot = SaveSlot::free(&free);
+        entries.push(SaveEntry {
+            name: entry_display_name(&slot, &free),
+            slot,
+            kind: SaveKind::Free,
+        });
+    }
     entries.sort_by(|a, b| a.name.cmp(&b.name).then(a.slot.puzzle.cmp(&b.slot.puzzle)));
     entries
 }
@@ -1010,6 +1160,15 @@ pub fn puzzle_names(entries: &[SaveEntry]) -> Vec<String> {
     entries
         .iter()
         .filter(|entry| entry.kind == SaveKind::Puzzle)
+        .map(|entry| entry.slot.puzzle.clone())
+        .collect()
+}
+
+/// Puzzle + Free 顶层名字（共享命名空间）
+pub fn top_level_world_names(entries: &[SaveEntry]) -> Vec<String> {
+    entries
+        .iter()
+        .filter(|entry| matches!(entry.kind, SaveKind::Puzzle | SaveKind::Free))
         .map(|entry| entry.slot.puzzle.clone())
         .collect()
 }

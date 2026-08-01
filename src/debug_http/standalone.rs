@@ -7,9 +7,13 @@ use oif_sim::SimSession;
 use super::headless::handle_headless_command;
 use super::protocol::{parse_http_request, DebugHttpRequest};
 
-/// 无头调试状态：自有 SimSession
+/// 无头调试状态：自有 SimSession + 当前存档与加载耗时
 pub struct HeadlessDebugState {
     pub session: SimSession,
+    /// 最近一次 loadSave / session enter 的存档名
+    pub current_save: Option<String>,
+    /// 最近一次加载耗时（毫秒）
+    pub last_load_ms: Option<f64>,
 }
 
 impl HeadlessDebugState {
@@ -17,6 +21,8 @@ impl HeadlessDebugState {
     pub fn new() -> Self {
         Self {
             session: SimSession::new(),
+            current_save: None,
+            last_load_ms: None,
         }
     }
 

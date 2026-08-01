@@ -1,14 +1,14 @@
 use bevy::prelude::IVec3;
 
-use super::fixture::{apply_fixture_setup, load_fixture_file, run_fixture_dir, run_fixture_file};
 use super::protocol::{DebugHttpCommand, help_json, json_error, json_ok};
 use super::snapshot::{
-    block_json, block_json_with_structure, pos_json, resolve_structure_query, session_status_json,
+    acceptors_json, block_json, block_json_with_structure, headless_perf_json, headless_status_json,
+    pos_json, power_query_json, resolve_pos_query, resolve_structure_query, session_status_json,
 };
 use super::standalone::HeadlessDebugState;
 use super::world_ops::{
-    block_kinds_json, fixture_root, load_save_into_session, parse_block_kind, parse_facing,
-    place_block, reset_session,
+    block_kinds_json, load_save_into_session, parse_block_kind, parse_facing, place_block,
+    reset_session,
 };
 
 /// 处理无头 debug HTTP 命令
@@ -19,23 +19,23 @@ pub fn handle_headless_command(
     match command {
         DebugHttpCommand::Help => help_json(),
         DebugHttpCommand::BlockKinds => block_kinds_json(),
-        DebugHttpCommand::GetPosBlock { x, y, z } => {
-            if let (Some(x), Some(y), Some(z)) = (x, y, z) {
-                let pos = IVec3::new(x, y, z);
-                state.with_core(|core| {
-                    json_ok(serde_json::json!({
-                        "pos": pos_json(pos),
-                        "block": block_json_with_structure(
-                            core.world_blocks(),
-                            Some(&core.structure_state),
-                            pos,
-                        ),
-                    }))
-                })
-            } else {
-                json_error("headless mode requires ?x=&y=&z= for /getPosBlock")
-            }
-        }
+        DebugHttpCommand::GetPosBlock {
+            x,
+            y,
+            z,
+            block_id,
+        } => state.with_core(|core| match resolve_pos_query(core.world_blocks(), x, y, z, block_id)
+        {
+            Ok(pos) => json_ok(serde_json::json!({
+                "pos": pos_json(pos),
+                "block": block_json_with_structure(
+                    core.world_blocks(),
+                    Some(&core.structure_state),
+                    pos,
+                ),
+            })),
+            Err(error) => json_error(&error),
+        }),
         DebugHttpCommand::GetStructure {
             x,
             y,
@@ -43,7 +43,6 @@ pub fn handle_headless_command(
             block_id,
             structure_id,
         } => state.with_core(|core| {
-            // 拆字段借用：world_blocks() 会借走整个 core
             match resolve_structure_query(
                 &core.world,
                 &mut core.structure_state,
@@ -57,39 +56,80 @@ pub fn handle_headless_command(
                 Err(error) => json_error(&error),
             }
         }),
+        DebugHttpCommand::GetPower {
+            x,
+            y,
+            z,
+            block_id,
+        } => state.with_core(|core| match resolve_pos_query(&core.world, x, y, z, block_id) {
+            Ok(pos) => json_ok(power_query_json(
+                &mut core.signal_cache,
+                &core.world,
+                pos,
+            )),
+            Err(error) => json_error(&error),
+        }),
+        DebugHttpCommand::GetPlayers => json_ok(serde_json::json!({ "players": [] })),
+        DebugHttpCommand::GetAcceptors => state.with_core(|core| {
+            json_ok(serde_json::json!({
+                "acceptors": acceptors_json(&core.world, &core.structure_state),
+            }))
+        }),
         DebugHttpCommand::GetStatus => {
             let control = state.session.control();
-            json_ok(serde_json::json!({
-                "game_mode": "headless",
-                "paused": false,
-                "inventory_open": false,
-                "active_play": true,
-                "ui_blocks_gameplay": false,
-                "render_ready": true,
-                "save": null,
-                "simulation": session_status_json(control),
-                "cursor": null,
-            }))
+            headless_status_json(control, state.current_save.as_deref()).to_string()
         }
-        DebugHttpCommand::WorldReset => state.with_core(|core| {
-            reset_session(core);
-            json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
-        }),
+        DebugHttpCommand::GetPerf => {
+            let load_ms = state.last_load_ms;
+            state.with_core(|core| json_ok(headless_perf_json(load_ms, &core.stats)))
+        }
+        DebugHttpCommand::WorldReset => {
+            state.current_save = None;
+            state.last_load_ms = None;
+            state.with_core(|core| {
+                reset_session(core);
+                json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
+            })
+        }
+        DebugHttpCommand::SessionExit => {
+            state.current_save = None;
+            state.last_load_ms = None;
+            state.with_core(|core| {
+                reset_session(core);
+                json_ok(serde_json::json!({
+                    "exited": true,
+                    "simulation": session_status_json(core.control()),
+                }))
+            })
+        }
+        DebugHttpCommand::SessionSave => {
+            json_error("session/save is not available in headless mode")
+        }
         DebugHttpCommand::BeginSimulation => state.with_core(|core| {
             core.begin_simulation();
             json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
         }),
+        DebugHttpCommand::SimPause => state.with_core(|core| {
+            core.control.running = false;
+            json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
+        }),
         DebugHttpCommand::LoadSave { name } => {
             if name.is_empty() {
-                return json_error("loadSave requires ?name=");
+                return json_error("loadSave/session enter requires ?name=");
             }
-            state.with_core(|core| match load_save_into_session(core, &name) {
-                Ok(()) => json_ok(serde_json::json!({
-                    "save": name,
-                    "simulation": session_status_json(core.control()),
-                })),
+            match state.with_core(|core| load_save_into_session(core, &name)) {
+                Ok(load_ms) => {
+                    state.current_save = Some(name.clone());
+                    state.last_load_ms = Some(load_ms);
+                    let control = state.session.control();
+                    json_ok(serde_json::json!({
+                        "save": name,
+                        "load_ms": load_ms,
+                        "simulation": session_status_json(control),
+                    }))
+                }
                 Err(error) => json_error(&error),
-            })
+            }
         }
         DebugHttpCommand::PlaceBlock {
             x,
@@ -115,55 +155,6 @@ pub fn handle_headless_command(
                 }
             })
         }
-        DebugHttpCommand::LoadFixture { path } => {
-            if path.is_empty() {
-                return json_error("loadFixture requires ?path=");
-            }
-            match load_fixture_file(&path) {
-                Ok(fixture) => state.with_core(|core| match apply_fixture_setup(core, &fixture) {
-                    Ok(()) => json_ok(serde_json::json!({
-                        "fixture": fixture.name,
-                        "simulation": session_status_json(core.control()),
-                    })),
-                    Err(error) => json_error(&error),
-                }),
-                Err(error) => json_error(&error),
-            }
-        }
-        DebugHttpCommand::RunFixture { path } => {
-            if path.is_empty() {
-                return json_error("runFixture requires ?path=");
-            }
-            match run_fixture_file_path(state, &path) {
-                Ok(fixture) => state.with_core(|core| {
-                    json_ok(serde_json::json!({
-                        "fixture": fixture.name,
-                        "simulation": session_status_json(core.control()),
-                    }))
-                }),
-                Err(error) => json_error(&error),
-            }
-        }
-        DebugHttpCommand::RunAllFixtures => state.with_core(|core| {
-            let dir = fixture_root().join("blocks");
-            let results = run_fixture_dir(core, &dir);
-            let passed = results.iter().filter(|(_, result)| result.is_ok()).count();
-            let payload: Vec<_> = results
-                .into_iter()
-                .map(|(name, result)| {
-                    serde_json::json!({
-                        "name": name,
-                        "ok": result.is_ok(),
-                        "error": result.err(),
-                    })
-                })
-                .collect();
-            json_ok(serde_json::json!({
-                "passed": passed,
-                "total": payload.len(),
-                "results": payload,
-            }))
-        }),
         DebugHttpCommand::Run => state.with_core(|core| {
             core.request_continuous_run();
             core.log
@@ -200,15 +191,8 @@ pub fn handle_headless_command(
             state.session.log.clear();
             r#"{"ok":true}"#.into()
         }
-        DebugHttpCommand::GetPerf => {
-            json_error("perf stats only available in the embedded game client")
+        DebugHttpCommand::TeleportPlayer { .. } => {
+            json_error("player teleport only available in the embedded game client")
         }
     }
-}
-
-fn run_fixture_file_path(
-    state: &mut HeadlessDebugState,
-    path: &str,
-) -> Result<super::fixture::E2eFixture, String> {
-    state.with_core(|core| run_fixture_file(core, path))
 }

@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use crate::game::blocks::BlockPresent;
 use crate::game::blocks::{BlockData, BlockKind};
 use crate::game::player::controller::player_intersects_block;
-use crate::game::state::BuilderMode;
+use crate::game::state::{BuilderMode, WorldEntryMode};
 use crate::game::world::grid::WorldBlocks;
 
 /// 判断指定位置在当前模式下是否允许放置该方块
@@ -13,6 +13,7 @@ pub(super) fn can_place_block_at(
     place_at: IVec3,
     block: BlockData,
     builder_mode: BuilderMode,
+    entry: WorldEntryMode,
     world: &WorldBlocks,
     player_pos: Option<Vec3>,
     face_normal: Option<IVec3>,
@@ -25,7 +26,7 @@ pub(super) fn can_place_block_at(
         return false;
     }
 
-    if !can_place_in_mode(block.kind, builder_mode) {
+    if !can_place_in_mode(block.kind, builder_mode, entry) {
         return false;
     }
 
@@ -47,8 +48,15 @@ pub(super) fn can_place_block_at(
     true
 }
 
-/// 判断当前建造模式下该方块种类是否可放置
-pub(super) fn can_place_in_mode(kind: BlockKind, mode: BuilderMode) -> bool {
+/// 判断当前进入模式/建造模式下该方块种类是否可放置
+pub(super) fn can_place_in_mode(
+    kind: BlockKind,
+    mode: BuilderMode,
+    entry: WorldEntryMode,
+) -> bool {
+    if entry == WorldEntryMode::Free {
+        return kind.is_editable() || kind.is_factory() || kind.is_material();
+    }
     match mode {
         BuilderMode::Edit => kind.is_editable(),
         BuilderMode::Play => kind.is_factory(),
@@ -61,32 +69,37 @@ pub(super) fn can_manual_rotate(kind: BlockKind) -> bool {
 }
 
 /// 判断指定位置在当前模式下是否可删除
-pub(super) fn can_delete_at(pos: IVec3, mode: BuilderMode, world: &WorldBlocks) -> bool {
-    match mode {
-        // 编辑模式：有方块即可删（系统方块多为 no_collision，不能用 is_occupied）
-        BuilderMode::Edit => {
-            world.blocks.contains_key(&pos) || world.system_blocks.contains_key(&pos)
-        }
-        BuilderMode::Play => world
-            .blocks
-            .get(&pos)
-            .is_some_and(|block| block.kind.is_factory()),
+pub(super) fn can_delete_at(
+    pos: IVec3,
+    mode: BuilderMode,
+    entry: WorldEntryMode,
+    world: &WorldBlocks,
+) -> bool {
+    if entry == WorldEntryMode::Free || mode == BuilderMode::Edit {
+        return world.blocks.contains_key(&pos) || world.system_blocks.contains_key(&pos);
     }
+    world
+        .blocks
+        .get(&pos)
+        .is_some_and(|block| block.kind.is_factory())
 }
 
 /// 按建造模式删除指定位置的方块
-pub(super) fn delete_block_at(pos: IVec3, mode: BuilderMode, world: &mut WorldBlocks) -> bool {
-    match mode {
-        BuilderMode::Edit => world.remove(&pos).is_some() || world.remove_system(&pos).is_some(),
-        BuilderMode::Play => {
-            if !world
-                .blocks
-                .get(&pos)
-                .is_some_and(|block| block.kind.is_factory())
-            {
-                return false;
-            }
-            world.remove(&pos).is_some()
-        }
+pub(super) fn delete_block_at(
+    pos: IVec3,
+    mode: BuilderMode,
+    entry: WorldEntryMode,
+    world: &mut WorldBlocks,
+) -> bool {
+    if entry == WorldEntryMode::Free || mode == BuilderMode::Edit {
+        return world.remove(&pos).is_some() || world.remove_system(&pos).is_some();
     }
+    if !world
+        .blocks
+        .get(&pos)
+        .is_some_and(|block| block.kind.is_factory())
+    {
+        return false;
+    }
+    world.remove(&pos).is_some()
 }

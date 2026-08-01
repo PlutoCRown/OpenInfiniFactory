@@ -1,5 +1,4 @@
 pub mod embedded;
-pub mod fixture;
 pub mod headless;
 pub mod protocol;
 pub mod snapshot;

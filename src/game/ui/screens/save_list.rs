@@ -9,8 +9,9 @@ use crate::game::ui::components::{
 
 use super::super::types::{
     LocalizedText, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListCoverHost,
-    SaveListCoverImage, SaveListCoverLoading, SaveListPanel, SaveListPuzzleRows,
-    SaveListPuzzleScroll, SaveListSolutionRows, SaveListSolutionScroll, SaveListTitleText,
+    SaveListCoverImage, SaveListCoverLoading, SaveListFreeHint, SaveListPanel, SaveListPuzzleRows,
+    SaveListPuzzleScroll, SaveListSolutionRows, SaveListSolutionScroll, SaveListSolutionSection,
+    SaveListTitleText,
 };
 
 /// 相对窗口逻辑像素的外边距（尽量贴边，给封面更多空间）
@@ -232,49 +233,80 @@ fn spawn_right_column(
     })
     .with_children(|col| {
         col.spawn((
-            text(heading, 14.0, Color::srgb(0.85, 0.88, 0.9)),
-            LocalizedText {
-                key: "save.title.select_solution",
-            },
-        ));
-
-        col.spawn((
             Node {
                 width: Val::Percent(100.0),
-                height: Val::Px(solution_strip_h),
-                overflow: Overflow::clip(),
-                position_type: PositionType::Relative,
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(RIGHT_ROW_GAP),
                 flex_shrink: 0.0,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.18)),
-            SaveListSolutionScroll {
-                offset: 0.0,
-                max_offset: 0.0,
-            },
-            Pickable {
-                should_block_lower: true,
-                is_hoverable: true,
-            },
+            SaveListSolutionSection,
         ))
-        .with_children(|viewport| {
-            viewport.spawn((
-                Node {
-                    height: Val::Percent(100.0),
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(0.0),
-                    top: Val::Px(0.0),
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(8.0),
-                    padding: UiRect::all(Val::Px(SOLUTION_STRIP_PAD)),
-                    align_items: AlignItems::Stretch,
-                    overflow: Overflow::clip(),
-                    ..default()
+        .with_children(|section| {
+            section.spawn((
+                text(heading, 14.0, Color::srgb(0.85, 0.88, 0.9)),
+                LocalizedText {
+                    key: "save.title.select_solution",
                 },
-                BackgroundColor(Color::NONE),
-                SaveListSolutionRows,
             ));
+
+            section
+                .spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: Val::Px(solution_strip_h),
+                        overflow: Overflow::clip(),
+                        position_type: PositionType::Relative,
+                        flex_shrink: 0.0,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.18)),
+                    SaveListSolutionScroll {
+                        offset: 0.0,
+                        max_offset: 0.0,
+                    },
+                    Pickable {
+                        should_block_lower: true,
+                        is_hoverable: true,
+                    },
+                ))
+                .with_children(|viewport| {
+                    viewport.spawn((
+                        Node {
+                            height: Val::Percent(100.0),
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(0.0),
+                            top: Val::Px(0.0),
+                            flex_direction: FlexDirection::Row,
+                            column_gap: Val::Px(8.0),
+                            padding: UiRect::all(Val::Px(SOLUTION_STRIP_PAD)),
+                            align_items: AlignItems::Stretch,
+                            overflow: Overflow::clip(),
+                            ..default()
+                        },
+                        BackgroundColor(Color::NONE),
+                        SaveListSolutionRows,
+                    ));
+                });
         });
+
+        col.spawn((
+            text("", 18.0, Color::srgb(0.85, 0.88, 0.9)),
+            LocalizedText {
+                key: "save.kind.free",
+            },
+            SaveListFreeHint,
+            Visibility::Hidden,
+            Node {
+                width: Val::Percent(100.0),
+                display: Display::None,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                flex_shrink: 0.0,
+                padding: UiRect::all(Val::Px(12.0)),
+                ..default()
+            },
+        ));
 
         // 封面按窗口比例定高；margin-top auto 吃掉竖直余量，方案条保持紧凑
         col.spawn((
@@ -362,6 +394,13 @@ fn spawn_footer(panel: &mut ChildSpawnerCommands, icons: &UiIconAssets) {
                     left.spawn((
                         text_button(btn_node.clone(), raised_border(), BUTTON_BG),
                         SaveListAction::NewPuzzle,
+                    ))
+                    .with_children(|button| {
+                        button.spawn(text("", 15.0, Color::WHITE));
+                    });
+                    left.spawn((
+                        text_button(btn_node.clone(), raised_border(), BUTTON_BG),
+                        SaveListAction::NewFree,
                     ))
                     .with_children(|button| {
                         button.spawn(text("", 15.0, Color::WHITE));

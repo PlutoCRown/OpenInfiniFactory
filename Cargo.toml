@@ -22,16 +22,6 @@ path = "src/bin/oif-debug-http.rs"
 required-features = ["native-tools"]
 
 [[bin]]
-name = "export_fixture"
-path = "src/bin/export_fixture.rs"
-required-features = ["native-tools"]
-
-[[bin]]
-name = "migrate_scene_blocks"
-path = "src/bin/migrate_scene_blocks.rs"
-required-features = ["native-tools"]
-
-[[bin]]
 name = "bake_scene_icons"
 path = "src/bin/bake_scene_icons.rs"
 required-features = ["native-tools"]
@@ -78,7 +68,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 tiny_http = "0.12"
 
 [features]
-# native-tools：无头调试 / fixture 导出（wasm 打包用 --no-default-features）
+# native-tools：无头调试（wasm 打包用 --no-default-features）
 default = ["native-tools"]
 native-tools = []
 webgpu = ["bevy/webgpu"]

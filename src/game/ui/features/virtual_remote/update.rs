@@ -514,6 +514,7 @@ pub fn sync_virtual_remote_visibility(
     simulation: Res<SimulationState>,
     editor_open: Res<VirtualLayoutEditorOpen>,
     builder_mode: Res<BuilderMode>,
+    solution_state: Res<crate::game::state::SolutionState>,
     placement: Res<PlacementState>,
     world: Res<WorldBlocks>,
     mut controls: Query<(
@@ -563,7 +564,8 @@ pub fn sync_virtual_remote_visibility(
     let sim_active = simulation.is_active();
     let play_mode = *builder_mode == BuilderMode::Play;
     let show_config = show
-        && *builder_mode == BuilderMode::Edit
+        && (*builder_mode == BuilderMode::Edit
+            || solution_state.entry == crate::game::state::WorldEntryMode::Free)
         && !sim_active
         && placement
             .target

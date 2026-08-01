@@ -338,6 +338,7 @@ fn write_world_status_line(out: &mut String, locale: &I18n, save_state: &SaveSta
     let kind = save_state.current_kind.unwrap_or_else(|| slot.kind());
     let kind_label = locale.t(match kind {
         SaveKind::Puzzle => "save.kind.puzzle",
+        SaveKind::Free => "save.kind.free",
         SaveKind::Solution => "save.kind.solution",
     });
     let name = slot.display_name();

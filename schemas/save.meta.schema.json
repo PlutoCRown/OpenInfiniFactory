@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://openinfinifactory.local/schemas/save.meta.schema.json",
   "title": "SaveMeta",
-  "description": "谜题/通关存档目录下的 meta.json（与 blocks.bin、可选 cover.png / skybox.png 同级）。新建谜题默认内容来自 assets/save_templates/default/。本文件仅供开发者查阅与编辑器校验；玩家存档 JSON 不要写 $schema，以免引用到游戏内部路径造成困惑。游戏加载时只按字段反序列化，忽略未知键。",
+  "description": "谜题/自由世界/通关存档目录下的 meta.json（与 blocks.bin、可选 cover.png / skybox.png 同级）。新建谜题默认内容来自 assets/save_templates/default/。本文件仅供开发者查阅与编辑器校验；玩家存档 JSON 不要写 $schema，以免引用到游戏内部路径造成困惑。游戏加载时只按字段反序列化，忽略未知键。",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -19,9 +19,10 @@
       "type": "string",
       "enum": [
         "puzzle",
+        "free",
         "solution"
       ],
-      "description": "puzzle：编辑态谜题存档；solution：游玩态通关存档（位于 puzzle/solutions/<name>/）。"
+      "description": "puzzle：编辑态谜题存档；free：顶层自由世界（与 puzzle 同级目录，含 scene/system/factory/panels，不含材料）；solution：游玩态通关存档（位于 puzzle/solutions/<name>/）。"
     },
     "puzzle_id": {
       "type": [
@@ -62,7 +63,7 @@
     },
     "sun": {
       "$ref": "#/$defs/Sun",
-      "description": "平行光与贴图天空盒亮度。各项均可选，省略的用内置默认。仅 puzzle meta 生效；solution 读所属 puzzle。游戏内保存不会覆盖手写值。"
+      "description": "平行光与贴图天空盒亮度。各项均可选，省略的用内置默认。puzzle/free meta 自身生效；solution 读所属 puzzle。游戏内保存不会覆盖手写值。"
     },
     "ambient": {
       "$ref": "#/$defs/Ambient",

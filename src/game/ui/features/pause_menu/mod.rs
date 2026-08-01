@@ -12,7 +12,9 @@ use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::{UiAccessScope, UiMainThread, i18n, ui};
 use crate::game::ui::core::host::PlayingUiRootEntity;
 use crate::game::ui::core::runtime::UiPanelContext;
-use crate::game::ui::features::save::{open_save_as_new_puzzle_prompt, open_save_puzzle_confirm};
+use crate::game::ui::features::save::{
+    open_export_as_puzzle_prompt, open_save_as_new_puzzle_prompt, open_save_puzzle_confirm,
+};
 use crate::game::ui::menu_button::{
     MenuButtonClick, MenuButtonMarker, MenuButtonSet, spawn_menu_button,
 };
@@ -62,10 +64,10 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
     {
         key: "button.toggle_builder_mode"
         visible(_save, solution) {
-            solution.entry != WorldEntryMode::PlaySolution
+            solution.entry == WorldEntryMode::EditPuzzle
         }
         on_click(ctx, _commands) {
-            if ctx.solution_state.entry == WorldEntryMode::PlaySolution {
+            if ctx.solution_state.entry != WorldEntryMode::EditPuzzle {
                 return;
             }
             *ctx.builder_mode = match *ctx.builder_mode {
@@ -111,6 +113,7 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
         label(save) {
             match save.current_kind {
                 Some(SaveKind::Solution) => i18n.t("button.save_solution"),
+                Some(SaveKind::Free) => i18n.t("button.save_world"),
                 _ => i18n.t("button.save_puzzle"),
             }
         }
@@ -129,6 +132,15 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
         }
         on_click(_ctx, _commands) {
             open_save_as_new_puzzle_prompt();
+        }
+    };
+    {
+        key: "button.export_as_puzzle"
+        visible(save, _solution) {
+            save.current_kind == Some(SaveKind::Free)
+        }
+        on_click(_ctx, _commands) {
+            open_export_as_puzzle_prompt();
         }
     };
     {

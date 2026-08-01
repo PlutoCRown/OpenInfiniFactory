@@ -13,6 +13,12 @@ pub struct SaveWorldAsNewPuzzle {
     pub name: String,
 }
 
+/// Free：把场景+系统层导出为新谜题，不切换当前会话
+#[derive(Clone, Message)]
+pub struct ExportAsPuzzle {
+    pub name: String,
+}
+
 #[derive(Clone, Message)]
 pub struct ExitToMainMenu {
     pub save_first: bool,
@@ -36,6 +42,11 @@ pub struct LoadWorld {
 
 #[derive(Clone, Message)]
 pub struct CreateNewPuzzle {
+    pub name: String,
+}
+
+#[derive(Clone, Message)]
+pub struct CreateNewFree {
     pub name: String,
 }
 

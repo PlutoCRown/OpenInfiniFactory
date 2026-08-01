@@ -108,9 +108,6 @@ cargo run -- --debug-http
 
 # 无头模拟 + HTTP（CI / 脚本）
 cargo run --bin oif-debug-http
-
-# E2E
-cargo build --bin oif-debug-http && cd e2e && bun test
 ```
 
 `cargo run` 后的参数写在 `--` 后面。完整列表也可 `cargo run -- --help`。
@@ -119,8 +116,7 @@ cargo build --bin oif-debug-http && cd e2e && bun test
 |------|------|
 | `--debug-http` | 游戏内嵌 HTTP 调试，监听 `127.0.0.1:8765` |
 | `--debug-http=PORT` / `--debug-http-port PORT` | 同上，指定端口 |
-| `--load-save=PATH` | 启动后直接加载存档并进入世界（客户端与无头均可用） |
-| `--load-fixture=PATH` | 无头启动时套用 e2e fixture（主要给 `oif-debug-http`） |
+| `--load-save=PATH` | 启动后直接加载存档并进入世界（客户端与无头均可用；支持 Puzzle / Solution / Free） |
 | `--config=PATH` | 使用指定 `config.ron`，而不是默认 `saves/config.ron` |
 | `--language=en` / `--language=zh-CN` | 本次启动覆盖 UI 语言（也接受 `zh`、`chinese` 等别名） |
 | `--touch` / `--virtual-remote` | 强制开启虚拟遥感（桌面调试触摸布局） |
@@ -131,10 +127,10 @@ cargo build --bin oif-debug-http && cd e2e && bun test
 ```bash
 cargo run -- --load-save=Important_Test
 cargo run -- --load-save=Important_Test/solutions/Solution1
-cargo run -- --load-save=saves/Important_Test/solutions/Solution1
+cargo run -- --load-save=free_sandbox
 ```
 
-相对路径相对存档根目录；也可传绝对路径（会自动剥掉 saves 前缀）。谜题与解法槽位写法见上。
+相对路径相对存档根目录；也可传绝对路径（会自动剥掉 saves 前缀）。谜题、解法与自由模式槽位写法见上。
 
 常用组合：
 
@@ -147,9 +143,6 @@ cargo run -- --debug-http=9000
 
 # 无头服务加载存档
 cargo run --bin oif-debug-http -- --load-save=Important_Test --debug-http=8765
-
-# 无头服务加载 fixture
-cargo run --bin oif-debug-http -- --load-fixture=blocks/platform.json
 ```
 
 环境变量（桌面端）：

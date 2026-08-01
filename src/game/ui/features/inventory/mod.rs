@@ -5,12 +5,14 @@ mod types;
 use bevy::prelude::*;
 
 pub use actions::{
-    dispatch_inventory_slot_actions, emit_inventory_slot_actions, inventory_hotbar_digit_input,
+    dispatch_inventory_slot_actions, emit_inventory_slot_actions, emit_inventory_tab_actions,
+    inventory_hotbar_digit_input,
 };
 pub use render::{
-    update_carried_item_ui, update_inventory_slots, update_inventory_title, update_item_tooltip,
+    update_carried_item_ui, update_inventory_slots, update_inventory_tabs, update_inventory_title,
+    update_item_tooltip,
 };
-pub use types::InventoryTitleText;
+pub use types::{InventoryTabButton, InventoryTitleText};
 
 use crate::game::state::{GameMode, PlayingUiState};
 use crate::game::systems::perf::PerfScope;
@@ -21,6 +23,7 @@ pub struct InventoryPlugin;
 impl Plugin for InventoryPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(emit_inventory_slot_actions)
+            .add_observer(emit_inventory_tab_actions)
             .add_systems(
                 Update,
                 (
@@ -41,7 +44,7 @@ impl Plugin for InventoryPlugin {
             )
             .add_systems(
                 Update,
-                update_inventory_title
+                (update_inventory_title, update_inventory_tabs)
                     .run_if(|playing_ui: Res<PlayingUiState>| playing_ui.inventory_open)
                     .in_set(UiAccessScope)
                     .after(PerfScope::Animation)

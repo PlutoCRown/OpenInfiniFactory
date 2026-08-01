@@ -14,7 +14,6 @@ pub const DEFAULT_DEBUG_HTTP_PORT: u16 = 8765;
 pub struct LaunchOptions {
     pub debug_http_port: Option<u16>,
     pub load_save: Option<String>,
-    pub load_fixture: Option<String>,
     pub config_path: Option<PathBuf>,
     pub language: Option<Language>,
     /// 强制启用虚拟遥感（桌面调试用）
@@ -57,17 +56,6 @@ impl LaunchOptions {
                 }
                 value if value.starts_with("--load-save=") => {
                     options.load_save = Some(value.trim_start_matches("--load-save=").into());
-                }
-                "--load-fixture" => {
-                    let Some(value) = args.next() else {
-                        eprintln!("error: --load-fixture requires a fixture path");
-                        print_launch_help();
-                        std::process::exit(2);
-                    };
-                    options.load_fixture = Some(value);
-                }
-                value if value.starts_with("--load-fixture=") => {
-                    options.load_fixture = Some(value.trim_start_matches("--load-fixture=").into());
                 }
                 "--config" => {
                     let Some(value) = args.next() else {
@@ -193,15 +181,11 @@ Options:
   --load-save=PATH          Load save and enter world (game client + headless)
                             Examples: Important_Test
                                       Important_Test/solutions/Solution1
-                                      saves/Important_Test/solutions/Solution1
-  --load-fixture=PATH       Apply fixture on headless startup (oif-debug-http)
+                                      free_sandbox
   -h, --help                Show this help
 
 Headless debug server (no window):
-  cargo run --bin oif-debug-http [-- --debug-http=PORT] [--load-fixture=blocks/platform.json]
-
-E2E block tests:
-  cd e2e && bun test
+  cargo run --bin oif-debug-http [-- --debug-http=PORT] [--load-save=NAME]
 "
     );
 }

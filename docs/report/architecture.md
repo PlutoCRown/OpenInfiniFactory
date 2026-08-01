@@ -71,9 +71,6 @@ OpenInfiniFactory 按依赖向下分层。模拟核心在独立 crate（无 Bevy
 
 无架构债务。
 
-## E2E
+## 调试存档
 
-```bash
-cargo build --bin oif-debug-http
-cd e2e && bun run generate-fixtures && bun test
-```
+通过 `--load-save` 加载 Puzzle / Solution / Free 存档，用 `oif-debug-http` 驱动模拟。详见 `.agents/skills/sim-debug-http/`。

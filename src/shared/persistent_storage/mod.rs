@@ -90,11 +90,32 @@ pub fn rename_save_folder(old_name: &str, new_name: &str) -> bool {
 }
 
 pub fn list_saves() -> Vec<String> {
-    list_puzzles()
+    list_top_level_names()
+}
+
+/// 顶层 Puzzle + Free 存档名（共享命名空间）
+pub fn list_top_level_names() -> Vec<String> {
+    let mut names = list_puzzles();
+    for name in list_frees() {
+        if !names.iter().any(|existing| existing == &name) {
+            names.push(name);
+        }
+    }
+    names.sort();
+    names
 }
 
 /// 顶层 Puzzle 存档名
 pub fn list_puzzles() -> Vec<String> {
+    list_top_level_by_kind("puzzle")
+}
+
+/// 顶层 Free 存档名
+pub fn list_frees() -> Vec<String> {
+    list_top_level_by_kind("free")
+}
+
+fn list_top_level_by_kind(kind: &str) -> Vec<String> {
     let vault = lock_vault();
     let prefix = SAVE_PREFIX;
     let mut names = Vec::new();
@@ -108,7 +129,7 @@ pub fn list_puzzles() -> Vec<String> {
         if save_name.contains('/') || file != META_FILE {
             continue;
         }
-        if save_meta_kind_in_vault(&vault, save_name) == Some("puzzle")
+        if save_meta_kind_in_vault(&vault, save_name) == Some(kind)
             && !names.iter().any(|name| name == save_name)
         {
             names.push(save_name.to_string());
@@ -116,6 +137,11 @@ pub fn list_puzzles() -> Vec<String> {
     }
     names.sort();
     names
+}
+
+/// 读存档 meta.kind（puzzle / free / solution）
+pub fn save_meta_kind(storage_path: &str) -> Option<&'static str> {
+    save_meta_kind_in_vault(&lock_vault(), storage_path)
 }
 
 /// 某 Puzzle 下 Solution 名
@@ -152,6 +178,7 @@ fn save_meta_kind_in_vault(
     let meta: serde_json::Value = serde_json::from_str(&text).ok()?;
     match meta.get("kind")?.as_str()? {
         "puzzle" => Some("puzzle"),
+        "free" => Some("free"),
         "solution" => Some("solution"),
         _ => None,
     }

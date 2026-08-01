@@ -10,12 +10,8 @@ pub use block_kind::{decode_kind, encode_kind};
 pub use settings::{read_settings, write_settings};
 
 pub const MAGIC: &[u8; 4] = b"OIF\0";
-/// v5：Material/Stamp 种类后跟字符串 id；设置里材料/印花/漆亦为字符串
-pub const VERSION: u16 = 5;
-pub const VERSION_V4: u16 = 4;
-pub const VERSION_V3: u16 = 3;
-pub const VERSION_V2: u16 = 2;
-pub const VERSION_V1: u16 = 1;
+/// blocks.bin 当前布局：scene + system + factory + wire_face_panels；string_ids 恒开启
+pub const VERSION: u16 = 1;
 
 pub const META_FILE: &str = "meta.json";
 pub const BLOCKS_FILE: &str = "blocks.bin";
@@ -193,55 +189,13 @@ pub fn decode_blocks(bytes: &[u8]) -> Result<SaveBlocksData, SaveFormatError> {
         return Err(SaveFormatError::InvalidMagic);
     }
     let version = cursor.read_u16()?;
-    let string_ids = version >= VERSION;
-    let (scene_blocks, system_blocks, factory_blocks, wire_face_panels) = match version {
-        VERSION | VERSION_V4 => {
-            let scene_blocks = read_scene_section(&mut cursor, true)?;
-            let system_blocks = read_section(&mut cursor, version, string_ids)?;
-            let factory_blocks = read_section(&mut cursor, version, string_ids)?;
-            let wire_face_panels = read_panel_section(&mut cursor)?;
-            (
-                scene_blocks,
-                system_blocks,
-                factory_blocks,
-                wire_face_panels,
-            )
-        }
-        VERSION_V3 => {
-            // v3：场景段仅字符串 id，无 facing
-            let scene_blocks = read_scene_section(&mut cursor, false)?;
-            let system_blocks = read_section(&mut cursor, version, false)?;
-            let factory_blocks = read_section(&mut cursor, version, false)?;
-            let wire_face_panels = read_panel_section(&mut cursor)?;
-            (
-                scene_blocks,
-                system_blocks,
-                factory_blocks,
-                wire_face_panels,
-            )
-        }
-        VERSION_V2 => {
-            // 漏刷兜底：v2 场景段仍为 u8 kind
-            let scene_blocks = read_section(&mut cursor, version, false)?;
-            let system_blocks = read_section(&mut cursor, version, false)?;
-            let factory_blocks = read_section(&mut cursor, version, false)?;
-            let wire_face_panels = read_panel_section(&mut cursor)?;
-            (
-                scene_blocks,
-                system_blocks,
-                factory_blocks,
-                wire_face_panels,
-            )
-        }
-        VERSION_V1 => {
-            // v1：无 wire_face_panels 段；场景仍为 u8 kind
-            let scene_blocks = read_section(&mut cursor, version, false)?;
-            let system_blocks = read_section(&mut cursor, version, false)?;
-            let factory_blocks = read_section(&mut cursor, version, false)?;
-            (scene_blocks, system_blocks, factory_blocks, Vec::new())
-        }
-        other => return Err(SaveFormatError::UnsupportedVersion(other)),
-    };
+    if version != VERSION {
+        return Err(SaveFormatError::UnsupportedVersion(version));
+    }
+    let scene_blocks = read_scene_section(&mut cursor, true)?;
+    let system_blocks = read_section(&mut cursor)?;
+    let factory_blocks = read_section(&mut cursor)?;
+    let wire_face_panels = read_panel_section(&mut cursor)?;
     if !cursor.remaining().is_empty() {
         return Err(SaveFormatError::UnexpectedEof);
     }
@@ -358,7 +312,7 @@ fn write_block(out: &mut Vec<u8>, block: &SavedBlock) {
     out.extend_from_slice(&block.y.to_le_bytes());
     out.extend_from_slice(&block.z.to_le_bytes());
     out.push(encode_kind(block.kind));
-    // v5：Material/Stamp 在种类字节后写字符串 id
+    // Material/Stamp 在种类字节后写字符串 id
     match block.kind {
         BlockKind::Material(id) => {
             oif_sim::blocks::ensure_fallback_material_catalog();
@@ -387,15 +341,11 @@ fn write_block(out: &mut Vec<u8>, block: &SavedBlock) {
     }
 }
 
-fn read_section(
-    cursor: &mut Cursor<'_>,
-    version: u16,
-    string_ids: bool,
-) -> Result<Vec<SavedBlock>, SaveFormatError> {
+fn read_section(cursor: &mut Cursor<'_>) -> Result<Vec<SavedBlock>, SaveFormatError> {
     let count = cursor.read_u32()? as usize;
     let mut blocks = Vec::with_capacity(count);
     for _ in 0..count {
-        blocks.push(read_block(cursor, version, string_ids)?);
+        blocks.push(read_block(cursor)?);
     }
     Ok(blocks)
 }
@@ -416,33 +366,25 @@ fn read_panel_section(cursor: &mut Cursor<'_>) -> Result<Vec<SavedWireFacePanel>
     Ok(panels)
 }
 
-fn read_block(
-    cursor: &mut Cursor<'_>,
-    version: u16,
-    string_ids: bool,
-) -> Result<SavedBlock, SaveFormatError> {
+fn read_block(cursor: &mut Cursor<'_>) -> Result<SavedBlock, SaveFormatError> {
     let x = cursor.read_i32()?;
     let y = cursor.read_i32()?;
     let z = cursor.read_i32()?;
     let kind_u8 = cursor.read_u8()?;
-    let kind = if version >= VERSION {
-        match kind_u8 {
-            29 => {
-                let string_id = cursor.read_string()?;
-                BlockKind::Material(oif_sim::blocks::resolve_material_id(&string_id))
-            }
-            38 => {
-                let string_id = cursor.read_string()?;
-                oif_sim::blocks::ensure_fallback_stamp_catalog();
-                oif_sim::blocks::stamp_catalog()
-                    .id_by_string(&string_id)
-                    .map(BlockKind::Stamp)
-                    .ok_or(SaveFormatError::UnknownStampMaterialId(string_id))?
-            }
-            other => decode_kind(other)?,
+    let kind = match kind_u8 {
+        29 => {
+            let string_id = cursor.read_string()?;
+            BlockKind::Material(oif_sim::blocks::resolve_material_id(&string_id))
         }
-    } else {
-        decode_kind(kind_u8)?
+        38 => {
+            let string_id = cursor.read_string()?;
+            oif_sim::blocks::ensure_fallback_stamp_catalog();
+            oif_sim::blocks::stamp_catalog()
+                .id_by_string(&string_id)
+                .map(BlockKind::Stamp)
+                .ok_or(SaveFormatError::UnknownStampMaterialId(string_id))?
+        }
+        other => decode_kind(other)?,
     };
     let flags = cursor.read_u8()?;
     let facing = if flags & 1 != 0 {
@@ -451,7 +393,7 @@ fn read_block(
         None
     };
     let settings = if flags & 2 != 0 {
-        Some(read_settings(cursor, kind, string_ids)?)
+        Some(read_settings(cursor, kind, true)?)
     } else {
         None
     };

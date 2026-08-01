@@ -14,7 +14,7 @@ use oif_sim::world::grid::{
 use super::Cursor;
 use super::SaveFormatError;
 
-/// 写入方块设置（v5：材料/印花/漆均为字符串 id）
+/// 写入方块设置（材料/印花/漆均为字符串 id）
 pub fn write_settings(out: &mut Vec<u8>, kind: oif_sim::BlockKind, settings: &BlockSettings) {
     match (kind, settings) {
         (oif_sim::BlockKind::Generator, BlockSettings::Generator(value)) => {
