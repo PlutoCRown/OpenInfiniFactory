@@ -4,12 +4,12 @@ use bevy::prelude::*;
 use bevy::text::LineBreak;
 use bevy::window::PrimaryWindow;
 
-use crate::game::blocks::BlockKind;
 use crate::game::player::controller::FlyCamera;
-use crate::game::state::{GameMode, PlacementState, PlayingUiState};
+use crate::game::state::{GameMode, PlayingUiState};
+use crate::game::systems::gameplay::AimFocus;
 use crate::game::ui::UiRuntime;
 use crate::game::ui::components::default_font_size;
-use crate::game::world::grid::{WorldBlocks, grid_to_world};
+use crate::game::world::grid::grid_to_world;
 
 /// 悬浮名牌根节点（绝对定位到准星瞄准的告示格中心）
 #[derive(Component)]
@@ -65,8 +65,7 @@ pub fn sync_sign_nametag(
     mode: Res<State<GameMode>>,
     playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
-    placement: Res<PlacementState>,
-    world: Res<WorldBlocks>,
+    aim: Res<AimFocus>,
     windows: Query<&Window, With<PrimaryWindow>>,
     camera: Query<(&Camera, &GlobalTransform), With<FlyCamera>>,
     mut root: Query<&mut Node, With<SignNametagRoot>>,
@@ -78,29 +77,14 @@ pub fn sync_sign_nametag(
 
     let hide = *mode.get() != GameMode::Playing
         || !playing_ui.active_play()
-        || ui_runtime.blocks_gameplay()
-        || placement.target.is_none();
+        || ui_runtime.blocks_gameplay();
+    let label = aim.sign_label.as_deref().filter(|_| !hide);
+    let pos = aim.hit.map(|hit| hit.pos).filter(|_| label.is_some());
 
-    let aimed = placement.target.and_then(|target| {
-        let block = world.blocks.get(&target.pos)?;
-        (block.kind == BlockKind::Sign).then_some(target.pos)
-    });
-    let settings = aimed.map(|pos| world.sign_settings(pos));
-    let label = settings
-        .as_ref()
-        .and_then(|s| s.text.as_deref())
-        .map(str::trim)
-        .filter(|t| !t.is_empty())
-        .map(str::to_string);
-
-    let Some(label) = label.filter(|_| !hide) else {
+    let (Some(label), Some(pos)) = (label, pos) else {
         if style.display != Display::None {
             style.display = Display::None;
         }
-        return;
-    };
-    let Some(pos) = aimed else {
-        style.display = Display::None;
         return;
     };
 
@@ -131,7 +115,7 @@ pub fn sync_sign_nametag(
 
     for mut text in &mut text {
         if text.0 != label {
-            text.0 = label.clone();
+            text.0 = label.to_string();
         }
     }
 

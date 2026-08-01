@@ -5,7 +5,7 @@ use glam::{IVec3, Vec3};
 use super::{REACH, WorldBlocks};
 
 /// 射线命中的格子与法线
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TargetHit {
     pub pos: IVec3,
     pub normal: IVec3,

@@ -6,7 +6,7 @@ use crate::shared::config::{ActionKeyName, GameConfig};
 use crate::shared::i18n::{I18n, subst_template};
 use crate::shared::save::SaveKind;
 
-/// 游戏状态栏缓存：世界/手持很少变，瞄准行才跟视角每帧变
+/// 游戏状态栏缓存：世界/手持很少变，瞄准行跟 AimFocus 变
 pub struct GameplayStatusCache {
     world_line: String,
     blocks_line: String,
@@ -73,35 +73,29 @@ pub fn update_status_ui(
     locale: Res<I18n>,
     placement: Res<PlacementState>,
     world: Res<WorldBlocks>,
-    structure_state: Res<StructureState>,
+    aim: Res<AimFocus>,
     inventory: Res<InventoryItems>,
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
     save_state: Res<SaveState>,
     config: Res<GameConfig>,
     mut primed: Local<bool>,
-    mut last_gameplay_sig: Local<(usize, Option<(IVec3, IVec3)>)>,
+    mut last_selected: Local<usize>,
     mut gameplay_cache: Local<GameplayStatusCache>,
     mut texts: Query<(&StatusText, &mut Text)>,
 ) {
-    let gameplay_sig = (
-        placement.selected,
-        placement.target.as_ref().map(|hit| (hit.pos, hit.normal)),
-    );
-    let headers_dirty = !*primed
+    let force = !*primed;
+    let headers_dirty = force
         || inventory.is_changed()
         || save_state.is_changed()
-        || placement.selected != last_gameplay_sig.0;
-    let target_dirty = !*primed
-        || *last_gameplay_sig != gameplay_sig
-        || world.is_changed()
-        || structure_state.is_changed();
-    let gameplay_dirty = headers_dirty || target_dirty;
+        || placement.selected != *last_selected;
+    let aim_dirty = force || aim.is_changed();
+    let blocks_dirty = force || world.is_changed();
+    let gameplay_dirty = headers_dirty || aim_dirty || blocks_dirty;
     let simulation_dirty =
-        !*primed || builder_mode.is_changed() || simulation.is_changed() || config.is_changed();
-    let force = !*primed;
+        force || builder_mode.is_changed() || simulation.is_changed() || config.is_changed();
     *primed = true;
-    *last_gameplay_sig = gameplay_sig;
+    *last_selected = placement.selected;
     if !force && !gameplay_dirty && !simulation_dirty {
         return;
     }
@@ -117,17 +111,10 @@ pub fn update_status_ui(
                 force,
             );
         }
-        if target_dirty {
-            refresh_gameplay_target(
-                &mut gameplay_cache,
-                &locale,
-                &placement,
-                &world,
-                &structure_state,
-            );
+        if aim_dirty {
+            refresh_gameplay_target(&mut gameplay_cache, &locale, &aim);
         }
-        // 只在世界方块变化时重扫数量，避免转视角也 O(n)
-        if force || world.is_changed() {
+        if blocks_dirty {
             write_blocks_status_line(&mut gameplay_cache, &world);
         }
         compose_gameplay_status(&mut gameplay_cache);
@@ -201,29 +188,18 @@ fn refresh_gameplay_headers(
     write_held_status_line(&mut cache.held_line, locale, inventory, placement);
 }
 
-fn refresh_gameplay_target(
-    cache: &mut GameplayStatusCache,
-    locale: &I18n,
-    placement: &PlacementState,
-    world: &WorldBlocks,
-    structure_state: &StructureState,
-) {
-    let Some(hit) = placement.target.as_ref() else {
+fn refresh_gameplay_target(cache: &mut GameplayStatusCache, locale: &I18n, aim: &AimFocus) {
+    let Some(hit) = aim.hit else {
         cache.aim_line.clone_from(&cache.aim_none);
         cache.structure_line.clear();
         cache.place_line.clear();
         cache.last_block_kind = Some(None);
         return;
     };
-    let place_at = hit.pos + hit.normal;
-    let block = world
-        .blocks
-        .get(&hit.pos)
-        .or_else(|| world.system_blocks.get(&hit.pos));
-    let kind = block.map(|block| block.kind);
+    let kind = aim.block.map(|block| block.kind);
     if cache.last_block_kind != Some(kind) {
         cache.last_block_kind = Some(kind);
-        match block {
+        match aim.block {
             Some(block) => {
                 cache.block_label.clear();
                 cache.block_label.push_str(locale.t(block.kind.name_key()));
@@ -231,7 +207,10 @@ fn refresh_gameplay_target(
             None => cache.block_label.clone_from(&cache.scene_label),
         }
     }
-    let facing = block.map(|block| facing_label(block.facing)).unwrap_or("-");
+    let facing = aim
+        .block
+        .map(|block| facing_label(block.facing))
+        .unwrap_or("-");
     write_i32(&mut cache.num_x, hit.pos.x);
     write_i32(&mut cache.num_y, hit.pos.y);
     write_i32(&mut cache.num_z, hit.pos.z);
@@ -246,13 +225,13 @@ fn refresh_gameplay_target(
         ],
         &mut cache.aim_line,
     );
-    if let Some(block) = block {
+    if let Some(block) = aim.block {
         if !block.id.is_none() {
             let _ = write!(cache.aim_line, " #{}", block.id.0);
         }
     }
-    match structure_state.structure_id_at(hit.pos) {
-        Some(id) if !id.is_none() => {
+    match aim.structure_id {
+        Some(id) => {
             write_u64(&mut cache.num_x, id.0);
             subst_template(
                 &cache.structure_tpl,
@@ -260,8 +239,9 @@ fn refresh_gameplay_target(
                 &mut cache.structure_line,
             );
         }
-        _ => cache.structure_line.clone_from(&cache.structure_none),
+        None => cache.structure_line.clone_from(&cache.structure_none),
     }
+    let place_at = aim.place_at.unwrap_or(hit.pos);
     write_i32(&mut cache.num_x, place_at.x);
     write_i32(&mut cache.num_y, place_at.y);
     write_i32(&mut cache.num_z, place_at.z);

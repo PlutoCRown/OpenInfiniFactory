@@ -41,9 +41,9 @@ use state::{
     SimulationState, SolutionState, StartMenuScreen,
 };
 use systems::gameplay::{
-    BlockSettingsClipboard, SelectionToolSwap, apply_fov, clipboard_input,
-    draw_hover_structure_bounds, gameplay_input, placement_input, sync_edit_bounds_overlays,
-    sync_factory_activity_debug_overlays, update_hover,
+    AimFocus, BlockSettingsClipboard, SelectionToolSwap, apply_fov, clipboard_input,
+    draw_hover_structure_bounds, gameplay_input, placement_input, sync_aim_focus,
+    sync_edit_bounds_overlays, sync_factory_activity_debug_overlays, update_hover,
 };
 use systems::perf::{PerfPlugin, PerfScope};
 use systems::simulation_controls::{simulation_controls, sync_generator_config_material_preview};
@@ -112,6 +112,7 @@ impl Plugin for GamePlugin {
             .insert_resource(WorldBlocks::default())
             .insert_resource(HoverStructureBounds::default())
             .insert_resource(PlacementState::default())
+            .init_resource::<AimFocus>()
             .insert_resource(InventoryItems::default())
             .init_state::<GameMode>()
             .insert_resource(StartMenuScreen::default())
@@ -240,6 +241,10 @@ impl Plugin for GamePlugin {
                 update_hover
                     .after(PerfScope::PlayerMove)
                     .before(PerfScope::Hover),
+            )
+            .add_systems(
+                Update,
+                sync_aim_focus.after(update_hover).before(PerfScope::Hover),
             )
             .add_systems(
                 Update,
