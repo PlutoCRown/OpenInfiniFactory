@@ -55,6 +55,11 @@ pub(super) fn can_place_in_mode(kind: BlockKind, mode: BuilderMode) -> bool {
     }
 }
 
+/// 玩家能否用 R 手动改朝向（有向附着物朝向由贴面决定，不可手转）
+pub(super) fn can_manual_rotate(kind: BlockKind) -> bool {
+    kind.is_directional() && !kind.attaches_to_factory_face()
+}
+
 /// 判断指定位置在当前模式下是否可删除
 pub(super) fn can_delete_at(pos: IVec3, mode: BuilderMode, world: &WorldBlocks) -> bool {
     match mode {

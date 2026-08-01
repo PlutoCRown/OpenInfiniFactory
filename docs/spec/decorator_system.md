@@ -87,8 +87,10 @@
 ### 告示牌（`BlockKind::Sign`）
 
 - 玩法工厂方块，占宿主面邻格（侧贴 / 顶立）
+- 有碰撞：挡材料下落/推动（非脆弱，不会被挤占覆盖）；也挡玩家
 - 面门禁：场景任意面；工厂 `face_attachable`；材料 `material_face_connectable`
 - `factory_attachments`：子工厂 BlockId → `{ parent, parent_face_normal }`；宿主销毁级联删子；结构移动时并入附着子格
+- **有向附着物通用规则**（`attaches_to_factory_face && is_directional`）：朝向由贴面法线决定（侧贴映射 N/E/S/W，顶/底固定 North），不跟玩家放置朝向，不可 R 手转
 - 设置：`BlockSettings::Sign`（文字与材料图标互斥）；面板可配；瞄准 billboard / 不可破坏为后续
 
 ### 后续

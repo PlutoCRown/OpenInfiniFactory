@@ -30,7 +30,9 @@ use crate::shared::i18n::I18n;
 use super::edit_ops::{
     alternate_block_at, pick_target_block, rotate_block_at, rotate_facing, shift_pressed,
 };
-use super::rules::{can_delete_at, can_place_block_at, can_place_in_mode, delete_block_at};
+use super::rules::{
+    can_delete_at, can_manual_rotate, can_place_block_at, can_place_in_mode, delete_block_at,
+};
 use super::selection::{handle_selection_area_input, selection_positions};
 
 /// 放置输入所需的查询与资源集合
@@ -257,7 +259,7 @@ pub fn placement_input(
         let reverse_rotation = shift_pressed(&keys);
         if let Some(gesture) = placement.edit_gesture.as_mut() {
             if let EditGestureKind::Place { block } = &mut gesture.kind {
-                if block.kind.is_directional() {
+                if can_manual_rotate(block.kind) {
                     block.facing = rotate_facing(block.facing, reverse_rotation);
                     placement.preview_facing = block.facing;
                 }
@@ -289,13 +291,13 @@ pub fn placement_input(
                 }
                 solution_state.dirty = true;
             } else if selected_place_block(&inventory, *builder_mode, &placement)
-                .is_some_and(|block| block.kind.is_directional())
+                .is_some_and(|block| can_manual_rotate(block.kind))
             {
                 placement.preview_facing =
                     rotate_facing(placement.preview_facing, reverse_rotation);
             }
         } else if selected_place_block(&inventory, *builder_mode, &placement)
-            .is_some_and(|block| block.kind.is_directional())
+            .is_some_and(|block| can_manual_rotate(block.kind))
         {
             placement.preview_facing = rotate_facing(placement.preview_facing, reverse_rotation);
         }
@@ -733,18 +735,19 @@ fn commit_edit_gesture(
     true
 }
 
-/// 侧贴附着块朝向取贴面法线；顶/底立保留原朝向（预览与真正放下一致）
+/// 有向附着物：朝向由贴面法线决定，不跟玩家放置朝向 / R 键
 pub(super) fn attachment_place_block(block: BlockData, plane_normal: IVec3) -> BlockData {
-    if !block.kind.attaches_to_factory_face() || plane_normal.y != 0 {
+    if !(block.kind.attaches_to_factory_face() && block.kind.is_directional()) {
         return block;
     }
     let mut placed = block;
-    placed.facing = match (plane_normal.x, plane_normal.z) {
-        (1, 0) => Facing::East,
-        (-1, 0) => Facing::West,
-        (0, 1) => Facing::South,
-        (0, -1) => Facing::North,
-        _ => placed.facing,
+    // Facing 只有水平四向：侧贴跟法线；顶/底无法映射，固定 North
+    placed.facing = match (plane_normal.x, plane_normal.y, plane_normal.z) {
+        (1, 0, 0) => Facing::East,
+        (-1, 0, 0) => Facing::West,
+        (0, 0, 1) => Facing::South,
+        (0, 0, -1) => Facing::North,
+        _ => Facing::North,
     };
     placed
 }

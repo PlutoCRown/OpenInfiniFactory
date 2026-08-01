@@ -16,6 +16,7 @@ use crate::game::world::rendering::{
 use crate::scene::BlockEntityIndex;
 
 use super::placement::{despawn_block_entities, refresh_edit_generated_markers};
+use super::rules::can_manual_rotate;
 
 /// 从准星目标拾取方块到快捷栏
 pub(super) fn pick_target_block(
@@ -41,8 +42,8 @@ pub(super) fn pick_target_block(
     } else {
         inventory.set_hotbar_block(placement.selected, kind);
     }
-    // 中键取有向块时，放置朝向跟它对齐
-    if kind.is_directional() {
+    // 中键取有向块时，放置朝向跟它对齐（有向附着物朝向由贴面决定，不写入）
+    if can_manual_rotate(kind) {
         placement.preview_facing = block.facing;
     }
     placement.selection.clear();
@@ -118,7 +119,7 @@ pub(super) fn rotate_block_at(
     }) else {
         return false;
     };
-    if !block.kind.is_directional() {
+    if !can_manual_rotate(block.kind) {
         return false;
     }
 
