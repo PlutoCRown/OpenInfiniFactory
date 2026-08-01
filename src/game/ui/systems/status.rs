@@ -12,11 +12,14 @@ pub struct GameplayStatusCache {
     held_line: String,
     aim_tpl: String,
     place_tpl: String,
+    structure_tpl: String,
     aim_none: String,
+    structure_none: String,
     scene_label: String,
     last_block_kind: Option<Option<BlockKind>>,
     block_label: String,
     aim_line: String,
+    structure_line: String,
     place_line: String,
     composed: String,
     num_x: String,
@@ -35,11 +38,14 @@ impl Default for GameplayStatusCache {
             held_line: String::new(),
             aim_tpl: String::new(),
             place_tpl: String::new(),
+            structure_tpl: String::new(),
             aim_none: String::new(),
+            structure_none: String::new(),
             scene_label: String::new(),
             last_block_kind: None,
             block_label: String::new(),
             aim_line: String::new(),
+            structure_line: String::new(),
             place_line: String::new(),
             composed: String::new(),
             num_x: String::new(),
@@ -57,6 +63,7 @@ pub fn update_status_ui(
     locale: Res<I18n>,
     placement: Res<PlacementState>,
     world: Res<WorldBlocks>,
+    structure_state: Res<StructureState>,
     inventory: Res<InventoryItems>,
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
@@ -75,7 +82,10 @@ pub fn update_status_ui(
         || inventory.is_changed()
         || save_state.is_changed()
         || placement.selected != last_gameplay_sig.0;
-    let target_dirty = !*primed || *last_gameplay_sig != gameplay_sig || world.is_changed();
+    let target_dirty = !*primed
+        || *last_gameplay_sig != gameplay_sig
+        || world.is_changed()
+        || structure_state.is_changed();
     let gameplay_dirty = headers_dirty || target_dirty;
     let simulation_dirty =
         !*primed || builder_mode.is_changed() || simulation.is_changed() || config.is_changed();
@@ -98,7 +108,13 @@ pub fn update_status_ui(
             );
         }
         if target_dirty {
-            refresh_gameplay_target(&mut gameplay_cache, &locale, &placement, &world);
+            refresh_gameplay_target(
+                &mut gameplay_cache,
+                &locale,
+                &placement,
+                &world,
+                &structure_state,
+            );
         }
         compose_gameplay_status(&mut gameplay_cache);
     }
@@ -145,10 +161,18 @@ fn refresh_gameplay_headers(
         cache.aim_tpl.push_str(locale.t("status.gameplay.aim"));
         cache.place_tpl.clear();
         cache.place_tpl.push_str(locale.t("status.gameplay.place"));
+        cache.structure_tpl.clear();
+        cache
+            .structure_tpl
+            .push_str(locale.t("status.gameplay.structure"));
         cache.aim_none.clear();
         cache
             .aim_none
             .push_str(locale.t("status.gameplay.aim_none"));
+        cache.structure_none.clear();
+        cache
+            .structure_none
+            .push_str(locale.t("status.gameplay.structure_none"));
         cache.scene_label.clear();
         cache
             .scene_label
@@ -164,9 +188,11 @@ fn refresh_gameplay_target(
     locale: &I18n,
     placement: &PlacementState,
     world: &WorldBlocks,
+    structure_state: &StructureState,
 ) {
     let Some(hit) = placement.target.as_ref() else {
         cache.aim_line.clone_from(&cache.aim_none);
+        cache.structure_line.clear();
         cache.place_line.clear();
         cache.last_block_kind = Some(None);
         return;
@@ -202,6 +228,22 @@ fn refresh_gameplay_target(
         ],
         &mut cache.aim_line,
     );
+    if let Some(block) = block {
+        if !block.id.is_none() {
+            let _ = write!(cache.aim_line, " #{}", block.id.0);
+        }
+    }
+    match structure_state.structure_id_at(hit.pos) {
+        Some(id) if !id.is_none() => {
+            write_u64(&mut cache.num_x, id.0);
+            subst_template(
+                &cache.structure_tpl,
+                &[("id", cache.num_x.as_str())],
+                &mut cache.structure_line,
+            );
+        }
+        _ => cache.structure_line.clone_from(&cache.structure_none),
+    }
     write_i32(&mut cache.num_x, place_at.x);
     write_i32(&mut cache.num_y, place_at.y);
     write_i32(&mut cache.num_z, place_at.z);
@@ -223,6 +265,10 @@ fn compose_gameplay_status(cache: &mut GameplayStatusCache) {
     cache.composed.push_str(&cache.held_line);
     cache.composed.push('\n');
     cache.composed.push_str(&cache.aim_line);
+    if !cache.structure_line.is_empty() {
+        cache.composed.push('\n');
+        cache.composed.push_str(&cache.structure_line);
+    }
     if !cache.place_line.is_empty() {
         cache.composed.push('\n');
         cache.composed.push_str(&cache.place_line);

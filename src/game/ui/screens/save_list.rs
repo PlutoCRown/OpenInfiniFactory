@@ -13,12 +13,34 @@ use super::super::types::{
     SaveListPuzzleScroll, SaveListSolutionRows, SaveListSolutionScroll, SaveListTitleText,
 };
 
-/// 相对窗口逻辑像素的外边距
-const SAVE_LIST_MARGIN: f32 = 48.0;
-const PUZZLE_COL_WIDTH_PERCENT: f32 = 25.0;
+/// 相对窗口逻辑像素的外边距（尽量贴边，给封面更多空间）
+const SAVE_LIST_MARGIN: f32 = 20.0;
+/// 方案卡片宽度
 const SOLUTION_CARD_WIDTH: f32 = 140.0;
-/// 方案横滑区内边距（与卡片高度一起决定条带高度）
+/// 方案横滑区内边距
 const SOLUTION_STRIP_PAD: f32 = 6.0;
+/// 谜题列最小宽度
+const PUZZLE_COL_MIN: f32 = 168.0;
+/// 谜题列最大占比（相对内容区内宽）
+const PUZZLE_COL_MAX_FRACTION: f32 = 0.32;
+
+/// 面板外框：padding 8×2 + border 4×2
+const PANEL_CHROME_X: f32 = 24.0;
+const PANEL_CHROME_Y: f32 = 24.0;
+/// 标题栏约高（关闭钮 36 + 少量 padding）
+const PANEL_TITLE_H: f32 = 40.0;
+/// 标题与内容的 row_gap
+const PANEL_TITLE_GAP: f32 = 8.0;
+/// 内容区内框：padding 8×2 + border 3×2
+const CONTENT_CHROME: f32 = 22.0;
+/// 内容区 body 与 footer 的 row_gap
+const CONTENT_ROW_GAP: f32 = 12.0;
+/// body 内左右列间距
+const BODY_COL_GAP: f32 = 12.0;
+/// 右侧标题字高（14 × text scale 1.5）
+const SECTION_HEADING_H: f32 = 21.0;
+/// 右侧标题 / 方案条 / 封面之间的 gap
+const RIGHT_ROW_GAP: f32 = 8.0;
 
 /// 存档弹窗挂载时预解析的文案与图标（须在 UiAccessScope 内算好再传入）
 pub struct SaveListSpawnCtx {
@@ -42,6 +64,7 @@ pub fn spawn_save_list(
     root: &mut ChildSpawnerCommands,
     panel_w: f32,
     panel_h: f32,
+    window_aspect: f32,
     ctx: SaveListSpawnCtx,
 ) {
     let SaveListSpawnCtx {
@@ -50,6 +73,46 @@ pub fn spawn_save_list(
         solution_heading,
         icons,
     } = ctx;
+
+    let aspect = window_aspect.max(0.5);
+    let footer_h = default_button_size(34.0) + 4.0;
+    let solution_strip_h = solution_card_height() + SOLUTION_STRIP_PAD * 2.0;
+
+    // 内容区可用宽高（扣掉面板/标题/页脚装饰）
+    let inner_w = (panel_w - PANEL_CHROME_X - CONTENT_CHROME).max(320.0);
+    let body_h = (panel_h
+        - PANEL_CHROME_Y
+        - PANEL_TITLE_H
+        - PANEL_TITLE_GAP
+        - CONTENT_CHROME
+        - CONTENT_ROW_GAP
+        - footer_h)
+        .max(160.0);
+
+    // 右侧封面最大高度（方案条保持紧凑）
+    let cover_h_budget =
+        (body_h - SECTION_HEADING_H - solution_strip_h - RIGHT_ROW_GAP * 2.0).max(80.0);
+    let puzzle_max_w = (inner_w * PUZZLE_COL_MAX_FRACTION).max(PUZZLE_COL_MIN);
+
+    // 优先用满高度预算做成窗口比例；侧栏过窄/过宽再夹紧并改由宽度定高
+    let mut cover_h = cover_h_budget;
+    let mut cover_w = cover_h * aspect;
+    let mut puzzle_w = inner_w - BODY_COL_GAP - cover_w;
+    if puzzle_w < PUZZLE_COL_MIN {
+        puzzle_w = PUZZLE_COL_MIN;
+        cover_w = (inner_w - BODY_COL_GAP - puzzle_w).max(160.0);
+        cover_h = cover_w / aspect;
+    } else if puzzle_w > puzzle_max_w {
+        puzzle_w = puzzle_max_w;
+        cover_w = inner_w - BODY_COL_GAP - puzzle_w;
+        cover_h = cover_w / aspect;
+        if cover_h > cover_h_budget {
+            cover_h = cover_h_budget;
+            cover_w = cover_h * aspect;
+            puzzle_w = inner_w - BODY_COL_GAP - cover_w;
+        }
+    }
+    let puzzle_fraction = (puzzle_w / inner_w).clamp(0.12, PUZZLE_COL_MAX_FRACTION);
 
     spawn_panel_with_title(
         root,
@@ -71,26 +134,34 @@ pub fn spawn_save_list(
                     flex_shrink: 1.0,
                     min_height: Val::Px(0.0),
                     flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(12.0),
+                    column_gap: Val::Px(BODY_COL_GAP),
                     ..default()
                 })
                 .with_children(|body| {
-                    spawn_puzzle_column(body, puzzle_heading);
-                    spawn_right_column(body, solution_heading);
+                    spawn_puzzle_column(body, puzzle_heading, puzzle_fraction);
+                    spawn_right_column(
+                        body,
+                        solution_heading,
+                        1.0 - puzzle_fraction,
+                        solution_strip_h,
+                        cover_h,
+                        aspect,
+                    );
                 });
             spawn_footer(content, &icons);
         },
     );
 }
 
-fn spawn_puzzle_column(body: &mut ChildSpawnerCommands, heading: String) {
+fn spawn_puzzle_column(body: &mut ChildSpawnerCommands, heading: String, width_fraction: f32) {
     body.spawn((
         Node {
-            width: Val::Percent(PUZZLE_COL_WIDTH_PERCENT),
+            width: Val::Percent(width_fraction * 100.0),
             height: Val::Percent(100.0),
             flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(8.0),
+            row_gap: Val::Px(RIGHT_ROW_GAP),
             min_width: Val::Px(0.0),
+            flex_shrink: 0.0,
             overflow: Overflow::clip(),
             ..default()
         },
@@ -141,13 +212,20 @@ fn spawn_puzzle_column(body: &mut ChildSpawnerCommands, heading: String) {
     });
 }
 
-fn spawn_right_column(body: &mut ChildSpawnerCommands, heading: String) {
+fn spawn_right_column(
+    body: &mut ChildSpawnerCommands,
+    heading: String,
+    width_fraction: f32,
+    solution_strip_h: f32,
+    cover_h: f32,
+    window_aspect: f32,
+) {
     body.spawn(Node {
-        width: Val::Percent(100.0 - PUZZLE_COL_WIDTH_PERCENT),
+        width: Val::Percent(width_fraction * 100.0),
         height: Val::Percent(100.0),
         flex_grow: 1.0,
         flex_direction: FlexDirection::Column,
-        row_gap: Val::Px(8.0),
+        row_gap: Val::Px(RIGHT_ROW_GAP),
         min_width: Val::Px(0.0),
         overflow: Overflow::clip(),
         ..default()
@@ -163,7 +241,7 @@ fn spawn_right_column(body: &mut ChildSpawnerCommands, heading: String) {
         col.spawn((
             Node {
                 width: Val::Percent(100.0),
-                height: Val::Px(solution_card_height() + SOLUTION_STRIP_PAD * 2.0),
+                height: Val::Px(solution_strip_h),
                 overflow: Overflow::clip(),
                 position_type: PositionType::Relative,
                 flex_shrink: 0.0,
@@ -198,11 +276,14 @@ fn spawn_right_column(body: &mut ChildSpawnerCommands, heading: String) {
             ));
         });
 
+        // 封面按窗口比例定高；margin-top auto 吃掉竖直余量，方案条保持紧凑
         col.spawn((
             Node {
                 width: Val::Percent(100.0),
-                flex_grow: 1.0,
-                min_height: Val::Px(0.0),
+                height: Val::Px(cover_h),
+                aspect_ratio: Some(window_aspect),
+                flex_shrink: 0.0,
+                margin: UiRect::top(Val::Auto),
                 overflow: Overflow::clip(),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
@@ -400,9 +481,9 @@ pub fn spawn_save_solution_card(parent: &mut ChildSpawnerCommands, storage: Opti
         });
 }
 
-/// 方案卡高度：与左侧 4 个谜题行按钮等高
+/// 方案卡高度：扁一些，把竖直空间让给封面
 fn solution_card_height() -> f32 {
-    4.0 * default_button_size(32.0)
+    default_button_size(48.0)
 }
 
 fn save_row_label(value: impl Into<String>, font_size: f32) -> impl Bundle {

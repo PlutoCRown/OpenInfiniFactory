@@ -125,6 +125,7 @@ pub fn sync_start_menu_mounts(
                 .map(|window| (window.width(), window.height()))
                 .unwrap_or((1280.0, 720.0));
             let (panel_w, panel_h) = save_list_panel_size(win_w, win_h, ui_scale.0);
+            let window_aspect = (win_w / win_h.max(1.0)).max(0.5);
             // 须在 with_children 延后执行前解析完（延后阶段已离开 UiAccessScope）
             let spawn_ctx = SaveListSpawnCtx {
                 title: save_list_title(),
@@ -147,7 +148,7 @@ pub fn sync_start_menu_mounts(
                         Pickable::IGNORE,
                     ))
                     .with_children(|c| {
-                        spawn_save_list(c, panel_w, panel_h, spawn_ctx);
+                        spawn_save_list(c, panel_w, panel_h, window_aspect, spawn_ctx);
                     })
                     .id(),
                 );

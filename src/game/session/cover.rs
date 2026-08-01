@@ -59,26 +59,29 @@ pub fn begin_cover_capture(
         .observe(move |captured: On<ScreenshotCaptured>| {
             let image = captured.image.clone();
             let storage_path = storage_path.clone();
-            IoTaskPool::get().spawn(async move {
-                let Ok(dyn_img) = image.try_into_dynamic() else {
-                    bevy::log::warn!("cover capture: failed to convert image");
-                    return;
-                };
-                // 与 Bevy save_to_disk 一致：丢掉 alpha / HDR 亮度通道
-                let rgb = dyn_img.to_rgb8();
-                let mut bytes = std::io::Cursor::new(Vec::new());
-                if let Err(error) = rgb.write_to(&mut bytes, image::ImageFormat::Png) {
-                    bevy::log::warn!("cover capture: png encode failed: {error}");
-                    return;
-                }
-                if !persistent_storage::write_save_bytes(
-                    &storage_path,
-                    COVER_FILE,
-                    &bytes.into_inner(),
-                ) {
-                    bevy::log::warn!("cover capture: vault write failed for `{storage_path}`");
-                }
-            });
+            // Task 被 drop 会取消；必须 detach 才能在后台写完封面
+            IoTaskPool::get()
+                .spawn(async move {
+                    let Ok(dyn_img) = image.try_into_dynamic() else {
+                        bevy::log::warn!("cover capture: failed to convert image");
+                        return;
+                    };
+                    // 与 Bevy save_to_disk 一致：丢掉 alpha / HDR 亮度通道
+                    let rgb = dyn_img.to_rgb8();
+                    let mut bytes = std::io::Cursor::new(Vec::new());
+                    if let Err(error) = rgb.write_to(&mut bytes, image::ImageFormat::Png) {
+                        bevy::log::warn!("cover capture: png encode failed: {error}");
+                        return;
+                    }
+                    if !persistent_storage::write_save_bytes(
+                        &storage_path,
+                        COVER_FILE,
+                        &bytes.into_inner(),
+                    ) {
+                        bevy::log::warn!("cover capture: vault write failed for `{storage_path}`");
+                    }
+                })
+                .detach();
         });
 }
 

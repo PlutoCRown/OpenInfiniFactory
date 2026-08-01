@@ -418,6 +418,8 @@
   "status.gameplay.no_world": "No world loaded",
   "status.gameplay.place": "Place: ({x}, {y}, {z})",
   "status.gameplay.scene": "Scene",
+  "status.gameplay.structure": "Structure: #{id}",
+  "status.gameplay.structure_none": "Structure: —",
   "status.gameplay.world": "World: {name} / {kind}",
   "status.hotbar": "Mode: {mode}   Selected: {selected}   Inventory   Pause",
   "status.session_loading": "Loading…",

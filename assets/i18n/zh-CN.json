@@ -418,6 +418,8 @@
   "status.gameplay.no_world": "未加载世界",
   "status.gameplay.place": "放置：({x}, {y}, {z})",
   "status.gameplay.scene": "场景",
+  "status.gameplay.structure": "结构：#{id}",
+  "status.gameplay.structure_none": "结构：—",
   "status.gameplay.world": "世界：{name} / {kind}",
   "status.hotbar": "模式：{mode}   已选：{selected}   背包   暂停",
   "status.session_loading": "加载中…",

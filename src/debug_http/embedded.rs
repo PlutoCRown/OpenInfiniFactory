@@ -15,7 +15,6 @@ use crate::debug_http::snapshot::{
 use crate::debug_http::world_ops::{block_kinds_json, parse_block_kind, parse_facing, place_block};
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
 use crate::game::debug::SimulationDebugLog;
-use crate::game::edit_history::EditHistory;
 use crate::game::player::controller::FlyCamera;
 use crate::game::session::PlayingWorldParams;
 use crate::game::simulation::pending::PendingGeneratedMaterials;
@@ -239,7 +238,6 @@ pub fn poll_debug_http(
     mut turn_cache: ResMut<TurnCache>,
     worker: Option<Res<SimulationWorker>>,
     bridge: Option<Res<DebugHttpBridge>>,
-    mut edit_history: ResMut<EditHistory>,
     mut playing: PlayingWorldParams,
 ) {
     let Some(bridge) = bridge else {
@@ -261,7 +259,6 @@ pub fn poll_debug_http(
             worker.as_deref(),
             render_ready,
             &mut playing,
-            &mut edit_history,
         );
         let _ = request.respond_to.send(body);
     }
@@ -281,7 +278,6 @@ fn handle_embedded_debug_command(
     worker: Option<&SimulationWorker>,
     render_ready: bool,
     playing: &mut PlayingWorldParams,
-    edit_history: &mut EditHistory,
 ) -> String {
     let mode = *session.mode.get();
     let builder_mode = *session.builder_mode;
@@ -419,7 +415,6 @@ fn handle_embedded_debug_command(
                 &playing.world,
                 &mut playing.structure_state,
                 &mut playing.pusher_state,
-                edit_history,
             );
             if starting {
                 presentation.committed_world = playing.world.clone();
@@ -464,7 +459,6 @@ fn handle_embedded_debug_command(
                 &playing.world,
                 &mut playing.structure_state,
                 &mut playing.pusher_state,
-                edit_history,
             );
             if starting {
                 presentation.committed_world = playing.world.clone();
@@ -515,7 +509,6 @@ fn handle_embedded_debug_command(
                 &playing.world,
                 &mut playing.structure_state,
                 &mut playing.pusher_state,
-                edit_history,
             );
             if starting {
                 presentation.committed_world = playing.world.clone();
