@@ -554,6 +554,13 @@ pub fn perf_stats_json(
                 "behavior_ms": sim_stats.behavior_ms,
                 "signal_refresh_ms": sim_stats.signal_refresh_ms,
                 "render_rebuild_ms": sim_stats.render_rebuild_ms,
+                "render_anim_ms": sim_stats.render_anim_ms,
+                "render_teleport_ms": sim_stats.render_teleport_ms,
+                "render_collect_ms": sim_stats.render_collect_ms,
+                "render_refresh_ms": sim_stats.render_refresh_ms,
+                "render_scene_ms": sim_stats.render_scene_ms,
+                "render_fill_ms": sim_stats.render_fill_ms,
+                "render_fx_ms": sim_stats.render_fx_ms,
             })
         });
     json!({

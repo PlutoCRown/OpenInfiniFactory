@@ -378,6 +378,39 @@ pub fn collect_wire_power_refresh_positions(
     refresh
 }
 
+/// 该格对场景合并 mesh 的贡献（AO/面剔除只认场景挡场景）
+fn scene_mesh_contribution(world: &WorldBlocks, pos: IVec3) -> Option<BlockData> {
+    world
+        .blocks
+        .get(&pos)
+        .copied()
+        .filter(|block| block.kind.is_scene())
+}
+
+/// 收集需要重刷场景 chunk 的格子（仅场景块增删改）
+fn collect_scene_mesh_dirty(
+    before: Option<&WorldBlocks>,
+    after: &WorldBlocks,
+    candidates: &HashSet<IVec3>,
+) -> HashSet<IVec3> {
+    let mut dirty = HashSet::new();
+    for &pos in candidates {
+        match before {
+            Some(before) => {
+                if scene_mesh_contribution(before, pos) != scene_mesh_contribution(after, pos) {
+                    dirty.insert(pos);
+                }
+            }
+            // 编辑路径无 before：只用 changed 种子保守标脏（远小于 refresh 邻域）
+            None => {
+                dirty.insert(pos);
+            }
+        }
+    }
+    dirty
+}
+
+/// 刷新指定格的实体（场景 chunk 由调用方按 collect_scene_mesh_dirty 同步）
 pub fn refresh_positions(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -391,16 +424,12 @@ pub fn refresh_positions(
     skip: &HashSet<IVec3>,
     pusher_animations: &HashMap<IVec3, PusherAnimation>,
     timing: AnimationTiming,
-    scene_chunks: &mut SceneChunkMeshes,
 ) {
     let factory_debug = None::<&StructureState>;
-    let mut scene_dirty = HashSet::new();
     for &pos in positions {
         if skip.contains(&pos) {
             continue;
         }
-        // 邻格 AO / 面剔除，以及「场景被其它层覆盖」都要刷 chunk
-        scene_dirty.insert(pos);
 
         // blocks 层（工厂/材料/场景）
         match world.blocks.get(&pos).copied() {
@@ -481,10 +510,6 @@ pub fn refresh_positions(
                 despawn_system_at(commands, index, pos);
             }
         }
-    }
-
-    if !scene_dirty.is_empty() {
-        sync_scene_chunks_for_positions(commands, meshes, world, assets, scene_chunks, scene_dirty);
     }
 }
 
@@ -672,8 +697,12 @@ pub fn refresh_edit_changes(
         &HashSet::new(),
         &HashMap::new(),
         AnimationTiming::edit(),
-        scene_chunks,
     );
+    // 编辑无 before：只对 changed 种子标脏，避免 refresh 邻域拖脏整片地形
+    let scene_dirty = collect_scene_mesh_dirty(None, world, changed);
+    if !scene_dirty.is_empty() {
+        sync_scene_chunks_for_positions(commands, meshes, world, assets, scene_chunks, scene_dirty);
+    }
 }
 
 pub fn apply_turn_output_incremental(
@@ -693,6 +722,9 @@ pub fn apply_turn_output_incremental(
     portal_flash_queue: &mut PortalFlashQueue,
 ) {
     let render_start = bevy::platform::time::Instant::now();
+    let mut mark = render_start;
+    let elapsed_ms = |from: bevy::platform::time::Instant| from.elapsed().as_secs_f64() * 1000.0;
+
     let timing = AnimationTiming::simulation(animation_duration);
     // DTO → 放映动画：时长只在放映时按当前倍速填写
     let animations: HashMap<_, BlockAnimation> = output
@@ -738,6 +770,9 @@ pub fn apply_turn_output_incremental(
         &paint_changed_ids,
         &teleported_from,
     );
+    stats.render_anim_ms = elapsed_ms(mark);
+    mark = bevy::platform::time::Instant::now();
+
     // 有「进入源口」动画则等播完再瞬移出口；否则立刻到位（本回合逻辑已在出口）
     let mut skip = animated;
     let mut deferred_exit_ids = HashSet::new();
@@ -782,12 +817,18 @@ pub fn apply_turn_output_incremental(
             });
         }
     }
+    stats.render_teleport_ms = elapsed_ms(mark);
+    mark = bevy::platform::time::Instant::now();
+
     let mut refresh = collect_sim_refresh_positions(before, after, output);
     refresh.extend(collect_wire_power_refresh_positions(
         after,
         &output.powered_wires,
         previous_powered_wires,
     ));
+    stats.render_collect_ms = elapsed_ms(mark);
+    mark = bevy::platform::time::Instant::now();
+
     refresh_positions(
         commands,
         meshes,
@@ -801,8 +842,19 @@ pub fn apply_turn_output_incremental(
         &skip,
         &pusher_animations,
         timing,
-        scene_chunks,
     );
+    stats.render_refresh_ms = elapsed_ms(mark);
+    mark = bevy::platform::time::Instant::now();
+
+    // 仅场景块增删改才刷合并 mesh；工厂/电线/材料不影响场景 AO
+    let scene_dirty =
+        collect_scene_mesh_dirty(Some(before), after, &diff_block_positions(before, after));
+    if !scene_dirty.is_empty() {
+        sync_scene_chunks_for_positions(commands, meshes, after, assets, scene_chunks, scene_dirty);
+    }
+    stats.render_scene_ms = elapsed_ms(mark);
+    mark = bevy::platform::time::Instant::now();
+
     for (&pos, data) in &after.blocks {
         if !data.kind.is_material() || index.get_animatable(pos).is_some() {
             continue;
@@ -834,6 +886,9 @@ pub fn apply_turn_output_incremental(
             commands, meshes, index, after, assets, pos, *data, None, None, timing, false, None,
         );
     }
+    stats.render_fill_ms = elapsed_ms(mark);
+    mark = bevy::platform::time::Instant::now();
+
     let weld_delay = if output.animations.is_empty() && output.pusher_animations.is_empty() {
         0.0
     } else {
@@ -844,6 +899,8 @@ pub fn apply_turn_output_incremental(
     spawn_break_debris(commands, meshes, assets, &output.break_debris);
     spawn_laser_beams(commands, assets, &output.laser_beams, animation_duration);
     spawn_acceptance_sparks(commands, meshes, assets, &output.acceptance_sparks);
-    stats.render_rebuild_ms = render_start.elapsed().as_secs_f64() * 1000.0;
+    stats.render_fx_ms = elapsed_ms(mark);
+
+    stats.render_rebuild_ms = elapsed_ms(render_start);
     stats.total_ms += stats.render_rebuild_ms;
 }

@@ -165,7 +165,7 @@ pub fn update_debug_ui(
         && sim_stats.has_sample
     {
         format!(
-            "\n\nSim Turn (last)\n  Total: {:>5.2} ms\n  Prep: {:>5.2} ms\n  Gravity: {:>5.2} ms\n  Signals: {:>5.2} ms\n  Markers A: {:>5.2} ms\n  Mark Move: {:>5.2} ms\n  Exec Move: {:>5.2} ms\n  Markers B: {:>5.2} ms\n  Behavior: {:>5.2} ms\n  Signals End: {:>5.2} ms\n  Rebuild: {:>5.2} ms",
+            "\n\nSim Turn (last)\n  Total: {:>5.2} ms\n  Prep: {:>5.2} ms\n  Gravity: {:>5.2} ms\n  Signals: {:>5.2} ms\n  Markers A: {:>5.2} ms\n  Mark Move: {:>5.2} ms\n  Exec Move: {:>5.2} ms\n  Markers B: {:>5.2} ms\n  Behavior: {:>5.2} ms\n  Signals End: {:>5.2} ms\n  Rebuild: {:>5.2} ms\n    Anim: {:>5.2} ms\n    Teleport: {:>5.2} ms\n    Collect: {:>5.2} ms\n    Refresh: {:>5.2} ms\n    Scene: {:>5.2} ms\n    Fill: {:>5.2} ms\n    FX: {:>5.2} ms",
             sim_stats.total_ms,
             sim_stats.prep_ms,
             sim_stats.gravity_ms,
@@ -177,6 +177,13 @@ pub fn update_debug_ui(
             sim_stats.behavior_ms,
             sim_stats.signal_refresh_ms,
             sim_stats.render_rebuild_ms,
+            sim_stats.render_anim_ms,
+            sim_stats.render_teleport_ms,
+            sim_stats.render_collect_ms,
+            sim_stats.render_refresh_ms,
+            sim_stats.render_scene_ms,
+            sim_stats.render_fill_ms,
+            sim_stats.render_fx_ms,
         )
     } else {
         String::new()
