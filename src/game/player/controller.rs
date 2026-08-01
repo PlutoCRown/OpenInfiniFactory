@@ -28,6 +28,9 @@ const FLOOR_TOP_Y: f32 = 1.0;
 const SPAWN_EYE_Y: f32 = FLOOR_TOP_Y + EYE_HEIGHT + 0.08;
 const PLAYER_SPEED: f32 = 5.5;
 const FLY_SPEED: f32 = 7.0;
+/// 飞行松开移动键后的惯性：0.5 秒内线性减速滑过约 0.5 格
+const FLY_DRIFT_DURATION: f32 = 0.5;
+const FLY_DRIFT_DISTANCE: f32 = 0.5;
 const GRAVITY: f32 = 18.0;
 /// Vertical travel (eye/camera position) needed to step onto the next 1-block tier.
 const ONE_BLOCK_JUMP_HEIGHT: f32 = 1.5;
@@ -46,6 +49,12 @@ pub struct FlyCamera {
     grounded: bool,
     flying: bool,
     last_space_press: f32,
+    /// 上一帧是否有水平移动输入（用于检测松手）
+    fly_was_moving: bool,
+    /// 松手前最后水平移动方向
+    fly_last_dir: Vec3,
+    /// 惯性漂移剩余时间
+    fly_drift_remaining: f32,
 }
 
 pub fn spawn_player(
@@ -90,6 +99,9 @@ pub fn spawn_player(
                 grounded: false,
                 flying: false,
                 last_space_press: -10.0,
+                fly_was_moving: false,
+                fly_last_dir: Vec3::ZERO,
+                fly_drift_remaining: 0.0,
             },
             GameplayCamera,
             GameplayScene,
@@ -162,6 +174,9 @@ pub fn apply_player_save(camera: &mut FlyCamera, transform: &mut Transform, save
     camera.velocity_y = 0.0;
     camera.grounded = false;
     camera.last_space_press = -10.0;
+    camera.fly_was_moving = false;
+    camera.fly_last_dir = Vec3::ZERO;
+    camera.fly_drift_remaining = 0.0;
     transform.rotation =
         Quat::from_axis_angle(Vec3::Y, camera.yaw) * Quat::from_axis_angle(Vec3::X, camera.pitch);
 }
@@ -182,6 +197,7 @@ pub fn apply_pending_player_spawn(
 pub fn camera_move(
     time: Res<Time>,
     input: Res<crate::game::input::GameplayInputState>,
+    keys: Res<ButtonInput<KeyCode>>,
     settings: Res<GameSettings>,
     mode: Res<State<GameMode>>,
     playing_ui: Res<PlayingUiState>,
@@ -207,6 +223,8 @@ pub fn camera_move(
             camera.flying = !camera.flying;
             camera.velocity_y = 0.0;
             camera.grounded = false;
+            camera.fly_was_moving = false;
+            camera.fly_drift_remaining = 0.0;
         } else if camera.grounded {
             camera.velocity_y = jump_speed(settings.gravity_scale);
             camera.grounded = false;
@@ -222,7 +240,8 @@ pub fn camera_move(
     direction += forward * input.move_axis.y;
     direction += right * input.move_axis.x;
 
-    if direction.length_squared() > 0.0 {
+    let moving = direction.length_squared() > 0.0;
+    if moving {
         let horizontal = Vec3::new(direction.x, 0.0, direction.z).normalize();
         let speed = if camera.flying {
             FLY_SPEED
@@ -239,9 +258,41 @@ pub fn camera_move(
             true,
             camera.grounded && !camera.flying,
         );
+        if camera.flying {
+            camera.fly_last_dir = horizontal;
+            camera.fly_drift_remaining = 0.0;
+        }
+    } else if camera.flying && camera.fly_was_moving {
+        // 松手瞬间按着 Shift 则不漂
+        if !crate::shared::config::shift_modifier_pressed(&keys)
+            && camera.fly_last_dir.length_squared() > 0.0
+        {
+            camera.fly_drift_remaining = FLY_DRIFT_DURATION;
+        } else {
+            camera.fly_drift_remaining = 0.0;
+        }
     }
 
     if camera.flying {
+        if camera.fly_drift_remaining > 0.0 {
+            let dt = time.delta_secs().min(camera.fly_drift_remaining);
+            // 线性减速：初速 = 2d/T，速度按剩余时间比例收到 0，积分仍为 d
+            let speed = (2.0 * FLY_DRIFT_DISTANCE / FLY_DRIFT_DURATION)
+                * (camera.fly_drift_remaining / FLY_DRIFT_DURATION);
+            let drift = camera.fly_last_dir * speed * dt;
+            move_with_collision(
+                &mut transform.translation,
+                drift,
+                &world,
+                &pusher_state,
+                &scene_registry,
+                true,
+                false,
+            );
+            camera.fly_drift_remaining -= dt;
+        }
+        camera.fly_was_moving = moving;
+
         let mut vertical = 0.0;
         if input.fly_up {
             vertical += 1.0;
@@ -272,9 +323,13 @@ pub fn camera_move(
                 camera.flying = false;
                 camera.grounded = true;
                 camera.velocity_y = 0.0;
+                camera.fly_was_moving = false;
+                camera.fly_drift_remaining = 0.0;
             }
         }
     } else {
+        camera.fly_was_moving = false;
+        camera.fly_drift_remaining = 0.0;
         camera.velocity_y -= GRAVITY * settings.gravity_scale * time.delta_secs();
         let vertical_delta = Vec3::Y * camera.velocity_y * time.delta_secs();
         let before = transform.translation;
