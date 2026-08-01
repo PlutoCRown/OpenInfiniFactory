@@ -1,26 +1,40 @@
 {
-  "name": "blocker_mixed_facing_no_mutual_push",
+  "name": "pusher_perp_held_order",
   "setup": [
     {
       "x": 0,
       "y": 1,
-      "z": 1,
-      "kind": "Blocker",
-      "facing": "North"
-    },
-    {
-      "x": 0,
-      "y": 1,
       "z": 0,
-      "kind": "Blocker",
-      "facing": "East"
+      "kind": "Platform",
+      "facing": "North"
     },
     {
       "x": 1,
       "y": 1,
       "z": 0,
       "kind": "Blocker",
+      "facing": "East"
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "z": 0,
+      "kind": "Platform",
+      "facing": "North"
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "z": 1,
+      "kind": "Blocker",
       "facing": "South"
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "z": 2,
+      "kind": "Platform",
+      "facing": "North"
     }
   ],
   "steps": [
@@ -36,12 +50,28 @@
       "x": 0,
       "y": 1,
       "z": 0,
+      "kind": "Platform",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": 1,
+      "y": 1,
+      "z": 0,
       "kind": "Blocker",
       "layer": "factory"
     },
     {
       "op": "assertBlock",
-      "x": 0,
+      "x": 3,
+      "y": 1,
+      "z": 0,
+      "kind": "Platform",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": 3,
       "y": 1,
       "z": 1,
       "kind": "Blocker",
@@ -49,10 +79,10 @@
     },
     {
       "op": "assertBlock",
-      "x": 2,
+      "x": 3,
       "y": 1,
-      "z": 0,
-      "kind": "Blocker",
+      "z": 2,
+      "kind": "Platform",
       "layer": "factory"
     }
   ]

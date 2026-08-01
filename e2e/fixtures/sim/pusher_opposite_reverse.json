@@ -1,26 +1,26 @@
 {
-  "name": "pusher_reverse_leaves_front",
+  "name": "pusher_opposite_reverse",
   "setup": [
     {
       "x": 0,
       "y": 1,
-      "z": 1,
+      "z": 0,
       "kind": "Blocker",
-      "facing": "North"
+      "facing": "East"
     },
     {
-      "x": 0,
+      "x": 1,
       "y": 1,
       "z": 0,
       "kind": "Platform",
       "facing": "North"
     },
     {
-      "x": 0,
-      "y": 0,
+      "x": 2,
+      "y": 1,
       "z": 0,
-      "kind": "fallback",
-      "facing": "North"
+      "kind": "Blocker",
+      "facing": "West"
     }
   ],
   "steps": [
@@ -36,14 +36,22 @@
       "x": 0,
       "y": 1,
       "z": 0,
+      "kind": "Blocker",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": 2,
+      "y": 1,
+      "z": 0,
       "kind": "Platform",
       "layer": "factory"
     },
     {
       "op": "assertBlock",
-      "x": 0,
+      "x": 3,
       "y": 1,
-      "z": 2,
+      "z": 0,
       "kind": "Blocker",
       "layer": "factory"
     }

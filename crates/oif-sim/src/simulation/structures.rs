@@ -559,7 +559,7 @@ pub(super) fn apply_fragile_shatter_before_execute(
 /// `hard_pusher_head_occupancy` 为本回合开始时已伸出的头；执行中随 Push 伸出/收回更新。
 /// `moved`：本回合真实平移过的格子。
 /// `gravity_held`：已有推杆动画的整坨，只抑重力。
-/// `actuated_facing`：同结构同朝向本回合已有推杆动作则挡后续非零 Push（同向链不并发；不同向仍可各自动）。
+/// `push_held`：本回合已平移或已开推动画的格子，后续非零 Push 不可再吃。
 /// 抬升与重力的互斥在 merge 阶段完成（有抬升标签则丢掉重叠重力）。
 pub(super) fn execute_structure_moves_with_pushers(
     world: &mut WorldBlocks,
@@ -575,8 +575,7 @@ pub(super) fn execute_structure_moves_with_pushers(
 ) {
     let mut moved = HashSet::new();
     let mut gravity_held = HashSet::new();
-    // 结构 ID → 本回合已启动过动画的推杆朝向
-    let mut actuated_facing: HashMap<StructureId, HashSet<Facing>> = HashMap::new();
+    let mut push_held = HashSet::new();
     let mut animations = HashMap::new();
     let mut pusher_animations = HashMap::new();
     let mut extension_commits = HashMap::new();
@@ -602,25 +601,11 @@ pub(super) fn execute_structure_moves_with_pushers(
                     {
                         continue;
                     }
-                } else if offset != IVec3::ZERO && structure.iter().any(|pos| moved.contains(pos)) {
-                    continue;
                 } else if offset != IVec3::ZERO
-                    && actors.iter().any(|actor| {
-                        let Some(pos) = block_pos_by_id(world, actor.id) else {
-                            return false;
-                        };
-                        let Some(facing) = world.blocks.get(&pos).map(|block| block.facing) else {
-                            return false;
-                        };
-                        let Some(sid) = structures.id_at(pos) else {
-                            return false;
-                        };
-                        actuated_facing
-                            .get(&sid)
-                            .is_some_and(|set| set.contains(&facing))
-                    })
+                    && structure
+                        .iter()
+                        .any(|pos| moved.contains(pos) || push_held.contains(pos))
                 {
-                    // 同结构同朝向已有推杆动过：本条非零 Push 延后到下回合
                     continue;
                 }
                 // 收回标签检查时忽略自己的头，否则粘头拉回会撞上尚未释放的头占位
@@ -652,7 +637,11 @@ pub(super) fn execute_structure_moves_with_pushers(
                     {
                         continue;
                     }
-                } else if offset != IVec3::ZERO && structure.iter().any(|pos| moved.contains(pos)) {
+                } else if offset != IVec3::ZERO
+                    && structure
+                        .iter()
+                        .any(|pos| moved.contains(pos) || push_held.contains(pos))
+                {
                     continue;
                 }
                 // 活塞头是实体：本回合已提交的头会挡住后续更低优先级移动（自带头随结构走，不挡自己）
@@ -723,6 +712,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                         }
                     }
                     moved.extend(structure.iter().copied());
+                    push_held.extend(structure.iter().copied());
                     move_structure(world, &structure, offset);
                     structures.move_positions(&structure, offset);
                     // 已伸出的头随本体平移
@@ -732,7 +722,8 @@ pub(super) fn execute_structure_moves_with_pushers(
                     }
                     let target_structure: HashSet<IVec3> =
                         structure.iter().map(|pos| *pos + offset).collect();
-                    moved.extend(target_structure);
+                    moved.extend(target_structure.iter().copied());
+                    push_held.extend(target_structure);
                 }
                 for actor in actors {
                     let Some(actor_pos) = block_pos_by_id(world, actor.id) else {
@@ -762,16 +753,13 @@ pub(super) fn execute_structure_moves_with_pushers(
                             heads.remove(&head);
                         }
                     }
-                    // 推杆开启动画：记朝向（挡同向后续非零 Push）+ 整坨抑重力
+                    // 推杆开启动画：整坨抑重力 + 不可再被其它 Push 当货物
                     if let Some(actor_structure_id) = structures.id_at(actor_pos) {
-                        actuated_facing
-                            .entry(actor_structure_id)
-                            .or_default()
-                            .insert(block.facing);
                         if let Some(actor_structure) =
                             structures.structure_positions(actor_structure_id)
                         {
                             gravity_held.extend(actor_structure.iter().copied());
+                            push_held.extend(actor_structure.iter().copied());
                         }
                     }
                 }

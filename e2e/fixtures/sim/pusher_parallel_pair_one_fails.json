@@ -1,13 +1,6 @@
 {
-  "name": "blocker_mixed_facing_no_mutual_push",
+  "name": "pusher_parallel_pair_one_fails",
   "setup": [
-    {
-      "x": 0,
-      "y": 1,
-      "z": 1,
-      "kind": "Blocker",
-      "facing": "North"
-    },
     {
       "x": 0,
       "y": 1,
@@ -19,8 +12,22 @@
       "x": 1,
       "y": 1,
       "z": 0,
-      "kind": "Blocker",
-      "facing": "South"
+      "kind": "Platform",
+      "facing": "North"
+    },
+    {
+      "x": 0,
+      "y": 1,
+      "z": 1,
+      "kind": "Platform",
+      "facing": "North"
+    },
+    {
+      "x": 1,
+      "y": 1,
+      "z": 1,
+      "kind": "Platform",
+      "facing": "North"
     }
   ],
   "steps": [
@@ -34,25 +41,33 @@
     {
       "op": "assertBlock",
       "x": 0,
-      "y": 1,
+      "y": 0,
       "z": 0,
       "kind": "Blocker",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": 1,
+      "y": 0,
+      "z": 0,
+      "kind": "Platform",
       "layer": "factory"
     },
     {
       "op": "assertBlock",
       "x": 0,
-      "y": 1,
+      "y": 0,
       "z": 1,
-      "kind": "Blocker",
+      "kind": "Platform",
       "layer": "factory"
     },
     {
       "op": "assertBlock",
-      "x": 2,
-      "y": 1,
-      "z": 0,
-      "kind": "Blocker",
+      "x": 1,
+      "y": 0,
+      "z": 1,
+      "kind": "Platform",
       "layer": "factory"
     }
   ]

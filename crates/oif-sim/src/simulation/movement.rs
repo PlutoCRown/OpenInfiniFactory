@@ -5,7 +5,7 @@ use crate::blocks::{BlockId, MovementRule};
 use crate::world::grid::WorldBlocks;
 
 use super::motion::PusherMotion;
-use super::structure_state::{StructureKind, StructureState};
+use super::structure_state::{StructureId, StructureKind, StructureState};
 use super::structures::{
     MovementMark, PusherActor, PusherAnimationKind, StructureMove, can_translate_structure,
 };
@@ -180,6 +180,53 @@ pub(super) fn mark_structure_movement_phase(
     let mut moves = Vec::new();
     let mut claimed_heads = pusher_state.hard_head_occupancy(world);
 
+    // 本回合要切换伸出状态的推杆：按结构收集 cut 集，再按全局坐标序 resolve
+    let mut actuating: Vec<(IVec3, IVec3, IVec3, bool)> = Vec::new();
+    for (pos, mover) in &movers {
+        let MovementRule::PoweredTranslate {
+            source,
+            offset,
+            extend_when_powered,
+        } = mover
+        else {
+            continue;
+        };
+        let powered = powered_devices.contains(pos);
+        let desired_extended = if *extend_when_powered {
+            powered
+        } else {
+            !powered
+        };
+        let current_extended = world
+            .blocks
+            .get(pos)
+            .and_then(|block| pusher_state.entries.get(&block.id))
+            .map(|entry| entry.extended)
+            .unwrap_or(false);
+        if desired_extended != current_extended {
+            actuating.push((*pos, *source, *offset, desired_extended));
+        }
+    }
+    let mut cut_by_structure: HashMap<StructureId, HashSet<BlockId>> = HashMap::new();
+    for (pos, _, _, _) in &actuating {
+        let Some(sid) = structures.id_at(*pos) else {
+            continue;
+        };
+        let Some(block) = world.blocks.get(pos) else {
+            continue;
+        };
+        cut_by_structure.entry(sid).or_default().insert(block.id);
+    }
+    let mut motion_held: HashSet<IVec3> = HashSet::new();
+    let mut motion_tags: HashMap<IVec3, IVec3> = HashMap::new();
+    // 头格 → 本体：含上回合已伸出 + 本回合空头争用成功的
+    let mut head_owners: HashMap<IVec3, IVec3> = HashMap::new();
+    for &head in &claimed_heads {
+        if let Some(body) = pusher_state.body_at_extended_head(world, head) {
+            head_owners.insert(head, body);
+        }
+    }
+
     for (pos, mover) in movers {
         let source_id = world.blocks.get(&pos).map(|block| block.id);
         match mover {
@@ -226,31 +273,39 @@ pub(super) fn mark_structure_movement_phase(
                     }
                 }
             }
-            MovementRule::PoweredTranslate {
-                source,
-                offset,
-                extend_when_powered,
-            } => {
-                let powered = powered_devices.contains(&pos);
-                let desired_extended = if extend_when_powered {
-                    powered
-                } else {
-                    !powered
-                };
-                if let Some(movement) = mark_pusher_movement(
-                    world,
-                    structures,
-                    pusher_state,
-                    pos,
-                    source,
-                    offset,
-                    desired_extended,
-                    &mut claimed_heads,
-                    suction,
-                ) {
-                    moves.push(movement);
-                }
+            MovementRule::PoweredTranslate { .. } => {
+                // 下面统一按 actuating 列表处理
             }
+        }
+    }
+
+    for (pos, source, offset, desired_extended) in actuating {
+        let cut_ids = structures
+            .id_at(pos)
+            .and_then(|sid| cut_by_structure.get(&sid).cloned())
+            .unwrap_or_else(|| {
+                world
+                    .blocks
+                    .get(&pos)
+                    .map(|block| HashSet::from([block.id]))
+                    .unwrap_or_default()
+            });
+        if let Some(movement) = mark_pusher_movement(
+            world,
+            structures,
+            pusher_state,
+            pos,
+            source,
+            offset,
+            desired_extended,
+            &cut_ids,
+            &mut claimed_heads,
+            &mut head_owners,
+            suction,
+            &mut motion_held,
+            &mut motion_tags,
+        ) {
+            moves.push(movement);
         }
     }
     moves
@@ -313,8 +368,12 @@ fn mark_pusher_movement(
     source: IVec3,
     offset: IVec3,
     desired_extended: bool,
+    cut_ids: &HashSet<BlockId>,
     claimed_heads: &mut HashSet<IVec3>,
+    head_owners: &mut HashMap<IVec3, IVec3>,
     suction: &SuctionLinks,
+    motion_held: &mut HashSet<IVec3>,
+    motion_tags: &mut HashMap<IVec3, IVec3>,
 ) -> Option<StructureMove> {
     let id = world.blocks.get(&pos)?.id;
     // 粘头只在开局 rebuild 写入；运行时新建条目视为不粘（不应靠当面有块临时粘上）
@@ -341,44 +400,158 @@ fn mark_pusher_movement(
     };
     // 伸出推 +offset，收回拉 -offset；失败时自身走反方向
     let attempt_offset = if desired_extended { offset } else { -offset };
+    let reverse = -attempt_offset;
+
+    // 单杆切断已是桥：只用自己的 cut（避免盟友切断缩小正推目标，见案例 1）
+    // 单杆成环：用同结构全部 actuating 的 multi-cut（案例 2/3/4）
+    let alone_cut = HashSet::from([id]);
+    let effective_cuts = match structures.pusher_cut_sides(world, pos, &alone_cut) {
+        Some(sides) if sides.separated => &alone_cut,
+        _ => cut_ids,
+    };
+    let sides = structures.pusher_cut_sides(world, pos, effective_cuts);
+    let same_structure_front = structures
+        .id_at(pos)
+        .zip(structures.id_at(head))
+        .is_some_and(|(a, b)| a == b);
+    let other_structure_front = structures.id_at(head).is_some() && !same_structure_front;
+    // 顶到已伸出头（上回合硬头或本回合刚争用成功）：推该杆本体
+    let extended_head_body = pusher_state
+        .body_at_extended_head(world, head)
+        .or_else(|| head_owners.get(&head).copied())
+        .filter(|body| *body != pos);
 
     let work = if desired_extended {
-        // 前方脆弱：压碎而非推动其所在结构
         if front_is_fragile {
             None
+        } else if other_structure_front {
+            // 头前属其它结构：整坨推（不受 multi-cut 影响）
+            if motion_held.contains(&head) {
+                None
+            } else {
+                mark_structure_translate(
+                    world,
+                    structures,
+                    pusher_state,
+                    pos,
+                    head,
+                    offset,
+                    MovementMark::Push,
+                    suction,
+                )
+            }
+        } else if same_structure_front {
+            let Some(sides) = sides.as_ref() else {
+                return None;
+            };
+            if !sides.separated || sides.target_side.is_empty() || sides.target_anchored {
+                None
+            } else if sides.target_side.iter().any(|p| motion_held.contains(p)) {
+                // 目标已 held：若位移标签与本杆正推同向 → 只挂动画（案例 3 后手）
+                let same_tag = sides
+                    .target_side
+                    .iter()
+                    .filter(|p| motion_held.contains(p))
+                    .all(|p| motion_tags.get(p).is_some_and(|tag| *tag == attempt_offset));
+                if same_tag {
+                    motion_held.insert(pos);
+                    return Some(
+                        StructureMove::translate_by_pusher_actor(
+                            structures.id_at(pos)?,
+                            HashSet::from([pos]),
+                            IVec3::ZERO,
+                            PusherActor { id, pos, animation },
+                            MovementMark::Push,
+                        )
+                        .with_source(id, pos),
+                    );
+                }
+                None
+            } else {
+                let structure_id = structures.id_at(head)?;
+                let structure =
+                    structures.linked_expand_pusher_subset(suction, &sides.target_side, offset)?;
+                Some(StructureMove::translate_marked(
+                    structure_id,
+                    structure,
+                    offset,
+                    MovementMark::Push,
+                ))
+            }
+        } else if let Some(body) = extended_head_body {
+            // 顶到静止/刚伸出的头：推动该杆整坨（头+体）；直接用本体格，不依赖 extended 状态
+            if motion_held.contains(&body) || motion_held.contains(&head) {
+                None
+            } else {
+                mark_structure_translate(
+                    world,
+                    structures,
+                    pusher_state,
+                    pos,
+                    body,
+                    offset,
+                    MovementMark::Push,
+                    suction,
+                )
+            }
+        } else {
+            // 真·空头：无货物可拆推
+            None
+        }
+    } else if bound_front {
+        // 收回：仅开局已粘的才拉回头前一格的结构
+        let pull_source = pos + offset + offset;
+        if motion_held.contains(&pull_source) {
+            None
+        } else if structures
+            .id_at(pos)
+            .zip(structures.id_at(pull_source))
+            .is_some_and(|(a, b)| a == b)
+        {
+            let Some(sides) = sides.as_ref() else {
+                return None;
+            };
+            if !sides.separated
+                || sides.target_side.is_empty()
+                || sides.target_anchored
+                || sides.target_side.iter().any(|p| motion_held.contains(p))
+            {
+                None
+            } else {
+                let structure_id = structures.id_at(pull_source)?;
+                let structure =
+                    structures.linked_expand_pusher_subset(suction, &sides.target_side, -offset)?;
+                Some(StructureMove::translate_marked(
+                    structure_id,
+                    structure,
+                    -offset,
+                    MovementMark::Push,
+                ))
+            }
         } else {
             mark_structure_translate(
                 world,
                 structures,
                 pusher_state,
                 pos,
-                pos + offset,
-                offset,
+                pull_source,
+                -offset,
                 MovementMark::Push,
                 suction,
             )
         }
-    } else if bound_front {
-        // 收回：仅开局已粘的才拉回头前一格的结构
-        mark_structure_translate(
-            world,
-            structures,
-            pusher_state,
-            pos,
-            pos + offset + offset,
-            -offset,
-            MovementMark::Push,
-            suction,
-        )
     } else {
         None
     };
 
     // 工作面标到结构：能走则推/拉对方；伸出失败才反推；收回失败只缩头
     if let Some(movement) = work {
-        // 收回时头会让出，被拉块可进原头格——校验忽略本推杆头占位
         let mut heads_for_check = claimed_heads.clone();
         if !desired_extended {
+            heads_for_check.remove(&head);
+        }
+        // 正推伸出头货物：校验时忽略对方旧头（会随结构搬走），本杆头进该格
+        if desired_extended && extended_head_body.is_some() {
             heads_for_check.remove(&head);
         }
         if can_translate_structure(
@@ -391,7 +564,19 @@ fn mark_pusher_movement(
         ) {
             if !desired_extended {
                 claimed_heads.remove(&head);
+                head_owners.remove(&head);
+            } else if extended_head_body.is_some() {
+                // 吃掉对方头格，本杆伸出占用
+                claimed_heads.insert(head);
+                head_owners.insert(head, pos);
             }
+            apply_motion_tags(
+                movement.structure(),
+                attempt_offset,
+                motion_held,
+                motion_tags,
+            );
+            motion_held.insert(pos);
             return Some(
                 movement
                     .with_pusher_actor(id, pos, MovementMark::Push, animation)
@@ -399,15 +584,18 @@ fn mark_pusher_movement(
             );
         }
         if desired_extended {
-            return mark_pusher_reverse_self(
+            return mark_pusher_reverse_or_anim(
                 world,
                 structures,
                 suction,
                 claimed_heads,
                 pos,
                 id,
-                -attempt_offset,
+                reverse,
                 animation,
+                effective_cuts,
+                motion_held,
+                motion_tags,
             );
         }
         // 收回拉不动：不反推，下面走零位移缩头
@@ -419,24 +607,51 @@ fn mark_pusher_movement(
             if !claimed_heads.insert(head) {
                 return None;
             }
-        } else if world.is_occupied(head) || !claimed_heads.insert(head) {
-            return mark_pusher_reverse_self(
+            head_owners.insert(head, pos);
+        } else if world.is_occupied(head) || other_structure_front || same_structure_front {
+            return mark_pusher_reverse_or_anim(
                 world,
                 structures,
                 suction,
                 claimed_heads,
                 pos,
                 id,
-                -attempt_offset,
+                reverse,
                 animation,
+                effective_cuts,
+                motion_held,
+                motion_tags,
             );
+        } else if !claimed_heads.insert(head) {
+            return mark_pusher_reverse_or_anim(
+                world,
+                structures,
+                suction,
+                claimed_heads,
+                pos,
+                id,
+                reverse,
+                animation,
+                effective_cuts,
+                motion_held,
+                motion_tags,
+            );
+        } else {
+            head_owners.insert(head, pos);
         }
     } else {
         // 收回（含粘头但拉不动 / 未粘头）：释放头占位，零位移缩头
         claimed_heads.remove(&head);
+        head_owners.remove(&head);
     }
 
     // 空头伸出/收回：对本结构发 Push 零位移标签，执行时优先于重力并抑制自身下落
+    // 动画也会 held，避免其它杆再推正在伸缩的活塞
+    if let Some(sid) = structures.id_at(pos) {
+        if let Some(members) = structures.structure_positions(sid) {
+            motion_held.extend(members.iter().copied());
+        }
+    }
     let structure_id = structures.id_at(pos)?;
     let structure = structures.structure_positions(structure_id)?.clone();
     Some(
@@ -451,26 +666,72 @@ fn mark_pusher_movement(
     )
 }
 
-/// 活塞/拦截器工作面失败时：自身反向平移并完成伸出/收回
-fn mark_pusher_reverse_self(
+fn apply_motion_tags(
+    structure: &HashSet<IVec3>,
+    offset: IVec3,
+    motion_held: &mut HashSet<IVec3>,
+    motion_tags: &mut HashMap<IVec3, IVec3>,
+) {
+    for &pos in structure {
+        motion_held.insert(pos);
+        motion_tags.insert(pos, offset);
+    }
+}
+
+/// 正推失败：反推；若反推子集已有同向运动标签则只挂伸缩动画
+fn mark_pusher_reverse_or_anim(
     world: &WorldBlocks,
     structures: &StructureState,
     suction: &SuctionLinks,
-    hard_heads: &HashSet<IVec3>,
+    hard_heads: &mut HashSet<IVec3>,
     pos: IVec3,
     id: BlockId,
     reverse: IVec3,
     animation: PusherAnimationKind,
+    cut_ids: &HashSet<BlockId>,
+    motion_held: &mut HashSet<IVec3>,
+    motion_tags: &mut HashMap<IVec3, IVec3>,
 ) -> Option<StructureMove> {
     if !PUSHER_REVERSE_ENABLED {
         return None;
     }
-    // 与正推对称：切断头前边，只带动活塞本体一侧；头前子结构留在原地
-    let subset = structures.pusher_actor_structure(world, pos, reverse)?;
-    let structure = structures.linked_expand_pusher_subset(suction, &subset, reverse)?;
+    let sides = structures.pusher_cut_sides(world, pos, cut_ids)?;
+    if !sides.separated || sides.actor_side.is_empty() || sides.actor_anchored {
+        return None;
+    }
+    let subset = &sides.actor_side;
+
+    // 案例 2：反向子集已有同向位移标签 → 只挂动画（并入已有运动）
+    let any_tagged_same = subset
+        .iter()
+        .any(|p| motion_tags.get(p).is_some_and(|tag| *tag == reverse));
+    let held_ok_for_anim = subset
+        .iter()
+        .all(|p| motion_tags.get(p).is_some_and(|tag| *tag == reverse) || !motion_held.contains(p));
+    if any_tagged_same && held_ok_for_anim {
+        motion_held.extend(subset.iter().copied());
+        return Some(
+            StructureMove::translate_by_pusher_actor(
+                structures.id_at(pos)?,
+                subset.clone(),
+                IVec3::ZERO,
+                PusherActor { id, pos, animation },
+                MovementMark::Push,
+            )
+            .with_source(id, pos),
+        );
+    }
+
+    if subset.iter().any(|p| motion_held.contains(p)) {
+        // held 冲突且无同向 tag：本杆不动
+        return None;
+    }
+
+    let structure = structures.linked_expand_pusher_subset(suction, subset, reverse)?;
     if !can_translate_structure(world, &structure, reverse, structures, suction, hard_heads) {
         return None;
     }
+    apply_motion_tags(&structure, reverse, motion_held, motion_tags);
     Some(
         StructureMove::translate_by_pusher_actor(
             structures.id_at(pos)?,

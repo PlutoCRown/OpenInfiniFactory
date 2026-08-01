@@ -1,15 +1,15 @@
 {
-  "name": "pusher_reverse_leaves_front",
+  "name": "pusher_parallel_pair_ring",
   "setup": [
     {
       "x": 0,
       "y": 1,
-      "z": 1,
+      "z": 0,
       "kind": "Blocker",
-      "facing": "North"
+      "facing": "East"
     },
     {
-      "x": 0,
+      "x": 1,
       "y": 1,
       "z": 0,
       "kind": "Platform",
@@ -17,9 +17,16 @@
     },
     {
       "x": 0,
-      "y": 0,
-      "z": 0,
-      "kind": "fallback",
+      "y": 1,
+      "z": 1,
+      "kind": "Blocker",
+      "facing": "East"
+    },
+    {
+      "x": 1,
+      "y": 1,
+      "z": 1,
+      "kind": "Platform",
       "facing": "North"
     }
   ],
@@ -36,15 +43,31 @@
       "x": 0,
       "y": 1,
       "z": 0,
-      "kind": "Platform",
+      "kind": "Blocker",
       "layer": "factory"
     },
     {
       "op": "assertBlock",
       "x": 0,
       "y": 1,
-      "z": 2,
+      "z": 1,
       "kind": "Blocker",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": 2,
+      "y": 1,
+      "z": 0,
+      "kind": "Platform",
+      "layer": "factory"
+    },
+    {
+      "op": "assertBlock",
+      "x": 2,
+      "y": 1,
+      "z": 1,
+      "kind": "Platform",
       "layer": "factory"
     }
   ]

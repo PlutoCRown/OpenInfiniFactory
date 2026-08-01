@@ -1,25 +1,25 @@
 {
-  "name": "pusher_reverse_leaves_front",
+  "name": "pusher_push_extended_head",
   "setup": [
     {
+      "x": 1,
+      "y": 1,
+      "z": 2,
+      "kind": "fallback",
+      "facing": "North"
+    },
+    {
       "x": 0,
+      "y": 1,
+      "z": 0,
+      "kind": "Blocker",
+      "facing": "East"
+    },
+    {
+      "x": 1,
       "y": 1,
       "z": 1,
       "kind": "Blocker",
-      "facing": "North"
-    },
-    {
-      "x": 0,
-      "y": 1,
-      "z": 0,
-      "kind": "Platform",
-      "facing": "North"
-    },
-    {
-      "x": 0,
-      "y": 0,
-      "z": 0,
-      "kind": "fallback",
       "facing": "North"
     }
   ],
@@ -29,21 +29,21 @@
     },
     {
       "op": "run",
-      "turns": 1
+      "turns": 2
     },
     {
       "op": "assertBlock",
       "x": 0,
       "y": 1,
-      "z": 0,
-      "kind": "Platform",
+      "z": -1,
+      "kind": "Blocker",
       "layer": "factory"
     },
     {
       "op": "assertBlock",
-      "x": 0,
+      "x": 1,
       "y": 1,
-      "z": 2,
+      "z": 1,
       "kind": "Blocker",
       "layer": "factory"
     }

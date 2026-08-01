@@ -64,6 +64,183 @@ pub struct BreakableSplit {
     pub target_anchored: bool,
 }
 
+/// multi-cut 后某杆两侧格点（Body–Head 在给定切断集下的连通分量）
+#[derive(Clone, Debug)]
+pub struct PusherCutSides {
+    /// 切断后体与头是否已不连通
+    pub separated: bool,
+    pub actor_side: HashSet<IVec3>,
+    pub target_side: HashSet<IVec3>,
+    pub actor_anchored: bool,
+    pub target_anchored: bool,
+}
+
+/// 结构图节点：工厂格或推杆头
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum BreakableNode {
+    Cell(IVec3),
+    Head(BlockId),
+}
+
+/// 体–头双节点图：供同结构多杆同时切断（multi-cut）查询
+#[derive(Clone, Debug, Default)]
+pub struct BreakableGraph {
+    adj: HashMap<BreakableNode, HashSet<BreakableNode>>,
+    /// 可切断推杆 BlockId → 体格
+    bodies: HashMap<BlockId, IVec3>,
+}
+
+impl BreakableGraph {
+    fn link(&mut self, a: BreakableNode, b: BreakableNode) {
+        self.adj.entry(a).or_default().insert(b);
+        self.adj.entry(b).or_default().insert(a);
+    }
+
+    /// 从工厂成员建双节点图：工作面经 Head，体–头边可切断
+    fn build(world: &WorldBlocks, positions: &HashSet<IVec3>) -> Self {
+        let mut graph = Self::default();
+        for &pos in positions {
+            graph.adj.entry(BreakableNode::Cell(pos)).or_default();
+        }
+
+        let mut forward_of: HashMap<IVec3, IVec3> = HashMap::new();
+        for &pos in positions {
+            let Some(block) = world.blocks.get(&pos) else {
+                continue;
+            };
+            let Some(MovementRule::PoweredTranslate { source, .. }) =
+                block.kind.movement_rule(block.facing)
+            else {
+                continue;
+            };
+            graph.bodies.insert(block.id, pos);
+            forward_of.insert(pos, source);
+            graph.adj.entry(BreakableNode::Head(block.id)).or_default();
+            graph.link(BreakableNode::Cell(pos), BreakableNode::Head(block.id));
+        }
+
+        for &pos in positions {
+            for offset in signal_offsets() {
+                let neighbor = pos + offset;
+                if !positions.contains(&neighbor)
+                    || is_blocked_factory_connection(world, pos, neighbor)
+                    || is_blocked_factory_connection(world, neighbor, pos)
+                {
+                    continue;
+                }
+                // 工作面：Cell(body)—Head—Cell(front)，不直连体与头前格
+                if forward_of.get(&pos) == Some(&offset) {
+                    let id = world.blocks.get(&pos).map(|block| block.id);
+                    if let Some(id) = id {
+                        graph.link(BreakableNode::Head(id), BreakableNode::Cell(neighbor));
+                    }
+                    continue;
+                }
+                if forward_of.get(&neighbor) == Some(&(-offset)) {
+                    let id = world.blocks.get(&neighbor).map(|block| block.id);
+                    if let Some(id) = id {
+                        graph.link(BreakableNode::Head(id), BreakableNode::Cell(pos));
+                    }
+                    continue;
+                }
+                graph.link(BreakableNode::Cell(pos), BreakableNode::Cell(neighbor));
+            }
+        }
+        graph
+    }
+
+    fn is_cut_edge(
+        a: BreakableNode,
+        b: BreakableNode,
+        cut_ids: &HashSet<BlockId>,
+        bodies: &HashMap<BlockId, IVec3>,
+    ) -> bool {
+        match (a, b) {
+            (BreakableNode::Cell(pos), BreakableNode::Head(id))
+            | (BreakableNode::Head(id), BreakableNode::Cell(pos)) => {
+                cut_ids.contains(&id) && bodies.get(&id) == Some(&pos)
+            }
+            _ => false,
+        }
+    }
+
+    /// 切断 cut_ids 中全部体–头边后，从 start 可达的工厂格
+    fn reachable_cells(&self, start: BreakableNode, cut_ids: &HashSet<BlockId>) -> HashSet<IVec3> {
+        let mut cells = HashSet::new();
+        let mut seen = HashSet::from([start]);
+        let mut queue = VecDeque::from([start]);
+        while let Some(node) = queue.pop_front() {
+            if let BreakableNode::Cell(pos) = node {
+                cells.insert(pos);
+            }
+            let Some(neighbors) = self.adj.get(&node) else {
+                continue;
+            };
+            for &next in neighbors {
+                if seen.contains(&next) || Self::is_cut_edge(node, next, cut_ids, &self.bodies) {
+                    continue;
+                }
+                seen.insert(next);
+                queue.push_back(next);
+            }
+        }
+        cells
+    }
+
+    /// 查询某杆在给定切断集下的两侧
+    fn sides_for(
+        &self,
+        pusher_id: BlockId,
+        cut_ids: &HashSet<BlockId>,
+        scene_touching: &HashSet<IVec3>,
+    ) -> Option<PusherCutSides> {
+        let &body = self.bodies.get(&pusher_id)?;
+        let actor_side = self.reachable_cells(BreakableNode::Cell(body), cut_ids);
+        let target_side = self.reachable_cells(BreakableNode::Head(pusher_id), cut_ids);
+        let separated = !target_side.contains(&body) && !actor_side.is_empty();
+        let (actor_side, target_side) = if separated {
+            (actor_side, target_side)
+        } else {
+            (HashSet::new(), HashSet::new())
+        };
+        let actor_anchored =
+            !actor_side.is_empty() && actor_side.iter().any(|pos| scene_touching.contains(pos));
+        let target_anchored =
+            !target_side.is_empty() && target_side.iter().any(|pos| scene_touching.contains(pos));
+        Some(PusherCutSides {
+            separated,
+            actor_side,
+            target_side,
+            actor_anchored,
+            target_anchored,
+        })
+    }
+
+    /// 成员平移后更新图中 Cell 坐标
+    fn translate_cells(&mut self, positions: &HashSet<IVec3>, offset: IVec3) {
+        let map_node = |node: BreakableNode| match node {
+            BreakableNode::Cell(pos) if positions.contains(&pos) => {
+                BreakableNode::Cell(pos + offset)
+            }
+            other => other,
+        };
+        let old = std::mem::take(&mut self.adj);
+        let mut new_adj: HashMap<BreakableNode, HashSet<BreakableNode>> = HashMap::new();
+        for (node, neighbors) in old {
+            let mapped = map_node(node);
+            for next in neighbors {
+                new_adj.entry(mapped).or_default().insert(map_node(next));
+            }
+        }
+        self.adj = new_adj;
+        for pos in self.bodies.values_mut() {
+            if positions.contains(pos) {
+                *pos += offset;
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Structure {
     pub id: StructureId,
@@ -73,8 +250,12 @@ pub struct Structure {
     pub freedom: StructureFreedom,
     pub pushable: bool,
     gravity_support: Vec<GravitySupportContact>,
-    /// 可断裂预拆：key = 活塞/拦截器 BlockId
+    /// 可断裂预拆：key = 活塞/拦截器 BlockId（仅切自己时的快照，观测/兼容）
     pub breakable_splits: HashMap<BlockId, BreakableSplit>,
+    /// 体–头双节点图（runtime multi-cut）
+    pub breakable_graph: BreakableGraph,
+    /// 开局贴场景的成员格（锚死判定，不随中途落地改写）
+    scene_touching: HashSet<IVec3>,
 }
 
 #[derive(Clone, Debug)]
@@ -234,6 +415,8 @@ impl StructureState {
                     pushable: true,
                     gravity_support,
                     breakable_splits: HashMap::new(),
+                    breakable_graph: BreakableGraph::default(),
+                    scene_touching: HashSet::new(),
                 },
             );
         }
@@ -273,6 +456,8 @@ impl StructureState {
                     pushable: true,
                     gravity_support: Vec::new(),
                     breakable_splits: HashMap::new(),
+                    breakable_graph: BreakableGraph::default(),
+                    scene_touching: HashSet::new(),
                 },
             );
         }
@@ -377,9 +562,10 @@ impl StructureState {
         self.pushable_structure_at(pos, offset)
     }
 
+    /// 不同结构正推：整坨；同结构需调用方用 multi-cut 的 target_side
     pub fn pusher_target_structure(
         &self,
-        world: &WorldBlocks,
+        _world: &WorldBlocks,
         pusher_pos: IVec3,
         target_pos: IVec3,
         offset: IVec3,
@@ -389,87 +575,30 @@ impl StructureState {
             return None;
         }
         let actor_id = self.id_at(pusher_pos)?;
-        // 不同结构：整坨推（材料/已分离的工厂），仍看对方 pushable
         if actor_id != target.id {
             if !target.pushable || !target.freedom.can_translate(offset) {
                 return None;
             }
             return Some(target.positions.clone());
         }
-        // 同结构：查预计算桥边拆分；是桥才能推头前子集（不看整坨 pushable）
-        let block = world.blocks.get(&pusher_pos)?;
-        let split = target.breakable_splits.get(&block.id)?;
-        if !split.is_bridge || split.target_side.is_empty() {
-            return None;
-        }
-        if !split.target_side.contains(&target_pos) {
-            return None;
-        }
-        // 开局已锚死的头前子集不可正推 → 交给反推
-        if split.target_anchored {
-            return None;
-        }
-        // 头前子集含不同朝向的其它推杆：不当正推货物（各自伸缩），改走反推。
-        // 同向链仍可把前方同朝向推杆当 target（否则同向三连无法拆推）。
-        if split.target_side.iter().any(|pos| {
-            world.blocks.get(pos).is_some_and(|other| {
-                other.id != block.id
-                    && other.facing != block.facing
-                    && matches!(
-                        other.kind.movement_rule(other.facing),
-                        Some(MovementRule::PoweredTranslate { .. })
-                    )
-            })
-        }) {
-            return None;
-        }
-        Some(split.target_side.clone())
+        // 同结构拆边由 `pusher_cut_sides` + cut 集负责
+        None
     }
 
-    /// 反推用：体–头边为桥时返回体侧子集；有回环（非桥）不可拆边反推。
-    /// 不把其它推杆拖进反推集；正推 target 仅允许同朝向推杆（见 `pusher_target_structure`）。
-    pub fn pusher_actor_structure(
+    /// 在给定同时切断的推杆集合下，查本杆体/头两侧
+    pub fn pusher_cut_sides(
         &self,
         world: &WorldBlocks,
         pusher_pos: IVec3,
-        _offset: IVec3,
-    ) -> Option<HashSet<IVec3>> {
+        cut_ids: &HashSet<BlockId>,
+    ) -> Option<PusherCutSides> {
         let seed = self.structure(pusher_pos)?;
         if seed.kind != StructureKind::Factory {
             return None;
         }
         let block = world.blocks.get(&pusher_pos)?;
-        let split = seed.breakable_splits.get(&block.id)?;
-        if !split.is_bridge || split.actor_side.is_empty() {
-            return None;
-        }
-        // 开局已锚死的本体侧不可反推
-        if split.actor_anchored {
-            return None;
-        }
-        let mut subset = HashSet::from([pusher_pos]);
-        let mut queue = VecDeque::from([pusher_pos]);
-        while let Some(pos) = queue.pop_front() {
-            for offset in signal_offsets() {
-                let neighbor = pos + offset;
-                if subset.contains(&neighbor) || !split.actor_side.contains(&neighbor) {
-                    continue;
-                }
-                let is_other_pusher = world.blocks.get(&neighbor).is_some_and(|other| {
-                    other.id != block.id
-                        && matches!(
-                            other.kind.movement_rule(other.facing),
-                            Some(MovementRule::PoweredTranslate { .. })
-                        )
-                });
-                if is_other_pusher {
-                    continue;
-                }
-                subset.insert(neighbor);
-                queue.push_back(neighbor);
-            }
-        }
-        Some(subset)
+        seed.breakable_graph
+            .sides_for(block.id, cut_ids, &seed.scene_touching)
     }
 
     /// 按结构 ID 取结构（调试/查询）
@@ -577,7 +706,7 @@ impl StructureState {
                     *member += offset;
                 }
             }
-            // 预拆子集坐标随成员平移
+            // 预拆子集与双节点图坐标随成员平移
             for split in structure.breakable_splits.values_mut() {
                 split.actor_side = split
                     .actor_side
@@ -602,6 +731,18 @@ impl StructureState {
                     })
                     .collect();
             }
+            structure.breakable_graph.translate_cells(positions, offset);
+            structure.scene_touching = structure
+                .scene_touching
+                .iter()
+                .map(|pos| {
+                    if positions.contains(pos) {
+                        *pos + offset
+                    } else {
+                        *pos
+                    }
+                })
+                .collect();
             for pos in &structure.positions {
                 self.structure_by_pos.insert(*pos, id);
             }
@@ -647,7 +788,7 @@ impl StructureState {
         }
     }
 
-    /// 单结构：按「体–头」双节点模型预拆；体–头边为桥则缓存两侧格点子集
+    /// 单结构：建双节点图，并缓存「仅切自己」时的桥边子集
     fn rebuild_breakable_splits_for(&mut self, world: &WorldBlocks, id: StructureId) {
         let Some(structure) = self.structures.get(&id) else {
             return;
@@ -656,49 +797,50 @@ impl StructureState {
             return;
         }
         let positions = structure.positions.clone();
+        let graph = BreakableGraph::build(world, &positions);
+        let scene_touching: HashSet<IVec3> = positions
+            .iter()
+            .copied()
+            .filter(|pos| {
+                signal_offsets().into_iter().any(|offset| {
+                    let neighbor = *pos + offset;
+                    world.is_scene_at(neighbor)
+                        && !is_blocked_factory_connection(world, *pos, neighbor)
+                })
+            })
+            .collect();
+
         let mut splits = HashMap::new();
         for &pos in &positions {
             let Some(block) = world.blocks.get(&pos) else {
                 continue;
             };
-            let Some(MovementRule::PoweredTranslate { source, .. }) =
-                block.kind.movement_rule(block.facing)
-            else {
+            if !matches!(
+                block.kind.movement_rule(block.facing),
+                Some(MovementRule::PoweredTranslate { .. })
+            ) {
+                continue;
+            }
+            let cut = HashSet::from([block.id]);
+            let Some(sides) = graph.sides_for(block.id, &cut, &scene_touching) else {
                 continue;
             };
-            // 体–头边：切断后从体侧 BFS；头前格在本结构内则从头前 BFS 得头侧
-            // 头前不在本结构（空/其它结构）⇔ 头节点无其它邻边 ⇔ 无回环 ⇔ 必为桥
-            let front = pos + source;
-            let actor_side = connected_factory_subset(world, &positions, pos, Some(pos));
-            let front_in_structure = positions.contains(&front);
-            let is_bridge = !front_in_structure || !actor_side.contains(&front);
-            let (actor_side, target_side) = if is_bridge {
-                let target_side = if front_in_structure {
-                    connected_factory_subset(world, &positions, front, Some(pos))
-                } else {
-                    HashSet::new()
-                };
-                (actor_side, target_side)
-            } else {
-                // 有回环：切断体–头后仍连通，不可拆推
-                (HashSet::new(), HashSet::new())
-            };
-            let actor_anchored = !actor_side.is_empty() && touches_scene(world, &actor_side);
-            let target_anchored = !target_side.is_empty() && touches_scene(world, &target_side);
             splits.insert(
                 block.id,
                 BreakableSplit {
                     facing: block.facing,
-                    is_bridge,
-                    actor_side,
-                    target_side,
-                    actor_anchored,
-                    target_anchored,
+                    is_bridge: sides.separated,
+                    actor_side: sides.actor_side,
+                    target_side: sides.target_side,
+                    actor_anchored: sides.actor_anchored,
+                    target_anchored: sides.target_anchored,
                 },
             );
         }
         if let Some(structure) = self.structures.get_mut(&id) {
             structure.breakable_splits = splits;
+            structure.breakable_graph = graph;
+            structure.scene_touching = scene_touching;
         }
     }
 
