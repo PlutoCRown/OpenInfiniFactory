@@ -63,8 +63,8 @@ fn face_mark_local_normal(data: BlockData, world_normal: IVec3) -> IVec3 {
     }
 }
 
-/// 工厂调试叠层用材质（活动/未活动）
-fn factory_debug_overlay_material(
+/// 工厂调试叠层材质（活动绿 / 固定红）
+pub(crate) fn factory_debug_overlay_material(
     assets: &WorldRenderAssets,
     structure_state: &StructureState,
     pos: IVec3,
@@ -80,7 +80,7 @@ fn factory_debug_overlay_material(
 }
 
 /// 在方块子节点上挂工厂调试半透明壳
-fn spawn_factory_debug_overlay(
+pub(crate) fn spawn_factory_debug_overlay(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
     material: Handle<StandardMaterial>,

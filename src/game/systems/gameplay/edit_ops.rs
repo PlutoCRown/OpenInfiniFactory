@@ -11,7 +11,7 @@ use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     BlockEntity, SceneChunkMeshes, WorldRenderAssets, rebuild_world_for_debug_state,
-    rebuild_world_with_animations, rebuild_world_with_animations_for_debug_state,
+    rebuild_world_with_animations,
 };
 use crate::scene::BlockEntityIndex;
 
@@ -81,6 +81,7 @@ pub(super) fn alternate_block_at(
     }
     edit_history.record(patch);
     refresh_edit_generated_markers(world);
+    structure_state.rebuild_for_simulation(world);
     despawn_block_entities(commands, meshes, block_entities, block_index, scene_chunks);
     rebuild_world_for_debug_state(
         commands,
@@ -141,31 +142,18 @@ pub(super) fn rotate_block_at(
         },
     );
 
+    structure_state.rebuild_for_simulation(world);
     despawn_block_entities(commands, meshes, block_entities, block_index, scene_chunks);
-    if debug.factory_activity {
-        rebuild_world_with_animations_for_debug_state(
-            commands,
-            meshes,
-            world,
-            render_assets,
-            &animations,
-            debug,
-            structure_state,
-            block_index,
-            scene_chunks,
-        );
-    } else {
-        rebuild_world_with_animations(
-            commands,
-            meshes,
-            world,
-            render_assets,
-            &animations,
-            None,
-            block_index,
-            scene_chunks,
-        );
-    }
+    rebuild_world_with_animations(
+        commands,
+        meshes,
+        world,
+        render_assets,
+        &animations,
+        None,
+        block_index,
+        scene_chunks,
+    );
     true
 }
 

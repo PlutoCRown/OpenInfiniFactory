@@ -5,7 +5,8 @@ use bevy::prelude::*;
 
 use crate::game::player::controller::FlyCamera;
 use crate::game::simulation::structure_state::{
-    StructureFreedom, StructureKind, StructureState, material_structure, query_factory_structure,
+    StructureFreedom, StructureId, StructureKind, StructureState, material_structure,
+    query_factory_structure,
 };
 use crate::game::state::{
     BuilderMode, EditGestureKind, GameMode, GameSettings, PlacementState, PlayingUiState,
@@ -17,10 +18,12 @@ use crate::game::world::grid::{
 };
 use crate::game::world::rendering::StructureBounds;
 use crate::game::world::rendering::{
-    AimFaceHighlight, EditPreview, HoverMarker, HoverStructureBounds, WorldRenderAssets,
-    block_face_highlight_transform, despawn_edit_previews, light_panel_transform,
-    spawn_block_preview,
+    AimFaceHighlight, EditPreview, FactoryDebugOverlay, HoverMarker, HoverStructureBounds,
+    WorldRenderAssets, block_face_highlight_transform, despawn_edit_previews,
+    factory_debug_overlay_material, light_panel_transform, spawn_block_preview,
+    spawn_factory_debug_overlay,
 };
+use crate::scene::BlockEntityIndex;
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
 use super::placement::{attachment_place_block, preview_world, selected_place_block};
@@ -304,4 +307,66 @@ pub fn draw_hover_structure_bounds(bounds: Res<HoverStructureBounds>, mut gizmos
         StructureKind::Factory => Color::srgba(0.35, 1.0, 0.45, 0.95),
     };
     gizmos.cube(Transform::from_translation(center).with_scale(size), color);
+}
+
+/// P 键调试：只给鼠标指向的工厂结构挂活动/固定叠层
+pub fn sync_factory_activity_debug_overlays(
+    debug: Res<DebugState>,
+    placement: Res<PlacementState>,
+    world: Res<WorldBlocks>,
+    structure_state: Res<StructureState>,
+    render_assets: Option<Res<WorldRenderAssets>>,
+    block_index: Res<BlockEntityIndex>,
+    mut commands: Commands,
+    overlays: Query<Entity, With<FactoryDebugOverlay>>,
+    mut last: Local<Option<(StructureId, usize)>>,
+) {
+    let aimed = debug
+        .factory_activity
+        .then(|| placement.target.as_ref())
+        .flatten()
+        .and_then(|hit| {
+            let block = world.blocks.get(&hit.pos)?;
+            if !block.kind.is_factory() {
+                return None;
+            }
+            let id = structure_state.structure_id_at(hit.pos)?;
+            let len = structure_state.structure_positions(id)?.len();
+            Some((id, len))
+        });
+
+    if *last == aimed && !(aimed.is_some() && structure_state.is_changed()) {
+        return;
+    }
+
+    for entity in &overlays {
+        commands.entity(entity).despawn();
+    }
+    *last = aimed;
+
+    let Some((id, _)) = aimed else {
+        return;
+    };
+    let Some(assets) = render_assets.as_ref() else {
+        return;
+    };
+    let Some(positions) = structure_state.structure_positions(id) else {
+        return;
+    };
+    for &pos in positions {
+        let Some(block) = world.blocks.get(&pos) else {
+            continue;
+        };
+        let Some(material) =
+            factory_debug_overlay_material(assets, &structure_state, pos, block.kind)
+        else {
+            continue;
+        };
+        let Some(entity) = block_index.get_animatable(pos) else {
+            continue;
+        };
+        commands.entity(entity).with_children(|parent| {
+            spawn_factory_debug_overlay(parent, assets, material);
+        });
+    }
 }

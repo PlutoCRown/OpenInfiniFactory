@@ -11,7 +11,7 @@ use crate::game::world::grid::WorldBlocks;
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::scene::BlockEntityIndex;
 
-/// 进入游玩时按调试状态重建结构与世界渲染
+/// 进入游玩时重建连通结构表与世界渲染
 pub fn rebuild_world_on_enter(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -22,10 +22,7 @@ pub fn rebuild_world_on_enter(
     index: &mut BlockEntityIndex,
     scene_chunks: &mut SceneChunkMeshes,
 ) {
-    structure_state.clear();
-    if debug.factory_activity {
-        structure_state.rebuild_factory_for_debug(world);
-    }
+    structure_state.rebuild_for_simulation(world);
     rebuild_world_for_debug_state(
         commands,
         meshes,
@@ -44,7 +41,7 @@ pub fn rebuild_world(
     meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
-    factory_debug: Option<&StructureState>,
+    _factory_debug: Option<&StructureState>,
     index: &mut BlockEntityIndex,
     scene_chunks: &mut SceneChunkMeshes,
 ) {
@@ -60,7 +57,7 @@ pub fn rebuild_world(
             world,
             *pos,
             *data,
-            factory_debug,
+            None,
             index,
         );
     }
@@ -72,21 +69,21 @@ pub fn rebuild_world(
             world,
             *pos,
             *data,
-            factory_debug,
+            None,
             index,
         );
     }
     rebuild_all_scene_chunks(commands, meshes, world, assets, scene_chunks);
 }
 
-/// 按调试开关决定是否带工厂叠层重建
+/// 全量重建世界（叠层改由悬停调试系统挂载，不再按开关烘焙）
 pub fn rebuild_world_for_debug_state(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
-    debug: &DebugState,
-    structure_state: &StructureState,
+    _debug: &DebugState,
+    _structure_state: &StructureState,
     index: &mut BlockEntityIndex,
     scene_chunks: &mut SceneChunkMeshes,
 ) {
@@ -95,21 +92,21 @@ pub fn rebuild_world_for_debug_state(
         meshes,
         world,
         assets,
-        debug.factory_activity.then_some(structure_state),
+        None,
         index,
         scene_chunks,
     );
 }
 
-/// 带编辑动画并按调试开关重建
+/// 带编辑动画的全量重建
 pub fn rebuild_world_with_animations_for_debug_state(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     animations: &HashMap<IVec3, BlockAnimation>,
-    debug: &DebugState,
-    structure_state: &StructureState,
+    _debug: &DebugState,
+    _structure_state: &StructureState,
     index: &mut BlockEntityIndex,
     scene_chunks: &mut SceneChunkMeshes,
 ) {
@@ -119,7 +116,7 @@ pub fn rebuild_world_with_animations_for_debug_state(
         world,
         assets,
         animations,
-        debug.factory_activity.then_some(structure_state),
+        None,
         index,
         scene_chunks,
     );
@@ -289,7 +286,7 @@ pub fn rebuild_world_with_runtime_animations(
     rebuild_all_scene_chunks(commands, meshes, world, assets, scene_chunks);
 }
 
-/// 运行时重建并按调试开关挂工厂叠层
+/// 运行时重建世界（叠层改由悬停调试系统挂载）
 pub fn rebuild_world_with_runtime_animations_for_debug_state(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -298,8 +295,8 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
     animations: &HashMap<IVec3, BlockAnimation>,
     pusher_animations: &HashMap<IVec3, PusherAnimation>,
     timing: AnimationTiming,
-    debug: &DebugState,
-    structure_state: &StructureState,
+    _debug: &DebugState,
+    _structure_state: &StructureState,
     powered_wires: &HashSet<IVec3>,
     index: &mut BlockEntityIndex,
     scene_chunks: &mut SceneChunkMeshes,
@@ -313,7 +310,7 @@ pub fn rebuild_world_with_runtime_animations_for_debug_state(
         pusher_animations,
         timing,
         powered_wires,
-        debug.factory_activity.then_some(structure_state),
+        None,
         index,
         scene_chunks,
     );

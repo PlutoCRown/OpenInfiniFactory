@@ -14,7 +14,6 @@ pub fn refresh_world_after_edit(world: &mut PlayingWorldParams, pos: IVec3) {
 }
 
 pub fn refresh_world_after_edit_many(world: &mut PlayingWorldParams, changed: HashSet<IVec3>) {
-    world.structure_state.clear();
     world.movement_influence.clear();
     world.pusher_state.clear();
     if let Some(render_assets) = world.render_assets.as_deref() {

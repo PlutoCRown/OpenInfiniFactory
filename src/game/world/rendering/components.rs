@@ -47,9 +47,9 @@ pub struct BlockEntity {
     pub layer: BlockEntityLayer,
 }
 
-/// 工厂活动调试半透明叠层
+/// 工厂活动调试半透明叠层（仅挂在鼠标指向的结构上）
 #[derive(Component)]
-pub(super) struct FactoryDebugOverlay;
+pub struct FactoryDebugOverlay;
 
 /// 游玩场景根标记（灯光、准星等）
 #[derive(Component)]

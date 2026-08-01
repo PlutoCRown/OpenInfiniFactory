@@ -384,8 +384,8 @@ pub fn refresh_positions(
     index: &mut BlockEntityIndex,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
-    debug: &DebugState,
-    structure_state: &StructureState,
+    _debug: &DebugState,
+    _structure_state: &StructureState,
     powered_wires: &HashSet<IVec3>,
     positions: &HashSet<IVec3>,
     skip: &HashSet<IVec3>,
@@ -393,7 +393,7 @@ pub fn refresh_positions(
     timing: AnimationTiming,
     scene_chunks: &mut SceneChunkMeshes,
 ) {
-    let factory_debug = debug.factory_activity.then_some(structure_state);
+    let factory_debug = None::<&StructureState>;
     let mut scene_dirty = HashSet::new();
     for &pos in positions {
         if skip.contains(&pos) {
@@ -494,8 +494,8 @@ pub fn apply_structure_animations(
     index: &mut BlockEntityIndex,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
-    debug: &DebugState,
-    structure_state: &StructureState,
+    _debug: &DebugState,
+    _structure_state: &StructureState,
     powered_wires: &HashSet<IVec3>,
     animations: &HashMap<IVec3, BlockAnimation>,
     pusher_animations: &HashMap<IVec3, PusherAnimation>,
@@ -504,7 +504,7 @@ pub fn apply_structure_animations(
     // 本回合已传到出口的源口 → 方块 id（仍要播进入源口的移动动画）
     teleported_from: &HashMap<IVec3, crate::game::blocks::BlockId>,
 ) -> HashSet<IVec3> {
-    let factory_debug = debug.factory_activity.then_some(structure_state);
+    let factory_debug = None::<&StructureState>;
     let mut handled = HashSet::new();
     // 本函数已排队销毁的实体：禁止再 insert（Bevy 0.19 对已 despawn 实体 insert 会 panic）
     let mut despawned = HashSet::new();
@@ -638,10 +638,11 @@ pub fn refresh_edit_changes(
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
     debug: &DebugState,
-    structure_state: &StructureState,
+    structure_state: &mut StructureState,
     changed: &HashSet<IVec3>,
     scene_chunks: &mut SceneChunkMeshes,
 ) {
+    structure_state.rebuild_for_simulation(world);
     let refresh = collect_edit_refresh_positions(world, changed);
     // 编辑常只改 block_settings（材料预览等），BlockData 不变；
     // refresh_positions 对已存在的系统实体会跳过，这里先拆掉再重建。
@@ -822,7 +823,7 @@ pub fn apply_turn_output_incremental(
             pusher_animations.get(&pos).copied(),
             timing,
             output.powered_wires.contains(&pos),
-            debug.factory_activity.then_some(structure_state),
+            None,
         );
     }
     for (&pos, data) in &after.system_blocks {
@@ -830,18 +831,7 @@ pub fn apply_turn_output_incremental(
             continue;
         }
         spawn_and_index(
-            commands,
-            meshes,
-            index,
-            after,
-            assets,
-            pos,
-            *data,
-            None,
-            None,
-            timing,
-            false,
-            debug.factory_activity.then_some(structure_state),
+            commands, meshes, index, after, assets, pos, *data, None, None, timing, false, None,
         );
     }
     let weld_delay = if output.animations.is_empty() && output.pusher_animations.is_empty() {

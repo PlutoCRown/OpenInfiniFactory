@@ -43,7 +43,7 @@ use state::{
 use systems::gameplay::{
     BlockSettingsClipboard, SelectionToolSwap, apply_fov, clipboard_input,
     draw_hover_structure_bounds, gameplay_input, placement_input, sync_edit_bounds_overlays,
-    update_hover,
+    sync_factory_activity_debug_overlays, update_hover,
 };
 use systems::perf::{PerfPlugin, PerfScope};
 use systems::simulation_controls::{simulation_controls, sync_generator_config_material_preview};
@@ -240,6 +240,10 @@ impl Plugin for GamePlugin {
                 update_hover
                     .after(PerfScope::PlayerMove)
                     .before(PerfScope::Hover),
+            )
+            .add_systems(
+                Update,
+                sync_factory_activity_debug_overlays.after(update_hover),
             )
             .add_systems(
                 Update,

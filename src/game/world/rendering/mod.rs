@@ -30,8 +30,9 @@ pub(crate) use components::GeneratorConfigMaterialPreview;
 pub use components::{
     AimFaceHighlight, BlockEntity, BlockEntityLayer, BlockIconAssets, BlockIconRenderCamera,
     BlockIconRenderRoot, BlockIconRenderState, DeleteBoundsOverlay, DeleteBoundsPart, EditPreview,
-    GameplayScene, HoverMarker, HoverStructureBounds, PendingGeneratedPreview, PlacementPreview,
-    SelectionBoundsOverlay, SelectionBoundsPart, StructureBounds, block_face_highlight_transform,
+    FactoryDebugOverlay, GameplayScene, HoverMarker, HoverStructureBounds, PendingGeneratedPreview,
+    PlacementPreview, SelectionBoundsOverlay, SelectionBoundsPart, StructureBounds,
+    block_face_highlight_transform,
 };
 pub(crate) use connectors::{light_panel_transform, signal_neighbor_offsets};
 pub use fx::{
@@ -55,7 +56,9 @@ pub use scene_chunks::{
 };
 pub use skybox::SkyboxPlugin;
 pub use skybox::{environment_map_intensity, environment_map_light};
-pub(crate) use spawn::spawn_world_block_entity;
+pub(crate) use spawn::{
+    factory_debug_overlay_material, spawn_factory_debug_overlay, spawn_world_block_entity,
+};
 pub use spawn::{
     spawn_block, spawn_block_with_animation, spawn_block_with_timed_animation,
     spawn_pending_generated_block,

@@ -20,15 +20,14 @@ use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     BlockEntity, BlockEntityLayer, DeleteBoundsOverlay, DeleteBoundsPart, SceneChunkMeshes,
-    SelectionBoundsOverlay, SelectionBoundsPart, WorldRenderAssets,
-    rebuild_world_with_animations_for_debug_state, spawn_block_with_animation,
+    SelectionBoundsOverlay, SelectionBoundsPart, WorldRenderAssets, spawn_block_with_animation,
     update_delete_bounds_overlay, update_selection_bounds_overlay,
 };
 use crate::scene::{BlockEntityIndex, refresh_edit_changes};
 use crate::shared::config::{ConfigChord, ConfigSelectionMode, GameConfig};
 use crate::shared::i18n::I18n;
 
-use super::placement::{despawn_block_entities, refresh_edit_generated_markers};
+use super::placement::refresh_edit_generated_markers;
 use super::rules::can_delete_at;
 
 /// 处理框选工具的点击与拖拽输入
@@ -412,7 +411,6 @@ fn move_selection(
     also_dirty.extend(animations.keys().copied());
     spawn_selection_result(
         world,
-        block_entities,
         commands,
         meshes,
         render_assets,
@@ -552,7 +550,6 @@ fn copy_selection(
     also_dirty.extend(target_positions.iter().copied());
     spawn_selection_result(
         world,
-        block_entities,
         commands,
         meshes,
         render_assets,
@@ -569,7 +566,6 @@ fn copy_selection(
 /// 选区搬移/复制后刷新实体（含焊点等静态虚方块 marker）
 fn spawn_selection_result(
     world: &mut WorldBlocks,
-    block_entities: &Query<(Entity, &BlockEntity)>,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     render_assets: &WorldRenderAssets,
@@ -586,22 +582,6 @@ fn spawn_selection_result(
     let mut dirty: HashSet<IVec3> = also_dirty.into_iter().collect();
     dirty.extend(animations.keys().copied());
     dirty.extend(animations.values().map(|animation| animation.from_pos));
-
-    if debug.factory_activity {
-        despawn_block_entities(commands, meshes, block_entities, block_index, scene_chunks);
-        rebuild_world_with_animations_for_debug_state(
-            commands,
-            meshes,
-            world,
-            render_assets,
-            &animations,
-            debug,
-            structure_state,
-            block_index,
-            scene_chunks,
-        );
-        return;
-    }
 
     refresh_edit_changes(
         commands,

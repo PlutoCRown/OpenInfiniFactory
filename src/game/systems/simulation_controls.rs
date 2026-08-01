@@ -141,7 +141,7 @@ pub fn simulation_controls(
         if let Some(snapshot) = factory_snapshot {
             *deps.structure_state = snapshot;
         } else {
-            deps.structure_state.clear();
+            deps.structure_state.rebuild_for_simulation(&deps.world);
         }
         despawn_world(
             &mut commands,
