@@ -595,26 +595,40 @@ pub fn scroll_conveyor_belts(
     }
 }
 
-/// 模拟期抬升器顶盘自发光；通电关闭时熄灭
+/// 模拟期抬升器顶盘自发光；通电关闭时熄灭。
+/// 仅在开停模拟或回合推进（电力集合更新）时刷新，与传送带/钻头同节奏。
 pub fn update_lifter_disk_glow(
     simulation: Res<crate::game::state::SimulationState>,
     world: Res<crate::game::world::grid::WorldBlocks>,
-    mut disks: Query<(
-        &LifterDiskGlow,
-        &mut MeshMaterial3d<StandardMaterial>,
-    )>,
+    mut disks: Query<(&LifterDiskGlow, &mut MeshMaterial3d<StandardMaterial>)>,
+    mut last: Local<(bool, u64)>,
 ) {
-    let sim_active = simulation.is_active();
+    let active = simulation.is_active();
+    let turn = simulation.turn;
+    let (was_active, last_turn) = *last;
+    if active == was_active && (!active || turn == last_turn) {
+        return;
+    }
+    *last = (active, turn);
+
+    if !active {
+        for (glow, mut material) in &mut disks {
+            if material.0 != glow.idle {
+                material.0 = glow.idle.clone();
+            }
+        }
+        return;
+    }
+
     let id_to_pos: std::collections::HashMap<_, _> = world
         .blocks
         .iter()
         .map(|(pos, block)| (block.id, *pos))
         .collect();
     for (glow, mut material) in &mut disks {
-        let lit = sim_active
-            && id_to_pos
-                .get(&glow.block_id)
-                .is_some_and(|pos| !simulation.last_powered_devices.contains(pos));
+        let lit = id_to_pos
+            .get(&glow.block_id)
+            .is_some_and(|pos| !simulation.last_powered_devices.contains(pos));
         let target = if lit { &glow.lit } else { &glow.idle };
         if material.0 != *target {
             material.0 = target.clone();
