@@ -148,8 +148,12 @@ pub fn update_hover(
             placement.target = raycast_blocks(origin, dir, &world);
         }
     } else if let Some(drag) = placement.selection.drag {
-        if let Some(cell) =
-            raycast_edit_drag_grid(origin, dir, drag.start, ConfigSelectionMode::Line, IVec3::Y)
+        // 与放置/删除相同：以抓住的格为起点，线/面拖拽求终点（点选配置退化为面选）
+        let mode = match config.place_selection_mode {
+            ConfigSelectionMode::Point => ConfigSelectionMode::Plane,
+            other => other,
+        };
+        if let Some(cell) = raycast_edit_drag_grid(origin, dir, drag.start, mode, drag.plane_normal)
         {
             placement.target = Some(TargetHit {
                 pos: cell,

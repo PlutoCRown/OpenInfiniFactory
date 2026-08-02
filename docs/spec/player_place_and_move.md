@@ -198,7 +198,10 @@ score = t - (far ? 5 : 0)    // FAR_FACE_PRIORITY_PENALTY = 5
 
 ### 3.7 其它调用
 
-- 选区工具拖拽：同样走 `raycast_edit_drag_grid`，模式固定 Line，`plane_normal = Y`（会跳过起始格底面求交，并做 Y 向钳制）。
+- **选区工具拖拽移动/复制**：与放置相同走 `raycast_edit_drag_grid`。
+  - 起点 = 按下时抓住的选区内格；法线 = 当时瞄准面（无则 `Y`）。
+  - 模式跟 `place_selection_mode`（若为 Point 则退化为 Plane）。
+  - 选区整体平移 `offset = 终点 − 起点`，使抓住的那块落到终点格。
 
 ---
 

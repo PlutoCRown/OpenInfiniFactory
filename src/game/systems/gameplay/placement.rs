@@ -190,7 +190,7 @@ pub fn placement_input(
         if handle_selection_area_input(
             &mouse_buttons,
             &keys,
-            current_target_pos,
+            placement.target,
             place_button,
             delete_button,
             copy_chord,

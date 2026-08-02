@@ -10,8 +10,8 @@ use crate::game::edit_history::{
 };
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{
-    BuilderMode, EditGestureKind, GameMode, PlacementState, PlayingUiState, SelectionAxis,
-    SelectionBounds, SelectionDrag, SelectionSnapshot, SimulationState, WorldEntryMode,
+    BuilderMode, EditGestureKind, GameMode, PlacementState, PlayingUiState, SelectionBounds,
+    SelectionDrag, SelectionSnapshot, SimulationState, WorldEntryMode,
 };
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::features::GameplayToast;
@@ -34,7 +34,7 @@ use super::rules::can_delete_at;
 pub(super) fn handle_selection_area_input(
     mouse_buttons: &ButtonInput<MouseButton>,
     keys: &ButtonInput<KeyCode>,
-    current_target_pos: Option<IVec3>,
+    current_target: Option<crate::game::world::grid::TargetHit>,
     place_button: MouseButton,
     delete_button: MouseButton,
     copy_chord: ConfigChord,
@@ -56,6 +56,7 @@ pub(super) fn handle_selection_area_input(
     toast: &mut GameplayToast,
 ) -> bool {
     let mut changed = false;
+    let current_target_pos = current_target.map(|t| t.pos);
 
     if mouse_buttons.just_pressed(delete_button) {
         if placement.selection.is_active() {
@@ -69,9 +70,10 @@ pub(super) fn handle_selection_area_input(
         return false;
     }
 
+    // 抓住的格 → 拖拽终点：整段选区平移，使抓住的方块落到终点
     if let Some(drag) = placement.selection.drag.as_mut() {
         if let Some(current) = current_target_pos {
-            drag.offset = selection_drag_offset(*drag, current);
+            drag.offset = current - drag.start;
         }
     }
 
@@ -154,9 +156,14 @@ pub(super) fn handle_selection_area_input(
 
     if let Some(bounds) = placement.selection.bounds {
         if bounds.contains(pos) {
+            let plane_normal = current_target
+                .map(|t| t.normal)
+                .filter(|n| *n != IVec3::ZERO)
+                .unwrap_or(IVec3::Y);
             placement.selection.drag = Some(SelectionDrag {
                 start: pos,
                 offset: IVec3::ZERO,
+                plane_normal,
             });
             return false;
         }
@@ -183,31 +190,6 @@ pub(super) fn handle_selection_area_input(
         toast.show(locale.t("toast.selection_pick_end").to_string());
     }
     false
-}
-
-/// 根据拖拽起点与当前格计算轴向偏移（每帧取当前最强轴，与放方块线选一致）
-fn selection_drag_offset(drag: SelectionDrag, current: IVec3) -> IVec3 {
-    let delta = current - drag.start;
-    if delta == IVec3::ZERO {
-        return IVec3::ZERO;
-    }
-    let axis = strongest_axis(delta);
-    match axis {
-        SelectionAxis::X => axis.offset(delta.x),
-        SelectionAxis::Y => axis.offset(delta.y),
-        SelectionAxis::Z => axis.offset(delta.z),
-    }
-}
-
-/// 取位移绝对值最大的轴
-fn strongest_axis(delta: IVec3) -> SelectionAxis {
-    if delta.x.abs() >= delta.y.abs() && delta.x.abs() >= delta.z.abs() {
-        SelectionAxis::X
-    } else if delta.y.abs() >= delta.z.abs() {
-        SelectionAxis::Y
-    } else {
-        SelectionAxis::Z
-    }
 }
 
 /// 收集选区内可移动/可复制的方块（游玩方案仅工厂；Free/Edit 含场景与材料）

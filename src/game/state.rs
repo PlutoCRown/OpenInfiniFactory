@@ -132,25 +132,12 @@ impl SelectionBounds {
 
 #[derive(Clone, Copy)]
 pub struct SelectionDrag {
+    /// 按下时抓住的选区内格子（该格方块应落到拖拽终点）
     pub start: IVec3,
+    /// 终点相对起点的位移
     pub offset: IVec3,
-}
-
-#[derive(Clone, Copy)]
-pub enum SelectionAxis {
-    X,
-    Y,
-    Z,
-}
-
-impl SelectionAxis {
-    pub fn offset(self, distance: i32) -> IVec3 {
-        match self {
-            Self::X => IVec3::X * distance,
-            Self::Y => IVec3::Y * distance,
-            Self::Z => IVec3::Z * distance,
-        }
-    }
+    /// 按下时瞄准面法线（接入放置/删除拖拽求交）
+    pub plane_normal: IVec3,
 }
 
 #[derive(States, Debug, Clone, Copy, Default, Eq, PartialEq, Hash)]
