@@ -165,7 +165,7 @@ pub fn simulate_turn(
     let suction = SuctionLinks::rebuild(world, structure_state, &powered_devices);
 
     // —— 阶段 2 运动标记：重力 + 通电设备，再 merge ——
-    let hard_pusher_head_occupancy = pusher_state.hard_head_occupancy(world);
+    let hard_pusher_head_occupancy = PusherState::hard_head_occupancy(world);
     let mut movement_plan = mark_gravity_phase(
         world,
         structure_state,
@@ -217,7 +217,7 @@ pub fn simulate_turn(
     );
     // 粘头/空头推动只有执行成功才提交伸出/收回（按 BlockId，避免互推后坐标过期）
     for (id, extended) in extension_commits {
-        pusher_state.set_extended(id, extended);
+        pusher_state.set_extended(world, id, extended);
     }
     let mut pusher_animations = pusher_animations;
     for (pos, animation) in pusher_state.sustained_animations(world) {

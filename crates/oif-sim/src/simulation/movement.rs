@@ -1,7 +1,7 @@
 use glam::IVec3;
 use std::collections::{HashMap, HashSet};
 
-use crate::blocks::{BlockId, MovementRule};
+use crate::blocks::{BlockData, BlockId, BlockKind, MovementRule};
 use crate::world::grid::WorldBlocks;
 
 use super::motion::PusherMotion;
@@ -37,13 +37,19 @@ impl PusherState {
                     block.kind.movement_rule(block.facing),
                     Some(MovementRule::PoweredTranslate { .. })
                 )
-                .then_some((
-                    block.id,
-                    PusherStateEntry {
-                        extended: false,
-                        bound_front: world.is_factory_at(*pos + block.facing.forward_ivec3()),
-                    },
-                ))
+                .then_some({
+                    let head = *pos + block.facing.forward_ivec3();
+                    (
+                        block.id,
+                        PusherStateEntry {
+                            extended: world
+                                .blocks
+                                .get(&head)
+                                .is_some_and(|b| b.kind == BlockKind::PusherHead),
+                            bound_front: world.is_factory_at(head),
+                        },
+                    )
+                })
             })
             .collect();
         Self { entries }
@@ -106,53 +112,59 @@ impl PusherState {
             .collect()
     }
 
-    pub fn extended_head_positions(&self, world: &WorldBlocks) -> HashSet<IVec3> {
-        self.hard_head_occupancy(world)
-    }
-
-    pub(super) fn hard_head_occupancy(&self, world: &WorldBlocks) -> HashSet<IVec3> {
+    /// 已伸出头占格：世界里的真实 PusherHead 方块
+    pub(super) fn hard_head_occupancy(world: &WorldBlocks) -> HashSet<IVec3> {
         world
             .blocks
             .iter()
-            .filter_map(|(pos, block)| {
-                if !matches!(
-                    block.kind.movement_rule(block.facing),
-                    Some(MovementRule::PoweredTranslate { .. })
-                ) {
-                    return None;
-                }
-                self.entries
-                    .get(&block.id)
-                    .filter(|entry| entry.extended)
-                    .map(|_| *pos + block.facing.forward_ivec3())
-            })
+            .filter(|(_, block)| block.kind == BlockKind::PusherHead)
+            .map(|(pos, _)| *pos)
             .collect()
     }
 
-    /// 该格若为已伸出推杆的头，返回其本体坐标（头占两格中的工作面格）
-    pub(super) fn body_at_extended_head(&self, world: &WorldBlocks, head: IVec3) -> Option<IVec3> {
-        world.blocks.iter().find_map(|(pos, block)| {
-            if !matches!(
-                block.kind.movement_rule(block.facing),
-                Some(MovementRule::PoweredTranslate { .. })
-            ) {
-                return None;
-            }
-            let extended = self
-                .entries
-                .get(&block.id)
-                .is_some_and(|entry| entry.extended);
-            if !extended {
-                return None;
-            }
-            (*pos + block.facing.forward_ivec3() == head).then_some(*pos)
-        })
+    /// 该格若为已伸出推杆头，返回其本体坐标
+    pub(super) fn body_at_extended_head(world: &WorldBlocks, head: IVec3) -> Option<IVec3> {
+        let head_block = world.blocks.get(&head)?;
+        if head_block.kind != BlockKind::PusherHead {
+            return None;
+        }
+        let body_pos = head - head_block.facing.forward_ivec3();
+        let body = world.blocks.get(&body_pos)?;
+        matches!(
+            body.kind.movement_rule(body.facing),
+            Some(MovementRule::PoweredTranslate { .. })
+        )
+        .then_some(body_pos)
     }
 
-    /// 推动/收回执行成功后提交伸出状态
-    pub(super) fn set_extended(&mut self, id: BlockId, extended: bool) {
-        if let Some(entry) = self.entries.get_mut(&id) {
-            entry.extended = extended;
+    /// 推动/收回执行成功后提交伸出状态，并同步真实头方块
+    pub(super) fn set_extended(&mut self, world: &mut WorldBlocks, id: BlockId, extended: bool) {
+        let Some(entry) = self.entries.get_mut(&id) else {
+            return;
+        };
+        if entry.extended == extended {
+            return;
+        }
+        entry.extended = extended;
+        let Some((pos, facing)) = world
+            .blocks
+            .iter()
+            .find(|(_, block)| block.id == id)
+            .map(|(pos, block)| (*pos, block.facing))
+        else {
+            return;
+        };
+        let head = pos + facing.forward_ivec3();
+        if extended {
+            if !world.blocks.contains_key(&head) {
+                let _ = world.insert(head, BlockData::new(BlockKind::PusherHead, facing));
+            }
+        } else if world
+            .blocks
+            .get(&head)
+            .is_some_and(|block| block.kind == BlockKind::PusherHead)
+        {
+            let _ = world.remove(&head);
         }
     }
 }
@@ -178,7 +190,7 @@ pub(super) fn mark_structure_movement_phase(
     // 空头争夺同一格时按坐标稳定决出胜者
     movers.sort_by_key(|(pos, _)| (pos.x, pos.y, pos.z));
     let mut moves = Vec::new();
-    let mut claimed_heads = pusher_state.hard_head_occupancy(world);
+    let mut claimed_heads = PusherState::hard_head_occupancy(world);
 
     // 本回合要切换伸出状态的推杆：按结构收集 cut 集，再按全局坐标序 resolve
     let mut actuating: Vec<(IVec3, IVec3, IVec3, bool)> = Vec::new();
@@ -222,7 +234,7 @@ pub(super) fn mark_structure_movement_phase(
     // 头格 → 本体：含上回合已伸出 + 本回合空头争用成功的
     let mut head_owners: HashMap<IVec3, IVec3> = HashMap::new();
     for &head in &claimed_heads {
-        if let Some(body) = pusher_state.body_at_extended_head(world, head) {
+        if let Some(body) = PusherState::body_at_extended_head(world, head) {
             head_owners.insert(head, body);
         }
     }
@@ -231,15 +243,9 @@ pub(super) fn mark_structure_movement_phase(
         let source_id = world.blocks.get(&pos).map(|block| block.id);
         match mover {
             MovementRule::Translate { source, offset } => {
-                if let Some(movement) = mark_conveyor_movement(
-                    world,
-                    structures,
-                    pusher_state,
-                    pos,
-                    source,
-                    offset,
-                    suction,
-                ) {
+                if let Some(movement) =
+                    mark_conveyor_movement(world, structures, pos, source, offset, suction)
+                {
                     if let Some(source_id) = source_id {
                         moves.push(movement.with_source(source_id, pos));
                     }
@@ -251,9 +257,7 @@ pub(super) fn mark_structure_movement_phase(
                     continue;
                 }
                 // 与参考实现一致：range 内每个可动结构各自打抬升标签（叠层同拍一起抬）
-                for movement in
-                    mark_lift_structures(world, structures, pusher_state, pos, range, suction)
-                {
+                for movement in mark_lift_structures(world, structures, pos, range, suction) {
                     if let Some(source_id) = source_id {
                         moves.push(movement.with_source(source_id, pos));
                     }
@@ -305,7 +309,37 @@ pub(super) fn mark_structure_movement_phase(
             &mut motion_held,
             &mut motion_tags,
         ) {
-            moves.push(movement);
+            // 已被先前正推当货物拖走时只挂零位移伸缩：并入该正推，避免执行时种子格已空被跳过
+            let merged = match &movement {
+                StructureMove::Translate {
+                    offset: move_off,
+                    actors,
+                    ..
+                } if *move_off == IVec3::ZERO && actors.len() == 1 => {
+                    let actor = actors[0];
+                    let mut found = false;
+                    for prior in moves.iter_mut().rev() {
+                        if let StructureMove::Translate {
+                            structure,
+                            offset: prior_off,
+                            actors: prior_actors,
+                            ..
+                        } = prior
+                        {
+                            if *prior_off != IVec3::ZERO && structure.contains(&actor.pos) {
+                                prior_actors.push(actor);
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                    found
+                }
+                _ => false,
+            };
+            if !merged {
+                moves.push(movement);
+            }
         }
     }
     moves
@@ -314,18 +348,16 @@ pub(super) fn mark_structure_movement_phase(
 fn mark_conveyor_movement(
     world: &WorldBlocks,
     structures: &StructureState,
-    pusher_state: &PusherState,
     pos: IVec3,
     source: IVec3,
     offset: IVec3,
     suction: &SuctionLinks,
 ) -> Option<StructureMove> {
-    let heads = pusher_state.hard_head_occupancy(world);
+    let heads = PusherState::hard_head_occupancy(world);
     let target = pos + source;
     if let Some(movement) = mark_structure_translate(
         world,
         structures,
-        pusher_state,
         pos,
         target,
         offset,
@@ -343,7 +375,7 @@ fn mark_conveyor_movement(
             return Some(movement);
         }
     } else if !world.is_occupied(target)
-        && pusher_state.body_at_extended_head(world, target).is_none()
+        && PusherState::body_at_extended_head(world, target).is_none()
     {
         return None;
     }
@@ -390,18 +422,38 @@ fn mark_pusher_movement(
     if desired_extended == current_extended {
         return None;
     }
-    // 已被本回合其它运动 held（正推货物/空头伸缩锁结构）：不再伸缩或反推
-    if motion_held.contains(&pos) {
-        return None;
-    }
-
-    let head = pos + source;
-    let front_is_fragile = world.is_fragile_material_at(head);
     let animation = if desired_extended {
         PusherAnimationKind::Extend
     } else {
         PusherAnimationKind::Retract
     };
+    // 已被本回合其它运动 held：默认不动作。
+    // 仅当作为正推货物被拖走，且位移后头格仍空闲时，才允许本回合伸出（否则会与先手头叠格）。
+    if motion_held.contains(&pos) {
+        if desired_extended {
+            if let Some(&tag) = motion_tags.get(&pos) {
+                let head_after = pos + tag + source;
+                if !claimed_heads.contains(&head_after) {
+                    claimed_heads.insert(head_after);
+                    head_owners.insert(head_after, pos);
+                    return Some(
+                        StructureMove::translate_by_pusher_actor(
+                            structures.id_at(pos)?,
+                            HashSet::from([pos]),
+                            IVec3::ZERO,
+                            PusherActor { id, pos, animation },
+                            MovementMark::Push,
+                        )
+                        .with_source(id, pos),
+                    );
+                }
+            }
+        }
+        return None;
+    }
+
+    let head = pos + source;
+    let front_is_fragile = world.is_fragile_material_at(head);
     // 伸出推 +offset，收回拉 -offset；失败时自身走反方向
     let attempt_offset = if desired_extended { offset } else { -offset };
     let reverse = -attempt_offset;
@@ -420,8 +472,7 @@ fn mark_pusher_movement(
         .is_some_and(|(a, b)| a == b);
     let other_structure_front = structures.id_at(head).is_some() && !same_structure_front;
     // 顶到已伸出头（上回合硬头或本回合刚争用成功）：推该杆本体
-    let extended_head_body = pusher_state
-        .body_at_extended_head(world, head)
+    let extended_head_body = PusherState::body_at_extended_head(world, head)
         .or_else(|| head_owners.get(&head).copied())
         .filter(|body| *body != pos);
 
@@ -436,7 +487,6 @@ fn mark_pusher_movement(
                 mark_structure_translate(
                     world,
                     structures,
-                    pusher_state,
                     pos,
                     head,
                     offset,
@@ -451,27 +501,31 @@ fn mark_pusher_movement(
             if !sides.separated || sides.target_side.is_empty() || sides.target_anchored {
                 None
             } else if sides.target_side.iter().any(|p| motion_held.contains(p)) {
-                // 目标已 held：若位移标签与本杆正推同向 → 只挂动画（案例 3 后手）
-                let same_tag = sides
-                    .target_side
-                    .iter()
-                    .filter(|p| motion_held.contains(p))
-                    .all(|p| motion_tags.get(p).is_some_and(|tag| *tag == attempt_offset));
-                if same_tag {
-                    motion_held.insert(pos);
-                    return Some(
-                        StructureMove::translate_by_pusher_actor(
-                            structures.id_at(pos)?,
-                            HashSet::from([pos]),
-                            IVec3::ZERO,
-                            PusherActor { id, pos, animation },
-                            MovementMark::Push,
-                        )
-                        .with_source(id, pos),
-                    );
+                // 身前已被占用：仅当头格上的块本回合会随已有运动搬走，才允许只挂伸出；
+                // 否则 hold 到下回合（同向链后手不得伸进仍停在身前的同伴）。
+                let head_will_clear = motion_tags
+                    .get(&head)
+                    .is_some_and(|&tag| tag != IVec3::ZERO);
+                if !head_will_clear {
+                    return None;
                 }
-                None
+                if !claimed_heads.insert(head) {
+                    return None;
+                }
+                head_owners.insert(head, pos);
+                motion_held.insert(pos);
+                return Some(
+                    StructureMove::translate_by_pusher_actor(
+                        structures.id_at(pos)?,
+                        HashSet::from([pos]),
+                        IVec3::ZERO,
+                        PusherActor { id, pos, animation },
+                        MovementMark::Push,
+                    )
+                    .with_source(id, pos),
+                );
             } else {
+                // 交叉拓扑下同伴可能在目标侧：一并拖走，后手并入伸缩动画
                 let structure_id = structures.id_at(head)?;
                 let structure =
                     structures.linked_expand_pusher_subset(suction, &sides.target_side, offset)?;
@@ -518,7 +572,6 @@ fn mark_pusher_movement(
                 mark_structure_translate(
                     world,
                     structures,
-                    pusher_state,
                     pos,
                     body,
                     offset,
@@ -564,7 +617,6 @@ fn mark_pusher_movement(
             mark_structure_translate(
                 world,
                 structures,
-                pusher_state,
                 pos,
                 pull_source,
                 -offset,
@@ -597,8 +649,8 @@ fn mark_pusher_movement(
             if !desired_extended {
                 claimed_heads.remove(&head);
                 head_owners.remove(&head);
-            } else if extended_head_body.is_some() {
-                // 吃掉对方头格，本杆伸出占用
+            } else {
+                // 正推/空头伸出成功：预留头格，避免贴脸对向后手再伸进同一格
                 claimed_heads.insert(head);
                 head_owners.insert(head, pos);
             }
@@ -849,7 +901,6 @@ impl StructureMoveSourceExt for StructureMove {
 fn mark_structure_translate(
     world: &WorldBlocks,
     structures: &StructureState,
-    pusher_state: &PusherState,
     actor: IVec3,
     mut source: IVec3,
     offset: IVec3,
@@ -858,7 +909,7 @@ fn mark_structure_translate(
 ) -> Option<StructureMove> {
     // 推到已伸出的头：视为推动该推杆整坨（头+体占两格）
     if structures.id_at(source).is_none() {
-        source = pusher_state.body_at_extended_head(world, source)?;
+        source = PusherState::body_at_extended_head(world, source)?;
     }
     if world.is_material_at(source) {
         let structure_id = structures.id_at(source)?;
@@ -898,7 +949,6 @@ fn mark_structure_translate(
 fn mark_lift_structures(
     world: &WorldBlocks,
     structures: &StructureState,
-    pusher_state: &PusherState,
     pos: IVec3,
     range: i32,
     suction: &SuctionLinks,
@@ -910,7 +960,7 @@ fn mark_lift_structures(
         let seed = structures
             .id_at(candidate)
             .map(|_| candidate)
-            .or_else(|| pusher_state.body_at_extended_head(world, candidate));
+            .or_else(|| PusherState::body_at_extended_head(world, candidate));
         let Some(seed) = seed else {
             continue;
         };
@@ -931,7 +981,6 @@ fn mark_lift_structures(
         let Some(movement) = mark_structure_translate(
             world,
             structures,
-            pusher_state,
             pos,
             seed,
             IVec3::Y,
@@ -987,4 +1036,480 @@ fn mark_rotate_structure(
         pos,
         clockwise,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::blocks::{BlockData, BlockKind, SceneBlockId};
+    use crate::simulation::structure_state::StructureState;
+    use crate::simulation::structures::{
+        MovementInfluenceCache, MovementMark, StructureMove, execute_structure_moves_with_pushers,
+    };
+    use crate::simulation::suction::SuctionLinks;
+    use crate::world::Facing;
+    use glam::IVec3;
+    use std::collections::HashSet;
+
+    /// 准星读到的面对面活塞：北向 Pusher@(11,2,-4) 对南向 Pusher@(11,2,-5)
+    fn face_to_face_cursor_world() -> (WorldBlocks, IVec3, IVec3) {
+        let mut world = WorldBlocks::default();
+        // 地面（现场 Scene）
+        for x in 9..13 {
+            for z in -6..2 {
+                world.insert(
+                    IVec3::new(x, 0, z),
+                    BlockData::new(BlockKind::Scene(SceneBlockId(6)), Facing::North),
+                );
+            }
+        }
+        let north = IVec3::new(11, 2, -4);
+        let south = IVec3::new(11, 2, -5);
+        world.insert(south, BlockData::new(BlockKind::Pusher, Facing::South));
+        world.insert(north, BlockData::new(BlockKind::Pusher, Facing::North));
+        world.insert(
+            IVec3::new(11, 2, -3),
+            BlockData::new(BlockKind::Wire, Facing::North),
+        );
+        world.insert(
+            IVec3::new(11, 3, -3),
+            BlockData::new(BlockKind::Detector, Facing::South),
+        );
+        world.insert(
+            IVec3::new(11, 4, -2),
+            BlockData::new(BlockKind::Platform, Facing::North),
+        );
+        (world, north, south)
+    }
+
+    fn run_pusher_phase(
+        world: &mut WorldBlocks,
+        structures: &mut StructureState,
+        pusher_state: &mut PusherState,
+        powered: &HashSet<IVec3>,
+    ) {
+        let suction = SuctionLinks::rebuild(world, structures, powered);
+        let moves =
+            mark_structure_movement_phase(world, powered, structures, pusher_state, &suction);
+        let heads = PusherState::hard_head_occupancy(world);
+        let mut influence = MovementInfluenceCache::default();
+        let (_a, _p, commits) = execute_structure_moves_with_pushers(
+            world,
+            moves,
+            structures,
+            &mut influence,
+            &heads,
+            &suction,
+        );
+        for (id, extended) in commits {
+            pusher_state.set_extended(world, id, extended);
+        }
+    }
+
+    #[test]
+    fn face_to_face_pusher_extend_retract_body_stays() {
+        let (mut world, north, south) = face_to_face_cursor_world();
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut pusher_state = PusherState::rebuild_from_world(&world);
+
+        let north_id = world.blocks.get(&north).unwrap().id;
+        let south_id = world.blocks.get(&south).unwrap().id;
+
+        // 仅通电北向杆一回合（对面无电）
+        let powered = HashSet::from([north]);
+        run_pusher_phase(&mut world, &mut structures, &mut pusher_state, &powered);
+
+        let north_after_ext = world
+            .blocks
+            .iter()
+            .find(|(_, b)| b.id == north_id)
+            .map(|(p, _)| *p);
+
+        assert_eq!(
+            north_after_ext,
+            Some(north),
+            "extend must not move the powered pusher body"
+        );
+
+        // 断电收回
+        let powered = HashSet::new();
+        run_pusher_phase(&mut world, &mut structures, &mut pusher_state, &powered);
+
+        let north_after_ret = world
+            .blocks
+            .iter()
+            .find(|(_, b)| b.id == north_id)
+            .map(|(p, _)| *p);
+        let south_after_ret = world
+            .blocks
+            .iter()
+            .find(|(_, b)| b.id == south_id)
+            .map(|(p, _)| *p);
+
+        assert_eq!(
+            north_after_ret,
+            Some(north),
+            "retract must not move the powered pusher body"
+        );
+        assert_eq!(
+            south_after_ret,
+            Some(south),
+            "opposite pusher should return to original cell after retract"
+        );
+    }
+
+    /// 三连同向 Blocker 链：每回合最多再伸一根，后手不得把头伸进仍停在身前的同伴
+    #[test]
+    fn same_facing_blocker_chain_no_head_body_overlap() {
+        let mut world = WorldBlocks::default();
+        let front = IVec3::new(4, 1, -14);
+        let mid = IVec3::new(4, 1, -13);
+        let rear = IVec3::new(4, 1, -12);
+        world.insert(front, BlockData::new(BlockKind::Blocker, Facing::North));
+        world.insert(mid, BlockData::new(BlockKind::Blocker, Facing::North));
+        world.insert(rear, BlockData::new(BlockKind::Blocker, Facing::North));
+        let ids = [
+            world.blocks.get(&front).unwrap().id,
+            world.blocks.get(&mid).unwrap().id,
+            world.blocks.get(&rear).unwrap().id,
+        ];
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut pusher_state = PusherState::rebuild_from_world(&world);
+        let powered = HashSet::new();
+        for turn in 1..=3 {
+            run_pusher_phase(&mut world, &mut structures, &mut pusher_state, &powered);
+            structures.rebuild_for_simulation(&world);
+            let extended_count = ids
+                .iter()
+                .filter(|id| pusher_state.entries.get(id).is_some_and(|e| e.extended))
+                .count();
+            assert_eq!(
+                extended_count, turn,
+                "turn {turn}: chain should extend one more blocker per turn"
+            );
+            for id in ids {
+                let Some(body) = world
+                    .blocks
+                    .iter()
+                    .find(|(_, b)| b.id == id)
+                    .map(|(p, _)| *p)
+                else {
+                    continue;
+                };
+                let ext = pusher_state.entries.get(&id).is_some_and(|e| e.extended);
+                let facing = world.blocks.get(&body).unwrap().facing;
+                let head = body + facing.forward_ivec3();
+                if ext {
+                    assert_eq!(
+                        world.blocks.get(&head).map(|b| b.kind),
+                        Some(BlockKind::PusherHead),
+                        "turn {turn}: extended {id:?} at {body:?} needs real head"
+                    );
+                } else if world
+                    .blocks
+                    .get(&head)
+                    .is_some_and(|f| matches!(f.kind, BlockKind::Blocker | BlockKind::Pusher))
+                {
+                    // 身前仍是同伴本体：保持 hold
+                }
+            }
+            for (pos, b) in &world.blocks {
+                if !matches!(b.kind, BlockKind::Blocker | BlockKind::Pusher) {
+                    continue;
+                }
+                let head = *pos + b.facing.forward_ivec3();
+                if world
+                    .blocks
+                    .get(&head)
+                    .is_some_and(|f| matches!(f.kind, BlockKind::Blocker | BlockKind::Pusher))
+                {
+                    assert!(
+                        !pusher_state.entries.get(&b.id).is_some_and(|e| e.extended),
+                        "turn {turn}: blocker at {pos:?} must not extend into peer at {head:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// 准星贴脸对向：北 Blocker@(0,2,-14) 对南 Blocker@(0,2,-15)
+    /// 先手正推后，后手本回合 hold，不可再伸头（否则两头叠在中间格）
+    fn face_to_face_blocker_pair_world() -> (WorldBlocks, IVec3, IVec3) {
+        let mut world = WorldBlocks::default();
+        let north = IVec3::new(0, 2, -14);
+        let south = IVec3::new(0, 2, -15);
+        world.insert(south, BlockData::new(BlockKind::Blocker, Facing::South));
+        world.insert(north, BlockData::new(BlockKind::Blocker, Facing::North));
+        (world, north, south)
+    }
+
+    #[test]
+    fn face_to_face_blocker_one_extends_other_held() {
+        let (mut world, north, south) = face_to_face_blocker_pair_world();
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut pusher_state = PusherState::rebuild_from_world(&world);
+        let north_id = world.blocks.get(&north).unwrap().id;
+        let south_id = world.blocks.get(&south).unwrap().id;
+
+        let powered = HashSet::new();
+        run_pusher_phase(&mut world, &mut structures, &mut pusher_state, &powered);
+        structures.rebuild_for_simulation(&world);
+
+        let north_ext = pusher_state
+            .entries
+            .get(&north_id)
+            .is_some_and(|e| e.extended);
+        let south_ext = pusher_state
+            .entries
+            .get(&south_id)
+            .is_some_and(|e| e.extended);
+        assert_ne!(
+            north_ext, south_ext,
+            "exactly one face-to-face blocker may extend this turn; north={north_ext} south={south_ext}"
+        );
+
+        let heads: Vec<_> = world
+            .blocks
+            .iter()
+            .filter(|(_, b)| b.kind == BlockKind::PusherHead)
+            .map(|(p, _)| *p)
+            .collect();
+        assert_eq!(heads.len(), 1, "exactly one pusher head; got {heads:?}");
+
+        let north_pos = world
+            .blocks
+            .iter()
+            .find(|(_, b)| b.id == north_id)
+            .map(|(p, _)| *p)
+            .unwrap();
+        let south_pos = world
+            .blocks
+            .iter()
+            .find(|(_, b)| b.id == south_id)
+            .map(|(p, _)| *p)
+            .unwrap();
+        assert_eq!(
+            structures.id_at(north_pos),
+            structures.id_at(south_pos),
+            "must stay one factory structure"
+        );
+    }
+
+    /// 准星 2×2 同向四格环：两西向 Blocker + 身前 Platform，伸出后仍是一块工厂结构
+    fn same_facing_blocker_square_world() -> (WorldBlocks, IVec3, IVec3) {
+        let mut world = WorldBlocks::default();
+        let a = IVec3::new(-12, 2, -13);
+        let b = IVec3::new(-12, 2, -12);
+        world.insert(
+            IVec3::new(-13, 2, -13),
+            BlockData::new(BlockKind::Platform, Facing::West),
+        );
+        world.insert(
+            IVec3::new(-13, 2, -12),
+            BlockData::new(BlockKind::Platform, Facing::West),
+        );
+        world.insert(a, BlockData::new(BlockKind::Blocker, Facing::West));
+        world.insert(b, BlockData::new(BlockKind::Blocker, Facing::West));
+        (world, a, b)
+    }
+
+    #[test]
+    fn same_facing_blocker_square_extend_stays_one_structure() {
+        let (mut world, a, b) = same_facing_blocker_square_world();
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut pusher_state = PusherState::rebuild_from_world(&world);
+        let a_id = world.blocks.get(&a).unwrap().id;
+        let b_id = world.blocks.get(&b).unwrap().id;
+        assert_eq!(structures.id_at(a), structures.id_at(b));
+        assert_eq!(
+            structures
+                .structure_positions(structures.id_at(a).unwrap())
+                .map(|s| s.len()),
+            Some(4)
+        );
+
+        let powered = HashSet::new();
+        run_pusher_phase(&mut world, &mut structures, &mut pusher_state, &powered);
+        structures.rebuild_for_simulation(&world);
+
+        let a_pos = world
+            .blocks
+            .iter()
+            .find(|(_, blk)| blk.id == a_id)
+            .map(|(p, _)| *p)
+            .expect("blocker a");
+        let b_pos = world
+            .blocks
+            .iter()
+            .find(|(_, blk)| blk.id == b_id)
+            .map(|(p, _)| *p)
+            .expect("blocker b");
+        assert_eq!(
+            a_pos, a,
+            "same-facing square must not reverse-drag blocker bodies"
+        );
+        assert_eq!(
+            b_pos, b,
+            "same-facing square must not reverse-drag blocker bodies"
+        );
+        assert_eq!(
+            structures.id_at(a_pos),
+            structures.id_at(b_pos),
+            "factory structure must stay one piece after extend"
+        );
+        assert_eq!(
+            structures
+                .structure_positions(structures.id_at(a_pos).unwrap())
+                .map(|s| s.len()),
+            Some(4),
+            "still four factory members (heads are not members)"
+        );
+        for (id, body) in [(a_id, a_pos), (b_id, b_pos)] {
+            let facing = world.blocks.get(&body).unwrap().facing;
+            let head = body + facing.forward_ivec3();
+            assert_eq!(
+                world.blocks.get(&head).map(|blk| blk.kind),
+                Some(BlockKind::PusherHead),
+                "blocker {id:?} needs its own head cell"
+            );
+        }
+    }
+
+    /// 准星 8 格 3×3 对向拦截器环：一正推应拖走同伴，两杆错开竖轴且头不叠块
+    fn opposing_blocker_ring_world() -> (WorldBlocks, IVec3, IVec3) {
+        let mut world = WorldBlocks::default();
+        let west = IVec3::new(13, 2, 16);
+        let east = IVec3::new(13, 4, 16);
+        // 3×3 环：两侧立柱平台 + 对向 Blocker，中心空
+        for (x, y, z) in [
+            (12, 2, 16),
+            (12, 3, 16),
+            (12, 4, 16),
+            (14, 2, 16),
+            (14, 3, 16),
+            (14, 4, 16),
+        ] {
+            world.insert(
+                IVec3::new(x, y, z),
+                BlockData::new(BlockKind::Platform, Facing::North),
+            );
+        }
+        world.insert(west, BlockData::new(BlockKind::Blocker, Facing::West));
+        world.insert(east, BlockData::new(BlockKind::Blocker, Facing::East));
+        (world, west, east)
+    }
+
+    #[test]
+    fn opposing_blocker_ring_one_push_one_reverse_keeps_one_structure() {
+        let (mut world, west, east) = opposing_blocker_ring_world();
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut pusher_state = PusherState::rebuild_from_world(&world);
+
+        let west_id = world.blocks.get(&west).unwrap().id;
+        let east_id = world.blocks.get(&east).unwrap().id;
+        let sid_before = structures.id_at(west).expect("structure");
+        assert_eq!(structures.id_at(east), Some(sid_before));
+        assert_eq!(
+            structures.structure_positions(sid_before).map(|s| s.len()),
+            Some(8)
+        );
+
+        // Blocker：断电要伸出
+        let powered = HashSet::new();
+        let suction = SuctionLinks::rebuild(&world, &structures, &powered);
+        let moves = mark_structure_movement_phase(
+            &mut world,
+            &powered,
+            &structures,
+            &mut pusher_state,
+            &suction,
+        );
+
+        let mut nonzero_push_dirs = Vec::new();
+        let mut actor_anims = Vec::new();
+        for m in &moves {
+            if let StructureMove::Translate {
+                offset,
+                actors,
+                mark: MovementMark::Push,
+                structure,
+                ..
+            } = m
+            {
+                for a in actors {
+                    actor_anims.push((a.id, a.pos, *offset, structure.len()));
+                }
+                if *offset != IVec3::ZERO {
+                    nonzero_push_dirs.push(*offset);
+                }
+            }
+        }
+        assert_eq!(
+            nonzero_push_dirs.len(),
+            1,
+            "exactly one BoundFront partition may move; got dirs={nonzero_push_dirs:?} actors={actor_anims:?}"
+        );
+        assert_eq!(
+            actor_anims.len(),
+            2,
+            "both blockers should participate (push or reverse/anim): {actor_anims:?}"
+        );
+
+        let heads = PusherState::hard_head_occupancy(&world);
+        let mut influence = MovementInfluenceCache::default();
+        let (_a, _p, commits) = execute_structure_moves_with_pushers(
+            &mut world,
+            moves,
+            &mut structures,
+            &mut influence,
+            &heads,
+            &suction,
+        );
+        for (id, extended) in commits {
+            pusher_state.set_extended(&mut world, id, extended);
+        }
+        structures.rebuild_for_simulation(&world);
+
+        let west_pos = world
+            .blocks
+            .iter()
+            .find(|(_, b)| b.id == west_id)
+            .map(|(p, _)| *p)
+            .expect("west blocker");
+        let east_pos = world
+            .blocks
+            .iter()
+            .find(|(_, b)| b.id == east_id)
+            .map(|(p, _)| *p)
+            .expect("east blocker");
+        assert_ne!(
+            west_pos.x, east_pos.x,
+            "reverse/drag must unstack blockers off the same vertical axis: west={west_pos:?} east={east_pos:?}"
+        );
+        assert_eq!(
+            structures.id_at(west_pos),
+            structures.id_at(east_pos),
+            "ring must stay one structure after the turn"
+        );
+        // 两杆都应伸出真实头，且头格不得被其它方块占用（HashMap 单格单块；缺头即曾与身前重叠而未写入）
+        for (id, body) in [(west_id, west_pos), (east_id, east_pos)] {
+            let facing = world.blocks.get(&body).unwrap().facing;
+            let head = body + facing.forward_ivec3();
+            let head_kind = world.blocks.get(&head).map(|b| b.kind);
+            assert_eq!(
+                head_kind,
+                Some(BlockKind::PusherHead),
+                "blocker {id:?} at {body:?} must own empty head cell {head:?}, got {head_kind:?}"
+            );
+            assert!(
+                pusher_state.entries.get(&id).is_some_and(|e| e.extended),
+                "blocker {id:?} should be extended"
+            );
+        }
+    }
 }

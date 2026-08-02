@@ -1,4 +1,4 @@
-use crate::simulation::core::{simulate_turn, TurnOutput};
+use crate::simulation::core::{TurnOutput, simulate_turn};
 use crate::simulation::movement::PusherState;
 use crate::simulation::pending::PendingGeneratedMaterials;
 use crate::simulation::signals::SignalNetworkCache;
@@ -7,8 +7,8 @@ use crate::simulation::structure_state::StructureState;
 use crate::simulation::structures::MovementInfluenceCache;
 use crate::world::grid::WorldBlocks;
 
-use super::control::SimulationControl;
 use super::SimulationDebugLog;
+use super::control::SimulationControl;
 
 /// 自有模拟会话：世界与回合状态，无 Bevy App
 pub struct SimSession {
@@ -144,5 +144,61 @@ impl SimSession {
 impl Default for SimSession {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::blocks::{BlockData, BlockKind};
+    use crate::world::Facing;
+    use glam::IVec3;
+
+    /// 粘头伸出：身前平台被推走后，头格出现 PusherHead，且整坨仍可通过臂连通
+    #[test]
+    fn sticky_blocker_extend_places_head_without_orphan_gap() {
+        let mut session = SimSession::new();
+        let back = IVec3::new(0, 1, 0);
+        let body = IVec3::new(1, 1, 0);
+        let face = IVec3::new(2, 1, 0);
+        session
+            .world
+            .insert(back, BlockData::new(BlockKind::Platform, Facing::North));
+        session
+            .world
+            .insert(body, BlockData::new(BlockKind::Blocker, Facing::East));
+        session
+            .world
+            .insert(face, BlockData::new(BlockKind::Platform, Facing::North));
+
+        session.begin_simulation();
+        session.simulate_next_turn();
+
+        let head_block = session.world.blocks.get(&face);
+        assert!(
+            head_block.is_some_and(|b| b.kind == BlockKind::PusherHead),
+            "face should become PusherHead, got {:?}",
+            head_block.map(|b| b.kind)
+        );
+        let front = face + IVec3::X;
+        assert!(
+            session.world.is_factory_at(front),
+            "platform should be pushed to {front}"
+        );
+        // 体仍在原位
+        assert_eq!(
+            session.world.blocks.get(&body).map(|b| b.kind),
+            Some(BlockKind::Blocker)
+        );
+        // 重建后仍同结构（穿过活塞臂）
+        session
+            .structure_state
+            .rebuild_for_simulation(&session.world);
+        let sid_body = session.structure_state.structure_id_at(body);
+        let sid_front = session.structure_state.structure_id_at(front);
+        assert_eq!(
+            sid_body, sid_front,
+            "body and front must remain one structure through the arm"
+        );
     }
 }

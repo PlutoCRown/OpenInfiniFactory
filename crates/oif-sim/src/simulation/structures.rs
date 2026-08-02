@@ -2,7 +2,7 @@ use glam::IVec3;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::blocks::{BlockData, BlockId, MovementRule};
+use crate::blocks::{BlockData, BlockId, BlockKind, MovementRule};
 use crate::world::direction::Facing;
 use crate::world::grid::{MaterialFace, WorldBlocks};
 
@@ -692,6 +692,9 @@ pub(super) fn execute_structure_moves_with_pushers(
                 if offset != IVec3::ZERO {
                     for pos in &structure {
                         if let Some(block) = world.blocks.get(pos) {
+                            if block.kind == BlockKind::PusherHead {
+                                continue;
+                            }
                             animations.insert(
                                 *pos + offset,
                                 BlockMotion {
@@ -713,9 +716,10 @@ pub(super) fn execute_structure_moves_with_pushers(
                     }
                     moved.extend(structure.iter().copied());
                     push_held.extend(structure.iter().copied());
+                    // 真实头并入集合后由 relocate 一并平移
+                    let structure = with_pusher_heads(world, &structure);
                     move_structure(world, &structure, offset);
                     structures.move_positions(&structure, offset);
-                    // 已伸出的头随本体平移
                     for head in own_heads_before {
                         heads.remove(&head);
                         heads.insert(head + offset);
@@ -753,15 +757,16 @@ pub(super) fn execute_structure_moves_with_pushers(
                             heads.remove(&head);
                         }
                     }
-                    // 推杆开启动画：整坨抑重力 + 不可再被其它 Push 当货物
+                    // 推杆开启动画：整坨抑重力；push_held 只锁本体，
+                    // 避免挡住同结构其它杆对另一侧子集的 BoundFront
                     if let Some(actor_structure_id) = structures.id_at(actor_pos) {
                         if let Some(actor_structure) =
                             structures.structure_positions(actor_structure_id)
                         {
                             gravity_held.extend(actor_structure.iter().copied());
-                            push_held.extend(actor_structure.iter().copied());
                         }
                     }
+                    push_held.insert(actor_pos);
                 }
                 if let Some(source) = source {
                     executed.push(ExecutedMovement {
@@ -915,7 +920,14 @@ fn own_extended_heads(
                 return None;
             }
             let head = *pos + block.facing.forward_ivec3();
-            hard_pusher_head_occupancy.contains(&head).then_some(head)
+            if !hard_pusher_head_occupancy.contains(&head) {
+                return None;
+            }
+            // 必须是本杆的头：面对面时对方头也可能落在同一前格方向上
+            let head_block = world.blocks.get(&head)?;
+            (head_block.kind == BlockKind::PusherHead
+                && head - head_block.facing.forward_ivec3() == *pos)
+                .then_some(head)
         })
         .collect()
 }
@@ -953,6 +965,39 @@ fn can_move_own_extended_heads(
     })
 }
 
+/// 把结构内推杆的真实伸出头并入移动集合
+fn with_pusher_heads(world: &WorldBlocks, structure: &HashSet<IVec3>) -> HashSet<IVec3> {
+    let mut expanded = structure.clone();
+    for &pos in structure {
+        let Some(block) = world.blocks.get(&pos) else {
+            continue;
+        };
+        if !matches!(
+            block.kind.movement_rule(block.facing),
+            Some(MovementRule::PoweredTranslate { .. })
+        ) {
+            continue;
+        }
+        let head = pos + block.facing.forward_ivec3();
+        // 仅并入「属于该本体」的头；面对面时前格可能是对面杆的头
+        if world.blocks.get(&head).is_some_and(|head_block| {
+            head_block.kind == BlockKind::PusherHead
+                && head - head_block.facing.forward_ivec3() == pos
+        }) {
+            expanded.insert(head);
+        }
+    }
+    expanded
+}
+
+/// 格上是否为真实伸出头（结构平移规划时当空格，碰撞仍走 has_collision）
+fn is_pusher_head_at(world: &WorldBlocks, pos: IVec3) -> bool {
+    world
+        .blocks
+        .get(&pos)
+        .is_some_and(|block| block.kind == BlockKind::PusherHead)
+}
+
 fn expanded_move_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
@@ -964,6 +1009,7 @@ fn expanded_move_structure(
     // 先经吸盘并集；种子内已有结构 id 不膨胀，只并入其它粘连结构
     let structure = structures.linked_expand_pusher_subset(suction, structure, offset)?;
     let structure = with_factory_attachment_children(world, &structure);
+    let structure = with_pusher_heads(world, &structure);
 
     if offset.abs().element_sum() != 1 {
         return can_move_structure_without_push(world, &structure, offset).then_some(structure);
@@ -979,9 +1025,15 @@ fn expanded_move_structure(
         if world.cell_accepts_move_from(pos, target) {
             continue;
         }
+        // 真实头对结构规划视为空格（与旧虚拟头一致）；外来头由 hard_pusher_head_* 拦截，
+        // 自带头由 with_pusher_heads 并入移动集。不可把 PusherHead 当货物去推本体。
+        if is_pusher_head_at(world, target) {
+            continue;
+        }
 
         let pushed = pushable_structure_at(world, structures, target, offset, suction)?;
         let pushed = with_factory_attachment_children(world, &pushed);
+        let pushed = with_pusher_heads(world, &pushed);
         if mode == MovementExpansionMode::Gravity && structure_supported_by_lifter(world, &pushed) {
             return None;
         }
@@ -1070,6 +1122,10 @@ fn pushable_structure_at(
     suction: &SuctionLinks,
 ) -> Option<HashSet<IVec3>> {
     let block = world.blocks.get(&pos)?;
+    // PusherHead 不是货物；顶头推挤由 mark_pusher 的 body_at_extended_head 路径处理
+    if block.kind == BlockKind::PusherHead {
+        return None;
+    }
     if block.kind.is_material() || block.kind.is_factory() {
         return structures.linked_pushable_at(suction, pos, offset);
     }
@@ -1086,7 +1142,10 @@ fn can_move_structure_without_push(
         if target.y < 0 {
             return false;
         }
-        if structure.contains(&target) || world.cell_accepts_move_from(*pos, target) {
+        if structure.contains(&target)
+            || world.cell_accepts_move_from(*pos, target)
+            || is_pusher_head_at(world, target)
+        {
             return true;
         }
         // 结构内脆弱撞实心：碎裂后放行

@@ -1,8 +1,8 @@
 use super::traits::PlaceableBlock;
 use super::{Block, BlockKind, EditableBlock};
 use oif_sim::blocks::{
-    material_catalog, scene_catalog, stamp_catalog, FALLBACK_MATERIAL_STRING_ID,
-    FALLBACK_SCENE_STRING_ID,
+    FALLBACK_MATERIAL_STRING_ID, FALLBACK_SCENE_STRING_ID, material_catalog, scene_catalog,
+    stamp_catalog,
 };
 
 pub fn edit_blocks() -> Vec<BlockKind> {
@@ -173,5 +173,6 @@ fn block_order(kind: BlockKind) -> usize {
         BlockKind::DrillHead => 301,
         BlockKind::RollerBody => 302,
         BlockKind::StamperBody => 303,
+        BlockKind::PusherHead => 304,
     }
 }

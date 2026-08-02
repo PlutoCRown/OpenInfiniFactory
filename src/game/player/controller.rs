@@ -13,7 +13,6 @@ use crate::game::cameras::{
     new_gameplay_view_image,
 };
 use crate::game::scene_blocks::SceneBlockRegistry;
-use crate::game::simulation::movement::PusherState;
 use crate::game::state::{GameMode, GameSettings, PlayingUiState};
 use crate::game::ui::UiRuntime;
 use crate::game::world::grid::{WorldBlocks, grid_to_world};
@@ -203,7 +202,6 @@ pub fn camera_move(
     playing_ui: Res<PlayingUiState>,
     ui_runtime: Res<UiRuntime>,
     world: Res<WorldBlocks>,
-    pusher_state: Res<PusherState>,
     scene_registry: Res<SceneBlockRegistry>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
@@ -253,7 +251,6 @@ pub fn camera_move(
             &mut transform.translation,
             delta,
             &world,
-            &pusher_state,
             &scene_registry,
             true,
             camera.grounded && !camera.flying,
@@ -284,7 +281,6 @@ pub fn camera_move(
                 &mut transform.translation,
                 drift,
                 &world,
-                &pusher_state,
                 &scene_registry,
                 true,
                 false,
@@ -306,7 +302,6 @@ pub fn camera_move(
                 &mut transform.translation,
                 Vec3::Y * vertical * FLY_SPEED * time.delta_secs(),
                 &world,
-                &pusher_state,
                 &scene_registry,
                 false,
                 false,
@@ -316,7 +311,6 @@ pub fn camera_move(
                     || is_supported(
                         transform.translation,
                         &world,
-                        &pusher_state,
                         &scene_registry,
                     ))
             {
@@ -337,7 +331,6 @@ pub fn camera_move(
             &mut transform.translation,
             vertical_delta,
             &world,
-            &pusher_state,
             &scene_registry,
             false,
             false,
@@ -350,14 +343,12 @@ pub fn camera_move(
             camera.grounded = is_supported(
                 transform.translation,
                 &world,
-                &pusher_state,
                 &scene_registry,
             );
         } else {
             camera.grounded = is_supported(
                 transform.translation,
                 &world,
-                &pusher_state,
                 &scene_registry,
             );
         }
@@ -492,30 +483,29 @@ fn move_with_collision(
     position: &mut Vec3,
     delta: Vec3,
     world: &WorldBlocks,
-    pusher_state: &PusherState,
     scene_registry: &SceneBlockRegistry,
     allow_step_up: bool,
     ground_snap: bool,
 ) {
-    let overlap0 = collision_overlap_score(*position, world, pusher_state, scene_registry);
+    let overlap0 = collision_overlap_score(*position, world, scene_registry);
 
     // X：可走则走；否则在 STEP_HEIGHT 内二分最小抬升（贴斜面，而非整级蹦）
     let mut next = *position;
     next.x += delta.x;
-    if can_move_to(next, overlap0, world, pusher_state, scene_registry) {
+    if can_move_to(next, overlap0, world, scene_registry) {
         position.x = next.x;
     } else if allow_step_up && delta.x.abs() > AABB_EPSILON {
         let base_y = position.y;
         let mut probe = *position;
         probe.x += delta.x;
         probe.y = base_y + STEP_HEIGHT;
-        if can_move_to(probe, overlap0, world, pusher_state, scene_registry) {
+        if can_move_to(probe, overlap0, world, scene_registry) {
             let mut lo = 0.0;
             let mut hi = STEP_HEIGHT;
             for _ in 0..12 {
                 let mid = (lo + hi) * 0.5;
                 probe.y = base_y + mid;
-                if can_move_to(probe, overlap0, world, pusher_state, scene_registry) {
+                if can_move_to(probe, overlap0, world, scene_registry) {
                     hi = mid;
                 } else {
                     lo = mid;
@@ -526,25 +516,25 @@ fn move_with_collision(
         }
     }
 
-    let overlap1 = collision_overlap_score(*position, world, pusher_state, scene_registry);
+    let overlap1 = collision_overlap_score(*position, world, scene_registry);
 
     // Z
     next = *position;
     next.z += delta.z;
-    if can_move_to(next, overlap1, world, pusher_state, scene_registry) {
+    if can_move_to(next, overlap1, world, scene_registry) {
         position.z = next.z;
     } else if allow_step_up && delta.z.abs() > AABB_EPSILON {
         let base_y = position.y;
         let mut probe = *position;
         probe.z += delta.z;
         probe.y = base_y + STEP_HEIGHT;
-        if can_move_to(probe, overlap1, world, pusher_state, scene_registry) {
+        if can_move_to(probe, overlap1, world, scene_registry) {
             let mut lo = 0.0;
             let mut hi = STEP_HEIGHT;
             for _ in 0..12 {
                 let mid = (lo + hi) * 0.5;
                 probe.y = base_y + mid;
-                if can_move_to(probe, overlap1, world, pusher_state, scene_registry) {
+                if can_move_to(probe, overlap1, world, scene_registry) {
                     hi = mid;
                 } else {
                     lo = mid;
@@ -560,13 +550,12 @@ fn move_with_collision(
         let start_y = position.y;
         let mut probe = *position;
         probe.y = start_y - STEP_HEIGHT;
-        if collides(*position, world, pusher_state, scene_registry) {
+        if collides(*position, world, scene_registry) {
             // 已陷入则交给 overlap 脱困，不硬拽
-        } else if collides(probe, world, pusher_state, scene_registry)
+        } else if collides(probe, world, scene_registry)
             || is_supported(
                 Vec3::new(position.x, start_y - STEP_HEIGHT + 0.02, position.z),
                 world,
-                pusher_state,
                 scene_registry,
             )
         {
@@ -575,7 +564,7 @@ fn move_with_collision(
             for _ in 0..12 {
                 let mid = (lo + hi) * 0.5;
                 probe.y = start_y - mid;
-                if collides(probe, world, pusher_state, scene_registry) {
+                if collides(probe, world, scene_registry) {
                     hi = mid;
                 } else {
                     lo = mid;
@@ -586,12 +575,12 @@ fn move_with_collision(
         }
     }
 
-    let overlap2 = collision_overlap_score(*position, world, pusher_state, scene_registry);
+    let overlap2 = collision_overlap_score(*position, world, scene_registry);
 
     // Y（重力 / 飞行竖移）
     next = *position;
     next.y += delta.y;
-    if can_move_to(next, overlap2, world, pusher_state, scene_registry) {
+    if can_move_to(next, overlap2, world, scene_registry) {
         position.y = next.y;
     }
 }
@@ -601,16 +590,8 @@ fn player_hits_block(
     player_max: Vec3,
     block_pos: IVec3,
     world: &WorldBlocks,
-    pusher_state: &PusherState,
     scene_registry: &SceneBlockRegistry,
 ) -> bool {
-    if pusher_state
-        .extended_head_positions(world)
-        .contains(&block_pos)
-    {
-        let block_min = block_pos.as_vec3();
-        return aabb_intersects(player_min, player_max, block_min, block_min + Vec3::ONE);
-    }
     let Some(block) = world.blocks.get(&block_pos) else {
         return false;
     };
@@ -627,7 +608,6 @@ fn player_hits_block(
 fn collides(
     position: Vec3,
     world: &WorldBlocks,
-    pusher_state: &PusherState,
     scene_registry: &SceneBlockRegistry,
 ) -> bool {
     let (min, max) = player_aabb(position);
@@ -643,7 +623,6 @@ fn collides(
                     max,
                     IVec3::new(x, y, z),
                     world,
-                    pusher_state,
                     scene_registry,
                 ) {
                     return true;
@@ -659,21 +638,19 @@ fn can_move_to(
     next: Vec3,
     current_overlap: f32,
     world: &WorldBlocks,
-    pusher_state: &PusherState,
     scene_registry: &SceneBlockRegistry,
 ) -> bool {
-    if !collides(next, world, pusher_state, scene_registry) {
+    if !collides(next, world, scene_registry) {
         return true;
     }
 
     current_overlap > 0.0
-        && collision_overlap_score(next, world, pusher_state, scene_registry) < current_overlap
+        && collision_overlap_score(next, world, scene_registry) < current_overlap
 }
 
 fn collision_overlap_score(
     position: Vec3,
     world: &WorldBlocks,
-    pusher_state: &PusherState,
     scene_registry: &SceneBlockRegistry,
 ) -> f32 {
     let (min, max) = player_aabb(position);
@@ -685,12 +662,12 @@ fn collision_overlap_score(
         for y in min_block.y..=max_block.y {
             for z in min_block.z..=max_block.z {
                 let block_pos = IVec3::new(x, y, z);
-                if !player_hits_block(min, max, block_pos, world, pusher_state, scene_registry) {
+                if !player_hits_block(min, max, block_pos, world, scene_registry) {
                     continue;
                 }
 
                 let (block_min, block_max) =
-                    block_collision_aabb(block_pos, world, pusher_state, scene_registry);
+                    block_collision_aabb(block_pos, world, scene_registry);
                 let overlap = (max.min(block_max) - min.max(block_min)).max(Vec3::ZERO);
                 score += overlap.x * overlap.y * overlap.z;
             }
@@ -703,7 +680,6 @@ fn collision_overlap_score(
 fn is_supported(
     position: Vec3,
     world: &WorldBlocks,
-    pusher_state: &PusherState,
     scene_registry: &SceneBlockRegistry,
 ) -> bool {
     let (min, max) = player_aabb(position);
@@ -728,7 +704,6 @@ fn is_supported(
                     probe_max,
                     IVec3::new(x, y, z),
                     world,
-                    pusher_state,
                     scene_registry,
                 ) {
                     return true;
@@ -744,17 +719,10 @@ fn is_supported(
 fn block_collision_aabb(
     block_pos: IVec3,
     world: &WorldBlocks,
-    pusher_state: &PusherState,
     scene_registry: &SceneBlockRegistry,
 ) -> (Vec3, Vec3) {
     let full_min = block_pos.as_vec3();
     let full_max = full_min + Vec3::ONE;
-    if pusher_state
-        .extended_head_positions(world)
-        .contains(&block_pos)
-    {
-        return (full_min, full_max);
-    }
     let Some(block) = world.blocks.get(&block_pos) else {
         return (full_min, full_max);
     };

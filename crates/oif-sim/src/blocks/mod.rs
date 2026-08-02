@@ -26,6 +26,7 @@ pub mod lifter;
 pub mod mirror;
 pub mod platform;
 pub mod pusher;
+pub mod pusher_head;
 pub mod reverse_conveyor;
 pub mod roller;
 pub mod roller_body;
@@ -162,6 +163,8 @@ pub enum VirtualBlock {
     RollerBody,
     /// 印花机实体占格（有碰撞，写入 machine_bodies；朝向与宿主同步）
     StamperBody,
+    /// 活塞/拦截器伸出头（有碰撞，写入 blocks；非每帧重生的 generated marker）
+    PusherHead,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -554,6 +557,8 @@ pub enum BlockKind {
     DrillHead,
     RollerBody,
     StamperBody,
+    /// 活塞/拦截器伸出头占格（有碰撞）
+    PusherHead,
 }
 
 impl BlockKind {
@@ -628,6 +633,7 @@ impl BlockKind {
             BlockKind::DrillHead => BlockLayer::Virtual(VirtualBlock::DrillHead),
             BlockKind::RollerBody => BlockLayer::Virtual(VirtualBlock::RollerBody),
             BlockKind::StamperBody => BlockLayer::Virtual(VirtualBlock::StamperBody),
+            BlockKind::PusherHead => BlockLayer::Virtual(VirtualBlock::PusherHead),
         }
     }
 
@@ -783,7 +789,16 @@ impl BlockKind {
     }
 
     pub fn is_generated_marker(self) -> bool {
-        matches!(self.layer(), BlockLayer::Virtual(_))
+        // PusherHead 是运行时伸缩占位，不随 clear_generated_markers 清掉
+        matches!(
+            self.layer(),
+            BlockLayer::Virtual(
+                VirtualBlock::WeldPoint
+                    | VirtualBlock::DrillHead
+                    | VirtualBlock::RollerBody
+                    | VirtualBlock::StamperBody
+            )
+        )
     }
 
     pub fn is_system_block(self) -> bool {

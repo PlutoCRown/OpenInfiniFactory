@@ -24,6 +24,7 @@ pub mod lifter;
 pub mod mirror;
 pub mod platform;
 pub mod pusher;
+pub mod pusher_head;
 pub mod reverse_conveyor;
 pub mod roller;
 pub mod roller_body;
@@ -55,19 +56,18 @@ use crate::game::state::UiPanelId;
 pub use oif_sim::blocks::{
     AcceptorId, BLOCK_SIZE, BlockClass, BlockData, BlockDefinition, BlockId, BlockKind, BlockLayer,
     BlockShape, ColorSpec, DEFAULT_GENERATOR_PERIOD, FALLBACK_MATERIAL_STRING_ID,
-    FALLBACK_SCENE_STRING_ID, Facing, FactoryBlock, LaserOpticsBehavior, MarkerBehavior,
-    MaterialBlock, MaterialBlockCatalog, MaterialBlockDef, MaterialBlockId, MaterialDestroyer,
-    MaterialLabeler, MaterialProcessor, MaterialProps, MaterialSource, MovementRule,
-    PaintMaterialCatalog, PaintMaterialDef, PaintMaterialId, PersistentLayer, PoweredSideEffect,
-    SceneBlockCatalog,
-    SceneBlockDef, SceneBlockId, SignalBehavior, StampMaterialCatalog, StampMaterialDef,
-    StampMaterialId, SystemBlock, VirtualBlock, WeldBehavior, WireFacePolicy, ensure_fallback_material_catalog,
+    FALLBACK_SCENE_STRING_ID, FALLBACK_STAMP_SEED_COLORS, Facing, FactoryBlock,
+    LaserOpticsBehavior, MarkerBehavior, MaterialBlock, MaterialBlockCatalog, MaterialBlockDef,
+    MaterialBlockId, MaterialDestroyer, MaterialLabeler, MaterialProcessor, MaterialProps,
+    MaterialSource, MovementRule, PaintMaterialCatalog, PaintMaterialDef, PaintMaterialId,
+    PersistentLayer, PoweredSideEffect, SceneBlockCatalog, SceneBlockDef, SceneBlockId,
+    SignalBehavior, StampMaterialCatalog, StampMaterialDef, StampMaterialId, SystemBlock,
+    VirtualBlock, WeldBehavior, WireFacePolicy, ensure_fallback_material_catalog,
     ensure_fallback_paint_catalog, ensure_fallback_scene_catalog, ensure_fallback_stamp_catalog,
     fallback_material_id, fallback_scene_id, install_material_catalog, install_paint_catalog,
     install_scene_catalog, install_stamp_catalog, leak_str, material_catalog, material_def,
     paint_catalog, paint_def, paint_id_by_string, resolve_material_id, resolve_scene_id, rgb, rgba,
     scene_catalog, scene_def, stamp_catalog, stamp_def, stamp_id_by_string, stamp_seed_color,
-    FALLBACK_STAMP_SEED_COLORS,
 };
 
 /// ColorSpec → Bevy Color

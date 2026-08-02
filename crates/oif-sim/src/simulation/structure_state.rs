@@ -1,7 +1,7 @@
 use glam::IVec3;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::blocks::{AcceptorId, BlockId, MovementRule};
+use crate::blocks::{AcceptorId, BlockId, BlockKind, MovementRule};
 use crate::world::direction::Facing;
 use crate::world::grid::WorldBlocks;
 
@@ -166,6 +166,25 @@ impl BreakableGraph {
             let Some(block) = world.blocks.get(&body) else {
                 continue;
             };
+            // 真实伸出头不在工厂成员里：Head 仍连通头格四周的结构格（越过活塞臂）
+            if world
+                .blocks
+                .get(&face)
+                .is_some_and(|b| b.kind == BlockKind::PusherHead)
+            {
+                for offset in signal_offsets() {
+                    let adj = face + offset;
+                    if adj == body || !positions.contains(&adj) {
+                        continue;
+                    }
+                    if is_blocked_factory_connection(world, adj, face)
+                        || is_blocked_factory_connection(world, face, adj)
+                    {
+                        continue;
+                    }
+                    graph.link(BreakableNode::Head(block.id), BreakableNode::Cell(adj));
+                }
+            }
             heads_at.entry(face).or_default().push(block.id);
         }
         for ids in heads_at.values() {
@@ -1039,8 +1058,37 @@ fn connected_factory_subset(
     while let Some(pos) = queue.pop_front() {
         for offset in signal_offsets() {
             let neighbor = pos + offset;
-            if structure.contains(&neighbor)
-                || !allowed.contains(&neighbor)
+            if structure.contains(&neighbor) {
+                continue;
+            }
+            // 穿过真实活塞头连通对侧：伸出是结构形变，臂保持整坨一体
+            if world
+                .blocks
+                .get(&neighbor)
+                .is_some_and(|block| block.kind == BlockKind::PusherHead)
+            {
+                if is_blocked_pusher_edge(world, blocked_pusher_pos, pos, neighbor)
+                    || is_blocked_factory_connection(world, pos, neighbor)
+                    || is_blocked_factory_connection(world, neighbor, pos)
+                {
+                    continue;
+                }
+                for offset2 in signal_offsets() {
+                    let beyond = neighbor + offset2;
+                    if structure.contains(&beyond) || !allowed.contains(&beyond) {
+                        continue;
+                    }
+                    if is_blocked_factory_connection(world, beyond, neighbor)
+                        || is_blocked_factory_connection(world, neighbor, beyond)
+                    {
+                        continue;
+                    }
+                    structure.insert(beyond);
+                    queue.push_back(beyond);
+                }
+                continue;
+            }
+            if !allowed.contains(&neighbor)
                 || is_blocked_pusher_edge(world, blocked_pusher_pos, pos, neighbor)
                 || is_blocked_factory_connection(world, pos, neighbor)
                 || is_blocked_factory_connection(world, neighbor, pos)
@@ -1095,4 +1143,49 @@ pub fn touches_scene(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
             world.is_scene_at(neighbor) && !is_blocked_factory_connection(world, *pos, neighbor)
         })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::blocks::{BlockData, BlockKind};
+    use crate::world::Facing;
+
+    /// 伸出后真实头应保持体与身前工厂格同结构，且切断后身前仍在 Head 侧
+    #[test]
+    fn extended_pusher_head_keeps_front_connected() {
+        let mut world = WorldBlocks::default();
+        let body = IVec3::new(0, 1, 0);
+        let head = IVec3::new(1, 1, 0);
+        let front = IVec3::new(2, 1, 0);
+        world.insert(body, BlockData::new(BlockKind::Blocker, Facing::East));
+        world.insert(head, BlockData::new(BlockKind::PusherHead, Facing::East));
+        world.insert(front, BlockData::new(BlockKind::Platform, Facing::North));
+
+        let members = factory_structure(&world, body);
+        assert!(
+            members.contains(&front),
+            "flood fill must walk through PusherHead to front: {members:?}"
+        );
+        assert!(
+            !members.contains(&head),
+            "head itself is not a factory member"
+        );
+
+        let graph = BreakableGraph::build(&world, &members);
+        let id = world.blocks.get(&body).unwrap().id;
+        let sides = graph
+            .sides_for(id, &HashSet::from([id]), &HashSet::new())
+            .expect("sides");
+        assert!(sides.separated, "cutting body-head should separate");
+        assert!(
+            sides.target_side.contains(&front),
+            "front must stay on Head side after extend: {:?}",
+            sides.target_side
+        );
+        assert!(
+            !sides.target_side.contains(&body),
+            "body must not be on Head side"
+        );
+    }
 }
