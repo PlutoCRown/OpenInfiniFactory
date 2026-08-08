@@ -23,6 +23,7 @@ pub struct GameplayStatusCache {
     aim_line: String,
     structure_line: String,
     place_line: String,
+    deform_line: String,
     composed: String,
     num_x: String,
     num_y: String,
@@ -54,6 +55,7 @@ impl Default for GameplayStatusCache {
             aim_line: String::new(),
             structure_line: String::new(),
             place_line: String::new(),
+            deform_line: String::new(),
             composed: String::new(),
             num_x: String::new(),
             num_y: String::new(),
@@ -193,6 +195,7 @@ fn refresh_gameplay_target(cache: &mut GameplayStatusCache, locale: &I18n, aim: 
         cache.aim_line.clone_from(&cache.aim_none);
         cache.structure_line.clear();
         cache.place_line.clear();
+        cache.deform_line.clear();
         cache.last_block_kind = Some(None);
         return;
     };
@@ -241,6 +244,10 @@ fn refresh_gameplay_target(cache: &mut GameplayStatusCache, locale: &I18n, aim: 
         }
         None => cache.structure_line.clone_from(&cache.structure_none),
     }
+    match &aim.deform_summary {
+        Some(summary) => cache.deform_line.clone_from(summary),
+        None => cache.deform_line.clear(),
+    }
     let place_at = aim.place_at.unwrap_or(hit.pos);
     write_i32(&mut cache.num_x, place_at.x);
     write_i32(&mut cache.num_y, place_at.y);
@@ -268,6 +275,10 @@ fn compose_gameplay_status(cache: &mut GameplayStatusCache) {
     if !cache.structure_line.is_empty() {
         cache.composed.push('\n');
         cache.composed.push_str(&cache.structure_line);
+    }
+    if !cache.deform_line.is_empty() {
+        cache.composed.push('\n');
+        cache.composed.push_str(&cache.deform_line);
     }
     if !cache.place_line.is_empty() {
         cache.composed.push('\n');

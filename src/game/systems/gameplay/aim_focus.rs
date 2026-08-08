@@ -1,10 +1,12 @@
 //! 瞄准派生上下文：由 placement.target + 世界解析，供状态栏/名牌等订阅
 
 use bevy::prelude::*;
+use std::fmt::Write;
 
 use crate::game::blocks::{BlockId, BlockKind};
-use crate::game::simulation::structure_state::{StructureId, StructureState};
+use crate::game::simulation::structure_state::{StructureId, StructureKind, StructureState};
 use crate::game::state::PlacementState;
+use crate::game::systems::debug::DebugState;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{TargetHit, WorldBlocks};
 
@@ -24,6 +26,8 @@ pub struct AimFocus {
     pub hit: Option<TargetHit>,
     pub block: Option<AimBlockInfo>,
     pub structure_id: Option<StructureId>,
+    /// P 结构调试：瞄准工厂结构的共轴伸缩摘要
+    pub deform_summary: Option<String>,
     /// 瞄准告示且有非空文本时的展示文案
     pub sign_label: Option<String>,
     /// 放置预览格：`hit.pos + hit.normal`（无瞄准时为 None）
@@ -35,6 +39,7 @@ pub fn sync_aim_focus(
     placement: Res<PlacementState>,
     world: Res<WorldBlocks>,
     structure_state: Res<StructureState>,
+    debug: Res<DebugState>,
     mut aim: ResMut<AimFocus>,
 ) {
     let next = match placement.target {
@@ -44,10 +49,38 @@ pub fn sync_aim_focus(
             let structure_id = structure_state
                 .structure_id_at(hit.pos)
                 .filter(|id| !id.is_none());
+            let deform_summary = if debug.factory_activity {
+                structure_id.and_then(|id| {
+                    let structure = structure_state.get(id)?;
+                    if structure.kind != StructureKind::Factory
+                        || structure.deform_groups.is_empty()
+                    {
+                        return None;
+                    }
+                    let mut text = String::from("deform:");
+                    for group in &structure.deform_groups {
+                        text.push_str("\n  [");
+                        for (i, (body, forward)) in group.actions.iter().enumerate() {
+                            if i > 0 {
+                                text.push(' ');
+                            }
+                            let _ = write!(text, "{}{}", if *forward { '+' } else { '-' }, body.0);
+                        }
+                        text.push_str("] ->");
+                        for node in &group.nodes {
+                            let _ = write!(text, " #{}", node.0);
+                        }
+                    }
+                    Some(text)
+                })
+            } else {
+                None
+            };
             AimFocus {
                 hit: Some(hit),
                 block,
                 structure_id,
+                deform_summary,
                 sign_label,
                 place_at: Some(hit.pos + hit.normal),
             }

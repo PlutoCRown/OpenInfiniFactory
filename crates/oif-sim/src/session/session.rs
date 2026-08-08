@@ -66,7 +66,7 @@ impl SimSession {
         }
         self.control.start_snapshot = Some(self.world.clone());
         self.pusher_state = PusherState::rebuild_from_world(&self.world);
-        self.structure_state.rebuild_for_simulation(&self.world);
+        self.structure_state.refresh_for_simulation_start(&self.world);
         self.control.start_structures = Some(self.structure_state.clone());
     }
 

@@ -667,7 +667,7 @@ pub fn refresh_edit_changes(
     changed: &HashSet<IVec3>,
     scene_chunks: &mut SceneChunkMeshes,
 ) {
-    structure_state.rebuild_for_simulation(world);
+    structure_state.apply_factory_edit(world, changed);
     let refresh = collect_edit_refresh_positions(world, changed);
     // 编辑常只改 block_settings（材料预览等），BlockData 不变；
     // refresh_positions 对已存在的系统实体会跳过，这里先拆掉再重建。

@@ -82,7 +82,7 @@ pub(super) fn alternate_block_at(
     }
     edit_history.record(patch);
     refresh_edit_generated_markers(world);
-    structure_state.rebuild_for_simulation(world);
+    structure_state.apply_factory_edit(world, &std::collections::HashSet::from([pos]));
     despawn_block_entities(commands, meshes, block_entities, block_index, scene_chunks);
     rebuild_world_for_debug_state(
         commands,
@@ -142,7 +142,7 @@ pub(super) fn rotate_block_at(
         },
     );
 
-    structure_state.rebuild_for_simulation(world);
+    structure_state.apply_factory_edit(world, &std::collections::HashSet::from([pos]));
     despawn_block_entities(commands, meshes, block_entities, block_index, scene_chunks);
     rebuild_world_with_animations(
         commands,

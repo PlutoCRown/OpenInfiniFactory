@@ -116,7 +116,7 @@ impl StructureState {
         let mut positions = HashSet::new();
         for id in component {
             let structure = self.structure_by_id(id)?;
-            if !structure.pushable || !structure.freedom.can_translate(offset) {
+            if !structure.is_pushable() || !structure.freedom.can_translate(offset) {
                 return None;
             }
             positions.extend(structure.positions.iter().copied());
@@ -144,7 +144,7 @@ impl StructureState {
                 // 种子子集已由调用方验证（如活塞子集），不因整结构 scene-anchored 而拒绝
                 continue;
             }
-            if !structure.pushable || !structure.freedom.can_translate(offset) {
+            if !structure.is_pushable() || !structure.freedom.can_translate(offset) {
                 return None;
             }
             positions.extend(structure.positions.iter().copied());

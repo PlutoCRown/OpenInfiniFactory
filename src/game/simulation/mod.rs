@@ -44,7 +44,7 @@ pub mod stats {
 pub mod structure_state {
     use bevy::prelude::*;
     pub use oif_sim::simulation::structure_state::{
-        BreakableSplit, FactoryActivity, StructureFreedom, StructureId, StructureKind,
+        DeformGroup, FactoryActivity, StructureFreedom, StructureId, StructureKind,
         material_structure, query_factory_structure,
     };
 

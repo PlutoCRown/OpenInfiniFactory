@@ -2,7 +2,6 @@ use glam::IVec3;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::blocks::{AcceptorId, BlockId, BlockKind, MovementRule};
-use crate::world::direction::Facing;
 use crate::world::grid::WorldBlocks;
 
 use super::signal_offsets;
@@ -43,31 +42,19 @@ impl StructureFreedom {
     }
 }
 
-/// Relative contact from a structure member toward a supporting cell.
+/// 重力支撑接触：成员格 → 支撑方向
 pub type GravitySupportContact = (IVec3, IVec3);
 
-/// 可断裂预拆：可断裂块在结构图里是「体 + 头」两节点，中间边为候选桥
-/// （普通块一格一节点、至多六度；头只连工作面邻格，体连其余五面）
-#[derive(Clone, Debug)]
-pub struct BreakableSplit {
-    /// 构建时的朝向（观测用；查找以 BlockId 为 key）
-    pub facing: Facing,
-    /// 切断体–头边后是否分成两连通分量（无回环则为桥，含头前不在本结构）
-    pub is_bridge: bool,
-    /// 体侧方块格（反推用）；头前不在本结构时为整结构
-    pub actor_side: HashSet<IVec3>,
-    /// 头侧方块格（正推用）；头空或头前属其它结构时为空
-    pub target_side: HashSet<IVec3>,
-    /// 构建时本体侧是否贴场景（开局快照，不随中途落地改写）
-    pub actor_anchored: bool,
-    /// 构建时头前侧是否贴场景
-    pub target_anchored: bool,
+/// 共轴可变形子集：同节点集的正/反推动作必须一起伸缩
+#[derive(Clone, Debug, Default)]
+pub struct DeformGroup {
+    pub actions: Vec<(BlockId, bool)>,
+    pub nodes: Vec<BlockId>,
 }
 
-/// multi-cut 后某杆两侧格点（Body–Head 在给定切断集下的连通分量）
+/// 单杆正/反推对应的格点两侧（由 DeformGroup 解析）
 #[derive(Clone, Debug)]
-pub struct PusherCutSides {
-    /// 切断后体与头是否已不连通
+pub struct DeformSides {
     pub separated: bool,
     pub actor_side: HashSet<IVec3>,
     pub target_side: HashSet<IVec3>,
@@ -75,220 +62,7 @@ pub struct PusherCutSides {
     pub target_anchored: bool,
 }
 
-/// 结构图节点：工厂格或推杆头
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-enum BreakableNode {
-    Cell(IVec3),
-    Head(BlockId),
-}
-
-/// 体–头双节点图：供同结构多杆同时切断（multi-cut）查询
-#[derive(Clone, Debug, Default)]
-pub struct BreakableGraph {
-    adj: HashMap<BreakableNode, HashSet<BreakableNode>>,
-    /// 可切断推杆 BlockId → 体格
-    bodies: HashMap<BlockId, IVec3>,
-}
-
-impl BreakableGraph {
-    fn link(&mut self, a: BreakableNode, b: BreakableNode) {
-        self.adj.entry(a).or_default().insert(b);
-        self.adj.entry(b).or_default().insert(a);
-    }
-
-    /// 从工厂成员建双节点图：工作面经 Head，体–头边可切断
-    fn build(world: &WorldBlocks, positions: &HashSet<IVec3>) -> Self {
-        let mut graph = Self::default();
-        for &pos in positions {
-            graph.adj.entry(BreakableNode::Cell(pos)).or_default();
-        }
-
-        let mut forward_of: HashMap<IVec3, IVec3> = HashMap::new();
-        for &pos in positions {
-            let Some(block) = world.blocks.get(&pos) else {
-                continue;
-            };
-            let Some(MovementRule::PoweredTranslate { source, .. }) =
-                block.kind.movement_rule(block.facing)
-            else {
-                continue;
-            };
-            graph.bodies.insert(block.id, pos);
-            forward_of.insert(pos, source);
-            graph.adj.entry(BreakableNode::Head(block.id)).or_default();
-            graph.link(BreakableNode::Cell(pos), BreakableNode::Head(block.id));
-        }
-
-        for &pos in positions {
-            for offset in signal_offsets() {
-                let neighbor = pos + offset;
-                if !positions.contains(&neighbor)
-                    || is_blocked_factory_connection(world, pos, neighbor)
-                    || is_blocked_factory_connection(world, neighbor, pos)
-                {
-                    continue;
-                }
-                // 工作面：不直连体与头前格
-                if forward_of.get(&pos) == Some(&offset) {
-                    let Some(id) = world.blocks.get(&pos).map(|block| block.id) else {
-                        continue;
-                    };
-                    // 贴脸对向：Cell—Head—Head—Cell，勿经对方 Cell 成环
-                    if forward_of.get(&neighbor) == Some(&(-offset)) {
-                        if let Some(other_id) = world.blocks.get(&neighbor).map(|block| block.id) {
-                            graph.link(BreakableNode::Head(id), BreakableNode::Head(other_id));
-                        }
-                    } else {
-                        graph.link(BreakableNode::Head(id), BreakableNode::Cell(neighbor));
-                    }
-                    continue;
-                }
-                if forward_of.get(&neighbor) == Some(&(-offset)) {
-                    // 仅对方工作面朝向本格（本格未朝向对方）
-                    let id = world.blocks.get(&neighbor).map(|block| block.id);
-                    if let Some(id) = id {
-                        graph.link(BreakableNode::Head(id), BreakableNode::Cell(pos));
-                    }
-                    continue;
-                }
-                graph.link(BreakableNode::Cell(pos), BreakableNode::Cell(neighbor));
-            }
-        }
-        // 未伸出时体与头同格：五面邻接走 Cell，工作面邻接走 Head。
-        // 仅当多杆的工作面都对着同一空格（格内无成员）时 Head 互通；
-        // 若工作面顶在对方本体上，已由上方 Head—Head / Head—Cell 处理，不可再按「同坐标」误连。
-        let mut heads_at: HashMap<IVec3, Vec<BlockId>> = HashMap::new();
-        for (&body, &forward) in &forward_of {
-            let face = body + forward;
-            if positions.contains(&face) {
-                continue;
-            }
-            let Some(block) = world.blocks.get(&body) else {
-                continue;
-            };
-            // 真实伸出头不在工厂成员里：Head 仍连通头格四周的结构格（越过活塞臂）
-            if world
-                .blocks
-                .get(&face)
-                .is_some_and(|b| b.kind == BlockKind::PusherHead)
-            {
-                for offset in signal_offsets() {
-                    let adj = face + offset;
-                    if adj == body || !positions.contains(&adj) {
-                        continue;
-                    }
-                    if is_blocked_factory_connection(world, adj, face)
-                        || is_blocked_factory_connection(world, face, adj)
-                    {
-                        continue;
-                    }
-                    graph.link(BreakableNode::Head(block.id), BreakableNode::Cell(adj));
-                }
-            }
-            heads_at.entry(face).or_default().push(block.id);
-        }
-        for ids in heads_at.values() {
-            for i in 0..ids.len() {
-                for j in (i + 1)..ids.len() {
-                    graph.link(BreakableNode::Head(ids[i]), BreakableNode::Head(ids[j]));
-                }
-            }
-        }
-        graph
-    }
-
-    fn is_cut_edge(
-        a: BreakableNode,
-        b: BreakableNode,
-        cut_ids: &HashSet<BlockId>,
-        bodies: &HashMap<BlockId, IVec3>,
-    ) -> bool {
-        match (a, b) {
-            (BreakableNode::Cell(pos), BreakableNode::Head(id))
-            | (BreakableNode::Head(id), BreakableNode::Cell(pos)) => {
-                cut_ids.contains(&id) && bodies.get(&id) == Some(&pos)
-            }
-            _ => false,
-        }
-    }
-
-    /// 切断 cut_ids 中全部体–头边后，从 start 可达的工厂格
-    fn reachable_cells(&self, start: BreakableNode, cut_ids: &HashSet<BlockId>) -> HashSet<IVec3> {
-        let mut cells = HashSet::new();
-        let mut seen = HashSet::from([start]);
-        let mut queue = VecDeque::from([start]);
-        while let Some(node) = queue.pop_front() {
-            if let BreakableNode::Cell(pos) = node {
-                cells.insert(pos);
-            }
-            let Some(neighbors) = self.adj.get(&node) else {
-                continue;
-            };
-            for &next in neighbors {
-                if seen.contains(&next) || Self::is_cut_edge(node, next, cut_ids, &self.bodies) {
-                    continue;
-                }
-                seen.insert(next);
-                queue.push_back(next);
-            }
-        }
-        cells
-    }
-
-    /// 查询某杆在给定切断集下的两侧
-    fn sides_for(
-        &self,
-        pusher_id: BlockId,
-        cut_ids: &HashSet<BlockId>,
-        scene_touching: &HashSet<IVec3>,
-    ) -> Option<PusherCutSides> {
-        let &body = self.bodies.get(&pusher_id)?;
-        let actor_side = self.reachable_cells(BreakableNode::Cell(body), cut_ids);
-        let target_side = self.reachable_cells(BreakableNode::Head(pusher_id), cut_ids);
-        let separated = !target_side.contains(&body) && !actor_side.is_empty();
-        let (actor_side, target_side) = if separated {
-            (actor_side, target_side)
-        } else {
-            (HashSet::new(), HashSet::new())
-        };
-        let actor_anchored =
-            !actor_side.is_empty() && actor_side.iter().any(|pos| scene_touching.contains(pos));
-        let target_anchored =
-            !target_side.is_empty() && target_side.iter().any(|pos| scene_touching.contains(pos));
-        Some(PusherCutSides {
-            separated,
-            actor_side,
-            target_side,
-            actor_anchored,
-            target_anchored,
-        })
-    }
-
-    /// 成员平移后更新图中 Cell 坐标
-    fn translate_cells(&mut self, positions: &HashSet<IVec3>, offset: IVec3) {
-        let map_node = |node: BreakableNode| match node {
-            BreakableNode::Cell(pos) if positions.contains(&pos) => {
-                BreakableNode::Cell(pos + offset)
-            }
-            other => other,
-        };
-        let old = std::mem::take(&mut self.adj);
-        let mut new_adj: HashMap<BreakableNode, HashSet<BreakableNode>> = HashMap::new();
-        for (node, neighbors) in old {
-            let mapped = map_node(node);
-            for next in neighbors {
-                new_adj.entry(mapped).or_default().insert(map_node(next));
-            }
-        }
-        self.adj = new_adj;
-        for pos in self.bodies.values_mut() {
-            if positions.contains(pos) {
-                *pos += offset;
-            }
-        }
-    }
-}
-
+/// 单个连通结构（工厂或材料）
 #[derive(Clone)]
 pub struct Structure {
     pub id: StructureId,
@@ -296,16 +70,31 @@ pub struct Structure {
     pub positions: HashSet<IVec3>,
     pub activity: FactoryActivity,
     pub freedom: StructureFreedom,
-    pub pushable: bool,
     gravity_support: Vec<GravitySupportContact>,
-    /// 可断裂预拆：key = 活塞/拦截器 BlockId（仅切自己时的快照，观测/兼容）
-    pub breakable_splits: HashMap<BlockId, BreakableSplit>,
-    /// 体–头双节点图（runtime multi-cut）
-    pub breakable_graph: BreakableGraph,
-    /// 开局贴场景的成员格（锚死判定，不随中途落地改写）
+    /// 推杆体 → 逻辑头 BlockId（放置/重建时分配，伸出前后稳定）
+    pub head_of: HashMap<BlockId, BlockId>,
+    /// 逻辑头 → 推杆体
+    body_of_head: HashMap<BlockId, BlockId>,
+    pub deform_groups: Vec<DeformGroup>,
+    /// (体, 正推?) → 候选组下标，按 nodes.len() 升序（优先多杆共轴、少节点）
+    action_to_groups: HashMap<(BlockId, bool), Vec<u32>>,
+    /// 开局/编辑时贴场景的成员格（锚死快照，中途落地不改）
     scene_touching: HashSet<IVec3>,
 }
 
+impl Structure {
+    /// 是否可被推动：无贴场景成员
+    pub fn is_pushable(&self) -> bool {
+        self.scene_touching.is_empty()
+    }
+
+    /// 子集是否含贴场景成员（锚死不可推）
+    pub fn is_scene_anchored_subset(&self, positions: &HashSet<IVec3>) -> bool {
+        positions.iter().any(|p| self.scene_touching.contains(p))
+    }
+}
+
+/// 验收口结构运行时计数
 #[derive(Clone, Debug)]
 pub struct AcceptorStructure {
     pub id: AcceptorId,
@@ -313,17 +102,28 @@ pub struct AcceptorStructure {
     pub count: u32,
 }
 
+/// 世界结构表：工厂/材料连通、可变形子集、回合 held
 #[derive(Default, Clone)]
 pub struct StructureState {
     structures: HashMap<StructureId, Structure>,
     structure_by_pos: HashMap<IVec3, StructureId>,
     next_structure_id: u64,
+    next_head_id: u64,
     acceptor_structures: Vec<AcceptorStructure>,
+    /// 本回合已占用移动的方块（含逻辑头）；每回合清空
+    pub held_blocks: HashSet<BlockId>,
+    /// 本回合已占用整段平移的结构
+    pub moving_structures: HashSet<StructureId>,
 }
 
 impl StructureState {
     pub fn clear(&mut self) {
         *self = Self::default();
+    }
+
+    pub fn clear_turn_marks(&mut self) {
+        self.held_blocks.clear();
+        self.moving_structures.clear();
     }
 
     pub fn is_empty(&self) -> bool {
@@ -335,15 +135,44 @@ impl StructureState {
         StructureId(self.next_structure_id)
     }
 
-    /// Build factory structures (connectivity + activity), acceptor structures, and material structures (welds).
-    /// 工厂连通按当前世界相邻关系建一次（开局/放置快照）；之后运行时只搬迁成员，不因贴上而合并。
+    fn alloc_head_id(&mut self) -> BlockId {
+        self.next_head_id = self.next_head_id.max(1);
+        let id = BlockId(self.next_head_id);
+        self.next_head_id += 1;
+        id
+    }
+
+    /// 逻辑头 ID 不得与世界方块 ID 冲突
+    fn sync_head_counter(&mut self, world: &WorldBlocks) {
+        self.next_head_id = self.next_head_id.max(world.next_block_id).max(1);
+    }
+
+    /// 全量重建：工厂连通 + inactive + deform + 验收口 + 材料
     pub fn rebuild_for_simulation(&mut self, world: &WorldBlocks) {
+        let next_head = self.next_head_id.max(world.next_block_id).max(1);
         *self = Self::default();
+        self.next_head_id = next_head;
         self.append_factory_structures(world);
         self.apply_factory_inactive_propagation(world);
-        self.rebuild_breakable_splits(world);
+        self.rebuild_all_factory_deform(world);
         self.append_acceptor_structures(world);
         self.append_material_structures(world, &HashMap::new(), &HashMap::new());
+    }
+
+    /// 开局轻量：已有工厂缓存则只刷新材料/验收口；否则全量重建
+    pub fn refresh_for_simulation_start(&mut self, world: &WorldBlocks) {
+        self.clear_turn_marks();
+        if !self
+            .structures
+            .values()
+            .any(|structure| structure.kind == StructureKind::Factory)
+        {
+            self.rebuild_for_simulation(world);
+            return;
+        }
+        self.acceptor_structures.clear();
+        self.append_acceptor_structures(world);
+        self.refresh_material_structures(world);
     }
 
     pub fn acceptor_structures(&self) -> &[AcceptorStructure] {
@@ -356,16 +185,15 @@ impl StructureState {
         }
     }
 
-    /// Debug-only factory connectivity for edit-mode visualization.
+    /// 调试：仅重建工厂连通与 deform
     pub fn rebuild_factory_for_debug(&mut self, world: &WorldBlocks) {
         self.retain_factory_only();
         self.append_factory_structures(world);
         self.apply_factory_inactive_propagation(world);
-        self.rebuild_breakable_splits(world);
+        self.rebuild_all_factory_deform(world);
     }
 
     pub fn refresh_material_structures(&mut self, world: &WorldBlocks) {
-        // 按成员 BlockId 集合复用 StructureId，避免影响计数每回合清零
         let mut previous_ids: HashMap<Vec<u64>, StructureId> = HashMap::new();
         let mut previous_support: HashMap<StructureId, Vec<GravitySupportContact>> = HashMap::new();
         for (id, structure) in &self.structures {
@@ -460,10 +288,11 @@ impl StructureState {
                     positions,
                     activity: FactoryActivity::Active,
                     freedom: StructureFreedom::All,
-                    pushable: true,
                     gravity_support,
-                    breakable_splits: HashMap::new(),
-                    breakable_graph: BreakableGraph::default(),
+                    head_of: HashMap::new(),
+                    body_of_head: HashMap::new(),
+                    deform_groups: Vec::new(),
+                    action_to_groups: HashMap::new(),
                     scene_touching: HashSet::new(),
                 },
             );
@@ -501,10 +330,11 @@ impl StructureState {
                     positions,
                     activity: FactoryActivity::Active,
                     freedom: StructureFreedom::All,
-                    pushable: true,
                     gravity_support: Vec::new(),
-                    breakable_splits: HashMap::new(),
-                    breakable_graph: BreakableGraph::default(),
+                    head_of: HashMap::new(),
+                    body_of_head: HashMap::new(),
+                    deform_groups: Vec::new(),
+                    action_to_groups: HashMap::new(),
                     scene_touching: HashSet::new(),
                 },
             );
@@ -575,14 +405,413 @@ impl StructureState {
             };
             structure.activity = FactoryActivity::Active;
             structure.freedom = StructureFreedom::All;
-            structure.pushable = true;
             if inactive.get(&id).copied().unwrap_or(false) {
                 structure.activity = FactoryActivity::Inactive;
                 if scene_anchored.get(&id).copied().unwrap_or(false) {
                     structure.freedom = StructureFreedom::None;
-                    structure.pushable = false;
                 }
             }
+        }
+    }
+
+    /// 编辑变更：局部合并/拆分工厂连通并重算受影响 deform
+    pub fn apply_factory_edit(&mut self, world: &WorldBlocks, changed: &HashSet<IVec3>) {
+        if changed.is_empty() {
+            return;
+        }
+
+        let mut seed_positions: HashSet<IVec3> = HashSet::new();
+        let mut stale_ids: HashSet<StructureId> = HashSet::new();
+
+        for &pos in changed {
+            if let Some(id) = self.structure_by_pos.get(&pos).copied() {
+                if let Some(structure) = self.structures.get(&id) {
+                    if structure.kind == StructureKind::Factory {
+                        stale_ids.insert(id);
+                        seed_positions.extend(structure.positions.iter().copied());
+                    }
+                }
+            }
+            for offset in signal_offsets() {
+                let neighbor = pos + offset;
+                if let Some(id) = self.structure_by_pos.get(&neighbor).copied() {
+                    if let Some(structure) = self.structures.get(&id) {
+                        if structure.kind == StructureKind::Factory {
+                            stale_ids.insert(id);
+                            seed_positions.extend(structure.positions.iter().copied());
+                        }
+                    }
+                }
+            }
+            if world.is_factory_at(pos) {
+                seed_positions.insert(pos);
+            }
+        }
+
+        for id in &stale_ids {
+            if let Some(structure) = self.structures.remove(id) {
+                for pos in &structure.positions {
+                    self.structure_by_pos.remove(pos);
+                }
+            }
+        }
+
+        let mut rebuild_seeds: Vec<IVec3> = seed_positions
+            .into_iter()
+            .filter(|pos| world.is_factory_at(*pos) && !self.structure_by_pos.contains_key(pos))
+            .collect();
+        rebuild_seeds.sort_by_key(|pos| (pos.x, pos.y, pos.z));
+
+        let before_ids: HashSet<StructureId> = self.structures.keys().copied().collect();
+        self.append_connected_factory_structures(world, rebuild_seeds);
+        let new_ids: Vec<StructureId> = self
+            .structures
+            .keys()
+            .copied()
+            .filter(|id| !before_ids.contains(id))
+            .collect();
+
+        self.apply_factory_inactive_propagation(world);
+        for id in new_ids {
+            self.rebuild_deform_for(world, id);
+        }
+        // 邻接 inactive 可能波及旧结构的 freedom；仅刷新仍存在的旧工厂 deform 的 scene 相关不重算图
+        // inactive 传播已写回 activity/freedom；deform 节点集不依赖 inactive
+        self.refresh_material_structures(world);
+    }
+
+    fn rebuild_all_factory_deform(&mut self, world: &WorldBlocks) {
+        let ids: Vec<StructureId> = self
+            .structures
+            .iter()
+            .filter(|(_, s)| s.kind == StructureKind::Factory)
+            .map(|(id, _)| *id)
+            .collect();
+        for id in ids {
+            self.rebuild_deform_for(world, id);
+        }
+    }
+
+    /// 为单个工厂结构分配逻辑头并构建共轴 DeformGroup
+    fn rebuild_deform_for(&mut self, world: &WorldBlocks, id: StructureId) {
+        self.sync_head_counter(world);
+        let Some(structure) = self.structures.get(&id) else {
+            return;
+        };
+        if structure.kind != StructureKind::Factory {
+            return;
+        }
+        let positions = structure.positions.clone();
+        let mut prev_heads = structure.head_of.clone();
+
+        let scene_touching: HashSet<IVec3> = positions
+            .iter()
+            .copied()
+            .filter(|pos| {
+                signal_offsets().into_iter().any(|offset| {
+                    let neighbor = *pos + offset;
+                    world.is_scene_at(neighbor)
+                        && !is_blocked_factory_connection(world, *pos, neighbor)
+                })
+            })
+            .collect();
+
+        // body → head；复用旧 head id
+        let mut head_of: HashMap<BlockId, BlockId> = HashMap::new();
+        let mut body_of_head: HashMap<BlockId, BlockId> = HashMap::new();
+        let mut body_pos: HashMap<BlockId, IVec3> = HashMap::new();
+        let mut facing_of: HashMap<BlockId, IVec3> = HashMap::new();
+
+        for &pos in &positions {
+            let Some(block) = world.blocks.get(&pos) else {
+                continue;
+            };
+            let Some(MovementRule::PoweredTranslate { source, .. }) =
+                block.kind.movement_rule(block.facing)
+            else {
+                continue;
+            };
+            let head_id = prev_heads
+                .remove(&block.id)
+                .unwrap_or_else(|| self.alloc_head_id());
+            head_of.insert(block.id, head_id);
+            body_of_head.insert(head_id, block.id);
+            body_pos.insert(block.id, pos);
+            facing_of.insert(block.id, source);
+        }
+
+        // 无向邻接 + 有向 body→head
+        let mut undirected: HashMap<BlockId, HashSet<BlockId>> = HashMap::new();
+        let link_u = |adj: &mut HashMap<BlockId, HashSet<BlockId>>, a: BlockId, b: BlockId| {
+            adj.entry(a).or_default().insert(b);
+            adj.entry(b).or_default().insert(a);
+        };
+
+        let id_at: HashMap<IVec3, BlockId> = positions
+            .iter()
+            .filter_map(|pos| world.blocks.get(pos).map(|b| (*pos, b.id)))
+            .collect();
+
+        for (&body, &head) in &head_of {
+            let Some(&bpos) = body_pos.get(&body) else {
+                continue;
+            };
+            let Some(&forward) = facing_of.get(&body) else {
+                continue;
+            };
+            // 体—头仅有向；头接到正面（贴脸对向则头—头，避免绕回本体）
+            let mut front = bpos + forward;
+            while world
+                .blocks
+                .get(&front)
+                .is_some_and(|b| b.kind == BlockKind::PusherHead)
+            {
+                front += forward;
+            }
+            if let Some(front_block) = world.blocks.get(&front) {
+                let face_to_face = matches!(
+                    front_block.kind.movement_rule(front_block.facing),
+                    Some(MovementRule::PoweredTranslate { source, .. })
+                        if bpos_facing_toward(front, source, bpos)
+                );
+                if face_to_face {
+                    if let Some(&other_head) = head_of.get(&front_block.id) {
+                        link_u(&mut undirected, head, other_head);
+                    }
+                } else if let Some(&front_id) = id_at.get(&front) {
+                    link_u(&mut undirected, head, front_id);
+                }
+            }
+        }
+
+        for &pos in &positions {
+            let Some(&block_id) = id_at.get(&pos) else {
+                continue;
+            };
+            let Some(block) = world.blocks.get(&pos) else {
+                continue;
+            };
+            let forward_opt = matches!(
+                block.kind.movement_rule(block.facing),
+                Some(MovementRule::PoweredTranslate { .. })
+            )
+            .then(|| block.facing.forward_ivec3());
+
+            for offset in signal_offsets() {
+                if forward_opt == Some(offset) {
+                    continue; // 正面只经头连
+                }
+                let neighbor = pos + offset;
+                let Some(&neighbor_id) = id_at.get(&neighbor) else {
+                    continue;
+                };
+                if is_blocked_factory_connection(world, pos, neighbor)
+                    || is_blocked_factory_connection(world, neighbor, pos)
+                {
+                    continue;
+                }
+                // 邻块若是朝向本格的推杆，已有「邻体→头→本格」，不再加体—体边
+                let neighbor_faces_here = world.blocks.get(&neighbor).is_some_and(|b| {
+                    matches!(
+                        b.kind.movement_rule(b.facing),
+                        Some(MovementRule::PoweredTranslate { source, .. })
+                            if bpos_facing_toward(neighbor, source, pos)
+                    )
+                });
+                if neighbor_faces_here {
+                    continue;
+                }
+                link_u(&mut undirected, block_id, neighbor_id);
+            }
+        }
+
+        // 推杆轴向：东西 / 南北 / 上下（同轴才共组；横切枚举也只对同轴同伴）
+        let axis_of = |fwd: IVec3| -> u8 {
+            if fwd.x != 0 {
+                0
+            } else if fwd.z != 0 {
+                1
+            } else {
+                2
+            }
+        };
+
+        // 在给定切断集下传播；碰到 forbidden=成环。有向边仅当其体未切断时可走。
+        let propagate_with_cuts = |start: BlockId,
+                                   forbidden: BlockId,
+                                   cuts: &HashSet<BlockId>,
+                                   undirected_only: bool|
+         -> Option<Vec<BlockId>> {
+            let mut seen = HashSet::from([start]);
+            let mut queue = VecDeque::from([start]);
+            while let Some(node) = queue.pop_front() {
+                if let Some(neighbors) = undirected.get(&node) {
+                    for &next in neighbors {
+                        if next == forbidden {
+                            return None;
+                        }
+                        if seen.insert(next) {
+                            queue.push_back(next);
+                        }
+                    }
+                }
+                if undirected_only {
+                    continue;
+                }
+                // 体→头
+                if let Some(&head_n) = head_of.get(&node) {
+                    if !cuts.contains(&node) {
+                        if head_n == forbidden {
+                            return None;
+                        }
+                        if seen.insert(head_n) {
+                            queue.push_back(head_n);
+                        }
+                    }
+                }
+                // 头→体
+                if let Some(&body_n) = body_of_head.get(&node) {
+                    if head_of.get(&body_n) == Some(&node) && !cuts.contains(&body_n) {
+                        if body_n == forbidden {
+                            return None;
+                        }
+                        if seen.insert(body_n) {
+                            queue.push_back(body_n);
+                        }
+                    }
+                }
+            }
+            let mut nodes: Vec<_> = seen.into_iter().collect();
+            nodes.sort_by_key(|id| id.0);
+            Some(nodes)
+        };
+
+        // (nodes_key, move_dir) → group；同节点且同推动方向才共组
+        let mut groups_by_key: HashMap<(Vec<u64>, IVec3), DeformGroup> = HashMap::new();
+
+        let mut bodies: Vec<BlockId> = head_of.keys().copied().collect();
+        bodies.sort_by_key(|id| id.0);
+
+        for &body in &bodies {
+            let Some(&head) = head_of.get(&body) else {
+                continue;
+            };
+            let Some(&b_fwd) = facing_of.get(&body) else {
+                continue;
+            };
+            let axis = axis_of(b_fwd);
+
+            // 同轴其它推杆：枚举「也切断」子集 → 每条成功传播都是该动作的候选
+            let mut peers: Vec<BlockId> = bodies
+                .iter()
+                .copied()
+                .filter(|p| *p != body && facing_of.get(p).is_some_and(|f| axis_of(*f) == axis))
+                .collect();
+            peers.sort_by_key(|id| id.0);
+            if peers.len() > 12 {
+                peers.truncate(12);
+            }
+
+            let mut candidate_sets: Vec<(bool, Vec<BlockId>)> = Vec::new();
+            let peer_n = peers.len();
+            let masks = 1u32 << peer_n;
+            for mask in 0..masks {
+                let mut cuts = HashSet::from([body]);
+                for (i, peer) in peers.iter().enumerate() {
+                    if mask & (1 << i) != 0 {
+                        cuts.insert(*peer);
+                    }
+                }
+                if let Some(nodes) = propagate_with_cuts(head, body, &cuts, false) {
+                    if !nodes.is_empty() {
+                        candidate_sets.push((true, nodes));
+                    }
+                }
+                if let Some(nodes) = propagate_with_cuts(body, head, &cuts, false) {
+                    if !nodes.is_empty() {
+                        candidate_sets.push((false, nodes));
+                    }
+                }
+            }
+
+            // 全部同轴单切都成环 → 全切仅无向（对向环）
+            let any_fwd = candidate_sets.iter().any(|(f, _)| *f);
+            let any_rev = candidate_sets.iter().any(|(f, _)| !*f);
+            if !any_fwd || !any_rev {
+                let all_cuts: HashSet<BlockId> = head_of.keys().copied().collect();
+                if !any_fwd {
+                    if let Some(nodes) = propagate_with_cuts(head, body, &all_cuts, true) {
+                        if !nodes.is_empty() {
+                            candidate_sets.push((true, nodes));
+                        }
+                    }
+                }
+                if !any_rev {
+                    if let Some(nodes) = propagate_with_cuts(body, head, &all_cuts, true) {
+                        if !nodes.is_empty() {
+                            candidate_sets.push((false, nodes));
+                        }
+                    }
+                }
+            }
+
+            // 正反仍缺一侧则整杆丢弃
+            let any_fwd = candidate_sets.iter().any(|(f, _)| *f);
+            let any_rev = candidate_sets.iter().any(|(f, _)| !*f);
+            if !any_fwd || !any_rev {
+                continue;
+            }
+
+            for (forward, nodes) in candidate_sets {
+                let move_dir = if forward { b_fwd } else { -b_fwd };
+                let key = (nodes.iter().map(|id| id.0).collect::<Vec<_>>(), move_dir);
+                if let Some(group) = groups_by_key.get_mut(&key) {
+                    if !group.actions.contains(&(body, forward)) {
+                        group.actions.push((body, forward));
+                    }
+                } else {
+                    groups_by_key.insert(
+                        key,
+                        DeformGroup {
+                            actions: vec![(body, forward)],
+                            nodes,
+                        },
+                    );
+                }
+            }
+        }
+
+        let mut keys: Vec<_> = groups_by_key.keys().cloned().collect();
+        keys.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then_with(|| a.1.x.cmp(&b.1.x))
+                .then_with(|| a.1.y.cmp(&b.1.y))
+                .then_with(|| a.1.z.cmp(&b.1.z))
+        });
+        let mut deform_groups: Vec<DeformGroup> = Vec::new();
+        let mut action_to_groups: HashMap<(BlockId, bool), Vec<u32>> = HashMap::new();
+        for key in keys {
+            let Some(mut group) = groups_by_key.remove(&key) else {
+                continue;
+            };
+            group.actions.sort_by_key(|(id, fwd)| (id.0, !*fwd));
+            let index = deform_groups.len() as u32;
+            for action in &group.actions {
+                action_to_groups.entry(*action).or_default().push(index);
+            }
+            deform_groups.push(group);
+        }
+        for indices in action_to_groups.values_mut() {
+            indices.sort_by_key(|idx| deform_groups[*idx as usize].nodes.len());
+            indices.dedup();
+        }
+
+        if let Some(structure) = self.structures.get_mut(&id) {
+            structure.head_of = head_of;
+            structure.body_of_head = body_of_head;
+            structure.deform_groups = deform_groups;
+            structure.action_to_groups = action_to_groups;
+            structure.scene_touching = scene_touching;
         }
     }
 
@@ -600,7 +829,7 @@ impl StructureState {
 
     pub fn pushable_structure_at(&self, pos: IVec3, offset: IVec3) -> Option<HashSet<IVec3>> {
         let structure = self.structure(pos)?;
-        if !structure.pushable || !structure.freedom.can_translate(offset) {
+        if !structure.is_pushable() || !structure.freedom.can_translate(offset) {
             return None;
         }
         Some(structure.positions.clone())
@@ -610,7 +839,7 @@ impl StructureState {
         self.pushable_structure_at(pos, offset)
     }
 
-    /// 不同结构正推：整坨；同结构需调用方用 multi-cut 的 target_side
+    /// 不同结构正推：整坨；同结构变形由 deform_sides 负责
     pub fn pusher_target_structure(
         &self,
         _world: &WorldBlocks,
@@ -624,32 +853,90 @@ impl StructureState {
         }
         let actor_id = self.id_at(pusher_pos)?;
         if actor_id != target.id {
-            if !target.pushable || !target.freedom.can_translate(offset) {
+            if !target.is_pushable() || !target.freedom.can_translate(offset) {
                 return None;
             }
             return Some(target.positions.clone());
         }
-        // 同结构拆边由 `pusher_cut_sides` + cut 集负责
         None
     }
 
-    /// 在给定同时切断的推杆集合下，查本杆体/头两侧
-    pub fn pusher_cut_sides(
+    /// 查询活塞某方向 deform 候选（按节点数升序）；返回结构与组下标列表
+    pub fn deform_action_groups(
         &self,
         world: &WorldBlocks,
         pusher_pos: IVec3,
-        cut_ids: &HashSet<BlockId>,
-    ) -> Option<PusherCutSides> {
+        forward: bool,
+    ) -> Option<(&Structure, &[u32])> {
         let seed = self.structure(pusher_pos)?;
         if seed.kind != StructureKind::Factory {
             return None;
         }
         let block = world.blocks.get(&pusher_pos)?;
-        seed.breakable_graph
-            .sides_for(block.id, cut_ids, &seed.scene_touching)
+        let indices = seed.action_to_groups.get(&(block.id, forward))?;
+        if indices.is_empty() {
+            return None;
+        }
+        Some((seed, indices.as_slice()))
     }
 
-    /// 按结构 ID 取结构（调试/查询）
+    /// 首选（节点最少）deform 动作
+    pub fn deform_action(
+        &self,
+        world: &WorldBlocks,
+        pusher_pos: IVec3,
+        forward: bool,
+    ) -> Option<(&Structure, u32, &[BlockId])> {
+        let (seed, indices) = self.deform_action_groups(world, pusher_pos, forward)?;
+        let idx = *indices.first()?;
+        let nodes = seed.deform_groups.get(idx as usize)?.nodes.as_slice();
+        Some((seed, idx, nodes))
+    }
+
+    /// 由首选 DeformGroup 解析正/反推格点两侧
+    pub fn deform_sides(&self, world: &WorldBlocks, pusher_pos: IVec3) -> Option<DeformSides> {
+        let (seed, _, target_nodes) = self.deform_action(world, pusher_pos, true)?;
+        let (_, _, actor_nodes) = self.deform_action(world, pusher_pos, false)?;
+
+        let target_side = self.nodes_to_positions(world, seed, target_nodes);
+        let actor_side = self.nodes_to_positions(world, seed, actor_nodes);
+        let separated = !target_side.is_empty()
+            && !actor_side.is_empty()
+            && target_side.is_disjoint(&actor_side);
+        let actor_anchored = actor_side.iter().any(|p| seed.scene_touching.contains(p));
+        let target_anchored = target_side.iter().any(|p| seed.scene_touching.contains(p));
+        Some(DeformSides {
+            separated,
+            actor_side,
+            target_side,
+            actor_anchored,
+            target_anchored,
+        })
+    }
+
+    /// 逻辑头以外的实体格；头占格由运动阶段 claimed_heads 处理
+    pub fn nodes_to_positions(
+        &self,
+        world: &WorldBlocks,
+        structure: &Structure,
+        nodes: &[BlockId],
+    ) -> HashSet<IVec3> {
+        let mut out = HashSet::new();
+        for &node in nodes {
+            if structure.body_of_head.contains_key(&node) {
+                continue;
+            }
+            if let Some(pos) = structure
+                .positions
+                .iter()
+                .find(|p| world.blocks.get(p).is_some_and(|b| b.id == node))
+            {
+                out.insert(*pos);
+            }
+        }
+        out
+    }
+
     pub fn get(&self, id: StructureId) -> Option<&Structure> {
         self.structures.get(&id)
     }
@@ -754,32 +1041,6 @@ impl StructureState {
                     *member += offset;
                 }
             }
-            // 预拆子集与双节点图坐标随成员平移
-            for split in structure.breakable_splits.values_mut() {
-                split.actor_side = split
-                    .actor_side
-                    .iter()
-                    .map(|pos| {
-                        if positions.contains(pos) {
-                            *pos + offset
-                        } else {
-                            *pos
-                        }
-                    })
-                    .collect();
-                split.target_side = split
-                    .target_side
-                    .iter()
-                    .map(|pos| {
-                        if positions.contains(pos) {
-                            *pos + offset
-                        } else {
-                            *pos
-                        }
-                    })
-                    .collect();
-            }
-            structure.breakable_graph.translate_cells(positions, offset);
             structure.scene_touching = structure
                 .scene_touching
                 .iter()
@@ -820,76 +1081,7 @@ impl StructureState {
         for pos in &structure.positions {
             self.structure_by_pos.insert(*pos, id);
         }
-        self.rebuild_breakable_splits_for(world, id);
-    }
-
-    /// 为所有工厂结构预计算可断裂桥边子集
-    fn rebuild_breakable_splits(&mut self, world: &WorldBlocks) {
-        let ids: Vec<StructureId> = self
-            .structures
-            .iter()
-            .filter(|(_, structure)| structure.kind == StructureKind::Factory)
-            .map(|(id, _)| *id)
-            .collect();
-        for id in ids {
-            self.rebuild_breakable_splits_for(world, id);
-        }
-    }
-
-    /// 单结构：建双节点图，并缓存「仅切自己」时的桥边子集
-    fn rebuild_breakable_splits_for(&mut self, world: &WorldBlocks, id: StructureId) {
-        let Some(structure) = self.structures.get(&id) else {
-            return;
-        };
-        if structure.kind != StructureKind::Factory {
-            return;
-        }
-        let positions = structure.positions.clone();
-        let graph = BreakableGraph::build(world, &positions);
-        let scene_touching: HashSet<IVec3> = positions
-            .iter()
-            .copied()
-            .filter(|pos| {
-                signal_offsets().into_iter().any(|offset| {
-                    let neighbor = *pos + offset;
-                    world.is_scene_at(neighbor)
-                        && !is_blocked_factory_connection(world, *pos, neighbor)
-                })
-            })
-            .collect();
-
-        let mut splits = HashMap::new();
-        for &pos in &positions {
-            let Some(block) = world.blocks.get(&pos) else {
-                continue;
-            };
-            if !matches!(
-                block.kind.movement_rule(block.facing),
-                Some(MovementRule::PoweredTranslate { .. })
-            ) {
-                continue;
-            }
-            let cut = HashSet::from([block.id]);
-            let Some(sides) = graph.sides_for(block.id, &cut, &scene_touching) else {
-                continue;
-            };
-            splits.insert(
-                block.id,
-                BreakableSplit {
-                    facing: block.facing,
-                    is_bridge: sides.separated,
-                    actor_side: sides.actor_side,
-                    target_side: sides.target_side,
-                    actor_anchored: sides.actor_anchored,
-                    target_anchored: sides.target_anchored,
-                },
-            );
-        }
-        if let Some(structure) = self.structures.get_mut(&id) {
-            structure.breakable_splits = splits;
-            structure.breakable_graph = graph;
-            structure.scene_touching = scene_touching;
-        }
+        self.rebuild_deform_for(world, id);
     }
 
     pub fn movable_structure_at(&self, pos: IVec3) -> Option<HashSet<IVec3>> {
@@ -942,6 +1134,11 @@ impl StructureState {
     }
 }
 
+fn bpos_facing_toward(body: IVec3, source: IVec3, target: IVec3) -> bool {
+    body + source == target
+}
+
+/// 材料焊接连通（即时）
 pub fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     let Some(start_id) = world
         .blocks
@@ -980,7 +1177,6 @@ pub fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
             structure.insert(neighbor);
             queue.push_back(other_id);
         }
-        // 附着边：父↔子双向并入同一材料结构
         for (child_id, att) in &world.material_attachments {
             let other_id = if *child_id == id {
                 att.parent
@@ -1028,23 +1224,15 @@ fn collect_gravity_support(
 }
 
 fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
-    factory_structure_with_blocked_edge(world, start, None)
-}
-
-fn factory_structure_with_blocked_edge(
-    world: &WorldBlocks,
-    start: IVec3,
-    blocked_pusher_pos: Option<IVec3>,
-) -> HashSet<IVec3> {
     let allowed: HashSet<IVec3> = world
         .blocks
         .iter()
         .filter_map(|(pos, block)| block.kind.is_factory().then_some(*pos))
         .collect();
-    connected_factory_subset(world, &allowed, start, blocked_pusher_pos)
+    connected_factory_subset(world, &allowed, start, None)
 }
 
-/// 切断指定活塞的体–头边后，从 start 在 allowed 内可达的方块格
+/// 在 allowed 内工厂连通（可穿过真实活塞头）
 fn connected_factory_subset(
     world: &WorldBlocks,
     allowed: &HashSet<IVec3>,
@@ -1061,7 +1249,6 @@ fn connected_factory_subset(
             if structure.contains(&neighbor) {
                 continue;
             }
-            // 穿过真实活塞头连通对侧：伸出是结构形变，臂保持整坨一体
             if world
                 .blocks
                 .get(&neighbor)
@@ -1103,7 +1290,6 @@ fn connected_factory_subset(
     structure
 }
 
-/// 是否为该活塞的体–头边（工作面一侧）；预拆 BFS 时禁止穿越
 fn is_blocked_pusher_edge(
     world: &WorldBlocks,
     pusher_pos: Option<IVec3>,
@@ -1113,8 +1299,14 @@ fn is_blocked_pusher_edge(
     let Some(pusher_pos) = pusher_pos else {
         return false;
     };
-    pusher_front_neighbor(world, pusher_pos).is_some_and(|front| {
-        (from == pusher_pos && to == front) || (from == front && to == pusher_pos)
+    world.blocks.get(&pusher_pos).is_some_and(|block| {
+        matches!(
+            block.kind.movement_rule(block.facing),
+            Some(MovementRule::PoweredTranslate { .. })
+        ) && {
+            let front = pusher_pos + block.facing.forward_ivec3();
+            (from == pusher_pos && to == front) || (from == front && to == pusher_pos)
+        }
     })
 }
 
@@ -1125,17 +1317,7 @@ fn is_blocked_factory_connection(world: &WorldBlocks, from: IVec3, to: IVec3) ->
         .is_some_and(|block| block.kind.non_connection_face(block.facing) == Some(to - from))
 }
 
-fn pusher_front_neighbor(world: &WorldBlocks, pos: IVec3) -> Option<IVec3> {
-    world.blocks.get(&pos).and_then(|block| {
-        matches!(
-            block.kind.movement_rule(block.facing),
-            Some(MovementRule::PoweredTranslate { .. })
-        )
-        .then_some(pos + block.facing.forward_ivec3())
-    })
-}
-
-/// 子集是否贴着场景格（脚下锚死等）；调试与活塞头前可推判定共用
+/// 子集是否贴着场景格
 pub fn touches_scene(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
     structure.iter().any(|pos| {
         signal_offsets().into_iter().any(|offset| {
@@ -1148,10 +1330,410 @@ pub fn touches_scene(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::blocks::{BlockData, BlockKind};
+    use crate::blocks::BlockData;
     use crate::world::Facing;
 
-    /// 伸出后真实头应保持体与身前工厂格同结构，且切断后身前仍在 Head 侧
+    fn place(world: &mut WorldBlocks, pos: IVec3, kind: BlockKind, facing: Facing) -> BlockId {
+        world.insert(pos, BlockData::new(kind, facing));
+        world.blocks.get(&pos).unwrap().id
+    }
+
+    fn preferred_nodes(structure: &Structure, body: BlockId, forward: bool) -> &[BlockId] {
+        let idx = structure.action_to_groups.get(&(body, forward)).unwrap()[0];
+        structure.deform_groups[idx as usize].nodes.as_slice()
+    }
+
+    fn candidate_node_sets(
+        structure: &Structure,
+        body: BlockId,
+        forward: bool,
+    ) -> Vec<Vec<BlockId>> {
+        structure
+            .action_to_groups
+            .get(&(body, forward))
+            .unwrap()
+            .iter()
+            .map(|idx| structure.deform_groups[*idx as usize].nodes.clone())
+            .collect()
+    }
+
+    /// 图 A：三平行推杆 → 两组共轴 deform（体列成环丢掉独立 fork）
+    #[test]
+    fn deform_figure_a_three_parallel() {
+        let mut world = WorldBlocks::default();
+        let b1 = place(
+            &mut world,
+            IVec3::new(0, 0, 0),
+            BlockKind::Pusher,
+            Facing::East,
+        );
+        let _f1 = place(
+            &mut world,
+            IVec3::new(1, 0, 0),
+            BlockKind::Platform,
+            Facing::North,
+        );
+        let b2 = place(
+            &mut world,
+            IVec3::new(0, 0, 1),
+            BlockKind::Pusher,
+            Facing::East,
+        );
+        let _f2 = place(
+            &mut world,
+            IVec3::new(1, 0, 1),
+            BlockKind::Platform,
+            Facing::North,
+        );
+        let b3 = place(
+            &mut world,
+            IVec3::new(0, 0, 2),
+            BlockKind::Pusher,
+            Facing::East,
+        );
+        let _f3 = place(
+            &mut world,
+            IVec3::new(1, 0, 2),
+            BlockKind::Platform,
+            Facing::North,
+        );
+
+        let mut state = StructureState::default();
+        state.rebuild_for_simulation(&world);
+        let sid = state.structure_id_at(IVec3::new(0, 0, 0)).unwrap();
+        let structure = state.get(sid).unwrap();
+        assert_eq!(structure.deform_groups.len(), 2);
+
+        let fwd = structure.action_to_groups.get(&(b1, true)).unwrap().clone();
+        let rev = structure
+            .action_to_groups
+            .get(&(b1, false))
+            .unwrap()
+            .clone();
+        assert_eq!(fwd.len(), 1);
+        assert_eq!(rev.len(), 1);
+        assert_eq!(structure.action_to_groups.get(&(b2, true)), Some(&fwd));
+        assert_eq!(structure.action_to_groups.get(&(b3, true)), Some(&fwd));
+        assert_eq!(structure.action_to_groups.get(&(b2, false)), Some(&rev));
+        assert_eq!(structure.action_to_groups.get(&(b3, false)), Some(&rev));
+
+        let fwd_nodes = &structure.deform_groups[fwd[0] as usize].nodes;
+        let rev_nodes = &structure.deform_groups[rev[0] as usize].nodes;
+        assert_eq!(fwd_nodes.len(), 6); // 3 heads + 3 fronts
+        assert_eq!(rev_nodes.len(), 3); // 3 bodies
+        assert!(rev_nodes.contains(&b1) && rev_nodes.contains(&b2) && rev_nodes.contains(&b3));
+    }
+
+    /// 图 B：折角三杆；fork 可产生多候选，须含文档中的最大成功集
+    #[test]
+    fn deform_figure_b_bent() {
+        let mut world = WorldBlocks::default();
+        let b1 = place(
+            &mut world,
+            IVec3::new(0, 0, 0),
+            BlockKind::Pusher,
+            Facing::East,
+        );
+        let b2 = place(
+            &mut world,
+            IVec3::new(1, 0, 0),
+            BlockKind::Pusher,
+            Facing::South,
+        );
+        let b3 = place(
+            &mut world,
+            IVec3::new(1, 0, 1),
+            BlockKind::Pusher,
+            Facing::West,
+        );
+
+        let mut state = StructureState::default();
+        state.rebuild_for_simulation(&world);
+        let sid = state.structure_id_at(IVec3::new(0, 0, 0)).unwrap();
+        let structure = state.get(sid).unwrap();
+
+        let h1 = *structure.head_of.get(&b1).unwrap();
+        let h2 = *structure.head_of.get(&b2).unwrap();
+        let h3 = *structure.head_of.get(&b3).unwrap();
+
+        let fwd1_sets = candidate_node_sets(structure, b1, true);
+        assert!(
+            fwd1_sets.iter().any(|n| {
+                n.contains(&h1)
+                    && n.contains(&b2)
+                    && n.contains(&h2)
+                    && n.contains(&b3)
+                    && n.contains(&h3)
+                    && !n.contains(&b1)
+            }),
+            "missing full (1,true) set: {fwd1_sets:?}"
+        );
+        assert_eq!(preferred_nodes(structure, b1, false), &[b1]);
+
+        let fwd3 = candidate_node_sets(structure, b2, true);
+        assert!(fwd3.iter().any(|n| {
+            n.contains(&h2) && n.contains(&b3) && n.contains(&h3) && !n.contains(&b2)
+        }));
+        let rev3 = candidate_node_sets(structure, b2, false);
+        assert!(
+            rev3.iter()
+                .any(|n| n.contains(&b2) && n.contains(&b1) && n.contains(&h1))
+        );
+
+        let fwd5 = preferred_nodes(structure, b3, true);
+        assert!(fwd5.contains(&h3) && !fwd5.contains(&b3));
+        let rev5 = candidate_node_sets(structure, b3, false);
+        assert!(rev5.iter().any(|n| {
+            n.contains(&b3)
+                && n.contains(&h2)
+                && n.contains(&b2)
+                && n.contains(&h1)
+                && n.contains(&b1)
+        }));
+    }
+
+    /// 贴脸对向：独立正推含对面体+背面；共轴小集可只有两头
+    #[test]
+    fn deform_face_to_face_includes_back_cargo() {
+        let mut world = WorldBlocks::default();
+        let south = place(
+            &mut world,
+            IVec3::new(0, 0, 0),
+            BlockKind::Blocker,
+            Facing::South,
+        );
+        let north = place(
+            &mut world,
+            IVec3::new(0, 0, 1),
+            BlockKind::Blocker,
+            Facing::North,
+        );
+        let cargo = place(
+            &mut world,
+            IVec3::new(0, 0, 2),
+            BlockKind::Wire,
+            Facing::North,
+        );
+
+        let mut state = StructureState::default();
+        state.rebuild_for_simulation(&world);
+        let sid = state.structure_id_at(IVec3::new(0, 0, 1)).unwrap();
+        let structure = state.get(sid).unwrap();
+        let h_south = *structure.head_of.get(&south).unwrap();
+        let h_north = *structure.head_of.get(&north).unwrap();
+
+        let south_fwd = candidate_node_sets(structure, south, true);
+        assert!(
+            south_fwd.iter().any(|n| {
+                n.contains(&h_south)
+                    && n.contains(&h_north)
+                    && n.contains(&north)
+                    && n.contains(&cargo)
+                    && !n.contains(&south)
+            }),
+            "missing independent south+: {south_fwd:?}"
+        );
+        assert!(
+            south_fwd.iter().any(|n| {
+                n.contains(&h_south)
+                    && n.contains(&h_north)
+                    && !n.contains(&north)
+                    && !n.contains(&cargo)
+            }),
+            "missing coaxial heads-only south+: {south_fwd:?}"
+        );
+
+        let north_fwd = candidate_node_sets(structure, north, true);
+        assert!(north_fwd.iter().any(|n| {
+            n.contains(&h_south)
+                && n.contains(&h_north)
+                && n.contains(&south)
+                && !n.contains(&north)
+        }));
+
+        assert_eq!(preferred_nodes(structure, south, false), &[south]);
+        let rev_north = preferred_nodes(structure, north, false);
+        assert!(rev_north.contains(&north) && rev_north.contains(&cargo));
+    }
+
+    /// 平行双杆正面列相连、体不相邻：共轴小集 + 各自独立拖对面体
+    #[test]
+
+    fn deform_parallel_gap_fork_independent() {
+        let mut world = WorldBlocks::default();
+        let a = place(
+            &mut world,
+            IVec3::new(-1, 2, -6),
+            BlockKind::Pusher,
+            Facing::East,
+        );
+        let b = place(
+            &mut world,
+            IVec3::new(-1, 2, -4),
+            BlockKind::Blocker,
+            Facing::East,
+        );
+        let p0 = place(
+            &mut world,
+            IVec3::new(0, 2, -6),
+            BlockKind::Platform,
+            Facing::North,
+        );
+        let p1 = place(
+            &mut world,
+            IVec3::new(0, 2, -5),
+            BlockKind::Platform,
+            Facing::North,
+        );
+        let p2 = place(
+            &mut world,
+            IVec3::new(0, 2, -4),
+            BlockKind::Platform,
+            Facing::North,
+        );
+
+        let mut state = StructureState::default();
+        state.rebuild_for_simulation(&world);
+        let structure = state
+            .get(state.structure_id_at(IVec3::new(-1, 2, -4)).unwrap())
+            .unwrap();
+        let ha = *structure.head_of.get(&a).unwrap();
+        let hb = *structure.head_of.get(&b).unwrap();
+
+        let a_fwd = candidate_node_sets(structure, a, true);
+        let b_fwd = candidate_node_sets(structure, b, true);
+        assert!(
+            a_fwd.len() >= 2 && b_fwd.len() >= 2,
+            "a={a_fwd:?} b={b_fwd:?}"
+        );
+
+        let coaxial = [p0, p1, p2, ha, hb];
+        assert!(
+            a_fwd.iter().any(|n| {
+                n.len() == 5
+                    && coaxial.iter().all(|id| n.contains(id))
+                    && !n.contains(&a)
+                    && !n.contains(&b)
+            }),
+            "missing coaxial: {a_fwd:?}"
+        );
+        assert!(
+            a_fwd.iter().any(|n| {
+                n.len() == 6
+                    && coaxial.iter().all(|id| n.contains(id))
+                    && n.contains(&b)
+                    && !n.contains(&a)
+            }),
+            "missing a independent: {a_fwd:?}"
+        );
+        assert!(
+            b_fwd.iter().any(|n| {
+                n.len() == 6
+                    && coaxial.iter().all(|id| n.contains(id))
+                    && n.contains(&a)
+                    && !n.contains(&b)
+            }),
+            "missing b independent: {b_fwd:?}"
+        );
+
+        // 首选应是共轴小集，且两杆共享同一组
+        let pref_a = structure.action_to_groups.get(&(a, true)).unwrap()[0];
+        let pref_b = structure.action_to_groups.get(&(b, true)).unwrap()[0];
+        assert_eq!(pref_a, pref_b);
+        assert_eq!(structure.deform_groups[pref_a as usize].nodes.len(), 5);
+    }
+
+    /// 单活塞 2×2 方环：正反单切/全切均成环 → 不写任何 DeformGroup
+    #[test]
+    fn deform_single_pusher_square_loop_discards() {
+        let mut world = WorldBlocks::default();
+        place(
+            &mut world,
+            IVec3::new(13, 3, 12),
+            BlockKind::Platform,
+            Facing::North,
+        );
+        place(
+            &mut world,
+            IVec3::new(14, 3, 12),
+            BlockKind::Platform,
+            Facing::North,
+        );
+        place(
+            &mut world,
+            IVec3::new(14, 4, 12),
+            BlockKind::Platform,
+            Facing::North,
+        );
+        let body = place(
+            &mut world,
+            IVec3::new(13, 4, 12),
+            BlockKind::Blocker,
+            Facing::East,
+        );
+
+        let mut state = StructureState::default();
+        state.rebuild_for_simulation(&world);
+        let structure = state
+            .get(state.structure_id_at(IVec3::new(13, 4, 12)).unwrap())
+            .unwrap();
+        assert!(
+            structure.deform_groups.is_empty(),
+            "cyclic single pusher must discard all deform actions; got {:?}",
+            structure.deform_groups
+        );
+        assert!(structure.action_to_groups.is_empty());
+        assert!(structure.action_to_groups.get(&(body, true)).is_none());
+        assert!(structure.action_to_groups.get(&(body, false)).is_none());
+        assert!(state.deform_sides(&world, IVec3::new(13, 4, 12)).is_none());
+    }
+
+    /// 对向环：单切成环 → 全切；西正推与东反推共轴
+    #[test]
+    fn deform_opposing_ring_coaxial_after_all_cut() {
+        let mut world = WorldBlocks::default();
+        let west = IVec3::new(13, 2, 16);
+        let east = IVec3::new(13, 4, 16);
+        for (x, y, z) in [
+            (12, 2, 16),
+            (12, 3, 16),
+            (12, 4, 16),
+            (14, 2, 16),
+            (14, 3, 16),
+            (14, 4, 16),
+        ] {
+            place(
+                &mut world,
+                IVec3::new(x, y, z),
+                BlockKind::Platform,
+                Facing::North,
+            );
+        }
+        let west_id = place(&mut world, west, BlockKind::Blocker, Facing::West);
+        let east_id = place(&mut world, east, BlockKind::Blocker, Facing::East);
+
+        let mut state = StructureState::default();
+        state.rebuild_for_simulation(&world);
+        let sides_w = state.deform_sides(&world, west).unwrap();
+        let sides_e = state.deform_sides(&world, east).unwrap();
+        assert!(sides_w.separated, "west must separate after all-cut");
+        assert!(sides_e.separated, "east must separate after all-cut");
+        assert_eq!(
+            sides_w.target_side, sides_e.actor_side,
+            "west forward == east reverse"
+        );
+        assert_eq!(
+            sides_w.actor_side, sides_e.target_side,
+            "west reverse == east forward"
+        );
+
+        let structure = state.get(state.structure_id_at(west).unwrap()).unwrap();
+        let w_fwd = structure.action_to_groups.get(&(west_id, true)).unwrap()[0];
+        let e_rev = structure.action_to_groups.get(&(east_id, false)).unwrap()[0];
+        assert_eq!(w_fwd, e_rev);
+    }
+
+    /// 伸出真实头后工厂连通仍穿过头
     #[test]
     fn extended_pusher_head_keeps_front_connected() {
         let mut world = WorldBlocks::default();
@@ -1163,29 +1745,14 @@ mod tests {
         world.insert(front, BlockData::new(BlockKind::Platform, Facing::North));
 
         let members = factory_structure(&world, body);
-        assert!(
-            members.contains(&front),
-            "flood fill must walk through PusherHead to front: {members:?}"
-        );
-        assert!(
-            !members.contains(&head),
-            "head itself is not a factory member"
-        );
+        assert!(members.contains(&front));
+        assert!(!members.contains(&head));
 
-        let graph = BreakableGraph::build(&world, &members);
-        let id = world.blocks.get(&body).unwrap().id;
-        let sides = graph
-            .sides_for(id, &HashSet::from([id]), &HashSet::new())
-            .expect("sides");
-        assert!(sides.separated, "cutting body-head should separate");
-        assert!(
-            sides.target_side.contains(&front),
-            "front must stay on Head side after extend: {:?}",
-            sides.target_side
-        );
-        assert!(
-            !sides.target_side.contains(&body),
-            "body must not be on Head side"
-        );
+        let mut state = StructureState::default();
+        state.rebuild_for_simulation(&world);
+        let sides = state.deform_sides(&world, body).expect("sides");
+        assert!(sides.separated);
+        assert!(sides.target_side.contains(&front));
+        assert!(!sides.target_side.contains(&body));
     }
 }

@@ -172,7 +172,7 @@ fn start_simulation_state(
     // 编辑 Undo/Redo 保留到退出世界；模拟期间输入侧已禁用撤销
     simulation.start_snapshot = Some(world.clone());
     *pusher_state = PusherState::rebuild_from_world(world);
-    structure_state.rebuild_for_simulation(world);
+    structure_state.refresh_for_simulation_start(world);
     simulation.start_structures = Some(structure_state.clone());
 }
 

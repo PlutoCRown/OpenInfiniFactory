@@ -180,13 +180,16 @@ pub fn simulate_turn(
 
     sample.marker_before_move_ms = mark_elapsed_ms(&mut mark);
 
-    let device_movement_plan = mark_structure_movement_phase(
-        world,
-        &powered_devices,
-        structure_state,
-        pusher_state,
-        &suction,
-    );
+    let device_movement_plan = {
+        structure_state.clear_turn_marks();
+        mark_structure_movement_phase(
+            world,
+            &powered_devices,
+            structure_state,
+            pusher_state,
+            &suction,
+        )
+    };
     if let Some(sim_log) = sim_log.as_mut() {
         log_movement_plan(turn, sim_log, world, "devices", &device_movement_plan);
     }

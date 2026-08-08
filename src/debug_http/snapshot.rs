@@ -147,9 +147,9 @@ pub fn block_json_with_structure(
             "id": id.0,
             "kind": format!("{:?}", structure.kind),
             "activity": format!("{:?}", structure.activity),
-            "pushable": structure.pushable,
+            "pushable": structure.is_pushable(),
             "freedom": format!("{:?}", structure.freedom),
-            "movable": structure.pushable && structure.freedom != oif_sim::simulation::structure_state::StructureFreedom::None,
+            "movable": structure.is_pushable() && structure.freedom != oif_sim::simulation::structure_state::StructureFreedom::None,
             "size": structure.positions.len(),
         }))
     });
@@ -219,28 +219,28 @@ pub fn structure_json(
         "id": id.0,
         "kind": format!("{:?}", structure.kind),
         "activity": format!("{:?}", structure.activity),
-        "pushable": structure.pushable,
+        "pushable": structure.is_pushable(),
         "freedom": format!("{:?}", structure.freedom),
-        "movable": structure.pushable
+        "movable": structure.is_pushable()
             && structure.freedom != oif_sim::simulation::structure_state::StructureFreedom::None,
         "size": structure.positions.len(),
         "blocks": blocks,
-        "breakable_splits": structure
-            .breakable_splits
+        "head_of": structure
+            .head_of
             .iter()
-            .map(|(block_id, split)| {
-                let mut actor: Vec<_> = split.actor_side.iter().copied().collect();
-                let mut target: Vec<_> = split.target_side.iter().copied().collect();
-                actor.sort_by_key(|p| (p.x, p.y, p.z));
-                target.sort_by_key(|p| (p.x, p.y, p.z));
+            .map(|(body, head)| json!({ "body": body.0, "head": head.0 }))
+            .collect::<Vec<_>>(),
+        "deform_groups": structure
+            .deform_groups
+            .iter()
+            .map(|group| {
                 json!({
-                    "block_id": block_id.0,
-                    "facing": format!("{:?}", split.facing),
-                    "is_bridge": split.is_bridge,
-                    "actor_anchored": split.actor_anchored,
-                    "target_anchored": split.target_anchored,
-                    "actor_side": actor.iter().map(|p| pos_json(*p)).collect::<Vec<_>>(),
-                    "target_side": target.iter().map(|p| pos_json(*p)).collect::<Vec<_>>(),
+                    "actions": group
+                        .actions
+                        .iter()
+                        .map(|(id, forward)| json!({ "body": id.0, "forward": forward }))
+                        .collect::<Vec<_>>(),
+                    "nodes": group.nodes.iter().map(|id| id.0).collect::<Vec<_>>(),
                 })
             })
             .collect::<Vec<_>>(),
