@@ -541,6 +541,7 @@ fn mark_pusher_movement(
             }
         }
         if PUSHER_REVERSE_ENABLED {
+            // 正推失败后反推自身；仍走 Extend：到位后进入伸出并停住（避免每回合再退）
             return try_deform_action(
                 world,
                 structures,
@@ -630,12 +631,9 @@ fn try_deform_action(
             (group.nodes.clone(), group.actions.clone())
         };
 
-        // 共轴切断集：未出现在 nodes 里的同伴动作，本回合必须同样在伸/缩
+        // 共轴组：actions 里列出的同伴本回合必须同样在伸/缩（与是否在 nodes 无关）
         let peers_ready = actions.iter().all(|(body, action_fwd)| {
             if *body == id || *action_fwd != forward {
-                return true;
-            }
-            if nodes.contains(body) {
                 return true;
             }
             if forward {
@@ -1075,6 +1073,136 @@ mod tests {
         for (id, extended) in commits {
             pusher_state.set_extended(world, id, extended);
         }
+    }
+
+    /// Blocker+Pusher 共轴：未通电时仅 Blocker 欲伸，不得单独伸出或反推撕裂
+    #[test]
+    fn coaxial_blocker_pusher_idle_power_stays_coupled() {
+        let mut world = WorldBlocks::default();
+        world.insert(
+            IVec3::new(-4, 2, -6),
+            BlockData::new(BlockKind::Platform, Facing::East),
+        );
+        world.insert(
+            IVec3::new(-3, 2, -6),
+            BlockData::new(BlockKind::Blocker, Facing::East),
+        );
+        world.insert(
+            IVec3::new(-2, 2, -6),
+            BlockData::new(BlockKind::Platform, Facing::North),
+        );
+        world.insert(
+            IVec3::new(-4, 2, -5),
+            BlockData::new(BlockKind::Platform, Facing::East),
+        );
+        world.insert(
+            IVec3::new(-2, 2, -5),
+            BlockData::new(BlockKind::Platform, Facing::North),
+        );
+        world.insert(
+            IVec3::new(-4, 2, -4),
+            BlockData::new(BlockKind::Platform, Facing::East),
+        );
+        world.insert(
+            IVec3::new(-3, 2, -4),
+            BlockData::new(BlockKind::Pusher, Facing::East),
+        );
+        world.insert(
+            IVec3::new(-2, 2, -4),
+            BlockData::new(BlockKind::Platform, Facing::North),
+        );
+        let blocker_pos = IVec3::new(-3, 2, -6);
+        let pusher_pos = IVec3::new(-3, 2, -4);
+        let blocker_id = world.blocks.get(&blocker_pos).unwrap().id;
+        let pusher_id = world.blocks.get(&pusher_pos).unwrap().id;
+
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut pusher_state = PusherState::rebuild_from_world(&world);
+        run_pusher_phase(
+            &mut world,
+            &mut structures,
+            &mut pusher_state,
+            &HashSet::new(),
+        );
+        structures.rebuild_for_simulation(&world);
+
+        assert_eq!(
+            world.blocks.get(&blocker_pos).map(|b| b.id),
+            Some(blocker_id)
+        );
+        assert_eq!(world.blocks.get(&pusher_pos).map(|b| b.id), Some(pusher_id));
+        assert!(
+            !pusher_state
+                .entries
+                .get(&blocker_id)
+                .is_some_and(|e| e.extended)
+        );
+        assert!(
+            !pusher_state
+                .entries
+                .get(&pusher_id)
+                .is_some_and(|e| e.extended)
+        );
+        assert_eq!(structures.id_at(blocker_pos), structures.id_at(pusher_pos));
+        let st = structures
+            .get(structures.id_at(blocker_pos).unwrap())
+            .unwrap();
+        assert_eq!(st.deform_groups.len(), 2);
+    }
+
+    /// 正推顶场景失败后反推一次并进入伸出，次回合不再后退
+    #[test]
+    fn scene_blocked_forward_reverse_extend_once() {
+        let mut world = WorldBlocks::default();
+        let body = IVec3::new(9, 2, 8);
+        let front = IVec3::new(9, 2, 7);
+        // 场景挡在货物北侧
+        world.insert(
+            IVec3::new(9, 2, 6),
+            BlockData::new(BlockKind::Scene(SceneBlockId(6)), Facing::North),
+        );
+        world.insert(front, BlockData::new(BlockKind::Platform, Facing::North));
+        world.insert(body, BlockData::new(BlockKind::Blocker, Facing::North));
+        let id = world.blocks.get(&body).unwrap().id;
+
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut pusher_state = PusherState::rebuild_from_world(&world);
+        run_pusher_phase(
+            &mut world,
+            &mut structures,
+            &mut pusher_state,
+            &HashSet::new(),
+        );
+
+        assert!(
+            pusher_state.entries.get(&id).is_some_and(|e| e.extended),
+            "should reverse-then-extend"
+        );
+        let body_after = world
+            .blocks
+            .iter()
+            .find(|(_, b)| b.id == id)
+            .map(|(p, _)| *p)
+            .unwrap();
+        assert_eq!(body_after, IVec3::new(9, 2, 9), "body nudges south once");
+
+        // 第二回合不应再退
+        structures.rebuild_for_simulation(&world);
+        run_pusher_phase(
+            &mut world,
+            &mut structures,
+            &mut pusher_state,
+            &HashSet::new(),
+        );
+        let body_2 = world
+            .blocks
+            .iter()
+            .find(|(_, b)| b.id == id)
+            .map(|(p, _)| *p)
+            .unwrap();
+        assert_eq!(body_2, body_after, "must not keep reversing each turn");
     }
 
     /// 平行双杆正面列相连：仅 Blocker 欲伸出时须拖走未动的 Pusher 本体
