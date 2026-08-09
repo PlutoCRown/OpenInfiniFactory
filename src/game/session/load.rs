@@ -11,7 +11,7 @@ use crate::shared::save::{
     decode_save_slot, load_world, save_solution_as,
 };
 use crate::sim_bridge::{
-    SimulationPresentationState, SimulationWorker, TurnCache, invalidate_simulation_prefetch,
+    SimulationPresentationState, TurnCache, rebind_simulation_worker_for_world,
 };
 
 use super::busy::{SessionBusy, SessionBusyCover};
@@ -56,6 +56,7 @@ pub fn handle_load_world(
 }
 
 pub fn poll_pending_world_load(
+    mut commands: Commands,
     mut pending: ResMut<PendingWorldLoad>,
     mut playing: PlayingWorldParams,
     mut session: SessionStateParams,
@@ -66,7 +67,6 @@ pub fn poll_pending_world_load(
     mut next_state: ResMut<NextState<GameMode>>,
     mut turn_cache: ResMut<TurnCache>,
     mut presentation: ResMut<SimulationPresentationState>,
-    worker: Option<Res<SimulationWorker>>,
     pending_generated: Res<PendingGeneratedMaterials>,
     signal_cache: Res<SignalNetworkCache>,
 ) {
@@ -124,11 +124,10 @@ pub fn poll_pending_world_load(
         *mode.get(),
         &mut next_state,
     );
-    // 作废上一档残留的预取回合，避免首次 F 加速闪回旧世界
-    invalidate_simulation_prefetch(
+    rebind_simulation_worker_for_world(
+        &mut commands,
         &mut turn_cache,
         &mut presentation,
-        worker.as_deref(),
         &playing.world,
         &pending_generated,
         &signal_cache,
@@ -175,6 +174,7 @@ pub fn release_session_busy_after_playing(
 }
 
 pub fn handle_create_new_puzzle(
+    mut commands: Commands,
     mut requests: MessageReader<CreateNewPuzzle>,
     mut playing: PlayingWorldParams,
     mut session: SessionStateParams,
@@ -183,7 +183,6 @@ pub fn handle_create_new_puzzle(
     mut next_state: ResMut<NextState<GameMode>>,
     mut turn_cache: ResMut<TurnCache>,
     mut presentation: ResMut<SimulationPresentationState>,
-    worker: Option<Res<SimulationWorker>>,
     pending_generated: Res<PendingGeneratedMaterials>,
     signal_cache: Res<SignalNetworkCache>,
 ) {
@@ -206,10 +205,10 @@ pub fn handle_create_new_puzzle(
             *mode.get(),
             &mut next_state,
         );
-        invalidate_simulation_prefetch(
+        rebind_simulation_worker_for_world(
+            &mut commands,
             &mut turn_cache,
             &mut presentation,
-            worker.as_deref(),
             &playing.world,
             &pending_generated,
             &signal_cache,
@@ -222,6 +221,7 @@ pub fn handle_create_new_puzzle(
 }
 
 pub fn handle_create_new_free(
+    mut commands: Commands,
     mut requests: MessageReader<CreateNewFree>,
     mut playing: PlayingWorldParams,
     mut session: SessionStateParams,
@@ -230,7 +230,6 @@ pub fn handle_create_new_free(
     mut next_state: ResMut<NextState<GameMode>>,
     mut turn_cache: ResMut<TurnCache>,
     mut presentation: ResMut<SimulationPresentationState>,
-    worker: Option<Res<SimulationWorker>>,
     pending_generated: Res<PendingGeneratedMaterials>,
     signal_cache: Res<SignalNetworkCache>,
 ) {
@@ -252,10 +251,10 @@ pub fn handle_create_new_free(
             *mode.get(),
             &mut next_state,
         );
-        invalidate_simulation_prefetch(
+        rebind_simulation_worker_for_world(
+            &mut commands,
             &mut turn_cache,
             &mut presentation,
-            worker.as_deref(),
             &playing.world,
             &pending_generated,
             &signal_cache,
@@ -268,6 +267,7 @@ pub fn handle_create_new_free(
 }
 
 pub fn handle_create_new_solution(
+    mut commands: Commands,
     mut requests: MessageReader<CreateNewSolution>,
     mut playing: PlayingWorldParams,
     mut session: SessionStateParams,
@@ -276,7 +276,6 @@ pub fn handle_create_new_solution(
     mut next_state: ResMut<NextState<GameMode>>,
     mut turn_cache: ResMut<TurnCache>,
     mut presentation: ResMut<SimulationPresentationState>,
-    worker: Option<Res<SimulationWorker>>,
     pending_generated: Res<PendingGeneratedMaterials>,
     signal_cache: Res<SignalNetworkCache>,
 ) {
@@ -310,10 +309,10 @@ pub fn handle_create_new_solution(
             *mode.get(),
             &mut next_state,
         );
-        invalidate_simulation_prefetch(
+        rebind_simulation_worker_for_world(
+            &mut commands,
             &mut turn_cache,
             &mut presentation,
-            worker.as_deref(),
             &playing.world,
             &pending_generated,
             &signal_cache,

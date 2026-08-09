@@ -74,6 +74,8 @@ pub(super) fn mark_structure_movement_phase(
     // 同结构同位移：can_translate 每回合只算一次；同向标记去重
     let mut translate_ok: HashMap<(StructureId, IVec3), bool> = HashMap::new();
     let mut emitted_translate: HashSet<(StructureId, IVec3)> = HashSet::new();
+    // 抬升：同一结构本回合只打一条标签（避免上千抬升器重复克隆同一坨）
+    let mut lifted_structures: HashSet<StructureId> = HashSet::new();
     let mut conveyor_diag = ConveyorMarkDiag::default();
 
     // 本回合要切换伸出状态的推杆（排序继承 movers）
@@ -157,7 +159,14 @@ pub(super) fn mark_structure_movement_phase(
                 if powered_devices.contains(&pos) {
                     continue;
                 }
-                for movement in mark_lift_structures(world, structures, pos, range, suction) {
+                for movement in mark_lift_structures(
+                    world,
+                    structures,
+                    pos,
+                    range,
+                    suction,
+                    &mut lifted_structures,
+                ) {
                     if let Some(source_id) = source_id {
                         moves.push(movement.with_source(source_id, pos));
                     }
@@ -891,16 +900,16 @@ fn mark_structure_translate(
     ))
 }
 
-/// 抬升器 range 内每个可动结构各打一条抬升标签（不并成一条，避免只抬底层）
+/// 抬升器 range 内每个活动结构各打一条抬升标签（跨抬升器去重，避免同结构被打成百上千遍）
 fn mark_lift_structures(
     world: &WorldBlocks,
     structures: &StructureState,
     pos: IVec3,
     range: i32,
     suction: &SuctionLinks,
+    lifted_structures: &mut HashSet<StructureId>,
 ) -> Vec<StructureMove> {
     let mut moves = Vec::new();
-    let mut seen_ids = HashSet::new();
     for height in 1..=range {
         let candidate = pos + IVec3::Y * height;
         let seed = structures
@@ -913,37 +922,49 @@ fn mark_lift_structures(
         let Some(id) = structures.id_at(seed) else {
             continue;
         };
-        if !seen_ids.insert(id) {
+        if lifted_structures.contains(&id) {
             continue;
         }
-        let eligible = world.is_material_at(seed)
-            || structures
-                .linked_pushable_at(suction, seed, IVec3::Y)
-                .is_some();
-        if !eligible {
-            seen_ids.remove(&id);
+        // 抬升器自身所在结构不抬
+        if structures
+            .get(id)
+            .is_some_and(|structure| structure.positions.contains(&pos))
+        {
             continue;
         }
-        let Some(movement) = mark_structure_translate(
-            world,
-            structures,
-            pos,
-            seed,
-            IVec3::Y,
-            MovementMark::Vertical,
-            suction,
-        ) else {
-            seen_ids.remove(&id);
+        // 吸盘分量内须全是 Active 且可上移（工厂 / 材料均可）
+        let component = suction.component_ids(structures, [id]);
+        let mut structure = HashSet::new();
+        let mut liftable = !component.is_empty();
+        for cid in &component {
+            if lifted_structures.contains(cid) {
+                liftable = false;
+                break;
+            }
+            let Some(meta) = structures.get(*cid) else {
+                liftable = false;
+                break;
+            };
+            if meta.activity != FactoryActivity::Active || !meta.freedom.can_translate(IVec3::Y) {
+                liftable = false;
+                break;
+            }
+            structure.extend(meta.positions.iter().copied());
+        }
+        if !liftable || structure.is_empty() || structure.contains(&pos) {
             continue;
-        };
+        }
         // 不在标记期用 can_translate 过滤：抬不动也要打标签，merge 才能压住重力，
         // 否则被挡住时下落→再抬→上下弹（65ff7b1）。执行阶段推不动则原地不动。
-        for member in movement.structure() {
-            if let Some(member_id) = structures.id_at(*member) {
-                seen_ids.insert(member_id);
-            }
+        for cid in &component {
+            lifted_structures.insert(*cid);
         }
-        moves.push(movement);
+        moves.push(StructureMove::translate_marked(
+            id,
+            structure,
+            IVec3::Y,
+            MovementMark::Vertical,
+        ));
     }
     moves
 }

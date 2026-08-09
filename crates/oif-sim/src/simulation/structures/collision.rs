@@ -44,6 +44,8 @@ fn structure_id_gravity_grounded(
     if let Some(&cached) = memo.get(&id) {
         return cached;
     }
+    // 先占位：交错支撑（A 压 B、B 又压到 A）时避免递归环把 worker 打爆
+    memo.insert(id, false);
     let Some(structure) = structures.get(id) else {
         memo.insert(id, true);
         return true;

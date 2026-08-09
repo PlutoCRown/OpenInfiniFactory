@@ -1146,4 +1146,42 @@ mod moving_occupancy_cases {
             "T3 left retracts"
         );
     }
+
+
+    /// Active 结构高低交错支撑时，gravity grounded 不得死递归
+    #[test]
+    fn interleaved_active_support_cycle_does_not_hang() {
+        // 材料 A 与工厂蛇 B 不相连；A 压在 B 上、B 又绕到 A 上方 → grounded 查询环
+        let plat = || BlockData::new(BlockKind::Platform, Facing::North);
+        let mat = || BlockData::new(BlockKind::Material(crate::blocks::MaterialBlockId(0)), Facing::North);
+        let mut world = WorldBlocks::default();
+        world.insert(IVec3::new(0, 2, 0), mat()); // A
+        world.insert(IVec3::new(0, 1, 0), plat()); // B
+        world.insert(IVec3::new(1, 1, 0), plat());
+        world.insert(IVec3::new(1, 2, 0), plat());
+        world.insert(IVec3::new(1, 3, 0), plat());
+        world.insert(IVec3::new(0, 3, 0), plat());
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let a = structures.id_at(IVec3::new(0, 2, 0)).expect("A");
+        let b = structures.id_at(IVec3::new(0, 1, 0)).expect("B");
+        assert_ne!(a, b);
+        assert_eq!(structures.id_at(IVec3::new(0, 3, 0)), Some(b));
+        let mut pusher = PusherState::rebuild_from_world(&world);
+        let mut pending = crate::simulation::pending::PendingGeneratedMaterials::default();
+        let mut signals = crate::simulation::signals::SignalNetworkCache::default();
+        let mut influence = MovementInfluenceCache::default();
+        let _ = crate::simulation::core::simulate_turn(
+            &mut world,
+            &mut pending,
+            &mut signals,
+            1,
+            &mut structures,
+            &mut influence,
+            &mut pusher,
+            None,
+            None,
+        );
+    }
+
 }

@@ -7,7 +7,7 @@ use crate::blocks::{BlockData, BlockId, BlockKind, MovementRule};
 use crate::world::grid::WorldBlocks;
 
 use super::motion::PusherMotion;
-use super::structure_state::{StructureId, StructureKind, StructureState};
+use super::structure_state::{FactoryActivity, StructureId, StructureKind, StructureState};
 use super::structures::{
     MovementMark, PusherActor, PusherAnimationKind, StructureMove, can_translate_structure,
 };

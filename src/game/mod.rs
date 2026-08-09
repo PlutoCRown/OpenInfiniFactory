@@ -26,7 +26,7 @@ use crate::shared::i18n::{I18n, resolve_language};
 use crate::shared::launch::LaunchOptions;
 use crate::shared::persistent_storage::{self, StoragePlugin, StorageReady};
 use crate::shared::save::SaveState;
-use crate::sim_bridge::{SimulationWorker, TurnCache};
+use crate::sim_bridge::TurnCache;
 
 use cameras::{spawn_ui_camera, sync_gameplay_view_image_size};
 #[cfg(not(target_arch = "wasm32"))]
@@ -130,7 +130,6 @@ impl Plugin for GamePlugin {
             .insert_resource(crate::sim_bridge::SimulationPresentationState::default())
             .insert_resource(BlockEntityIndex::default())
             .init_resource::<crate::game::world::rendering::SceneChunkMeshes>()
-            .insert_resource(SimulationWorker::spawn())
             .insert_resource(TurnCache::default())
             .insert_resource(settings)
             .insert_resource(UiScale(config.ui_scale))

@@ -39,6 +39,7 @@ use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     BlockIconRenderRoot, GameplayScene, WorldRenderAssets, teardown_playing_scene,
 };
+use crate::sim_bridge::{SimulationWorker, TurnCache};
 
 use load::{
     PendingWorldLoad, handle_create_new_free, handle_create_new_puzzle, handle_create_new_solution,
@@ -104,9 +105,12 @@ impl Plugin for SessionPlugin {
                 handle_create_new_puzzle,
                 handle_create_new_free,
                 handle_create_new_solution,
+                // 进档 insert 的 SimulationWorker 需在 poll 前落地
+                ApplyDeferred,
             )
                 .chain()
                 .after(PerfScope::Menus)
+                .before(crate::sim_bridge::poll_simulation_worker)
                 .before(PerfScope::Simulation),
         );
         #[cfg(not(target_arch = "wasm32"))]
@@ -161,6 +165,7 @@ pub fn on_exit_playing(
     playing_ui_roots: Query<Entity, With<PlayingUiRoot>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut scene_chunks: ResMut<crate::game::world::rendering::SceneChunkMeshes>,
+    mut turn_cache: ResMut<TurnCache>,
 ) {
     playing_ui.reset();
 
@@ -182,4 +187,7 @@ pub fn on_exit_playing(
     crate::game::world::rendering::forget_scene_chunks(&mut meshes, &mut scene_chunks);
     teardown_playing_scene(&mut commands);
     commands.remove_resource::<GameplayViewImage>();
+    // 退档卸掉模拟线程，避免上一档卡住/死亡拖死后续存档
+    commands.remove_resource::<SimulationWorker>();
+    turn_cache.clear();
 }

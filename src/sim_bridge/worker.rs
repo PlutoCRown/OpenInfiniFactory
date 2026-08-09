@@ -60,17 +60,27 @@ fn prefetch_turns(
     let target = display_turn + depth;
     while *simulated_through < target {
         let next_turn = *simulated_through + 1;
-        let output = simulate_turn(
-            &mut snapshot.world,
-            &mut snapshot.pending_generated,
-            &mut snapshot.signal_cache,
-            next_turn,
-            &mut snapshot.structure_state,
-            &mut snapshot.movement_influence,
-            &mut snapshot.pusher_state,
-            None,
-            None,
-        );
+        let output = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            simulate_turn(
+                &mut snapshot.world,
+                &mut snapshot.pending_generated,
+                &mut snapshot.signal_cache,
+                next_turn,
+                &mut snapshot.structure_state,
+                &mut snapshot.movement_influence,
+                &mut snapshot.pusher_state,
+                None,
+                None,
+            )
+        })) {
+            Ok(output) => output,
+            Err(_) => {
+                eprintln!(
+                    "simulation worker panicked at turn {next_turn}; stopping prefetch for this epoch"
+                );
+                break;
+            }
+        };
         *simulated_through = next_turn;
         out.push(CachedTurn {
             epoch,
@@ -86,11 +96,11 @@ fn prefetch_turns(
 
 #[cfg(not(target_arch = "wasm32"))]
 mod threaded {
-    use std::sync::mpsc::{self, Receiver, Sender};
     use std::sync::Mutex;
+    use std::sync::mpsc::{self, Receiver, Sender};
     use std::thread::{self, JoinHandle};
 
-    use super::{prefetch_turns, CachedTurn, SimSnapshot};
+    use super::{CachedTurn, SimSnapshot, prefetch_turns};
 
     enum WorkerCommand {
         Shutdown,
@@ -219,7 +229,7 @@ mod threaded {
 mod inline {
     use std::sync::Mutex;
 
-    use super::{prefetch_turns, CachedTurn, SimSnapshot};
+    use super::{CachedTurn, SimSnapshot, prefetch_turns};
 
     struct State {
         snapshot: SimSnapshot,
