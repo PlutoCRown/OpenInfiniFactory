@@ -127,15 +127,6 @@ pub struct AnimatedPusher {
     to_extension: f32,
 }
 
-#[derive(Component)]
-pub struct AnimatedPusherRod {
-    xy_scale: Vec3,
-    elapsed: f32,
-    duration: f32,
-    from_extension: f32,
-    to_extension: f32,
-}
-
 /// 钻头 Head：模拟激活后绕局部前进轴（Z）持续旋转
 #[derive(Component, Default)]
 pub struct SpinningDrillHead;
@@ -252,28 +243,6 @@ impl AnimatedPusher {
     }
 }
 
-impl AnimatedPusherRod {
-    pub fn new(animation: PusherAnimation, xy_scale: Vec3) -> Self {
-        Self {
-            xy_scale,
-            elapsed: 0.0,
-            duration: animation.duration.unwrap_or(0.0),
-            from_extension: animation.from_extension,
-            to_extension: animation.to_extension,
-        }
-    }
-
-    fn apply(&self, extension: f32, transform: &mut Transform) {
-        use crate::game::blocks::pusher::model::{
-            ROD_BASE_LENGTH, pusher_rod_center_z, pusher_rod_length,
-        };
-
-        let length = pusher_rod_length(extension);
-        transform.translation.z = pusher_rod_center_z(extension);
-        transform.scale = Vec3::new(self.xy_scale.x, self.xy_scale.y, length / ROD_BASE_LENGTH);
-    }
-}
-
 impl AnimatedBlock {
     pub fn new(animation: BlockAnimation, timing: AnimationTiming) -> Self {
         let timing = AnimationTiming {
@@ -349,16 +318,6 @@ pub fn animate_blocks(
         (Entity, &mut Transform, &mut AnimatedPusher),
         (
             Without<AnimatedBlock>,
-            Without<AnimatedPusherRod>,
-            Without<SpinningDrillHead>,
-            Without<BreakDebrisParticle>,
-        ),
-    >,
-    mut pusher_rods: Query<
-        (Entity, &mut Transform, &mut AnimatedPusherRod),
-        (
-            Without<AnimatedBlock>,
-            Without<AnimatedPusher>,
             Without<SpinningDrillHead>,
             Without<BreakDebrisParticle>,
         ),
@@ -369,7 +328,6 @@ pub fn animate_blocks(
             With<SpinningDrillHead>,
             Without<AnimatedBlock>,
             Without<AnimatedPusher>,
-            Without<AnimatedPusherRod>,
             Without<WeldSpark>,
             Without<WeldBurstParticle>,
             Without<LaserBeamBurst>,
@@ -381,7 +339,6 @@ pub fn animate_blocks(
         (
             Without<AnimatedBlock>,
             Without<AnimatedPusher>,
-            Without<AnimatedPusherRod>,
             Without<SpinningDrillHead>,
             Without<WeldBurstParticle>,
             Without<LaserBeamBurst>,
@@ -393,7 +350,6 @@ pub fn animate_blocks(
         (
             Without<AnimatedBlock>,
             Without<AnimatedPusher>,
-            Without<AnimatedPusherRod>,
             Without<SpinningDrillHead>,
             Without<WeldSpark>,
             Without<LaserBeamBurst>,
@@ -405,7 +361,6 @@ pub fn animate_blocks(
         (
             Without<AnimatedBlock>,
             Without<AnimatedPusher>,
-            Without<AnimatedPusherRod>,
             Without<SpinningDrillHead>,
             Without<WeldSpark>,
             Without<WeldBurstParticle>,
@@ -417,7 +372,6 @@ pub fn animate_blocks(
         (
             Without<AnimatedBlock>,
             Without<AnimatedPusher>,
-            Without<AnimatedPusherRod>,
             Without<SpinningDrillHead>,
             Without<WeldSpark>,
             Without<WeldBurstParticle>,
@@ -462,18 +416,6 @@ pub fn animate_blocks(
             transform.translation = animation.base_translation
                 + animation.direction * (animation.to_extension * animation.extension_factor);
             commands.entity(entity).remove::<AnimatedPusher>();
-        }
-    }
-
-    for (entity, mut transform, mut animation) in &mut pusher_rods {
-        animation.elapsed += time.delta_secs();
-        let t = (animation.elapsed / animation.duration.max(f32::EPSILON)).clamp(0.0, 1.0);
-        let extension = animation.from_extension.lerp(animation.to_extension, t);
-        animation.apply(extension, &mut transform);
-
-        if t >= 1.0 {
-            animation.apply(animation.to_extension, &mut transform);
-            commands.entity(entity).remove::<AnimatedPusherRod>();
         }
     }
 

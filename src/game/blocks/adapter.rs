@@ -12,7 +12,7 @@ use oif_sim::blocks::{
 };
 
 use super::traits::{BlockRender, BlockUi, PlaceableBlock};
-use super::{BlockModel, RenderBehavior};
+use super::{RenderBehavior};
 
 /// 包装各方块类型，使分文件的 sub-trait impl 能注册进 inventory
 pub struct BlockImpl<T>(pub T);
@@ -125,10 +125,6 @@ where
 {
     fn render_behavior(&self, facing: Facing) -> RenderBehavior {
         self.0.render_behavior(facing)
-    }
-
-    fn model(&self) -> BlockModel {
-        self.0.model()
     }
 
     fn block_texture(&self) -> Option<Image> {

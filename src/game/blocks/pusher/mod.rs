@@ -9,8 +9,6 @@ use crate::game::blocks::BlockKind;
 
 pub static BLOCK: BlockImpl<PusherBlock> = BlockImpl(PusherBlock);
 
-pub mod model;
-pub mod texture;
 mod render;
 
 impl PlaceableBlock for PusherBlock {

@@ -1,73 +1,58 @@
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 
-use crate::game::blocks::{BlockModel, BlockModelPart, ModelMesh};
 use crate::game::world::animation::{
-    AnimatedPusher, AnimatedPusherRod, LifterDiskGlow, PusherAnimation, ScrollingConveyorBelt,
-    SpinningDrillHead,
+    AnimatedPusher, LifterDiskGlow, PusherAnimation, ScrollingConveyorBelt, SpinningDrillHead,
 };
 use crate::game::world::render_assets::{FactoryPartHandles, FactoryVisual, WorldRenderAssets};
 use crate::game::world::rendering::BlockIconRenderEntity;
 
-/// 生成方块模型零件（优先工厂 GLB，否则程序化）
+/// 生成方块模型零件（工厂 GLB）
 pub fn spawn_model_parts(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
     kind: crate::game::blocks::BlockKind,
     block_id: crate::game::blocks::BlockId,
-    model: BlockModel,
     pusher_animation: Option<PusherAnimation>,
     icon_layer: Option<&RenderLayers>,
     preview: bool,
 ) {
-    if let Some(visual) = assets.factory_visual(kind) {
-        match visual {
-            FactoryVisual::Static {
-                parts,
-                local_rotation,
-            } => {
-                spawn_factory_static(
-                    parent,
-                    assets,
-                    kind,
-                    parts,
-                    *local_rotation,
-                    block_id,
-                    icon_layer,
-                    preview,
-                );
-            }
-            FactoryVisual::Drill { body, head } => {
-                spawn_factory_drill(parent, assets, body, head, icon_layer, preview);
-            }
-            FactoryVisual::Pusher { body, stage, head } => {
-                spawn_factory_pusher(
-                    parent,
-                    assets,
-                    body,
-                    stage,
-                    head,
-                    pusher_animation,
-                    icon_layer,
-                    preview,
-                );
-            }
-            // 电线在 spawn 连通逻辑里按面生成
-            FactoryVisual::Wire { .. } => {}
-        }
+    let Some(visual) = assets.factory_visual(kind) else {
         return;
-    }
-
-    match model {
-        BlockModel::Default => {}
-        BlockModel::Parts(parts) | BlockModel::PartsOnly(parts) => {
-            for &part in parts {
-                spawn_static_part(parent, assets, part, icon_layer, preview);
-            }
+    };
+    match visual {
+        FactoryVisual::Static {
+            parts,
+            local_rotation,
+        } => {
+            spawn_factory_static(
+                parent,
+                assets,
+                kind,
+                parts,
+                *local_rotation,
+                block_id,
+                icon_layer,
+                preview,
+            );
         }
-        BlockModel::PusherParts(parts) => {
-            spawn_pusher_model_parts(parent, assets, parts, pusher_animation, icon_layer, preview);
+        FactoryVisual::Drill { body, head } => {
+            spawn_factory_drill(parent, assets, body, head, icon_layer, preview);
         }
+        FactoryVisual::Pusher { body, stage, head } => {
+            spawn_factory_pusher(
+                parent,
+                assets,
+                body,
+                stage,
+                head,
+                pusher_animation,
+                icon_layer,
+                preview,
+            );
+        }
+        // 电线在 spawn 连通逻辑里按面生成
+        FactoryVisual::Wire { .. } => {}
     }
 }
 
@@ -360,109 +345,3 @@ pub fn spawn_factory_wire_arm(
     }
 }
 
-fn spawn_pusher_model_parts(
-    parent: &mut ChildSpawnerCommands,
-    assets: &WorldRenderAssets,
-    parts: &'static [BlockModelPart],
-    pusher_animation: Option<PusherAnimation>,
-    icon_layer: Option<&RenderLayers>,
-    preview: bool,
-) {
-    use crate::game::blocks::pusher::model::{
-        ROD_BASE_LENGTH, pusher_rod_center_z, pusher_rod_length,
-    };
-
-    for part in parts {
-        let mut translation = model_vec3(part.translation);
-        let mut scale = model_vec3(part.scale);
-
-        // 必须用 from_extension：实体要到下一帧才进 animate，若用 to 会首帧直接画成终点
-        if part.mesh == ModelMesh::PusherHead {
-            if let Some(animation) = pusher_animation {
-                translation += Vec3::NEG_Z * animation.from_extension;
-            }
-        } else if part.mesh == ModelMesh::RodZ {
-            let extension = pusher_animation
-                .map(|animation| animation.from_extension)
-                .unwrap_or(0.0);
-            let length = pusher_rod_length(extension);
-            translation.z = pusher_rod_center_z(extension);
-            scale = Vec3::new(scale.x, scale.y, length / ROD_BASE_LENGTH);
-        }
-
-        spawn_part_mesh(
-            parent,
-            assets,
-            *part,
-            translation,
-            scale,
-            icon_layer,
-            preview,
-            pusher_animation,
-        );
-    }
-}
-
-fn spawn_static_part(
-    parent: &mut ChildSpawnerCommands,
-    assets: &WorldRenderAssets,
-    part: BlockModelPart,
-    icon_layer: Option<&RenderLayers>,
-    preview: bool,
-) {
-    let translation = model_vec3(part.translation);
-    let scale = model_vec3(part.scale);
-    spawn_part_mesh(
-        parent,
-        assets,
-        part,
-        translation,
-        scale,
-        icon_layer,
-        preview,
-        None,
-    );
-}
-
-fn spawn_part_mesh(
-    parent: &mut ChildSpawnerCommands,
-    assets: &WorldRenderAssets,
-    part: BlockModelPart,
-    translation: Vec3,
-    scale: Vec3,
-    icon_layer: Option<&RenderLayers>,
-    preview: bool,
-    pusher_animation: Option<PusherAnimation>,
-) {
-    let mut child = parent.spawn((
-        Mesh3d(assets.model_mesh(part.mesh)),
-        MeshMaterial3d(if preview {
-            assets.model_preview_material(part.material)
-        } else {
-            assets.model_material(part.material)
-        }),
-        Transform {
-            translation,
-            rotation: Quat::from_rotation_y(part.yaw_radians),
-            scale,
-            ..default()
-        },
-    ));
-    if let Some(icon_layer) = icon_layer {
-        child.insert((icon_layer.clone(), BlockIconRenderEntity));
-    }
-    if let Some(animation) = pusher_animation.filter(|animation| {
-        animation.duration.is_some_and(|duration| duration > 0.0)
-            && animation.from_extension != animation.to_extension
-    }) {
-        if part.mesh == ModelMesh::PusherHead {
-            child.insert(AnimatedPusher::new(animation, model_vec3(part.translation)));
-        } else if part.mesh == ModelMesh::RodZ {
-            child.insert(AnimatedPusherRod::new(animation, model_vec3(part.scale)));
-        }
-    }
-}
-
-fn model_vec3(value: [f32; 3]) -> Vec3 {
-    Vec3::new(value[0], value[1], value[2])
-}

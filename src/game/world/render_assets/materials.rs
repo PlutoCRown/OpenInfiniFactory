@@ -102,16 +102,6 @@ pub(super) fn scene_color_material(base_color: Color) -> StandardMaterial {
     }
 }
 
-/// 程序化零件用 sRGB 材质
-pub(super) fn srgb_material(r: f32, g: f32, b: f32) -> StandardMaterial {
-    StandardMaterial {
-        base_color: Color::srgb(r, g, b),
-        perceptual_roughness: 0.82,
-        reflectance: 0.16,
-        ..default()
-    }
-}
-
 /// 带贴图的模型零件材质
 pub(super) fn textured_model_material(
     base_color: Color,
@@ -122,24 +112,6 @@ pub(super) fn textured_model_material(
         base_color_texture: Some(texture),
         perceptual_roughness: 0.90,
         reflectance: 0.12,
-        ..default()
-    }
-}
-
-/// 自发光模型零件材质
-pub(super) fn emissive_material(
-    r: f32,
-    g: f32,
-    b: f32,
-    er: f32,
-    eg: f32,
-    eb: f32,
-) -> StandardMaterial {
-    StandardMaterial {
-        base_color: Color::srgb(r, g, b),
-        emissive: Color::srgb(er, eg, eb).into(),
-        perceptual_roughness: 0.72,
-        reflectance: 0.10,
         ..default()
     }
 }

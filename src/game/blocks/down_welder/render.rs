@@ -1,11 +1,10 @@
 use super::DownWelderBlock;
 
-use crate::game::blocks::traits::BlockRender;
-use crate::game::blocks::{BlockModel, RenderBehavior, WeldConnectorBehavior};
-use bevy::prelude::{IVec3};
-use crate::game::world::direction::{Facing};
+use bevy::prelude::IVec3;
 
-const MODEL: &[crate::game::blocks::BlockModelPart] = &[];
+use crate::game::blocks::traits::BlockRender;
+use crate::game::blocks::{RenderBehavior, WeldConnectorBehavior};
+use crate::game::world::direction::Facing;
 
 impl BlockRender for DownWelderBlock {
     fn render_behavior(&self, _facing: Facing) -> RenderBehavior {
@@ -13,9 +12,5 @@ impl BlockRender for DownWelderBlock {
             weld_connector: Some(WeldConnectorBehavior::Offset(IVec3::NEG_Y)),
             ..Default::default()
         }
-    }
-
-    fn model(&self) -> BlockModel {
-        BlockModel::Parts(MODEL)
     }
 }

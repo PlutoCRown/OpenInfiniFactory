@@ -37,9 +37,9 @@ pub fn baked_block_icon_relpath(kind: BlockKind) -> Option<&'static str> {
         BlockKind::Sign => Some("block_icons/sign.png"),
         BlockKind::Generator => Some("block_icons/generator.png"),
         BlockKind::Goal => Some("block_icons/goal.png"),
-        BlockKind::Converter => Some("block_icons/converter.png"),
-        BlockKind::Stamper => Some("block_icons/stamper.png"),
-        BlockKind::Roller => Some("block_icons/roller.png"),
+        BlockKind::Converter => Some("factory_blocks/converter/icon.png"),
+        BlockKind::Stamper => Some("factory_blocks/stamper/icon.png"),
+        BlockKind::Roller => Some("factory_blocks/roller/icon.png"),
         BlockKind::Teleport => Some("block_icons/teleport.png"),
         BlockKind::Scene(_)
         | BlockKind::Material(_)

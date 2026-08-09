@@ -2,17 +2,15 @@
 
 mod factory;
 mod materials;
-mod meshes;
 mod packs;
 
 use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 
-use crate::game::blocks::pusher::texture;
 use crate::game::blocks::{
-    BLOCK_SIZE, BlockKind, BlockPresent, BlockShape, ModelMaterial, ModelMesh, PaintMaterialId,
-    all_blocks, paint_catalog, stamp_catalog, stamp_def,
+    BLOCK_SIZE, BlockKind, BlockPresent, BlockShape, PaintMaterialId, all_blocks, paint_catalog,
+    stamp_catalog, stamp_def,
 };
 
 pub use factory::{FactoryPartHandles, FactoryVisual};
@@ -35,30 +33,10 @@ pub struct WorldRenderAssets {
     wire_connector_x: Handle<Mesh>,
     wire_connector_y: Handle<Mesh>,
     wire_connector_z: Handle<Mesh>,
-    part_conveyor_base: Handle<Mesh>,
-    part_conveyor_belt: Handle<Mesh>,
-    part_drill_body: Handle<Mesh>,
-    part_drill_tip: Handle<Mesh>,
-    part_large: Handle<Mesh>,
-    part_medium: Handle<Mesh>,
-    part_small: Handle<Mesh>,
-    part_plate: Handle<Mesh>,
     part_sign_board: Handle<Mesh>,
     part_sign_pole: Handle<Mesh>,
     /// 告示正面 icon 四边形（XY，法线 +Z）
     part_sign_icon: Handle<Mesh>,
-    part_rotator_base: Handle<Mesh>,
-    part_rotator_disk: Handle<Mesh>,
-    part_rotator_ring: Handle<Mesh>,
-    part_rod_x: Handle<Mesh>,
-    part_rod_y: Handle<Mesh>,
-    part_rod_z: Handle<Mesh>,
-    part_mirror_face: Handle<Mesh>,
-    part_vertical_mirror_face: Handle<Mesh>,
-    part_splitter_face: Handle<Mesh>,
-    part_suction_cup: Handle<Mesh>,
-    part_pusher_body: Handle<Mesh>,
-    part_pusher_head: Handle<Mesh>,
     block_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
     /// 破坏碎片公告板材质（双面 unlit，采样方块贴图）
     break_debris_materials: HashMap<BlockKind, Handle<StandardMaterial>>,
@@ -91,8 +69,10 @@ pub struct WorldRenderAssets {
     pub(crate) light_panel_material: Handle<StandardMaterial>,
     /// 灯面板通电发光材质
     pub(crate) light_panel_lit_material: Handle<StandardMaterial>,
-    model_materials: HashMap<ModelMaterial, Handle<StandardMaterial>>,
-    model_preview_materials: HashMap<ModelMaterial, Handle<StandardMaterial>>,
+    /// 告示牌木材材质
+    sign_wood_material: Handle<StandardMaterial>,
+    /// 告示牌木材预览材质
+    sign_wood_preview_material: Handle<StandardMaterial>,
     pub(crate) wire_connector_material: Handle<StandardMaterial>,
     pub(crate) active_wire_material: Handle<StandardMaterial>,
     /// 抬升器顶盘：模拟期微弱白自发光（通电关闭时切回 GLB 原材质）
@@ -138,14 +118,6 @@ impl WorldRenderAssets {
         let wood_texture = images.add(crate::game::world::procedural_textures::from_fn(
             crate::game::world::procedural_textures::birch_wood_pixel,
         ));
-        let bordered_wood_texture = images.add(texture::bordered_wood());
-        let stone_texture = images.add(crate::game::world::procedural_textures::from_fn(|x, y| {
-            crate::game::world::procedural_textures::material_pixel(x, y, [124, 128, 132], 89)
-        }));
-        let platform_texture = block_textures
-            .get(&BlockKind::Platform)
-            .expect("platform defines a texture")
-            .clone();
         let block_materials: HashMap<BlockKind, Handle<StandardMaterial>> = all_blocks()
             .into_iter()
             .map(|kind| {
@@ -333,152 +305,10 @@ impl WorldRenderAssets {
                 (id, materials.add(material))
             })
             .collect();
-        let model_materials = [
-            (
-                ModelMaterial::ConveyorBase,
-                materials::srgb_material(0.16, 0.18, 0.18),
-            ),
-            (
-                ModelMaterial::ConveyorBelt,
-                materials::srgb_material(0.02, 0.02, 0.02),
-            ),
-            (
-                ModelMaterial::DrillTip,
-                materials::srgb_material(0.82, 0.84, 0.82),
-            ),
-            (
-                ModelMaterial::Frame,
-                materials::srgb_material(0.42, 0.44, 0.44),
-            ),
-            (
-                ModelMaterial::DarkFrame,
-                materials::srgb_material(0.12, 0.13, 0.15),
-            ),
-            (
-                ModelMaterial::Belt,
-                materials::srgb_material(0.86, 0.46, 0.14),
-            ),
-            (
-                ModelMaterial::BeltStripe,
-                materials::emissive_material(1.0, 0.76, 0.28, 0.18, 0.10, 0.02),
-            ),
-            (
-                ModelMaterial::WeldCore,
-                materials::emissive_material(1.0, 0.22, 0.10, 0.22, 0.04, 0.02),
-            ),
-            (
-                ModelMaterial::Welding,
-                materials::emissive_material(0.18, 0.58, 1.0, 0.02, 0.12, 0.26),
-            ),
-            (
-                ModelMaterial::Wire,
-                materials::emissive_material(1.0, 0.88, 0.30, 0.20, 0.12, 0.02),
-            ),
-            (
-                ModelMaterial::Signal,
-                materials::emissive_material(0.12, 0.78, 1.0, 0.02, 0.18, 0.24),
-            ),
-            (
-                ModelMaterial::Power,
-                materials::emissive_material(1.0, 0.52, 0.20, 0.22, 0.08, 0.02),
-            ),
-            (
-                ModelMaterial::DetectorBody,
-                materials::block_material(BlockKind::Detector),
-            ),
-            (
-                ModelMaterial::Pusher,
-                materials::srgb_material(0.54, 0.56, 0.54),
-            ),
-            (
-                ModelMaterial::Platform,
-                materials::textured_model_material(Color::WHITE, platform_texture.clone()),
-            ),
-            (
-                ModelMaterial::PlatformBase,
-                materials::block_material(BlockKind::Platform),
-            ),
-            (
-                ModelMaterial::Wood,
-                materials::srgb_material(0.72, 0.46, 0.22),
-            ),
-            (
-                ModelMaterial::WoodTexture,
-                materials::textured_model_material(Color::WHITE, wood_texture),
-            ),
-            (
-                ModelMaterial::BorderedWoodTexture,
-                materials::textured_model_material(Color::WHITE, bordered_wood_texture),
-            ),
-            (
-                ModelMaterial::StoneTexture,
-                materials::textured_model_material(Color::WHITE, stone_texture),
-            ),
-            (
-                ModelMaterial::Lift,
-                materials::emissive_material(0.35, 0.82, 1.0, 0.03, 0.16, 0.22),
-            ),
-            (
-                ModelMaterial::Rotation,
-                materials::emissive_material(0.70, 0.36, 1.0, 0.11, 0.04, 0.20),
-            ),
-            (
-                ModelMaterial::Drill,
-                materials::srgb_material(0.06, 0.07, 0.08),
-            ),
-            (
-                ModelMaterial::Laser,
-                materials::emissive_material(1.0, 0.10, 0.22, 0.35, 0.01, 0.04),
-            ),
-            (
-                ModelMaterial::Mirror,
-                StandardMaterial {
-                    base_color: Color::srgb(0.45, 0.88, 1.0),
-                    emissive: LinearRgba::new(0.10, 0.22, 0.30, 1.0),
-                    alpha_mode: AlphaMode::Blend,
-                    perceptual_roughness: 0.72,
-                    reflectance: 0.10,
-                    cull_mode: None,
-                    ..default()
-                },
-            ),
-            (
-                ModelMaterial::System,
-                materials::srgb_material(0.35, 0.28, 0.48),
-            ),
-            (
-                ModelMaterial::SystemAccent,
-                materials::emissive_material(0.72, 0.58, 1.0, 0.12, 0.08, 0.24),
-            ),
-            (
-                ModelMaterial::TeleportIn,
-                materials::emissive_material(0.18, 0.62, 1.0, 0.02, 0.10, 0.34),
-            ),
-            (
-                ModelMaterial::TeleportOut,
-                materials::emissive_material(1.0, 0.54, 0.18, 0.34, 0.10, 0.02),
-            ),
-            (
-                ModelMaterial::SuctionCup,
-                materials::srgb_material(0.82, 0.84, 0.82),
-            ),
-        ]
-        .into_iter()
-        .map(|(kind, material)| (kind, materials.add(material)))
-        .collect::<HashMap<_, _>>();
-        let model_preview_materials = model_materials
-            .iter()
-            .map(|(kind, handle)| {
-                let source = materials
-                    .get(handle)
-                    .expect("model material exists")
-                    .clone();
-                (
-                    *kind,
-                    materials.add(materials::preview_model_material(source)),
-                )
-            })
-            .collect();
+        let sign_wood_source = materials::textured_model_material(Color::WHITE, wood_texture);
+        let sign_wood_material = materials.add(sign_wood_source.clone());
+        let sign_wood_preview_material =
+            materials.add(materials::preview_model_material(sign_wood_source));
 
         let factory_models = factory::load_factory_visuals(meshes, materials, images);
         let light_panel = factory::load_light_panel_mesh(meshes, materials, images);
@@ -512,44 +342,10 @@ impl WorldRenderAssets {
             wire_connector_x: meshes.add(Cuboid::new(0.652, 0.304, 0.304)),
             wire_connector_y: meshes.add(Cuboid::new(0.304, 0.652, 0.304)),
             wire_connector_z: meshes.add(Cuboid::new(0.304, 0.304, 0.652)),
-            part_conveyor_base: meshes.add(Cuboid::new(1.0, 0.90, 1.0)),
-            part_conveyor_belt: meshes.add(Cuboid::new(0.90, 0.10, 1.0)),
-            part_drill_body: meshes.add(Cuboid::new(1.0, 1.0, 0.80)),
-            part_drill_tip: meshes.add(meshes::drill_tip_mesh(0.34, 1.0, 48)),
-            part_large: meshes.add(Cuboid::new(0.72, 0.22, 0.72)),
-            part_medium: meshes.add(Cuboid::new(0.44, 0.20, 0.44)),
-            part_small: meshes.add(Cuboid::new(0.22, 0.22, 0.22)),
-            part_plate: meshes.add(Cuboid::new(0.78, 0.06, 0.78)),
             // 告示竖板：宽 1、高 0.6、薄在 Z（局部 +Z 贴宿主）
             part_sign_board: meshes.add(Cuboid::new(1.0, 0.6, 0.05)),
             part_sign_pole: meshes.add(Cuboid::new(0.1, 0.5, 0.1)),
             part_sign_icon: meshes.add(Rectangle::new(1.0, 1.0)),
-            part_rotator_base: meshes.add(Cuboid::new(1.0, 0.80, 1.0)),
-            part_rotator_disk: meshes.add(Cylinder::new(0.40, 0.20).mesh().resolution(48)),
-            part_rotator_ring: meshes.add(meshes::rotator_ring_mesh(0.50, 0.40, 0.20, 64)),
-            part_rod_x: meshes.add(Cuboid::new(0.72, 0.12, 0.12)),
-            part_rod_y: meshes.add(Cuboid::new(0.12, 0.72, 0.12)),
-            part_rod_z: meshes.add(Cuboid::new(0.12, 0.12, 0.72)),
-            // 镜子面片：000, 101, 111, 010
-            part_mirror_face: meshes.add(meshes::thick_quad_mesh([
-                [0, 0, 0],
-                [1, 0, 1],
-                [1, 1, 1],
-                [0, 1, 0],
-            ])),
-            // 垂直镜子面片：000, 001, 111, 110
-            part_vertical_mirror_face: meshes.add(meshes::thick_quad_mesh([
-                [0, 0, 0],
-                [0, 0, 1],
-                [1, 1, 1],
-                [1, 1, 0],
-            ])),
-            // 分光镜：x+y+z=0 六边形再烘焙 -180° yaw
-            part_splitter_face: meshes.add(meshes::thick_splitter_hexagon_mesh()),
-            // 吸盘：工作面在 -Z，顶点在格子中心
-            part_suction_cup: meshes.add(meshes::suction_cup_pyramid_mesh()),
-            part_pusher_body: meshes.add(meshes::cover_cuboid_mesh(Vec3::new(1.0, 1.0, 0.80))),
-            part_pusher_head: meshes.add(meshes::cover_cuboid_mesh(Vec3::new(1.0, 1.0, 0.20))),
             block_materials,
             break_debris_materials,
             preview_materials,
@@ -580,8 +376,8 @@ impl WorldRenderAssets {
                 cull_mode: None,
                 ..default()
             }),
-            model_materials,
-            model_preview_materials,
+            sign_wood_material,
+            sign_wood_preview_material,
             wire_connector_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.88, 0.30),
                 emissive: Color::srgb(0.10, 0.06, 0.01).into(),
@@ -888,47 +684,16 @@ impl WorldRenderAssets {
         self.sign_display_materials.insert(kind, material);
     }
 
-    pub(crate) fn model_mesh(&self, mesh: ModelMesh) -> Handle<Mesh> {
+    pub(crate) fn sign_mesh(&self, mesh: crate::game::blocks::SignMesh) -> Handle<Mesh> {
         match mesh {
-            ModelMesh::ConveyorBase => self.part_conveyor_base.clone(),
-            ModelMesh::ConveyorBelt => self.part_conveyor_belt.clone(),
-            ModelMesh::DrillBody => self.part_drill_body.clone(),
-            ModelMesh::DrillTip => self.part_drill_tip.clone(),
-            ModelMesh::Large => self.part_large.clone(),
-            ModelMesh::Medium => self.part_medium.clone(),
-            ModelMesh::Small => self.part_small.clone(),
-            ModelMesh::Plate => self.part_plate.clone(),
-            ModelMesh::SignBoard => self.part_sign_board.clone(),
-            ModelMesh::SignPole => self.part_sign_pole.clone(),
-            ModelMesh::RotatorBase => self.part_rotator_base.clone(),
-            ModelMesh::RotatorDisk => self.part_rotator_disk.clone(),
-            ModelMesh::RotatorRing => self.part_rotator_ring.clone(),
-            ModelMesh::RodX => self.part_rod_x.clone(),
-            ModelMesh::RodY => self.part_rod_y.clone(),
-            ModelMesh::RodZ => self.part_rod_z.clone(),
-            ModelMesh::MirrorFace => self.part_mirror_face.clone(),
-            ModelMesh::VerticalMirrorFace => self.part_vertical_mirror_face.clone(),
-            ModelMesh::SplitterFace => self.part_splitter_face.clone(),
-            ModelMesh::SuctionCup => self.part_suction_cup.clone(),
-            ModelMesh::PusherBody => self.part_pusher_body.clone(),
-            ModelMesh::PusherHead => self.part_pusher_head.clone(),
+            crate::game::blocks::SignMesh::Board => self.part_sign_board.clone(),
+            crate::game::blocks::SignMesh::Pole => self.part_sign_pole.clone(),
         }
     }
-
-    pub(crate) fn model_material(&self, material: ModelMaterial) -> Handle<StandardMaterial> {
-        self.model_materials
-            .get(&material)
-            .expect("every model material exists")
-            .clone()
+    pub(crate) fn sign_wood_material(&self) -> Handle<StandardMaterial> {
+        self.sign_wood_material.clone()
     }
-
-    pub(crate) fn model_preview_material(
-        &self,
-        material: ModelMaterial,
-    ) -> Handle<StandardMaterial> {
-        self.model_preview_materials
-            .get(&material)
-            .expect("every model material has a preview material")
-            .clone()
+    pub(crate) fn sign_wood_preview_material(&self) -> Handle<StandardMaterial> {
+        self.sign_wood_preview_material.clone()
     }
 }

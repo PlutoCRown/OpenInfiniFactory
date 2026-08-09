@@ -14,8 +14,8 @@ use crate::game::blocks::BlockPresent;
 use crate::game::blocks::sign::visual::spawn_sign_visual;
 use crate::game::blocks::teleport::visual::spawn_teleport_visual;
 use crate::game::blocks::{
-    BlockData, BlockKind, BlockModel, WeldConnectorBehavior, WireConnectorBehavior,
-    spawn_factory_wire_arm, spawn_model_parts,
+    BlockData, BlockKind, WeldConnectorBehavior, WireConnectorBehavior, spawn_factory_wire_arm,
+    spawn_model_parts,
 };
 use crate::game::simulation::structure_state::{FactoryActivity, StructureState};
 use crate::game::world::animation::{
@@ -441,24 +441,16 @@ pub(crate) fn spawn_block_model(
         }
     } else if data.kind == crate::game::blocks::BlockKind::Wire
         || data.kind == BlockKind::Teleport
+        || data.kind == BlockKind::Sign
+        || data.kind == BlockKind::WeldPoint
+        || data.kind == BlockKind::PusherHead
+        || data.kind == BlockKind::DrillHead
+        || data.kind == BlockKind::RollerBody
+        || data.kind == BlockKind::StamperBody
         || has_factory_visual
-        || matches!(
-            data.kind.model(),
-            BlockModel::PartsOnly(_) | BlockModel::PusherParts(_)
-        )
     {
         // 传送只用子节点 Portal 立方体，勿再挂默认实心壳（否则会叠 1.05 壳）
         commands.spawn((transform, Visibility::default()))
-    } else if data.kind == BlockKind::Platform {
-        commands.spawn((
-            Mesh3d(assets.block_mesh(data.kind)),
-            MeshMaterial3d(if is_preview {
-                assets.model_preview_material(crate::game::blocks::ModelMaterial::Platform)
-            } else {
-                assets.model_material(crate::game::blocks::ModelMaterial::Platform)
-            }),
-            transform,
-        ))
     } else {
         match assets.scene_material(data.kind) {
             Some(scene_material) => {
@@ -538,7 +530,6 @@ pub(crate) fn spawn_block_model(
                 assets,
                 data.kind,
                 data.id,
-                data.kind.model(),
                 pusher_animation,
                 icon_render.map(|(_, layer)| layer),
                 is_preview,

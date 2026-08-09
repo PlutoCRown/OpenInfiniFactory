@@ -5,7 +5,7 @@ use std::f32::consts::PI;
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 
-use crate::game::blocks::{BlockData, BlockKind, ModelMaterial, ModelMesh};
+use crate::game::blocks::{BlockData, BlockKind, SignMesh};
 use crate::game::world::grid::{SignDisplay, WorldBlocks};
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::game::world::rendering::BlockIconRenderEntity;
@@ -47,7 +47,7 @@ pub fn spawn_sign_visual(
     spawn_wood_part(
         parent,
         assets,
-        ModelMesh::SignBoard,
+        SignMesh::Board,
         board_translation,
         Vec3::ONE,
         icon_layer,
@@ -70,7 +70,7 @@ pub fn spawn_sign_visual(
         spawn_wood_part(
             parent,
             assets,
-            ModelMesh::SignPole,
+            SignMesh::Pole,
             Vec3::new(0.0, pole_y, 0.0),
             Vec3::new(1.0, pole_h / POLE_MESH_H, 1.0),
             icon_layer,
@@ -112,18 +112,18 @@ pub fn spawn_sign_visual(
 fn spawn_wood_part(
     parent: &mut ChildSpawnerCommands,
     assets: &WorldRenderAssets,
-    mesh: ModelMesh,
+    mesh: SignMesh,
     translation: Vec3,
     scale: Vec3,
     icon_layer: Option<&RenderLayers>,
     preview: bool,
 ) {
     let mut child = parent.spawn((
-        Mesh3d(assets.model_mesh(mesh)),
+        Mesh3d(assets.sign_mesh(mesh)),
         MeshMaterial3d(if preview {
-            assets.model_preview_material(ModelMaterial::WoodTexture)
+            assets.sign_wood_preview_material()
         } else {
-            assets.model_material(ModelMaterial::WoodTexture)
+            assets.sign_wood_material()
         }),
         Transform {
             translation,

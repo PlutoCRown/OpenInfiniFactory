@@ -109,6 +109,9 @@ pub(super) fn load_factory_visuals(
         (BlockKind::VerticalMirror, "vertical_mirror", Quat::IDENTITY),
         (BlockKind::Splitter, "splitter", Quat::IDENTITY),
         (BlockKind::SuctionCup, "suction_cup", Quat::IDENTITY),
+        (BlockKind::Converter, "converter", Quat::IDENTITY),
+        (BlockKind::Roller, "roller", Quat::IDENTITY),
+        (BlockKind::Stamper, "stamper", Quat::IDENTITY),
     ];
     for &(kind, dir, local_rotation) in static_dirs {
         let path = root.join(dir).join("model.glb");

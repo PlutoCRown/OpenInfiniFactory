@@ -30,7 +30,7 @@ use crate::game::systems::simulation_controls::{
     request_continuous_run, request_one_turn, start_simulation_if_needed,
 };
 use crate::game::ui::UiRuntime;
-use crate::game::world::animation::{AnimatedBlock, AnimatedPusherRod};
+use crate::game::world::animation::AnimatedBlock;
 use crate::game::world::rendering::BlockEntity;
 use crate::shared::launch::{DEFAULT_DEBUG_HTTP_PORT, LaunchOptions};
 use crate::shared::save::{SaveKind, SaveSlot, SaveState};
@@ -57,7 +57,7 @@ pub struct DebugHttpSessionSnapshot<'w, 's> {
     ui_runtime: Res<'w, UiRuntime>,
     save_state: Res<'w, SaveState>,
     solution_state: Res<'w, SolutionState>,
-    animated: Query<'w, 's, Entity, Or<(With<AnimatedBlock>, With<AnimatedPusherRod>)>>,
+    animated: Query<'w, 's, Entity, With<AnimatedBlock>>,
 }
 
 impl<'w, 's> DebugHttpSessionSnapshot<'w, 's> {

@@ -3,16 +3,12 @@ use bevy::prelude::*;
 use crate::game::state::UiPanelId;
 use crate::game::world::direction::Facing;
 
-use super::{BlockModel, RenderBehavior};
+use super::{RenderBehavior};
 
 /// 3D 模型与连接器渲染提示
 pub trait BlockRender: Send + Sync {
     fn render_behavior(&self, _facing: Facing) -> RenderBehavior {
         RenderBehavior::default()
-    }
-
-    fn model(&self) -> BlockModel {
-        BlockModel::Default
     }
 
     fn block_texture(&self) -> Option<Image> {

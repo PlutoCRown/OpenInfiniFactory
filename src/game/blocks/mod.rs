@@ -49,8 +49,8 @@ pub use self::registry::{
     PLAY_BLOCKS, all_blocks, assert_registry_consistent, edit_blocks, save_stores_facing,
 };
 pub use self::render_types::{
-    BlockModel, BlockModelPart, ModelMaterial, ModelMesh, RenderBehavior, WeldConnectorBehavior,
-    WireConnectorBehavior, render_bottom_wire_device, render_directional_wire_device,
+    RenderBehavior, SignMesh, WeldConnectorBehavior, WireConnectorBehavior,
+    render_bottom_wire_device, render_directional_wire_device,
 };
 use crate::game::state::UiPanelId;
 pub use oif_sim::blocks::{
@@ -106,7 +106,6 @@ pub trait BlockPresent: Sized {
     fn is_editable(self) -> bool;
     fn ui_panel(self) -> Option<UiPanelId>;
     fn render_behavior(self, facing: Facing) -> RenderBehavior;
-    fn model(self) -> BlockModel;
     fn block_texture(self) -> Option<Image>;
 }
 
@@ -155,16 +154,6 @@ impl BlockPresent for BlockKind {
             return RenderBehavior::default();
         }
         registry::get(self).render_behavior(facing)
-    }
-
-    fn model(self) -> BlockModel {
-        if matches!(
-            self,
-            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
-        ) {
-            return BlockModel::Default;
-        }
-        registry::get(self).model()
     }
 
     fn block_texture(self) -> Option<Image> {
