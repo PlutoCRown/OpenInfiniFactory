@@ -10,8 +10,8 @@ use crate::game::ui::components::{
 use super::super::types::{
     LocalizedText, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListCoverHost,
     SaveListCoverImage, SaveListCoverLoading, SaveListFreeHint, SaveListPanel, SaveListPuzzleRows,
-    SaveListPuzzleScroll, SaveListSolutionRows, SaveListSolutionScroll, SaveListSolutionSection,
-    SaveListTitleText,
+    SaveListPuzzleScroll, SaveListRowMeta, SaveListRowName, SaveListSolutionRows,
+    SaveListSolutionScroll, SaveListSolutionSection, SaveListTitleText,
 };
 
 /// 相对窗口逻辑像素的外边距（尽量贴边，给封面更多空间）
@@ -480,7 +480,9 @@ pub fn spawn_save_puzzle_row(parent: &mut ChildSpawnerCommands, storage: String)
                     padding: UiRect::horizontal(Val::Px(10.0)),
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::FlexStart,
+                    column_gap: Val::Px(8.0),
                     flex_shrink: 0.0,
+                    overflow: Overflow::clip(),
                     ..default()
                 },
                 raised_border(),
@@ -490,7 +492,11 @@ pub fn spawn_save_puzzle_row(parent: &mut ChildSpawnerCommands, storage: String)
             SaveListAction::SelectPuzzle(storage),
         ))
         .with_children(|button| {
-            button.spawn(save_row_label("", 13.0));
+            button.spawn((save_row_label("", 13.0, Color::WHITE), SaveListRowName));
+            button.spawn((
+                save_row_label("", 12.0, Color::srgb(0.55, 0.55, 0.58)),
+                SaveListRowMeta,
+            ));
         });
 }
 
@@ -510,6 +516,8 @@ pub fn spawn_save_solution_card(parent: &mut ChildSpawnerCommands, storage: Opti
                     padding: UiRect::all(Val::Px(8.0)),
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(4.0),
                     flex_shrink: 0.0,
                     overflow: Overflow::clip(),
                     ..default()
@@ -521,7 +529,11 @@ pub fn spawn_save_solution_card(parent: &mut ChildSpawnerCommands, storage: Opti
             action,
         ))
         .with_children(|card| {
-            card.spawn(save_row_label("", 13.0));
+            card.spawn((save_row_label("", 13.0, Color::WHITE), SaveListRowName));
+            card.spawn((
+                save_row_label("", 11.0, Color::srgb(0.55, 0.55, 0.58)),
+                SaveListRowMeta,
+            ));
         });
 }
 
@@ -530,13 +542,14 @@ fn solution_card_height() -> f32 {
     default_button_size(48.0)
 }
 
-fn save_row_label(value: impl Into<String>, font_size: f32) -> impl Bundle {
+fn save_row_label(value: impl Into<String>, font_size: f32, color: Color) -> impl Bundle {
     (
-        text(value, font_size, Color::WHITE),
+        text(value, font_size, color),
         TextLayout::no_wrap(),
         Node {
             max_width: Val::Percent(100.0),
             overflow: Overflow::clip(),
+            flex_shrink: 1.0,
             ..default()
         },
     )

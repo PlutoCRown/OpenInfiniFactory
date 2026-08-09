@@ -76,6 +76,14 @@ pub struct SaveListCoverLoading;
 #[derive(Component)]
 pub struct SaveListTitleText;
 
+/// 存档行主标题（名字）
+#[derive(Component)]
+pub struct SaveListRowName;
+
+/// 存档行灰色相对时间
+#[derive(Component)]
+pub struct SaveListRowMeta;
+
 #[derive(Resource, Default)]
 pub struct SaveListRenderState {
     pub puzzle_keys: Vec<String>,

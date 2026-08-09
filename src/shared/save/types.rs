@@ -200,6 +200,10 @@ pub struct SaveEntry {
     pub slot: SaveSlot,
     pub name: String,
     pub kind: SaveKind,
+    /// 创建时间（unix 秒）；旧档可能为 None
+    pub created_at: Option<u64>,
+    /// 上次保存时间（unix 秒）；旧档可能为 None
+    pub updated_at: Option<u64>,
 }
 
 impl SaveEntry {
@@ -227,9 +231,15 @@ enum SaveMetaKind {
 struct SaveMeta {
     version: u32,
     kind: SaveMetaKind,
-    /// 存档名字（可中文）；缺省时列表用文件夹名兜底
+    /// 存档显示名，可含中文。省略时用文件夹名。文件夹本身仍是 sanitize 后的 id（仅 ASCII 字母数字/_/-）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     name: Option<String>,
+    /// 首次创建时间（unix 秒）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    created_at: Option<u64>,
+    /// 上次写入时间（unix 秒）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    updated_at: Option<u64>,
     #[serde(default)]
     puzzle_id: Option<String>,
     #[serde(default)]

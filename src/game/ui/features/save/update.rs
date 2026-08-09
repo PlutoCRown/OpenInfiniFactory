@@ -14,12 +14,14 @@ use crate::game::ui::screens::{spawn_save_puzzle_row, spawn_save_solution_card};
 use crate::game::ui::types::{
     SaveListAction, SaveListCloseButton, SaveListCoverHost, SaveListCoverImage,
     SaveListCoverLoading, SaveListFreeHint, SaveListPuzzleRows, SaveListPuzzleScroll,
-    SaveListRenderState, SaveListSolutionRows, SaveListSolutionScroll, SaveListSolutionSection,
-    SaveListTitleText, UiHoverState,
+    SaveListRenderState, SaveListRowMeta, SaveListRowName, SaveListSolutionRows,
+    SaveListSolutionScroll, SaveListSolutionSection, SaveListTitleText, UiHoverState,
 };
 use crate::shared::save::{SaveKind, SaveSlot, SaveState, read_cover_png};
 
-use super::view::{SaveListViewCtx, save_list_puzzle_rows, save_list_title, selected_top_level_kind};
+use super::view::{
+    SaveListViewCtx, save_list_puzzle_rows, save_list_title, selected_top_level_kind,
+};
 
 fn save_list_visible(mode: &State<GameMode>, screen: &StartMenuScreen) -> bool {
     *mode.get() == GameMode::StartMenu && *screen == StartMenuScreen::SaveList
@@ -331,6 +333,9 @@ pub fn update_save_list_styles(
     mut render_state: ResMut<SaveListRenderState>,
     mut commands: Commands,
     mut texts: Query<&mut Text, Without<SaveListTitleText>>,
+    name_texts: Query<(), With<SaveListRowName>>,
+    meta_texts: Query<(), With<SaveListRowMeta>>,
+    mut meta_nodes: Query<&mut Node, (With<SaveListRowMeta>, Without<Button>)>,
     mut buttons: Query<
         (
             Entity,
@@ -343,10 +348,22 @@ pub fn update_save_list_styles(
         ),
         (With<Button>, Without<SaveListCloseButton>),
     >,
-    mut solution_sections: Query<&mut Node, (With<SaveListSolutionSection>, Without<Button>)>,
+    mut solution_sections: Query<
+        &mut Node,
+        (
+            With<SaveListSolutionSection>,
+            Without<Button>,
+            Without<SaveListRowMeta>,
+        ),
+    >,
     mut free_hints: Query<
         (&mut Node, &mut Visibility),
-        (With<SaveListFreeHint>, Without<Button>, Without<SaveListSolutionSection>),
+        (
+            With<SaveListFreeHint>,
+            Without<Button>,
+            Without<SaveListSolutionSection>,
+            Without<SaveListRowMeta>,
+        ),
     >,
 ) {
     if !save_list_visible(&mode, &start_menu_screen) {
@@ -432,7 +449,31 @@ pub fn update_save_list_styles(
 
         if paint_labels {
             for child in children.iter() {
-                if let Ok(mut text) = texts.get_mut(child) {
+                if name_texts.contains(child) {
+                    if let Ok(mut text) = texts.get_mut(child) {
+                        if text.0 != view.label {
+                            text.0 = view.label.clone();
+                        }
+                    }
+                } else if meta_texts.contains(child) {
+                    let meta = view.meta.clone().unwrap_or_default();
+                    if let Ok(mut text) = texts.get_mut(child) {
+                        if text.0 != meta {
+                            text.0 = meta;
+                        }
+                    }
+                    if let Ok(mut node) = meta_nodes.get_mut(child) {
+                        let display = if view.meta.is_some() {
+                            Display::Flex
+                        } else {
+                            Display::None
+                        };
+                        if node.display != display {
+                            node.display = display;
+                        }
+                    }
+                } else if let Ok(mut text) = texts.get_mut(child) {
+                    // 页脚等无分栏按钮：整段写 label
                     if text.0 != view.label {
                         text.0 = view.label.clone();
                     }

@@ -38,6 +38,22 @@
       ],
       "description": "存档显示名，可含中文。省略时用文件夹名。文件夹本身仍是 sanitize 后的 id（仅 ASCII 字母数字/_/-）。"
     },
+    "created_at": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "首次创建时间（unix 秒）。列表按此排序；旧档可省略。"
+    },
+    "updated_at": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "上次保存时间（unix 秒）。列表以相对时间展示；旧档可省略。"
+    },
     "hotbar": {
       "type": [
         "array",

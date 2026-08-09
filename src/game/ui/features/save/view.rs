@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::game::ui::access::i18n;
-use crate::shared::save::{SaveKind, SaveState};
+use crate::shared::save::{SaveKind, SaveState, format_relative_saved_at};
 
 use super::types::SaveListAction;
 
@@ -11,6 +11,8 @@ pub struct SaveListViewCtx<'a> {
 
 pub struct ActionButtonView {
     pub label: String,
+    /// 名字旁灰色相对时间（仅存档行）
+    pub meta: Option<String>,
     pub enabled: bool,
     pub selected: bool,
     /// 非 None 时强制显隐（Free 选中时隐藏方案/编辑谜题相关按钮）
@@ -22,6 +24,7 @@ impl SaveListAction {
         let free_selected = selected_is_free(ctx.save_state);
         ActionButtonView {
             label: self.button_label(ctx),
+            meta: self.button_meta(ctx),
             enabled: self.is_enabled(ctx.save_state),
             selected: self.button_selected(ctx),
             display: self.button_display(free_selected),
@@ -74,6 +77,28 @@ impl SaveListAction {
             Self::StartGame => i18n.t("button.start_game"),
             Self::Back => i18n.t("button.back"),
         }
+    }
+
+    fn button_meta(&self, ctx: &SaveListViewCtx<'_>) -> Option<String> {
+        let entry = match self {
+            Self::SelectPuzzle(storage) => ctx
+                .save_state
+                .top_level_worlds()
+                .into_iter()
+                .find(|entry| entry.slot.puzzle == *storage),
+            Self::SelectSolution(storage) => ctx
+                .save_state
+                .selected_puzzle_solutions()
+                .iter()
+                .find(|entry| entry.slot.solution.as_deref() == Some(storage.as_str())),
+            _ => None,
+        }?;
+        let updated = entry.updated_at.or(entry.created_at)?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(updated);
+        Some(format_relative_saved_at(updated, now))
     }
 
     fn button_selected(&self, ctx: &SaveListViewCtx<'_>) -> bool {

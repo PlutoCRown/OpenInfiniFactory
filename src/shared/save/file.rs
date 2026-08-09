@@ -5,6 +5,8 @@ impl SaveFile {
                 version: SAVE_VERSION,
                 kind: SaveMetaKind::Puzzle,
                 name: None,
+                created_at: None,
+                updated_at: None,
                 puzzle_id: None,
                 hotbar: layer.hotbar,
                 player,
@@ -27,6 +29,8 @@ impl SaveFile {
                 version: SAVE_VERSION,
                 kind: SaveMetaKind::Free,
                 name: None,
+                created_at: None,
+                updated_at: None,
                 puzzle_id: None,
                 hotbar: world.hotbar,
                 player,
@@ -55,6 +59,8 @@ impl SaveFile {
                 version: SAVE_VERSION,
                 kind: SaveMetaKind::Solution,
                 name: None,
+                created_at: None,
+                updated_at: None,
                 puzzle_id: Some(puzzle_id.to_string()),
                 hotbar: Some(*hotbar),
                 player,
@@ -191,13 +197,18 @@ fn load_puzzle_world(puzzle: &str) -> Option<WorldBlocks> {
 }
 
 fn write_save(slot: &SaveSlot, mut save: SaveFile) -> bool {
-    // 覆盖保存：名字 / 光照只保留磁盘上已有的，不在保存路径改写
+    let now = unix_now_secs();
+    // 覆盖保存：名字 / 光照 / 创建时间只保留磁盘上已有的；每次写入刷新 updated_at
     if let Some(existing) = read_save(slot) {
         save.meta.name = existing.meta.name;
         save.meta.sun = existing.meta.sun;
         save.meta.ambient = existing.meta.ambient;
         save.meta.sun_direction = existing.meta.sun_direction;
+        save.meta.created_at = existing.meta.created_at.or(Some(now));
+    } else {
+        save.meta.created_at = Some(now);
     }
+    save.meta.updated_at = Some(now);
     let path = slot.storage_path();
     let meta = match serde_json::to_string_pretty(&save.meta) {
         Ok(serialized) => serialized,
@@ -216,6 +227,13 @@ fn write_save(slot: &SaveSlot, mut save: SaveFile) -> bool {
     // 谜题存档：缺省时填入默认天空盒
     ensure_default_skybox_for_puzzle(&slot.puzzle);
     true
+}
+
+fn unix_now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 /// 读谜题 meta 光照

@@ -69,6 +69,9 @@ fn create_top_level_from_template(name: &str, kind: SaveKind) -> Option<SaveSlot
                 SaveKind::Solution => return None,
             };
             meta.name = Some(name.trim().to_string());
+            let now = unix_now_secs();
+            meta.created_at = Some(now);
+            meta.updated_at = Some(now);
             match serde_json::to_string_pretty(&meta) {
                 Ok(serialized) => serialized,
                 Err(error) => {

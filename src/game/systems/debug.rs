@@ -161,7 +161,7 @@ pub fn update_debug_ui(
         .unwrap_or(Vec3::ZERO);
 
     let sim_turn_text = if *builder_mode == BuilderMode::Play
-        && simulation.running
+        && simulation.is_active()
         && sim_stats.has_sample
     {
         format!(

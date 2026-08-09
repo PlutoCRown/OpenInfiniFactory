@@ -10,8 +10,8 @@ pub use crate::game::ui::core::{
 pub use crate::game::ui::features::save::types::{
     SaveListAction, SaveListCloseButton, SaveListCoverHost, SaveListCoverImage,
     SaveListCoverLoading, SaveListFreeHint, SaveListPanel, SaveListPuzzleRows,
-    SaveListPuzzleScroll, SaveListRenderState, SaveListSolutionRows, SaveListSolutionScroll,
-    SaveListSolutionSection, SaveListTitleText,
+    SaveListPuzzleScroll, SaveListRenderState, SaveListRowMeta, SaveListRowName,
+    SaveListSolutionRows, SaveListSolutionScroll, SaveListSolutionSection, SaveListTitleText,
 };
 pub use crate::game::ui::features::settings::types::{
     GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
