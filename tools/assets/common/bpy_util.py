@@ -245,6 +245,18 @@ def boolean_union(target: bpy.types.Object, other: bpy.types.Object) -> None:
     bpy.data.objects.remove(other, do_unlink=True)
 
 
+def boolean_intersect(target: bpy.types.Object, other: bpy.types.Object) -> None:
+    """target ∩ other，并删除 other。"""
+    apply_transforms(other)
+    set_active(target)
+    mod = target.modifiers.new("BoolIntersect", "BOOLEAN")
+    mod.operation = "INTERSECT"
+    mod.solver = "EXACT"
+    mod.object = other
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+    bpy.data.objects.remove(other, do_unlink=True)
+
+
 def join_objects(name: str, objs: list[bpy.types.Object]) -> bpy.types.Object:
     """把多个物体 join 成一个，命名为 name。"""
     assert objs

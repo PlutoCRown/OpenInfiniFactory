@@ -44,7 +44,7 @@ mod model_spawn;
 
 use bevy::prelude::*;
 
-pub use self::model_spawn::{spawn_factory_wire_arm, spawn_model_parts};
+pub use self::model_spawn::{spawn_factory_wire_arm, spawn_factory_wire_core, spawn_model_parts};
 pub use self::registry::{
     PLAY_BLOCKS, all_blocks, assert_registry_consistent, edit_blocks, save_stores_facing,
 };

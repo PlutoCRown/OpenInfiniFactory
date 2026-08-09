@@ -4,6 +4,8 @@
 节点名按 export_yup 后的游戏局部轴：PosX / NegX / PosY / NegY / PosZ / NegZ
 （游戏中可按面显隐）。
 
+另有恒定显示的 Core：三轴贯穿八角柱求交，填满拐角接缝。
+
 端面圆形接口：直接把供电口贴图 UV 到八角柱 +Z 端面（不多加圆盘）。
 两根电线对接时橙臂贴齐成一根棍。
 
@@ -27,13 +29,13 @@ from common.bpy_util import (
     apply_mat,
     apply_transforms,
     boolean_diff,
+    boolean_intersect,
     clear_scene,
     export_factory_glb,
     finish,
     join_objects,
     link,
     make_mat,
-    mesh_cube,
     set_active,
 )
 from common.power_port_geom import WIRE_PORT, make_power_port_material
@@ -53,9 +55,11 @@ ARM_W = 0.30
 ARM_Z0 = 0.0
 ARM_Z1 = CELL
 
+# 通电条：单面片宽（嵌在 V 口略内侧）；长度与凹槽同长
 POWER_W = 0.028
-POWER_D = 0.018
-POWER_LEN_RATIO = 0.72
+GROOVE_W = 0.04
+GROOVE_D = 0.035
+GROOVE_LEN_RATIO = 0.88
 
 
 def mesh_oct_prism(
@@ -120,6 +124,84 @@ def paint_power_port_on_arm_end(
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
+def mesh_v_groove_cutter(
+    name: str,
+    out: Vector,
+    tangent: Vector,
+    surface_r: float,
+    groove_w: float,
+    groove_d: float,
+    z0: float,
+    z1: float,
+) -> bpy.types.Object:
+    """三角棱柱切割体：扁平面开口宽 = groove_w，尖朝内，布尔挖 V 槽。"""
+    half = groove_w * 0.5
+    tip = out * (surface_r - groove_d)
+    # 开口落在扁平面上，再沿 tip→开口 射线略伸出表面，保证布尔切穿
+    left_s = out * surface_r + tangent * half
+    right_s = out * surface_r - tangent * half
+
+    def extend_past(p: Vector) -> Vector:
+        d = p - tip
+        return tip + d * ((d.length + 0.03) / d.length)
+
+    left = extend_past(left_s)
+    right = extend_past(right_s)
+
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    v = [
+        bm.verts.new((tip.x, tip.y, z0)),
+        bm.verts.new((left.x, left.y, z0)),
+        bm.verts.new((right.x, right.y, z0)),
+        bm.verts.new((tip.x, tip.y, z1)),
+        bm.verts.new((left.x, left.y, z1)),
+        bm.verts.new((right.x, right.y, z1)),
+    ]
+    bm.faces.new((v[0], v[1], v[2]))
+    bm.faces.new((v[3], v[5], v[4]))
+    bm.faces.new((v[0], v[3], v[4], v[1]))
+    bm.faces.new((v[1], v[4], v[5], v[2]))
+    bm.faces.new((v[2], v[5], v[3], v[0]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    if bm.calc_volume() < 0.0:
+        bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.validate(clean_customdata=True)
+    mesh.update()
+    obj = bpy.data.objects.new(name, mesh)
+    link(obj)
+    return obj
+
+
+def mesh_outward_quad(
+    name: str,
+    out: Vector,
+    tangent: Vector,
+    radius: float,
+    half_w: float,
+    z0: float,
+    z1: float,
+) -> bpy.types.Object:
+    """单面片（法线朝 out），作通电灯条。"""
+    a = out * radius + tangent * half_w
+    b = out * radius - tangent * half_w
+    # 绕序使法线朝外
+    verts = [
+        (a.x, a.y, z0),
+        (b.x, b.y, z0),
+        (b.x, b.y, z1),
+        (a.x, a.y, z1),
+    ]
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(verts, [], [(0, 1, 2, 3)])
+    mesh.update()
+    obj = bpy.data.objects.new(name, mesh)
+    link(obj)
+    return obj
+
+
 def build_arm_along_pos_z(
     mat_orange: bpy.types.Material,
     mat_port: bpy.types.Material,
@@ -131,33 +213,44 @@ def build_arm_along_pos_z(
     arm_h = ARM_Z1 - ARM_Z0
     arm_z = (ARM_Z0 + ARM_Z1) * 0.5
     oct_r = ARM_W * 0.5 / math.cos(math.radians(22.5))
+    surface_r = ARM_W * 0.5
 
     arm = mesh_oct_prism("Arm", oct_r, arm_h, Vector((0, 0, arm_z)))
     apply_mat(arm, mat_orange)
     apply_transforms(arm)
 
-    groove_w, groove_d = 0.04, 0.035
+    groove_len = arm_h * GROOVE_LEN_RATIO
+    gz0 = arm_z - groove_len * 0.5
+    gz1 = arm_z + groove_len * 0.5
+    # 灯条与凹槽同长
+    # 灯条略沉入 V 口，避免与外皮共面闪烁
+    strip_r = surface_r - GROOVE_D * 0.22
+
     for ang in (0.0, 90.0, 180.0, 270.0):
         rad = math.radians(ang)
-        ox = math.cos(rad) * (ARM_W * 0.5 - groove_d * 0.35)
-        oy = math.sin(rad) * (ARM_W * 0.5 - groove_d * 0.35)
-        cutter = mesh_cube(
+        out = Vector((math.cos(rad), math.sin(rad), 0.0))
+        tangent = Vector((-math.sin(rad), math.cos(rad), 0.0))
+        cutter = mesh_v_groove_cutter(
             f"Groove_{ang}",
-            Vector((groove_d, groove_w, arm_h * 0.88)),
-            Vector((ox, oy, arm_z)),
+            out,
+            tangent,
+            surface_r,
+            GROOVE_W,
+            GROOVE_D,
+            gz0,
+            gz1,
         )
-        cutter.rotation_euler = Euler((0, 0, rad))
-        apply_transforms(cutter)
         boolean_diff(arm, cutter)
 
-        px = math.cos(rad) * (ARM_W * 0.5 - groove_d * 0.55)
-        py = math.sin(rad) * (ARM_W * 0.5 - groove_d * 0.55)
-        glow = mesh_cube(
+        glow = mesh_outward_quad(
             f"Power_{ang}",
-            Vector((POWER_D, POWER_W, arm_h * POWER_LEN_RATIO)),
-            Vector((px, py, arm_z)),
+            out,
+            tangent,
+            strip_r,
+            POWER_W * 0.5,
+            gz0,
+            gz1,
         )
-        glow.rotation_euler = Euler((0, 0, rad))
         power_parts.append(finish(glow, mat_power))
 
     paint_power_port_on_arm_end(arm, mat_orange, mat_port)
@@ -181,6 +274,35 @@ FACE_ORIENTATIONS: list[tuple[str, Euler]] = [
 ]
 
 
+def build_core(mat_orange: bpy.types.Material) -> bpy.types.Object:
+    """三轴贯穿八角柱求交 → 中心核（恒定显示，填拐角）。"""
+    oct_r = ARM_W * 0.5 / math.cos(math.radians(22.5))
+    # 沿格边贯穿：长度 1，中心在原点
+    along_z = mesh_oct_prism("CoreZ", oct_r, 1.0, Vector((0, 0, 0)))
+    apply_mat(along_z, mat_orange)
+    apply_transforms(along_z)
+
+    along_x = mesh_oct_prism("CoreX", oct_r, 1.0, Vector((0, 0, 0)))
+    along_x.rotation_euler = Euler((0, math.radians(90), 0))
+    apply_mat(along_x, mat_orange)
+    apply_transforms(along_x)
+
+    along_y = mesh_oct_prism("CoreY", oct_r, 1.0, Vector((0, 0, 0)))
+    along_y.rotation_euler = Euler((math.radians(90), 0, 0))
+    apply_mat(along_y, mat_orange)
+    apply_transforms(along_y)
+
+    boolean_intersect(along_z, along_x)
+    boolean_intersect(along_z, along_y)
+    # 略缩小，避免与臂根部共面 z-fighting（GLB 无法设绘制优先级）
+    along_z.scale = Vector((0.94, 0.94, 0.94))
+    apply_transforms(along_z)
+    along_z.name = "Core"
+    if along_z.data:
+        along_z.data.name = "Mesh_Core"
+    return along_z
+
+
 def main() -> None:
     clear_scene()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -197,6 +319,9 @@ def main() -> None:
         bsdf.inputs["Emission Strength"].default_value = 4.0
     elif "Emission" in bsdf.inputs:
         bsdf.inputs["Emission"].default_value = (1.0, 1.0, 1.0, 1.0)
+
+    print("building Core…", file=sys.stderr)
+    build_core(mat_orange)
 
     for name, rot in FACE_ORIENTATIONS:
         print(f"building {name}…", file=sys.stderr)

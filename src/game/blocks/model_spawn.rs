@@ -290,7 +290,7 @@ pub fn spawn_factory_wire_arm(
     powered: bool,
     shorten_for_panel: bool,
 ) {
-    let Some(FactoryVisual::Wire { faces, power }) =
+    let Some(FactoryVisual::Wire { faces, power, .. }) =
         assets.factory_visual(crate::game::blocks::BlockKind::Wire)
     else {
         return;
@@ -345,3 +345,27 @@ pub fn spawn_factory_wire_arm(
     }
 }
 
+/// 电线中心核：恒定显示（填拐角接缝）
+pub fn spawn_factory_wire_core(
+    parent: &mut ChildSpawnerCommands,
+    assets: &WorldRenderAssets,
+    icon_layer: Option<&RenderLayers>,
+    preview: bool,
+) {
+    let Some(FactoryVisual::Wire { core, .. }) =
+        assets.factory_visual(crate::game::blocks::BlockKind::Wire)
+    else {
+        return;
+    };
+    for part in core {
+        let material = if preview {
+            part.preview_material.clone()
+        } else {
+            part.material.clone()
+        };
+        let mut child = parent.spawn((Mesh3d(part.mesh.clone()), MeshMaterial3d(material)));
+        if let Some(icon_layer) = icon_layer {
+            child.insert((icon_layer.clone(), BlockIconRenderEntity));
+        }
+    }
+}

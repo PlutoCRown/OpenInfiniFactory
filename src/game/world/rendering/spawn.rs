@@ -15,7 +15,7 @@ use crate::game::blocks::sign::visual::spawn_sign_visual;
 use crate::game::blocks::teleport::visual::spawn_teleport_visual;
 use crate::game::blocks::{
     BlockData, BlockKind, WeldConnectorBehavior, WireConnectorBehavior, spawn_factory_wire_arm,
-    spawn_model_parts,
+    spawn_factory_wire_core, spawn_model_parts,
 };
 use crate::game::simulation::structure_state::{FactoryActivity, StructureState};
 use crate::game::world::animation::{
@@ -721,6 +721,13 @@ pub(crate) fn spawn_block_model(
             }
 
             if use_factory_wire {
+                // 中心核恒定显示，填拐角
+                spawn_factory_wire_core(
+                    parent,
+                    assets,
+                    icon_render.map(|(_, layer)| layer),
+                    is_preview,
+                );
                 // 电线块：孤立/图标六向全画，单边连通补对向；吸盘：只画实际连通面
                 let mut faces: Vec<usize> = if data.kind == BlockKind::Wire
                     && (connected_offsets.is_empty() || icon_render.is_some())

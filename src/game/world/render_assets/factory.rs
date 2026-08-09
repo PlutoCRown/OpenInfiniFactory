@@ -39,8 +39,9 @@ pub enum FactoryVisual {
         stage: Vec<FactoryPartHandles>,
         head: Vec<FactoryPartHandles>,
     },
-    /// 电线六向臂：索引对齐 signal_neighbor_offsets；power 为通电凹槽灯
+    /// 电线：core 恒定显示；faces/power 按连通面显隐（索引对齐 signal_neighbor_offsets）
     Wire {
+        core: Vec<FactoryPartHandles>,
         faces: [Vec<FactoryPartHandles>; 6],
         power: [Vec<FactoryPartHandles>; 6],
     },
@@ -278,27 +279,18 @@ fn split_pusher_parts(
     Some(FactoryVisual::Pusher { body, stage, head })
 }
 
-/// 按 PosX…NegZ / PosX_Power… / PosX_Port… 拆电线六向臂与通电条
+/// 按 Core / PosX…NegZ / PosX_Power… 拆电线核与六向臂
 fn split_wire_faces(
     raw: Vec<FactoryGltfPart>,
     materials: &mut Assets<StandardMaterial>,
 ) -> Option<FactoryVisual> {
+    let mut core = Vec::new();
     let mut faces: [Vec<FactoryPartHandles>; 6] = Default::default();
     let mut power: [Vec<FactoryPartHandles>; 6] = Default::default();
-    let mut any = false;
+    let mut any_face = false;
     for part in raw {
         let group = part.group.as_deref().unwrap_or("");
-        let (is_power, rest) = match group.strip_suffix("_Power") {
-            Some(face) => (true, face),
-            None => (false, group),
-        };
-        // 端面供电口：PosY_Port → 与 PosY 同面
-        let face_name = rest.strip_suffix("_Port").unwrap_or(rest);
-        let Some(index) = wire_face_index(Some(face_name)) else {
-            continue;
-        };
-        any = true;
-        let mut handles = {
+        let handles = {
             let preview_material = materials
                 .get(&part.material)
                 .cloned()
@@ -308,28 +300,42 @@ fn split_wire_faces(
                 mesh: part.mesh,
                 material: part.material,
                 preview_material,
-                group: part.group,
+                group: part.group.clone(),
             }
         };
-        // 通电条：白自发光（须 lit，否则 emissive 不进 HDR，Bloom 无效）
+        if group == "Core" {
+            core.push(handles);
+            continue;
+        }
+        let (is_power, rest) = match group.strip_suffix("_Power") {
+            Some(face) => (true, face),
+            None => (false, group),
+        };
+        let face_name = rest.strip_suffix("_Port").unwrap_or(rest);
+        let Some(index) = wire_face_index(Some(face_name)) else {
+            continue;
+        };
+        any_face = true;
         if is_power {
-            handles.material = materials.add(StandardMaterial {
+            // 通电条：白自发光（须 lit，否则 emissive 不进 HDR，Bloom 无效）
+            let mut lit = handles;
+            lit.material = materials.add(StandardMaterial {
                 base_color: Color::WHITE,
                 emissive: LinearRgba::new(8.0, 8.0, 8.0, 1.0),
                 perceptual_roughness: 1.0,
                 metallic: 0.0,
                 ..default()
             });
-            handles.preview_material = handles.material.clone();
-            power[index].push(handles);
+            lit.preview_material = lit.material.clone();
+            power[index].push(lit);
         } else {
             faces[index].push(handles);
         }
     }
-    if !any {
+    if !any_face {
         return None;
     }
-    Some(FactoryVisual::Wire { faces, power })
+    Some(FactoryVisual::Wire { core, faces, power })
 }
 
 /// 电线节点名 → signal_neighbor_offsets 下标
