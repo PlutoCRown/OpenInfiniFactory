@@ -159,6 +159,7 @@ impl StructureState {
             return false;
         };
         let contacts = &structure.gravity_support;
+        // 仅场景 / Inactive 支撑可跨回合生效；撑在 Active 上时对方下回合可能自己动
         !contacts.is_empty()
             && contacts.iter().any(|(member, dir)| {
                 structure.positions.contains(member) && {
@@ -167,6 +168,11 @@ impl StructureState {
                         && !structure.positions.contains(&support)
                         && (!world.can_move_into_yielding_fragile(support)
                             || hard_pusher_head_occupancy.contains(&support))
+                        && (world.is_scene_at(support)
+                            || self.structure(support).is_some_and(|s| {
+                                s.kind == StructureKind::Factory
+                                    && s.activity == FactoryActivity::Inactive
+                            }))
                 }
             })
     }

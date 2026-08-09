@@ -1047,6 +1047,43 @@ mod moving_occupancy_cases {
         );
     }
 
+    /// 上块曾撑在 Active 下块上：下块本回合可落时空时，上块不得因跨回合 support 拒落
+    #[test]
+    fn support_on_active_must_not_block_cofall() {
+        let mut world = WorldBlocks::default();
+        world.insert(IVec3::new(0, 0, 0), scene());
+        world.insert(IVec3::new(0, 1, 0), mat());
+        world.insert(IVec3::new(0, 3, 0), mat());
+        world.insert(IVec3::new(0, 4, 0), mat());
+        let low = id_at(&world, IVec3::new(0, 1, 0));
+        let mid = id_at(&world, IVec3::new(0, 3, 0));
+        let top = id_at(&world, IVec3::new(0, 4, 0));
+
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let top_sid = structures.id_at(IVec3::new(0, 4, 0)).unwrap();
+        // 模拟上回合撑在 Active mid 上写入的缓存
+        structures.record_gravity_support(top_sid, &world, &HashSet::new());
+        assert!(
+            !structures.gravity_support_valid(top_sid, &world, &HashSet::new()),
+            "support on Active must not be valid across turns"
+        );
+
+        let mut pusher = PusherState::rebuild_from_world(&world);
+        turn(&mut world, &mut structures, &mut pusher, 1);
+        assert_eq!(
+            pos_of(&world, mid),
+            IVec3::new(0, 2, 0),
+            "mid falls into gap"
+        );
+        assert_eq!(
+            pos_of(&world, top),
+            IVec3::new(0, 3, 0),
+            "top cofalls with mid"
+        );
+        assert_eq!(pos_of(&world, low), IVec3::new(0, 1, 0), "low stays");
+    }
+
     /// 对向活塞轮流：一伸一收同向经过中间格
     #[test]
     fn opposing_pistons_alternate_extend_retract() {
