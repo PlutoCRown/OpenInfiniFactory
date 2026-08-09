@@ -83,14 +83,17 @@ pub fn update_status_ui(
     config: Res<GameConfig>,
     mut primed: Local<bool>,
     mut last_selected: Local<usize>,
+    mut last_held: Local<Option<InventoryItem>>,
     mut gameplay_cache: Local<GameplayStatusCache>,
     mut texts: Query<(&StatusText, &mut Text)>,
 ) {
     let force = !*primed;
+    let held = inventory.hotbar[placement.selected];
+    // 勿用 inventory.is_changed()：其它系统若误 DerefMut 会每帧脏，状态栏文案其实没变
     let headers_dirty = force
-        || inventory.is_changed()
         || save_state.is_changed()
-        || placement.selected != *last_selected;
+        || placement.selected != *last_selected
+        || held != *last_held;
     let aim_dirty = force || aim.is_changed();
     let blocks_dirty = force || world.is_changed();
     let gameplay_dirty = headers_dirty || aim_dirty || blocks_dirty;
@@ -98,6 +101,7 @@ pub fn update_status_ui(
         force || builder_mode.is_changed() || simulation.is_changed() || config.is_changed();
     *primed = true;
     *last_selected = placement.selected;
+    *last_held = held;
     if !force && !gameplay_dirty && !simulation_dirty {
         return;
     }

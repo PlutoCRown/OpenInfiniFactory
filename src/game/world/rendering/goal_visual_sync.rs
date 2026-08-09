@@ -15,7 +15,12 @@ use super::world_rebuild::{despawn_world, rebuild_world_for_debug_state};
 
 /// 注册验收器外观与 BuilderMode 的同步
 pub fn register_goal_visual_systems(app: &mut App) {
-    app.add_systems(Update, sync_goal_play_visual_on_builder_mode);
+    app.add_systems(
+        Update,
+        sync_goal_play_visual_on_builder_mode
+            .after(crate::game::systems::perf::PerfScope::Menus)
+            .before(crate::game::systems::perf::PerfScope::Simulation),
+    );
 }
 
 /// BuilderMode 变化时切换验收器外观并重建世界

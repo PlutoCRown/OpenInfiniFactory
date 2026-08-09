@@ -36,11 +36,15 @@ impl Plugin for InventoryPlugin {
             // 热栏 / tooltip 常驻，不能绑 inventory_open，否则关背包后不刷新、tooltip 残留
             .add_systems(
                 Update,
-                (update_inventory_slots, update_item_tooltip)
+                (
+                    update_inventory_slots,
+                    update_item_tooltip,
+                    update_carried_item_ui,
+                )
                     .run_if(|mode: Res<State<GameMode>>| *mode.get() == GameMode::Playing)
                     .in_set(UiAccessScope)
                     .after(PerfScope::Animation)
-                    .before(PerfScope::Ui),
+                    .before(crate::game::systems::perf::perf_mark_ui_inventory),
             )
             .add_systems(
                 Update,
@@ -48,14 +52,7 @@ impl Plugin for InventoryPlugin {
                     .run_if(|playing_ui: Res<PlayingUiState>| playing_ui.inventory_open)
                     .in_set(UiAccessScope)
                     .after(PerfScope::Animation)
-                    .before(PerfScope::Ui),
-            )
-            .add_systems(
-                Update,
-                update_carried_item_ui
-                    .in_set(UiAccessScope)
-                    .after(PerfScope::Animation)
-                    .before(PerfScope::Ui),
+                    .before(crate::game::systems::perf::perf_mark_ui_inventory),
             );
     }
 }

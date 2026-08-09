@@ -1,5 +1,6 @@
 //! 悬停准星、结构包围盒与 FOV
 
+use crate::game::blocks::BlockData;
 use crate::game::local_player::LocalPlayerMut;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -27,6 +28,20 @@ use crate::shared::config::{ConfigSelectionMode, GameConfig};
 
 use super::placement::{attachment_place_block, preview_world, selected_place_block};
 use super::rules::can_place_block_at;
+
+/// 放置预览缓存键：同键不重建，避免每帧 clone 世界 + 销毁/生成 GLB
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HoverPreviewKey {
+    LightPanel {
+        pos: IVec3,
+        normal: IVec3,
+    },
+    Block {
+        place_at: IVec3,
+        block: BlockData,
+        plane_normal: IVec3,
+    },
+}
 
 /// 根据设置同步玩家相机 FOV
 pub fn apply_fov(
@@ -72,6 +87,7 @@ pub fn update_hover(
     world: Res<WorldBlocks>,
     structure_state: Res<StructureState>,
     mut hover_bounds: ResMut<HoverStructureBounds>,
+    mut last_preview: Local<Option<HoverPreviewKey>>,
     mut marker: Query<
         (
             &mut Transform,
@@ -94,11 +110,14 @@ pub fn update_hover(
     >,
     mut preview_deps: HoverPreviewDeps,
 ) {
-    let placement = &mut *player.placement;
+    // 勿提前 `&mut *placement`：Bevy 会在 DerefMut 时标 changed，即使本帧没改字段
 
     if !gate.allows_active_play(&player.playing_ui) {
-        placement.target = None;
+        if player.placement.target.is_some() {
+            player.placement.target = None;
+        }
         hover_bounds.bounds = None;
+        *last_preview = None;
         if let Ok((_, mut visibility, _)) = marker.single_mut() {
             *visibility = Visibility::Hidden;
         }
@@ -116,46 +135,52 @@ pub fn update_hover(
     let origin = camera_transform.translation;
     let dir = *camera_transform.forward();
 
-    if let Some(gesture) = placement.edit_gesture.as_mut() {
+    let next_target = if player.placement.edit_gesture.is_some() {
+        let gesture = player
+            .placement
+            .edit_gesture
+            .as_mut()
+            .expect("checked is_some");
         if !gesture.canceled {
             let selection_mode = match gesture.kind {
                 EditGestureKind::Place { .. } => config.place_selection_mode,
                 EditGestureKind::Delete => config.delete_selection_mode,
             };
             if selection_mode != ConfigSelectionMode::Point {
-                if let Some(cell) = raycast_edit_drag_grid(
+                raycast_edit_drag_grid(
                     origin,
                     dir,
                     gesture.start,
                     selection_mode,
                     gesture.plane_normal,
-                ) {
-                    placement.target = Some(TargetHit {
-                        pos: cell,
-                        normal: IVec3::ZERO,
-                    });
-                }
+                )
+                .map(|cell| TargetHit {
+                    pos: cell,
+                    normal: IVec3::ZERO,
+                })
             } else {
-                placement.target = raycast_blocks(origin, dir, &world);
+                raycast_blocks(origin, dir, &world)
             }
         } else {
-            placement.target = raycast_blocks(origin, dir, &world);
+            raycast_blocks(origin, dir, &world)
         }
-    } else if let Some(drag) = placement.selection.drag {
+    } else if let Some(drag) = player.placement.selection.drag {
         // 与放置/删除相同：以抓住的格为起点，线/面拖拽求终点（点选配置退化为面选）
         let mode = match config.place_selection_mode {
             ConfigSelectionMode::Point => ConfigSelectionMode::Plane,
             other => other,
         };
-        if let Some(cell) = raycast_edit_drag_grid(origin, dir, drag.start, mode, drag.plane_normal)
-        {
-            placement.target = Some(TargetHit {
+        raycast_edit_drag_grid(origin, dir, drag.start, mode, drag.plane_normal).map(|cell| {
+            TargetHit {
                 pos: cell,
                 normal: IVec3::ZERO,
-            });
-        }
+            }
+        })
     } else {
-        placement.target = raycast_blocks(origin, dir, &world);
+        raycast_blocks(origin, dir, &world)
+    };
+    if player.placement.target != next_target {
+        player.placement.target = next_target;
     }
 
     let Ok((_, mut marker_visibility, _)) = marker.single_mut() else {
@@ -170,87 +195,125 @@ pub fn update_hover(
     if gate.simulation.is_active() {
         *face_visibility = Visibility::Hidden;
         hover_bounds.bounds = None;
+        *last_preview = None;
         despawn_edit_previews(&mut preview_deps.commands, &preview_deps.edit_previews);
         return;
     }
-    if let Some(target) = placement.target {
+    if let Some(target) = player.placement.target {
         *face_transform = block_face_highlight_transform(target.pos, target.normal);
         *face_visibility = Visibility::Visible;
     } else {
         *face_visibility = Visibility::Hidden;
     }
 
-    if placement.edit_gesture.is_none() {
-        hover_bounds.bounds = placement.target.and_then(|target| {
+    if player.placement.edit_gesture.is_none() {
+        hover_bounds.bounds = player.placement.target.and_then(|target| {
             hover_structure_bounds(&world, &structure_state, debug.factory_activity, target.pos)
         });
     } else {
         hover_bounds.bounds = None;
     }
 
-    if placement.edit_gesture.is_none() {
-        despawn_edit_previews(&mut preview_deps.commands, &preview_deps.edit_previews);
-        let light_panel_selected =
-            player.inventory.hotbar[placement.selected].is_some_and(|item| item.is_light_panel());
-        if light_panel_selected {
-            if let (Some(target), Some(render_assets)) = (
-                placement
-                    .target
-                    .filter(|target| target.normal != IVec3::ZERO),
-                preview_deps.render_assets.as_ref(),
-            ) {
-                if world.blocks.get(&target.pos).is_some_and(|block| {
-                    block.kind.signal_behavior(block.facing)
-                        == Some(crate::game::blocks::SignalBehavior::Wire)
-                }) {
-                    let mut transform = light_panel_transform(target.normal);
-                    transform.translation += grid_to_world(target.pos);
-                    preview_deps.commands.spawn((
-                        Mesh3d(render_assets.light_panel_mesh()),
-                        MeshMaterial3d(render_assets.light_panel_material.clone()),
-                        transform,
-                        EditPreview,
-                    ));
-                }
-            }
+    if player.placement.edit_gesture.is_none() {
+        let light_panel_selected = player.inventory.hotbar[player.placement.selected]
+            .is_some_and(|item| item.is_light_panel());
+        let next_preview = if light_panel_selected {
+            player
+                .placement
+                .target
+                .filter(|target| target.normal != IVec3::ZERO)
+                .filter(|target| {
+                    world.blocks.get(&target.pos).is_some_and(|block| {
+                        block.kind.signal_behavior(block.facing)
+                            == Some(crate::game::blocks::SignalBehavior::Wire)
+                    })
+                })
+                .map(|target| HoverPreviewKey::LightPanel {
+                    pos: target.pos,
+                    normal: target.normal,
+                })
         } else if let (Some(target), Some(block)) = (
-            placement
+            player
+                .placement
                 .target
                 .filter(|target| target.normal != IVec3::ZERO),
             selected_place_block(
                 &player.inventory,
                 *player.builder_mode,
                 preview_deps.solution_state.entry,
-                &placement,
+                &player.placement,
             ),
         ) {
-            if let Some(render_assets) = preview_deps.render_assets.as_ref() {
-                let place_at = target.pos + target.normal;
-                let player_pos = preview_deps
-                    .player
-                    .single()
-                    .ok()
-                    .map(|transform| transform.translation);
-                if can_place_block_at(
+            let place_at = target.pos + target.normal;
+            let player_pos = preview_deps
+                .player
+                .single()
+                .ok()
+                .map(|transform| transform.translation);
+            can_place_block_at(
+                place_at,
+                block,
+                *player.builder_mode,
+                preview_deps.solution_state.entry,
+                &world,
+                player_pos,
+                Some(target.normal),
+            )
+            .then(|| {
+                let block = attachment_place_block(block, target.normal);
+                HoverPreviewKey::Block {
                     place_at,
                     block,
-                    *player.builder_mode,
-                    preview_deps.solution_state.entry,
-                    &world,
-                    player_pos,
-                    Some(target.normal),
-                ) {
-                    let block = attachment_place_block(block, target.normal);
-                    let preview_world = preview_world(&world, &[place_at], block);
-                    spawn_block_preview(
-                        &mut preview_deps.commands,
-                        &mut preview_deps.meshes,
-                        render_assets,
-                        &preview_world,
-                        place_at,
-                        block,
-                    );
+                    plane_normal: target.normal,
                 }
+            })
+        } else {
+            None
+        };
+
+        // 世界改过时电线等连通预览要重算；其余同键复用实体
+        let reuse = *last_preview == next_preview
+            && next_preview.is_some()
+            && !world.is_changed()
+            && !preview_deps.edit_previews.is_empty();
+        if reuse {
+            return;
+        }
+
+        despawn_edit_previews(&mut preview_deps.commands, &preview_deps.edit_previews);
+        *last_preview = next_preview;
+        let Some(preview) = next_preview else {
+            return;
+        };
+        let Some(render_assets) = preview_deps.render_assets.as_ref() else {
+            *last_preview = None;
+            return;
+        };
+        match preview {
+            HoverPreviewKey::LightPanel { pos, normal } => {
+                let mut transform = light_panel_transform(normal);
+                transform.translation += grid_to_world(pos);
+                preview_deps.commands.spawn((
+                    Mesh3d(render_assets.light_panel_mesh()),
+                    MeshMaterial3d(render_assets.light_panel_material.clone()),
+                    transform,
+                    EditPreview,
+                ));
+            }
+            HoverPreviewKey::Block {
+                place_at,
+                block,
+                plane_normal: _,
+            } => {
+                let preview_world = preview_world(&world, &[place_at], block);
+                spawn_block_preview(
+                    &mut preview_deps.commands,
+                    &mut preview_deps.meshes,
+                    render_assets,
+                    &preview_world,
+                    place_at,
+                    block,
+                );
             }
         }
     }

@@ -54,10 +54,15 @@ perf_scopes! {
     Simulation => "Simulation",
     View => "View",
     Animation => "Animation",
-    Ui => "UI",
+    UiInventory => "UI/Inv",
+    UiStatus => "UI/Status",
+    UiChrome => "UI/Chrome",
+    UiFeat => "UI/Feat",
     Debug => "Debug",
     PostUpdateStart => "Update tail",
+    PostUiPrepare => "Post/UI prep",
     PostUpdateUi => "Post/UI layout",
+    PostUiPost => "Post/UI post",
     PostUpdateTransform => "Post/Transform",
     PostVisPrep => "Post/Vis prep",
     PostVisCheck => "Post/Vis check",
@@ -209,7 +214,7 @@ pub struct PerfPlugin;
 impl Plugin for PerfPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PerfStats>()
-            // 前半段拆开计时；后半段 View→Debug 串死以免漂进 UI
+            // 整条 Update 观测链串死，避免 Menus/Simulation 漂进 UI
             .configure_sets(
                 Update,
                 (
@@ -219,15 +224,10 @@ impl Plugin for PerfPlugin {
                     PerfScope::PlayerMove,
                     PerfScope::Hover,
                     PerfScope::Placement,
-                )
-                    .chain(),
-            )
-            .configure_sets(
-                Update,
-                (
+                    PerfScope::Menus,
+                    PerfScope::Simulation,
                     PerfScope::View,
                     PerfScope::Animation,
-                    PerfScope::Ui,
                     PerfScope::Debug,
                 )
                     .chain(),
@@ -258,7 +258,20 @@ impl Plugin for PerfPlugin {
             .add_systems(Update, perf_mark_simulation.in_set(PerfScope::Simulation))
             .add_systems(Update, perf_mark_view.in_set(PerfScope::View))
             .add_systems(Update, perf_mark_animation.in_set(PerfScope::Animation))
-            .add_systems(Update, perf_mark_ui.in_set(PerfScope::Ui))
+            // UI 子段标记：挂在 UiAccessScope 内、夹在各业务系统之间（勿再 chain 进全局 Update）
+            .add_systems(
+                Update,
+                (
+                    perf_mark_ui_inventory,
+                    perf_mark_ui_status,
+                    perf_mark_ui_chrome,
+                    perf_mark_ui_feat,
+                )
+                    .chain()
+                    .in_set(crate::game::ui::UiAccessScope)
+                    .after(PerfScope::Animation)
+                    .before(PerfScope::Debug),
+            )
             .add_systems(Update, perf_mark_debug.in_set(PerfScope::Debug))
             .add_systems(
                 PostUpdate,
@@ -268,9 +281,23 @@ impl Plugin for PerfPlugin {
             )
             .add_systems(
                 PostUpdate,
+                perf_mark_post_ui_prepare
+                    .in_set(PerfScope::PostUiPrepare)
+                    .after(UiSystems::Prepare)
+                    .before(UiSystems::Layout),
+            )
+            .add_systems(
+                PostUpdate,
                 perf_mark_post_update_ui
                     .in_set(PerfScope::PostUpdateUi)
                     .after(UiSystems::Layout)
+                    .before(UiSystems::PostLayout),
+            )
+            .add_systems(
+                PostUpdate,
+                perf_mark_post_ui_post
+                    .in_set(PerfScope::PostUiPost)
+                    .after(UiSystems::PostLayout)
                     .before(TransformSystems::Propagate),
             )
             .add_systems(

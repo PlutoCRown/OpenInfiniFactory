@@ -23,7 +23,6 @@ pub use systems::{
 };
 pub use types::*;
 
-use crate::game::systems::perf::PerfScope;
 use crate::game::ui::core::confirm_dialog::{
     PendingConfirmHandler, emit_confirm_dialog_actions, update_confirm_dialog_ui,
 };
@@ -74,6 +73,28 @@ impl Plugin for GameUiPlugin {
             .add_observer(emit_text_prompt_actions)
             .add_systems(
                 Update,
+                update_status_ui
+                    .in_set(UiAccessScope)
+                    .after(crate::game::systems::perf::perf_mark_ui_inventory)
+                    .before(crate::game::systems::perf::perf_mark_ui_status),
+            )
+            .add_systems(
+                Update,
+                update_hud_visibility
+                    .in_set(UiAccessScope)
+                    .after(crate::game::systems::perf::perf_mark_ui_status)
+                    .before(crate::game::systems::perf::perf_mark_ui_chrome),
+            )
+            .add_systems(
+                Update,
+                (update_panel_visibility, update_ui_layers)
+                    .chain()
+                    .in_set(UiAccessScope)
+                    .after(crate::game::systems::perf::perf_mark_ui_status)
+                    .before(crate::game::systems::perf::perf_mark_ui_chrome),
+            )
+            .add_systems(
+                Update,
                 (
                     update_localized_ui,
                     update_text_prompt_ui,
@@ -83,23 +104,8 @@ impl Plugin for GameUiPlugin {
                     apply_ui_font,
                 )
                     .in_set(UiAccessScope)
-                    .after(PerfScope::Animation)
-                    .before(PerfScope::Ui),
-            )
-            .add_systems(
-                Update,
-                (update_panel_visibility, update_ui_layers)
-                    .chain()
-                    .in_set(UiAccessScope)
-                    .after(PerfScope::Animation)
-                    .before(PerfScope::Ui),
-            )
-            .add_systems(
-                Update,
-                (update_status_ui, update_hud_visibility)
-                    .in_set(UiAccessScope)
-                    .after(PerfScope::Animation)
-                    .before(PerfScope::Ui),
+                    .after(crate::game::systems::perf::perf_mark_ui_status)
+                    .before(crate::game::systems::perf::perf_mark_ui_chrome),
             );
     }
 }

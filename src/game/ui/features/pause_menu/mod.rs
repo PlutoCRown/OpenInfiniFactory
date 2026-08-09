@@ -187,8 +187,8 @@ impl Plugin for PauseMenuPlugin {
                     .run_if(|playing_ui: Res<PlayingUiState>| playing_ui.paused)
                     .in_set(UiAccessScope)
                     .after(crate::game::ui::update_localized_ui)
-                    .after(PerfScope::Animation)
-                    .before(PerfScope::Ui),
+                    .after(crate::game::systems::perf::perf_mark_ui_chrome)
+                    .before(crate::game::systems::perf::perf_mark_ui_feat),
             ),
         );
     }

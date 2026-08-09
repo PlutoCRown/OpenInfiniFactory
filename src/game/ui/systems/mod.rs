@@ -16,7 +16,7 @@ use crate::game::ui::components::ui_logical_bounds;
 
 use super::types::{
     CarriedItem, Crosshair, GameplayHudVisibility, InGameHudStyle, InGameHudVisibility,
-    InlineTextEditState, InventoryItems, LocalizedText, OpenBlockPanelDropdown,
+    InlineTextEditState, InventoryItem, InventoryItems, LocalizedText, OpenBlockPanelDropdown,
     OpenSettingsDropdown, PanelCloseButton, PanelDragState, PanelFlowLayout, PanelPosition,
     PanelTitleBar, PanelVisibility, PanelWindow, PendingKeyBind, SettingsTab, StatusText,
     StatusTextKind, TextPromptRoot, TextPromptState, UiHost, UiHoverState, UiPanelBinding,

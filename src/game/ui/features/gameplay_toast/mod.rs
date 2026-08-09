@@ -3,7 +3,6 @@
 use bevy::prelude::*;
 
 use crate::game::state::{GameMode, PlacementState};
-use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::UiAccessScope;
 use crate::game::ui::components::text;
 use crate::game::ui::types::{InventoryItem, InventoryItems};
@@ -29,10 +28,7 @@ impl GameplayToast {
 
     /// 「表面不可放置 {item}」
     pub fn show_cannot_place_on_surface(&mut self, locale: &I18n, item_name: &str) {
-        self.show(locale.fmt(
-            "toast.cannot_place_on_surface",
-            &[("item", item_name)],
-        ));
+        self.show(locale.fmt("toast.cannot_place_on_surface", &[("item", item_name)]));
     }
 }
 
@@ -130,15 +126,12 @@ impl Plugin for GameplayToastPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<GameplayToast>().add_systems(
             Update,
-            (
-                toast_on_hotbar_select,
-                update_gameplay_toast,
-            )
+            (toast_on_hotbar_select, update_gameplay_toast)
                 .chain()
                 .run_if(|mode: Res<State<GameMode>>| *mode.get() == GameMode::Playing)
                 .in_set(UiAccessScope)
-                .after(PerfScope::Placement)
-                .before(PerfScope::Ui),
+                .after(crate::game::systems::perf::perf_mark_ui_chrome)
+                .before(crate::game::systems::perf::perf_mark_ui_feat),
         );
     }
 }

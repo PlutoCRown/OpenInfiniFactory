@@ -250,7 +250,9 @@ impl Plugin for GamePlugin {
             )
             .add_systems(
                 Update,
-                sync_factory_activity_debug_overlays.after(update_hover),
+                sync_factory_activity_debug_overlays
+                    .after(update_hover)
+                    .before(PerfScope::Hover),
             )
             .add_systems(
                 Update,
@@ -262,7 +264,8 @@ impl Plugin for GamePlugin {
                 Update,
                 sync_edit_bounds_overlays
                     .after(placement_input)
-                    .after(PerfScope::Placement),
+                    .after(PerfScope::Placement)
+                    .before(PerfScope::Menus),
             )
             .add_systems(
                 Update,
@@ -272,7 +275,9 @@ impl Plugin for GamePlugin {
             )
             .add_systems(
                 Update,
-                sync_generator_config_material_preview.after(simulation_controls),
+                sync_generator_config_material_preview
+                    .after(simulation_controls)
+                    .before(PerfScope::Simulation),
             )
             .add_systems(
                 Update,
@@ -320,7 +325,7 @@ impl Plugin for GamePlugin {
                     systems::debug::draw_player_collider,
                 )
                     .chain()
-                    .after(PerfScope::Ui)
+                    .after(crate::game::systems::perf::perf_mark_ui_feat)
                     .before(PerfScope::Debug),
             );
     }

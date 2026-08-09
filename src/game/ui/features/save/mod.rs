@@ -40,8 +40,8 @@ impl Plugin for SavePlugin {
                     )
                         .chain()
                         .in_set(UiAccessScope)
-                        .after(PerfScope::Animation)
-                        .before(PerfScope::Ui),
+                        .after(crate::game::systems::perf::perf_mark_ui_chrome)
+                        .before(crate::game::systems::perf::perf_mark_ui_feat),
                 ),
             );
     }

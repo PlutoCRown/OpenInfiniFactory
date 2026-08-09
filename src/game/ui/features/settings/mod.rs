@@ -45,8 +45,8 @@ impl Plugin for SettingsPlugin {
                         ui_runtime.is_settings_open()
                     })
                     .in_set(UiAccessScope)
-                    .after(PerfScope::Animation)
-                    .before(PerfScope::Ui),
+                    .after(crate::game::systems::perf::perf_mark_ui_chrome)
+                    .before(crate::game::systems::perf::perf_mark_ui_feat),
             );
     }
 }

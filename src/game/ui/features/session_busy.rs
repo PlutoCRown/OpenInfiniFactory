@@ -3,7 +3,6 @@
 use bevy::prelude::*;
 
 use crate::game::session::{SessionBusy, SessionBusyCover};
-use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::{UiAccessScope, UiMainThread, i18n};
 use crate::game::ui::components::text;
 
@@ -160,8 +159,8 @@ impl Plugin for SessionBusyUiPlugin {
             Update,
             update_session_busy_overlay
                 .in_set(UiAccessScope)
-                .after(PerfScope::Animation)
-                .before(PerfScope::Ui),
+                .after(crate::game::systems::perf::perf_mark_ui_chrome)
+                .before(crate::game::systems::perf::perf_mark_ui_feat),
         );
     }
 }

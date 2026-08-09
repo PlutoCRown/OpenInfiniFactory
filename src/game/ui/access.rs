@@ -68,7 +68,9 @@ fn with_ui<R>(f: impl FnOnce(&mut UiHostCommands) -> R) -> R {
     with_world(|world| {
         let mut state = SystemState::<UiHostCommands>::new(world);
         let mut params = state.get_mut(world).unwrap();
-        f(&mut params)
+        let out = f(&mut params);
+        state.apply(world);
+        out
     })
 }
 
@@ -134,7 +136,9 @@ impl UiAccess {
             };
             let mut state = SystemState::<UiHostCommands>::new(world);
             let mut params = state.get_mut(world).unwrap();
-            params.mount_settings(commands, root, context, &settings, panel_w, panel_h)
+            let id = params.mount_settings(commands, root, context, &settings, panel_w, panel_h);
+            state.apply(world);
+            id
         })
     }
 

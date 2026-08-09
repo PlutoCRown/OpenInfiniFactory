@@ -10,11 +10,13 @@ use crate::debug_http::protocol::{
     DebugHttpCommand, DebugHttpRequest, help_json, json_error, json_ok,
 };
 use crate::debug_http::snapshot::{
-    acceptors_json, block_json, block_json_with_structure, cursor_target_json,
-    embedded_status_json, perf_stats_json, player_entry_json, pos_json, power_query_json,
-    resolve_pos_query, resolve_structure_query, simulation_status_json,
+    acceptors_json, block_json_with_structure, cursor_target_json, embedded_status_json,
+    perf_stats_json, player_entry_json, pos_json, power_query_json, resolve_pos_query,
+    resolve_structure_query, simulation_status_json,
 };
-use crate::debug_http::world_ops::{block_kinds_json, parse_block_kind, parse_facing, place_blocks_box};
+use crate::debug_http::world_ops::{
+    block_kinds_json, parse_block_kind, parse_facing, place_blocks_box,
+};
 use crate::game::block_editing::world_refresh::refresh_world_after_edit_many;
 use crate::game::debug::SimulationDebugLog;
 use crate::game::player::controller::{FlyCamera, apply_player_save};

@@ -90,7 +90,6 @@ pub fn placement_input(
 
     let placement = &mut *player.placement;
     let edit_history = &mut *player.edit_history;
-    let inventory = &mut *player.inventory;
     let builder_mode = *player.builder_mode;
 
     if !gate.allows_active_play(&player.playing_ui) {
@@ -183,7 +182,7 @@ pub fn placement_input(
         return;
     }
 
-    if selected_area(inventory, placement) == Some(AreaKind::Selection) {
+    if selected_area(&player.inventory, placement) == Some(AreaKind::Selection) {
         let copy_chord = config.chord(crate::shared::config::ActionKeyName::Copy);
         {
             let mut edit = WorldEditScene {
@@ -228,7 +227,7 @@ pub fn placement_input(
 
     if input.pick.just_pressed {
         if let Some(pos) = current_target_pos {
-            pick_target_block(pos, &world, placement, inventory);
+            pick_target_block(pos, &world, placement, &mut player.inventory);
         }
         placement.edit_gesture = None;
         despawn_edit_previews(&mut commands, &edit_previews);
@@ -307,7 +306,7 @@ pub fn placement_input(
                     }
                     solution_state.dirty = true;
                 } else if selected_place_block(
-                    inventory,
+                    &player.inventory,
                     builder_mode,
                     solution_state.entry,
                     placement,
@@ -318,8 +317,13 @@ pub fn placement_input(
                         rotate_facing(placement.preview_facing, reverse_rotation);
                 }
             }
-        } else if selected_place_block(inventory, builder_mode, solution_state.entry, placement)
-            .is_some_and(|block| can_manual_rotate(block.kind))
+        } else if selected_place_block(
+            &player.inventory,
+            builder_mode,
+            solution_state.entry,
+            placement,
+        )
+        .is_some_and(|block| can_manual_rotate(block.kind))
         {
             placement.preview_facing = rotate_facing(placement.preview_facing, reverse_rotation);
         }
@@ -408,7 +412,7 @@ pub fn placement_input(
 
     if input.place.just_pressed {
         // 灯面板：点在电线表面即时粘贴，不走占格手势
-        if inventory.hotbar[placement.selected].is_some_and(|item| item.is_light_panel()) {
+        if player.inventory.hotbar[placement.selected].is_some_and(|item| item.is_light_panel()) {
             let item_name = locale.t("item.light_panel").to_string();
             let mut placed = false;
             if let Some(target) = placement
@@ -474,7 +478,7 @@ pub fn placement_input(
             None => {
                 if let Some(start) = current_place_at {
                     if let Some(block) = selected_place_block(
-                        inventory,
+                        &player.inventory,
                         builder_mode,
                         solution_state.entry,
                         placement,
