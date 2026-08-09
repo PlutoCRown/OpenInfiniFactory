@@ -5,7 +5,7 @@
   - 钻头格：Y ∈ [+0.5, +1.5]
 
 同一 model.glb 内两个独立节点（方便对 Head 做旋转动画）：
-  - Body：蓝尾环 + 深灰散热槽 + 橙框
+  - Body：蓝尾环 + 深灰散热槽 + 橙板
   - Head：阶梯锥 + 尖齿
 
 用法：
@@ -17,16 +17,26 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+
 _TOOLS = Path(__file__).resolve().parents[2]
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 from common.paths import REPO_ROOT
-from common.bpy_util import apply_mat, apply_transforms, boolean_diff, clear_scene, export_factory_glb, join_objects, link, make_mat, mesh_cube, mesh_cylinder, set_active
+from common.bpy_util import (
+    apply_mat,
+    apply_transforms,
+    boolean_diff,
+    clear_scene,
+    export_factory_glb,
+    join_objects,
+    make_mat,
+    mesh_cube,
+    mesh_cylinder,
+)
 
 import math
 
 import bpy
-import bmesh
 from mathutils import Euler, Vector
 
 OUT_DIR = REPO_ROOT / "assets" / "factory_blocks" / "drill"
@@ -76,9 +86,8 @@ def build_body(
     mat_dark: bpy.types.Material,
     mat_orange: bpy.types.Material,
     mat_blue: bpy.types.Material,
-    mat_recess: bpy.types.Material,
 ) -> list[bpy.types.Object]:
-    """蓝尾环 + 深灰散热槽机身 + 橙框。"""
+    """蓝尾环 + 深灰散热槽机身 + 橙板。"""
     # 屁股蓝环
     blue = mesh_cube(
         "BlueRing",
@@ -138,6 +147,7 @@ def build_body(
             ),
         )
 
+    # 前脸橙板：实心长方体（钻头从板前伸出，中间挖孔看不见）
     frame = mesh_cube(
         "OrangeFrame",
         Vector((1.0, ORANGE_T, 1.0)),
@@ -145,19 +155,7 @@ def build_body(
     )
     apply_mat(frame, mat_orange)
     apply_transforms(frame)
-    boolean_diff(
-        frame,
-        mesh_cone_along_y(
-            "FrameHole", 0.22, 0.22, ORANGE_Y0 - 0.02, ORANGE_Y1 + 0.02, verts=24
-        ),
-    )
-
-    recess = mesh_cone_along_y(
-        "Recess", 0.20, 0.20, ORANGE_Y0 - 0.01, ORANGE_Y1 - 0.02, verts=24
-    )
-    apply_mat(recess, mat_recess)
-    apply_transforms(recess)
-    return [blue, body, frame, recess]
+    return [blue, body, frame]
 
 
 def add_tooth(
@@ -236,9 +234,6 @@ def main() -> None:
         "Orange", (0.92, 0.38, 0.06, 1.0), metallic=0.08, roughness=0.40
     )
     mat_blue = make_mat("Blue", (0.30, 0.38, 0.46, 1.0), metallic=0.18, roughness=0.52)
-    mat_recess = make_mat(
-        "Recess", (0.04, 0.04, 0.05, 1.0), metallic=0.35, roughness=0.45
-    )
     mat_metal = make_mat(
         "Metal", (0.62, 0.66, 0.68, 1.0), metallic=0.85, roughness=0.28
     )
@@ -247,7 +242,7 @@ def main() -> None:
     )
 
     print("building body…", file=sys.stderr)
-    body_parts = build_body(mat_dark, mat_orange, mat_blue, mat_recess)
+    body_parts = build_body(mat_dark, mat_orange, mat_blue)
     print("building head…", file=sys.stderr)
     head_parts = build_head(mat_metal, mat_tooth)
 
