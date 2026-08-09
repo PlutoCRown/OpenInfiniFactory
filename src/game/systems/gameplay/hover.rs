@@ -1,5 +1,6 @@
 //! 悬停准星、结构包围盒与 FOV
 
+use crate::game::local_player::LocalPlayerMut;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
@@ -8,12 +9,9 @@ use crate::game::simulation::structure_state::{
     StructureFreedom, StructureId, StructureKind, StructureState, material_structure,
     query_factory_structure,
 };
-use crate::game::state::{
-    BuilderMode, EditGestureKind, GameMode, GameSettings, PlacementState, PlayingUiState,
-    SimulationState, SolutionState,
-};
+use crate::game::state::{EditGestureKind, GameSettings, PlacementState, SolutionState};
 use crate::game::systems::debug::DebugState;
-use crate::game::ui::{InventoryItems, UiRuntime};
+use crate::game::systems::gameplay::GameplayPlayGate;
 use crate::game::world::grid::{
     TargetHit, WorldBlocks, grid_to_world, raycast_blocks, raycast_edit_drag_grid,
 };
@@ -46,14 +44,12 @@ pub fn apply_fov(
     }
 }
 
-/// 悬停放置预览所需的依赖集合
+/// 悬停放置预览所需的依赖集合（不含本地玩家 Resource，避免与 LocalPlayerMut 争用）
 #[derive(SystemParam)]
 pub struct HoverPreviewDeps<'w, 's> {
     commands: Commands<'w, 's>,
     meshes: ResMut<'w, Assets<Mesh>>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
-    inventory: Res<'w, InventoryItems>,
-    builder_mode: Res<'w, BuilderMode>,
     solution_state: Res<'w, SolutionState>,
     player: Query<'w, 's, &'static Transform, With<FlyCamera>>,
     edit_previews: Query<'w, 's, Entity, With<EditPreview>>,
@@ -61,12 +57,9 @@ pub struct HoverPreviewDeps<'w, 's> {
 
 /// 更新准星目标、面高亮与放置悬停预览
 pub fn update_hover(
-    mut placement: ResMut<PlacementState>,
+    mut player: LocalPlayerMut,
     config: Res<GameConfig>,
-    mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
-    ui_runtime: Res<UiRuntime>,
-    simulation: Res<SimulationState>,
+    gate: GameplayPlayGate,
     debug: Res<DebugState>,
     camera: Query<
         &Transform,
@@ -101,8 +94,9 @@ pub fn update_hover(
     >,
     mut preview_deps: HoverPreviewDeps,
 ) {
-    if *mode.get() != GameMode::Playing || !playing_ui.active_play() || ui_runtime.blocks_gameplay()
-    {
+    let placement = &mut *player.placement;
+
+    if !gate.allows_active_play(&player.playing_ui) {
         placement.target = None;
         hover_bounds.bounds = None;
         if let Ok((_, mut visibility, _)) = marker.single_mut() {
@@ -173,7 +167,7 @@ pub fn update_hover(
         return;
     };
     // 模拟期不显示瞄准面高亮与放置预览（仍保留 target 供传送等）
-    if simulation.is_active() {
+    if gate.simulation.is_active() {
         *face_visibility = Visibility::Hidden;
         hover_bounds.bounds = None;
         despawn_edit_previews(&mut preview_deps.commands, &preview_deps.edit_previews);
@@ -196,8 +190,8 @@ pub fn update_hover(
 
     if placement.edit_gesture.is_none() {
         despawn_edit_previews(&mut preview_deps.commands, &preview_deps.edit_previews);
-        let light_panel_selected = preview_deps.inventory.hotbar[placement.selected]
-            .is_some_and(|item| item.is_light_panel());
+        let light_panel_selected =
+            player.inventory.hotbar[placement.selected].is_some_and(|item| item.is_light_panel());
         if light_panel_selected {
             if let (Some(target), Some(render_assets)) = (
                 placement
@@ -224,8 +218,8 @@ pub fn update_hover(
                 .target
                 .filter(|target| target.normal != IVec3::ZERO),
             selected_place_block(
-                &preview_deps.inventory,
-                *preview_deps.builder_mode,
+                &player.inventory,
+                *player.builder_mode,
                 preview_deps.solution_state.entry,
                 &placement,
             ),
@@ -240,7 +234,7 @@ pub fn update_hover(
                 if can_place_block_at(
                     place_at,
                     block,
-                    *preview_deps.builder_mode,
+                    *player.builder_mode,
                     preview_deps.solution_state.entry,
                     &world,
                     player_pos,

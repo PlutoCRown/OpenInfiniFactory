@@ -3,17 +3,12 @@ use bevy::prelude::*;
 use crate::game::input::GameplayInputState;
 use crate::game::state::{GameMode, SolutionState, StartMenuScreen, WorldEntryMode};
 use crate::game::systems::perf::PerfScope;
+use crate::game::ui::PanelCloseDeps;
 use crate::game::ui::access::UiMainThread;
 use crate::game::ui::access::{UiAccessScope, ui};
-use crate::game::ui::core::confirm_dialog::ConfirmDialogState;
 use crate::game::ui::core::host::UiRootEntity;
 use crate::game::ui::core::runtime::UiPanelContext;
-use crate::game::ui::dismiss_start_menu_overlay;
 use crate::game::ui::menu_button::{MenuButtonClick, MenuButtonSet, spawn_menu_button};
-use crate::game::ui::{
-    InlineTextEditState, OpenBlockPanelDropdown, OpenSettingsDropdown, PanelDragState,
-    PendingKeyBind, TextPromptState, UiHost, UiRuntime,
-};
 use crate::list_ui_config;
 use crate::shared::save::SaveState;
 
@@ -140,35 +135,18 @@ fn start_menu_escape(
     input: Res<GameplayInputState>,
     mode: Res<State<GameMode>>,
     mut start_menu_screen: ResMut<StartMenuScreen>,
-    mut ui_runtime: ResMut<UiRuntime>,
-    mut ui_host: ResMut<UiHost>,
-    mut confirm: ResMut<ConfirmDialogState>,
-    mut text_prompt: ResMut<TextPromptState>,
-    mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
-    mut open_settings_dropdown: ResMut<OpenSettingsDropdown>,
-    mut pending_key_bind: ResMut<PendingKeyBind>,
-    mut inline_edit: ResMut<InlineTextEditState>,
-    mut drag: ResMut<PanelDragState>,
+    mut close: PanelCloseDeps,
     mut commands: Commands,
 ) {
     if *mode.get() != GameMode::StartMenu || !input.pause {
         return;
     }
     // 改键 / 输入中：交给各自逻辑，不在这里抢 Esc
-    if pending_key_bind.0.is_some() || text_prompt.is_open() || inline_edit.is_active() {
+    if close.pending_key_bind.0.is_some()
+        || close.text_prompt.is_open()
+        || close.inline_edit.is_active()
+    {
         return;
     }
-    let _ = dismiss_start_menu_overlay(
-        &mut start_menu_screen,
-        &mut ui_runtime,
-        &mut ui_host,
-        &mut confirm,
-        &mut text_prompt,
-        &mut open_block_dropdown,
-        &mut open_settings_dropdown,
-        &mut pending_key_bind,
-        &mut inline_edit,
-        &mut drag,
-        &mut commands,
-    );
+    let _ = close.dismiss_start_menu_overlay(&mut start_menu_screen, &mut commands);
 }

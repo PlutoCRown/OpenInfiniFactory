@@ -12,9 +12,10 @@ use crate::game::cameras::{
     GameplayCamera, GameplayViewImage, MENU_CLEAR, PlayingUiCamera, gameplay_view_size,
     new_gameplay_view_image,
 };
+use crate::game::local_player::LocalPlayer;
 use crate::game::scene_blocks::SceneBlockRegistry;
-use crate::game::state::{GameMode, GameSettings, PlayingUiState};
-use crate::game::ui::UiRuntime;
+use crate::game::state::GameSettings;
+use crate::game::systems::gameplay::GameplayPlayGate;
 use crate::game::world::grid::{WorldBlocks, grid_to_world};
 use crate::game::world::rendering::{GameplayScene, environment_map_light, gameplay_ssao};
 use crate::shared::config::GameConfig;
@@ -198,15 +199,13 @@ pub fn camera_move(
     input: Res<crate::game::input::GameplayInputState>,
     keys: Res<ButtonInput<KeyCode>>,
     settings: Res<GameSettings>,
-    mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
-    ui_runtime: Res<UiRuntime>,
+    gate: GameplayPlayGate,
+    player: LocalPlayer,
     world: Res<WorldBlocks>,
     scene_registry: Res<SceneBlockRegistry>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
-    if *mode.get() != GameMode::Playing || !playing_ui.active_play() || ui_runtime.blocks_gameplay()
-    {
+    if !gate.allows_active_play(&player.playing_ui) {
         return;
     }
 
@@ -308,11 +307,7 @@ pub fn camera_move(
             );
             if vertical < 0.0
                 && (transform.translation.y == before_y
-                    || is_supported(
-                        transform.translation,
-                        &world,
-                        &scene_registry,
-                    ))
+                    || is_supported(transform.translation, &world, &scene_registry))
             {
                 camera.flying = false;
                 camera.grounded = true;
@@ -340,17 +335,9 @@ pub fn camera_move(
             camera.grounded = false;
         } else if transform.translation.y == before.y && camera.velocity_y <= 0.0 {
             camera.velocity_y = 0.0;
-            camera.grounded = is_supported(
-                transform.translation,
-                &world,
-                &scene_registry,
-            );
+            camera.grounded = is_supported(transform.translation, &world, &scene_registry);
         } else {
-            camera.grounded = is_supported(
-                transform.translation,
-                &world,
-                &scene_registry,
-            );
+            camera.grounded = is_supported(transform.translation, &world, &scene_registry);
         }
     }
 
@@ -364,9 +351,8 @@ pub fn camera_move(
 pub fn camera_look(
     keys: Res<ButtonInput<KeyCode>>,
     input: Res<crate::game::input::GameplayInputState>,
-    mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
-    ui_runtime: Res<UiRuntime>,
+    gate: GameplayPlayGate,
+    player: LocalPlayer,
     settings: Res<GameSettings>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
@@ -374,11 +360,7 @@ pub fn camera_look(
         return;
     };
 
-    if *mode.get() != GameMode::Playing
-        || !playing_ui.active_play()
-        || ui_runtime.blocks_gameplay()
-        || alt_pressed(&keys)
-    {
+    if !gate.allows_active_play(&player.playing_ui) || alt_pressed(&keys) {
         return;
     }
 
@@ -403,9 +385,8 @@ pub struct MouseLookBaseline {
 pub fn sync_cursor_grab(
     keys: Res<ButtonInput<KeyCode>>,
     touch: Res<crate::shared::touch_profile::TouchProfile>,
-    mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
-    ui_runtime: Res<UiRuntime>,
+    gate: GameplayPlayGate,
+    player: LocalPlayer,
     mut look_baseline: ResMut<MouseLookBaseline>,
     mut focus_events: MessageReader<WindowFocused>,
     mut windows: Query<(Entity, &mut Window, &mut CursorOptions), With<PrimaryWindow>>,
@@ -425,10 +406,7 @@ pub fn sync_cursor_grab(
         return;
     }
 
-    let want_lock = *mode.get() == GameMode::Playing
-        && playing_ui.active_play()
-        && !ui_runtime.blocks_gameplay()
-        && !alt_pressed(&keys);
+    let want_lock = gate.allows_active_play(&player.playing_ui) && !alt_pressed(&keys);
     if want_lock {
         let just_locked = cursor.grab_mode != CursorGrabMode::Locked;
         cursor.grab_mode = CursorGrabMode::Locked;
@@ -605,11 +583,7 @@ fn player_hits_block(
     aabb_intersects(player_min, player_max, block_min, block_min + Vec3::ONE)
 }
 
-fn collides(
-    position: Vec3,
-    world: &WorldBlocks,
-    scene_registry: &SceneBlockRegistry,
-) -> bool {
+fn collides(position: Vec3, world: &WorldBlocks, scene_registry: &SceneBlockRegistry) -> bool {
     let (min, max) = player_aabb(position);
 
     let min_block = min.floor().as_ivec3();
@@ -618,13 +592,7 @@ fn collides(
     for x in min_block.x..=max_block.x {
         for y in min_block.y..=max_block.y {
             for z in min_block.z..=max_block.z {
-                if player_hits_block(
-                    min,
-                    max,
-                    IVec3::new(x, y, z),
-                    world,
-                    scene_registry,
-                ) {
+                if player_hits_block(min, max, IVec3::new(x, y, z), world, scene_registry) {
                     return true;
                 }
             }
@@ -644,8 +612,7 @@ fn can_move_to(
         return true;
     }
 
-    current_overlap > 0.0
-        && collision_overlap_score(next, world, scene_registry) < current_overlap
+    current_overlap > 0.0 && collision_overlap_score(next, world, scene_registry) < current_overlap
 }
 
 fn collision_overlap_score(
@@ -666,8 +633,7 @@ fn collision_overlap_score(
                     continue;
                 }
 
-                let (block_min, block_max) =
-                    block_collision_aabb(block_pos, world, scene_registry);
+                let (block_min, block_max) = block_collision_aabb(block_pos, world, scene_registry);
                 let overlap = (max.min(block_max) - min.max(block_min)).max(Vec3::ZERO);
                 score += overlap.x * overlap.y * overlap.z;
             }
@@ -677,11 +643,7 @@ fn collision_overlap_score(
     score
 }
 
-fn is_supported(
-    position: Vec3,
-    world: &WorldBlocks,
-    scene_registry: &SceneBlockRegistry,
-) -> bool {
+fn is_supported(position: Vec3, world: &WorldBlocks, scene_registry: &SceneBlockRegistry) -> bool {
     let (min, max) = player_aabb(position);
     let probe_min = Vec3::new(min.x, min.y - 0.04, min.z);
     let probe_max = Vec3::new(max.x, min.y, max.z);

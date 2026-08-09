@@ -7,7 +7,6 @@ use crate::game::edit_history::{
 };
 use crate::game::session::PlayingWorldParams;
 use crate::game::world::grid::WorldBlocks;
-use crate::scene::refresh_edit_changes;
 
 pub fn refresh_world_after_edit(world: &mut PlayingWorldParams, pos: IVec3) {
     refresh_world_after_edit_many(world, HashSet::from([pos]));
@@ -16,19 +15,7 @@ pub fn refresh_world_after_edit(world: &mut PlayingWorldParams, pos: IVec3) {
 pub fn refresh_world_after_edit_many(world: &mut PlayingWorldParams, changed: HashSet<IVec3>) {
     world.movement_influence.clear();
     world.pusher_state.clear();
-    if let Some(render_assets) = world.render_assets.as_deref() {
-        refresh_edit_changes(
-            &mut world.commands,
-            &mut world.meshes,
-            &mut world.block_index,
-            &world.world,
-            render_assets,
-            &world.debug,
-            &mut world.structure_state,
-            &changed,
-            &mut world.scene_chunks,
-        );
-    }
+    world.refresh_edit_changes(&changed);
 }
 
 /// 写入方块配置、记入历史，并重建受影响格的渲染（生成器/验收器材料预览等）

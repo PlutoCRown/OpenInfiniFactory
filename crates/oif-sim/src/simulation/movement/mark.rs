@@ -113,21 +113,24 @@ pub(super) fn mark_structure_movement_phase(
     }
 
     for (pos, source, offset, desired_extended) in actuating {
-        if let Some(movement) = mark_pusher_movement(
+        let mut ctx = SimMovementMarkCtx {
             world,
             structures,
+            suction,
+            claimed_heads: &mut claimed_heads,
+            motion_held: &mut motion_held,
+            motion_tags: &mut motion_tags,
+            succeeded_deform: &mut succeeded_deform,
+            actuating_extend: &actuating_extend,
+            actuating_retract: &actuating_retract,
+        };
+        if let Some(movement) = mark_pusher_movement(
+            &mut ctx,
             pusher_state,
             pos,
             source,
             offset,
             desired_extended,
-            &mut claimed_heads,
-            suction,
-            &mut motion_held,
-            &mut motion_tags,
-            &mut succeeded_deform,
-            &actuating_extend,
-            &actuating_retract,
         ) {
             let merged = match &movement {
                 StructureMove::Translate {
@@ -212,22 +215,14 @@ fn mark_conveyor_movement(
 }
 
 fn mark_pusher_movement(
-    world: &WorldBlocks,
-    structures: &mut StructureState,
+    ctx: &mut SimMovementMarkCtx<'_>,
     pusher_state: &mut PusherState,
     pos: IVec3,
     source: IVec3,
     offset: IVec3,
     desired_extended: bool,
-    claimed_heads: &mut HashSet<IVec3>,
-    suction: &SuctionLinks,
-    motion_held: &mut HashSet<IVec3>,
-    motion_tags: &mut HashMap<IVec3, IVec3>,
-    succeeded_deform: &mut HashSet<(StructureId, u32)>,
-    actuating_extend: &HashSet<BlockId>,
-    actuating_retract: &HashSet<BlockId>,
 ) -> Option<StructureMove> {
-    let id = world.blocks.get(&pos)?.id;
+    let id = ctx.world.blocks.get(&pos)?.id;
     let (current_extended, bound_front) = {
         let entry = pusher_state
             .entries
@@ -248,25 +243,24 @@ fn mark_pusher_movement(
     };
 
     let head = pos + source;
-    let structure_id = structures.id_at(pos)?;
+    let structure_id = ctx.structures.id_at(pos)?;
 
     // 体已 held：不可再发动其它 deform；仅当某动作组已成功时挂共轴动画
-    if structures.held_blocks.contains(&id) || motion_held.contains(&pos) {
+    if ctx.structures.held_blocks.contains(&id) || ctx.motion_held.contains(&pos) {
         if desired_extended {
             for forward in [true, false] {
-                let Some((_, indices)) = structures.deform_action_groups(world, pos, forward)
+                let Some((_, indices)) =
+                    ctx.structures
+                        .deform_action_groups(ctx.world, pos, forward)
                 else {
                     continue;
                 };
-                if indices
-                    .iter()
-                    .any(|idx| succeeded_deform.contains(&(structure_id, *idx)))
-                {
+                if indices.iter().any(|idx| {
+                    ctx.succeeded_deform
+                        .contains(&(structure_id, *idx))
+                }) {
                     return try_deform_action(
-                        world,
-                        structures,
-                        suction,
-                        claimed_heads,
+                        ctx,
                         pos,
                         id,
                         structure_id,
@@ -274,11 +268,6 @@ fn mark_pusher_movement(
                         if forward { offset } else { -offset },
                         animation,
                         forward,
-                        motion_held,
-                        motion_tags,
-                        succeeded_deform,
-                        actuating_extend,
-                        actuating_retract,
                     );
                 }
             }
@@ -288,10 +277,7 @@ fn mark_pusher_movement(
 
     if desired_extended {
         if let Some(movement) = try_deform_action(
-            world,
-            structures,
-            suction,
-            claimed_heads,
+            ctx,
             pos,
             id,
             structure_id,
@@ -299,65 +285,62 @@ fn mark_pusher_movement(
             offset,
             animation,
             true,
-            motion_held,
-            motion_tags,
-            succeeded_deform,
-            actuating_extend,
-            actuating_retract,
         ) {
             return Some(movement);
         }
         // 正推无实体格且头前是外结构：整坨外推
-        let forward_physical_empty =
-            structures
-                .deform_action(world, pos, true)
-                .is_some_and(|(seed, _, nodes)| {
-                    structures.nodes_to_positions(world, seed, nodes).is_empty()
-                });
-        if forward_physical_empty && !world.is_fragile_material_at(head) {
-            if let Some(front_id) = world.blocks.get(&head).map(|b| b.id) {
-                let external = structures
-                    .id_at(head)
-                    .is_some_and(|sid| sid != structure_id)
-                    || PusherState::body_at_extended_head(world, head)
-                        .is_some_and(|body| structures.id_at(body) != Some(structure_id));
-                if external && !structures.held_blocks.contains(&front_id) {
-                    let cargo_pos = PusherState::body_at_extended_head(world, head).unwrap_or(head);
+        let forward_physical_empty = ctx
+            .structures
+            .deform_action(ctx.world, pos, true)
+            .is_some_and(|(seed, _, nodes)| {
+                ctx.structures
+                    .nodes_to_positions(ctx.world, seed, nodes)
+                    .is_empty()
+            });
+        if forward_physical_empty && !ctx.world.is_fragile_material_at(head) {
+            if let Some(front_id) = ctx.world.blocks.get(&head).map(|b| b.id) {
+                let external = ctx.structures.id_at(head).is_some_and(|sid| sid != structure_id)
+                    || PusherState::body_at_extended_head(ctx.world, head)
+                        .is_some_and(|body| ctx.structures.id_at(body) != Some(structure_id));
+                if external && !ctx.structures.held_blocks.contains(&front_id) {
+                    let cargo_pos =
+                        PusherState::body_at_extended_head(ctx.world, head).unwrap_or(head);
                     if let Some(movement) = mark_structure_translate(
-                        world,
-                        structures,
+                        ctx.world,
+                        ctx.structures,
                         pos,
                         cargo_pos,
                         offset,
                         MovementMark::Push,
-                        suction,
+                        ctx.suction,
                     ) {
-                        let mut heads = claimed_heads.clone();
+                        let mut heads = ctx.claimed_heads.clone();
                         heads.remove(&head);
                         if can_translate_structure(
-                            world,
+                            ctx.world,
                             movement.structure(),
                             offset,
-                            structures,
-                            suction,
+                            ctx.structures,
+                            ctx.suction,
                             &heads,
                         ) {
-                            claimed_heads.insert(head);
+                            ctx.claimed_heads.insert(head);
                             apply_motion_tags(
                                 movement.structure(),
                                 offset,
-                                motion_held,
-                                motion_tags,
+                                ctx.motion_held,
+                                ctx.motion_tags,
                             );
                             for &p in movement.structure() {
-                                if let Some(b) = world.blocks.get(&p) {
-                                    structures.held_blocks.insert(b.id);
+                                if let Some(b) = ctx.world.blocks.get(&p) {
+                                    ctx.structures.held_blocks.insert(b.id);
                                 }
                             }
-                            if let Some((_, _, nodes)) = structures.deform_action(world, pos, true)
+                            if let Some((_, _, nodes)) =
+                                ctx.structures.deform_action(ctx.world, pos, true)
                             {
                                 let node_ids: Vec<_> = nodes.to_vec();
-                                structures.held_blocks.extend(node_ids);
+                                ctx.structures.held_blocks.extend(node_ids);
                             }
                             return Some(
                                 movement
@@ -372,10 +355,7 @@ fn mark_pusher_movement(
         if PUSHER_REVERSE_ENABLED {
             // 正推失败后反推自身；仍走 Extend：到位后进入伸出并停住（避免每回合再退）
             return try_deform_action(
-                world,
-                structures,
-                suction,
-                claimed_heads,
+                ctx,
                 pos,
                 id,
                 structure_id,
@@ -383,24 +363,16 @@ fn mark_pusher_movement(
                 -offset,
                 animation,
                 false,
-                motion_held,
-                motion_tags,
-                succeeded_deform,
-                actuating_extend,
-                actuating_retract,
             );
         }
         return None;
     }
 
     // 收回：先释放头占格，粘头则拉回正推节点集
-    claimed_heads.remove(&head);
+    ctx.claimed_heads.remove(&head);
     if bound_front {
         if let Some(movement) = try_deform_action(
-            world,
-            structures,
-            suction,
-            claimed_heads,
+            ctx,
             pos,
             id,
             structure_id,
@@ -408,11 +380,6 @@ fn mark_pusher_movement(
             -offset,
             animation,
             false,
-            motion_held,
-            motion_tags,
-            succeeded_deform,
-            actuating_extend,
-            actuating_retract,
         ) {
             return Some(movement);
         }
@@ -431,10 +398,7 @@ fn mark_pusher_movement(
 
 /// 一次 deform：按节点数升序试候选；共轴已成功则只挂动画；节点撞 held 则试下一条
 fn try_deform_action(
-    world: &WorldBlocks,
-    structures: &mut StructureState,
-    suction: &SuctionLinks,
-    claimed_heads: &mut HashSet<IVec3>,
+    ctx: &mut SimMovementMarkCtx<'_>,
     pos: IVec3,
     id: BlockId,
     structure_id: StructureId,
@@ -442,20 +406,15 @@ fn try_deform_action(
     move_offset: IVec3,
     animation: PusherAnimationKind,
     claim_head: bool,
-    motion_held: &mut HashSet<IVec3>,
-    motion_tags: &mut HashMap<IVec3, IVec3>,
-    succeeded_deform: &mut HashSet<(StructureId, u32)>,
-    actuating_extend: &HashSet<BlockId>,
-    actuating_retract: &HashSet<BlockId>,
 ) -> Option<StructureMove> {
     let group_indices: Vec<u32> = {
-        let (_, indices) = structures.deform_action_groups(world, pos, forward)?;
+        let (_, indices) = ctx.structures.deform_action_groups(ctx.world, pos, forward)?;
         indices.to_vec()
     };
 
     for group_idx in group_indices {
         let (nodes, actions) = {
-            let structure = structures.get(structure_id)?;
+            let structure = ctx.structures.get(structure_id)?;
             let group = structure.deform_groups.get(group_idx as usize)?;
             (group.nodes.clone(), group.actions.clone())
         };
@@ -466,31 +425,32 @@ fn try_deform_action(
                 return true;
             }
             if forward {
-                actuating_extend.contains(body)
+                ctx.actuating_extend.contains(body)
             } else {
-                actuating_retract.contains(body)
+                ctx.actuating_retract.contains(body)
             }
         });
         if !peers_ready {
             continue;
         }
 
-        if succeeded_deform.contains(&(structure_id, group_idx)) {
+        if ctx.succeeded_deform.contains(&(structure_id, group_idx)) {
             if claim_head {
                 let head = pos
-                    + world
+                    + ctx
+                        .world
                         .blocks
                         .get(&pos)
                         .map(|b| b.facing.forward_ivec3())
                         .unwrap_or(IVec3::ZERO);
                 // 世界尚未提交位移：头格上的货物可能已在本回合 motion_held
-                if !world.is_fragile_material_at(head)
-                    && world.is_occupied(head)
-                    && !motion_held.contains(&head)
+                if !ctx.world.is_fragile_material_at(head)
+                    && ctx.world.is_occupied(head)
+                    && !ctx.motion_held.contains(&head)
                 {
                     continue;
                 }
-                if !claimed_heads.insert(head) {
+                if !ctx.claimed_heads.insert(head) {
                     return None;
                 }
             }
@@ -506,22 +466,25 @@ fn try_deform_action(
             );
         }
 
-        if nodes.iter().any(|n| structures.held_blocks.contains(n)) {
+        if nodes.iter().any(|n| ctx.structures.held_blocks.contains(n)) {
             continue;
         }
 
         let (subset, anchored) = {
-            let structure = structures.get(structure_id)?;
-            let subset = structures.nodes_to_positions(world, structure, &nodes);
+            let structure = ctx.structures.get(structure_id)?;
+            let subset = ctx
+                .structures
+                .nodes_to_positions(ctx.world, structure, &nodes);
             let anchored = structure.is_scene_anchored_subset(&subset);
             (subset, anchored)
         };
-        if anchored || subset.iter().any(|p| motion_held.contains(p)) {
+        if anchored || subset.iter().any(|p| ctx.motion_held.contains(p)) {
             continue;
         }
 
         let head = pos
-            + world
+            + ctx
+                .world
                 .blocks
                 .get(&pos)
                 .map(|b| b.facing.forward_ivec3())
@@ -532,15 +495,15 @@ fn try_deform_action(
                 continue;
             }
             if claim_head {
-                if !world.is_fragile_material_at(head) && world.is_occupied(head) {
+                if !ctx.world.is_fragile_material_at(head) && ctx.world.is_occupied(head) {
                     continue;
                 }
-                if !claimed_heads.insert(head) {
+                if !ctx.claimed_heads.insert(head) {
                     return None;
                 }
             }
-            structures.held_blocks.extend(nodes.iter().copied());
-            succeeded_deform.insert((structure_id, group_idx));
+            ctx.structures.held_blocks.extend(nodes.iter().copied());
+            ctx.succeeded_deform.insert((structure_id, group_idx));
             return Some(
                 StructureMove::translate_by_pusher_actor(
                     structure_id,
@@ -553,12 +516,14 @@ fn try_deform_action(
             );
         }
 
-        let Some(expanded) = structures.linked_expand_pusher_subset(suction, &subset, move_offset)
+        let Some(expanded) =
+            ctx.structures
+                .linked_expand_pusher_subset(ctx.suction, &subset, move_offset)
         else {
             continue;
         };
-        let mut heads_for_check = claimed_heads.clone();
-        if let Some(body) = PusherState::body_at_extended_head(world, head) {
+        let mut heads_for_check = ctx.claimed_heads.clone();
+        if let Some(body) = PusherState::body_at_extended_head(ctx.world, head) {
             if expanded.contains(&body) {
                 heads_for_check.remove(&head);
             }
@@ -570,35 +535,35 @@ fn try_deform_action(
             heads_for_check.remove(&head);
         }
         if !can_translate_structure(
-            world,
+            ctx.world,
             &expanded,
             move_offset,
-            structures,
-            suction,
+            ctx.structures,
+            ctx.suction,
             &heads_for_check,
         ) {
             continue;
         }
         if claim_head {
-            if let Some(body) = PusherState::body_at_extended_head(world, head) {
+            if let Some(body) = PusherState::body_at_extended_head(ctx.world, head) {
                 if expanded.contains(&body) {
-                    claimed_heads.remove(&head);
+                    ctx.claimed_heads.remove(&head);
                 }
             }
-            if !claimed_heads.insert(head) {
+            if !ctx.claimed_heads.insert(head) {
                 return None;
             }
         }
 
-        apply_motion_tags(&expanded, move_offset, motion_held, motion_tags);
-        structures.held_blocks.extend(nodes.iter().copied());
+        apply_motion_tags(&expanded, move_offset, ctx.motion_held, ctx.motion_tags);
+        ctx.structures.held_blocks.extend(nodes.iter().copied());
         for &p in &expanded {
-            if let Some(b) = world.blocks.get(&p) {
-                structures.held_blocks.insert(b.id);
+            if let Some(b) = ctx.world.blocks.get(&p) {
+                ctx.structures.held_blocks.insert(b.id);
             }
         }
-        succeeded_deform.insert((structure_id, group_idx));
-        structures.moving_structures.insert(structure_id);
+        ctx.succeeded_deform.insert((structure_id, group_idx));
+        ctx.structures.moving_structures.insert(structure_id);
 
         return Some(
             StructureMove::translate_by_pusher_actor(

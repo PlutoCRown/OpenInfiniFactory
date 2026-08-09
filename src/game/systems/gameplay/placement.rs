@@ -5,25 +5,26 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 use crate::game::blocks::{BlockData, BlockPresent};
-use crate::game::edit_history::{EditHistory, FacePanelDelta, WorldPatch, build_cell_patch};
+use crate::game::edit_history::{FacePanelDelta, WorldPatch, build_cell_patch};
+use crate::game::local_player::LocalPlayerMut;
 use crate::game::player::controller::{FlyCamera, teleport_player_preserve_offset};
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{
-    BuilderMode, EditGesture, EditGestureKind, GameMode, PlacementState, PlayingUiState,
-    SimulationState, SolutionState, WorldEntryMode,
+    BuilderMode, EditGesture, EditGestureKind, PlacementState, SolutionState, WorldEntryMode,
 };
 use crate::game::systems::debug::DebugState;
+use crate::game::systems::gameplay::GameplayPlayGate;
 use crate::game::ui::features::GameplayToast;
 use crate::game::ui::features::block_panels::PendingBlockPanelOpen;
-use crate::game::ui::{AreaKind, InventoryItems, UiRuntime};
+use crate::game::ui::{AreaKind, InventoryItems};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, WorldBlocks};
 use crate::game::world::rendering::{
     BlockEntity, EditPreview, SceneChunkMeshes, WorldRenderAssets, despawn_edit_previews,
     spawn_block_preview,
 };
-use crate::scene::{BlockEntityIndex, refresh_edit_changes};
+use crate::scene::{BlockEntityIndex, SceneRenderMut, WorldEditScene, refresh_edit_changes};
 use crate::shared::config::{ConfigSelectionMode, GameConfig};
 use crate::shared::i18n::I18n;
 
@@ -38,10 +39,11 @@ use super::selection::{handle_selection_area_input, selection_positions};
 /// 放置输入所需的查询与资源集合
 #[derive(SystemParam)]
 pub struct PlacementQueries<'w, 's> {
+    commands: Commands<'w, 's>,
     meshes: ResMut<'w, Assets<Mesh>>,
     block_entities: Query<'w, 's, (Entity, &'static BlockEntity)>,
     edit_previews: Query<'w, 's, Entity, With<EditPreview>>,
-    player: Query<'w, 's, (&'static mut FlyCamera, &'static mut Transform), With<FlyCamera>>,
+    fly_camera: Query<'w, 's, (&'static mut FlyCamera, &'static mut Transform), With<FlyCamera>>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
     debug: Res<'w, DebugState>,
     structure_state: ResMut<'w, StructureState>,
@@ -58,25 +60,19 @@ pub struct PlacementQueries<'w, 's> {
 pub fn placement_input(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
-    mut commands: Commands,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
-    mut edit_history: ResMut<EditHistory>,
-    mut inventory: ResMut<InventoryItems>,
     config: Res<GameConfig>,
-    builder_mode: Res<BuilderMode>,
-    mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
-    simulation: Res<SimulationState>,
-    mut placement: ResMut<PlacementState>,
-    ui_runtime: Res<UiRuntime>,
+    gate: GameplayPlayGate,
+    mut player: LocalPlayerMut,
     queries: PlacementQueries,
 ) {
     let PlacementQueries {
+        mut commands,
         mut meshes,
         block_entities,
         edit_previews,
-        mut player,
+        mut fly_camera,
         render_assets,
         debug,
         mut structure_state,
@@ -89,7 +85,12 @@ pub fn placement_input(
         mut toast,
     } = queries;
 
-    if *mode.get() != GameMode::Playing || !playing_ui.active_play() {
+    let placement = &mut *player.placement;
+    let edit_history = &mut *player.edit_history;
+    let inventory = &mut *player.inventory;
+    let builder_mode = *player.builder_mode;
+
+    if !gate.allows_active_play(&player.playing_ui) {
         placement.edit_gesture = None;
         despawn_edit_previews(&mut commands, &edit_previews);
         return;
@@ -110,19 +111,13 @@ pub fn placement_input(
         .mouse_button()
         .unwrap_or(MouseButton::Middle);
 
-    if ui_runtime.blocks_gameplay() {
-        placement.edit_gesture = None;
-        despawn_edit_previews(&mut commands, &edit_previews);
-        return;
-    }
-
     // 模拟期禁止编辑，但仍允许右键传送玩家
-    if simulation.is_active() {
+    if gate.simulation.is_active() {
         placement.edit_gesture = None;
         despawn_edit_previews(&mut commands, &edit_previews);
-        if *builder_mode == BuilderMode::Play && input.delete.just_pressed {
+        if builder_mode == BuilderMode::Play && input.delete.just_pressed {
             let current_target_pos = placement.target.map(|target| target.pos);
-            try_player_teleport(current_target_pos, &world, &mut player);
+            try_player_teleport(current_target_pos, &world, &mut fly_camera);
         }
         return;
     }
@@ -138,7 +133,7 @@ pub fn placement_input(
         if open_target_block_ui(
             current_target_pos,
             &world,
-            *builder_mode,
+            builder_mode,
             solution_state.entry,
             &mut pending_block_panel,
         ) {
@@ -174,7 +169,7 @@ pub fn placement_input(
         && open_target_block_ui(
             current_target_pos,
             &world,
-            *builder_mode,
+            builder_mode,
             solution_state.entry,
             &mut pending_block_panel,
         )
@@ -185,33 +180,40 @@ pub fn placement_input(
         return;
     }
 
-    if selected_area(&inventory, &placement) == Some(AreaKind::Selection) {
+    if selected_area(inventory, placement) == Some(AreaKind::Selection) {
         let copy_chord = config.chord(crate::shared::config::ActionKeyName::Copy);
-        if handle_selection_area_input(
-            &mouse_buttons,
-            &keys,
-            placement.target,
-            place_button,
-            delete_button,
-            copy_chord,
-            force_place,
-            *builder_mode,
-            solution_state.entry,
-            &mut placement,
-            &mut world,
-            &mut edit_history,
-            &block_entities,
-            &mut commands,
-            &mut meshes,
-            &render_assets,
-            &debug,
-            &mut structure_state,
-            &mut block_index,
-            &mut scene_chunks,
-            &locale,
-            &mut toast,
-        ) {
-            solution_state.dirty = true;
+        {
+            let mut edit = WorldEditScene {
+                scene: SceneRenderMut {
+                    commands: &mut commands,
+                    meshes: &mut meshes,
+                    render_assets: &render_assets,
+                    block_index: &mut block_index,
+                    scene_chunks: &mut scene_chunks,
+                    debug: &debug,
+                    structure_state: &mut structure_state,
+                },
+                world: &mut world,
+                edit_history,
+                block_entities: &block_entities,
+            };
+            if handle_selection_area_input(
+                &mut edit,
+                &mouse_buttons,
+                &keys,
+                placement.target,
+                place_button,
+                delete_button,
+                copy_chord,
+                force_place,
+                builder_mode,
+                solution_state.entry,
+                placement,
+                &locale,
+                &mut toast,
+            ) {
+                solution_state.dirty = true;
+            }
         }
         despawn_edit_previews(&mut commands, &edit_previews);
         return;
@@ -223,33 +225,37 @@ pub fn placement_input(
 
     if input.pick.just_pressed {
         if let Some(pos) = current_target_pos {
-            pick_target_block(pos, &world, &mut placement, &mut inventory);
+            pick_target_block(pos, &world, placement, inventory);
         }
         placement.edit_gesture = None;
         despawn_edit_previews(&mut commands, &edit_previews);
         return;
     }
 
-    if *builder_mode == BuilderMode::Play && !simulation.is_active() && input.alternate {
+    if builder_mode == BuilderMode::Play && !gate.simulation.is_active() && input.alternate {
         if let Some(pos) = current_target_pos {
             edit_history.flush_pending_rotation();
-            if alternate_block_at(
-                pos,
-                &mut world,
-                &mut edit_history,
-                &block_entities,
-                &mut commands,
-                &mut meshes,
-                &render_assets,
-                &debug,
-                &mut structure_state,
-                &mut block_index,
-                &mut scene_chunks,
-            ) {
-                solution_state.dirty = true;
-                // C 切变体后：后续放置朝向跟这个方块对齐
-                if let Some(block) = world.blocks.get(&pos) {
-                    placement.preview_facing = block.facing;
+            {
+                let mut edit = WorldEditScene {
+                    scene: SceneRenderMut {
+                        commands: &mut commands,
+                        meshes: &mut meshes,
+                        render_assets: &render_assets,
+                        block_index: &mut block_index,
+                        scene_chunks: &mut scene_chunks,
+                        debug: &debug,
+                        structure_state: &mut structure_state,
+                    },
+                    world: &mut world,
+                    edit_history,
+                    block_entities: &block_entities,
+                };
+                if alternate_block_at(&mut edit, pos) {
+                    solution_state.dirty = true;
+                    // C 切变体后：后续放置朝向跟这个方块对齐
+                    if let Some(block) = edit.world.blocks.get(&pos) {
+                        placement.preview_facing = block.facing;
+                    }
                 }
             }
         }
@@ -269,41 +275,47 @@ pub fn placement_input(
             }
         } else if let Some(pos) = current_target_pos {
             edit_history.prepare_rotation(&world, pos);
-            if rotate_block_at(
-                pos,
-                reverse_rotation,
-                &mut world,
-                &block_entities,
-                &mut commands,
-                &mut meshes,
-                &render_assets,
-                &mut structure_state,
-                &mut block_index,
-                &mut scene_chunks,
-            ) {
-                let facing = world
-                    .blocks
-                    .get(&pos)
-                    .or_else(|| world.system_blocks.get(&pos))
-                    .map(|block| block.facing);
-                if let Some(facing) = facing {
-                    edit_history.finish_rotation(pos, facing);
-                    // R 转世界上的方块后：放置朝向跟它对齐
-                    placement.preview_facing = facing;
-                }
-                solution_state.dirty = true;
-            } else if selected_place_block(
-                &inventory,
-                *builder_mode,
-                solution_state.entry,
-                &placement,
-            )
-            .is_some_and(|block| can_manual_rotate(block.kind))
             {
-                placement.preview_facing =
-                    rotate_facing(placement.preview_facing, reverse_rotation);
+                let mut edit = WorldEditScene {
+                    scene: SceneRenderMut {
+                        commands: &mut commands,
+                        meshes: &mut meshes,
+                        render_assets: &render_assets,
+                        block_index: &mut block_index,
+                        scene_chunks: &mut scene_chunks,
+                        debug: &debug,
+                        structure_state: &mut structure_state,
+                    },
+                    world: &mut world,
+                    edit_history,
+                    block_entities: &block_entities,
+                };
+                if rotate_block_at(&mut edit, pos, reverse_rotation) {
+                    let facing = edit
+                        .world
+                        .blocks
+                        .get(&pos)
+                        .or_else(|| edit.world.system_blocks.get(&pos))
+                        .map(|block| block.facing);
+                    if let Some(facing) = facing {
+                        edit.edit_history.finish_rotation(pos, facing);
+                        // R 转世界上的方块后：放置朝向跟它对齐
+                        placement.preview_facing = facing;
+                    }
+                    solution_state.dirty = true;
+                } else if selected_place_block(
+                    inventory,
+                    builder_mode,
+                    solution_state.entry,
+                    placement,
+                )
+                .is_some_and(|block| can_manual_rotate(block.kind))
+                {
+                    placement.preview_facing =
+                        rotate_facing(placement.preview_facing, reverse_rotation);
+                }
             }
-        } else if selected_place_block(&inventory, *builder_mode, solution_state.entry, &placement)
+        } else if selected_place_block(inventory, builder_mode, solution_state.entry, placement)
             .is_some_and(|block| can_manual_rotate(block.kind))
         {
             placement.preview_facing = rotate_facing(placement.preview_facing, reverse_rotation);
@@ -311,8 +323,8 @@ pub fn placement_input(
     }
 
     if input.delete.just_pressed {
-        if *builder_mode == BuilderMode::Play
-            && try_player_teleport(current_target_pos, &world, &mut player)
+        if builder_mode == BuilderMode::Play
+            && try_player_teleport(current_target_pos, &world, &mut fly_camera)
         {
             placement.edit_gesture = None;
             despawn_edit_previews(&mut commands, &edit_previews);
@@ -342,25 +354,25 @@ pub fn placement_input(
                         patch.apply_forward(&mut world);
                         edit_history.record(patch);
                         refresh_static_generated_markers(&mut world);
-                        refresh_edit_changes(
-                            &mut commands,
-                            &mut meshes,
-                            &mut block_index,
-                            &world,
-                            &render_assets,
-                            &debug,
-                            &mut structure_state,
-                            &HashSet::from([
-                                target.pos,
-                                target.pos + IVec3::X,
-                                target.pos + IVec3::NEG_X,
-                                target.pos + IVec3::Y,
-                                target.pos + IVec3::NEG_Y,
-                                target.pos + IVec3::Z,
-                                target.pos + IVec3::NEG_Z,
-                            ]),
-                            &mut scene_chunks,
-                        );
+                        let wire_neighbors = HashSet::from([
+                            target.pos,
+                            target.pos + IVec3::X,
+                            target.pos + IVec3::NEG_X,
+                            target.pos + IVec3::Y,
+                            target.pos + IVec3::NEG_Y,
+                            target.pos + IVec3::Z,
+                            target.pos + IVec3::NEG_Z,
+                        ]);
+                        let mut scene = SceneRenderMut {
+                            commands: &mut commands,
+                            meshes: &mut meshes,
+                            render_assets: &render_assets,
+                            block_index: &mut block_index,
+                            scene_chunks: &mut scene_chunks,
+                            debug: &debug,
+                            structure_state: &mut structure_state,
+                        };
+                        refresh_edit_changes(&mut scene, &world, &wire_neighbors);
                         solution_state.dirty = true;
                         placement.edit_gesture = None;
                         despawn_edit_previews(&mut commands, &edit_previews);
@@ -418,25 +430,25 @@ pub fn placement_input(
                             };
                             patch.apply_forward(&mut world);
                             edit_history.record(patch);
-                            refresh_edit_changes(
-                                &mut commands,
-                                &mut meshes,
-                                &mut block_index,
-                                &world,
-                                &render_assets,
-                                &debug,
-                                &mut structure_state,
-                                &HashSet::from([
-                                    target.pos,
-                                    target.pos + IVec3::X,
-                                    target.pos + IVec3::NEG_X,
-                                    target.pos + IVec3::Y,
-                                    target.pos + IVec3::NEG_Y,
-                                    target.pos + IVec3::Z,
-                                    target.pos + IVec3::NEG_Z,
-                                ]),
-                                &mut scene_chunks,
-                            );
+                            let wire_neighbors = HashSet::from([
+                                target.pos,
+                                target.pos + IVec3::X,
+                                target.pos + IVec3::NEG_X,
+                                target.pos + IVec3::Y,
+                                target.pos + IVec3::NEG_Y,
+                                target.pos + IVec3::Z,
+                                target.pos + IVec3::NEG_Z,
+                            ]);
+                            let mut scene = SceneRenderMut {
+                                commands: &mut commands,
+                                meshes: &mut meshes,
+                                render_assets: &render_assets,
+                                block_index: &mut block_index,
+                                scene_chunks: &mut scene_chunks,
+                                debug: &debug,
+                                structure_state: &mut structure_state,
+                            };
+                            refresh_edit_changes(&mut scene, &world, &wire_neighbors);
                             solution_state.dirty = true;
                             placed = true;
                         } else {
@@ -459,10 +471,10 @@ pub fn placement_input(
             None => {
                 if let Some(start) = current_place_at {
                     if let Some(block) = selected_place_block(
-                        &inventory,
-                        *builder_mode,
+                        inventory,
+                        builder_mode,
                         solution_state.entry,
-                        &placement,
+                        placement,
                     ) {
                         let plane_normal = placement
                             .target
@@ -496,7 +508,7 @@ pub fn placement_input(
             || matches!(gesture.kind, EditGestureKind::Delete) && released_delete
     });
 
-    let player_pos = player
+    let player_pos = fly_camera
         .single()
         .ok()
         .map(|(_, transform)| transform.translation);
@@ -510,24 +522,33 @@ pub fn placement_input(
                     }
                     _ => None,
                 };
-                if commit_edit_gesture(
-                    gesture,
-                    current_place_at,
-                    current_delete_at,
-                    &config,
-                    &mut world,
-                    *builder_mode,
-                    solution_state.entry,
-                    player_pos,
-                    &mut edit_history,
-                    &mut commands,
-                    &mut meshes,
-                    &render_assets,
-                    &debug,
-                    &mut structure_state,
-                    &mut block_index,
-                    &mut scene_chunks,
-                ) {
+                let committed = {
+                    let mut edit = WorldEditScene {
+                        scene: SceneRenderMut {
+                            commands: &mut commands,
+                            meshes: &mut meshes,
+                            render_assets: &render_assets,
+                            block_index: &mut block_index,
+                            scene_chunks: &mut scene_chunks,
+                            debug: &debug,
+                            structure_state: &mut structure_state,
+                        },
+                        world: &mut world,
+                        edit_history,
+                        block_entities: &block_entities,
+                    };
+                    commit_edit_gesture(
+                        &mut edit,
+                        gesture,
+                        current_place_at,
+                        current_delete_at,
+                        &config,
+                        builder_mode,
+                        solution_state.entry,
+                        player_pos,
+                    )
+                };
+                if committed {
                     solution_state.dirty = true;
                 } else if let Some(name_key) = surface_item {
                     let item_name = locale.t(name_key).to_string();
@@ -545,7 +566,7 @@ pub fn placement_input(
                 current_place_at,
                 &config,
                 &world,
-                *builder_mode,
+                builder_mode,
                 solution_state.entry,
                 player_pos,
                 &mut commands,
@@ -659,22 +680,14 @@ pub(super) fn refresh_edit_generated_markers(world: &mut WorldBlocks) {
 
 /// 提交放置/删除手势并写入历史
 fn commit_edit_gesture(
+    edit: &mut WorldEditScene,
     gesture: EditGesture,
     current_place_at: Option<IVec3>,
     current_delete_at: Option<IVec3>,
     config: &GameConfig,
-    world: &mut WorldBlocks,
     builder_mode: BuilderMode,
     entry: WorldEntryMode,
     player_pos: Option<Vec3>,
-    edit_history: &mut EditHistory,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
-    debug: &DebugState,
-    structure_state: &mut StructureState,
-    block_index: &mut BlockEntityIndex,
-    scene_chunks: &mut SceneChunkMeshes,
 ) -> bool {
     let patch = match gesture.kind {
         EditGestureKind::Place { block } => {
@@ -691,7 +704,7 @@ fn commit_edit_gesture(
                         block,
                         builder_mode,
                         entry,
-                        world,
+                        edit.world,
                         player_pos,
                         Some(gesture.plane_normal),
                     )
@@ -701,7 +714,7 @@ fn commit_edit_gesture(
                 return false;
             }
             let placed = attachment_place_block(block, gesture.plane_normal);
-            build_cell_patch(world, &positions, |world| {
+            build_cell_patch(edit.world, &positions, |world| {
                 for pos in &positions {
                     world.insert(*pos, placed);
                     if placed.kind.attaches_to_factory_face() {
@@ -723,12 +736,12 @@ fn commit_edit_gesture(
             );
             let positions: Vec<IVec3> = positions
                 .into_iter()
-                .filter(|pos| can_delete_at(*pos, builder_mode, entry, world))
+                .filter(|pos| can_delete_at(*pos, builder_mode, entry, edit.world))
                 .collect();
             if positions.is_empty() {
                 return false;
             }
-            build_cell_patch(world, &positions, |world| {
+            build_cell_patch(edit.world, &positions, |world| {
                 for pos in &positions {
                     delete_block_at(*pos, builder_mode, entry, world);
                 }
@@ -739,19 +752,9 @@ fn commit_edit_gesture(
         return false;
     }
     let changed_positions = patch.affected_positions();
-    edit_history.record(patch);
-    refresh_edit_generated_markers(world);
-    refresh_edit_changes(
-        commands,
-        meshes,
-        block_index,
-        world,
-        render_assets,
-        debug,
-        structure_state,
-        &changed_positions,
-        scene_chunks,
-    );
+    edit.edit_history.record(patch);
+    refresh_edit_generated_markers(edit.world);
+    refresh_edit_changes(&mut edit.scene, edit.world, &changed_positions);
     true
 }
 

@@ -61,7 +61,7 @@ pub(crate) use spawn::{
 };
 pub use spawn::{
     spawn_block, spawn_block_with_animation, spawn_block_with_timed_animation,
-    spawn_pending_generated_block,
+    spawn_pending_generated_block, SpawnBlockOpts, SpawnMode,
 };
 pub use world_rebuild::{
     despawn_world, rebuild_world, rebuild_world_for_debug_state, rebuild_world_on_enter,

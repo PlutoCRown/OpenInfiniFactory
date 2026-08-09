@@ -1,64 +1,12 @@
 //! 暂停/背包/快捷栏输入
 
-use bevy::ecs::system::SystemParam;
+use crate::game::local_player::LocalPlayerMut;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
-use crate::game::state::{
-    GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
-};
-use crate::game::ui::UiHost;
-use crate::game::ui::core::confirm_dialog::ConfirmDialogState;
-use crate::game::ui::dismiss_playing_overlay;
-use crate::game::ui::{
-    CarriedItem, HOTBAR_SLOTS, InlineTextEditState, InventoryItems, OpenBlockPanelDropdown,
-    OpenSettingsDropdown, PanelDragState, PendingKeyBind, TextPromptState, UiRuntime,
-};
-
-/// 关闭覆盖层所需的 UI 资源集合
-#[derive(SystemParam)]
-pub struct PanelCloseDeps<'w> {
-    ui_runtime: ResMut<'w, UiRuntime>,
-    ui_host: ResMut<'w, UiHost>,
-    confirm: ResMut<'w, ConfirmDialogState>,
-    text_prompt: ResMut<'w, TextPromptState>,
-    open_block_dropdown: ResMut<'w, OpenBlockPanelDropdown>,
-    open_settings_dropdown: ResMut<'w, OpenSettingsDropdown>,
-    pending_key_bind: ResMut<'w, PendingKeyBind>,
-    inline_edit: ResMut<'w, InlineTextEditState>,
-    drag: ResMut<'w, PanelDragState>,
-}
-
-impl PanelCloseDeps<'_> {
-    /// 尝试关闭当前覆盖层，成功则返回 true
-    fn dismiss_overlay(
-        &mut self,
-        playing_ui: &mut PlayingUiState,
-        carried: &mut CarriedItem,
-        inventory: &mut InventoryItems,
-        placement: &PlacementState,
-        solution_state: &mut SolutionState,
-        commands: &mut Commands,
-    ) -> bool {
-        dismiss_playing_overlay(
-            playing_ui,
-            carried,
-            inventory,
-            placement,
-            solution_state,
-            &mut self.ui_runtime,
-            &mut self.ui_host,
-            &mut self.confirm,
-            &mut self.text_prompt,
-            &mut self.open_block_dropdown,
-            &mut self.open_settings_dropdown,
-            &mut self.pending_key_bind,
-            &mut self.inline_edit,
-            &mut self.drag,
-            commands,
-        )
-    }
-}
+use crate::game::state::{GameMode, SimulationState, SolutionState};
+use crate::game::ui::PanelCloseDeps;
+use crate::game::ui::HOTBAR_SLOTS;
 
 /// 处理暂停、背包与快捷栏切换输入
 pub fn gameplay_input(
@@ -66,10 +14,7 @@ pub fn gameplay_input(
     mut mouse_wheel: MessageReader<MouseWheel>,
     keys: Res<ButtonInput<KeyCode>>,
     mode: Res<State<GameMode>>,
-    mut playing_ui: ResMut<PlayingUiState>,
-    mut placement: ResMut<PlacementState>,
-    mut carried: ResMut<CarriedItem>,
-    mut inventory: ResMut<InventoryItems>,
+    mut player: LocalPlayerMut,
     mut solution_state: ResMut<SolutionState>,
     mut panel_close: PanelCloseDeps,
     mut simulation: ResMut<SimulationState>,
@@ -89,23 +34,23 @@ pub fn gameplay_input(
     }
 
     // 模拟中若背包仍开着则关掉，并禁止再次打开
-    if simulation.is_active() && playing_ui.inventory_open {
-        playing_ui.inventory_open = false;
+    if simulation.is_active() && player.playing_ui.inventory_open {
+        player.playing_ui.inventory_open = false;
     }
 
     if input.pause {
-        if panel_close.dismiss_overlay(
-            &mut playing_ui,
-            &mut carried,
-            &mut inventory,
-            &placement,
+        if panel_close.dismiss_playing_overlay(
+            &mut player.playing_ui,
+            &mut player.carried,
+            &mut player.inventory,
+            &player.placement,
             &mut solution_state,
             &mut commands,
         ) {
             // Overlay dismissed.
         } else {
-            playing_ui.paused = !playing_ui.paused;
-            if playing_ui.paused {
+            player.playing_ui.paused = !player.playing_ui.paused;
+            if player.playing_ui.paused {
                 simulation.running = false;
                 simulation.step_requested = false;
                 simulation.speed = 1.0;
@@ -114,22 +59,22 @@ pub fn gameplay_input(
     }
 
     if input.inventory {
-        if panel_close.dismiss_overlay(
-            &mut playing_ui,
-            &mut carried,
-            &mut inventory,
-            &placement,
+        if panel_close.dismiss_playing_overlay(
+            &mut player.playing_ui,
+            &mut player.carried,
+            &mut player.inventory,
+            &player.placement,
             &mut solution_state,
             &mut commands,
         ) {
             // Overlay dismissed.
         } else if !simulation.is_active() {
             // 模拟期禁止打开背包
-            playing_ui.inventory_open = true;
+            player.playing_ui.inventory_open = true;
         }
     }
 
-    if panel_close.ui_runtime.blocks_gameplay() || !playing_ui.active_play() {
+    if panel_close.ui_runtime.blocks_gameplay() || !player.playing_ui.active_play() {
         mouse_wheel.clear();
         return;
     }
@@ -146,10 +91,10 @@ pub fn gameplay_input(
         (KeyCode::Digit9, 8),
     ] {
         if keys.just_pressed(key) && index < HOTBAR_SLOTS {
-            if placement.selected != index {
-                placement.selection.clear();
-                placement.edit_gesture = None;
-                placement.selected = index;
+            if player.placement.selected != index {
+                player.placement.selection.clear();
+                player.placement.edit_gesture = None;
+                player.placement.selected = index;
             }
         }
     }
@@ -157,11 +102,11 @@ pub fn gameplay_input(
     let wheel_delta: f32 = mouse_wheel.read().map(|event| event.y).sum();
     if wheel_delta.abs() > f32::EPSILON {
         let direction = if wheel_delta > 0.0 { -1 } else { 1 };
-        let selected = (placement.selected as i32 + direction).rem_euclid(HOTBAR_SLOTS as i32);
-        if placement.selected != selected as usize {
-            placement.selection.clear();
-            placement.edit_gesture = None;
-            placement.selected = selected as usize;
+        let selected = (player.placement.selected as i32 + direction).rem_euclid(HOTBAR_SLOTS as i32);
+        if player.placement.selected != selected as usize {
+            player.placement.selection.clear();
+            player.placement.edit_gesture = None;
+            player.placement.selected = selected as usize;
         }
     }
 }

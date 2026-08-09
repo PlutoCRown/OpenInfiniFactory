@@ -1,18 +1,14 @@
 //! 印花机/滚筒共用的单色图标选择槽与下拉
 
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 
-use crate::game::block_editing::OpenBlockPanelDropdown;
+use crate::game::block_editing::BlockPanelDropdownDeps;
 use crate::game::block_editing::widgets::{
     hover_tooltip_paint, hover_tooltip_stamp, set_hover_tooltip, spawn_labeled_control_row,
     spawn_material_icon_list, spawn_material_icon_toggle, sync_dropdown_overlay, update_slot_icon,
 };
 use crate::game::blocks::{BlockKind, PaintMaterialId, StampMaterialId};
 use crate::game::state::UiPanelId;
-use crate::game::ui::access::UiMainThread;
-use crate::game::ui::core::runtime::UiRuntime;
-use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockIconAssets;
 
 /// 颜色下拉槽位编号（印花机/滚筒面板各只有这一格）
@@ -68,24 +64,18 @@ pub fn spawn_color_select_list<A, Id>(
 
 /// 同步颜色下拉显隐与槽位/选项图标
 pub(crate) fn update_color_select_dropdowns(
-    _ui_thread: UiMainThread,
-    ui_runtime: Res<UiRuntime>,
-    open_dropdown: Res<OpenBlockPanelDropdown>,
-    world: Res<WorldBlocks>,
-    block_icons: Option<Res<BlockIconAssets>>,
-    mut commands: Commands,
-    windows: Query<&Window, With<PrimaryWindow>>,
+    mut deps: BlockPanelDropdownDeps,
     mut slots: Query<(Entity, &ColorSelectSlot, &Children)>,
     mut options: Query<(&ColorSelectOption, &Children)>,
     mut icons: Query<&mut ImageNode>,
     mut lists: Query<(&ColorSelectList, &mut Node, &ComputedNode)>,
     triggers: Query<(&ColorSelectSlot, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
-    let panel = ui_runtime.active_panel();
+    let panel = deps.ui_runtime.active_panel();
     let color_panel = matches!(panel, Some(UiPanelId::Stamper) | Some(UiPanelId::Roller));
-    let open = color_panel && panel.is_some_and(|p| open_dropdown.is_open(p, COLOR_SLOT));
+    let open = color_panel && panel.is_some_and(|p| deps.open_dropdown.is_open(p, COLOR_SLOT));
 
-    let window = windows.single().ok();
+    let window = deps.windows.single().ok();
     let viewport = window
         .map(|w| Vec2::new(w.width(), w.height()))
         .unwrap_or(Vec2::ZERO);
@@ -101,7 +91,7 @@ pub(crate) fn update_color_select_dropdowns(
     }
 
     // 不缓存「已填充」：关面板时本系统被 run_if 跳过，Local 清不掉，二次打开会跳过刷新
-    let Some(block_icons_res) = block_icons.as_ref() else {
+    let Some(block_icons_res) = deps.block_icons.as_ref() else {
         return;
     };
     let block_icons = block_icons_res.as_ref();
@@ -109,12 +99,12 @@ pub(crate) fn update_color_select_dropdowns(
         update_slot_icon(children, option.icon(block_icons), &mut icons);
     }
 
-    let selected = ui_runtime.active_block_pos().and_then(|pos| match panel {
+    let selected = deps.ui_runtime.active_block_pos().and_then(|pos| match panel {
         Some(UiPanelId::Stamper) => {
-            Some(ColorSelectOption::Stamp(world.stamper_settings(pos).stamp))
+            Some(ColorSelectOption::Stamp(deps.world.stamper_settings(pos).stamp))
         }
         Some(UiPanelId::Roller) => {
-            Some(ColorSelectOption::Paint(world.roller_settings(pos).paint))
+            Some(ColorSelectOption::Paint(deps.world.roller_settings(pos).paint))
         }
         _ => None,
     });
@@ -128,6 +118,6 @@ pub(crate) fn update_color_select_dropdowns(
             selected.and_then(|opt| opt.icon(block_icons)),
             &mut icons,
         );
-        set_hover_tooltip(&mut commands, entity, tip);
+        set_hover_tooltip(&mut deps.commands, entity, tip);
     }
 }

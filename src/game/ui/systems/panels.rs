@@ -1,154 +1,104 @@
 use crate::game::blocks::BlockPresent;
 
-/// 关闭 UiHost 上的活动面板（设置 / 系统方块）
-pub fn dismiss_active_panel(
-    ui_runtime: &mut UiRuntime,
-    ui_host: &mut UiHost,
-    open_block_dropdown: &mut OpenBlockPanelDropdown,
-    open_settings_dropdown: &mut OpenSettingsDropdown,
-    pending_key_bind: &mut PendingKeyBind,
-    inline_edit: &mut InlineTextEditState,
-    drag: &mut PanelDragState,
-    commands: &mut Commands,
-) -> bool {
-    let Some(panel) = ui_runtime.active_panel() else {
-        return false;
-    };
-
-    if ui_runtime.is_settings_open() {
-        open_settings_dropdown.0 = None;
-        pending_key_bind.0 = None;
-    }
-    open_block_dropdown.0 = None;
-    inline_edit.clear();
-    ui_host.unmount_panel(panel, ui_runtime, Some(commands));
-    drag.clear();
-    true
+/// 关闭覆盖层所需的 UI 资源集合（权威簇 C4）
+#[derive(SystemParam)]
+pub struct PanelCloseDeps<'w> {
+    pub ui_runtime: ResMut<'w, UiRuntime>,
+    pub ui_host: ResMut<'w, UiHost>,
+    pub confirm: ResMut<'w, ConfirmDialogState>,
+    pub text_prompt: ResMut<'w, TextPromptState>,
+    pub open_block_dropdown: ResMut<'w, OpenBlockPanelDropdown>,
+    pub open_settings_dropdown: ResMut<'w, OpenSettingsDropdown>,
+    pub pending_key_bind: ResMut<'w, PendingKeyBind>,
+    pub inline_edit: ResMut<'w, InlineTextEditState>,
+    pub drag: ResMut<'w, PanelDragState>,
 }
 
-/// 关闭模态与 UiHost 面板（确认/输入/下拉/设置/方块）
-fn dismiss_modals_and_host_panels(
-    ui_runtime: &mut UiRuntime,
-    ui_host: &mut UiHost,
-    confirm: &mut ConfirmDialogState,
-    text_prompt: &mut TextPromptState,
-    open_block_dropdown: &mut OpenBlockPanelDropdown,
-    open_settings_dropdown: &mut OpenSettingsDropdown,
-    pending_key_bind: &mut PendingKeyBind,
-    inline_edit: &mut InlineTextEditState,
-    drag: &mut PanelDragState,
-    commands: &mut Commands,
-) -> bool {
-    if text_prompt.is_open() {
-        text_prompt.cancel();
-        return true;
-    }
-    if confirm.is_open() {
-        confirm.resolve(ConfirmButtonId::Cancel);
-        return true;
-    }
-    if open_block_dropdown.0.is_some() || open_settings_dropdown.0.is_some() {
-        open_block_dropdown.0 = None;
-        open_settings_dropdown.0 = None;
-        return true;
-    }
-    dismiss_active_panel(
-        ui_runtime,
-        ui_host,
-        open_block_dropdown,
-        open_settings_dropdown,
-        pending_key_bind,
-        inline_edit,
-        drag,
-        commands,
-    )
-}
+impl PanelCloseDeps<'_> {
+    /// 关闭 UiHost 上的活动面板（设置 / 系统方块）
+    fn dismiss_active_panel(&mut self, commands: &mut Commands) -> bool {
+        let Some(panel) = self.ui_runtime.active_panel() else {
+            return false;
+        };
 
-/// 关闭最顶层覆盖 UI（Esc / 关钮共用）
-/// 顺序：输入框 → 确认框 → 下拉 → UiHost 面板 → 背包 → 暂停
-pub fn dismiss_playing_overlay(
-    playing_ui: &mut PlayingUiState,
-    carried: &mut CarriedItem,
-    inventory: &mut InventoryItems,
-    placement: &PlacementState,
-    solution_state: &mut SolutionState,
-    ui_runtime: &mut UiRuntime,
-    ui_host: &mut UiHost,
-    confirm: &mut ConfirmDialogState,
-    text_prompt: &mut TextPromptState,
-    open_block_dropdown: &mut OpenBlockPanelDropdown,
-    open_settings_dropdown: &mut OpenSettingsDropdown,
-    pending_key_bind: &mut PendingKeyBind,
-    inline_edit: &mut InlineTextEditState,
-    drag: &mut PanelDragState,
-    commands: &mut Commands,
-) -> bool {
-    if dismiss_modals_and_host_panels(
-        ui_runtime,
-        ui_host,
-        confirm,
-        text_prompt,
-        open_block_dropdown,
-        open_settings_dropdown,
-        pending_key_bind,
-        inline_edit,
-        drag,
-        commands,
-    ) {
-        return true;
-    }
-    if playing_ui.inventory_open {
-        playing_ui.inventory_open = false;
-        // 手里有东西时放进当前激活快捷栏，而不是丢掉
-        if let Some(item) = carried.take() {
-            let slot = &mut inventory.hotbar[placement.selected];
-            if *slot != Some(item) {
-                *slot = Some(item);
-                solution_state.dirty = true;
-            }
+        if self.ui_runtime.is_settings_open() {
+            self.open_settings_dropdown.0 = None;
+            self.pending_key_bind.0 = None;
         }
-        return true;
+        self.open_block_dropdown.0 = None;
+        self.inline_edit.clear();
+        self.ui_host
+            .unmount_panel(panel, &mut self.ui_runtime, Some(commands));
+        self.drag.clear();
+        true
     }
-    if playing_ui.paused {
-        playing_ui.paused = false;
-        return true;
-    }
-    false
-}
 
-/// 主菜单 Esc：先关模态/设置，再从存档列表退回主菜单
-pub fn dismiss_start_menu_overlay(
-    start_menu_screen: &mut StartMenuScreen,
-    ui_runtime: &mut UiRuntime,
-    ui_host: &mut UiHost,
-    confirm: &mut ConfirmDialogState,
-    text_prompt: &mut TextPromptState,
-    open_block_dropdown: &mut OpenBlockPanelDropdown,
-    open_settings_dropdown: &mut OpenSettingsDropdown,
-    pending_key_bind: &mut PendingKeyBind,
-    inline_edit: &mut InlineTextEditState,
-    drag: &mut PanelDragState,
-    commands: &mut Commands,
-) -> bool {
-    if dismiss_modals_and_host_panels(
-        ui_runtime,
-        ui_host,
-        confirm,
-        text_prompt,
-        open_block_dropdown,
-        open_settings_dropdown,
-        pending_key_bind,
-        inline_edit,
-        drag,
-        commands,
-    ) {
-        return true;
+    /// 关闭模态与 UiHost 面板（确认/输入/下拉/设置/方块）
+    fn dismiss_modals_and_host_panels(&mut self, commands: &mut Commands) -> bool {
+        if self.text_prompt.is_open() {
+            self.text_prompt.cancel();
+            return true;
+        }
+        if self.confirm.is_open() {
+            self.confirm.resolve(ConfirmButtonId::Cancel);
+            return true;
+        }
+        if self.open_block_dropdown.0.is_some() || self.open_settings_dropdown.0.is_some() {
+            self.open_block_dropdown.0 = None;
+            self.open_settings_dropdown.0 = None;
+            return true;
+        }
+        self.dismiss_active_panel(commands)
     }
-    if *start_menu_screen == StartMenuScreen::SaveList {
-        *start_menu_screen = StartMenuScreen::Main;
-        return true;
+
+    /// 关闭最顶层覆盖 UI（Esc / 关钮共用）
+    /// 顺序：输入框 → 确认框 → 下拉 → UiHost 面板 → 背包 → 暂停
+    pub fn dismiss_playing_overlay(
+        &mut self,
+        playing_ui: &mut PlayingUiState,
+        carried: &mut CarriedItem,
+        inventory: &mut InventoryItems,
+        placement: &PlacementState,
+        solution_state: &mut SolutionState,
+        commands: &mut Commands,
+    ) -> bool {
+        if self.dismiss_modals_and_host_panels(commands) {
+            return true;
+        }
+        if playing_ui.inventory_open {
+            playing_ui.inventory_open = false;
+            // 手里有东西时放进当前激活快捷栏，而不是丢掉
+            if let Some(item) = carried.take() {
+                let slot = &mut inventory.hotbar[placement.selected];
+                if *slot != Some(item) {
+                    *slot = Some(item);
+                    solution_state.dirty = true;
+                }
+            }
+            return true;
+        }
+        if playing_ui.paused {
+            playing_ui.paused = false;
+            return true;
+        }
+        false
     }
-    false
+
+    /// 主菜单 Esc：先关模态/设置，再从存档列表退回主菜单
+    pub fn dismiss_start_menu_overlay(
+        &mut self,
+        start_menu_screen: &mut StartMenuScreen,
+        commands: &mut Commands,
+    ) -> bool {
+        if self.dismiss_modals_and_host_panels(commands) {
+            return true;
+        }
+        if *start_menu_screen == StartMenuScreen::SaveList {
+            *start_menu_screen = StartMenuScreen::Main;
+            return true;
+        }
+        false
+    }
 }
 
 pub fn update_panel_visibility(
@@ -244,15 +194,7 @@ pub fn panel_close_clicked(
     mut inventory: ResMut<InventoryItems>,
     placement: Res<PlacementState>,
     mut solution_state: ResMut<SolutionState>,
-    mut ui_runtime: ResMut<UiRuntime>,
-    mut ui_host: ResMut<UiHost>,
-    mut confirm: ResMut<ConfirmDialogState>,
-    mut text_prompt: ResMut<TextPromptState>,
-    mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
-    mut open_settings_dropdown: ResMut<OpenSettingsDropdown>,
-    mut pending_key_bind: ResMut<PendingKeyBind>,
-    mut inline_edit: ResMut<InlineTextEditState>,
-    mut drag: ResMut<PanelDragState>,
+    mut close: PanelCloseDeps,
     mut commands: Commands,
     close_buttons: Query<(), With<PanelCloseButton>>,
 ) {
@@ -260,21 +202,12 @@ pub fn panel_close_clicked(
         return;
     }
     click.propagate(false);
-    dismiss_playing_overlay(
+    close.dismiss_playing_overlay(
         &mut playing_ui,
         &mut carried,
         &mut inventory,
         &placement,
         &mut solution_state,
-        &mut ui_runtime,
-        &mut ui_host,
-        &mut confirm,
-        &mut text_prompt,
-        &mut open_block_dropdown,
-        &mut open_settings_dropdown,
-        &mut pending_key_bind,
-        &mut inline_edit,
-        &mut drag,
         &mut commands,
     );
 }

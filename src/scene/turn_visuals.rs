@@ -1,28 +1,23 @@
 use bevy::prelude::*;
 use std::collections::HashSet;
 
-use crate::game::systems::debug::DebugState;
+use crate::game::simulation::stats::SimulationStepStats;
 use crate::game::world::grid::WorldBlocks;
-use crate::game::world::rendering::{PortalFlashQueue, SceneChunkMeshes, WorldRenderAssets};
+use crate::game::world::rendering::PortalFlashQueue;
 use crate::sim_bridge::TurnOutput;
 
-use super::entity_index::BlockEntityIndex;
 use super::incremental::apply_turn_output_incremental;
+use super::scene_render::SceneRenderMut;
 
+/// 将一回合输出落到场景实体（转发增量实现）
 pub fn apply_turn_output(
     before: &WorldBlocks,
     after: &WorldBlocks,
     output: &TurnOutput,
     previous_powered_wires: &HashSet<IVec3>,
     animation_duration: f32,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    index: &mut BlockEntityIndex,
-    render_assets: &WorldRenderAssets,
-    debug: &DebugState,
-    structure_state: &crate::game::simulation::structure_state::StructureState,
-    stats: &mut crate::game::simulation::stats::SimulationStepStats,
-    scene_chunks: &mut SceneChunkMeshes,
+    scene: &mut SceneRenderMut,
+    stats: &mut SimulationStepStats,
     portal_flash_queue: &mut PortalFlashQueue,
 ) {
     apply_turn_output_incremental(
@@ -31,14 +26,8 @@ pub fn apply_turn_output(
         output,
         previous_powered_wires,
         animation_duration,
-        commands,
-        meshes,
-        index,
-        render_assets,
-        debug,
-        structure_state,
+        scene,
         stats,
-        scene_chunks,
         portal_flash_queue,
     );
 }

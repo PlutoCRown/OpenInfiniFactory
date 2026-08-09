@@ -1,21 +1,18 @@
+use crate::game::local_player::LocalPlayerMut;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structure_state::StructureState;
-use crate::game::state::{
-    GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
-};
+use crate::game::state::SolutionState;
 use crate::game::systems::debug::DebugState;
-use crate::game::ui::core::runtime::UiRuntime;
+use crate::game::systems::gameplay::GameplayPlayGate;
 use crate::game::ui::core::text_input::InlineTextEditState;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::SceneChunkMeshes;
 use crate::game::world::rendering::WorldRenderAssets;
-use crate::scene::{BlockEntityIndex, refresh_edit_changes};
+use crate::scene::{BlockEntityIndex, SceneRenderMut, refresh_edit_changes};
 use crate::shared::config::{ActionKeyName, GameConfig};
-
-use super::EditHistory;
 
 /// 撤销/重做后刷新世界渲染所需的查询集合
 #[derive(SystemParam)]
@@ -29,41 +26,52 @@ pub struct EditHistoryApply<'w, 's> {
     debug: Res<'w, DebugState>,
 }
 
+impl<'w, 's> EditHistoryApply<'w, 's> {
+    /// 撤销/重做后增量刷新受影响格的渲染
+    fn refresh_edit_changes(&mut self, world: &WorldBlocks, changed: &std::collections::HashSet<IVec3>) {
+        let Some(render_assets) = self.render_assets.as_ref() else {
+            return;
+        };
+        let mut scene = SceneRenderMut {
+            commands: &mut self.commands,
+            meshes: &mut self.meshes,
+            render_assets,
+            block_index: &mut self.block_index,
+            scene_chunks: &mut self.scene_chunks,
+            debug: &self.debug,
+            structure_state: &mut self.structure_state,
+        };
+        refresh_edit_changes(&mut scene, world, changed);
+    }
+}
+
 /// 处理 Undo / Redo 快捷键并刷新受影响的方块
 pub fn edit_history_input(
     keys: Res<ButtonInput<KeyCode>>,
     config: Res<GameConfig>,
-    mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
-    simulation: Res<SimulationState>,
-    ui_runtime: Res<UiRuntime>,
+    gate: GameplayPlayGate,
     inline_edit: Res<InlineTextEditState>,
-    mut edit_history: ResMut<EditHistory>,
+    mut player: LocalPlayerMut,
     mut world: ResMut<WorldBlocks>,
-    mut placement: ResMut<PlacementState>,
     mut solution_state: ResMut<SolutionState>,
     mut apply: EditHistoryApply,
 ) {
-    if *mode.get() != GameMode::Playing
-        || !playing_ui.active_play()
-        || simulation.is_active()
-        || ui_runtime.blocks_gameplay()
-        || inline_edit.is_active()
-    {
+    if !gate.allows_world_edit(&player.playing_ui) || inline_edit.is_active() {
         return;
     }
 
     let patch = if config.chord(ActionKeyName::Redo).just_triggered(&keys) {
-        edit_history.redo(&mut world, &mut placement.selection)
+        player
+            .edit_history
+            .redo(&mut world, &mut player.placement.selection)
     } else if config.chord(ActionKeyName::Undo).just_triggered(&keys) {
-        edit_history.undo(&mut world, &mut placement.selection)
+        player
+            .edit_history
+            .undo(&mut world, &mut player.placement.selection)
     } else {
         return;
     };
 
-    let Some(render_assets) = apply.render_assets.as_ref() else {
-        return;
-    };
     let Some(patch) = patch else {
         return;
     };
@@ -72,16 +80,9 @@ pub fn edit_history_input(
     if !patch.cells.is_empty() || patch.touches_goal_or_generator() {
         refresh_static_generated_markers(&mut world);
     }
-    refresh_edit_changes(
-        &mut apply.commands,
-        &mut apply.meshes,
-        &mut apply.block_index,
-        &world,
-        render_assets,
-        &apply.debug,
-        &mut apply.structure_state,
-        &patch.affected_positions(),
-        &mut apply.scene_chunks,
-    );
+    if apply.render_assets.is_none() {
+        return;
+    }
+    apply.refresh_edit_changes(&world, &patch.affected_positions());
     solution_state.dirty = true;
 }

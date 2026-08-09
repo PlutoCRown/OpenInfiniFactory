@@ -6,24 +6,24 @@ use bevy::prelude::*;
 
 use crate::game::blocks::{BlockData, BlockId};
 use crate::game::edit_history::{
-    EditHistory, build_cell_patch, build_relocate_patch, capture_welds_for_ids, weld_diff,
+    build_cell_patch, build_relocate_patch, capture_welds_for_ids, weld_diff,
 };
-use crate::game::simulation::structure_state::StructureState;
+use crate::game::local_player::LocalPlayer;
 use crate::game::state::{
-    BuilderMode, EditGestureKind, GameMode, PlacementState, PlayingUiState, SelectionBounds,
-    SelectionDrag, SelectionSnapshot, SimulationState, WorldEntryMode,
+    BuilderMode, EditGestureKind, PlacementState, SelectionBounds, SelectionDrag,
+    SelectionSnapshot, WorldEntryMode,
 };
-use crate::game::systems::debug::DebugState;
+use crate::game::systems::gameplay::GameplayPlayGate;
 use crate::game::ui::features::GameplayToast;
-use crate::game::ui::{AreaKind, InventoryItems, UiRuntime};
+use crate::game::ui::AreaKind;
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    BlockEntity, BlockEntityLayer, DeleteBoundsOverlay, DeleteBoundsPart, SceneChunkMeshes,
-    SelectionBoundsOverlay, SelectionBoundsPart, WorldRenderAssets, spawn_block_with_animation,
+    BlockEntityLayer, DeleteBoundsOverlay, DeleteBoundsPart, SelectionBoundsOverlay,
+    SelectionBoundsPart, WorldRenderAssets, spawn_block_with_animation,
     update_delete_bounds_overlay, update_selection_bounds_overlay,
 };
-use crate::scene::{BlockEntityIndex, refresh_edit_changes};
+use crate::scene::{WorldEditScene, refresh_edit_changes};
 use crate::shared::config::{ConfigChord, ConfigSelectionMode, GameConfig};
 use crate::shared::i18n::I18n;
 
@@ -32,6 +32,7 @@ use super::rules::can_delete_at;
 
 /// 处理框选工具的点击与拖拽输入
 pub(super) fn handle_selection_area_input(
+    edit: &mut WorldEditScene,
     mouse_buttons: &ButtonInput<MouseButton>,
     keys: &ButtonInput<KeyCode>,
     current_target: Option<crate::game::world::grid::TargetHit>,
@@ -42,16 +43,6 @@ pub(super) fn handle_selection_area_input(
     builder_mode: BuilderMode,
     entry: WorldEntryMode,
     placement: &mut PlacementState,
-    world: &mut WorldBlocks,
-    edit_history: &mut EditHistory,
-    block_entities: &Query<(Entity, &BlockEntity)>,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
-    debug: &DebugState,
-    structure_state: &mut StructureState,
-    block_index: &mut BlockEntityIndex,
-    scene_chunks: &mut SceneChunkMeshes,
     locale: &I18n,
     toast: &mut GameplayToast,
 ) -> bool {
@@ -63,7 +54,8 @@ pub(super) fn handle_selection_area_input(
             let before = SelectionSnapshot::from_state(&placement.selection);
             placement.selection.clear();
             let after = SelectionSnapshot::from_state(&placement.selection);
-            edit_history.record_with_selection(Default::default(), before, after);
+            edit.edit_history
+                .record_with_selection(Default::default(), before, after);
         } else {
             toast.show(locale.t("toast.selection_empty").to_string());
         }
@@ -84,16 +76,7 @@ pub(super) fn handle_selection_area_input(
                 if let Some(bounds) = placement.selection.bounds {
                     let before = SelectionSnapshot::from_state(&placement.selection);
                     if copy_selection(
-                        world,
-                        edit_history,
-                        block_entities,
-                        commands,
-                        meshes,
-                        render_assets,
-                        debug,
-                        structure_state,
-                        block_index,
-                        scene_chunks,
+                        edit,
                         bounds,
                         drag.offset,
                         force_place,
@@ -120,16 +103,7 @@ pub(super) fn handle_selection_area_input(
                 if let Some(bounds) = placement.selection.bounds {
                     let before = SelectionSnapshot::from_state(&placement.selection);
                     if move_selection(
-                        world,
-                        edit_history,
-                        block_entities,
-                        commands,
-                        meshes,
-                        render_assets,
-                        debug,
-                        structure_state,
-                        block_index,
-                        scene_chunks,
+                        edit,
                         bounds,
                         drag.offset,
                         force_place,
@@ -170,7 +144,8 @@ pub(super) fn handle_selection_area_input(
         let before = SelectionSnapshot::from_state(&placement.selection);
         placement.selection.clear();
         let after = SelectionSnapshot::from_state(&placement.selection);
-        edit_history.record_with_selection(Default::default(), before, after);
+        edit.edit_history
+            .record_with_selection(Default::default(), before, after);
         return false;
     }
 
@@ -182,7 +157,8 @@ pub(super) fn handle_selection_area_input(
         placement.selection.bounds = Some(SelectionBounds::from_corners(first, pos));
         placement.selection.drag = None;
         let after = SelectionSnapshot::from_state(&placement.selection);
-        edit_history.record_with_selection(Default::default(), before, after);
+        edit.edit_history
+            .record_with_selection(Default::default(), before, after);
     } else {
         placement.selection.first_corner = Some(pos);
         placement.selection.bounds = None;
@@ -271,45 +247,32 @@ fn selection_overwrite_targets(
 }
 
 /// 销毁指定格的方块实体
-fn despawn_blocks_at(
-    positions: &[IVec3],
-    block_entities: &Query<(Entity, &BlockEntity)>,
-    commands: &mut Commands,
-    block_index: &mut BlockEntityIndex,
-) {
+fn despawn_blocks_at(positions: &[IVec3], edit: &mut WorldEditScene) {
     for pos in positions {
-        if let Some((entity, block_entity)) = block_entities
+        if let Some((entity, block_entity)) = edit
+            .block_entities
             .iter()
             .find(|(_, block_entity)| block_entity.pos == *pos)
         {
             match block_entity.layer {
                 BlockEntityLayer::Animatable => {
-                    block_index.remove_animatable(*pos);
+                    edit.scene.block_index.remove_animatable(*pos);
                 }
                 BlockEntityLayer::System => {
-                    block_index.remove_system(*pos);
+                    edit.scene.block_index.remove_system(*pos);
                 }
                 BlockEntityLayer::Scene => {
-                    block_index.remove_scene(*pos);
+                    edit.scene.block_index.remove_scene(*pos);
                 }
             }
-            commands.entity(entity).despawn();
+            edit.scene.commands.entity(entity).despawn();
         }
     }
 }
 
 /// 将框选区域内的方块整体平移
 fn move_selection(
-    world: &mut WorldBlocks,
-    edit_history: &mut EditHistory,
-    block_entities: &Query<(Entity, &BlockEntity)>,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
-    debug: &DebugState,
-    structure_state: &mut StructureState,
-    block_index: &mut BlockEntityIndex,
-    scene_chunks: &mut SceneChunkMeshes,
+    edit: &mut WorldEditScene,
     bounds: SelectionBounds,
     offset: IVec3,
     force: bool,
@@ -317,20 +280,21 @@ fn move_selection(
     entry: WorldEntryMode,
     selection_before: &SelectionSnapshot,
 ) -> bool {
-    let selected = selected_blocks(world, bounds, builder_mode, entry);
+    let selected = selected_blocks(edit.world, bounds, builder_mode, entry);
     if selected.is_empty() {
         let mut after = selection_before.clone();
         after.bounds = Some(bounds.moved(offset));
-        edit_history.record_with_selection(Default::default(), selection_before.clone(), after);
+        edit.edit_history
+            .record_with_selection(Default::default(), selection_before.clone(), after);
         return true;
     }
 
-    if !selection_can_place(world, &selected, offset, true, builder_mode, entry, force) {
+    if !selection_can_place(edit.world, &selected, offset, true, builder_mode, entry, force) {
         return false;
     }
 
     let overwrite = if force {
-        selection_overwrite_targets(world, &selected, offset, true)
+        selection_overwrite_targets(edit.world, &selected, offset, true)
     } else {
         Vec::new()
     };
@@ -340,47 +304,48 @@ fn move_selection(
         .map(|(_, block)| block.id)
         .filter(|id| !id.is_none())
         .collect();
-    let welds_before = capture_welds_for_ids(world, &selected_ids);
+    let welds_before = capture_welds_for_ids(edit.world, &selected_ids);
     let moves: Vec<(IVec3, IVec3)> = selected
         .iter()
         .map(|(pos, _)| (*pos, *pos + offset))
         .collect();
-    let mut patch = build_relocate_patch(world, &moves);
+    let mut patch = build_relocate_patch(edit.world, &moves);
 
-    let weld_count = world.material_welds.len();
-    world
+    let weld_count = edit.world.material_welds.len();
+    edit.world
         .material_welds
         .retain(|weld| selected_ids.contains(&weld.a) == selected_ids.contains(&weld.b));
-    if world.material_welds.len() != weld_count {
-        world.topology_revision = world.topology_revision.wrapping_add(1);
+    if edit.world.material_welds.len() != weld_count {
+        edit.world.topology_revision = edit.world.topology_revision.wrapping_add(1);
     }
 
     let mut despawn_positions: Vec<IVec3> = selected.iter().map(|(pos, _)| *pos).collect();
     despawn_positions.extend(overwrite.iter().copied());
-    despawn_blocks_at(&despawn_positions, block_entities, commands, block_index);
+    despawn_blocks_at(&despawn_positions, edit);
 
     for pos in &overwrite {
-        world.remove(pos);
+        edit.world.remove(pos);
     }
 
     let relocate_moves: Vec<(IVec3, IVec3, BlockData)> = selected
         .iter()
         .map(|(pos, block)| (*pos, *pos + offset, *block))
         .collect();
-    world.relocate_blocks(relocate_moves);
+    edit.world.relocate_blocks(relocate_moves);
 
-    let welds_after = capture_welds_for_ids(world, &selected_ids);
+    let welds_after = capture_welds_for_ids(edit.world, &selected_ids);
     let (welds_add, welds_remove) = weld_diff(&welds_before, &welds_after);
     patch.welds_add = welds_add;
     patch.welds_remove = welds_remove;
     let mut after = selection_before.clone();
     after.bounds = Some(bounds.moved(offset));
-    edit_history.record_with_selection(patch, selection_before.clone(), after);
+    edit.edit_history
+        .record_with_selection(patch, selection_before.clone(), after);
 
     let mut animations = HashMap::new();
     for (pos, block) in selected {
         let target = pos + offset;
-        let stored = world.blocks[&target];
+        let stored = edit.world.blocks[&target];
         animations.insert(
             target,
             BlockAnimation {
@@ -397,33 +362,13 @@ fn move_selection(
     }
     let mut also_dirty = despawn_positions;
     also_dirty.extend(animations.keys().copied());
-    spawn_selection_result(
-        world,
-        commands,
-        meshes,
-        render_assets,
-        debug,
-        structure_state,
-        block_index,
-        scene_chunks,
-        animations,
-        also_dirty,
-    );
+    spawn_selection_result(edit, animations, also_dirty);
     true
 }
 
 /// 将框选区域内的方块复制到偏移位置
 fn copy_selection(
-    world: &mut WorldBlocks,
-    edit_history: &mut EditHistory,
-    block_entities: &Query<(Entity, &BlockEntity)>,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
-    debug: &DebugState,
-    structure_state: &mut StructureState,
-    block_index: &mut BlockEntityIndex,
-    scene_chunks: &mut SceneChunkMeshes,
+    edit: &mut WorldEditScene,
     bounds: SelectionBounds,
     offset: IVec3,
     force: bool,
@@ -431,20 +376,21 @@ fn copy_selection(
     entry: WorldEntryMode,
     selection_before: &SelectionSnapshot,
 ) -> bool {
-    let selected = selected_blocks(world, bounds, builder_mode, entry);
+    let selected = selected_blocks(edit.world, bounds, builder_mode, entry);
     if selected.is_empty() {
         let mut after = selection_before.clone();
         after.bounds = Some(bounds.moved(offset));
-        edit_history.record_with_selection(Default::default(), selection_before.clone(), after);
+        edit.edit_history
+            .record_with_selection(Default::default(), selection_before.clone(), after);
         return true;
     }
 
-    if !selection_can_place(world, &selected, offset, false, builder_mode, entry, force) {
+    if !selection_can_place(edit.world, &selected, offset, false, builder_mode, entry, force) {
         return false;
     }
 
     let overwrite = if force {
-        selection_overwrite_targets(world, &selected, offset, false)
+        selection_overwrite_targets(edit.world, &selected, offset, false)
     } else {
         Vec::new()
     };
@@ -454,7 +400,8 @@ fn copy_selection(
         .map(|(_, block)| block.id)
         .filter(|id| !id.is_none())
         .collect();
-    let internal_welds: Vec<_> = world
+    let internal_welds: Vec<_> = edit
+        .world
         .material_welds
         .iter()
         .copied()
@@ -463,7 +410,7 @@ fn copy_selection(
     let settings_by_pos: HashMap<IVec3, _> = selected
         .iter()
         .filter_map(|(pos, _)| {
-            world
+            edit.world
                 .block_settings
                 .get(pos)
                 .cloned()
@@ -472,9 +419,9 @@ fn copy_selection(
         .collect();
     let target_positions: Vec<IVec3> = selected.iter().map(|(pos, _)| *pos + offset).collect();
 
-    despawn_blocks_at(&overwrite, block_entities, commands, block_index);
+    despawn_blocks_at(&overwrite, edit);
 
-    let patch = build_cell_patch(world, &target_positions, |world| {
+    let patch = build_cell_patch(edit.world, &target_positions, |world| {
         for pos in &overwrite {
             world.remove(pos);
         }
@@ -515,12 +462,13 @@ fn copy_selection(
 
     let mut after = selection_before.clone();
     after.bounds = Some(bounds.moved(offset));
-    edit_history.record_with_selection(patch, selection_before.clone(), after);
+    edit.edit_history
+        .record_with_selection(patch, selection_before.clone(), after);
 
     let mut animations = HashMap::new();
     for (pos, block) in selected {
         let target = pos + offset;
-        let stored = world.blocks[&target];
+        let stored = edit.world.blocks[&target];
         animations.insert(
             target,
             BlockAnimation {
@@ -537,72 +485,44 @@ fn copy_selection(
     }
     let mut also_dirty = overwrite;
     also_dirty.extend(target_positions.iter().copied());
-    spawn_selection_result(
-        world,
-        commands,
-        meshes,
-        render_assets,
-        debug,
-        structure_state,
-        block_index,
-        scene_chunks,
-        animations,
-        also_dirty,
-    );
+    spawn_selection_result(edit, animations, also_dirty);
     true
 }
 
 /// 选区搬移/复制后刷新实体（含焊点等静态虚方块 marker）
 fn spawn_selection_result(
-    world: &mut WorldBlocks,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
-    debug: &DebugState,
-    structure_state: &mut StructureState,
-    block_index: &mut BlockEntityIndex,
-    scene_chunks: &mut SceneChunkMeshes,
+    edit: &mut WorldEditScene,
     animations: HashMap<IVec3, BlockAnimation>,
     also_dirty: impl IntoIterator<Item = IVec3>,
 ) {
     // 宿主搬移后须重建焊点/钻头等生成 marker，否则会留在原地
-    refresh_edit_generated_markers(world);
+    refresh_edit_generated_markers(edit.world);
 
     let mut dirty: HashSet<IVec3> = also_dirty.into_iter().collect();
     dirty.extend(animations.keys().copied());
     dirty.extend(animations.values().map(|animation| animation.from_pos));
 
-    refresh_edit_changes(
-        commands,
-        meshes,
-        block_index,
-        world,
-        render_assets,
-        debug,
-        structure_state,
-        &dirty,
-        scene_chunks,
-    );
+    refresh_edit_changes(&mut edit.scene, edit.world, &dirty);
 
     // 增量刷新会无动画生成搬移目标，再叠一层移动动画
     for (target, animation) in &animations {
-        let block = world.blocks[target];
+        let block = edit.world.blocks[target];
         if block.kind.is_scene() {
             continue;
         }
-        if let Some(entity) = block_index.remove_animatable(*target) {
-            commands.entity(entity).despawn();
+        if let Some(entity) = edit.scene.block_index.remove_animatable(*target) {
+            edit.scene.commands.entity(entity).despawn();
         }
         spawn_block_with_animation(
-            commands,
-            meshes,
-            render_assets,
-            world,
+            edit.scene.commands,
+            edit.scene.meshes,
+            edit.scene.render_assets,
+            edit.world,
             *target,
             block,
             Some(*animation),
             None,
-            block_index,
+            edit.scene.block_index,
         );
     }
 }
@@ -703,13 +623,8 @@ fn min_max(a: i32, b: i32) -> (i32, i32) {
 
 /// 每帧同步全局选区/删除包围盒（平移与显隐，不重建实体）
 pub fn sync_edit_bounds_overlays(
-    mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
-    ui_runtime: Res<UiRuntime>,
-    simulation: Res<SimulationState>,
-    placement: Res<PlacementState>,
-    inventory: Res<InventoryItems>,
-    builder_mode: Res<BuilderMode>,
+    gate: GameplayPlayGate,
+    player: LocalPlayer,
     solution_state: Res<crate::game::state::SolutionState>,
     config: Res<GameConfig>,
     world: Res<WorldBlocks>,
@@ -733,25 +648,22 @@ pub fn sync_edit_bounds_overlays(
         return;
     };
 
-    if *mode.get() != GameMode::Playing
-        || !playing_ui.active_play()
-        || ui_runtime.blocks_gameplay()
-        || simulation.is_active()
-    {
+    if !gate.allows_world_edit(&player.playing_ui) {
         update_selection_bounds_overlay(&mut selection_parts, assets, None);
         update_delete_bounds_overlay(&mut delete_parts, None);
         return;
     }
 
-    let selection_tool = inventory.hotbar[placement.selected].and_then(|item| item.area())
+    let selection_tool = player.inventory.hotbar[player.placement.selected]
+        .and_then(|item| item.area())
         == Some(AreaKind::Selection);
 
     if selection_tool {
         let force_place = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
         let show = selection_bounds_show(
-            &placement,
+            &player.placement,
             &world,
-            *builder_mode,
+            *player.builder_mode,
             solution_state.entry,
             force_place,
         );
@@ -762,13 +674,14 @@ pub fn sync_edit_bounds_overlays(
 
     update_selection_bounds_overlay(&mut selection_parts, assets, None);
 
-    let delete_show = placement.edit_gesture.as_ref().and_then(|gesture| {
+    let delete_show = player.placement.edit_gesture.as_ref().and_then(|gesture| {
         if gesture.canceled {
             return None;
         }
         match gesture.kind {
             EditGestureKind::Delete => {
-                let end = placement
+                let end = player
+                    .placement
                     .target
                     .map(|target| target.pos)
                     .unwrap_or(gesture.start);
@@ -776,7 +689,14 @@ pub fn sync_edit_bounds_overlays(
                     selection_positions(config.delete_selection_mode, gesture.start, end);
                 let deletable: Vec<IVec3> = positions
                     .into_iter()
-                    .filter(|pos| can_delete_at(*pos, *builder_mode, solution_state.entry, &world))
+                    .filter(|pos| {
+                        can_delete_at(
+                            *pos,
+                            *player.builder_mode,
+                            solution_state.entry,
+                            &world,
+                        )
+                    })
                     .collect();
                 SelectionBounds::from_positions(&deletable).map(|bounds| (bounds.min, bounds.max))
             }

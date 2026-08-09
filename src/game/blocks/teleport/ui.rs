@@ -1,10 +1,10 @@
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 
 use super::TeleportBlock;
 use super::prompt::open_teleport_rename_prompt;
 
+use crate::game::block_editing::BlockPanelDropdownDeps;
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{spawn_text_dropdown_toggle, sync_dropdown_overlay};
 use crate::game::block_editing::world_refresh::apply_teleport_pair_edit;
@@ -275,12 +275,7 @@ fn update_panel(
 struct TeleportPairOption;
 
 fn update_dropdowns(
-    _ui_thread: UiMainThread,
-    mut commands: Commands,
-    ui_runtime: Res<UiRuntime>,
-    open_dropdown: Res<OpenBlockPanelDropdown>,
-    world: Res<WorldBlocks>,
-    windows: Query<&Window, With<PrimaryWindow>>,
+    mut deps: BlockPanelDropdownDeps,
     mut last_label: Local<Option<String>>,
     mut labels: Query<(&TeleportPairLabel, &mut Text)>,
     mut lists: Query<(
@@ -295,15 +290,16 @@ fn update_dropdowns(
     mut pair_cache: Local<Option<(Option<IVec3>, u64, bool)>>,
 ) {
     let panel = UiPanelId::Teleport;
-    let panel_active = ui_runtime.active_panel() == Some(panel);
-    let active_pos = ui_runtime.active_block_pos();
-    let pair_open = panel_active && open_dropdown.is_open(panel, PAIR_SLOT);
+    let panel_active = deps.ui_runtime.active_panel() == Some(panel);
+    let active_pos = deps.ui_runtime.active_block_pos();
+    let pair_open = panel_active && deps.open_dropdown.is_open(panel, PAIR_SLOT);
 
     if panel_active {
         if let Some(pos) = active_pos {
-            let label = world
+            let label = deps
+                .world
                 .teleport_partner(pos)
-                .map(|pair| world.teleport_settings(pair).name)
+                .map(|pair| deps.world.teleport_settings(pair).name)
                 .unwrap_or_else(|| i18n.t("teleport.none"));
             if last_label.as_ref() != Some(&label) {
                 for (_, mut text) in &mut labels {
@@ -316,13 +312,13 @@ fn update_dropdowns(
         *last_label = None;
     }
 
-    let cache_key = (active_pos, world.topology_revision, pair_open);
+    let cache_key = (active_pos, deps.world.topology_revision, pair_open);
     let rebuild = *pair_cache != Some(cache_key);
     if rebuild {
         *pair_cache = Some(cache_key);
     }
 
-    let window = windows.single().ok();
+    let window = deps.windows.single().ok();
     let viewport = window
         .map(|w| Vec2::new(w.width(), w.height()))
         .unwrap_or(Vec2::ZERO);
@@ -339,17 +335,17 @@ fn update_dropdowns(
             if let Some(children) = children {
                 for child in children.iter() {
                     if pair_options.get(child).is_ok() {
-                        commands.entity(child).despawn();
+                        deps.commands.entity(child).despawn();
                     }
                 }
             }
             if let Some(pos) = active_pos {
-                commands.entity(entity).with_children(|parent| {
+                deps.commands.entity(entity).with_children(|parent| {
                     spawn_pair_option(parent, i18n.t("teleport.none"), None);
-                    for candidate in pair_candidates(&world, pos) {
+                    for candidate in pair_candidates(&deps.world, pos) {
                         spawn_pair_option(
                             parent,
-                            world.teleport_settings(candidate).name,
+                            deps.world.teleport_settings(candidate).name,
                             Some(candidate),
                         );
                     }

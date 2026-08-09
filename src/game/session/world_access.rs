@@ -1,5 +1,6 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use std::collections::HashSet;
 
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::structure_state::StructureState;
@@ -13,6 +14,7 @@ use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     BlockEntity, SceneChunkMeshes, WorldRenderAssets, despawn_world, rebuild_world_for_debug_state,
 };
+use crate::scene::{SceneRenderMut, refresh_edit_changes};
 use crate::scene::BlockEntityIndex;
 use crate::shared::save::SaveState;
 
@@ -33,6 +35,23 @@ pub struct PlayingWorldParams<'w, 's> {
 }
 
 impl PlayingWorldParams<'_, '_> {
+    /// 编辑后增量刷新受影响格的渲染
+    pub fn refresh_edit_changes(&mut self, changed: &HashSet<IVec3>) {
+        let Some(render_assets) = self.render_assets.as_ref() else {
+            return;
+        };
+        let mut scene = SceneRenderMut {
+            commands: &mut self.commands,
+            meshes: &mut self.meshes,
+            render_assets,
+            block_index: &mut self.block_index,
+            scene_chunks: &mut self.scene_chunks,
+            debug: &self.debug,
+            structure_state: &mut self.structure_state,
+        };
+        refresh_edit_changes(&mut scene, &self.world, changed);
+    }
+
     /// 清空结构/运动/推杆缓存
     pub fn clear_sim_sidecars(&mut self) {
         self.structure_state.clear();

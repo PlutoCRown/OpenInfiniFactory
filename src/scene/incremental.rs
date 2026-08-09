@@ -10,14 +10,14 @@ use crate::game::world::animation::{
 };
 use crate::game::world::grid::{WorldBlocks, grid_to_world};
 use crate::game::world::rendering::{
-    BlockEntity, BlockEntityLayer, PortalFlashQueue, SceneChunkMeshes, WorldRenderAssets,
-    signal_neighbor_offsets, spawn_acceptance_sparks, spawn_break_debris, spawn_laser_beams,
-    spawn_weld_bursts, spawn_weld_sparks, spawn_world_block_entity,
-    sync_scene_chunks_for_positions,
+    BlockEntity, BlockEntityLayer, PortalFlashQueue, WorldRenderAssets, signal_neighbor_offsets,
+    spawn_acceptance_sparks, spawn_break_debris, spawn_laser_beams, spawn_weld_bursts,
+    spawn_weld_sparks, spawn_world_block_entity, sync_scene_chunks_for_positions,
 };
 use crate::sim_bridge::TurnOutput;
 
 use super::entity_index::BlockEntityIndex;
+use super::scene_render::SceneRenderMut;
 
 pub fn block_data_at(world: &WorldBlocks, pos: IVec3) -> Option<BlockData> {
     world
@@ -657,16 +657,20 @@ pub fn apply_structure_animations(
 }
 
 pub fn refresh_edit_changes(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    index: &mut BlockEntityIndex,
+    scene: &mut SceneRenderMut,
     world: &WorldBlocks,
-    assets: &WorldRenderAssets,
-    debug: &DebugState,
-    structure_state: &mut StructureState,
     changed: &HashSet<IVec3>,
-    scene_chunks: &mut SceneChunkMeshes,
 ) {
+    let SceneRenderMut {
+        commands,
+        meshes,
+        render_assets: assets,
+        block_index: index,
+        scene_chunks,
+        debug,
+        structure_state,
+    } = scene;
+
     structure_state.apply_factory_edit(world, changed);
     let refresh = collect_edit_refresh_positions(world, changed);
     // 编辑常只改 block_settings（材料预览等），BlockData 不变；
@@ -711,16 +715,20 @@ pub fn apply_turn_output_incremental(
     output: &TurnOutput,
     previous_powered_wires: &HashSet<IVec3>,
     animation_duration: f32,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    index: &mut BlockEntityIndex,
-    assets: &WorldRenderAssets,
-    debug: &DebugState,
-    structure_state: &StructureState,
+    scene: &mut SceneRenderMut,
     stats: &mut crate::game::simulation::stats::SimulationStepStats,
-    scene_chunks: &mut SceneChunkMeshes,
     portal_flash_queue: &mut PortalFlashQueue,
 ) {
+    let SceneRenderMut {
+        commands,
+        meshes,
+        render_assets: assets,
+        block_index: index,
+        scene_chunks,
+        debug,
+        structure_state,
+    } = scene;
+
     let render_start = bevy::platform::time::Instant::now();
     let mut mark = render_start;
     let elapsed_ms = |from: bevy::platform::time::Instant| from.elapsed().as_secs_f64() * 1000.0;

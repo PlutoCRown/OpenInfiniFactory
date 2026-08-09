@@ -2,18 +2,15 @@
 
 use bevy::prelude::*;
 
-use crate::game::edit_history::{EditHistory, build_cell_patch};
-use crate::game::simulation::structure_state::StructureState;
+use crate::game::edit_history::build_cell_patch;
 use crate::game::state::PlacementState;
-use crate::game::systems::debug::DebugState;
 use crate::game::ui::InventoryItems;
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
-    BlockEntity, SceneChunkMeshes, WorldRenderAssets, rebuild_world_for_debug_state,
-    rebuild_world_with_animations,
+    rebuild_world_for_debug_state, rebuild_world_with_animations,
 };
-use crate::scene::BlockEntityIndex;
+use crate::scene::WorldEditScene;
 
 use super::placement::{despawn_block_entities, refresh_edit_generated_markers};
 use super::rules::can_manual_rotate;
@@ -51,20 +48,8 @@ pub(super) fn pick_target_block(
 }
 
 /// 切换目标方块的变体并重建场景
-pub(super) fn alternate_block_at(
-    pos: IVec3,
-    world: &mut WorldBlocks,
-    edit_history: &mut EditHistory,
-    block_entities: &Query<(Entity, &BlockEntity)>,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
-    debug: &DebugState,
-    structure_state: &mut StructureState,
-    block_index: &mut BlockEntityIndex,
-    scene_chunks: &mut SceneChunkMeshes,
-) -> bool {
-    let patch = build_cell_patch(world, &[pos], |world| {
+pub(super) fn alternate_block_at(edit: &mut WorldEditScene, pos: IVec3) -> bool {
+    let patch = build_cell_patch(edit.world, &[pos], |world| {
         let Some(block) = world.blocks.get_mut(&pos) else {
             return;
         };
@@ -80,41 +65,38 @@ pub(super) fn alternate_block_at(
     if patch.is_empty() {
         return false;
     }
-    edit_history.record(patch);
-    refresh_edit_generated_markers(world);
-    structure_state.apply_factory_edit(world, &std::collections::HashSet::from([pos]));
-    despawn_block_entities(commands, meshes, block_entities, block_index, scene_chunks);
+    edit.edit_history.record(patch);
+    refresh_edit_generated_markers(edit.world);
+    edit.scene
+        .structure_state
+        .apply_factory_edit(edit.world, &std::collections::HashSet::from([pos]));
+    despawn_block_entities(
+        edit.scene.commands,
+        edit.scene.meshes,
+        edit.block_entities,
+        edit.scene.block_index,
+        edit.scene.scene_chunks,
+    );
     rebuild_world_for_debug_state(
-        commands,
-        meshes,
-        world,
-        render_assets,
-        debug,
-        structure_state,
-        block_index,
-        scene_chunks,
+        edit.scene.commands,
+        edit.scene.meshes,
+        edit.world,
+        edit.scene.render_assets,
+        edit.scene.debug,
+        edit.scene.structure_state,
+        edit.scene.block_index,
+        edit.scene.scene_chunks,
     );
     true
 }
 
 /// 旋转目标方块朝向并重建场景
-pub(super) fn rotate_block_at(
-    pos: IVec3,
-    reverse: bool,
-    world: &mut WorldBlocks,
-    block_entities: &Query<(Entity, &BlockEntity)>,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    render_assets: &WorldRenderAssets,
-    structure_state: &mut StructureState,
-    block_index: &mut BlockEntityIndex,
-    scene_chunks: &mut SceneChunkMeshes,
-) -> bool {
-    let in_system = !world.blocks.contains_key(&pos);
+pub(super) fn rotate_block_at(edit: &mut WorldEditScene, pos: IVec3, reverse: bool) -> bool {
+    let in_system = !edit.world.blocks.contains_key(&pos);
     let Some(block) = (if in_system {
-        world.system_blocks.get_mut(&pos)
+        edit.world.system_blocks.get_mut(&pos)
     } else {
-        world.blocks.get_mut(&pos)
+        edit.world.blocks.get_mut(&pos)
     }) else {
         return false;
     };
@@ -126,7 +108,7 @@ pub(super) fn rotate_block_at(
     block.facing = rotate_facing(block.facing, reverse);
     let updated = *block;
 
-    refresh_edit_generated_markers(world);
+    refresh_edit_generated_markers(edit.world);
     let mut animations = std::collections::HashMap::new();
     animations.insert(
         pos,
@@ -142,17 +124,25 @@ pub(super) fn rotate_block_at(
         },
     );
 
-    structure_state.apply_factory_edit(world, &std::collections::HashSet::from([pos]));
-    despawn_block_entities(commands, meshes, block_entities, block_index, scene_chunks);
+    edit.scene
+        .structure_state
+        .apply_factory_edit(edit.world, &std::collections::HashSet::from([pos]));
+    despawn_block_entities(
+        edit.scene.commands,
+        edit.scene.meshes,
+        edit.block_entities,
+        edit.scene.block_index,
+        edit.scene.scene_chunks,
+    );
     rebuild_world_with_animations(
-        commands,
-        meshes,
-        world,
-        render_assets,
+        edit.scene.commands,
+        edit.scene.meshes,
+        edit.world,
+        edit.scene.render_assets,
         &animations,
         None,
-        block_index,
-        scene_chunks,
+        edit.scene.block_index,
+        edit.scene.scene_chunks,
     );
     true
 }

@@ -1,8 +1,10 @@
 pub mod color_slot_ui;
 pub mod context;
+pub mod panel_dropdown_deps;
 pub mod panel_state;
 pub mod widgets;
 pub mod world_refresh;
 
 pub use context::*;
+pub use panel_dropdown_deps::BlockPanelDropdownDeps;
 pub use panel_state::*;

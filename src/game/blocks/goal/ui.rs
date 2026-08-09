@@ -4,6 +4,7 @@ use bevy::window::PrimaryWindow;
 
 use super::GoalBlock;
 
+use crate::game::block_editing::BlockPanelDropdownDeps;
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
     MaterialIconSlotBlocked, click_material_slot, hover_tooltip_material, hover_tooltip_paint,
@@ -33,7 +34,6 @@ use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{CarriedItem, UiActionLabel, UiPanelBinding};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{GoalSettings, WorldBlocks};
-use crate::game::world::rendering::BlockIconAssets;
 
 const MATERIAL_SLOT: u8 = 0;
 const STAMP_SLOT_BASE: u8 = 1;
@@ -539,11 +539,7 @@ fn update_dropdown_overlays(
 }
 
 fn update_slot_icons(
-    _ui_thread: UiMainThread,
-    ui_runtime: Res<UiRuntime>,
-    world: Res<WorldBlocks>,
-    block_icons: Option<Res<BlockIconAssets>>,
-    mut commands: Commands,
+    mut deps: BlockPanelDropdownDeps,
     mut material_slots: Query<(Entity, &GoalMaterialSlot, &Children)>,
     mut material_options: Query<(&GoalMaterialOption, &Children)>,
     mut stamp_slots: Query<(
@@ -562,11 +558,11 @@ fn update_slot_icons(
     mut paint_options: Query<(&GoalPaintOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
 ) {
-    if ui_runtime.active_panel() != Some(UiPanelId::Goal) {
+    if deps.ui_runtime.active_panel() != Some(UiPanelId::Goal) {
         return;
     }
 
-    let Some(icons) = block_icons.as_ref() else {
+    let Some(icons) = deps.block_icons.as_ref() else {
         return;
     };
     let block_icons = icons.as_ref();
@@ -590,14 +586,15 @@ fn update_slot_icons(
         );
     }
 
-    let settings = ui_runtime
+    let settings = deps
+        .ui_runtime
         .active_block_pos()
-        .map(|pos| world.goal_settings(pos));
+        .map(|pos| deps.world.goal_settings(pos));
     for (entity, _, children) in &mut material_slots {
         let material = settings.map(|s| s.material);
         update_material_icon(children, material, block_icons, &mut material_icons);
         set_hover_tooltip(
-            &mut commands,
+            &mut deps.commands,
             entity,
             material.map(hover_tooltip_material),
         );
@@ -611,7 +608,7 @@ fn update_slot_icons(
         );
         // 不可附着面留给 face tooltip，不挂材料名
         set_hover_tooltip(
-            &mut commands,
+            &mut deps.commands,
             entity,
             blocked
                 .is_none()
@@ -627,7 +624,7 @@ fn update_slot_icons(
             &mut material_icons,
         );
         set_hover_tooltip(
-            &mut commands,
+            &mut deps.commands,
             entity,
             blocked
                 .is_none()

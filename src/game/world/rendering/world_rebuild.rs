@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::components::BlockEntity;
 use super::scene_chunks::{clear_scene_chunks, rebuild_all_scene_chunks, SceneChunkMeshes};
-use super::spawn::{block_render_material, spawn_block, spawn_block_model};
+use super::spawn::{block_render_material, spawn_block, spawn_block_model, SpawnBlockOpts, SpawnMode};
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{AnimationTiming, BlockAnimation, PusherAnimation};
@@ -185,17 +185,17 @@ pub fn rebuild_world_with_timed_animations(
             world,
             *pos,
             *data,
-            assets.block_material(data.kind),
-            None,
-            animations.get(pos).copied(),
-            None,
-            timing,
-            true,
-            false,
-            true,
-            None,
-            factory_debug,
-            Some(index),
+            SpawnBlockOpts {
+                material: assets.block_material(data.kind),
+                animation: animations.get(pos).copied(),
+                pusher_animation: None,
+                timing,
+                mode: SpawnMode::World {
+                    index,
+                    factory_debug,
+                    show_generator_preview: true,
+                },
+            },
         );
     }
     for (pos, data) in &world.system_blocks {
@@ -206,17 +206,17 @@ pub fn rebuild_world_with_timed_animations(
             world,
             *pos,
             *data,
-            assets.block_material(data.kind),
-            None,
-            animations.get(pos).copied(),
-            None,
-            timing,
-            true,
-            false,
-            true,
-            None,
-            None,
-            Some(index),
+            SpawnBlockOpts {
+                material: assets.block_material(data.kind),
+                animation: animations.get(pos).copied(),
+                pusher_animation: None,
+                timing,
+                mode: SpawnMode::World {
+                    index,
+                    factory_debug: None,
+                    show_generator_preview: true,
+                },
+            },
         );
     }
     rebuild_all_scene_chunks(commands, meshes, world, assets, scene_chunks);
@@ -249,17 +249,17 @@ pub fn rebuild_world_with_runtime_animations(
             world,
             *pos,
             *data,
-            material,
-            None,
-            animations.get(pos).copied(),
-            pusher_animations.get(pos).copied(),
-            timing,
-            true,
-            false,
-            false,
-            None,
-            factory_debug,
-            Some(index),
+            SpawnBlockOpts {
+                material,
+                animation: animations.get(pos).copied(),
+                pusher_animation: pusher_animations.get(pos).copied(),
+                timing,
+                mode: SpawnMode::World {
+                    index,
+                    factory_debug,
+                    show_generator_preview: false,
+                },
+            },
         );
     }
     for (pos, data) in &world.system_blocks {
@@ -270,17 +270,17 @@ pub fn rebuild_world_with_runtime_animations(
             world,
             *pos,
             *data,
-            assets.block_material(data.kind),
-            None,
-            animations.get(pos).copied(),
-            None,
-            timing,
-            true,
-            false,
-            false,
-            None,
-            None,
-            Some(index),
+            SpawnBlockOpts {
+                material: assets.block_material(data.kind),
+                animation: animations.get(pos).copied(),
+                pusher_animation: None,
+                timing,
+                mode: SpawnMode::World {
+                    index,
+                    factory_debug: None,
+                    show_generator_preview: false,
+                },
+            },
         );
     }
     rebuild_all_scene_chunks(commands, meshes, world, assets, scene_chunks);

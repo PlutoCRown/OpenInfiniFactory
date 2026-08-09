@@ -21,7 +21,7 @@ use crate::game::material_blocks::{
 use crate::game::world::animation::AnimationTiming;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::render_assets::WorldRenderAssets;
-use crate::game::world::rendering::spawn::spawn_block_model;
+use crate::game::world::rendering::spawn::{spawn_block_model, SpawnBlockOpts, SpawnMode};
 use crate::game::world::rendering::{
     BlockIconRenderEntity, BlockIconRenderRoot, bakeable_block_icon_kinds,
     baked_block_icon_only_id, baked_block_icon_path, light_panel_icon_path, selection_icon_path,
@@ -650,17 +650,16 @@ fn spawn_bake_icon_model(
         world,
         IVec3::ZERO,
         data,
-        assets.block_material(data.kind),
-        None,
-        None,
-        None,
-        AnimationTiming::edit(),
-        false,
-        false,
-        true,
-        Some((origin - Vec3::splat(0.5), icon_layer)),
-        None,
-        None,
+        SpawnBlockOpts {
+            material: assets.block_material(data.kind),
+            animation: None,
+            pusher_animation: None,
+            timing: AnimationTiming::edit(),
+            mode: SpawnMode::Icon {
+                origin_offset: origin - Vec3::splat(0.5),
+                layer: icon_layer,
+            },
+        },
     );
 }
 

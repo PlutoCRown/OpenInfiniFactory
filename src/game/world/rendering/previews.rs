@@ -4,7 +4,7 @@ use super::components::{
     DeleteBoundsOverlay, DeleteBoundsPart, EditPreview, GameplayScene, PendingGeneratedPreview,
     SelectionBoundsOverlay, SelectionBoundsPart,
 };
-use super::spawn::spawn_block_model;
+use super::spawn::{spawn_block_model, SpawnBlockOpts, SpawnMode};
 use crate::game::blocks::BlockData;
 use crate::game::world::animation::AnimationTiming;
 use crate::game::world::grid::{WorldBlocks, grid_to_world};
@@ -267,16 +267,12 @@ pub fn spawn_block_preview(
         world,
         pos,
         data,
-        assets.block_preview_material(data.kind),
-        Some(EditPreview),
-        None,
-        None,
-        AnimationTiming::edit(),
-        false,
-        false,
-        true,
-        None,
-        None,
-        None,
+        SpawnBlockOpts {
+            material: assets.block_preview_material(data.kind),
+            animation: None,
+            pusher_animation: None,
+            timing: AnimationTiming::edit(),
+            mode: SpawnMode::Preview,
+        },
     );
 }

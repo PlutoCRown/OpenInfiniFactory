@@ -4,6 +4,7 @@ pub mod cameras;
 pub mod debug;
 pub mod edit_history;
 pub mod input;
+pub mod local_player;
 pub mod material_blocks;
 pub mod player;
 pub mod scene_blocks;

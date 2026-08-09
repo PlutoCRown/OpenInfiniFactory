@@ -20,7 +20,7 @@ use crate::game::world::rendering::{
     PendingGeneratedPreview, PortalFlashQueue, SceneChunkMeshes, WorldRenderAssets,
     despawn_pending_generated_previews, spawn_pending_generated_block,
 };
-use crate::scene::{BlockEntityIndex, apply_turn_output};
+use crate::scene::{BlockEntityIndex, SceneRenderMut, apply_turn_output};
 
 /// 表现层提交状态：已提交世界与上次通电电线集
 #[derive(Resource, Default)]
@@ -83,21 +83,21 @@ pub fn prefetch_simulation_turn(
 /// tick_simulation 所需的世界/缓存/渲染依赖集合
 #[derive(SystemParam)]
 pub struct SimulationTickDeps<'w> {
-    world: ResMut<'w, WorldBlocks>,
-    pending_generated: ResMut<'w, PendingGeneratedMaterials>,
-    signal_cache: ResMut<'w, SignalNetworkCache>,
-    structure_state: ResMut<'w, StructureState>,
-    movement_influence: ResMut<'w, MovementInfluenceCache>,
-    pusher_state: ResMut<'w, PusherState>,
-    turn_cache: ResMut<'w, TurnCache>,
-    sim_stats: ResMut<'w, SimulationStepStats>,
-    presentation: ResMut<'w, SimulationPresentationState>,
-    block_index: ResMut<'w, BlockEntityIndex>,
-    scene_chunks: ResMut<'w, SceneChunkMeshes>,
-    meshes: ResMut<'w, Assets<Mesh>>,
-    render_assets: Option<Res<'w, WorldRenderAssets>>,
-    portal_flash_queue: ResMut<'w, PortalFlashQueue>,
-    debug: Res<'w, DebugState>,
+    pub(crate) world: ResMut<'w, WorldBlocks>,
+    pub(crate) pending_generated: ResMut<'w, PendingGeneratedMaterials>,
+    pub(crate) signal_cache: ResMut<'w, SignalNetworkCache>,
+    pub(crate) structure_state: ResMut<'w, StructureState>,
+    pub(crate) movement_influence: ResMut<'w, MovementInfluenceCache>,
+    pub(crate) pusher_state: ResMut<'w, PusherState>,
+    pub(crate) turn_cache: ResMut<'w, TurnCache>,
+    pub(crate) sim_stats: ResMut<'w, SimulationStepStats>,
+    pub(crate) presentation: ResMut<'w, SimulationPresentationState>,
+    pub(crate) block_index: ResMut<'w, BlockEntityIndex>,
+    pub(crate) scene_chunks: ResMut<'w, SceneChunkMeshes>,
+    pub(crate) meshes: ResMut<'w, Assets<Mesh>>,
+    pub(crate) render_assets: Option<Res<'w, WorldRenderAssets>>,
+    pub(crate) portal_flash_queue: ResMut<'w, PortalFlashQueue>,
+    pub(crate) debug: Res<'w, DebugState>,
 }
 
 /// 按缓存回合推进模拟并刷新生成预览
@@ -109,10 +109,11 @@ pub fn tick_simulation(
     pending_previews: Query<Entity, With<PendingGeneratedPreview>>,
     mut deps: SimulationTickDeps,
 ) {
-    let Some(render_assets) = deps.render_assets.as_ref() else {
-        return;
-    };
     if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
+        if deps.render_assets.is_none() {
+            return;
+        }
+        let render_assets = deps.render_assets.as_ref().unwrap();
         prepare_upcoming_generation(
             &deps.world,
             &mut deps.pending_generated,
@@ -129,6 +130,10 @@ pub fn tick_simulation(
             simulation.turn,
             simulation.accumulator,
         );
+        return;
+    }
+
+    if deps.render_assets.is_none() {
         return;
     }
 
@@ -148,22 +153,9 @@ pub fn tick_simulation(
             present_turn(
                 cached,
                 animation_duration_for(simulation.running, simulation.speed),
-                &mut deps.presentation,
                 &mut simulation.last_powered_devices,
-                &mut deps.world,
-                &mut deps.pending_generated,
-                &mut deps.signal_cache,
-                &mut deps.structure_state,
-                &mut deps.movement_influence,
-                &mut deps.pusher_state,
+                &mut deps,
                 &mut commands,
-                &mut deps.meshes,
-                &mut deps.block_index,
-                &mut deps.scene_chunks,
-                render_assets,
-                &mut deps.portal_flash_queue,
-                &deps.debug,
-                &mut deps.sim_stats,
             );
         }
         prepare_upcoming_generation(
@@ -176,7 +168,7 @@ pub fn tick_simulation(
             &mut commands,
             &mut deps.meshes,
             &pending_previews,
-            render_assets,
+            deps.render_assets.as_ref().unwrap(),
             &deps.world,
             &deps.pending_generated,
             simulation.turn,
@@ -195,22 +187,9 @@ pub fn tick_simulation(
             present_turn(
                 cached,
                 animation_duration_for(simulation.running, simulation.speed),
-                &mut deps.presentation,
                 &mut simulation.last_powered_devices,
-                &mut deps.world,
-                &mut deps.pending_generated,
-                &mut deps.signal_cache,
-                &mut deps.structure_state,
-                &mut deps.movement_influence,
-                &mut deps.pusher_state,
+                &mut deps,
                 &mut commands,
-                &mut deps.meshes,
-                &mut deps.block_index,
-                &mut deps.scene_chunks,
-                render_assets,
-                &mut deps.portal_flash_queue,
-                &deps.debug,
-                &mut deps.sim_stats,
             );
         }
     }
@@ -225,7 +204,7 @@ pub fn tick_simulation(
         &mut commands,
         &mut deps.meshes,
         &pending_previews,
-        render_assets,
+        deps.render_assets.as_ref().unwrap(),
         &deps.world,
         &deps.pending_generated,
         simulation.turn,
@@ -236,53 +215,46 @@ pub fn tick_simulation(
 fn present_turn(
     cached: CachedTurn,
     animation_duration: f32,
-    presentation: &mut SimulationPresentationState,
     last_powered_devices: &mut HashSet<IVec3>,
-    world: &mut WorldBlocks,
-    pending_generated: &mut PendingGeneratedMaterials,
-    signal_cache: &mut SignalNetworkCache,
-    structure_state: &mut StructureState,
-    movement_influence: &mut MovementInfluenceCache,
-    pusher_state: &mut PusherState,
+    deps: &mut SimulationTickDeps,
     commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    block_index: &mut BlockEntityIndex,
-    scene_chunks: &mut SceneChunkMeshes,
-    render_assets: &WorldRenderAssets,
-    portal_flash_queue: &mut PortalFlashQueue,
-    debug: &DebugState,
-    sim_stats: &mut SimulationStepStats,
 ) {
-    let before = presentation.committed_world.clone();
+    let Some(render_assets) = deps.render_assets.as_ref() else {
+        return;
+    };
+    let before = deps.presentation.committed_world.clone();
     apply_sim_snapshot(
         &cached.after,
-        world,
-        pending_generated,
-        signal_cache,
-        structure_state,
-        movement_influence,
-        pusher_state,
+        &mut deps.world,
+        &mut deps.pending_generated,
+        &mut deps.signal_cache,
+        &mut deps.structure_state,
+        &mut deps.movement_influence,
+        &mut deps.pusher_state,
     );
-    *sim_stats = SimulationStepStats(cached.output.stats.clone());
+    *deps.sim_stats = SimulationStepStats(cached.output.stats.clone());
+    let mut scene = SceneRenderMut {
+        commands,
+        meshes: &mut deps.meshes,
+        render_assets,
+        block_index: &mut deps.block_index,
+        scene_chunks: &mut deps.scene_chunks,
+        debug: &deps.debug,
+        structure_state: &mut deps.structure_state,
+    };
     apply_turn_output(
         &before,
-        world,
+        &deps.world,
         &cached.output,
-        &presentation.last_powered_wires,
+        &deps.presentation.last_powered_wires,
         animation_duration,
-        commands,
-        meshes,
-        block_index,
-        render_assets,
-        debug,
-        structure_state,
-        sim_stats,
-        scene_chunks,
-        portal_flash_queue,
+        &mut scene,
+        &mut deps.sim_stats,
+        &mut deps.portal_flash_queue,
     );
-    presentation.last_powered_wires = cached.output.powered_wires.clone();
+    deps.presentation.last_powered_wires = cached.output.powered_wires.clone();
     *last_powered_devices = cached.output.powered_devices.clone();
-    presentation.committed_world = world.clone();
+    deps.presentation.committed_world = deps.world.clone();
 }
 
 fn refresh_pending_generated_previews(

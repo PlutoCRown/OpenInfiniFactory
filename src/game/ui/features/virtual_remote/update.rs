@@ -7,8 +7,9 @@ use bevy::window::PrimaryWindow;
 
 use crate::game::blocks::BlockPresent;
 use crate::game::input::{ActionPulse, GameplayInputState};
-use crate::game::state::{BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState};
-use crate::game::ui::UiRuntime;
+use crate::game::local_player::LocalPlayer;
+use crate::game::state::BuilderMode;
+use crate::game::systems::gameplay::GameplayPlayGate;
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::config::{GameConfig, VirtualControlId};
 use crate::shared::touch_profile::TouchProfile;
@@ -211,10 +212,8 @@ pub fn on_virtual_press(
     mut press: On<Pointer<Press>>,
     touch: Res<TouchProfile>,
     editor_open: Res<VirtualLayoutEditorOpen>,
-    mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
-    ui_runtime: Res<UiRuntime>,
-    placement: Res<PlacementState>,
+    gate: GameplayPlayGate,
+    player: LocalPlayer,
     windows: Query<&Window, With<PrimaryWindow>>,
     controls: Query<&VirtualRemoteControl>,
     look_zones: Query<(), With<VirtualLookZone>>,
@@ -223,9 +222,7 @@ pub fn on_virtual_press(
 ) {
     if !touch.enabled
         || editor_open.0
-        || *mode.get() != GameMode::Playing
-        || !playing_ui.active_play()
-        || ui_runtime.blocks_gameplay()
+        || !gate.allows_active_play(&player.playing_ui)
         || press.event.button != PointerButton::Primary
     {
         return;
@@ -286,7 +283,7 @@ pub fn on_virtual_press(
 
     if look_zones.get(press.entity).is_ok() {
         press.propagate(false);
-        if placement.edit_gesture.is_some() {
+        if player.placement.edit_gesture.is_some() {
             if let Ok(window) = windows.single() {
                 if pos.x >= window.width() * 0.5 {
                     input.virtual_cancel_edit = true;
@@ -416,18 +413,14 @@ pub fn on_virtual_click(
     mut click: On<Pointer<Click>>,
     touch: Res<TouchProfile>,
     editor_open: Res<VirtualLayoutEditorOpen>,
-    mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
-    ui_runtime: Res<UiRuntime>,
-    simulation: Res<SimulationState>,
+    gate: GameplayPlayGate,
+    player: LocalPlayer,
     controls: Query<&VirtualRemoteControl>,
     mut input: ResMut<GameplayInputState>,
 ) {
     if !touch.enabled
         || editor_open.0
-        || *mode.get() != GameMode::Playing
-        || !playing_ui.active_play()
-        || ui_runtime.blocks_gameplay()
+        || !gate.allows_active_play(&player.playing_ui)
         || click.event.button != PointerButton::Primary
     {
         return;
@@ -439,7 +432,7 @@ pub fn on_virtual_click(
     match control.0 {
         VirtualControlId::Pause => input.virtual_pause = true,
         VirtualControlId::Inventory => {
-            if !simulation.is_active() {
+            if !gate.simulation.is_active() {
                 input.virtual_inventory = true;
             }
         }
@@ -448,14 +441,14 @@ pub fn on_virtual_click(
         VirtualControlId::SimPause => input.virtual_rollback = true,
         VirtualControlId::SimStep => input.virtual_sim_step = true,
         VirtualControlId::Rotate => {
-            if simulation.is_active() {
+            if gate.simulation.is_active() {
                 input.virtual_rollback = true;
             } else {
                 input.virtual_rotate = true;
             }
         }
         VirtualControlId::Alternate => {
-            if simulation.is_active() {
+            if gate.simulation.is_active() {
                 input.virtual_sim_step = true;
             } else {
                 input.virtual_alternate = true;
@@ -512,14 +505,10 @@ pub fn apply_virtual_control_layout(
 
 pub fn sync_virtual_remote_visibility(
     touch: Res<TouchProfile>,
-    mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
-    ui_runtime: Res<UiRuntime>,
-    simulation: Res<SimulationState>,
+    gate: GameplayPlayGate,
+    player: LocalPlayer,
     editor_open: Res<VirtualLayoutEditorOpen>,
-    builder_mode: Res<BuilderMode>,
     solution_state: Res<crate::game::state::SolutionState>,
-    placement: Res<PlacementState>,
     world: Res<WorldBlocks>,
     mut controls: Query<(
         Entity,
@@ -562,16 +551,15 @@ pub fn sync_virtual_remote_visibility(
         return;
     }
 
-    let show = *mode.get() == GameMode::Playing
-        && playing_ui.active_play()
-        && !ui_runtime.blocks_gameplay();
-    let sim_active = simulation.is_active();
-    let play_mode = *builder_mode == BuilderMode::Play;
+    let show = gate.allows_active_play(&player.playing_ui);
+    let sim_active = gate.simulation.is_active();
+    let play_mode = *player.builder_mode == BuilderMode::Play;
     let show_config = show
-        && (*builder_mode == BuilderMode::Edit
+        && (*player.builder_mode == BuilderMode::Edit
             || solution_state.entry == crate::game::state::WorldEntryMode::Free)
         && !sim_active
-        && placement
+        && player
+            .placement
             .target
             .and_then(|t| world.system_blocks.get(&t.pos))
             .and_then(|b| b.kind.ui_panel())

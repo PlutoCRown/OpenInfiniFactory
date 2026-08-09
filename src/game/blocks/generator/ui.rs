@@ -1,11 +1,11 @@
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 
 use super::GeneratorBlock;
 
 use crate::game::edit_history::EditHistory;
 
+use crate::game::block_editing::BlockPanelDropdownDeps;
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
     click_material_slot, hover_tooltip_material, set_hover_tooltip, spawn_facing_radio_row,
@@ -30,7 +30,6 @@ use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{CarriedItem, UiActionLabel, UiPanelBinding};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{GeneratorMode, WorldBlocks};
-use crate::game::world::rendering::BlockIconAssets;
 
 const MATERIAL_SLOT: u8 = 0;
 
@@ -494,13 +493,7 @@ fn update_panel(
 }
 
 fn update_dropdowns(
-    _ui_thread: UiMainThread,
-    ui_runtime: Res<UiRuntime>,
-    open_dropdown: Res<OpenBlockPanelDropdown>,
-    world: Res<WorldBlocks>,
-    block_icons: Option<Res<BlockIconAssets>>,
-    mut commands: Commands,
-    windows: Query<&Window, With<PrimaryWindow>>,
+    mut deps: BlockPanelDropdownDeps,
     mut material_slots: Query<(Entity, &GeneratorMaterialSlot, &Children)>,
     mut material_options: Query<(&GeneratorMaterialOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
@@ -508,10 +501,10 @@ fn update_dropdowns(
     triggers: Query<(&GeneratorAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     let panel = UiPanelId::Generator;
-    let panel_active = ui_runtime.active_panel() == Some(panel);
-    let open = panel_active && open_dropdown.is_open(panel, MATERIAL_SLOT);
+    let panel_active = deps.ui_runtime.active_panel() == Some(panel);
+    let open = panel_active && deps.open_dropdown.is_open(panel, MATERIAL_SLOT);
 
-    let window = windows.single().ok();
+    let window = deps.windows.single().ok();
     let viewport = window
         .map(|window| Vec2::new(window.width(), window.height()))
         .unwrap_or(Vec2::ZERO);
@@ -528,7 +521,7 @@ fn update_dropdowns(
     }
 
     // 不缓存「已填充」：关面板时本系统被 run_if 跳过，Local 清不掉，二次打开会跳过刷新
-    let Some(icons) = block_icons.as_ref() else {
+    let Some(icons) = deps.block_icons.as_ref() else {
         return;
     };
     let block_icons = icons.as_ref();
@@ -536,13 +529,14 @@ fn update_dropdowns(
         update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
     }
 
-    let material = ui_runtime
+    let material = deps
+        .ui_runtime
         .active_block_pos()
-        .map(|pos| world.generator_settings(pos).material);
+        .map(|pos| deps.world.generator_settings(pos).material);
     for (entity, _, children) in &mut material_slots {
         update_material_icon(children, material, block_icons, &mut material_icons);
         set_hover_tooltip(
-            &mut commands,
+            &mut deps.commands,
             entity,
             material.map(hover_tooltip_material),
         );

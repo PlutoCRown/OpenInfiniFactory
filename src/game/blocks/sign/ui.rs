@@ -1,9 +1,9 @@
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 
 use super::SignBlock;
 
+use crate::game::block_editing::BlockPanelDropdownDeps;
 use crate::game::block_editing::OpenBlockPanelDropdown;
 use crate::game::block_editing::widgets::{
     click_material_slot, hover_tooltip_material, set_hover_tooltip, spawn_material_icon_list,
@@ -29,7 +29,6 @@ use crate::game::ui::core::text_prompt::{TextPromptProps, TextPromptResult};
 use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{CarriedItem, UiActionLabel, UiPanelBinding};
 use crate::game::world::grid::{SignDisplay, WorldBlocks};
-use crate::game::world::rendering::BlockIconAssets;
 
 const DISPLAY_SLOT: u8 = 0;
 
@@ -344,13 +343,7 @@ fn update_panel(
 }
 
 fn update_dropdowns(
-    _ui_thread: UiMainThread,
-    ui_runtime: Res<UiRuntime>,
-    open_dropdown: Res<OpenBlockPanelDropdown>,
-    world: Res<WorldBlocks>,
-    block_icons: Option<Res<BlockIconAssets>>,
-    mut commands: Commands,
-    windows: Query<&Window, With<PrimaryWindow>>,
+    mut deps: BlockPanelDropdownDeps,
     mut display_slots: Query<(Entity, &SignDisplaySlot, &Children)>,
     mut material_options: Query<(&SignMaterialOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
@@ -358,10 +351,10 @@ fn update_dropdowns(
     triggers: Query<(&SignAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     let panel = UiPanelId::Sign;
-    let panel_active = ui_runtime.active_panel() == Some(panel);
-    let open = panel_active && open_dropdown.is_open(panel, DISPLAY_SLOT);
+    let panel_active = deps.ui_runtime.active_panel() == Some(panel);
+    let open = panel_active && deps.open_dropdown.is_open(panel, DISPLAY_SLOT);
 
-    let window = windows.single().ok();
+    let window = deps.windows.single().ok();
     let viewport = window
         .map(|w| Vec2::new(w.width(), w.height()))
         .unwrap_or(Vec2::ZERO);
@@ -377,7 +370,7 @@ fn update_dropdowns(
     }
 
     // 不缓存「已填充」：关面板时本系统被 run_if 跳过，Local 清不掉，二次打开会跳过刷新
-    let Some(icons) = block_icons.as_ref() else {
+    let Some(icons) = deps.block_icons.as_ref() else {
         return;
     };
     let block_icons = icons.as_ref();
@@ -385,15 +378,14 @@ fn update_dropdowns(
         update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
     }
 
-    let material =
-        ui_runtime
-            .active_block_pos()
-            .and_then(|pos| match world.sign_settings(pos).display {
-                Some(SignDisplay::Material(material)) => Some(material),
-                _ => None,
-            });
+    let material = deps.ui_runtime.active_block_pos().and_then(|pos| {
+        match deps.world.sign_settings(pos).display {
+            Some(SignDisplay::Material(material)) => Some(material),
+            _ => None,
+        }
+    });
     for (entity, _, children) in &mut display_slots {
         update_material_icon(children, material, block_icons, &mut material_icons);
-        set_hover_tooltip(&mut commands, entity, material.map(hover_tooltip_material));
+        set_hover_tooltip(&mut deps.commands, entity, material.map(hover_tooltip_material));
     }
 }

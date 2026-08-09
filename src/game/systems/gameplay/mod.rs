@@ -6,6 +6,7 @@ mod edit_ops;
 mod hover;
 mod input;
 mod placement;
+mod play_gate;
 mod rules;
 mod selection;
 
@@ -16,4 +17,5 @@ pub use hover::{
 };
 pub use input::gameplay_input;
 pub use placement::placement_input;
+pub use play_gate::GameplayPlayGate;
 pub use selection::sync_edit_bounds_overlays;

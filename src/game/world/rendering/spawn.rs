@@ -27,6 +27,34 @@ use crate::game::world::grid::{MaterialFace, WorldBlocks, grid_to_world};
 use crate::game::world::render_assets::{FactoryVisual, WorldRenderAssets};
 use crate::scene::BlockEntityIndex;
 
+/// 方块生成场景：决定索引、预览与图标等特殊行为
+pub enum SpawnMode<'a> {
+    /// 游玩/世界中的正式方块
+    World {
+        index: &'a mut BlockEntityIndex,
+        factory_debug: Option<&'a StructureState>,
+        show_generator_preview: bool,
+    },
+    /// 模拟待落地的半透明生成预览
+    PendingGen,
+    /// 离屏图标烘焙
+    Icon {
+        origin_offset: Vec3,
+        layer: &'a RenderLayers,
+    },
+    /// 编辑放置预览
+    Preview,
+}
+
+/// 方块模型生成的统一参数（材质、动画与时序 + 场景模式）
+pub struct SpawnBlockOpts<'a> {
+    pub material: Handle<StandardMaterial>,
+    pub animation: Option<BlockAnimation>,
+    pub pusher_animation: Option<PusherAnimation>,
+    pub timing: AnimationTiming,
+    pub mode: SpawnMode<'a>,
+}
+
 /// 按通电状态选择方块渲染材质
 pub(crate) fn block_render_material(
     assets: &WorldRenderAssets,
@@ -275,17 +303,17 @@ pub fn spawn_block_with_timed_animation(
         world,
         pos,
         data,
-        block_render_material(assets, data, powered_wire),
-        None,
-        animation,
-        None,
-        timing,
-        true,
-        false,
-        true,
-        None,
-        factory_debug,
-        Some(index),
+        SpawnBlockOpts {
+            material: block_render_material(assets, data, powered_wire),
+            animation,
+            pusher_animation: None,
+            timing,
+            mode: SpawnMode::World {
+                index,
+                factory_debug,
+                show_generator_preview: true,
+            },
+        },
     )
 }
 
@@ -307,17 +335,13 @@ pub fn spawn_pending_generated_block(
         world,
         pos,
         data,
-        assets.block_material(data.kind),
-        None,
-        animation,
-        None,
-        timing,
-        false,
-        true,
-        false,
-        None,
-        None,
-        None,
+        SpawnBlockOpts {
+            material: assets.block_material(data.kind),
+            animation,
+            pusher_animation: None,
+            timing,
+            mode: SpawnMode::PendingGen,
+        },
     );
 }
 
@@ -343,17 +367,17 @@ pub(crate) fn spawn_world_block_entity(
         world,
         pos,
         data,
-        block_render_material(assets, data, powered_wire),
-        None,
-        animation,
-        pusher_animation,
-        timing,
-        true,
-        false,
-        true,
-        None,
-        factory_debug,
-        Some(index),
+        SpawnBlockOpts {
+            material: block_render_material(assets, data, powered_wire),
+            animation,
+            pusher_animation,
+            timing,
+            mode: SpawnMode::World {
+                index,
+                factory_debug,
+                show_generator_preview: true,
+            },
+        },
     )
 }
 
@@ -365,18 +389,52 @@ pub(crate) fn spawn_block_model(
     world: &WorldBlocks,
     pos: IVec3,
     data: BlockData,
-    material: Handle<StandardMaterial>,
-    edit_preview: Option<EditPreview>,
-    animation: Option<BlockAnimation>,
-    pusher_animation: Option<PusherAnimation>,
-    timing: AnimationTiming,
-    with_block_entity: bool,
-    pending_generated_preview: bool,
-    show_generator_preview: bool,
-    icon_render: Option<(Vec3, &RenderLayers)>,
-    factory_debug: Option<&StructureState>,
-    index: Option<&mut BlockEntityIndex>,
+    opts: SpawnBlockOpts<'_>,
 ) -> Entity {
+    let SpawnBlockOpts {
+        material,
+        animation,
+        pusher_animation,
+        timing,
+        mode,
+    } = opts;
+    let (
+        with_block_entity,
+        pending_generated_preview,
+        show_generator_preview,
+        icon_render,
+        edit_preview,
+        factory_debug,
+        index,
+    ) = match mode {
+        SpawnMode::World {
+            index,
+            factory_debug,
+            show_generator_preview,
+        } => (
+            true,
+            false,
+            show_generator_preview,
+            None,
+            None,
+            factory_debug,
+            Some(index),
+        ),
+        SpawnMode::PendingGen => (false, true, false, None, None, None, None),
+        SpawnMode::Icon {
+            origin_offset,
+            layer,
+        } => (
+            false,
+            false,
+            true,
+            Some((origin_offset, layer)),
+            None,
+            None,
+            None,
+        ),
+        SpawnMode::Preview => (false, false, true, None, Some(EditPreview), None, None),
+    };
     let debug_overlay = factory_debug.and_then(|structure_state| {
         factory_debug_overlay_material(assets, structure_state, pos, data.kind)
     });
