@@ -16,7 +16,7 @@ use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state,
 };
 use crate::sim_bridge::SimulationPresentationState;
-use crate::sim_bridge::{SimSnapshot, SimulationWorker, TurnCache};
+use crate::sim_bridge::{SimulationWorker, TurnCache, invalidate_simulation_prefetch};
 
 #[derive(SystemParam)]
 pub struct SimulationControlDeps<'w> {
@@ -68,22 +68,19 @@ pub fn simulation_controls(
             &mut deps.structure_state,
             &mut deps.pusher_state,
         );
-        deps.presentation.committed_world = deps.world.clone();
-        deps.presentation.last_powered_wires.clear();
         deps.simulation.last_powered_devices.clear();
-        if let Some(worker) = deps.worker.as_ref() {
-            worker.reset(
-                SimSnapshot::from_world(
-                    &deps.world,
-                    &deps.pending_generated,
-                    &deps.signal_cache,
-                    &deps.structure_state,
-                    &deps.movement_influence,
-                    &deps.pusher_state,
-                ),
-                deps.simulation.turn,
-            );
-        }
+        invalidate_simulation_prefetch(
+            &mut deps.turn_cache,
+            &mut deps.presentation,
+            deps.worker.as_deref(),
+            &deps.world,
+            &deps.pending_generated,
+            &deps.signal_cache,
+            &deps.structure_state,
+            &deps.movement_influence,
+            &deps.pusher_state,
+            deps.simulation.turn,
+        );
         request_continuous_run(&mut deps.simulation);
         // 未运行/暂停时按 F 是启动；与加速同键时需松手再按才加速
         if !was_running {
@@ -121,23 +118,19 @@ pub fn simulation_controls(
         deps.structure_state.clear();
         deps.movement_influence.clear();
         deps.pusher_state.clear();
-        deps.turn_cache.reset_to_turn(0);
-        deps.presentation.committed_world = deps.world.clone();
-        deps.presentation.last_powered_wires.clear();
         deps.simulation.last_powered_devices.clear();
-        if let Some(worker) = deps.worker.as_ref() {
-            worker.reset(
-                SimSnapshot::from_world(
-                    &deps.world,
-                    &deps.pending_generated,
-                    &deps.signal_cache,
-                    &deps.structure_state,
-                    &deps.movement_influence,
-                    &deps.pusher_state,
-                ),
-                0,
-            );
-        }
+        invalidate_simulation_prefetch(
+            &mut deps.turn_cache,
+            &mut deps.presentation,
+            deps.worker.as_deref(),
+            &deps.world,
+            &deps.pending_generated,
+            &deps.signal_cache,
+            &deps.structure_state,
+            &deps.movement_influence,
+            &deps.pusher_state,
+            0,
+        );
         if let Some(snapshot) = factory_snapshot {
             *deps.structure_state = snapshot;
         } else {

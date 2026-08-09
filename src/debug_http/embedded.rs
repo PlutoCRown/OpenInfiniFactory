@@ -9,9 +9,9 @@ use crate::debug_http::protocol::{
     DebugHttpCommand, DebugHttpRequest, help_json, json_error, json_ok,
 };
 use crate::debug_http::snapshot::{
-    acceptors_json, block_json, block_json_with_structure, cursor_target_json, embedded_status_json,
-    perf_stats_json, player_entry_json, pos_json, power_query_json, resolve_pos_query,
-    resolve_structure_query, simulation_status_json,
+    acceptors_json, block_json, block_json_with_structure, cursor_target_json,
+    embedded_status_json, perf_stats_json, player_entry_json, pos_json, power_query_json,
+    resolve_pos_query, resolve_structure_query, simulation_status_json,
 };
 use crate::debug_http::world_ops::{block_kinds_json, parse_block_kind, parse_facing, place_block};
 use crate::game::block_editing::world_refresh::refresh_world_after_edit;
@@ -35,7 +35,7 @@ use crate::game::world::rendering::BlockEntity;
 use crate::shared::launch::{DEFAULT_DEBUG_HTTP_PORT, LaunchOptions};
 use crate::shared::save::{SaveKind, SaveSlot, SaveState};
 use crate::sim_bridge::SimulationPresentationState;
-use crate::sim_bridge::{SimSnapshot, SimulationWorker, TurnCache};
+use crate::sim_bridge::{SimulationWorker, TurnCache, invalidate_simulation_prefetch};
 
 #[derive(Resource)]
 pub struct DebugHttpBridge {
@@ -389,35 +389,32 @@ fn handle_embedded_debug_command(
         | DebugHttpCommand::LoadSave { .. }
         | DebugHttpCommand::SessionExit
         | DebugHttpCommand::SessionSave => unreachable!(),
-        DebugHttpCommand::GetPosBlock {
-            x,
-            y,
-            z,
-            block_id,
-        } => match resolve_pos_query(&playing.world, x, y, z, block_id) {
-            Ok(pos) => serde_json::json!({
-                "ok": true,
-                "pos": pos_json(pos),
-                "block": block_json_with_structure(
-                    &playing.world,
-                    Some(&playing.structure_state),
-                    pos,
-                ),
-                "cursor": cursor_target_json(placement, &playing.world),
-            })
-            .to_string(),
-            Err(error) => {
-                if x.is_none() && y.is_none() && z.is_none() && block_id.is_none() {
-                    serde_json::json!({
-                        "ok": true,
-                        "cursor": cursor_target_json(placement, &playing.world),
-                    })
-                    .to_string()
-                } else {
-                    json_error(&error)
+        DebugHttpCommand::GetPosBlock { x, y, z, block_id } => {
+            match resolve_pos_query(&playing.world, x, y, z, block_id) {
+                Ok(pos) => serde_json::json!({
+                    "ok": true,
+                    "pos": pos_json(pos),
+                    "block": block_json_with_structure(
+                        &playing.world,
+                        Some(&playing.structure_state),
+                        pos,
+                    ),
+                    "cursor": cursor_target_json(placement, &playing.world),
+                })
+                .to_string(),
+                Err(error) => {
+                    if x.is_none() && y.is_none() && z.is_none() && block_id.is_none() {
+                        serde_json::json!({
+                            "ok": true,
+                            "cursor": cursor_target_json(placement, &playing.world),
+                        })
+                        .to_string()
+                    } else {
+                        json_error(&error)
+                    }
                 }
             }
-        },
+        }
         DebugHttpCommand::GetStructure {
             x,
             y,
@@ -436,19 +433,12 @@ fn handle_embedded_debug_command(
             Ok(structure) => json_ok(serde_json::json!({ "structure": structure })),
             Err(error) => json_error(&error),
         },
-        DebugHttpCommand::GetPower {
-            x,
-            y,
-            z,
-            block_id,
-        } => match resolve_pos_query(&playing.world, x, y, z, block_id) {
-            Ok(pos) => json_ok(power_query_json(
-                &mut signal_cache.0,
-                &playing.world,
-                pos,
-            )),
-            Err(error) => json_error(&error),
-        },
+        DebugHttpCommand::GetPower { x, y, z, block_id } => {
+            match resolve_pos_query(&playing.world, x, y, z, block_id) {
+                Ok(pos) => json_ok(power_query_json(&mut signal_cache.0, &playing.world, pos)),
+                Err(error) => json_error(&error),
+            }
+        }
         DebugHttpCommand::GetAcceptors => json_ok(serde_json::json!({
             "acceptors": acceptors_json(&playing.world, &playing.structure_state),
         })),
@@ -470,21 +460,19 @@ fn handle_embedded_debug_command(
                 Ok(()) => {
                     refresh_world_after_edit(playing, pos);
                     if simulation.is_active() {
-                        presentation.committed_world = playing.world.clone();
-                        turn_cache.reset_to_turn(simulation.turn);
-                        if let Some(worker) = worker {
-                            worker.reset(
-                                SimSnapshot::from_world(
-                                    &playing.world,
-                                    pending_generated,
-                                    signal_cache,
-                                    &playing.structure_state,
-                                    &playing.movement_influence,
-                                    &playing.pusher_state,
-                                ),
-                                simulation.turn,
-                            );
-                        }
+                        simulation.last_powered_devices.clear();
+                        invalidate_simulation_prefetch(
+                            turn_cache,
+                            presentation,
+                            worker,
+                            &playing.world,
+                            pending_generated,
+                            signal_cache,
+                            &playing.structure_state,
+                            &playing.movement_influence,
+                            &playing.pusher_state,
+                            simulation.turn,
+                        );
                     }
                     json_ok(serde_json::json!({
                         "pos": pos_json(pos),
@@ -512,23 +500,19 @@ fn handle_embedded_debug_command(
                 &mut playing.pusher_state,
             );
             if starting {
-                presentation.committed_world = playing.world.clone();
-                presentation.last_powered_wires.clear();
                 simulation.last_powered_devices.clear();
-                turn_cache.reset_to_turn(simulation.turn);
-                if let Some(worker) = worker {
-                    worker.reset(
-                        SimSnapshot::from_world(
-                            &playing.world,
-                            pending_generated,
-                            signal_cache,
-                            &playing.structure_state,
-                            &playing.movement_influence,
-                            &playing.pusher_state,
-                        ),
-                        simulation.turn,
-                    );
-                }
+                invalidate_simulation_prefetch(
+                    turn_cache,
+                    presentation,
+                    worker,
+                    &playing.world,
+                    pending_generated,
+                    signal_cache,
+                    &playing.structure_state,
+                    &playing.movement_influence,
+                    &playing.pusher_state,
+                    simulation.turn,
+                );
             }
             request_continuous_run(simulation);
             sim_log.log(simulation.turn, "HTTP /run");
@@ -556,23 +540,19 @@ fn handle_embedded_debug_command(
                 &mut playing.pusher_state,
             );
             if starting {
-                presentation.committed_world = playing.world.clone();
-                presentation.last_powered_wires.clear();
                 simulation.last_powered_devices.clear();
-                turn_cache.reset_to_turn(simulation.turn);
-                if let Some(worker) = worker {
-                    worker.reset(
-                        SimSnapshot::from_world(
-                            &playing.world,
-                            pending_generated,
-                            signal_cache,
-                            &playing.structure_state,
-                            &playing.movement_influence,
-                            &playing.pusher_state,
-                        ),
-                        simulation.turn,
-                    );
-                }
+                invalidate_simulation_prefetch(
+                    turn_cache,
+                    presentation,
+                    worker,
+                    &playing.world,
+                    pending_generated,
+                    signal_cache,
+                    &playing.structure_state,
+                    &playing.movement_influence,
+                    &playing.pusher_state,
+                    simulation.turn,
+                );
                 request_continuous_run(simulation);
             }
             match request_one_turn(simulation) {
@@ -605,23 +585,19 @@ fn handle_embedded_debug_command(
                 &mut playing.pusher_state,
             );
             if starting {
-                presentation.committed_world = playing.world.clone();
-                presentation.last_powered_wires.clear();
                 simulation.last_powered_devices.clear();
-                turn_cache.reset_to_turn(simulation.turn);
-                if let Some(worker) = worker {
-                    worker.reset(
-                        SimSnapshot::from_world(
-                            &playing.world,
-                            pending_generated,
-                            signal_cache,
-                            &playing.structure_state,
-                            &playing.movement_influence,
-                            &playing.pusher_state,
-                        ),
-                        simulation.turn,
-                    );
-                }
+                invalidate_simulation_prefetch(
+                    turn_cache,
+                    presentation,
+                    worker,
+                    &playing.world,
+                    pending_generated,
+                    signal_cache,
+                    &playing.structure_state,
+                    &playing.movement_influence,
+                    &playing.pusher_state,
+                    simulation.turn,
+                );
             }
             sim_log.log(simulation.turn, "HTTP /beginSimulation");
             serde_json::json!({
@@ -649,7 +625,9 @@ fn handle_embedded_debug_command(
             }
             // 嵌入式：排队 n 次单步意图不现实；提示用无头或连续 /run
             let _ = n;
-            json_error("use headless oif-debug-http for /sim/run?n=; embedded supports /run and /runOneTurn")
+            json_error(
+                "use headless oif-debug-http for /sim/run?n=; embedded supports /run and /runOneTurn",
+            )
         }
         DebugHttpCommand::GetLogs { limit } => sim_log.recent_json(limit),
         DebugHttpCommand::ClearLogs => {
@@ -670,7 +648,8 @@ fn handle_embedded_debug_command(
             let Ok((mut transform, mut camera)) = player.single_mut() else {
                 return json_error("player entity not found");
             };
-            let mut save = crate::game::player::controller::capture_player_save(&camera, &transform);
+            let mut save =
+                crate::game::player::controller::capture_player_save(&camera, &transform);
             save.x = x;
             save.y = y;
             save.z = z;

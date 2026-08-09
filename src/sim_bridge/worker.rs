@@ -25,8 +25,8 @@ impl SimulationWorker {
         }
     }
 
-    pub fn reset(&self, snapshot: SimSnapshot, display_turn: u64) {
-        self.backend.reset(snapshot, display_turn);
+    pub fn reset(&self, snapshot: SimSnapshot, display_turn: u64, epoch: u64) {
+        self.backend.reset(snapshot, display_turn, epoch);
     }
 
     pub fn configure(&self, display_turn: u64, running: bool, step_requested: bool, active: bool) {
@@ -50,6 +50,7 @@ fn prefetch_turns(
     display_turn: u64,
     running: bool,
     step_requested: bool,
+    epoch: u64,
 ) -> Vec<CachedTurn> {
     let mut out = Vec::new();
     if !running && !step_requested {
@@ -72,6 +73,7 @@ fn prefetch_turns(
         );
         *simulated_through = next_turn;
         out.push(CachedTurn {
+            epoch,
             output,
             after: snapshot.clone(),
         });
@@ -95,6 +97,7 @@ mod threaded {
         Reset {
             snapshot: SimSnapshot,
             display_turn: u64,
+            epoch: u64,
         },
         Configure {
             display_turn: u64,
@@ -122,10 +125,11 @@ mod threaded {
             }
         }
 
-        pub fn reset(&self, snapshot: SimSnapshot, display_turn: u64) {
+        pub fn reset(&self, snapshot: SimSnapshot, display_turn: u64, epoch: u64) {
             let _ = self.command_tx.send(WorkerCommand::Reset {
                 snapshot,
                 display_turn,
+                epoch,
             });
         }
 
@@ -169,6 +173,7 @@ mod threaded {
             &Default::default(),
         );
         let mut simulated_through = 0_u64;
+        let mut epoch = 0_u64;
 
         while let Ok(command) = command_rx.recv() {
             match command {
@@ -176,9 +181,11 @@ mod threaded {
                 WorkerCommand::Reset {
                     snapshot: state,
                     display_turn,
+                    epoch: next_epoch,
                 } => {
                     snapshot = state;
                     simulated_through = display_turn;
+                    epoch = next_epoch;
                 }
                 WorkerCommand::Configure {
                     display_turn,
@@ -195,6 +202,7 @@ mod threaded {
                         display_turn,
                         running,
                         step_requested,
+                        epoch,
                     );
                     for turn in batch {
                         if result_tx.send(turn).is_err() {
@@ -216,6 +224,7 @@ mod inline {
     struct State {
         snapshot: SimSnapshot,
         simulated_through: u64,
+        epoch: u64,
         pending: Vec<CachedTurn>,
     }
 
@@ -236,15 +245,17 @@ mod inline {
                         &Default::default(),
                     ),
                     simulated_through: 0,
+                    epoch: 0,
                     pending: Vec::new(),
                 }),
             }
         }
 
-        pub fn reset(&self, snapshot: SimSnapshot, display_turn: u64) {
+        pub fn reset(&self, snapshot: SimSnapshot, display_turn: u64, epoch: u64) {
             let mut state = self.state.lock().expect("inline sim worker lock");
             state.snapshot = snapshot;
             state.simulated_through = display_turn;
+            state.epoch = epoch;
             state.pending.clear();
         }
 
@@ -266,6 +277,7 @@ mod inline {
                 display_turn,
                 running,
                 step_requested,
+                state.epoch,
             );
             state.pending.extend(batch);
         }

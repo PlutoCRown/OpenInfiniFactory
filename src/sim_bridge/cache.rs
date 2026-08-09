@@ -11,6 +11,8 @@ pub const TURN_PREFETCH_DEPTH: u64 = 4;
 #[derive(Resource, Default)]
 pub struct TurnCache {
     pub simulated_through: u64,
+    /// 与 SimulationWorker 同步；bump 后旧 CachedTurn 全部作废
+    pub epoch: u64,
     pending: BTreeMap<u64, CachedTurn>,
 }
 
@@ -23,6 +25,13 @@ impl TurnCache {
     pub fn reset_to_turn(&mut self, turn: u64) {
         self.simulated_through = turn;
         self.pending.clear();
+    }
+
+    /// 换档 / 重启模拟：丢弃预取并推进 epoch
+    pub fn invalidate_prefetch(&mut self, display_turn: u64) -> u64 {
+        self.epoch = self.epoch.wrapping_add(1);
+        self.reset_to_turn(display_turn);
+        self.epoch
     }
 
     pub fn has_prefetched(&self, display_turn: u64) -> bool {
@@ -38,16 +47,23 @@ impl TurnCache {
     }
 
     pub fn take_pending(&mut self, expected_turn: u64) -> Option<CachedTurn> {
-        self.pending.remove(&expected_turn)
+        let cached = self.pending.remove(&expected_turn)?;
+        (cached.epoch == self.epoch).then_some(cached)
     }
 
     pub fn store_prefetch(&mut self, cached: CachedTurn) {
+        if cached.epoch != self.epoch {
+            return;
+        }
         self.simulated_through = cached.output.turn;
         self.pending.insert(cached.output.turn, cached);
     }
 
     pub fn ingest_worker_results(&mut self, results: impl IntoIterator<Item = CachedTurn>) {
         for cached in results {
+            if cached.epoch != self.epoch {
+                continue;
+            }
             if self.pending.contains_key(&cached.output.turn) {
                 continue;
             }

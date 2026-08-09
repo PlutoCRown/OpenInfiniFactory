@@ -21,6 +21,8 @@ pub struct SimSnapshot {
 /// 预计算完成的一回合
 #[derive(Clone)]
 pub struct CachedTurn {
+    /// 与 TurnCache / worker 对齐；换档或 reset 后旧结果作废
+    pub epoch: u64,
     pub output: TurnOutput,
     pub after: SimSnapshot,
 }

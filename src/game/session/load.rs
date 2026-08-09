@@ -2,11 +2,16 @@ use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, futures_lite::future};
 
 use crate::game::edit_history::EditHistory;
+use crate::game::simulation::pending::PendingGeneratedMaterials;
+use crate::game::simulation::signals::SignalNetworkCache;
 use crate::game::state::{BuilderMode, GameMode, WorldEntryMode};
 use crate::game::ui::InventoryItems;
 use crate::shared::save::{
     LoadedSave, SaveSlot, create_free_from_default_template, create_puzzle_from_default_template,
     decode_save_slot, load_world, save_solution_as,
+};
+use crate::sim_bridge::{
+    SimulationPresentationState, SimulationWorker, TurnCache, invalidate_simulation_prefetch,
 };
 
 use super::busy::{SessionBusy, SessionBusyCover};
@@ -59,6 +64,11 @@ pub fn poll_pending_world_load(
     mut scene_registry: ResMut<crate::game::scene_blocks::SceneBlockRegistry>,
     mode: Res<State<GameMode>>,
     mut next_state: ResMut<NextState<GameMode>>,
+    mut turn_cache: ResMut<TurnCache>,
+    mut presentation: ResMut<SimulationPresentationState>,
+    worker: Option<Res<SimulationWorker>>,
+    pending_generated: Res<PendingGeneratedMaterials>,
+    signal_cache: Res<SignalNetworkCache>,
 ) {
     if let Some(mut task) = pending.task.take() {
         match block_on(future::poll_once(&mut task)) {
@@ -114,6 +124,19 @@ pub fn poll_pending_world_load(
         *mode.get(),
         &mut next_state,
     );
+    // 作废上一档残留的预取回合，避免首次 F 加速闪回旧世界
+    invalidate_simulation_prefetch(
+        &mut turn_cache,
+        &mut presentation,
+        worker.as_deref(),
+        &playing.world,
+        &pending_generated,
+        &signal_cache,
+        &playing.structure_state,
+        &playing.movement_influence,
+        &playing.pusher_state,
+        0,
+    );
     // StartMenu→Playing 的世界重建在下一帧 OnEnter；等进 Playing 后再清 busy
     if *mode.get() == GameMode::StartMenu {
         pending.release_busy_after_playing = true;
@@ -158,6 +181,11 @@ pub fn handle_create_new_puzzle(
     mut edit_history: ResMut<EditHistory>,
     mode: Res<State<GameMode>>,
     mut next_state: ResMut<NextState<GameMode>>,
+    mut turn_cache: ResMut<TurnCache>,
+    mut presentation: ResMut<SimulationPresentationState>,
+    worker: Option<Res<SimulationWorker>>,
+    pending_generated: Res<PendingGeneratedMaterials>,
+    signal_cache: Res<SignalNetworkCache>,
 ) {
     for request in requests.read() {
         let Some(slot) = create_puzzle_from_default_template(&request.name) else {
@@ -178,6 +206,18 @@ pub fn handle_create_new_puzzle(
             *mode.get(),
             &mut next_state,
         );
+        invalidate_simulation_prefetch(
+            &mut turn_cache,
+            &mut presentation,
+            worker.as_deref(),
+            &playing.world,
+            &pending_generated,
+            &signal_cache,
+            &playing.structure_state,
+            &playing.movement_influence,
+            &playing.pusher_state,
+            0,
+        );
     }
 }
 
@@ -188,6 +228,11 @@ pub fn handle_create_new_free(
     mut edit_history: ResMut<EditHistory>,
     mode: Res<State<GameMode>>,
     mut next_state: ResMut<NextState<GameMode>>,
+    mut turn_cache: ResMut<TurnCache>,
+    mut presentation: ResMut<SimulationPresentationState>,
+    worker: Option<Res<SimulationWorker>>,
+    pending_generated: Res<PendingGeneratedMaterials>,
+    signal_cache: Res<SignalNetworkCache>,
 ) {
     for request in requests.read() {
         let Some(slot) = create_free_from_default_template(&request.name) else {
@@ -207,6 +252,18 @@ pub fn handle_create_new_free(
             *mode.get(),
             &mut next_state,
         );
+        invalidate_simulation_prefetch(
+            &mut turn_cache,
+            &mut presentation,
+            worker.as_deref(),
+            &playing.world,
+            &pending_generated,
+            &signal_cache,
+            &playing.structure_state,
+            &playing.movement_influence,
+            &playing.pusher_state,
+            0,
+        );
     }
 }
 
@@ -217,6 +274,11 @@ pub fn handle_create_new_solution(
     mut edit_history: ResMut<EditHistory>,
     mode: Res<State<GameMode>>,
     mut next_state: ResMut<NextState<GameMode>>,
+    mut turn_cache: ResMut<TurnCache>,
+    mut presentation: ResMut<SimulationPresentationState>,
+    worker: Option<Res<SimulationWorker>>,
+    pending_generated: Res<PendingGeneratedMaterials>,
+    signal_cache: Res<SignalNetworkCache>,
 ) {
     for request in requests.read() {
         let puzzle_slot = SaveSlot::puzzle(&request.puzzle);
@@ -247,6 +309,18 @@ pub fn handle_create_new_solution(
             loaded,
             *mode.get(),
             &mut next_state,
+        );
+        invalidate_simulation_prefetch(
+            &mut turn_cache,
+            &mut presentation,
+            worker.as_deref(),
+            &playing.world,
+            &pending_generated,
+            &signal_cache,
+            &playing.structure_state,
+            &playing.movement_influence,
+            &playing.pusher_state,
+            0,
         );
     }
 }
