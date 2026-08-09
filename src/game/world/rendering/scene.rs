@@ -1,5 +1,5 @@
 use bevy::gizmos::config::{DefaultGizmoConfigGroup, GizmoConfigStore};
-use bevy::light::CascadeShadowConfigBuilder;
+use bevy::light::{CascadeShadowConfigBuilder, NotShadowCaster};
 use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
 use bevy::prelude::*;
 
@@ -122,6 +122,7 @@ pub fn setup_scene(
         Mesh3d(face_mesh),
         MeshMaterial3d(face_material),
         Visibility::Hidden,
+        NotShadowCaster,
         AimFaceHighlight,
         GameplayScene,
     ));
