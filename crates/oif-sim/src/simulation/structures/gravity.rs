@@ -8,6 +8,7 @@ pub(super) fn gravity_moves(
     let ids = structures.gravity_structure_ids();
     let mut moves = Vec::new();
     let mut handled = HashSet::new();
+    let mut grounded_memo: HashMap<StructureId, bool> = HashMap::new();
 
     for id in ids {
         let Some(positions) = structures.structure_positions(id) else {
@@ -46,6 +47,20 @@ pub(super) fn gravity_moves(
         if structures.gravity_support_valid(id, world, hard_pusher_head_occupancy) {
             continue;
         }
+        // 场景 / Inactive 稳定支撑：找到一处即可早退并缓存
+        if structures.try_record_stable_gravity_support(id, world, hard_pusher_head_occupancy) {
+            continue;
+        }
+        // Active 支撑链若最终接地，则本回合不落（无需展开 can_move 克隆大结构）
+        if structure_id_gravity_grounded(
+            world,
+            structures,
+            id,
+            hard_pusher_head_occupancy,
+            &mut grounded_memo,
+        ) {
+            continue;
+        }
         // 整块结构一起下落；不可拆开，否则焊接材料会被撕开并丢掉焊缝
         if can_move_gravity_structure(
             world,
@@ -65,8 +80,6 @@ pub(super) fn gravity_moves(
                 IVec3::NEG_Y,
                 MovementMark::Vertical,
             ));
-        } else {
-            structures.record_gravity_support(id, world, hard_pusher_head_occupancy);
         }
     }
     moves

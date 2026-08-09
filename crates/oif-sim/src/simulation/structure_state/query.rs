@@ -190,6 +190,51 @@ impl StructureState {
             collect_gravity_support(world, &structure.positions, hard_pusher_head_occupancy);
     }
 
+    /// 扫描结构成员下方，找到第一个场景 / Inactive 稳定支撑即记下并返回 true
+    pub fn try_record_stable_gravity_support(
+        &mut self,
+        id: StructureId,
+        world: &WorldBlocks,
+        hard_pusher_head_occupancy: &HashSet<IVec3>,
+    ) -> bool {
+        let positions: Vec<IVec3> = {
+            let Some(structure) = self.structures.get(&id) else {
+                return false;
+            };
+            structure.positions.iter().copied().collect()
+        };
+        let mut contact = None;
+        for pos in positions {
+            let below = pos + IVec3::NEG_Y;
+            if below.y < 0 {
+                continue;
+            }
+            if self.structure_by_pos.get(&below) == Some(&id) {
+                continue;
+            }
+            if world.can_move_into_yielding_fragile(below)
+                && !hard_pusher_head_occupancy.contains(&below)
+            {
+                continue;
+            }
+            let stable = world.is_scene_at(below)
+                || self.structure(below).is_some_and(|s| {
+                    s.kind == StructureKind::Factory && s.activity == FactoryActivity::Inactive
+                });
+            if stable {
+                contact = Some((pos, IVec3::NEG_Y));
+                break;
+            }
+        }
+        let Some(contact) = contact else {
+            return false;
+        };
+        if let Some(structure) = self.structures.get_mut(&id) {
+            structure.gravity_support = vec![contact];
+        }
+        true
+    }
+
     pub fn clear_gravity_support(&mut self, id: StructureId) {
         if let Some(structure) = self.structures.get_mut(&id) {
             structure.gravity_support.clear();

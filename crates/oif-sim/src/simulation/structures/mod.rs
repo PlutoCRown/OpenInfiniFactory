@@ -7,7 +7,7 @@ use crate::world::direction::Facing;
 use crate::world::grid::{MaterialFace, WorldBlocks};
 
 use super::motion::{BlockMotion, BlockMotionKind, PusherMotion};
-use super::structure_state::{StructureId, StructureState};
+use super::structure_state::{FactoryActivity, StructureId, StructureKind, StructureState};
 use super::suction::SuctionLinks;
 
 pub(crate) use super::structure_state::material_structure;

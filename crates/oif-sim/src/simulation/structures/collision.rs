@@ -1,12 +1,100 @@
 /// 抬到 range 上一格（range=5 时为第 6 格）后悬停：已出抬升标记范围，靠此抑制重力，避免边缘上下弹跳
 fn structure_supported_by_lifter(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
-    world.blocks.iter().any(|(pos, block)| {
-        matches!(
-            block.kind.movement_rule(block.facing),
-            Some(MovementRule::Lift { range })
-                if structure.contains(&(*pos + IVec3::Y * (range + 1)))
-        )
+    // Lifter range 固定 5：只查正下方第 6 格，避免全图 / 多段扫描
+    structure.iter().any(|pos| {
+        let candidate = *pos - IVec3::Y * 6;
+        world
+            .blocks
+            .get(&candidate)
+            .is_some_and(|block| block.kind == BlockKind::Lifter)
     })
+}
+
+/// 结构是否直接搁在场景 / Inactive 上（找到一处即可）
+fn structure_id_rests_on_stable_support(
+    world: &WorldBlocks,
+    structures: &StructureState,
+    id: StructureId,
+) -> bool {
+    let Some(structure) = structures.get(id) else {
+        return false;
+    };
+    structure.positions.iter().any(|pos| {
+        let below = *pos + IVec3::NEG_Y;
+        if below.y < 0 || structure.positions.contains(&below) {
+            return false;
+        }
+        world.is_scene_at(below)
+            || structures.structure_id_at(below).is_some_and(|below_id| {
+                structures.get(below_id).is_some_and(|s| {
+                    s.kind == StructureKind::Factory && s.activity == FactoryActivity::Inactive
+                })
+            })
+    })
+}
+
+/// 重力是否被支撑链接地（场景/Inactive，或下方 Active 已接地）；带 memo，避免重复扫
+fn structure_id_gravity_grounded(
+    world: &WorldBlocks,
+    structures: &StructureState,
+    id: StructureId,
+    hard_pusher_head_occupancy: &HashSet<IVec3>,
+    memo: &mut HashMap<StructureId, bool>,
+) -> bool {
+    if let Some(&cached) = memo.get(&id) {
+        return cached;
+    }
+    let Some(structure) = structures.get(id) else {
+        memo.insert(id, true);
+        return true;
+    };
+    let mut grounded = false;
+    for pos in &structure.positions {
+        let below = *pos + IVec3::NEG_Y;
+        if below.y < 0 {
+            grounded = true;
+            break;
+        }
+        if structure.positions.contains(&below) {
+            continue;
+        }
+        if world.can_move_into_yielding_fragile(below)
+            && !hard_pusher_head_occupancy.contains(&below)
+        {
+            continue;
+        }
+        if world.is_scene_at(below) {
+            grounded = true;
+            break;
+        }
+        if let Some(below_id) = structures.structure_id_at(below) {
+            if below_id == id {
+                continue;
+            }
+            if structures.get(below_id).is_some_and(|s| {
+                s.kind == StructureKind::Factory && s.activity == FactoryActivity::Inactive
+            }) {
+                grounded = true;
+                break;
+            }
+            if structure_id_gravity_grounded(
+                world,
+                structures,
+                below_id,
+                hard_pusher_head_occupancy,
+                memo,
+            ) {
+                grounded = true;
+                break;
+            }
+        } else {
+            // 非结构实体（如活塞头）挡住
+            grounded = true;
+            break;
+        }
+    }
+    memo.insert(id, grounded);
+    grounded
 }
 
 /// 运动执行前：按计划压碎/让出冲突的脆弱材料（与钻头/激光销毁分离）
@@ -223,12 +311,21 @@ pub(super) fn expanded_move_structure_with_occupancy(
             }
         }
 
+        if mode == MovementExpansionMode::Gravity {
+            if let Some(sid) = structures.structure_id_at(target) {
+                // 下方结构已接地则整条重力链失败；先查 id 再克隆
+                if structure_id_rests_on_stable_support(world, structures, sid)
+                    || structures
+                        .get(sid)
+                        .is_some_and(|s| structure_supported_by_lifter(world, &s.positions))
+                {
+                    return None;
+                }
+            }
+        }
         let pushed = pushable_structure_at(world, structures, target, offset, suction)?;
         let pushed = with_factory_attachment_children(world, &pushed);
         let pushed = with_pusher_heads(world, &pushed);
-        if mode == MovementExpansionMode::Gravity && structure_supported_by_lifter(world, &pushed) {
-            return None;
-        }
         for pushed_pos in pushed {
             if expanded.insert(pushed_pos) {
                 queue.push_back(pushed_pos);

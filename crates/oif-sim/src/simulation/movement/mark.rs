@@ -7,24 +7,68 @@ pub(super) fn mark_structure_movement_phase(
 ) -> (Vec<StructureMove>, ConveyorMarkDiag) {
     world.sync_rotator_arrivals();
     structures.clear_turn_marks();
-    let mut movers: Vec<(IVec3, MovementRule)> = world
+    let mut movers: Vec<(u64, IVec3, MovementRule)> = world
         .blocks
         .iter()
         .filter_map(|(pos, block)| {
-            block
-                .kind
-                .movement_rule(block.facing)
-                .map(|mover| (*pos, mover))
+            // 仅运动设备收集规则，避免场景等方块走 dyn movement_rule
+            let rule = match block.kind {
+                BlockKind::Conveyor => Some(MovementRule::Translate {
+                    source: IVec3::Y,
+                    offset: block.facing.forward_ivec3(),
+                }),
+                BlockKind::ReverseConveyor => Some(MovementRule::Translate {
+                    source: IVec3::NEG_Y,
+                    offset: -block.facing.forward_ivec3(),
+                }),
+                BlockKind::Lifter
+                | BlockKind::Rotator
+                | BlockKind::CounterRotator
+                | BlockKind::Pusher
+                | BlockKind::Blocker => block.kind.movement_rule(block.facing),
+                _ => None,
+            }?;
+            Some((block.id.0, *pos, rule))
         })
         .collect();
     // 按 BlockId 稳定裁决（与 held 冲突规则一致）
-    movers.sort_by_key(|(pos, _)| {
-        world
-            .blocks
-            .get(pos)
-            .map(|block| block.id.0)
-            .unwrap_or(u64::MAX)
-    });
+    movers.sort_by_key(|(id, _, _)| *id);
+    // 同结构同位移只需一个代表传送带尝试
+    let mut seen_forward: HashSet<(StructureId, IVec3)> = HashSet::new();
+    let mut seen_reverse: HashSet<(StructureId, IVec3)> = HashSet::new();
+    let mut unique_movers = Vec::with_capacity(movers.len());
+    for (_id, pos, mover) in movers {
+        match mover {
+            MovementRule::Translate { source, offset } => {
+                let target = pos + source;
+                let same_structure = structures
+                    .id_at(target)
+                    .is_some_and(|_| structures.structure_contains(target, pos));
+                let keep = if same_structure {
+                    structures
+                        .id_at(pos)
+                        .is_some_and(|sid| seen_reverse.insert((sid, -offset)))
+                } else if let Some(tid) = structures.id_at(target) {
+                    let forward_new = seen_forward.insert((tid, offset));
+                    let reverse_new = structures
+                        .id_at(pos)
+                        .is_some_and(|sid| seen_reverse.insert((sid, -offset)));
+                    forward_new || reverse_new
+                } else if world.is_occupied(target)
+                    || PusherState::body_at_extended_head(world, target).is_some()
+                {
+                    true
+                } else {
+                    false
+                };
+                if keep {
+                    unique_movers.push((pos, mover));
+                }
+            }
+            _ => unique_movers.push((pos, mover)),
+        }
+    }
+    let movers = unique_movers;
     let mut moves = Vec::new();
     let mut claimed_heads = PusherState::hard_head_occupancy(world);
     // 同结构同位移：can_translate 每回合只算一次；同向标记去重
@@ -95,6 +139,7 @@ pub(super) fn mark_structure_movement_phase(
                     suction,
                     &claimed_heads,
                     &mut translate_ok,
+                    &emitted_translate,
                     &mut conveyor_diag,
                 ) {
                     let key = (movement.structure_id(), translate_offset(&movement));
@@ -248,30 +293,63 @@ fn mark_conveyor_movement(
     suction: &SuctionLinks,
     hard_pusher_heads: &HashSet<IVec3>,
     translate_ok: &mut HashMap<(StructureId, IVec3), bool>,
+    emitted_translate: &HashSet<(StructureId, IVec3)>,
     diag: &mut ConveyorMarkDiag,
 ) -> Option<StructureMove> {
     let target = pos + source;
-    if let Some(movement) = mark_structure_translate(
-        world,
-        structures,
-        pos,
-        target,
-        offset,
-        MovementMark::Conveyor,
-        suction,
-    ) {
-        if cached_can_translate(
-            world,
-            structures,
-            suction,
-            hard_pusher_heads,
-            movement.structure_id(),
-            movement.structure(),
-            offset,
-            translate_ok,
-            diag,
-        ) {
-            return Some(movement);
+    let forward_seed = if structures.id_at(target).is_some() {
+        Some(target)
+    } else {
+        PusherState::body_at_extended_head(world, target)
+    };
+
+    // 正向推货：先看 structure_id 缓存，避免上千次克隆整坨位置
+    if let Some(seed) = forward_seed {
+        if !structures.structure_contains(seed, pos) {
+            if let Some(structure_id) = structures.id_at(seed) {
+                let key = (structure_id, offset);
+                if !emitted_translate.contains(&key) {
+                    match translate_ok.get(&key).copied() {
+                        Some(true) => {
+                            return mark_structure_translate(
+                                world,
+                                structures,
+                                pos,
+                                target,
+                                offset,
+                                MovementMark::Conveyor,
+                                suction,
+                            );
+                        }
+                        Some(false) => {}
+                        None => {
+                            if let Some(movement) = mark_structure_translate(
+                                world,
+                                structures,
+                                pos,
+                                target,
+                                offset,
+                                MovementMark::Conveyor,
+                                suction,
+                            ) {
+                                if cached_can_translate(
+                                    world,
+                                    structures,
+                                    suction,
+                                    hard_pusher_heads,
+                                    movement.structure_id(),
+                                    movement.structure(),
+                                    offset,
+                                    translate_ok,
+                                    diag,
+                                ) {
+                                    return Some(movement);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     } else if !world.is_occupied(target)
         && PusherState::body_at_extended_head(world, target).is_none()
@@ -279,27 +357,47 @@ fn mark_conveyor_movement(
         return None;
     }
 
-    let structure = structures.linked_pushable_at(suction, pos, -offset)?;
+    // 反向：传送带自己被顶着走；同样先查缓存再克隆
     let structure_id = structures.id_at(pos)?;
-    if !cached_can_translate(
-        world,
-        structures,
-        suction,
-        hard_pusher_heads,
-        structure_id,
-        &structure,
-        -offset,
-        translate_ok,
-        diag,
-    ) {
+    let reverse = -offset;
+    let key = (structure_id, reverse);
+    if emitted_translate.contains(&key) {
         return None;
     }
-    Some(StructureMove::translate_marked(
-        structure_id,
-        structure,
-        -offset,
-        MovementMark::Conveyor,
-    ))
+    match translate_ok.get(&key).copied() {
+        Some(false) => return None,
+        Some(true) => {
+            let structure = structures.linked_pushable_at(suction, pos, reverse)?;
+            return Some(StructureMove::translate_marked(
+                structure_id,
+                structure,
+                reverse,
+                MovementMark::Conveyor,
+            ));
+        }
+        None => {
+            let structure = structures.linked_pushable_at(suction, pos, reverse)?;
+            if !cached_can_translate(
+                world,
+                structures,
+                suction,
+                hard_pusher_heads,
+                structure_id,
+                &structure,
+                reverse,
+                translate_ok,
+                diag,
+            ) {
+                return None;
+            }
+            Some(StructureMove::translate_marked(
+                structure_id,
+                structure,
+                reverse,
+                MovementMark::Conveyor,
+            ))
+        }
+    }
 }
 
 fn mark_pusher_movement(
