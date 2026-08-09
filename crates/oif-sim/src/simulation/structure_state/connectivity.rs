@@ -2,8 +2,27 @@ fn bpos_facing_toward(body: IVec3, source: IVec3, target: IVec3) -> bool {
     body + source == target
 }
 
+/// 材料 id → 坐标（连通洪水复用，避免每个种子重建）
+fn material_id_to_pos(world: &WorldBlocks) -> HashMap<BlockId, IVec3> {
+    world
+        .blocks
+        .iter()
+        .filter(|(_, block)| block.kind.is_material() && !block.id.is_none())
+        .map(|(pos, block)| (block.id, *pos))
+        .collect()
+}
+
 /// 材料焊接连通（即时）
 pub fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
+    let id_to_pos = material_id_to_pos(world);
+    material_structure_from(world, start, &id_to_pos)
+}
+
+fn material_structure_from(
+    world: &WorldBlocks,
+    start: IVec3,
+    id_to_pos: &HashMap<BlockId, IVec3>,
+) -> HashSet<IVec3> {
     let Some(start_id) = world
         .blocks
         .get(&start)
@@ -12,12 +31,6 @@ pub fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     else {
         return HashSet::new();
     };
-    let id_to_pos: HashMap<BlockId, IVec3> = world
-        .blocks
-        .iter()
-        .filter(|(_, block)| block.kind.is_material() && !block.id.is_none())
-        .map(|(pos, block)| (block.id, *pos))
-        .collect();
 
     let mut structure = HashSet::new();
     let mut seen_ids = HashSet::from([start_id]);

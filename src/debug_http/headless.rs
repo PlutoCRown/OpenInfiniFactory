@@ -2,12 +2,12 @@ use bevy::prelude::IVec3;
 
 use super::protocol::{DebugHttpCommand, help_json, json_error, json_ok};
 use super::snapshot::{
-    acceptors_json, block_json, block_json_with_structure, headless_perf_json, headless_status_json,
-    pos_json, power_query_json, resolve_pos_query, resolve_structure_query, session_status_json,
+    acceptors_json, block_json_with_structure, headless_perf_json, headless_status_json, pos_json,
+    power_query_json, resolve_pos_query, resolve_structure_query, session_status_json,
 };
 use super::standalone::HeadlessDebugState;
 use super::world_ops::{
-    block_kinds_json, load_save_into_session, parse_block_kind, parse_facing, place_block,
+    block_kinds_json, load_save_into_session, parse_block_kind, parse_facing, place_blocks_box,
     reset_session,
 };
 
@@ -19,22 +19,18 @@ pub fn handle_headless_command(
     match command {
         DebugHttpCommand::Help => help_json(),
         DebugHttpCommand::BlockKinds => block_kinds_json(),
-        DebugHttpCommand::GetPosBlock {
-            x,
-            y,
-            z,
-            block_id,
-        } => state.with_core(|core| match resolve_pos_query(core.world_blocks(), x, y, z, block_id)
-        {
-            Ok(pos) => json_ok(serde_json::json!({
-                "pos": pos_json(pos),
-                "block": block_json_with_structure(
-                    core.world_blocks(),
-                    Some(&core.structure_state),
-                    pos,
-                ),
-            })),
-            Err(error) => json_error(&error),
+        DebugHttpCommand::GetPosBlock { x, y, z, block_id } => state.with_core(|core| {
+            match resolve_pos_query(core.world_blocks(), x, y, z, block_id) {
+                Ok(pos) => json_ok(serde_json::json!({
+                    "pos": pos_json(pos),
+                    "block": block_json_with_structure(
+                        core.world_blocks(),
+                        Some(&core.structure_state),
+                        pos,
+                    ),
+                })),
+                Err(error) => json_error(&error),
+            }
         }),
         DebugHttpCommand::GetStructure {
             x,
@@ -56,19 +52,14 @@ pub fn handle_headless_command(
                 Err(error) => json_error(&error),
             }
         }),
-        DebugHttpCommand::GetPower {
-            x,
-            y,
-            z,
-            block_id,
-        } => state.with_core(|core| match resolve_pos_query(&core.world, x, y, z, block_id) {
-            Ok(pos) => json_ok(power_query_json(
-                &mut core.signal_cache,
-                &core.world,
-                pos,
-            )),
-            Err(error) => json_error(&error),
-        }),
+        DebugHttpCommand::GetPower { x, y, z, block_id } => {
+            state.with_core(
+                |core| match resolve_pos_query(&core.world, x, y, z, block_id) {
+                    Ok(pos) => json_ok(power_query_json(&mut core.signal_cache, &core.world, pos)),
+                    Err(error) => json_error(&error),
+                },
+            )
+        }
         DebugHttpCommand::GetPlayers => json_ok(serde_json::json!({ "players": [] })),
         DebugHttpCommand::GetAcceptors => state.with_core(|core| {
             json_ok(serde_json::json!({
@@ -135,6 +126,9 @@ pub fn handle_headless_command(
             x,
             y,
             z,
+            x1,
+            y1,
+            z1,
             kind,
             facing,
         } => {
@@ -145,14 +139,24 @@ pub fn handle_headless_command(
                 return json_error(&format!("unknown facing `{facing}`"));
             };
             state.with_core(|core| {
-                let pos = IVec3::new(x, y, z);
-                match place_block(core.world_blocks_mut(), pos, kind, facing) {
-                    Ok(()) => json_ok(serde_json::json!({
-                        "pos": pos_json(pos),
-                        "block": block_json(core.world_blocks(), pos),
-                    })),
-                    Err(error) => json_error(&error),
+                let a = IVec3::new(x, y, z);
+                let b = IVec3::new(x1.unwrap_or(x), y1.unwrap_or(y), z1.unwrap_or(z));
+                let (placed, skipped) =
+                    place_blocks_box(core.world_blocks_mut(), a, b, kind, facing);
+                if placed.is_empty() && !skipped.is_empty() {
+                    return json_error(&format!(
+                        "cannot place {kind:?} in box ({},{},{})-({},{},{})",
+                        a.x, a.y, a.z, b.x, b.y, b.z
+                    ));
                 }
+                json_ok(serde_json::json!({
+                    "from": pos_json(a),
+                    "to": pos_json(b),
+                    "placed": placed.iter().map(|pos| pos_json(*pos)).collect::<Vec<_>>(),
+                    "skipped": skipped.iter().map(|pos| pos_json(*pos)).collect::<Vec<_>>(),
+                    "placed_count": placed.len(),
+                    "skipped_count": skipped.len(),
+                }))
             })
         }
         DebugHttpCommand::Run => state.with_core(|core| {

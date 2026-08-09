@@ -95,6 +95,114 @@ impl StructureState {
         self.append_material_structures(world, &previous_ids, &previous_support);
     }
 
+    /// 编辑变更：只拆/重建触及的材料连通，避免整图材料洪水
+    fn apply_material_edit(&mut self, world: &WorldBlocks, changed: &HashSet<IVec3>) {
+        let mut stale_ids: HashSet<StructureId> = HashSet::new();
+        let mut seeds: HashSet<IVec3> = HashSet::new();
+        for &pos in changed {
+            if let Some(&id) = self.structure_by_pos.get(&pos) {
+                if self
+                    .structures
+                    .get(&id)
+                    .is_some_and(|structure| structure.kind == StructureKind::Material)
+                {
+                    stale_ids.insert(id);
+                }
+            }
+            if world.is_material_at(pos) {
+                seeds.insert(pos);
+            }
+        }
+
+        let id_to_pos = material_id_to_pos(world);
+        for &pos in changed {
+            let Some(block) = world
+                .blocks
+                .get(&pos)
+                .filter(|block| block.kind.is_material() && !block.id.is_none())
+            else {
+                continue;
+            };
+            for weld in &world.material_welds {
+                let Some(other_id) = weld.other(block.id) else {
+                    continue;
+                };
+                let Some(&other_pos) = id_to_pos.get(&other_id) else {
+                    continue;
+                };
+                seeds.insert(other_pos);
+                if let Some(&id) = self.structure_by_pos.get(&other_pos) {
+                    if self
+                        .structures
+                        .get(&id)
+                        .is_some_and(|structure| structure.kind == StructureKind::Material)
+                    {
+                        stale_ids.insert(id);
+                    }
+                }
+            }
+            for (child_id, att) in &world.material_attachments {
+                let other_id = if *child_id == block.id {
+                    att.parent
+                } else if att.parent == block.id {
+                    *child_id
+                } else {
+                    continue;
+                };
+                let Some(&other_pos) = id_to_pos.get(&other_id) else {
+                    continue;
+                };
+                seeds.insert(other_pos);
+                if let Some(&id) = self.structure_by_pos.get(&other_pos) {
+                    if self
+                        .structures
+                        .get(&id)
+                        .is_some_and(|structure| structure.kind == StructureKind::Material)
+                    {
+                        stale_ids.insert(id);
+                    }
+                }
+            }
+        }
+
+        let mut previous_ids: HashMap<Vec<u64>, StructureId> = HashMap::new();
+        let mut previous_support: HashMap<StructureId, Vec<GravitySupportContact>> = HashMap::new();
+        for id in stale_ids {
+            let Some(structure) = self.structures.remove(&id) else {
+                continue;
+            };
+            let mut members: Vec<u64> = structure
+                .positions
+                .iter()
+                .filter_map(|pos| world.blocks.get(pos).map(|block| block.id.0))
+                .collect();
+            members.sort_unstable();
+            if !members.is_empty() {
+                previous_ids.insert(members, id);
+            }
+            previous_support.insert(id, structure.gravity_support.clone());
+            for pos in &structure.positions {
+                self.structure_by_pos.remove(pos);
+                if world.is_material_at(*pos) {
+                    seeds.insert(*pos);
+                }
+            }
+        }
+
+        if seeds.is_empty() {
+            return;
+        }
+        let mut starts: Vec<IVec3> = seeds.into_iter().collect();
+        starts.sort_by_key(|pos| (pos.x, pos.y, pos.z));
+        self.append_material_at_starts(
+            world,
+            &starts,
+            &previous_ids,
+            &previous_support,
+            &id_to_pos,
+        );
+    }
+
     fn retain_factory_only(&mut self) {
         self.structures
             .retain(|_, structure| structure.kind == StructureKind::Factory);
@@ -131,23 +239,35 @@ impl StructureState {
         previous_ids: &HashMap<Vec<u64>, StructureId>,
         previous_support: &HashMap<StructureId, Vec<GravitySupportContact>>,
     ) {
-        let mut handled = self
-            .structure_by_pos
-            .keys()
-            .copied()
-            .collect::<HashSet<_>>();
+        let id_to_pos = material_id_to_pos(world);
         let mut starts: Vec<IVec3> = world
             .blocks
             .iter()
             .filter_map(|(pos, block)| block.kind.is_material().then_some(*pos))
             .collect();
         starts.sort_by_key(|pos| (pos.x, pos.y, pos.z));
+        self.append_material_at_starts(world, &starts, previous_ids, previous_support, &id_to_pos);
+    }
 
-        for start in starts {
+    fn append_material_at_starts(
+        &mut self,
+        world: &WorldBlocks,
+        starts: &[IVec3],
+        previous_ids: &HashMap<Vec<u64>, StructureId>,
+        previous_support: &HashMap<StructureId, Vec<GravitySupportContact>>,
+        id_to_pos: &HashMap<BlockId, IVec3>,
+    ) {
+        let mut handled = self
+            .structure_by_pos
+            .keys()
+            .copied()
+            .collect::<HashSet<_>>();
+
+        for &start in starts {
             if handled.contains(&start) || !world.is_material_at(start) {
                 continue;
             }
-            let positions = material_structure(world, start);
+            let positions = material_structure_from(world, start, id_to_pos);
             let mut members: Vec<u64> = positions
                 .iter()
                 .filter_map(|pos| world.blocks.get(pos).map(|block| block.id.0))
@@ -353,13 +473,13 @@ impl StructureState {
             .filter(|id| !before_ids.contains(id))
             .collect();
 
-        self.apply_factory_inactive_propagation(world);
-        for id in new_ids {
-            self.rebuild_deform_for(world, id);
+        if !stale_ids.is_empty() || !new_ids.is_empty() {
+            self.apply_factory_inactive_propagation(world);
+            for id in new_ids {
+                self.rebuild_deform_for(world, id);
+            }
         }
-        // 邻接 inactive 可能波及旧结构的 freedom；仅刷新仍存在的旧工厂 deform 的 scene 相关不重算图
-        // inactive 传播已写回 activity/freedom；deform 节点集不依赖 inactive
-        self.refresh_material_structures(world);
+        self.apply_material_edit(world, changed);
     }
 
     fn rebuild_all_factory_deform(&mut self, world: &WorldBlocks) {

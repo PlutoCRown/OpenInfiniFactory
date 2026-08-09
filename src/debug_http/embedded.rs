@@ -1,6 +1,7 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use std::collections::HashSet;
 use std::sync::{Mutex, mpsc};
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread::{self, JoinHandle};
@@ -13,8 +14,8 @@ use crate::debug_http::snapshot::{
     embedded_status_json, perf_stats_json, player_entry_json, pos_json, power_query_json,
     resolve_pos_query, resolve_structure_query, simulation_status_json,
 };
-use crate::debug_http::world_ops::{block_kinds_json, parse_block_kind, parse_facing, place_block};
-use crate::game::block_editing::world_refresh::refresh_world_after_edit;
+use crate::debug_http::world_ops::{block_kinds_json, parse_block_kind, parse_facing, place_blocks_box};
+use crate::game::block_editing::world_refresh::refresh_world_after_edit_many;
 use crate::game::debug::SimulationDebugLog;
 use crate::game::player::controller::{FlyCamera, apply_player_save};
 use crate::game::session::{self, PlayingWorldParams};
@@ -446,6 +447,9 @@ fn handle_embedded_debug_command(
             x,
             y,
             z,
+            x1,
+            y1,
+            z1,
             kind,
             facing,
         } => {
@@ -455,32 +459,40 @@ fn handle_embedded_debug_command(
             let Some(facing) = parse_facing(&facing) else {
                 return json_error(&format!("unknown facing `{facing}`"));
             };
-            let pos = IVec3::new(x, y, z);
-            match place_block(&mut playing.world, pos, kind, facing) {
-                Ok(()) => {
-                    refresh_world_after_edit(playing, pos);
-                    if simulation.is_active() {
-                        simulation.last_powered_devices.clear();
-                        invalidate_simulation_prefetch(
-                            turn_cache,
-                            presentation,
-                            worker,
-                            &playing.world,
-                            pending_generated,
-                            signal_cache,
-                            &playing.structure_state,
-                            &playing.movement_influence,
-                            &playing.pusher_state,
-                            simulation.turn,
-                        );
-                    }
-                    json_ok(serde_json::json!({
-                        "pos": pos_json(pos),
-                        "block": block_json(&playing.world, pos),
-                    }))
-                }
-                Err(error) => json_error(&error),
+            let a = IVec3::new(x, y, z);
+            let b = IVec3::new(x1.unwrap_or(x), y1.unwrap_or(y), z1.unwrap_or(z));
+            let (placed, skipped) = place_blocks_box(&mut playing.world, a, b, kind, facing);
+            if placed.is_empty() {
+                return json_error(&format!(
+                    "cannot place {kind:?} in box ({},{},{})-({},{},{})",
+                    a.x, a.y, a.z, b.x, b.y, b.z
+                ));
             }
+            let changed: HashSet<_> = placed.iter().copied().collect();
+            refresh_world_after_edit_many(playing, changed);
+            if simulation.is_active() {
+                simulation.last_powered_devices.clear();
+                invalidate_simulation_prefetch(
+                    turn_cache,
+                    presentation,
+                    worker,
+                    &playing.world,
+                    pending_generated,
+                    signal_cache,
+                    &playing.structure_state,
+                    &playing.movement_influence,
+                    &playing.pusher_state,
+                    simulation.turn,
+                );
+            }
+            json_ok(serde_json::json!({
+                "from": pos_json(a),
+                "to": pos_json(b),
+                "placed": placed.iter().map(|pos| pos_json(*pos)).collect::<Vec<_>>(),
+                "skipped": skipped.iter().map(|pos| pos_json(*pos)).collect::<Vec<_>>(),
+                "placed_count": placed.len(),
+                "skipped_count": skipped.len(),
+            }))
         }
         DebugHttpCommand::Run => {
             if builder_mode != BuilderMode::Play {

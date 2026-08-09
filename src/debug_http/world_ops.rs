@@ -57,22 +57,35 @@ pub fn reset_session(core: &mut SimSession) {
     core.reset();
 }
 
-/// 在世界中放置方块（oif-sim 网格）
-pub fn place_block(
+/// 在包容 AABB 内批量放置；返回成功坐标与跳过坐标
+pub fn place_blocks_box(
     world: &mut oif_sim::WorldBlocks,
-    pos: IVec3,
+    a: IVec3,
+    b: IVec3,
     kind: BlockKind,
     facing: Facing,
-) -> Result<(), String> {
-    if !world.can_place_block_kind_at(pos, kind) {
-        return Err(format!(
-            "cannot place {kind:?} at ({}, {}, {})",
-            pos.x, pos.y, pos.z
-        ));
+) -> (Vec<IVec3>, Vec<IVec3>) {
+    let min = IVec3::new(a.x.min(b.x), a.y.min(b.y), a.z.min(b.z));
+    let max = IVec3::new(a.x.max(b.x), a.y.max(b.y), a.z.max(b.z));
+    let mut placed = Vec::new();
+    let mut skipped = Vec::new();
+    for x in min.x..=max.x {
+        for y in min.y..=max.y {
+            for z in min.z..=max.z {
+                let pos = IVec3::new(x, y, z);
+                if !world.can_place_block_kind_at(pos, kind) {
+                    skipped.push(pos);
+                    continue;
+                }
+                world.insert(pos, BlockData::new(kind, facing));
+                placed.push(pos);
+            }
+        }
     }
-    world.insert(pos, BlockData::new(kind, facing));
-    refresh_static_generated_markers(world);
-    Ok(())
+    if !placed.is_empty() {
+        refresh_static_generated_markers(world);
+    }
+    (placed, skipped)
 }
 
 /// 把存档载入无头会话，返回加载耗时毫秒

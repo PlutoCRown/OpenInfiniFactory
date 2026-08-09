@@ -30,7 +30,7 @@
 | POST | `/session/enter?name=` | 加载存档（别名 `/loadSave`）；无头记录 current_save + load_ms |
 | POST | `/session/exit` | 无头：重置世界并清空存档名；内嵌：退回主菜单 |
 | POST | `/session/save` | 内嵌：保存当前世界；无头：错误 |
-| POST | `/world/place?x=&y=&z=&kind=&facing=` | 放置方块（含材料） |
+| POST | `/world/place?x=&y=&z=&kind=&facing=&x1=&y1=&z1=` | 放置方块（含材料）；`x1/y1/z1` 可选，与 `x/y/z` 组成包容 AABB 批量放置 |
 | POST | `/world/reset` | 清空世界（无头） |
 | POST | `/sim/begin` | 进入模拟（别名 `/beginSimulation`） |
 | POST | `/sim/pause` | 停止连续跑 |
@@ -47,6 +47,6 @@
 
 ## 备注
 
-- 材料一般不进存档；调试时用 `/world/place` 临时放置。
+- 材料一般不进存档；调试时用 `/world/place` 临时放置（支持 `x1/y1/z1` 范围）。
 - 内嵌 `session/enter`：仅主菜单可排队 `LoadWorld`；已在世界中会报错。
 - 内嵌 `/sim/run?n=` 请改用无头二进制，或用 `/run` / `/runOneTurn`。

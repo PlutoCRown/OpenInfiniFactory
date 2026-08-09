@@ -49,6 +49,10 @@ pub enum DebugHttpCommand {
         x: i32,
         y: i32,
         z: i32,
+        /// 对角点；缺省则只放 (x,y,z) 单格
+        x1: Option<i32>,
+        y1: Option<i32>,
+        z1: Option<i32>,
         kind: String,
         facing: String,
     },
@@ -137,6 +141,9 @@ pub fn parse_http_request(request: &tiny_http::Request) -> DebugHttpCommand {
             x: params.get("x").and_then(|v| v.parse().ok()).unwrap_or(0),
             y: params.get("y").and_then(|v| v.parse().ok()).unwrap_or(0),
             z: params.get("z").and_then(|v| v.parse().ok()).unwrap_or(0),
+            x1: params.get("x1").and_then(|v| v.parse().ok()),
+            y1: params.get("y1").and_then(|v| v.parse().ok()),
+            z1: params.get("z1").and_then(|v| v.parse().ok()),
             kind: params.get("kind").cloned().unwrap_or_default(),
             facing: params
                 .get("facing")
@@ -208,7 +215,7 @@ pub fn help_json() -> String {
             {"method": "POST", "path": "/session/exit", "desc": "exit world / reset headless session"},
             {"method": "POST", "path": "/session/save", "desc": "save current world (embedded only)"},
             {"method": "POST", "path": "/world/reset", "desc": "clear session world"},
-            {"method": "POST", "path": "/world/place?x=&y=&z=&kind=&facing=", "desc": "place one block"},
+            {"method": "POST", "path": "/world/place?x=&y=&z=&kind=&facing=&x1=&y1=&z1=", "desc": "place block(s) in inclusive AABB (omit x1/y1/z1 for one cell)"},
             {"method": "POST", "path": "/sim/begin", "desc": "begin simulation (alias /beginSimulation)"},
             {"method": "POST", "path": "/sim/pause", "desc": "stop continuous run"},
             {"method": "POST", "path": "/sim/run?n=", "desc": "advance N turns (alias /runN)"},
