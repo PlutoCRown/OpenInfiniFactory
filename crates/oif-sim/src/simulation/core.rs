@@ -180,7 +180,7 @@ pub fn simulate_turn(
 
     sample.marker_before_move_ms = mark_elapsed_ms(&mut mark);
 
-    let device_movement_plan = {
+    let (device_movement_plan, conveyor_diag) = {
         structure_state.clear_turn_marks();
         mark_structure_movement_phase(
             world,
@@ -191,6 +191,24 @@ pub fn simulate_turn(
         )
     };
     if let Some(sim_log) = sim_log.as_mut() {
+        let avg = if conveyor_diag.can_translate_calls == 0 {
+            0.0
+        } else {
+            conveyor_diag.can_translate_ms / f64::from(conveyor_diag.can_translate_calls)
+        };
+        sim_log.log(
+            turn,
+            format!(
+                "conveyor mark: attempts={} can_translate_calls={} ({:.2}ms, avg {:.3}ms/call) cache_hits={} emitted={} deduped={}",
+                conveyor_diag.attempts,
+                conveyor_diag.can_translate_calls,
+                conveyor_diag.can_translate_ms,
+                avg,
+                conveyor_diag.cache_hits,
+                conveyor_diag.emitted,
+                conveyor_diag.deduped,
+            ),
+        );
         log_movement_plan(turn, sim_log, world, "devices", &device_movement_plan);
     }
     movement_plan = merge_structure_movement_plan(

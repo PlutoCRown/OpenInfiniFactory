@@ -4,7 +4,7 @@ pub(super) fn mark_structure_movement_phase(
     structures: &mut StructureState,
     pusher_state: &mut PusherState,
     suction: &SuctionLinks,
-) -> Vec<StructureMove> {
+) -> (Vec<StructureMove>, ConveyorMarkDiag) {
     world.sync_rotator_arrivals();
     structures.clear_turn_marks();
     let mut movers: Vec<(IVec3, MovementRule)> = world
@@ -27,6 +27,10 @@ pub(super) fn mark_structure_movement_phase(
     });
     let mut moves = Vec::new();
     let mut claimed_heads = PusherState::hard_head_occupancy(world);
+    // 同结构同位移：can_translate 每回合只算一次；同向标记去重
+    let mut translate_ok: HashMap<(StructureId, IVec3), bool> = HashMap::new();
+    let mut emitted_translate: HashSet<(StructureId, IVec3)> = HashSet::new();
+    let mut conveyor_diag = ConveyorMarkDiag::default();
 
     // 本回合要切换伸出状态的推杆（排序继承 movers）
     let mut actuating: Vec<(IVec3, IVec3, IVec3, bool)> = Vec::new();
@@ -76,11 +80,26 @@ pub(super) fn mark_structure_movement_phase(
         let source_id = world.blocks.get(&pos).map(|block| block.id);
         match mover {
             MovementRule::Translate { source, offset } => {
-                if let Some(movement) =
-                    mark_conveyor_movement(world, structures, pos, source, offset, suction)
-                {
-                    if let Some(source_id) = source_id {
-                        moves.push(movement.with_source(source_id, pos));
+                conveyor_diag.attempts += 1;
+                if let Some(movement) = mark_conveyor_movement(
+                    world,
+                    structures,
+                    pos,
+                    source,
+                    offset,
+                    suction,
+                    &claimed_heads,
+                    &mut translate_ok,
+                    &mut conveyor_diag,
+                ) {
+                    let key = (movement.structure_id(), translate_offset(&movement));
+                    if emitted_translate.insert(key) {
+                        conveyor_diag.emitted += 1;
+                        if let Some(source_id) = source_id {
+                            moves.push(movement.with_source(source_id, pos));
+                        }
+                    } else {
+                        conveyor_diag.deduped += 1;
                     }
                 }
             }
@@ -164,7 +183,55 @@ pub(super) fn mark_structure_movement_phase(
             }
         }
     }
-    moves
+    (moves, conveyor_diag)
+}
+
+/// 传送带标记诊断：回答「单次 can_translate 有多贵」
+#[derive(Default, Clone, Debug)]
+pub(super) struct ConveyorMarkDiag {
+    pub attempts: u32,
+    pub cache_hits: u32,
+    pub can_translate_calls: u32,
+    pub can_translate_ms: f64,
+    pub emitted: u32,
+    pub deduped: u32,
+}
+
+fn translate_offset(movement: &StructureMove) -> IVec3 {
+    match movement {
+        StructureMove::Translate { offset, .. } => *offset,
+        StructureMove::Rotate { .. } => IVec3::ZERO,
+    }
+}
+
+fn cached_can_translate(
+    world: &WorldBlocks,
+    structures: &StructureState,
+    suction: &SuctionLinks,
+    hard_pusher_heads: &HashSet<IVec3>,
+    structure_id: StructureId,
+    structure: &HashSet<IVec3>,
+    offset: IVec3,
+    cache: &mut HashMap<(StructureId, IVec3), bool>,
+    diag: &mut ConveyorMarkDiag,
+) -> bool {
+    if let Some(&allowed) = cache.get(&(structure_id, offset)) {
+        diag.cache_hits += 1;
+        return allowed;
+    }
+    let started = std::time::Instant::now();
+    let allowed = can_translate_structure(
+        world,
+        structure,
+        offset,
+        structures,
+        suction,
+        hard_pusher_heads,
+    );
+    diag.can_translate_calls += 1;
+    diag.can_translate_ms += started.elapsed().as_secs_f64() * 1000.0;
+    cache.insert((structure_id, offset), allowed);
+    allowed
 }
 
 fn mark_conveyor_movement(
@@ -174,8 +241,10 @@ fn mark_conveyor_movement(
     source: IVec3,
     offset: IVec3,
     suction: &SuctionLinks,
+    hard_pusher_heads: &HashSet<IVec3>,
+    translate_ok: &mut HashMap<(StructureId, IVec3), bool>,
+    diag: &mut ConveyorMarkDiag,
 ) -> Option<StructureMove> {
-    let heads = PusherState::hard_head_occupancy(world);
     let target = pos + source;
     if let Some(movement) = mark_structure_translate(
         world,
@@ -186,13 +255,16 @@ fn mark_conveyor_movement(
         MovementMark::Conveyor,
         suction,
     ) {
-        if can_translate_structure(
+        if cached_can_translate(
             world,
-            movement.structure(),
-            offset,
             structures,
             suction,
-            &heads,
+            hard_pusher_heads,
+            movement.structure_id(),
+            movement.structure(),
+            offset,
+            translate_ok,
+            diag,
         ) {
             return Some(movement);
         }
@@ -203,11 +275,22 @@ fn mark_conveyor_movement(
     }
 
     let structure = structures.linked_pushable_at(suction, pos, -offset)?;
-    if !can_translate_structure(world, &structure, -offset, structures, suction, &heads) {
+    let structure_id = structures.id_at(pos)?;
+    if !cached_can_translate(
+        world,
+        structures,
+        suction,
+        hard_pusher_heads,
+        structure_id,
+        &structure,
+        -offset,
+        translate_ok,
+        diag,
+    ) {
         return None;
     }
     Some(StructureMove::translate_marked(
-        structures.id_at(pos)?,
+        structure_id,
         structure,
         -offset,
         MovementMark::Conveyor,
@@ -250,15 +333,14 @@ fn mark_pusher_movement(
         if desired_extended {
             for forward in [true, false] {
                 let Some((_, indices)) =
-                    ctx.structures
-                        .deform_action_groups(ctx.world, pos, forward)
+                    ctx.structures.deform_action_groups(ctx.world, pos, forward)
                 else {
                     continue;
                 };
-                if indices.iter().any(|idx| {
-                    ctx.succeeded_deform
-                        .contains(&(structure_id, *idx))
-                }) {
+                if indices
+                    .iter()
+                    .any(|idx| ctx.succeeded_deform.contains(&(structure_id, *idx)))
+                {
                     return try_deform_action(
                         ctx,
                         pos,
@@ -276,16 +358,9 @@ fn mark_pusher_movement(
     }
 
     if desired_extended {
-        if let Some(movement) = try_deform_action(
-            ctx,
-            pos,
-            id,
-            structure_id,
-            true,
-            offset,
-            animation,
-            true,
-        ) {
+        if let Some(movement) =
+            try_deform_action(ctx, pos, id, structure_id, true, offset, animation, true)
+        {
             return Some(movement);
         }
         // 正推无实体格且头前是外结构：整坨外推
@@ -299,7 +374,10 @@ fn mark_pusher_movement(
             });
         if forward_physical_empty && !ctx.world.is_fragile_material_at(head) {
             if let Some(front_id) = ctx.world.blocks.get(&head).map(|b| b.id) {
-                let external = ctx.structures.id_at(head).is_some_and(|sid| sid != structure_id)
+                let external = ctx
+                    .structures
+                    .id_at(head)
+                    .is_some_and(|sid| sid != structure_id)
                     || PusherState::body_at_extended_head(ctx.world, head)
                         .is_some_and(|body| ctx.structures.id_at(body) != Some(structure_id));
                 if external && !ctx.structures.held_blocks.contains(&front_id) {
@@ -354,16 +432,7 @@ fn mark_pusher_movement(
         }
         if PUSHER_REVERSE_ENABLED {
             // 正推失败后反推自身；仍走 Extend：到位后进入伸出并停住（避免每回合再退）
-            return try_deform_action(
-                ctx,
-                pos,
-                id,
-                structure_id,
-                false,
-                -offset,
-                animation,
-                false,
-            );
+            return try_deform_action(ctx, pos, id, structure_id, false, -offset, animation, false);
         }
         return None;
     }
@@ -371,16 +440,9 @@ fn mark_pusher_movement(
     // 收回：先释放头占格，粘头则拉回正推节点集
     ctx.claimed_heads.remove(&head);
     if bound_front {
-        if let Some(movement) = try_deform_action(
-            ctx,
-            pos,
-            id,
-            structure_id,
-            true,
-            -offset,
-            animation,
-            false,
-        ) {
+        if let Some(movement) =
+            try_deform_action(ctx, pos, id, structure_id, true, -offset, animation, false)
+        {
             return Some(movement);
         }
     }
@@ -408,7 +470,9 @@ fn try_deform_action(
     claim_head: bool,
 ) -> Option<StructureMove> {
     let group_indices: Vec<u32> = {
-        let (_, indices) = ctx.structures.deform_action_groups(ctx.world, pos, forward)?;
+        let (_, indices) = ctx
+            .structures
+            .deform_action_groups(ctx.world, pos, forward)?;
         indices.to_vec()
     };
 
