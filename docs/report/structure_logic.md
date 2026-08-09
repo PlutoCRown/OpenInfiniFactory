@@ -66,16 +66,15 @@ pub struct FactoryStructure {
 
 活动性规则：
 
-1. 如果一个工厂结构与任何场景方块相邻，则该结构为 `Inactive`。
-2. 如果一个工厂结构与任何 `Inactive` 工厂结构相邻，则它也会传播为 `Inactive`。
-3. 未被传播为固定的结构为 `Active`。
+1. 如果一个工厂结构与任何场景方块相邻（且该面未被 `non_connection_face` 挡住），则该结构为 `Inactive`。
+2. 否则为 `Active`。
+3. Inactive **不**在独立结构之间传播：遮挡面导致无法并入同一连通分量的结构，彼此不影响 activity。
+4. 编辑时只对新建/重建的结构按上述规则重算；并入已有连通分量时，合并后的整团按是否贴场景判定。
 
 自由度规则：
 
-- `Active` 工厂结构当前设置为 `StructureFreedom::All`。
-- `Inactive` 工厂结构当前设置为 `StructureFreedom::None`。
-
-后续如果要支持“某些方向固定、某些方向可移动”，可以把 `StructureFreedom` 从两档扩展为六方向 bitset 或方向集合。
+- `Active` 工厂结构：`StructureFreedom::All`。
+- `Inactive` 工厂结构：`StructureFreedom::None`。
 
 ## 更新时机
 

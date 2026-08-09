@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use crate::game::player::controller::{FlyCamera, player_collision_box};
 use crate::game::simulation::stats::SimulationStepStats;
 use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
+use crate::game::systems::gameplay::EditBatchTiming;
 use crate::game::ui::core::host::PlayingUiRootEntity;
 use crate::game::ui::{PendingKeyBind, TextPromptState};
 use crate::game::world::grid::WorldBlocks;
@@ -121,6 +122,7 @@ pub fn update_debug_ui(
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
     sim_stats: Res<SimulationStepStats>,
+    edit_timing: Res<EditBatchTiming>,
     player: Query<&Transform, With<FlyCamera>>,
     block_entities: Query<Entity, With<BlockEntity>>,
     mut panel: Query<(&mut Text, &mut Node), With<DebugPanel>>,
@@ -189,10 +191,24 @@ pub fn update_debug_ui(
         String::new()
     };
 
+    let edit_batch_text = match (edit_timing.last_place_ms, edit_timing.last_delete_ms) {
+        (None, None) => String::new(),
+        (place, delete) => {
+            let mut lines = String::from("\n\nEdit Batch (last)");
+            if let Some(ms) = place {
+                lines.push_str(&format!("\n  Place: {ms:>5.2} ms"));
+            }
+            if let Some(ms) = delete {
+                lines.push_str(&format!("\n  Delete: {ms:>5.2} ms"));
+            }
+            lines
+        }
+    };
+
     let render_remainder_ms = (perf.render_other_ms() - perf.render_gap_ms()).max(0.0);
 
     let next = format!(
-        "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n{}\n  Schedule/Untracked: {:>8.2} us\nRender/Engine: {:>5.2} ms\n  Frame Gap: {:>5.2} ms\n  Timing Remainder: {:>5.2} ms{}\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
+        "Debug\nFPS: {:>4.0}\nFrame: {:>5.2} ms\nMain: {:>5.2} ms\n{}\n  Schedule/Untracked: {:>8.2} us\nRender/Engine: {:>5.2} ms\n  Frame Gap: {:>5.2} ms\n  Timing Remainder: {:>5.2} ms{}{}\nBlocks: {}  Entities: {}\nPlayer: {:.1}, {:.1}, {:.1}\n/: toggle",
         fps,
         perf.frame_ms(),
         perf.main_ms(),
@@ -202,6 +218,7 @@ pub fn update_debug_ui(
         perf.render_gap_ms(),
         render_remainder_ms,
         sim_turn_text,
+        edit_batch_text,
         world.blocks.len(),
         block_entities.iter().count(),
         player_pos.x,

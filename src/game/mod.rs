@@ -115,6 +115,7 @@ impl Plugin for GamePlugin {
             .insert_resource(PlacementState::default())
             .init_resource::<AimFocus>()
             .insert_resource(InventoryItems::default())
+            .init_resource::<crate::game::systems::gameplay::EditBatchTiming>()
             .init_state::<GameMode>()
             .insert_resource(StartMenuScreen::default())
             .insert_resource(PlayingUiState::default())

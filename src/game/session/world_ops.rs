@@ -82,6 +82,7 @@ fn commit_save_current_world(
     invalidate_solutions: bool,
     player: Option<PlayerSave>,
 ) -> bool {
+    let started = std::time::Instant::now();
     let world = simulation.authoring_world(world);
     let kind = save_state.current_kind.unwrap_or(SaveKind::Puzzle);
     let mut slot = save_state.current.clone().unwrap_or_else(|| {
@@ -120,6 +121,11 @@ fn commit_save_current_world(
         }
     };
     if saved {
+        let ms = started.elapsed().as_secs_f64() * 1000.0;
+        bevy::log::info!(
+            "saved `{}` ({kind:?}) in {ms:.1}ms",
+            slot.storage_path()
+        );
         save_state.current = Some(slot);
         save_state.current_kind = Some(kind);
         solution_state.dirty = false;

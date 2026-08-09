@@ -29,13 +29,13 @@ impl StructureState {
         self.next_head_id = self.next_head_id.max(world.next_block_id).max(1);
     }
 
-    /// 全量重建：工厂连通 + inactive + deform + 验收口 + 材料
+    /// 全量重建：工厂连通 + 贴场景 activity + deform + 验收口 + 材料
     pub fn rebuild_for_simulation(&mut self, world: &WorldBlocks) {
         let next_head = self.next_head_id.max(world.next_block_id).max(1);
         *self = Self::default();
         self.next_head_id = next_head;
         self.append_factory_structures(world);
-        self.apply_factory_inactive_propagation(world);
+        self.refresh_all_factory_activity_from_scene(world);
         self.rebuild_all_factory_deform(world);
         self.append_acceptor_structures(world);
         self.append_material_structures(world, &HashMap::new(), &HashMap::new());
@@ -71,7 +71,7 @@ impl StructureState {
     pub fn rebuild_factory_for_debug(&mut self, world: &WorldBlocks) {
         self.retain_factory_only();
         self.append_factory_structures(world);
-        self.apply_factory_inactive_propagation(world);
+        self.refresh_all_factory_activity_from_scene(world);
         self.rebuild_all_factory_deform(world);
     }
 
@@ -343,77 +343,37 @@ impl StructureState {
         }
     }
 
-    fn apply_factory_inactive_propagation(&mut self, world: &WorldBlocks) {
+    /// 贴场景 → Inactive + Freedom::None；否则 Active + All。不做结构间传播。
+    fn refresh_factory_activity_from_scene(
+        &mut self,
+        world: &WorldBlocks,
+        ids: impl IntoIterator<Item = StructureId>,
+    ) {
+        for id in ids {
+            let Some(structure) = self.structures.get_mut(&id) else {
+                continue;
+            };
+            if structure.kind != StructureKind::Factory {
+                continue;
+            }
+            if touches_scene(world, &structure.positions) {
+                structure.activity = FactoryActivity::Inactive;
+                structure.freedom = StructureFreedom::None;
+            } else {
+                structure.activity = FactoryActivity::Active;
+                structure.freedom = StructureFreedom::All;
+            }
+        }
+    }
+
+    fn refresh_all_factory_activity_from_scene(&mut self, world: &WorldBlocks) {
         let factory_ids: Vec<StructureId> = self
             .structures
             .iter()
             .filter(|(_, structure)| structure.kind == StructureKind::Factory)
             .map(|(id, _)| *id)
             .collect();
-        let scene_anchored: HashMap<StructureId, bool> = factory_ids
-            .iter()
-            .map(|id| {
-                let anchored = self
-                    .structures
-                    .get(id)
-                    .is_some_and(|structure| touches_scene(world, &structure.positions));
-                (*id, anchored)
-            })
-            .collect();
-        let mut inactive: HashMap<StructureId, bool> = scene_anchored.clone();
-        let mut queue = VecDeque::new();
-        for (id, anchored) in &scene_anchored {
-            if *anchored {
-                inactive.insert(*id, true);
-                queue.push_back(*id);
-            }
-        }
-
-        while let Some(id) = queue.pop_front() {
-            let Some(structure) = self.structures.get(&id) else {
-                continue;
-            };
-            if structure.kind != StructureKind::Factory {
-                continue;
-            }
-            for pos in structure.positions.clone() {
-                for offset in signal_offsets() {
-                    let neighbor = pos + offset;
-                    let Some(neighbor_id) = self.structure_by_pos.get(&neighbor).copied() else {
-                        continue;
-                    };
-                    let Some(neighbor_structure) = self.structures.get(&neighbor_id) else {
-                        continue;
-                    };
-                    if neighbor_structure.kind != StructureKind::Factory {
-                        continue;
-                    }
-                    if is_blocked_factory_connection(world, pos, neighbor)
-                        || is_blocked_factory_connection(world, neighbor, pos)
-                    {
-                        continue;
-                    }
-                    if !inactive.get(&neighbor_id).copied().unwrap_or(false) {
-                        inactive.insert(neighbor_id, true);
-                        queue.push_back(neighbor_id);
-                    }
-                }
-            }
-        }
-
-        for id in factory_ids {
-            let Some(structure) = self.structures.get_mut(&id) else {
-                continue;
-            };
-            structure.activity = FactoryActivity::Active;
-            structure.freedom = StructureFreedom::All;
-            if inactive.get(&id).copied().unwrap_or(false) {
-                structure.activity = FactoryActivity::Inactive;
-                if scene_anchored.get(&id).copied().unwrap_or(false) {
-                    structure.freedom = StructureFreedom::None;
-                }
-            }
-        }
+        self.refresh_factory_activity_from_scene(world, factory_ids);
     }
 
     /// 编辑变更：局部合并/拆分工厂连通并重算受影响 deform
@@ -473,10 +433,10 @@ impl StructureState {
             .filter(|id| !before_ids.contains(id))
             .collect();
 
-        if !stale_ids.is_empty() || !new_ids.is_empty() {
-            self.apply_factory_inactive_propagation(world);
-            for id in new_ids {
-                self.rebuild_deform_for(world, id);
+        if !new_ids.is_empty() {
+            self.refresh_factory_activity_from_scene(world, new_ids.iter().copied());
+            for id in &new_ids {
+                self.rebuild_deform_for(world, *id);
             }
         }
         self.apply_material_edit(world, changed);

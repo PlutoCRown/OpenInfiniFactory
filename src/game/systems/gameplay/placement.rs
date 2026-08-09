@@ -31,6 +31,7 @@ use crate::shared::i18n::I18n;
 use super::edit_ops::{
     alternate_block_at, pick_target_block, rotate_block_at, rotate_facing, shift_pressed,
 };
+use super::edit_timing::EditBatchTiming;
 use super::rules::{
     can_delete_at, can_manual_rotate, can_place_block_at, can_place_in_mode, delete_block_at,
 };
@@ -54,6 +55,7 @@ pub struct PlacementQueries<'w, 's> {
     pending_block_panel: ResMut<'w, PendingBlockPanelOpen>,
     locale: Res<'w, I18n>,
     toast: ResMut<'w, GameplayToast>,
+    edit_timing: ResMut<'w, EditBatchTiming>,
 }
 
 /// 处理放置/删除手势、取块、旋转与框选入口
@@ -83,6 +85,7 @@ pub fn placement_input(
         mut pending_block_panel,
         locale,
         mut toast,
+        mut edit_timing,
     } = queries;
 
     let placement = &mut *player.placement;
@@ -546,6 +549,7 @@ pub fn placement_input(
                         builder_mode,
                         solution_state.entry,
                         player_pos,
+                        &mut edit_timing,
                     )
                 };
                 if committed {
@@ -688,7 +692,10 @@ fn commit_edit_gesture(
     builder_mode: BuilderMode,
     entry: WorldEntryMode,
     player_pos: Option<Vec3>,
+    edit_timing: &mut EditBatchTiming,
 ) -> bool {
+    let started = std::time::Instant::now();
+    let is_place = matches!(gesture.kind, EditGestureKind::Place { .. });
     let patch = match gesture.kind {
         EditGestureKind::Place { block } => {
             let positions = selection_positions(
@@ -752,9 +759,18 @@ fn commit_edit_gesture(
         return false;
     }
     let changed_positions = patch.affected_positions();
+    let cell_count = changed_positions.len();
     edit.edit_history.record(patch);
     refresh_edit_generated_markers(edit.world);
     refresh_edit_changes(&mut edit.scene, edit.world, &changed_positions);
+    let ms = started.elapsed().as_secs_f64() * 1000.0;
+    if is_place {
+        edit_timing.last_place_ms = Some(ms);
+        bevy::log::info!("place batch {cell_count} cell(s) in {ms:.2}ms");
+    } else {
+        edit_timing.last_delete_ms = Some(ms);
+        bevy::log::info!("delete batch {cell_count} cell(s) in {ms:.2}ms");
+    }
     true
 }
 
