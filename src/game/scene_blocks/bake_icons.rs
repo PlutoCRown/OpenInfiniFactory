@@ -23,7 +23,7 @@ use crate::game::world::grid::WorldBlocks;
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::game::world::rendering::spawn::{spawn_block_model, SpawnBlockOpts, SpawnMode};
 use crate::game::world::rendering::{
-    BlockIconRenderEntity, BlockIconRenderRoot, bakeable_block_icon_kinds,
+    BlockIconRenderEntity, BlockIconRenderRoot, ShadowProxyMaterial, bakeable_block_icon_kinds,
     baked_block_icon_only_id, baked_block_icon_path, light_panel_icon_path, selection_icon_path,
 };
 use crate::shared::platform;
@@ -206,6 +206,7 @@ pub fn run(config: BakeSceneIconsConfig) {
                     ..default()
                 }),
         )
+        .init_asset::<ShadowProxyMaterial>()
         .add_systems(Startup, setup_bake)
         .add_systems(Update, (tick_bake_capture, exit_when_bake_done))
         .run();
@@ -224,6 +225,7 @@ fn setup_bake(
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut shadow_proxy_materials: ResMut<Assets<ShadowProxyMaterial>>,
     config: Res<BakeSceneIconsConfig>,
 ) {
     let mut scene_registry = SceneBlockRegistry::default();
@@ -254,6 +256,7 @@ fn setup_bake(
     let assets = WorldRenderAssets::new(
         &mut meshes,
         &mut materials,
+        &mut shadow_proxy_materials,
         &mut images,
         &scene_registry,
         &material_registry,

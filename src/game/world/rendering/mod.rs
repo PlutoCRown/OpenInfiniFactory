@@ -6,13 +6,15 @@ mod connectors;
 pub(crate) mod depth_bias;
 mod fx;
 pub(crate) mod goal_ghost;
-pub(crate) mod portal_material;
 mod goal_visual_sync;
 mod icons;
+pub(crate) mod portal_material;
 mod previews;
 mod scene;
 mod scene_chunks;
 mod scene_mesh;
+pub(crate) mod shadow_proxy;
+pub(crate) mod shadow_proxy_material;
 mod skybox;
 pub(crate) mod spawn;
 mod world_rebuild;
@@ -40,8 +42,8 @@ pub use fx::{
     spawn_weld_sparks,
 };
 pub use goal_ghost::{GoalGhostMaterial, GoalGhostPlugin};
-pub use portal_material::{PortalFlashQueue, PortalMaterial, PortalMaterialPlugin};
 pub use icons::{retire_block_icon_renderers, setup_block_icons};
+pub use portal_material::{PortalFlashQueue, PortalMaterial, PortalMaterialPlugin};
 pub use previews::{
     despawn_edit_previews, despawn_pending_generated_previews, spawn_block_preview,
     spawn_edit_preview, update_delete_bounds_overlay, update_selection_bounds_overlay,
@@ -54,14 +56,15 @@ pub use scene_chunks::{
     SceneChunkMeshes, clear_scene_chunks, forget_scene_chunks, rebuild_all_scene_chunks,
     sync_scene_chunks_for_positions,
 };
+pub use shadow_proxy_material::{ShadowProxyMaterial, ShadowProxyMaterialPlugin};
 pub use skybox::SkyboxPlugin;
 pub use skybox::{environment_map_intensity, environment_map_light};
+pub use spawn::{
+    SpawnBlockOpts, SpawnMode, spawn_block, spawn_block_with_animation,
+    spawn_block_with_timed_animation, spawn_pending_generated_block,
+};
 pub(crate) use spawn::{
     factory_debug_overlay_material, spawn_factory_debug_overlay, spawn_world_block_entity,
-};
-pub use spawn::{
-    spawn_block, spawn_block_with_animation, spawn_block_with_timed_animation,
-    spawn_pending_generated_block, SpawnBlockOpts, SpawnMode,
 };
 pub use world_rebuild::{
     despawn_world, rebuild_world, rebuild_world_for_debug_state, rebuild_world_on_enter,

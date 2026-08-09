@@ -8,6 +8,7 @@ use super::depth_bias;
 use super::goal_ghost::GoalGhostMaterial;
 use super::portal_material::PortalMaterial;
 use super::previews::spawn_bounds_overlays;
+use super::shadow_proxy_material::ShadowProxyMaterial;
 use super::skybox::{SkyMaterial, spawn_sky_dome, transform_for_sun_direction};
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::shared::save::PuzzleLighting;
@@ -17,6 +18,7 @@ pub fn setup_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut shadow_proxy_materials: ResMut<Assets<ShadowProxyMaterial>>,
     mut ghost_materials: ResMut<Assets<GoalGhostMaterial>>,
     mut portal_materials: ResMut<Assets<PortalMaterial>>,
     mut sky_materials: ResMut<Assets<SkyMaterial>>,
@@ -76,6 +78,7 @@ pub fn setup_scene(
     let mut render_assets = WorldRenderAssets::new(
         &mut meshes,
         &mut materials,
+        &mut shadow_proxy_materials,
         &mut images,
         &scene_registry,
         &material_registry,

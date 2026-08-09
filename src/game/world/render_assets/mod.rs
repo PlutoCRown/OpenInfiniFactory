@@ -81,6 +81,10 @@ pub struct WorldRenderAssets {
     /// 焊接扩散粒子：白底 + 黄自发光（与焊点同风格，须 lit）
     pub(crate) weld_burst_material: Handle<StandardMaterial>,
     pub(crate) laser_beam_material: Handle<StandardMaterial>,
+    /// 阴影代理廉价材质（仅深度）
+    pub(crate) shadow_proxy_material: Handle<crate::game::world::rendering::ShadowProxyMaterial>,
+    /// 钻头阴影代理圆锥（8 边，沿局部 +Y；spawn 时转到 -Z）
+    pub(crate) shadow_proxy_drill_cone: Handle<Mesh>,
     delete_preview_material: Handle<StandardMaterial>,
     /// 选区包围盒半透明填充
     selection_fill_material: Handle<StandardMaterial>,
@@ -104,6 +108,7 @@ impl WorldRenderAssets {
     pub(crate) fn new(
         meshes: &mut Assets<Mesh>,
         materials: &mut Assets<StandardMaterial>,
+        shadow_proxy_materials: &mut Assets<crate::game::world::rendering::ShadowProxyMaterial>,
         images: &mut Assets<Image>,
         scene_registry: &crate::game::scene_blocks::SceneBlockRegistry,
         material_registry: &crate::game::material_blocks::MaterialBlockRegistry,
@@ -419,6 +424,17 @@ impl WorldRenderAssets {
                 unlit: true,
                 ..default()
             }),
+            shadow_proxy_material: shadow_proxy_materials
+                .add(crate::game::world::rendering::ShadowProxyMaterial::default()),
+            shadow_proxy_drill_cone: meshes.add(
+                Cone {
+                    radius: BLOCK_SIZE * 0.38,
+                    height: BLOCK_SIZE,
+                }
+                .mesh()
+                .resolution(8)
+                .build(),
+            ),
             delete_preview_material: materials.add(StandardMaterial {
                 base_color: Color::srgba(1.0, 0.08, 0.04, 0.38),
                 alpha_mode: AlphaMode::Blend,
@@ -625,6 +641,11 @@ impl WorldRenderAssets {
     /// 工厂 GLB 外观；无则走程序化零件
     pub(crate) fn factory_visual(&self, kind: BlockKind) -> Option<&FactoryVisual> {
         self.factory_models.get(&kind)
+    }
+
+    /// 单位立方体阴影代理（复用方块网格）
+    pub(crate) fn shadow_proxy_cube(&self) -> Handle<Mesh> {
+        self.block.clone()
     }
 
     pub(crate) fn connector_mesh(&self, offset: IVec3) -> Handle<Mesh> {

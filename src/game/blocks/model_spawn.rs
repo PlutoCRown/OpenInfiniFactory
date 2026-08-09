@@ -1,4 +1,5 @@
 use bevy::camera::visibility::RenderLayers;
+use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
 use crate::game::world::animation::{
@@ -6,6 +7,7 @@ use crate::game::world::animation::{
 };
 use crate::game::world::render_assets::{FactoryPartHandles, FactoryVisual, WorldRenderAssets};
 use crate::game::world::rendering::BlockIconRenderEntity;
+use crate::game::world::rendering::shadow_proxy::uses_shadow_proxy;
 
 /// 生成方块模型零件（工厂 GLB）
 pub fn spawn_model_parts(
@@ -67,6 +69,7 @@ fn spawn_factory_static(
     icon_layer: Option<&RenderLayers>,
     preview: bool,
 ) {
+    let world_proxy = icon_layer.is_none() && uses_shadow_proxy(kind);
     if local_rotation == Quat::IDENTITY {
         for part in parts {
             spawn_factory_part(
@@ -79,6 +82,14 @@ fn spawn_factory_static(
                 icon_layer,
                 preview,
             );
+        }
+        if world_proxy {
+            // 传送带：整格立方体投影（预览与落地共用）
+            parent.spawn((
+                Mesh3d(assets.shadow_proxy_cube()),
+                MeshMaterial3d(assets.shadow_proxy_material.clone()),
+                Transform::default(),
+            ));
         }
         return;
     }
@@ -101,6 +112,13 @@ fn spawn_factory_static(
                 icon_layer,
                 preview,
             );
+        }
+        if world_proxy {
+            parent.spawn((
+                Mesh3d(assets.shadow_proxy_cube()),
+                MeshMaterial3d(assets.shadow_proxy_material.clone()),
+                Transform::default(),
+            ));
         }
     });
 }
@@ -148,6 +166,22 @@ fn spawn_factory_drill(
             );
         }
     });
+
+    // 阴影代理：本体立方体 + 前进一格的低边数圆锥（不随钻头自旋，避免阴影抖）
+    if icon_layer.is_none() {
+        parent.spawn((
+            Mesh3d(assets.shadow_proxy_cube()),
+            MeshMaterial3d(assets.shadow_proxy_material.clone()),
+            Transform::default(),
+        ));
+        // 圆锥默认沿 +Y，尖端朝上；转到局部 -Z（钻头前进方向），落在前一格
+        parent.spawn((
+            Mesh3d(assets.shadow_proxy_drill_cone.clone()),
+            MeshMaterial3d(assets.shadow_proxy_material.clone()),
+            Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
+                .with_translation(Vec3::new(0.0, 0.0, -crate::game::blocks::BLOCK_SIZE)),
+        ));
+    }
 }
 
 /// 生成活塞 Body / Stage / Head
@@ -258,6 +292,10 @@ fn spawn_factory_part(
     ));
     if let Some(icon_layer) = icon_layer {
         child.insert((icon_layer.clone(), BlockIconRenderEntity));
+    }
+    // 有阴影代理的种类：可见高模不进阴影 cascade（含放置预览）
+    if icon_layer.is_none() && uses_shadow_proxy(kind) {
+        child.insert(NotShadowCaster);
     }
     // 传送带皮带：模拟时滚动 UV（颜色+法线共用 uv_transform）
     if !preview && icon_layer.is_none() && part.group.as_deref() == Some("Part_Belt") {
