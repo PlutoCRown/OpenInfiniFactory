@@ -20,30 +20,34 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+
 _TOOLS = Path(__file__).resolve().parents[2]
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 from common.paths import REPO_ROOT
-from common.bpy_util import apply_mat, apply_transforms, boolean_diff, clear_scene, export_factory_glb, finish, join_objects, link, make_mat, mesh_cube, mesh_cylinder, mesh_torus, set_active
+from common.bpy_util import (
+    apply_mat,
+    apply_transforms,
+    boolean_diff,
+    clear_scene,
+    export_factory_glb,
+    finish,
+    join_objects,
+    make_mat,
+    mesh_cube,
+    mesh_cylinder,
+)
+from common.power_port_geom import add_textured_block_port, make_power_port_material
 
 import math
 
 import bpy
-import bmesh
 from mathutils import Euler, Vector
 
 OUT_PUSHER = REPO_ROOT / "assets" / "factory_blocks" / "pusher"
 OUT_BLOCKER = REPO_ROOT / "assets" / "factory_blocks" / "blocker"
 
 CELL = 0.5
-# 供电口：与 generate_detector_glb.add_port 一致
-PORT_PLATE = 0.40
-PORT_PLATE_T = 0.03
-PORT_HOLE_R, PORT_HOLE_D = 0.095, 0.035
-PORT_GOLD_MAJOR, PORT_GOLD_MINOR = 0.118, 0.009
-PORT_OUTER_MAJOR, PORT_OUTER_MINOR = 0.145, 0.007
-PORT_SCREW_R, PORT_SCREW_D = 0.013, 0.013
-PORT_SCREW_OFF = 0.145
 PORT_PAD = 0.016
 
 ORANGE_T = 0.08
@@ -72,220 +76,6 @@ VARIANTS = (
 )
 
 
-def add_port(
-    prefix: str,
-    center: Vector,
-    axis: str,
-    mat_metal: bpy.types.Material,
-    mat_gold: bpy.types.Material,
-    mat_dark: bpy.types.Material,
-    parts: list[bpy.types.Object],
-) -> None:
-    """方块传感器同款供电口。"""
-    plate = PORT_PLATE
-    plate_t = PORT_PLATE_T
-    hole_r, hole_d = PORT_HOLE_R, PORT_HOLE_D
-    gold_major, gold_minor = PORT_GOLD_MAJOR, PORT_GOLD_MINOR
-    outer_major, outer_minor = PORT_OUTER_MAJOR, PORT_OUTER_MINOR
-    screw_r, screw_d = PORT_SCREW_R, PORT_SCREW_D
-    screw_off = PORT_SCREW_OFF
-
-    if axis in ("+Z", "-Z"):
-        sign = 1.0 if axis == "+Z" else -1.0
-        parts.append(
-            finish(
-                mesh_cube(f"{prefix}_Plate", Vector((plate, plate, plate_t)), center),
-                mat_metal,
-            )
-        )
-        parts.append(
-            finish(
-                mesh_cylinder(
-                    f"{prefix}_Hole",
-                    hole_r,
-                    hole_d,
-                    center + Vector((0, 0, sign * 0.002)),
-                ),
-                mat_dark,
-            )
-        )
-        parts.append(
-            finish(
-                mesh_torus(
-                    f"{prefix}_Gold",
-                    gold_major,
-                    gold_minor,
-                    center + Vector((0, 0, sign * 0.012)),
-                ),
-                mat_gold,
-            )
-        )
-        parts.append(
-            finish(
-                mesh_torus(
-                    f"{prefix}_Outer",
-                    outer_major,
-                    outer_minor,
-                    center + Vector((0, 0, sign * 0.01)),
-                ),
-                mat_metal,
-            )
-        )
-        for i, (sx, sy) in enumerate(
-            (
-                (-screw_off, -screw_off),
-                (screw_off, -screw_off),
-                (-screw_off, screw_off),
-                (screw_off, screw_off),
-            )
-        ):
-            parts.append(
-                finish(
-                    mesh_cylinder(
-                        f"{prefix}_S{i}",
-                        screw_r,
-                        screw_d,
-                        center + Vector((sx, sy, sign * 0.014)),
-                        verts=10,
-                    ),
-                    mat_dark,
-                )
-            )
-
-    elif axis in ("+X", "-X"):
-        sign = 1.0 if axis == "+X" else -1.0
-        rot = Euler((0, math.radians(90), 0))
-        parts.append(
-            finish(
-                mesh_cube(f"{prefix}_Plate", Vector((plate_t, plate, plate)), center),
-                mat_metal,
-            )
-        )
-        parts.append(
-            finish(
-                mesh_cylinder(
-                    f"{prefix}_Hole",
-                    hole_r,
-                    hole_d,
-                    center + Vector((sign * 0.002, 0, 0)),
-                    rot=rot,
-                ),
-                mat_dark,
-            )
-        )
-        parts.append(
-            finish(
-                mesh_torus(
-                    f"{prefix}_Gold",
-                    gold_major,
-                    gold_minor,
-                    center + Vector((sign * 0.012, 0, 0)),
-                    rot=rot,
-                ),
-                mat_gold,
-            )
-        )
-        parts.append(
-            finish(
-                mesh_torus(
-                    f"{prefix}_Outer",
-                    outer_major,
-                    outer_minor,
-                    center + Vector((sign * 0.01, 0, 0)),
-                    rot=rot,
-                ),
-                mat_metal,
-            )
-        )
-        for i, (sy, sz) in enumerate(
-            (
-                (-screw_off, -screw_off),
-                (screw_off, -screw_off),
-                (-screw_off, screw_off),
-                (screw_off, screw_off),
-            )
-        ):
-            parts.append(
-                finish(
-                    mesh_cylinder(
-                        f"{prefix}_S{i}",
-                        screw_r,
-                        screw_d,
-                        center + Vector((sign * 0.014, sy, sz)),
-                        rot=rot,
-                        verts=10,
-                    ),
-                    mat_dark,
-                )
-            )
-
-    else:  # -Y 背面
-        rot = Euler((math.radians(90), 0, 0))
-        parts.append(
-            finish(
-                mesh_cube(f"{prefix}_Plate", Vector((plate, plate_t, plate)), center),
-                mat_metal,
-            )
-        )
-        parts.append(
-            finish(
-                mesh_cylinder(
-                    f"{prefix}_Hole",
-                    hole_r,
-                    hole_d,
-                    center + Vector((0, -0.002, 0)),
-                    rot=rot,
-                ),
-                mat_dark,
-            )
-        )
-        parts.append(
-            finish(
-                mesh_torus(
-                    f"{prefix}_Gold",
-                    gold_major,
-                    gold_minor,
-                    center + Vector((0, -0.012, 0)),
-                    rot=rot,
-                ),
-                mat_gold,
-            )
-        )
-        parts.append(
-            finish(
-                mesh_torus(
-                    f"{prefix}_Outer",
-                    outer_major,
-                    outer_minor,
-                    center + Vector((0, -0.01, 0)),
-                    rot=rot,
-                ),
-                mat_metal,
-            )
-        )
-        for i, (sx, sz) in enumerate(
-            (
-                (-screw_off, -screw_off),
-                (screw_off, -screw_off),
-                (-screw_off, screw_off),
-                (screw_off, screw_off),
-            )
-        ):
-            parts.append(
-                finish(
-                    mesh_cylinder(
-                        f"{prefix}_S{i}",
-                        screw_r,
-                        screw_d,
-                        center + Vector((sx, -0.014, sz)),
-                        rot=rot,
-                        verts=10,
-                    ),
-                    mat_dark,
-                )
-            )
-
-
 def arm_xy() -> list[tuple[float, float]]:
     return [
         (-ARM_OFF, -ARM_OFF),
@@ -298,11 +88,9 @@ def arm_xy() -> list[tuple[float, float]]:
 def build_body(
     mat_body: bpy.types.Material,
     mat_orange: bpy.types.Material,
-    mat_metal: bpy.types.Material,
-    mat_gold: bpy.types.Material,
-    mat_dark: bpy.types.Material,
+    mat_port: bpy.types.Material,
 ) -> list[bpy.types.Object]:
-    """活塞体：厚度 1-HEAD_T；前橙环属本体；五面供电口。"""
+    """活塞体：厚度 1-HEAD_T；前橙环属本体；五面贴图供电口。"""
     parts: list[bpy.types.Object] = []
     core_y1 = BODY_Y1 - ORANGE_T
     core_h = core_y1 - BODY_Y0
@@ -341,21 +129,12 @@ def build_body(
     parts.append(frame)
 
     pad = PORT_PAD
-    add_port(
-        "PosZ", Vector((0, 0, CELL + pad)), "+Z", mat_metal, mat_gold, mat_dark, parts
-    )
-    add_port(
-        "NegZ", Vector((0, 0, -CELL - pad)), "-Z", mat_metal, mat_gold, mat_dark, parts
-    )
-    add_port(
-        "PosX", Vector((CELL + pad, 0, 0)), "+X", mat_metal, mat_gold, mat_dark, parts
-    )
-    add_port(
-        "NegX", Vector((-CELL - pad, 0, 0)), "-X", mat_metal, mat_gold, mat_dark, parts
-    )
-    add_port(
-        "NegY", Vector((0, -CELL - pad, 0)), "-Y", mat_metal, mat_gold, mat_dark, parts
-    )
+    # 供电口独立物体：勿 join 进 Body，否则顶点 AO 会乘到 PBR 贴图上
+    add_textured_block_port("PosZ", Vector((0, 0, CELL + pad)), "+Z", mat_port)
+    add_textured_block_port("NegZ", Vector((0, 0, -CELL - pad)), "-Z", mat_port)
+    add_textured_block_port("PosX", Vector((CELL + pad, 0, 0)), "+X", mat_port)
+    add_textured_block_port("NegX", Vector((-CELL - pad, 0, 0)), "-X", mat_port)
+    add_textured_block_port("NegY", Vector((0, -CELL - pad, 0)), "-Y", mat_port)
     return parts
 
 
@@ -502,18 +281,15 @@ def build_and_export(
     mat_orange = make_mat(
         "Orange", (0.92, 0.40, 0.06, 1.0), metallic=0.08, roughness=0.40
     )
-    mat_metal = make_mat(
-        "Metal", (0.58, 0.60, 0.62, 1.0), metallic=0.90, roughness=0.24
-    )
-    mat_gold = make_mat("Gold", (0.88, 0.68, 0.16, 1.0), metallic=0.95, roughness=0.20)
     mat_dark = make_mat("Dark", (0.04, 0.04, 0.05, 1.0), metallic=0.40, roughness=0.42)
     mat_rod = make_mat("Rod", (0.78, 0.80, 0.82, 1.0), metallic=0.75, roughness=0.30)
+    mat_port = make_power_port_material("block")
     mat_head = mat_orange if orange_head else mat_body
     square_arm = orange_head  # 拦截器：单根粗方臂
 
     kind = "blocker" if orange_head else "pusher"
     print(f"building {kind} body (offset={offset})…", file=sys.stderr)
-    body_parts = build_body(mat_body, mat_orange, mat_metal, mat_gold, mat_dark)
+    body_parts = build_body(mat_body, mat_orange, mat_port)
     print("building stage (offset/2)…", file=sys.stderr)
     stage_parts = build_stage(offset, mat_body, square_arm=square_arm)
     print("building head + tip…", file=sys.stderr)
@@ -524,7 +300,7 @@ def build_and_export(
     join_objects("Head", head_parts)
 
     out = out_dir / filename
-    export_factory_glb(out)
+    export_factory_glb(out, export_tangents=True)
     print(f"Wrote {out}", file=sys.stderr)
 
 

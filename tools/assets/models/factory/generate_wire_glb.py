@@ -4,7 +4,7 @@
 节点名按 export_yup 后的游戏局部轴：PosX / NegX / PosY / NegY / PosZ / NegZ
 （游戏中可按面显隐）。
 
-端面圆形接口嵌在橙臂端面上（样式对齐传感器供电口，但无大方板、不粗于线身）。
+端面圆形接口：直接把供电口贴图 UV 到八角柱 +Z 端面（不多加圆盘）。
 两根电线对接时橙臂贴齐成一根棍。
 
 模板臂沿 Blender +Z 建模；export_yup：Blender +Z → 游戏 +Y。
@@ -18,11 +18,25 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+
 _TOOLS = Path(__file__).resolve().parents[2]
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 from common.paths import REPO_ROOT
-from common.bpy_util import apply_mat, apply_transforms, boolean_diff, clear_scene, export_factory_glb, finish, join_objects, link, make_mat, mesh_cube, mesh_cylinder, mesh_torus, set_active
+from common.bpy_util import (
+    apply_mat,
+    apply_transforms,
+    boolean_diff,
+    clear_scene,
+    export_factory_glb,
+    finish,
+    join_objects,
+    link,
+    make_mat,
+    mesh_cube,
+    set_active,
+)
+from common.power_port_geom import WIRE_PORT, make_power_port_material
 
 import math
 
@@ -35,19 +49,10 @@ OUT_GLB = OUT_DIR / "model.glb"
 
 CELL = 0.5
 
-# 端面圆形接口：略外凸，游戏里才能看见金属环（过薄会像橙色平面）
-PORT_HOLE_R, PORT_HOLE_D = 0.085, 0.045
-PORT_GOLD_MAJOR, PORT_GOLD_MINOR = 0.105, 0.018
-PORT_OUTER_MAJOR, PORT_OUTER_MINOR = 0.122, 0.014
-PORT_SCREW_R, PORT_SCREW_D = 0.011, 0.014
-PORT_SCREW_OFF = 0.088
-
-# 橙臂截面 ≈0.30；臂身从格心贴到格面，两根对接成一根棍
 ARM_W = 0.30
-ARM_Z0 = 0.0  # 接到格心，避免对向臂中间留缝
-ARM_Z1 = CELL  # 0.50 贴齐面，无外凸
+ARM_Z0 = 0.0
+ARM_Z1 = CELL
 
-# 通电指示条：嵌在四侧纵槽里
 POWER_W = 0.028
 POWER_D = 0.018
 POWER_LEN_RATIO = 0.72
@@ -82,14 +87,45 @@ def mesh_oct_prism(
     return obj
 
 
+def paint_power_port_on_arm_end(
+    arm: bpy.types.Object,
+    mat_orange: bpy.types.Material,
+    mat_port: bpy.types.Material,
+) -> None:
+    """八角柱 +Z 端面：第二材质槽 + XY→UV（与烘焙 face_size=ARM_W 对齐）。"""
+    mesh = arm.data
+    mesh.materials.clear()
+    mesh.materials.append(mat_orange)
+    mesh.materials.append(mat_port)
+
+    set_active(arm)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bm = bmesh.from_edit_mesh(mesh)
+    uv_layer = bm.loops.layers.uv.verify()
+    # 烘焙平面边长 = WIRE_PORT.face_size（与 ARM_W 相同）
+    span = WIRE_PORT.face_size
+    for face in bm.faces:
+        n = face.normal
+        c = face.calc_center_median()
+        if n.z > 0.85 and c.z > ARM_Z1 - 0.08:
+            face.material_index = 1
+            for loop in face.loops:
+                p = loop.vert.co
+                loop[uv_layer].uv = (p.x / span + 0.5, p.y / span + 0.5)
+        else:
+            face.material_index = 0
+            for loop in face.loops:
+                loop[uv_layer].uv = (0.0, 0.0)
+    bmesh.update_edit_mesh(mesh)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
 def build_arm_along_pos_z(
     mat_orange: bpy.types.Material,
-    mat_metal: bpy.types.Material,
-    mat_gold: bpy.types.Material,
-    mat_dark: bpy.types.Material,
+    mat_port: bpy.types.Material,
     mat_power: bpy.types.Material,
 ) -> tuple[list[bpy.types.Object], list[bpy.types.Object]]:
-    """沿 Blender +Z 的单臂：橙身贴齐格面；返回 (外观零件, 通电凹槽条)。"""
+    """沿 Blender +Z 的单臂：橙身端面直接贴供电口；返回 (外观, 通电条)。"""
     parts: list[bpy.types.Object] = []
     power_parts: list[bpy.types.Object] = []
     arm_h = ARM_Z1 - ARM_Z0
@@ -100,7 +136,6 @@ def build_arm_along_pos_z(
     apply_mat(arm, mat_orange)
     apply_transforms(arm)
 
-    # 四侧纵槽（不改变外轮廓最大宽度）
     groove_w, groove_d = 0.04, 0.035
     for ang in (0.0, 90.0, 180.0, 270.0):
         rad = math.radians(ang)
@@ -115,7 +150,6 @@ def build_arm_along_pos_z(
         apply_transforms(cutter)
         boolean_diff(arm, cutter)
 
-        # 通电白条：坐在槽底，默认由游戏按通电显隐
         px = math.cos(rad) * (ARM_W * 0.5 - groove_d * 0.55)
         py = math.sin(rad) * (ARM_W * 0.5 - groove_d * 0.55)
         glow = mesh_cube(
@@ -126,73 +160,8 @@ def build_arm_along_pos_z(
         glow.rotation_euler = Euler((0, 0, rad))
         power_parts.append(finish(glow, mat_power))
 
-    # 端面浅凹，给接口留出嵌面
-    boolean_diff(
-        arm,
-        mesh_cylinder(
-            "FaceRecess",
-            PORT_OUTER_MAJOR + 0.010,
-            0.05,
-            Vector((0, 0, ARM_Z1 - 0.005)),
-        ),
-    )
+    paint_power_port_on_arm_end(arm, mat_orange, mat_port)
     parts.append(arm)
-
-    # 端面接口：略探出橙面，避免游戏里只剩橙色平面
-    z_face = ARM_Z1 - 0.008
-    parts.append(
-        finish(
-            mesh_cylinder(
-                "Hole",
-                PORT_HOLE_R,
-                PORT_HOLE_D,
-                Vector((0, 0, z_face)),
-            ),
-            mat_dark,
-        )
-    )
-    parts.append(
-        finish(
-            mesh_torus(
-                "Gold",
-                PORT_GOLD_MAJOR,
-                PORT_GOLD_MINOR,
-                Vector((0, 0, z_face + 0.012)),
-            ),
-            mat_gold,
-        )
-    )
-    parts.append(
-        finish(
-            mesh_torus(
-                "Outer",
-                PORT_OUTER_MAJOR,
-                PORT_OUTER_MINOR,
-                Vector((0, 0, z_face + 0.010)),
-            ),
-            mat_metal,
-        )
-    )
-    for i, (sx, sy) in enumerate(
-        (
-            (-PORT_SCREW_OFF, -PORT_SCREW_OFF),
-            (PORT_SCREW_OFF, -PORT_SCREW_OFF),
-            (-PORT_SCREW_OFF, PORT_SCREW_OFF),
-            (PORT_SCREW_OFF, PORT_SCREW_OFF),
-        )
-    ):
-        parts.append(
-            finish(
-                mesh_cylinder(
-                    f"Screw_{i}",
-                    PORT_SCREW_R,
-                    PORT_SCREW_D,
-                    Vector((sx, sy, z_face + 0.014)),
-                    verts=10,
-                ),
-                mat_dark,
-            )
-        )
     return parts, power_parts
 
 
@@ -202,15 +171,13 @@ def rotate_objects(objs: list[bpy.types.Object], rot: Euler) -> None:
         apply_transforms(obj)
 
 
-# 模板沿 Blender +Z → export 后游戏 +Y。
-# 下列旋转把 +Z 转到对应 Blender 轴，节点名用游戏轴。
 FACE_ORIENTATIONS: list[tuple[str, Euler]] = [
-    ("PosY", Euler((0, 0, 0))),  # +Z → +Y
-    ("NegY", Euler((math.radians(180), 0, 0))),  # +Z → -Z → -Y
-    ("PosZ", Euler((math.radians(90), 0, 0))),  # +Z → -Y → +Z
-    ("NegZ", Euler((math.radians(-90), 0, 0))),  # +Z → +Y → -Z
-    ("PosX", Euler((0, math.radians(90), 0))),  # +Z → +X
-    ("NegX", Euler((0, math.radians(-90), 0))),  # +Z → -X
+    ("PosY", Euler((0, 0, 0))),
+    ("NegY", Euler((math.radians(180), 0, 0))),
+    ("PosZ", Euler((math.radians(90), 0, 0))),
+    ("NegZ", Euler((math.radians(-90), 0, 0))),
+    ("PosX", Euler((0, math.radians(90), 0))),
+    ("NegX", Euler((0, math.radians(-90), 0))),
 ]
 
 
@@ -221,13 +188,8 @@ def main() -> None:
     mat_orange = make_mat(
         "Orange", (0.92, 0.40, 0.06, 1.0), metallic=0.08, roughness=0.40
     )
-    mat_metal = make_mat(
-        "Metal", (0.58, 0.60, 0.62, 1.0), metallic=0.90, roughness=0.24
-    )
-    mat_gold = make_mat("Gold", (0.88, 0.68, 0.16, 1.0), metallic=0.95, roughness=0.20)
-    mat_dark = make_mat("Dark", (0.04, 0.04, 0.05, 1.0), metallic=0.40, roughness=0.42)
+    mat_port = make_power_port_material("wire")
     mat_power = make_mat("Power", (1.0, 1.0, 1.0, 1.0), metallic=0.0, roughness=0.35)
-    # 自发光：Blender Principled Emission
     nt = mat_power.node_tree
     bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
     if "Emission Color" in bsdf.inputs:
@@ -238,16 +200,14 @@ def main() -> None:
 
     for name, rot in FACE_ORIENTATIONS:
         print(f"building {name}…", file=sys.stderr)
-        parts, power_parts = build_arm_along_pos_z(
-            mat_orange, mat_metal, mat_gold, mat_dark, mat_power
-        )
+        parts, power_parts = build_arm_along_pos_z(mat_orange, mat_port, mat_power)
         rotate_objects(parts, rot)
         rotate_objects(power_parts, rot)
         join_objects(name, parts)
         if power_parts:
             join_objects(f"{name}_Power", power_parts)
 
-    export_factory_glb(OUT_GLB)
+    export_factory_glb(OUT_GLB, export_tangents=True)
     print(f"Wrote {OUT_GLB}", file=sys.stderr)
 
 

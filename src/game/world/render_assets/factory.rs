@@ -278,7 +278,7 @@ fn split_pusher_parts(
     Some(FactoryVisual::Pusher { body, stage, head })
 }
 
-/// 按 PosX…NegZ / PosX_Power… 拆电线六向臂与通电条
+/// 按 PosX…NegZ / PosX_Power… / PosX_Port… 拆电线六向臂与通电条
 fn split_wire_faces(
     raw: Vec<FactoryGltfPart>,
     materials: &mut Assets<StandardMaterial>,
@@ -288,10 +288,12 @@ fn split_wire_faces(
     let mut any = false;
     for part in raw {
         let group = part.group.as_deref().unwrap_or("");
-        let (is_power, face_name) = match group.strip_suffix("_Power") {
+        let (is_power, rest) = match group.strip_suffix("_Power") {
             Some(face) => (true, face),
             None => (false, group),
         };
+        // 端面供电口：PosY_Port → 与 PosY 同面
+        let face_name = rest.strip_suffix("_Port").unwrap_or(rest);
         let Some(index) = wire_face_index(Some(face_name)) else {
             continue;
         };

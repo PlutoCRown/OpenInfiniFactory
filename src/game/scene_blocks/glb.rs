@@ -82,33 +82,7 @@ pub fn load_scene_glb(
     };
 
     let gltf_material = primitive.material();
-    let pbr = gltf_material.pbr_metallic_roughness();
-    let factor = pbr.base_color_factor();
-    let base_color = Color::srgba(factor[0], factor[1], factor[2], factor[3]);
-
-    let base_color_texture = pbr.base_color_texture().and_then(|info| {
-        let texture = info.texture();
-        let image = gltf_images.get(texture.source().index())?;
-        Some(images.add(bevy_image_from_gltf(image, &texture.sampler(), true)?))
-    });
-    let normal_map_texture = gltf_material.normal_texture().and_then(|info| {
-        let texture = info.texture();
-        let image = gltf_images.get(texture.source().index())?;
-        Some(images.add(bevy_image_from_gltf(image, &texture.sampler(), false)?))
-    });
-
-    let alpha_mode = match gltf_material.alpha_mode() {
-        gltf::material::AlphaMode::Opaque => AlphaMode::Opaque,
-        gltf::material::AlphaMode::Mask => {
-            AlphaMode::Mask(gltf_material.alpha_cutoff().unwrap_or(0.5))
-        }
-        gltf::material::AlphaMode::Blend => AlphaMode::Blend,
-    };
-    let cull_mode = if gltf_material.double_sided() {
-        None
-    } else {
-        Some(bevy::render::render_resource::Face::Back)
-    };
+    let has_normal = gltf_material.normal_texture().is_some();
 
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -118,21 +92,11 @@ pub fn load_scene_glb(
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-    if normal_map_texture.is_some() {
+    if has_normal {
         let _ = mesh.generate_tangents();
     }
 
-    let material = StandardMaterial {
-        base_color,
-        base_color_texture,
-        normal_map_texture,
-        perceptual_roughness: pbr.roughness_factor(),
-        metallic: pbr.metallic_factor(),
-        reflectance: 0.08,
-        alpha_mode,
-        cull_mode,
-        ..default()
-    };
+    let material = standard_material_from_gltf(&gltf_material, &gltf_images, images);
 
     Ok(SceneGltfHandles {
         mesh: meshes.add(mesh),
@@ -190,6 +154,9 @@ pub fn load_factory_glb(
                 .read_tex_coords(0)
                 .map(|iter| iter.into_f32().collect())
                 .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
+            let tangents: Option<Vec<[f32; 4]>> = reader
+                .read_tangents()
+                .map(|iter| iter.map(|t| [t[0], t[1], t[2], t[3]]).collect());
             let colors: Option<Vec<[f32; 4]>> = reader.read_colors(0).map(|iter| {
                 iter.into_rgba_f32()
                     .map(|c| [c[0], c[1], c[2], c[3]])
@@ -218,6 +185,16 @@ pub fn load_factory_glb(
                     ));
                 }
             }
+            if let Some(ref tangents) = tangents {
+                if tangents.len() != positions.len() {
+                    return Err(format!(
+                        "{}: TANGENT length mismatch (pos={} tan={})",
+                        path.display(),
+                        positions.len(),
+                        tangents.len()
+                    ));
+                }
+            }
 
             let mut bevy_mesh = Mesh::new(
                 PrimitiveTopology::TriangleList,
@@ -230,9 +207,14 @@ pub fn load_factory_glb(
             if let Some(colors) = colors {
                 bevy_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
             }
+            if let Some(tangents) = tangents {
+                bevy_mesh.insert_attribute(Mesh::ATTRIBUTE_TANGENT, tangents);
+            }
 
             let gltf_material = primitive.material();
-            if gltf_material.normal_texture().is_some() {
+            if gltf_material.normal_texture().is_some()
+                && bevy_mesh.attribute(Mesh::ATTRIBUTE_TANGENT).is_none()
+            {
                 let _ = bevy_mesh.generate_tangents();
             }
             let material_handle = match gltf_material.index() {
@@ -270,7 +252,7 @@ pub fn load_factory_glb(
     Ok(parts)
 }
 
-/// 从 glTF 材质建 StandardMaterial（含贴图 / 双面 / alpha）
+/// 从 glTF 材质建 StandardMaterial（baseColor / normal / metallicRoughness / occlusion）
 fn standard_material_from_gltf(
     gltf_material: &gltf::Material<'_>,
     gltf_images: &[gltf::image::Data],
@@ -284,8 +266,18 @@ fn standard_material_from_gltf(
         let image = gltf_images.get(texture.source().index())?;
         Some(images.add(bevy_image_from_gltf(image, &texture.sampler(), true)?))
     });
-    // 法线贴图必须线性色域，否则凹凸方向会偏
+    // 法线 / ORM 必须线性色域，否则凹凸与金属度会偏
     let normal_map_texture = gltf_material.normal_texture().and_then(|info| {
+        let texture = info.texture();
+        let image = gltf_images.get(texture.source().index())?;
+        Some(images.add(bevy_image_from_gltf(image, &texture.sampler(), false)?))
+    });
+    let metallic_roughness_texture = pbr.metallic_roughness_texture().and_then(|info| {
+        let texture = info.texture();
+        let image = gltf_images.get(texture.source().index())?;
+        Some(images.add(bevy_image_from_gltf(image, &texture.sampler(), false)?))
+    });
+    let occlusion_texture = gltf_material.occlusion_texture().and_then(|info| {
         let texture = info.texture();
         let image = gltf_images.get(texture.source().index())?;
         Some(images.add(bevy_image_from_gltf(image, &texture.sampler(), false)?))
@@ -306,13 +298,24 @@ fn standard_material_from_gltf(
         let e = gltf_material.emissive_factor();
         LinearRgba::new(e[0], e[1], e[2], 1.0)
     };
+    // Bevy：有 metallicRoughness 贴图时，scalar 是乘子；必须为 1 才「只用贴图」。
+    // 无贴图时用 glTF factor 作常量金属度/粗糙度。
+    let (metallic, perceptual_roughness) = if metallic_roughness_texture.is_some() {
+        (1.0, 1.0)
+    } else {
+        (pbr.metallic_factor(), pbr.roughness_factor())
+    };
     StandardMaterial {
         base_color,
         base_color_texture,
         normal_map_texture,
+        metallic_roughness_texture,
+        occlusion_texture,
         emissive,
-        perceptual_roughness: pbr.roughness_factor(),
-        metallic: pbr.metallic_factor(),
+        perceptual_roughness,
+        metallic,
+        // 非金属高光；金属主要靠 IBL，略提高以免整体发闷
+        reflectance: 0.5,
         alpha_mode,
         cull_mode,
         ..default()

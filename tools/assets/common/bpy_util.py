@@ -196,19 +196,29 @@ def mesh_torus(
     loc: Vector,
     *,
     rot: Euler | None = None,
+    major_segments: int = 36,
+    minor_segments: int = 12,
 ) -> bpy.types.Object:
-    """圆环原语。"""
+    """圆环原语；烘焙用可把 major_segments 提到 128+ 避免贴图露棱。"""
     bpy.ops.mesh.primitive_torus_add(
         major_radius=major,
         minor_radius=minor,
-        major_segments=36,
-        minor_segments=12,
+        major_segments=major_segments,
+        minor_segments=minor_segments,
         location=loc,
         rotation=rot or Euler((0, 0, 0)),
     )
     obj = bpy.context.active_object
     obj.name = name
     return obj
+
+
+def load_image(path: Path, *, is_data: bool = False) -> bpy.types.Image:
+    """加载贴图；法线/ORM 等数据贴图用 Non-Color。"""
+    img = bpy.data.images.load(str(path))
+    if is_data:
+        img.colorspace_settings.name = "Non-Color"
+    return img
 
 
 def boolean_diff(target: bpy.types.Object, cutter: bpy.types.Object) -> None:
@@ -284,10 +294,20 @@ def export_glb(
 ) -> None:
     """导出选中 mesh 为 GLB（Y-up，与游戏一致）。"""
     path.parent.mkdir(parents=True, exist_ok=True)
+    meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
+    if export_tangents:
+        # glTF 切线需要三角面；布尔/挤出后常有 n-gon。无 UV 的 mesh 跳过 calc_tangents。
+        for obj in meshes:
+            bm = bmesh.new()
+            bm.from_mesh(obj.data)
+            bmesh.ops.triangulate(bm, faces=bm.faces[:])
+            bm.to_mesh(obj.data)
+            bm.free()
+            if obj.data.uv_layers:
+                obj.data.calc_tangents()
     bpy.ops.object.select_all(action="DESELECT")
-    for obj in bpy.context.scene.objects:
-        if obj.type == "MESH":
-            obj.select_set(True)
+    for obj in meshes:
+        obj.select_set(True)
     kwargs = dict(
         filepath=str(path),
         export_format="GLB",

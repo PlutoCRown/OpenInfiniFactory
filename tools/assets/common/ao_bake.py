@@ -22,7 +22,11 @@ def bake_vertex_ao(
     attr_name: str = "Col",
 ) -> None:
     """对场景内全部 Mesh 烘 AO → 顶点色，并按 strength 软混向白色。"""
-    meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
+    meshes = [
+        obj
+        for obj in bpy.context.scene.objects
+        if obj.type == "MESH" and not _is_power_port_mesh(obj)
+    ]
     if not meshes:
         print("ao_bake: no mesh objects", file=sys.stderr)
         return
@@ -76,6 +80,20 @@ def bake_vertex_ao(
             v = 1.0 - (1.0 - ao) * strength
             loop.color = (v, v, v, 1.0)
 
+    # 同 mesh 上 PowerPort 面：顶点色置白，避免 COLOR_0 乘暗金属贴图
+    for obj in bpy.context.scene.objects:
+        if obj.type != "MESH" or not obj.data.materials:
+            continue
+        attr = obj.data.color_attributes.get(attr_name)
+        if attr is None:
+            continue
+        for poly in obj.data.polygons:
+            mat = obj.data.materials[poly.material_index]
+            if mat is None or not mat.name.startswith("PowerPort"):
+                continue
+            for li in poly.loop_indices:
+                attr.data[li].color = (1.0, 1.0, 1.0, 1.0)
+
     _wire_vertex_colors_for_gltf_export(attr_name)
 
     # 只保留 AO 这一层，避免导出多余 COLOR_n（全白占位）
@@ -92,11 +110,21 @@ def bake_vertex_ao(
     print("ao_bake: vertex AO done", file=sys.stderr)
 
 
+def _is_power_port_mesh(obj: bpy.types.Object) -> bool:
+    """供电口贴图件：已有 AO/PBR 贴图，不再烘顶点色以免压暗金属。"""
+    if not obj.data.materials:
+        return False
+    mat = obj.data.materials[0]
+    return mat is not None and mat.name.startswith("PowerPort")
+
+
 def _wire_vertex_colors_for_gltf_export(attr_name: str) -> None:
     """把 Color Attribute 乘进 Base Color，否则 Blender 5 不导出 COLOR_0。"""
     wired = 0
     for mat in bpy.data.materials:
         if not mat.use_nodes or mat.node_tree is None:
+            continue
+        if mat.name.startswith("PowerPort"):
             continue
         nt = mat.node_tree
         if any(

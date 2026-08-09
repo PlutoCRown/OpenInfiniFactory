@@ -77,6 +77,8 @@ pub(super) fn preview_model_material(material: StandardMaterial) -> StandardMate
         ),
         base_color_texture: material.base_color_texture,
         normal_map_texture: material.normal_map_texture,
+        metallic_roughness_texture: material.metallic_roughness_texture,
+        occlusion_texture: material.occlusion_texture,
         emissive: material.emissive * 0.25,
         metallic: material.metallic * 0.35,
         perceptual_roughness: material.perceptual_roughness.max(0.75),
