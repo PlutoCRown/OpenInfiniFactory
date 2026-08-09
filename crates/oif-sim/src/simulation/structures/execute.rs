@@ -106,6 +106,19 @@ pub(super) fn execute_structure_moves_with_pushers(
     let mut extension_commits = HashMap::new();
     let mut executed = Vec::new();
     let mut heads = hard_pusher_head_occupancy.clone();
+    // 本回合收回的头先逻辑腾出，便于对向「伸+收」同向共用中间格
+    for movement in &moves {
+        if let StructureMove::Translate { actors, .. } = movement {
+            for actor in actors {
+                if matches!(actor.animation, PusherAnimationKind::Retract) {
+                    let actor_pos = block_pos_by_id(world, actor.id).unwrap_or(actor.pos);
+                    if let Some(block) = world.blocks.get(&actor_pos) {
+                        heads.remove(&(actor_pos + block.facing.forward_ivec3()));
+                    }
+                }
+            }
+        }
+    }
     for movement in moves {
         match movement {
             StructureMove::Translate {

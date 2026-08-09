@@ -176,13 +176,28 @@ fn expanded_move_structure(
     mode: MovementExpansionMode,
     suction: &SuctionLinks,
 ) -> Option<HashSet<IVec3>> {
-    // 先经吸盘并集；种子内已有结构 id 不膨胀，只并入其它粘连结构
+    expanded_move_structure_with_occupancy(
+        world, structure, offset, structures, mode, suction, None,
+    )
+}
+
+/// 展开推动链；`occupancy` 下同向离开的格视为空（不并入），异速占用则失败
+pub(super) fn expanded_move_structure_with_occupancy(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+    offset: IVec3,
+    structures: &StructureState,
+    mode: MovementExpansionMode,
+    suction: &SuctionLinks,
+    occupancy: Option<&MovingOccupancy>,
+) -> Option<HashSet<IVec3>> {
     let structure = structures.linked_expand_pusher_subset(suction, structure, offset)?;
     let structure = with_factory_attachment_children(world, &structure);
     let structure = with_pusher_heads(world, &structure);
 
     if offset.abs().element_sum() != 1 {
-        return can_move_structure_without_push(world, &structure, offset).then_some(structure);
+        return can_move_structure_without_push_occupancy(world, &structure, offset, occupancy)
+            .then_some(structure);
     }
 
     let mut expanded = structure.clone();
@@ -195,10 +210,17 @@ fn expanded_move_structure(
         if world.cell_accepts_move_from(pos, target) {
             continue;
         }
-        // 真实头对结构规划视为空格（与旧虚拟头一致）；外来头由 hard_pusher_head_* 拦截，
-        // 自带头由 with_pusher_heads 并入移动集。不可把 PusherHead 当货物去推本体。
         if is_pusher_head_at(world, target) {
             continue;
+        }
+        if let Some(occ) = occupancy {
+            if let Some(v) = occ.velocity_at(target) {
+                if v == offset {
+                    // 独立结构同向离开：不并入，视为可进入
+                    continue;
+                }
+                return None;
+            }
         }
 
         let pushed = pushable_structure_at(world, structures, target, offset, suction)?;
@@ -214,7 +236,34 @@ fn expanded_move_structure(
         }
     }
 
-    can_move_structure_without_push(world, &expanded, offset).then_some(expanded)
+    can_move_structure_without_push_occupancy(world, &expanded, offset, occupancy)
+        .then_some(expanded)
+}
+
+fn can_move_structure_without_push_occupancy(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+    offset: IVec3,
+    occupancy: Option<&MovingOccupancy>,
+) -> bool {
+    structure.iter().all(|pos| {
+        let target = *pos + offset;
+        if target.y < 0 {
+            return false;
+        }
+        if structure.contains(&target)
+            || world.cell_accepts_move_from(*pos, target)
+            || is_pusher_head_at(world, target)
+        {
+            return true;
+        }
+        if let Some(occ) = occupancy {
+            if let Some(v) = occ.velocity_at(target) {
+                return v == offset;
+            }
+        }
+        world.is_fragile_material_at(*pos)
+    })
 }
 
 /// 把工厂附着子格（告示等）并入待移动集合
@@ -271,12 +320,15 @@ pub(super) fn can_translate_structure(
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-enum MovementExpansionMode {
+pub(super) enum MovementExpansionMode {
     Normal,
     Gravity,
 }
 
-fn movement_expansion_mode(mark: MovementMark, source: Option<BlockId>) -> MovementExpansionMode {
+pub(super) fn movement_expansion_mode(
+    mark: MovementMark,
+    source: Option<BlockId>,
+) -> MovementExpansionMode {
     if mark == MovementMark::Vertical && source.is_none() {
         MovementExpansionMode::Gravity
     } else {
@@ -300,27 +352,6 @@ fn pushable_structure_at(
         return structures.linked_pushable_at(suction, pos, offset);
     }
     None
-}
-
-fn can_move_structure_without_push(
-    world: &WorldBlocks,
-    structure: &HashSet<IVec3>,
-    offset: IVec3,
-) -> bool {
-    structure.iter().all(|pos| {
-        let target = *pos + offset;
-        if target.y < 0 {
-            return false;
-        }
-        if structure.contains(&target)
-            || world.cell_accepts_move_from(*pos, target)
-            || is_pusher_head_at(world, target)
-        {
-            return true;
-        }
-        // 结构内脆弱撞实心：碎裂后放行
-        world.is_fragile_material_at(*pos)
-    })
 }
 
 pub(super) fn move_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, offset: IVec3) {

@@ -883,3 +883,230 @@ fn face_pair_south_lower_id_and_second_turn_forward() {
         );
     }
 }
+
+/// 移动占位：⬛ 均为独立材料结构（无焊接）
+mod moving_occupancy_cases {
+    use super::*;
+    use crate::blocks::BlockKind;
+    use crate::simulation::core::simulate_turn;
+    use crate::simulation::pending::PendingGeneratedMaterials;
+    use crate::simulation::signals::SignalNetworkCache;
+    use crate::simulation::structures::MovementInfluenceCache;
+
+    fn mat() -> BlockData {
+        BlockData::new(BlockKind::material("iron"), Facing::North)
+    }
+
+    fn scene() -> BlockData {
+        BlockData::new(BlockKind::Scene(SceneBlockId(6)), Facing::North)
+    }
+
+    fn turn(
+        world: &mut WorldBlocks,
+        structures: &mut StructureState,
+        pusher: &mut PusherState,
+        n: u64,
+    ) {
+        let mut pending = PendingGeneratedMaterials::default();
+        let mut signals = SignalNetworkCache::default();
+        let mut influence = MovementInfluenceCache::default();
+        simulate_turn(
+            world,
+            &mut pending,
+            &mut signals,
+            n,
+            structures,
+            &mut influence,
+            pusher,
+            None,
+            None,
+        );
+    }
+
+    fn id_at(world: &WorldBlocks, pos: IVec3) -> crate::blocks::BlockId {
+        world.blocks.get(&pos).expect("block at pos").id
+    }
+
+    fn pos_of(world: &WorldBlocks, id: crate::blocks::BlockId) -> IVec3 {
+        world
+            .blocks
+            .iter()
+            .find(|(_, b)| b.id == id)
+            .map(|(p, _)| *p)
+            .expect("id present")
+    }
+
+    /// 右块悬空下落占双格 → 左块本回合不能右移（两 ⬛ 独立）
+    #[test]
+    fn fall_occupies_start_blocks_lateral_conveyor() {
+        let mut world = WorldBlocks::default();
+        world.insert(IVec3::new(0, 0, 0), scene());
+        world.insert(
+            IVec3::new(0, 1, 0),
+            BlockData::new(BlockKind::Conveyor, Facing::East),
+        );
+        world.insert(IVec3::new(0, 2, 0), mat());
+        world.insert(IVec3::new(1, 2, 0), mat());
+        let left = id_at(&world, IVec3::new(0, 2, 0));
+        let right = id_at(&world, IVec3::new(1, 2, 0));
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut pusher = PusherState::rebuild_from_world(&world);
+        turn(&mut world, &mut structures, &mut pusher, 1);
+        assert_eq!(pos_of(&world, right), IVec3::new(1, 1, 0), "right falls");
+        assert_eq!(
+            pos_of(&world, left),
+            IVec3::new(0, 2, 0),
+            "left must not enter falling cell"
+        );
+    }
+
+    /// 双传送带同向：两独立块同回合都右移
+    #[test]
+    fn convoy_same_direction_both_move() {
+        let mut world = WorldBlocks::default();
+        for x in 0..3 {
+            world.insert(IVec3::new(x, 0, 0), scene());
+        }
+        world.insert(
+            IVec3::new(0, 1, 0),
+            BlockData::new(BlockKind::Conveyor, Facing::East),
+        );
+        world.insert(
+            IVec3::new(1, 1, 0),
+            BlockData::new(BlockKind::Conveyor, Facing::East),
+        );
+        world.insert(IVec3::new(0, 2, 0), mat());
+        world.insert(IVec3::new(1, 2, 0), mat());
+        let left = id_at(&world, IVec3::new(0, 2, 0));
+        let right = id_at(&world, IVec3::new(1, 2, 0));
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut pusher = PusherState::rebuild_from_world(&world);
+        turn(&mut world, &mut structures, &mut pusher, 1);
+        assert_eq!(pos_of(&world, left), IVec3::new(1, 2, 0));
+        assert_eq!(pos_of(&world, right), IVec3::new(2, 2, 0));
+    }
+
+    /// 竖叠两独立块同向下落
+    #[test]
+    fn stacked_fall_same_direction() {
+        let mut world = WorldBlocks::default();
+        world.insert(IVec3::new(0, 1, 0), mat());
+        world.insert(IVec3::new(0, 2, 0), mat());
+        let lower = id_at(&world, IVec3::new(0, 1, 0));
+        let upper = id_at(&world, IVec3::new(0, 2, 0));
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut pusher = PusherState::rebuild_from_world(&world);
+        turn(&mut world, &mut structures, &mut pusher, 1);
+        assert_eq!(pos_of(&world, lower), IVec3::new(0, 0, 0));
+        assert_eq!(pos_of(&world, upper), IVec3::new(0, 1, 0));
+    }
+
+    /// 悬空先落 → 上带右运 → 下带承接
+    #[test]
+    fn chain_fall_then_east_then_west() {
+        let mut world = WorldBlocks::default();
+        world.insert(IVec3::new(0, 0, 0), scene());
+        world.insert(IVec3::new(2, 0, 0), scene());
+        world.insert(
+            IVec3::new(0, 1, 0),
+            BlockData::new(BlockKind::Conveyor, Facing::East),
+        );
+        // 西向带在下落落点下方：材料停在 (1,1)，带在 (1,0)
+        world.insert(
+            IVec3::new(1, 0, 0),
+            BlockData::new(BlockKind::Conveyor, Facing::East),
+        );
+        world.insert(IVec3::new(2, 0, 0), scene());
+        world.insert(IVec3::new(0, 2, 0), mat());
+        world.insert(IVec3::new(1, 2, 0), mat());
+        let left = id_at(&world, IVec3::new(0, 2, 0));
+        let right = id_at(&world, IVec3::new(1, 2, 0));
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut pusher = PusherState::rebuild_from_world(&world);
+
+        turn(&mut world, &mut structures, &mut pusher, 1);
+        assert_eq!(pos_of(&world, right), IVec3::new(1, 1, 0), "T1 fall");
+        assert_eq!(pos_of(&world, left), IVec3::new(0, 2, 0), "T1 left held");
+
+        turn(&mut world, &mut structures, &mut pusher, 2);
+        assert_eq!(
+            pos_of(&world, left),
+            IVec3::new(1, 2, 0),
+            "T2 upper belt east"
+        );
+
+        turn(&mut world, &mut structures, &mut pusher, 3);
+        assert_eq!(
+            pos_of(&world, right),
+            IVec3::new(2, 1, 0),
+            "T3 lower belt east"
+        );
+    }
+
+    /// 对向活塞轮流：一伸一收同向经过中间格
+    #[test]
+    fn opposing_pistons_alternate_extend_retract() {
+        let mut world = WorldBlocks::default();
+        for x in 0..3 {
+            world.insert(IVec3::new(x, 0, 0), scene());
+        }
+        let left = IVec3::new(0, 1, 0);
+        let right = IVec3::new(2, 1, 0);
+        world.insert(left, BlockData::new(BlockKind::Pusher, Facing::East));
+        world.insert(right, BlockData::new(BlockKind::Pusher, Facing::West));
+        let left_id = id_at(&world, left);
+        let right_id = id_at(&world, right);
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let mut pusher = PusherState::rebuild_from_world(&world);
+
+        run_pusher_phase(
+            &mut world,
+            &mut structures,
+            &mut pusher,
+            &HashSet::from([right]),
+        );
+        assert!(
+            pusher.entries.get(&right_id).is_some_and(|e| e.extended),
+            "T1 right extends"
+        );
+        assert!(
+            !pusher.entries.get(&left_id).is_some_and(|e| e.extended),
+            "T1 left retracted"
+        );
+
+        run_pusher_phase(
+            &mut world,
+            &mut structures,
+            &mut pusher,
+            &HashSet::from([left]),
+        );
+        assert!(
+            pusher.entries.get(&left_id).is_some_and(|e| e.extended),
+            "T2 left must extend while right retracts"
+        );
+        assert!(
+            !pusher.entries.get(&right_id).is_some_and(|e| e.extended),
+            "T2 right must retract"
+        );
+
+        run_pusher_phase(
+            &mut world,
+            &mut structures,
+            &mut pusher,
+            &HashSet::from([right]),
+        );
+        assert!(
+            pusher.entries.get(&right_id).is_some_and(|e| e.extended),
+            "T3 right extends again"
+        );
+        assert!(
+            !pusher.entries.get(&left_id).is_some_and(|e| e.extended),
+            "T3 left retracts"
+        );
+    }
+}

@@ -75,6 +75,11 @@ pub(super) fn mark_structure_movement_phase(
             actuating_retract.insert(id);
         }
     }
+    // 先收回再伸出，使对向「伸+收」同向共用中间格时伸出能看到头已逻辑释放
+    actuating.sort_by_key(|(pos, _, _, desired)| {
+        let id = world.blocks.get(pos).map(|b| b.id.0).unwrap_or(u64::MAX);
+        (*desired, id)
+    });
 
     for (pos, mover) in movers {
         let source_id = world.blocks.get(&pos).map(|block| block.id);
@@ -507,15 +512,22 @@ fn try_deform_action(
                         .get(&pos)
                         .map(|b| b.facing.forward_ivec3())
                         .unwrap_or(IVec3::ZERO);
-                // 世界尚未提交位移：头格上的货物可能已在本回合 motion_held
+                // 对向杆本回合收回：头格虽仍在世界中，但将同向腾出，允许伸入
+                let head_vacating = PusherState::body_at_extended_head(ctx.world, head)
+                    .and_then(|body| ctx.world.blocks.get(&body).map(|b| b.id))
+                    .is_some_and(|bid| ctx.actuating_retract.contains(&bid));
                 if !ctx.world.is_fragile_material_at(head)
                     && ctx.world.is_occupied(head)
                     && !ctx.motion_held.contains(&head)
+                    && !head_vacating
                 {
                     continue;
                 }
-                if !ctx.claimed_heads.insert(head) {
+                if !head_vacating && !ctx.claimed_heads.insert(head) {
                     return None;
+                }
+                if head_vacating {
+                    ctx.claimed_heads.insert(head);
                 }
             }
             return Some(
@@ -559,11 +571,20 @@ fn try_deform_action(
                 continue;
             }
             if claim_head {
-                if !ctx.world.is_fragile_material_at(head) && ctx.world.is_occupied(head) {
+                let head_vacating = PusherState::body_at_extended_head(ctx.world, head)
+                    .and_then(|body| ctx.world.blocks.get(&body).map(|b| b.id))
+                    .is_some_and(|bid| ctx.actuating_retract.contains(&bid));
+                if !ctx.world.is_fragile_material_at(head)
+                    && ctx.world.is_occupied(head)
+                    && !head_vacating
+                {
                     continue;
                 }
-                if !ctx.claimed_heads.insert(head) {
+                if !head_vacating && !ctx.claimed_heads.insert(head) {
                     return None;
+                }
+                if head_vacating {
+                    ctx.claimed_heads.insert(head);
                 }
             }
             ctx.structures.held_blocks.extend(nodes.iter().copied());

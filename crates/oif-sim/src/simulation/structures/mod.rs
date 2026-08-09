@@ -17,3 +17,4 @@ include!("gravity.rs");
 include!("plan.rs");
 include!("execute.rs");
 include!("collision.rs");
+include!("occupancy.rs");

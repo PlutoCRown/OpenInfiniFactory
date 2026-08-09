@@ -21,7 +21,7 @@ use super::stats::SimulationStepStats;
 use super::structure_state::StructureState;
 use super::structures::{
     MovementInfluenceCache, StructureMove, apply_fragile_shatter_before_execute,
-    execute_structure_moves_with_pushers, merge_structure_movement_plan,
+    arbitrate_movement_plan, execute_structure_moves_with_pushers, merge_structure_movement_plan,
 };
 use super::suction::SuctionLinks;
 
@@ -218,6 +218,8 @@ pub fn simulate_turn(
         structure_state,
         world,
     );
+    movement_plan =
+        arbitrate_movement_plan(world, structure_state, &suction, movement_plan);
     if let Some(sim_log) = sim_log.as_mut() {
         log_movement_plan(turn, sim_log, world, "merged", &movement_plan);
     }
