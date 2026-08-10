@@ -4,6 +4,7 @@ pub(super) fn apply_fragile_shatter_before_execute(
     structures: &mut StructureState,
 ) -> Vec<(IVec3, crate::blocks::BlockKind)> {
     let mut shatter = HashSet::new();
+    let mut shatter_stamps = HashMap::new();
     for movement in moves.iter() {
         match movement {
             StructureMove::Translate {
@@ -25,6 +26,16 @@ pub(super) fn apply_fragile_shatter_before_execute(
                 if *offset == IVec3::ZERO {
                     continue;
                 }
+                for collision in stamp_collisions(world, structure, *offset, None) {
+                    if let Some(stamp) = world.material_stamps.get(&collision.face).copied() {
+                        if crate::blocks::stamp_def(stamp).fragile {
+                            shatter_stamps.insert(
+                                collision.face,
+                                (collision.target, crate::blocks::BlockKind::Stamp(stamp)),
+                            );
+                        }
+                    }
+                }
                 for pos in structure {
                     let target = *pos + *offset;
                     if !structure.contains(&target) && world.is_fragile_material_at(target) {
@@ -40,10 +51,28 @@ pub(super) fn apply_fragile_shatter_before_execute(
                     }
                 }
             }
-            StructureMove::Rotate { .. } => {}
+            StructureMove::Rotate {
+                structure,
+                pivot,
+                clockwise,
+                ..
+            } => {
+                for collision in stamp_collisions_for_rotation(
+                    world, structure, *pivot, *clockwise,
+                ) {
+                    if let Some(stamp) = world.material_stamps.get(&collision.face).copied() {
+                        if crate::blocks::stamp_def(stamp).fragile {
+                            shatter_stamps.insert(
+                                collision.face,
+                                (collision.target, crate::blocks::BlockKind::Stamp(stamp)),
+                            );
+                        }
+                    }
+                }
+            }
         }
     }
-    if shatter.is_empty() {
+    if shatter.is_empty() && shatter_stamps.is_empty() {
         return Vec::new();
     }
 
@@ -59,6 +88,14 @@ pub(super) fn apply_fragile_shatter_before_execute(
             affected.entry(id).or_default().insert(*pos);
         }
         world.remove(pos);
+    }
+    let shattered_stamps = !shatter_stamps.is_empty();
+    for (face, (pos, kind)) in shatter_stamps {
+        world.material_stamps.remove(&face);
+        debris.push((pos, kind));
+    }
+    if shattered_stamps {
+        world.topology_revision = world.topology_revision.wrapping_add(1);
     }
     for (id, removed) in affected {
         let Some(old) = structures.structure_positions(id).cloned() else {

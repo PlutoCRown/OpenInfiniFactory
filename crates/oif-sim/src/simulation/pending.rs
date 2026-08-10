@@ -2,7 +2,6 @@ use glam::IVec3;
 use std::collections::HashMap;
 
 use crate::blocks::{BlockData, BlockId, BlockKind, PaintMaterialId, StampMaterialId};
-use crate::world::direction::Facing;
 use crate::world::grid::MaterialFace;
 
 /// 跨回合挂起：生成、延后销毁、延后漆/印花（等移动动画播完再落地）
@@ -75,7 +74,6 @@ impl PendingGeneratedMaterials {
         host: BlockId,
         face_normal: IVec3,
         stamp: StampMaterialId,
-        stamp_facing: Facing,
         ready_turn: u64,
     ) {
         self.pending_stamps
@@ -84,7 +82,6 @@ impl PendingGeneratedMaterials {
                 host,
                 face_normal,
                 stamp,
-                stamp_facing,
                 ready_turn,
             });
     }
@@ -177,12 +174,11 @@ struct PendingPaint {
     ready_turn: u64,
 }
 
-/// 延后印花：挂在印花机格，落地时写宿主附着
+/// 延后印花：挂在宿主材料面，落地时写入面附着
 #[derive(Clone)]
 pub(crate) struct PendingStamp {
     pub host: BlockId,
     pub face_normal: IVec3,
     pub stamp: StampMaterialId,
-    pub stamp_facing: Facing,
     ready_turn: u64,
 }

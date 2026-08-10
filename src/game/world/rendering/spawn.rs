@@ -503,8 +503,6 @@ pub(crate) fn spawn_block_model(
         || data.kind == BlockKind::WeldPoint
         || data.kind == BlockKind::PusherHead
         || data.kind == BlockKind::DrillHead
-        || data.kind == BlockKind::RollerBody
-        || data.kind == BlockKind::StamperBody
         || has_factory_visual
     {
         // 传送只用子节点 Portal 立方体，勿再挂默认实心壳（否则会叠 1.05 壳）
@@ -807,6 +805,19 @@ pub(crate) fn spawn_block_model(
                     child.insert((icon_layer.clone(), BlockIconRenderEntity));
                 }
             }
+            let stamps = GOAL_PREVIEW_FACES.map(|normal| {
+                world
+                    .material_stamps
+                    .get(&MaterialFace::new(data.id, normal))
+                    .copied()
+            });
+            spawn_goal_attachment_previews(
+                parent,
+                assets,
+                stamps,
+                [None; 4],
+                icon_render.map(|(_, layer)| layer),
+            );
         }
 
         if use_goal_ghost {

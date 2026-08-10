@@ -87,11 +87,6 @@ pub trait BlockBehavior: Send + Sync {
         false
     }
 
-    /// 机身格是否允许印花材料沿工作朝向透传进入
-    fn allows_stamp_passthrough(&self) -> bool {
-        false
-    }
-
     /// 是否验收材料（Goal 等）
     fn accepts_material(&self) -> bool {
         false

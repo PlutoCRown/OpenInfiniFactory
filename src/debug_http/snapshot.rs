@@ -33,20 +33,8 @@ pub fn block_json_with_structure(
 ) -> Value {
     let material_block = world.blocks.get(&pos).copied();
     let system_block = world.system_blocks.get(&pos).copied();
-    let machine_body = world.machine_bodies.get(&pos).copied();
 
     let Some(block) = material_block.or(system_block) else {
-        if let Some(body) = machine_body {
-            return json!({
-                "layer": "machine_body",
-                "kind": format!("{:?}", body.kind),
-                "kind_detail": kind_detail(body.kind),
-                "facing": format!("{:?}", body.facing),
-                "yaw": body.facing.yaw(),
-                "id": body.id.0,
-                "directional": body.kind.is_directional(),
-            });
-        }
         return Value::Null;
     };
 
@@ -70,23 +58,19 @@ pub fn block_json_with_structure(
         .collect();
 
     let attached_stamps: Vec<Value> = world
-        .material_attachments
+        .material_stamps
         .iter()
-        .filter(|(_, att)| att.parent == id)
-        .filter_map(|(child_id, att)| {
-            let (child_pos, child) = world.blocks.iter().find(|(_, b)| b.id == *child_id)?;
-            Some(json!({
-                "child_id": child_id.0,
-                "pos": pos_json(*child_pos),
-                "kind": format!("{:?}", child.kind),
-                "stamp": child.kind.stamp_id().map(stamp_string_id),
-                "facing": format!("{:?}", child.facing),
-                "parent_face_normal": pos_json(att.parent_face_normal),
-            }))
+        .filter(|(face, _)| face.block == id)
+        .map(|(face, stamp)| {
+            json!({
+                "pos": pos_json(pos + face.normal),
+                "stamp": stamp_string_id(*stamp),
+                "parent_face_normal": pos_json(face.normal),
+            })
         })
         .collect();
 
-    let attachment = world.material_attachments.get(&id).map(|att| {
+    let attachment = world.factory_attachments.get(&id).map(|att| {
         let parent_pos = world
             .blocks
             .iter()
@@ -171,11 +155,6 @@ pub fn block_json_with_structure(
         "acceptor_id": acceptor_id,
         "acceptor_count": acceptor_count,
         "structure": structure_summary,
-        "machine_body": machine_body.map(|body| json!({
-            "kind": format!("{:?}", body.kind),
-            "facing": format!("{:?}", body.facing),
-            "id": body.id.0,
-        })),
         "system_overlap": material_block.is_some().then(|| system_block.map(|sys| json!({
             "kind": format!("{:?}", sys.kind),
             "facing": format!("{:?}", sys.facing),
@@ -295,7 +274,6 @@ pub fn find_block_pos(world: &oif_sim::WorldBlocks, block_id: u64) -> Option<IVe
         .blocks
         .iter()
         .chain(world.system_blocks.iter())
-        .chain(world.machine_bodies.iter())
         .find(|(_, block)| block.id.0 == block_id)
         .map(|(pos, _)| *pos)
 }

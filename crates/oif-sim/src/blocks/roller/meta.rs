@@ -11,18 +11,16 @@ impl BlockMeta for RollerBlock {
     }
 
     fn definition(&self) -> BlockDefinition {
-        BlockDefinition::puzzle_system(
+        BlockDefinition::factory(
             self.id(),
             "block.roller",
             "short.roller",
             "desc.roller",
             rgb(0.18, 0.62, 0.78),
         )
-        .no_collision()
     }
 
     fn default_settings(&self, _pos: IVec3) -> Option<BlockSettings> {
         Some(BlockSettings::Roller(RollerSettings::default()))
     }
 }
-

@@ -171,8 +171,6 @@ fn block_order(kind: BlockKind) -> usize {
         BlockKind::Stamp(id) => 200 + id.0 as usize,
         BlockKind::WeldPoint => 300,
         BlockKind::DrillHead => 301,
-        BlockKind::RollerBody => 302,
-        BlockKind::StamperBody => 303,
         BlockKind::PusherHead => 304,
     }
 }

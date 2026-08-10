@@ -3,6 +3,7 @@ use std::collections::HashSet;
 
 use crate::blocks::{
     AcceptorId, BlockData, BlockKind, MaterialDestroyer, MaterialLabeler, MaterialProcessor,
+    stamp_def,
     SignalBehavior,
 };
 use crate::world::direction::Facing;
@@ -208,7 +209,7 @@ pub(super) fn run_material_label_phase(
     ready_turn: u64,
 ) {
     let labelers: Vec<(IVec3, Facing, MaterialLabeler)> = world
-        .system_blocks
+        .blocks
         .iter()
         .filter_map(|(pos, block)| {
             block
@@ -261,47 +262,19 @@ pub(super) fn run_material_label_phase(
                     continue;
                 }
 
-                let existing_child = world
-                    .material_attachments
-                    .iter()
-                    .find(|(_, att)| att.parent == host.id && att.parent_face_normal == face_normal)
-                    .map(|(child, _)| *child);
-                if let Some(child_id) = existing_child {
-                    let Some((_, child_block)) = world
-                        .blocks
-                        .iter()
-                        .find(|(_, b)| b.id == child_id)
-                        .map(|(p, b)| (*p, *b))
-                    else {
-                        continue;
-                    };
-                    let fragile = child_block
-                        .kind
-                        .material_props()
-                        .is_some_and(|props| props.fragile);
-                    if !fragile {
+                let face = MaterialFace::new(host.id, face_normal);
+                if let Some(existing) = world.material_stamps.get(&face) {
+                    if !stamp_def(*existing).fragile {
                         continue;
                     }
                 }
 
-                if world.blocks.contains_key(&pos) {
-                    continue;
-                }
-
-                let stamp_facing = match (face_normal.x, face_normal.y, face_normal.z) {
-                    (1, 0, 0) => Facing::East,
-                    (-1, 0, 0) => Facing::West,
-                    (0, 0, 1) => Facing::South,
-                    (0, 0, -1) => Facing::North,
-                    _ => facing,
-                };
                 let stamp_id = world.stamper_settings(pos).stamp;
                 pending_generated.mark_stamp(
                     pos,
                     host.id,
                     face_normal,
                     stamp_id,
-                    stamp_facing,
                     ready_turn,
                 );
             }
@@ -333,55 +306,20 @@ pub(super) fn apply_pending_stamps(
     turn: u64,
 ) -> bool {
     let mut any = false;
-    for (stamper_pos, pending) in pending_generated.take_ready_stamps(turn) {
+    for (_stamper_pos, pending) in pending_generated.take_ready_stamps(turn) {
         if !world.blocks.values().any(|block| block.id == pending.host) {
             continue;
         }
-        // 该面已有附着：非脆弱跳过；脆弱碎旧换新
-        let existing_child = world
-            .material_attachments
-            .iter()
-            .find(|(_, att)| {
-                att.parent == pending.host && att.parent_face_normal == pending.face_normal
-            })
-            .map(|(child, _)| *child);
-        if let Some(child_id) = existing_child {
-            let Some((child_pos, child_block)) = world
-                .blocks
-                .iter()
-                .find(|(_, b)| b.id == child_id)
-                .map(|(p, b)| (*p, *b))
-            else {
-                world.material_attachments.remove(&child_id);
-                continue;
-            };
-            let fragile = child_block
-                .kind
-                .material_props()
-                .is_some_and(|props| props.fragile);
-            if !fragile {
+        let face = MaterialFace::new(pending.host, pending.face_normal);
+        if let Some(existing) = world.material_stamps.get(&face) {
+            if !stamp_def(*existing).fragile {
                 continue;
             }
-            world.remove(&child_pos);
         }
-        if world.blocks.contains_key(&stamper_pos) {
-            continue;
+        if world.material_stamps.insert(face, pending.stamp) != Some(pending.stamp) {
+            world.topology_revision = world.topology_revision.wrapping_add(1);
+            any = true;
         }
-        world.insert(
-            stamper_pos,
-            BlockData::new(BlockKind::Stamp(pending.stamp), pending.stamp_facing),
-        );
-        let Some(stamp) = world.blocks.get(&stamper_pos).copied() else {
-            continue;
-        };
-        world.material_attachments.insert(
-            stamp.id,
-            crate::world::grid::MaterialAttachment {
-                parent: pending.host,
-                parent_face_normal: pending.face_normal,
-            },
-        );
-        any = true;
     }
     any
 }

@@ -11,18 +11,16 @@ impl BlockMeta for StamperBlock {
     }
 
     fn definition(&self) -> BlockDefinition {
-        BlockDefinition::puzzle_system(
+        BlockDefinition::factory(
             self.id(),
             "block.stamper",
             "short.stamper",
             "desc.stamper",
             rgb(0.82, 0.26, 0.58),
         )
-        .no_collision()
     }
 
     fn default_settings(&self, _pos: IVec3) -> Option<BlockSettings> {
         Some(BlockSettings::Stamper(StamperSettings::default()))
     }
 }
-
