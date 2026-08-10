@@ -1,7 +1,7 @@
 //! 虚拟遥感触摸输入与显隐
 
 use bevy::picking::pointer::PointerButton;
-use bevy::picking::prelude::{Click, Drag, Pointer, Press, Release};
+use bevy::picking::prelude::{Cancel, Drag, Pointer, Press, Release};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
@@ -32,6 +32,7 @@ const LOOK_SENSITIVITY: f32 = 1.0;
 pub fn update_virtual_remote_input(
     touch: Res<TouchProfile>,
     editor_open: Res<VirtualLayoutEditorOpen>,
+    touches: Res<Touches>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut input: ResMut<GameplayInputState>,
     mut runtime: ResMut<VirtualRemoteRuntime>,
@@ -58,6 +59,22 @@ pub fn update_virtual_remote_input(
         runtime.joystick_stick_offset = Vec2::ZERO;
         runtime.pressed_controls.clear();
         return;
+    }
+
+    // Android 触摸即使没有命中 Release/Cancel 实体，也必须按手指生命周期释放捕获。
+    let ended_touch_pointers: Vec<_> = runtime
+        .pointers
+        .iter()
+        .filter_map(|binding| {
+            let touch_id = binding.pointer_id.get_touch_id()?;
+            touches
+                .get_pressed(touch_id)
+                .is_none()
+                .then_some(binding.pointer_id)
+        })
+        .collect();
+    for pointer_id in ended_touch_pointers {
+        let _ = end_pointer_binding(&mut runtime, pointer_id);
     }
 
     // 桌面模拟触控：主指针松开一定结束放置/删除（防止 UI Release 丢失导致粘住）
@@ -104,6 +121,14 @@ pub fn update_virtual_remote_input(
         runtime.move_accum = Vec2::ZERO;
         runtime.joystick_stick_offset = Vec2::ZERO;
         clear_pressed(&mut runtime, VirtualControlId::Joystick);
+    }
+    if mouse_buttons.just_released(MouseButton::Left)
+        && runtime
+            .pointers
+            .iter()
+            .any(|binding| binding.pointer_id == bevy::picking::pointer::PointerId::Mouse)
+    {
+        let _ = end_pointer_binding(&mut runtime, bevy::picking::pointer::PointerId::Mouse);
     }
 
     let mut fly_up = false;
@@ -165,13 +190,13 @@ fn clear_pressed(runtime: &mut VirtualRemoteRuntime, id: VirtualControlId) {
 fn end_pointer_binding(
     runtime: &mut VirtualRemoteRuntime,
     pointer_id: bevy::picking::pointer::PointerId,
-) {
+) -> Option<VirtualPointerKind> {
     let Some(index) = runtime
         .pointers
         .iter()
         .position(|b| b.pointer_id == pointer_id)
     else {
-        return;
+        return None;
     };
     let kind = runtime.pointers[index].kind;
     runtime.pointers.remove(index);
@@ -204,8 +229,12 @@ fn end_pointer_binding(
             runtime.sim_fast_held = false;
             clear_pressed(runtime, VirtualControlId::SimFast);
         }
+        VirtualPointerKind::Tap(control) => {
+            clear_pressed(runtime, control);
+        }
         _ => {}
     }
+    Some(kind)
 }
 
 pub fn on_virtual_press(
@@ -234,9 +263,9 @@ pub fn on_virtual_press(
     if let Ok(control) = controls.get(press.entity) {
         press.propagate(false);
         // 同一指针换控件前先结束旧绑定
-        end_pointer_binding(&mut runtime, pointer_id);
+        let _ = end_pointer_binding(&mut runtime, pointer_id);
         mark_pressed(&mut runtime, control.0);
-        // 点按类：只亮按下态，等 Release / Click
+        // 点按类捕获原始手指：拖出后仍能复位，只有在原按钮上松手才触发。
         match control.0 {
             VirtualControlId::Pause
             | VirtualControlId::Simulate
@@ -245,7 +274,15 @@ pub fn on_virtual_press(
             | VirtualControlId::Rotate
             | VirtualControlId::Alternate
             | VirtualControlId::Inventory
-            | VirtualControlId::BlockConfig => return,
+            | VirtualControlId::BlockConfig => {
+                runtime.pointers.push(VirtualPointerBinding {
+                    pointer_id,
+                    kind: VirtualPointerKind::Tap(control.0),
+                    last_pos: pos,
+                    origin: pos,
+                });
+                return;
+            }
             _ => {}
         }
         let kind = match control.0 {
@@ -306,7 +343,7 @@ pub fn on_virtual_press(
                 }
             }
         }
-        end_pointer_binding(&mut runtime, pointer_id);
+        let _ = end_pointer_binding(&mut runtime, pointer_id);
         runtime.pointers.push(VirtualPointerBinding {
             pointer_id,
             kind: VirtualPointerKind::Look,
@@ -350,7 +387,10 @@ pub fn on_virtual_drag(
             runtime.look_accum += delta * LOOK_SENSITIVITY;
             drag.propagate(false);
         }
-        VirtualPointerKind::Jump | VirtualPointerKind::BlockLook | VirtualPointerKind::SimFast => {
+        VirtualPointerKind::Jump
+        | VirtualPointerKind::BlockLook
+        | VirtualPointerKind::SimFast
+        | VirtualPointerKind::Tap(_) => {
             drag.propagate(false);
         }
         VirtualPointerKind::Joystick => {
@@ -389,73 +429,73 @@ pub fn on_virtual_drag(
 pub fn on_virtual_release(
     mut release: On<Pointer<Release>>,
     touch: Res<TouchProfile>,
-    controls: Query<&VirtualRemoteControl>,
-    look_zones: Query<(), With<VirtualLookZone>>,
-    mut runtime: ResMut<VirtualRemoteRuntime>,
-) {
-    if !touch.enabled || release.event.button != PointerButton::Primary {
-        return;
-    }
-    if let Ok(control) = controls.get(release.entity) {
-        clear_pressed(&mut runtime, control.0);
-        if control.0 == VirtualControlId::Joystick {
-            runtime.joystick_stick_offset = Vec2::ZERO;
-        }
-    }
-    let pointer_id = release.pointer_id;
-    end_pointer_binding(&mut runtime, pointer_id);
-    if controls.get(release.entity).is_ok() || look_zones.get(release.entity).is_ok() {
-        release.propagate(false);
-    }
-}
-
-pub fn on_virtual_click(
-    mut click: On<Pointer<Click>>,
-    touch: Res<TouchProfile>,
     editor_open: Res<VirtualLayoutEditorOpen>,
     gate: GameplayPlayGate,
     player: LocalPlayer,
     controls: Query<&VirtualRemoteControl>,
+    look_zones: Query<(), With<VirtualLookZone>>,
+    mut runtime: ResMut<VirtualRemoteRuntime>,
     mut input: ResMut<GameplayInputState>,
 ) {
-    if !touch.enabled
-        || editor_open.0
-        || !gate.allows_active_play(&player.playing_ui)
-        || click.event.button != PointerButton::Primary
-    {
+    if !touch.enabled || release.event.button != PointerButton::Primary {
         return;
     }
-    let Ok(control) = controls.get(click.entity) else {
+    let pointer_id = release.pointer_id;
+    let ended = end_pointer_binding(&mut runtime, pointer_id);
+    let released_control = controls.get(release.entity).ok().map(|control| control.0);
+    if !editor_open.0
+        && gate.allows_active_play(&player.playing_ui)
+        && let Some(VirtualPointerKind::Tap(control)) = ended
+        && released_control == Some(control)
+    {
+        match control {
+            VirtualControlId::Pause => input.virtual_pause = true,
+            VirtualControlId::Inventory => {
+                if !gate.simulation.is_active() {
+                    input.virtual_inventory = true;
+                }
+            }
+            VirtualControlId::Simulate => input.virtual_simulate = true,
+            // 暂停模拟：回滚并退出模拟态（与 R 回滚一致，回到可编辑的非模拟 HUD）
+            VirtualControlId::SimPause => input.virtual_rollback = true,
+            VirtualControlId::SimStep => input.virtual_sim_step = true,
+            VirtualControlId::Rotate => {
+                if gate.simulation.is_active() {
+                    input.virtual_rollback = true;
+                } else {
+                    input.virtual_rotate = true;
+                }
+            }
+            VirtualControlId::Alternate => {
+                if gate.simulation.is_active() {
+                    input.virtual_sim_step = true;
+                } else {
+                    input.virtual_alternate = true;
+                }
+            }
+            VirtualControlId::BlockConfig => input.virtual_open_block_config = true,
+            _ => {}
+        }
+    }
+    if ended.is_some()
+        || controls.get(release.entity).is_ok()
+        || look_zones.get(release.entity).is_ok()
+    {
+        release.propagate(false);
+    }
+}
+
+/// 触摸被系统取消时释放原控件，但不执行点击动作。
+pub fn on_virtual_cancel(
+    mut cancel: On<Pointer<Cancel>>,
+    touch: Res<TouchProfile>,
+    mut runtime: ResMut<VirtualRemoteRuntime>,
+) {
+    if !touch.enabled {
         return;
-    };
-    click.propagate(false);
-    match control.0 {
-        VirtualControlId::Pause => input.virtual_pause = true,
-        VirtualControlId::Inventory => {
-            if !gate.simulation.is_active() {
-                input.virtual_inventory = true;
-            }
-        }
-        VirtualControlId::Simulate => input.virtual_simulate = true,
-        // 暂停模拟：回滚并退出模拟态（与 R 回滚一致，回到可编辑的非模拟 HUD）
-        VirtualControlId::SimPause => input.virtual_rollback = true,
-        VirtualControlId::SimStep => input.virtual_sim_step = true,
-        VirtualControlId::Rotate => {
-            if gate.simulation.is_active() {
-                input.virtual_rollback = true;
-            } else {
-                input.virtual_rotate = true;
-            }
-        }
-        VirtualControlId::Alternate => {
-            if gate.simulation.is_active() {
-                input.virtual_sim_step = true;
-            } else {
-                input.virtual_alternate = true;
-            }
-        }
-        VirtualControlId::BlockConfig => input.virtual_open_block_config = true,
-        _ => {}
+    }
+    if end_pointer_binding(&mut runtime, cancel.pointer_id).is_some() {
+        cancel.propagate(false);
     }
 }
 

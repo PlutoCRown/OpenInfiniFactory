@@ -95,6 +95,8 @@ pub fn spawn_virtual_remote(
                 ..default()
             },
             VirtualLookZone,
+            // 高于普通 HUD，低于快捷栏(5)和虚拟按键(10)，保证空白区滑动能命中视角层。
+            GlobalZIndex(2),
             Pickable::default(),
         ));
 

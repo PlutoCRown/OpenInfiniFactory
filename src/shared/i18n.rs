@@ -132,7 +132,19 @@ fn platform_language_tag() -> Option<String> {
     env_language_tag().or_else(system_ui_language_tag)
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+#[cfg(target_os = "android")]
+fn platform_language_tag() -> Option<String> {
+    bevy::android::ANDROID_APP
+        .get()
+        .and_then(|app| app.config().language())
+}
+
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "windows",
+    target_os = "android"
+)))]
 fn platform_language_tag() -> Option<String> {
     None
 }

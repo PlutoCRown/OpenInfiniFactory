@@ -40,6 +40,9 @@ const AABB_EPSILON: f32 = 0.001;
 const STEP_HEIGHT: f32 = 0.55;
 /// 鼠标视角基础灵敏度，X/Y 轴倍率由设置中的 mouse_sensitivity_x/y 控制。
 const BASE_MOUSE_SENSITIVITY: f32 = 0.0025;
+/// 初始镜头朝向必须与移动使用的 yaw/pitch 完全一致。
+const INITIAL_YAW: f32 = 0.0;
+const INITIAL_PITCH: f32 = -0.15;
 
 #[derive(Component)]
 pub struct FlyCamera {
@@ -90,11 +93,13 @@ pub fn spawn_player(
                 ..default()
             }),
             RenderTarget::Image(image_handle.into()),
-            Transform::from_xyz(0.5, SPAWN_EYE_Y + 1.2, 10.5)
-                .looking_at(Vec3::new(0.5, 0.8, 0.5), Vec3::Y),
+            Transform::from_xyz(0.5, SPAWN_EYE_Y + 1.2, 10.5).with_rotation(
+                Quat::from_axis_angle(Vec3::Y, INITIAL_YAW)
+                    * Quat::from_axis_angle(Vec3::X, INITIAL_PITCH),
+            ),
             FlyCamera {
-                yaw: std::f32::consts::PI,
-                pitch: -0.15,
+                yaw: INITIAL_YAW,
+                pitch: INITIAL_PITCH,
                 velocity_y: 0.0,
                 grounded: false,
                 flying: false,

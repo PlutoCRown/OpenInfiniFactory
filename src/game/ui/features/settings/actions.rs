@@ -14,6 +14,7 @@ use crate::list_ui_config;
 use crate::shared::config::{
     GameConfig, chord_from_input, input_from_buttons, open_config_folder, save_config,
 };
+use crate::shared::touch_profile::TouchProfile;
 
 use super::types::{
     ActiveSettingsSlider, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
@@ -57,6 +58,7 @@ pub fn settings_menu_actions(
     mut settings: ResMut<GameSettings>,
     mut ui_scale: ResMut<UiScale>,
     mut config: ResMut<GameConfig>,
+    touch: Res<TouchProfile>,
     mut open_dropdown: ResMut<OpenSettingsDropdown>,
     mut pending_key_bind: ResMut<PendingKeyBind>,
     mut active_slider: ResMut<ActiveSettingsSlider>,
@@ -102,6 +104,7 @@ pub fn settings_menu_actions(
         &mut settings,
         &mut ui_scale,
         &mut config,
+        *touch,
     );
 
     if mouse_buttons.just_released(MouseButton::Left) {
@@ -111,6 +114,7 @@ pub fn settings_menu_actions(
             &mut settings,
             &mut ui_scale,
             &mut config,
+            *touch,
         );
     }
 }
@@ -268,6 +272,7 @@ fn update_settings_sliders_from_input(
     settings: &mut GameSettings,
     ui_scale: &mut UiScale,
     config: &mut GameConfig,
+    touch: TouchProfile,
 ) {
     for (action, value, range, drag_state) in slider_changes {
         let SettingsAction::Field(field) = *action else {
@@ -281,13 +286,13 @@ fn update_settings_sliders_from_input(
                 .slider()
                 .is_some_and(|slider| slider.trigger == SettingsSliderTrigger::Live)
             {
-                field.apply_percent(percent, settings, ui_scale, config);
+                field.apply_percent(percent, settings, ui_scale, config, touch);
             }
             continue;
         }
 
         if active_slider.0 == Some(field) || value.is_changed() {
-            field.apply_percent(percent, settings, ui_scale, config);
+            field.apply_percent(percent, settings, ui_scale, config, touch);
             save_config(config);
             if active_slider.0 == Some(field) {
                 active_slider.0 = None;
@@ -302,6 +307,7 @@ fn commit_active_settings_slider(
     settings: &mut GameSettings,
     ui_scale: &mut UiScale,
     config: &mut GameConfig,
+    touch: TouchProfile,
 ) {
     let Some(field) = active_slider.0.take() else {
         return;
@@ -312,7 +318,7 @@ fn commit_active_settings_slider(
             continue;
         }
         let percent = range.thumb_position(value.0).clamp(0.0, 1.0);
-        field.apply_percent(percent, settings, ui_scale, config);
+        field.apply_percent(percent, settings, ui_scale, config, touch);
         save_config(config);
         return;
     }

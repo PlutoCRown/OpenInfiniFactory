@@ -60,6 +60,7 @@ pub enum VirtualPointerKind {
     Delete,
     SimFast,
     BlockLook,
+    Tap(VirtualControlId),
 }
 
 #[derive(Component, Clone, Copy)]
@@ -102,7 +103,7 @@ impl Plugin for VirtualRemotePlugin {
             .add_observer(update::on_virtual_press)
             .add_observer(update::on_virtual_drag)
             .add_observer(update::on_virtual_release)
-            .add_observer(update::on_virtual_click)
+            .add_observer(update::on_virtual_cancel)
             .add_observer(editor::on_editor_control_click)
             .add_observer(editor::on_editor_drag)
             .add_observer(editor::on_editor_release)

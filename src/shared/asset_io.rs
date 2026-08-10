@@ -2,6 +2,10 @@
 
 use std::path::{Path, PathBuf};
 
+// APK 内随程序打包的资源目录，用于 Android 运行时枚举资源包。
+#[cfg(target_os = "android")]
+const PACKAGED_ASSET_DIRS: &str = include_str!("packaged_asset_dirs.txt");
+
 /// 读资源文件全部字节
 pub fn read_bytes(path: &Path) -> Result<Vec<u8>, String> {
     #[cfg(target_os = "android")]
@@ -44,12 +48,15 @@ pub fn list_subdirs(path: &Path) -> Result<Vec<PathBuf>, String> {
 
     #[cfg(target_os = "android")]
     if let Some(key) = android_asset_key(path) {
-        let names = android_list_names(&key)
-            .map_err(|e| format!("list asset `{}` ({}): {e}", path.display(), key))?;
-        let mut dirs: Vec<PathBuf> = names
-            .into_iter()
-            .map(|name| path.join(name))
-            .filter(|child| is_dir(child))
+        let prefix = (!key.is_empty()).then(|| format!("{key}/"));
+        let mut dirs: Vec<PathBuf> = PACKAGED_ASSET_DIRS
+            .lines()
+            .filter_map(|entry| match &prefix {
+                Some(prefix) => entry.strip_prefix(prefix),
+                None => Some(entry),
+            })
+            .filter(|relative| !relative.is_empty() && !relative.contains('/'))
+            .map(|relative| path.join(relative))
             .collect();
         dirs.sort_by(|a, b| {
             let a_name = a.file_name().and_then(|s| s.to_str()).unwrap_or("");
@@ -131,33 +138,5 @@ fn android_is_file(key: &str) -> bool {
 
 #[cfg(target_os = "android")]
 fn android_is_dir(key: &str) -> bool {
-    let Ok(app) = android_app() else {
-        return false;
-    };
-    let Ok(c_key) = std::ffi::CString::new(key) else {
-        return false;
-    };
-    let manager = app.asset_manager();
-    // 与 Bevy AndroidAssetReader 相同：open_dir 能开、open 失败 → 目录
-    manager.open_dir(&c_key).is_some() && manager.open(&c_key).is_none()
-}
-
-#[cfg(target_os = "android")]
-fn android_list_names(key: &str) -> Result<Vec<String>, String> {
-    let manager = android_app()?.asset_manager();
-    let c_key = std::ffi::CString::new(key).map_err(|e| e.to_string())?;
-    let dir = manager
-        .open_dir(&c_key)
-        .ok_or_else(|| "AssetManager.open_dir failed".to_string())?;
-    let mut names = Vec::new();
-    for name in dir {
-        let Some(s) = name.to_str().ok().map(str::to_owned) else {
-            continue;
-        };
-        if s.is_empty() {
-            continue;
-        }
-        names.push(s);
-    }
-    Ok(names)
+    key.is_empty() || PACKAGED_ASSET_DIRS.lines().any(|dir| dir == key)
 }

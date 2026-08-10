@@ -26,6 +26,7 @@ use crate::shared::i18n::{I18n, resolve_language};
 use crate::shared::launch::LaunchOptions;
 use crate::shared::persistent_storage::{self, StoragePlugin, StorageReady};
 use crate::shared::save::SaveState;
+use crate::shared::touch_profile::TouchProfile;
 use crate::sim_bridge::TurnCache;
 
 use cameras::{spawn_ui_camera, sync_gameplay_view_image_size};
@@ -93,6 +94,11 @@ impl Plugin for GamePlugin {
         config.mouse_sensitivity_y = config
             .mouse_sensitivity_y
             .clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX);
+        let touch_profile = TouchProfile::detect_with_force(
+            launch
+                .as_ref()
+                .is_some_and(|options| options.force_touch),
+        );
         let i18n = I18n::new(resolve_language(config.language));
         let settings = GameSettings {
             fov_degrees: config.fov_degrees,
@@ -133,10 +139,13 @@ impl Plugin for GamePlugin {
             .init_resource::<crate::game::world::rendering::SceneChunkMeshes>()
             .insert_resource(TurnCache::default())
             .insert_resource(settings)
-            .insert_resource(UiScale(config.ui_scale))
+            .insert_resource(UiScale(
+                touch_profile.effective_ui_scale(config.ui_scale),
+            ))
             .insert_resource(config)
             .insert_resource(i18n)
             .insert_resource(SaveState::default())
+            .insert_resource(touch_profile)
             .init_resource::<EditHistory>()
             .init_resource::<PendingPlayerSpawn>()
             .init_resource::<MouseLookBaseline>()
@@ -339,6 +348,7 @@ fn apply_storage_ready(
     mut i18n: ResMut<I18n>,
     mut settings: ResMut<GameSettings>,
     mut ui_scale: ResMut<UiScale>,
+    touch: Res<TouchProfile>,
     launch: Res<LaunchOptions>,
 ) {
     if *applied || !ready.0 {
@@ -367,7 +377,7 @@ fn apply_storage_ready(
     settings.gravity_scale = loaded.gravity_scale;
     settings.mouse_sensitivity_x = loaded.mouse_sensitivity_x;
     settings.mouse_sensitivity_y = loaded.mouse_sensitivity_y;
-    ui_scale.0 = loaded.ui_scale;
+    ui_scale.0 = touch.effective_ui_scale(loaded.ui_scale);
     *config = loaded;
     save_state.refresh();
 }

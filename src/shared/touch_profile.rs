@@ -10,11 +10,10 @@ pub struct TouchProfile {
     pub enabled: bool,
 }
 
-impl TouchProfile {
-    pub fn detect() -> Self {
-        Self::detect_with_force(false)
-    }
+// 触控设备固定像素 UI 的额外缩放；虚拟遥感使用 VMin，不受此值影响。
+pub const TOUCH_UI_SCALE: f32 = 0.6;
 
+impl TouchProfile {
     pub fn detect_with_force(force_touch: bool) -> Self {
         if force_touch {
             return Self { enabled: true };
@@ -25,6 +24,16 @@ impl TouchProfile {
             StoragePlatform::Desktop => false,
         };
         Self { enabled }
+    }
+
+    /// 把用户设置的 UI 比例换算为当前输入平台的实际比例
+    pub fn effective_ui_scale(self, configured_scale: f32) -> f32 {
+        configured_scale
+            * if self.enabled {
+                TOUCH_UI_SCALE
+            } else {
+                1.0
+            }
     }
 }
 

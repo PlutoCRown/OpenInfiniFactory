@@ -5,6 +5,7 @@ use crate::game::ui::access::i18n;
 use crate::game::ui::core::confirm_dialog::{ConfirmProps, ConfirmResult};
 use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, MOUSE_SENSITIVITY_MAX, MOUSE_SENSITIVITY_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
 use crate::shared::config::{save_config, GameConfig};
+use crate::shared::touch_profile::TouchProfile;
 
 use super::types::{OpenSettingsDropdown, PendingKeyBind};
 
@@ -51,7 +52,10 @@ pub fn on_reset_defaults(result: ConfirmResult, world: &mut World) {
         settings.mouse_sensitivity_y = mouse_sensitivity_y;
     }
 
-    world.resource_mut::<UiScale>().0 = ui_scale;
+    let effective_ui_scale = world
+        .resource::<TouchProfile>()
+        .effective_ui_scale(ui_scale);
+    world.resource_mut::<UiScale>().0 = effective_ui_scale;
     world.resource_mut::<OpenSettingsDropdown>().0 = None;
     world.resource_mut::<PendingKeyBind>().0 = None;
     save_config(world.resource::<GameConfig>());

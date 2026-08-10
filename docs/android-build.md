@@ -57,7 +57,15 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 # 产物
 # dist/android/OpenInfiniFactory.apk
+
+# 快速开发包（首次建立 dev 缓存，后续走增量编译）
+./scripts/package_android_dev.sh
+
+# 开发包产物；不会删除同目录中的正式包
+# dist/android/OpenInfiniFactory-dev.apk
 ```
+
+开发包使用轻优化 Rust dev profile、跳过重复图标生成并复用 Gradle daemon，适合频繁装机验证。正式发布仍使用 `package_android.sh`。
 
 ### 分步执行
 

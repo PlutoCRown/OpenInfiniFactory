@@ -7,6 +7,7 @@ use crate::game::{
 };
 use crate::shared::config::{ActionKeyName, ConfigSelectionMode, ConfigWindowMode};
 use crate::shared::i18n::Language;
+use crate::shared::touch_profile::TouchProfile;
 
 use crate::game::ui::core::action::UiActionLabel;
 
@@ -228,6 +229,7 @@ impl SettingsField {
         settings: &mut GameSettings,
         ui_scale: &mut UiScale,
         config: &mut crate::shared::config::GameConfig,
+        touch: TouchProfile,
     ) {
         let Some(slider) = self.slider() else {
             return;
@@ -239,6 +241,7 @@ impl SettingsField {
             settings,
             ui_scale,
             config,
+            touch,
         );
     }
 
@@ -258,6 +261,7 @@ impl SettingsField {
         settings: &mut GameSettings,
         ui_scale: &mut UiScale,
         config: &mut crate::shared::config::GameConfig,
+        touch: TouchProfile,
     ) {
         match self {
             Self::Fov => {
@@ -266,7 +270,7 @@ impl SettingsField {
             }
             Self::UiScale => {
                 settings.ui_scale = value;
-                ui_scale.0 = value;
+                ui_scale.0 = touch.effective_ui_scale(value);
                 config.ui_scale = value;
             }
             Self::Gravity => {

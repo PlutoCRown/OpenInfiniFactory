@@ -14,31 +14,65 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 # DEBUG=1 时做 debug 构建（保留符号，APK 自动设 debuggable=true）
 if [ "${DEBUG:-0}" = "1" ]; then
-  CARGO_FLAGS=""
+  CARGO_RELEASE=0
   GRADLE_TASK="assembleDebug"
   APK_PATH="debug/app-debug.apk"
 else
-  CARGO_FLAGS="--release"
+  CARGO_RELEASE=1
   GRADLE_TASK="assembleRelease"
   APK_PATH="release/app-release.apk"
 fi
 
-# 1. 刷新启动器图标（源：assets/app_icon.png）
-echo "==> Generating Android launcher icons..."
-"$ROOT_DIR/scripts/generate_app_icons.sh"
+# 1. 刷新 Android 运行时使用的资源目录清单，仅目录变化时改写文件
+echo "==> Updating packaged asset directory manifest..."
+python3 - "$ROOT_DIR/assets" "$ROOT_DIR/src/shared/packaged_asset_dirs.txt" <<'PY'
+from pathlib import Path
+import sys
 
-# 2. 用 cargo-ndk 编译 .so 到 jniLibs
+assets = Path(sys.argv[1])
+manifest = Path(sys.argv[2])
+directories = sorted(
+    path.relative_to(assets).as_posix()
+    for path in assets.rglob("*")
+    if path.is_dir()
+)
+content = "\n".join(directories) + "\n"
+if not manifest.exists() or manifest.read_text() != content:
+    manifest.write_text(content)
+    print(f"updated {manifest}")
+else:
+    print(f"unchanged {manifest}")
+PY
+
+# 2. 正式包刷新启动器图标；开发包可复用现有图标
+if [ "${SKIP_ANDROID_ICONS:-0}" != "1" ]; then
+  echo "==> Generating Android launcher icons..."
+  "$ROOT_DIR/scripts/generate_app_icons.sh"
+fi
+
+# 3. 用 cargo-ndk 编译 .so 到 jniLibs
 echo "==> Building .so with cargo-ndk..."
-cargo ndk -t "$TARGET" -P 26 -o "$JNI_DIR" build $CARGO_FLAGS
+if [ "$CARGO_RELEASE" = "1" ]; then
+  cargo ndk -t "$TARGET" -P 26 -o "$JNI_DIR" build --release
+else
+  cargo ndk -t "$TARGET" -P 26 -o "$JNI_DIR" build
+fi
 
-# 3. 用 Gradle 打包 APK
+# 4. 用 Gradle 打包 APK
 echo "==> Building APK with Gradle..."
 cd "$ANDROID_DIR"
-./gradlew "$GRADLE_TASK" --no-daemon
+if [ "${USE_GRADLE_DAEMON:-0}" = "1" ]; then
+  ./gradlew "$GRADLE_TASK"
+else
+  ./gradlew "$GRADLE_TASK" --no-daemon
+fi
 
-# 4. 收集产物
-rm -rf "$DIST_DIR"
+# 5. 收集产物
+if [ "${KEEP_ANDROID_DIST:-0}" != "1" ]; then
+  rm -rf "$DIST_DIR"
+fi
 mkdir -p "$DIST_DIR"
-cp "$ANDROID_DIR/app/build/outputs/apk/$APK_PATH" "$DIST_DIR/OpenInfiniFactory.apk"
+APK_NAME="${ANDROID_APK_NAME:-OpenInfiniFactory.apk}"
+cp "$ANDROID_DIR/app/build/outputs/apk/$APK_PATH" "$DIST_DIR/$APK_NAME"
 
-echo "$DIST_DIR/OpenInfiniFactory.apk"
+echo "$DIST_DIR/$APK_NAME"

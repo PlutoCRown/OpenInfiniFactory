@@ -1,4 +1,3 @@
-
 /// 虚拟遥感单个控件相对固定锚点的偏移与缩放
 ///
 /// `offset_*` / 基准尺寸以 [`VIRTUAL_LAYOUT_REF_EDGE`] 为参考短边存档；
@@ -48,25 +47,26 @@ pub struct VirtualControlsLayout {
 }
 
 fn default_virtual_inventory() -> VirtualControlTransform {
-    VirtualControlTransform::new(24.0, 282.0, 1.0)
+    VirtualControlTransform::new(24.0, 282.0, 1.5)
 }
 
 impl VirtualControlsLayout {
     pub const DEFAULT: Self = Self {
         // 基于玩家手调布局校准：摇杆等距；右下三角同尺寸圆弧；右上/右侧齐边等距
+        // 方向摇杆保持原尺寸；右下三键在旧尺寸上 ×1.2；其余按钮 ×1.5。
         joystick: VirtualControlTransform::new(75.1875, 75.1875, 1.8123217),
-        jump: VirtualControlTransform::new(41.4327, 242.987, 1.2227905),
-        place: VirtualControlTransform::new(174.2844, 160.9637, 1.2227905),
-        delete: VirtualControlTransform::new(247.7921, 23.2175, 1.2227905),
-        pause: VirtualControlTransform::new(24.0, 24.0, 1.0),
-        simulate: VirtualControlTransform::new(110.0, 24.0, 1.0),
-        sim_pause: VirtualControlTransform::new(110.0, 24.0, 1.0),
-        sim_fast: VirtualControlTransform::new(196.0, 24.0, 1.0),
-        sim_step: VirtualControlTransform::new(282.0, 24.0, 1.0),
-        rotate: VirtualControlTransform::new(24.0, 196.0, 1.0),
-        alternate: VirtualControlTransform::new(24.0, 110.0, 1.0),
-        block_config: VirtualControlTransform::new(58.625, 268.75, 1.0),
-        inventory: VirtualControlTransform::new(24.0, 282.0, 1.0),
+        jump: VirtualControlTransform::new(41.4327, 242.987, 1.4673486),
+        place: VirtualControlTransform::new(174.2844, 160.9637, 1.4673486),
+        delete: VirtualControlTransform::new(247.7921, 23.2175, 1.4673486),
+        pause: VirtualControlTransform::new(24.0, 24.0, 1.5),
+        simulate: VirtualControlTransform::new(110.0, 24.0, 1.5),
+        sim_pause: VirtualControlTransform::new(110.0, 24.0, 1.5),
+        sim_fast: VirtualControlTransform::new(196.0, 24.0, 1.5),
+        sim_step: VirtualControlTransform::new(282.0, 24.0, 1.5),
+        rotate: VirtualControlTransform::new(24.0, 196.0, 1.5),
+        alternate: VirtualControlTransform::new(24.0, 110.0, 1.5),
+        block_config: VirtualControlTransform::new(58.625, 268.75, 1.5),
+        inventory: VirtualControlTransform::new(24.0, 282.0, 1.5),
     };
 
     pub fn transform(&self, id: VirtualControlId) -> VirtualControlTransform {
