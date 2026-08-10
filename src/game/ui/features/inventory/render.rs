@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::game::state::{BuilderMode, PlacementState, SolutionState, WorldEntryMode};
+use crate::game::state::{
+    BuilderMode, PlacementState, PlayingUiState, SolutionState, WorldEntryMode,
+};
 use crate::game::ui::access::{UiMainThread, i18n};
 use crate::game::ui::components::{default_button_size, hover_border, inset_border};
 use crate::game::ui::features::inventory::InventoryTabButton;
@@ -11,8 +13,9 @@ use crate::game::ui::types::{
 };
 use crate::game::ui::widgets::{short_item_name, slot_color};
 use crate::game::world::rendering::BlockIconAssets;
+use crate::shared::touch_profile::TouchProfile;
 
-use super::types::InventoryTitleText;
+use super::types::{InventoryTitleText, TouchInventoryState};
 
 fn builder_mode_key(mode: BuilderMode) -> &'static str {
     match mode {
@@ -74,6 +77,8 @@ pub fn update_inventory_slots(
     _ui_thread: UiMainThread,
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
+    touch: Res<TouchProfile>,
+    touch_inventory: Res<TouchInventoryState>,
     block_icons: Option<Res<BlockIconAssets>>,
     mut commands: Commands,
     mut initialized: Local<bool>,
@@ -81,6 +86,7 @@ pub fn update_inventory_slots(
     mut had_block_icons: Local<bool>,
     mut last_slot_count: Local<usize>,
     mut last_hovered: Local<Option<Entity>>,
+    mut last_touch_selected: Local<Option<usize>>,
     mut slot_query: Query<
         (
             Entity,
@@ -119,6 +125,8 @@ pub fn update_inventory_slots(
         (*interaction == Interaction::Hovered).then_some(entity)
     });
     let hover_changed = !*initialized || hovered_entity != *last_hovered;
+    let touch_selected = touch_inventory.selected_backpack.map(|(index, _)| index);
+    let touch_selected_changed = !*initialized || touch_selected != *last_touch_selected;
 
     if !inventory_changed
         && !selected_changed
@@ -126,6 +134,7 @@ pub fn update_inventory_slots(
         && !icons_changed
         && !icons_became_ready
         && !slots_changed
+        && !touch_selected_changed
     {
         return;
     }
@@ -133,9 +142,9 @@ pub fn update_inventory_slots(
     *last_selected = placement.selected;
     *last_hovered = hovered_entity;
     *last_slot_count = slot_count;
+    *last_touch_selected = touch_selected;
 
-    let refresh_content =
-        inventory_changed || icons_changed || icons_became_ready || slots_changed;
+    let refresh_content = inventory_changed || icons_changed || icons_became_ready || slots_changed;
 
     for (entity, slot, interaction, children, mut node, mut background, mut border, tip) in
         &mut slot_query
@@ -165,9 +174,11 @@ pub fn update_inventory_slots(
         let has_icon = icon_handle.is_some();
         let hovered = *interaction == Interaction::Hovered;
         let selected_hotbar = slot.area == SlotArea::Hotbar && slot.index == placement.selected;
+        let selected_touch =
+            touch.enabled && slot.area == SlotArea::Backpack && touch_selected == Some(slot.index);
 
         *background = slot_background(item, has_icon, hovered);
-        *border = slot_border(selected_hotbar, hovered);
+        *border = slot_border(selected_hotbar || selected_touch, hovered);
 
         let next_tip = item.map(|item| HoverTooltip {
             name_key: item.name_key(),
@@ -209,22 +220,53 @@ pub fn update_inventory_slots(
 pub fn update_item_tooltip(
     _ui_thread: UiMainThread,
     carried: Res<CarriedItem>,
+    touch: Res<TouchProfile>,
+    playing_ui: Res<PlayingUiState>,
+    touch_inventory: Res<TouchInventoryState>,
     targets: Query<(&HoverTooltip, &Interaction)>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut last_keys: Local<Option<HoverTooltip>>,
     mut tooltip: Query<(&mut Node, &mut Visibility), (With<ItemTooltip>, Without<Button>)>,
-    mut tooltip_name: Query<
-        &mut Text,
-        (With<ItemTooltipName>, Without<ItemTooltipDescription>),
-    >,
-    mut tooltip_desc: Query<
-        &mut Text,
-        (With<ItemTooltipDescription>, Without<ItemTooltipName>),
-    >,
+    mut tooltip_name: Query<&mut Text, (With<ItemTooltipName>, Without<ItemTooltipDescription>)>,
+    mut tooltip_desc: Query<&mut Text, (With<ItemTooltipDescription>, Without<ItemTooltipName>)>,
 ) {
     let Ok((mut tooltip_node, mut tooltip_visibility)) = tooltip.single_mut() else {
         return;
     };
+
+    if touch.enabled {
+        let selected = if playing_ui.inventory_open && !touch_inventory.dragging {
+            touch_inventory.selected_backpack.map(|(_, item)| item)
+        } else {
+            None
+        };
+        let Some(item) = selected else {
+            tooltip_node.display = Display::None;
+            tooltip_visibility.set_if_neq(Visibility::Hidden);
+            *last_keys = None;
+            return;
+        };
+        let tip = HoverTooltip {
+            name_key: item.name_key(),
+            description_key: item.description_key(),
+        };
+        tooltip_visibility.set_if_neq(Visibility::Visible);
+        tooltip_node.display = Display::Flex;
+        tooltip_node.left = Val::Auto;
+        tooltip_node.top = Val::Auto;
+        tooltip_node.right = Val::Px(16.0);
+        tooltip_node.bottom = Val::Px(84.0);
+        if last_keys.as_ref() != Some(&tip) {
+            if let Ok(mut text) = tooltip_name.single_mut() {
+                text.0 = i18n.t(tip.name_key);
+            }
+            if let Ok(mut text) = tooltip_desc.single_mut() {
+                text.0 = i18n.t(tip.description_key);
+            }
+            *last_keys = Some(tip);
+        }
+        return;
+    }
 
     // 手里拿着东西时不显示，避免和悬浮 Icon 叠在一起
     if carried.item().is_some() {
@@ -236,9 +278,9 @@ pub fn update_item_tooltip(
         return;
     }
 
-    let hovered = targets.iter().find_map(|(tip, interaction)| {
-        (*interaction == Interaction::Hovered).then_some(*tip)
-    });
+    let hovered = targets
+        .iter()
+        .find_map(|(tip, interaction)| (*interaction == Interaction::Hovered).then_some(*tip));
 
     let Some(tip) = hovered else {
         if tooltip_node.display != Display::None {
@@ -281,6 +323,8 @@ pub fn update_item_tooltip(
 pub fn update_carried_item_ui(
     _ui_thread: UiMainThread,
     carried: Res<CarriedItem>,
+    touch: Res<TouchProfile>,
+    touch_inventory: Res<TouchInventoryState>,
     block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut preview: Query<(&mut Node, &mut ImageNode), With<CarriedItemPreview>>,
@@ -297,10 +341,12 @@ pub fn update_carried_item_ui(
         return;
     };
 
-    let Ok(window) = windows.single() else {
-        return;
+    let cursor = if touch.enabled {
+        touch_inventory.drag_pointer
+    } else {
+        windows.single().ok().and_then(Window::cursor_position)
     };
-    let Some(cursor) = window.cursor_position() else {
+    let Some(cursor) = cursor else {
         if style.display != Display::None {
             style.display = Display::None;
         }
@@ -322,9 +368,7 @@ pub fn update_carried_item_ui(
         InventoryItem::Area(AreaKind::Selection) => {
             block_icons.as_deref().and_then(|icons| icons.selection())
         }
-        InventoryItem::LightPanel => {
-            block_icons.as_deref().and_then(|icons| icons.light_panel())
-        }
+        InventoryItem::LightPanel => block_icons.as_deref().and_then(|icons| icons.light_panel()),
     };
     *image = icon_handle
         .map(|handle| ImageNode::new(handle.clone()))

@@ -6,13 +6,14 @@ use bevy::prelude::*;
 
 pub use actions::{
     dispatch_inventory_slot_actions, emit_inventory_slot_actions, emit_inventory_tab_actions,
-    inventory_hotbar_digit_input,
+    inventory_hotbar_digit_input, reset_closed_touch_inventory, touch_inventory_drag_ended,
+    touch_inventory_drag_started, touch_inventory_dragged,
 };
 pub use render::{
     update_carried_item_ui, update_inventory_slots, update_inventory_tabs, update_inventory_title,
     update_item_tooltip,
 };
-pub use types::{InventoryTabButton, InventoryTitleText};
+pub use types::{InventoryTabButton, InventoryTitleText, TouchInventoryState};
 
 use crate::game::state::{GameMode, PlayingUiState};
 use crate::game::systems::perf::PerfScope;
@@ -22,11 +23,16 @@ pub struct InventoryPlugin;
 
 impl Plugin for InventoryPlugin {
     fn build(&self, app: &mut App) {
-        app.add_observer(emit_inventory_slot_actions)
+        app.init_resource::<TouchInventoryState>()
+            .add_observer(emit_inventory_slot_actions)
             .add_observer(emit_inventory_tab_actions)
+            .add_observer(touch_inventory_drag_started)
+            .add_observer(touch_inventory_dragged)
+            .add_observer(touch_inventory_drag_ended)
             .add_systems(
                 Update,
                 (
+                    reset_closed_touch_inventory,
                     inventory_hotbar_digit_input,
                     dispatch_inventory_slot_actions,
                 )

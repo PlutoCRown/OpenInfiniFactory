@@ -16,8 +16,8 @@ use crate::game::ui::features::inventory::{InventoryTabButton, InventoryTitleTex
 use crate::game::ui::types::FreeInventoryTab;
 use crate::shared::touch_profile::TouchProfile;
 
-/// 背包一行格数；面板宽度按此精确排满
-const BACKPACK_COLS: usize = 10;
+/// 桌面背包一行格数；触控端改用九列，正好排满二十七格
+const DESKTOP_BACKPACK_COLS: usize = 10;
 /// 与 spawn_slot 一致
 const SLOT_BASE: f32 = 54.0;
 /// 与 panel_content / panel_window 一致
@@ -25,12 +25,11 @@ const PANEL_PAD: f32 = 8.0;
 const PANEL_BORDER: f32 = 4.0;
 const PANEL_BODY_BORDER: f32 = 3.0;
 
-/// 使一行刚好放下 BACKPACK_COLS 个格子（含 gap、内外边距与边框）
-fn inventory_panel_width() -> f32 {
+/// 使一行刚好放下指定数量的格子（含 gap、内外边距与边框）
+fn inventory_panel_width(cols: usize) -> f32 {
     let slot = default_button_size(SLOT_BASE);
-    let cols = BACKPACK_COLS as f32;
-    let gaps = (BACKPACK_COLS.saturating_sub(1) as f32) * INVENTORY_SLOT_GAP;
-    cols * slot
+    let gaps = (cols.saturating_sub(1) as f32) * INVENTORY_SLOT_GAP;
+    cols as f32 * slot
         + gaps
         + INVENTORY_TRAY_PADDING * 2.0
         + PANEL_PAD * 2.0
@@ -96,7 +95,13 @@ pub fn spawn_inventory_panel(
         });
         i18n.fmt("inventory.title", &[("mode", mode.as_str())])
     };
-    let mut options = PanelOptions::new(inventory_panel_width(), "inventory.title").start_hidden();
+    let backpack_cols = if touch.enabled {
+        HOTBAR_SLOTS
+    } else {
+        DESKTOP_BACKPACK_COLS
+    };
+    let mut options =
+        PanelOptions::new(inventory_panel_width(backpack_cols), "inventory.title").start_hidden();
     // 触控无 Esc，标题栏需要关钮
     if touch.enabled {
         options = options.closable();

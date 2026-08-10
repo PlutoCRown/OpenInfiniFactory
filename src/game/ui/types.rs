@@ -17,7 +17,7 @@ pub use crate::game::ui::features::settings::types::{
     GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
     SettingsControl, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList,
     SettingsDropdownRow, SettingsField, SettingsItem, SettingsSliderFill, SettingsSliderKnob,
-    SettingsTab, SettingsText, SettingsTextKind, SettingsValueText,
+    SettingsTab, SettingsText, SettingsTextKind, SettingsValueText, TOUCH_SETTINGS,
 };
 
 use crate::game::blocks::{BlockKind, PLAY_BLOCKS, edit_blocks};

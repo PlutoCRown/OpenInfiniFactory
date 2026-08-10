@@ -1,8 +1,9 @@
 use bevy::picking::pointer::PointerButton;
-use bevy::picking::prelude::{Click, Pointer};
+use bevy::picking::prelude::{Click, Drag, DragEnd, DragStart, Pointer};
 use bevy::prelude::*;
 
 use crate::game::state::{GameMode, PlacementState, PlayingUiState, SolutionState, WorldEntryMode};
+use crate::game::ui::components::ui_logical_bounds;
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::inventory::InventoryTabButton;
@@ -12,6 +13,9 @@ use crate::game::ui::{
     SlotArea, TextPromptState, UiRuntime,
 };
 use crate::shared::config::{ActionKeyName, GameConfig};
+use crate::shared::touch_profile::TouchProfile;
+
+use super::types::TouchInventoryState;
 
 pub fn emit_inventory_slot_actions(
     mut click: On<Pointer<Click>>,
@@ -78,6 +82,8 @@ pub fn dispatch_inventory_slot_actions(
     mut placement: ResMut<PlacementState>,
     mut solution_state: ResMut<SolutionState>,
     mut free_tab: ResMut<FreeInventoryTab>,
+    touch: Res<TouchProfile>,
+    mut touch_inventory: ResMut<TouchInventoryState>,
     playing_ui: Res<PlayingUiState>,
 ) {
     for action in actions.read() {
@@ -91,6 +97,7 @@ pub fn dispatch_inventory_slot_actions(
                 }
                 *free_tab = tab;
                 inventory.fill_free_backpack(tab);
+                touch_inventory.clear();
             }
             UiActionKind::InventorySlot { slot, button } => {
                 dispatch_inventory_slot_action(
@@ -102,10 +109,122 @@ pub fn dispatch_inventory_slot_actions(
                     &mut carried,
                     &mut placement,
                     &mut solution_state,
+                    *touch,
+                    &mut touch_inventory,
                 );
             }
             _ => {}
         }
+    }
+}
+
+/// 触控拖动从背包目录拿起物品，并关闭点选 tooltip
+pub fn touch_inventory_drag_started(
+    mut drag_start: On<Pointer<DragStart>>,
+    touch: Res<TouchProfile>,
+    playing_ui: Res<PlayingUiState>,
+    ui_host: Res<UiHost>,
+    slots: Query<&InventorySlot>,
+    inventory: Res<InventoryItems>,
+    mut carried: ResMut<CarriedItem>,
+    mut touch_inventory: ResMut<TouchInventoryState>,
+) {
+    if !touch.enabled
+        || !playing_ui.inventory_open
+        || ui_host.modal_open()
+        || drag_start.event.button != PointerButton::Primary
+    {
+        return;
+    }
+    let Ok(slot) = slots.get(drag_start.entity) else {
+        return;
+    };
+    if slot.area != SlotArea::Backpack {
+        return;
+    }
+    let Some(item) = inventory.backpack[slot.index] else {
+        return;
+    };
+    drag_start.propagate(false);
+    touch_inventory.selected_backpack = None;
+    touch_inventory.drag_pointer = Some(drag_start.pointer_location.position);
+    touch_inventory.dragging = true;
+    carried.set(Some(item));
+}
+
+/// 触控拖动时记录手指位置，让手持物品图标跟随手指
+pub fn touch_inventory_dragged(
+    mut drag: On<Pointer<Drag>>,
+    touch: Res<TouchProfile>,
+    slots: Query<&InventorySlot>,
+    mut touch_inventory: ResMut<TouchInventoryState>,
+) {
+    if !touch.enabled
+        || !touch_inventory.dragging
+        || drag.event.button != PointerButton::Primary
+        || slots.get(drag.entity).is_err()
+    {
+        return;
+    }
+    drag.propagate(false);
+    touch_inventory.drag_pointer = Some(drag.pointer_location.position);
+}
+
+/// 触控拖动结束时放入手指下的快捷栏，否则取消手持
+pub fn touch_inventory_drag_ended(
+    mut drag_end: On<Pointer<DragEnd>>,
+    touch: Res<TouchProfile>,
+    slots: Query<(&InventorySlot, &Node, &ComputedNode, &UiGlobalTransform)>,
+    mut inventory: ResMut<InventoryItems>,
+    mut carried: ResMut<CarriedItem>,
+    mut placement: ResMut<PlacementState>,
+    mut solution_state: ResMut<SolutionState>,
+    mut touch_inventory: ResMut<TouchInventoryState>,
+) {
+    if !touch.enabled
+        || !touch_inventory.dragging
+        || drag_end.event.button != PointerButton::Primary
+    {
+        return;
+    }
+    drag_end.propagate(false);
+    let pointer = drag_end.pointer_location.position;
+    let target = slots
+        .iter()
+        .filter(|(slot, node, ..)| slot.area == SlotArea::Hotbar && node.display != Display::None)
+        .find_map(|(slot, _, computed, transform)| {
+            let bounds = ui_logical_bounds(computed, transform);
+            (pointer.x >= bounds.min.x
+                && pointer.x <= bounds.max.x
+                && pointer.y >= bounds.min.y
+                && pointer.y <= bounds.max.y)
+                .then_some(slot.index)
+        });
+    let item = carried.take();
+    if let (Some(index), Some(item)) = (target, item) {
+        if inventory.hotbar[index] != Some(item) {
+            inventory.hotbar[index] = Some(item);
+            solution_state.dirty = true;
+        }
+    }
+    touch_inventory.clear();
+    placement.selection.clear();
+    placement.edit_gesture = None;
+}
+
+/// 背包关闭后清除触控点选和拖动状态，避免下次打开残留
+pub fn reset_closed_touch_inventory(
+    touch: Res<TouchProfile>,
+    playing_ui: Res<PlayingUiState>,
+    mut carried: ResMut<CarriedItem>,
+    mut touch_inventory: ResMut<TouchInventoryState>,
+) {
+    if touch.enabled
+        && !playing_ui.inventory_open
+        && (touch_inventory.selected_backpack.is_some() || touch_inventory.dragging)
+    {
+        carried.clear();
+        touch_inventory.clear();
     }
 }
 
@@ -163,6 +282,8 @@ fn dispatch_inventory_slot_action(
     carried: &mut CarriedItem,
     placement: &mut PlacementState,
     solution_state: &mut SolutionState,
+    touch: TouchProfile,
+    touch_inventory: &mut TouchInventoryState,
 ) {
     // 背包关闭：快捷栏左键只切换当前选中格（等同数字键）
     if !inventory_open {
@@ -181,7 +302,7 @@ fn dispatch_inventory_slot_action(
         .mouse_button()
         .map(pointer_button)
         .unwrap_or(PointerButton::Middle);
-    if clicked_button == pick_button {
+    if !touch.enabled && clicked_button == pick_button {
         if slot.area == SlotArea::Hotbar {
             if inventory.hotbar[slot.index].is_some() {
                 inventory.hotbar[slot.index] = None;
@@ -204,6 +325,28 @@ fn dispatch_inventory_slot_action(
         SlotArea::Hotbar => inventory.hotbar[slot.index],
         SlotArea::Backpack => inventory.backpack[slot.index],
     };
+
+    if touch.enabled {
+        match slot.area {
+            SlotArea::Backpack => {
+                carried.clear();
+                touch_inventory.selected_backpack = clicked_item.map(|item| (slot.index, item));
+            }
+            SlotArea::Hotbar => {
+                if let Some((_, item)) = touch_inventory.selected_backpack.take() {
+                    if inventory.hotbar[slot.index] != Some(item) {
+                        inventory.hotbar[slot.index] = Some(item);
+                        solution_state.dirty = true;
+                    }
+                } else if placement.selected != slot.index {
+                    placement.selected = slot.index;
+                }
+            }
+        }
+        placement.selection.clear();
+        placement.edit_gesture = None;
+        return;
+    }
 
     if slot.area == SlotArea::Hotbar {
         apply_open_inventory_hotbar(slot.index, inventory, carried, placement, solution_state);
