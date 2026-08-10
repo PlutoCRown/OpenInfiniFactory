@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::game::ui::components::{
-    BUTTON_BG, BUTTON_BORDER_X, button_border, localized_text, raised_border, ui_logical_bounds,
+    BUTTON_BORDER_X, auto_width_button, localized_text, raised_border, ui_logical_bounds,
 };
 use crate::game::ui::core::confirm_dialog::{
     ConfirmDialogState, ConfirmExtraButton, ConfirmProps, ConfirmResult, PendingConfirmHandler,
@@ -41,6 +41,7 @@ pub struct VirtualLayoutEditorOpen(pub bool);
 pub struct VirtualLayoutEditorState {
     pub selected: Option<VirtualControlId>,
     pub drag_last: Option<Vec2>,
+    pub scale_drag_start: Option<(f32, f32)>,
 }
 
 /// 编辑中的草稿布局（未点保存前不写回 GameConfig）
@@ -88,6 +89,14 @@ pub struct VirtualLayoutScaleSlider;
 #[derive(Component)]
 pub struct VirtualLayoutScaleFill;
 
+/// 未选择控件时显示的操作提示
+#[derive(Component)]
+pub struct VirtualLayoutSelectHint;
+
+/// 选中控件后显示的缩放操作区
+#[derive(Component)]
+pub struct VirtualLayoutScaleControls;
+
 /// 屏幕中心准心（对齐辅助）
 #[derive(Component)]
 pub struct VirtualLayoutCrosshair;
@@ -101,6 +110,9 @@ pub fn open_virtual_layout_editor(world: &mut World) {
     world.resource_mut::<VirtualLayoutEditorOpen>().0 = true;
     world.resource_mut::<VirtualLayoutEditorState>().selected = None;
     world.resource_mut::<VirtualLayoutEditorState>().drag_last = None;
+    world
+        .resource_mut::<VirtualLayoutEditorState>()
+        .scale_drag_start = None;
     {
         let layout = world.resource::<GameConfig>().virtual_controls.clone();
         let mut draft = world.resource_mut::<VirtualLayoutDraft>();
@@ -262,18 +274,7 @@ fn spawn_crosshair(parent: &mut ChildSpawnerCommands) {
 
 fn chrome_button(label_key: &'static str) -> impl Bundle {
     (
-        Node {
-            padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: button_border(),
-            border_radius: BorderRadius::all(Val::Px(5.0)),
-            ..default()
-        },
-        BackgroundColor(BUTTON_BG),
-        raised_border(),
-        Button,
-        Pickable::default(),
+        auto_width_button(32.0),
         children![(
             localized_text(label_key, 14.0, Color::WHITE),
             Pickable::IGNORE
@@ -317,38 +318,70 @@ fn spawn_editor_chrome(parent: &mut ChildSpawnerCommands) {
             ));
 
             bar.spawn((
-                localized_text("virtual.layout_scale", 14.0, Color::srgb(0.88, 0.9, 0.92)),
+                Node {
+                    display: Display::Flex,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                VirtualLayoutSelectHint,
                 Pickable::IGNORE,
-            ));
+            ))
+            .with_children(|hint| {
+                hint.spawn((
+                    localized_text(
+                        "virtual.layout_select_control",
+                        14.0,
+                        Color::srgb(0.88, 0.9, 0.92),
+                    ),
+                    Pickable::IGNORE,
+                ));
+            });
 
             bar.spawn((
                 Node {
-                    width: Val::Px(320.0),
-                    height: Val::Px(28.0),
-                    padding: UiRect::all(Val::Px(3.0)),
-                    border: UiRect::all(Val::Px(1.0)),
-                    border_radius: BorderRadius::all(Val::Px(4.0)),
-                    justify_content: JustifyContent::FlexStart,
-                    align_items: AlignItems::Stretch,
+                    display: Display::None,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(10.0),
                     ..default()
                 },
-                BackgroundColor(Color::srgb(0.22, 0.24, 0.26)),
-                BorderColor::all(Color::srgb(0.4, 0.42, 0.45)),
-                VirtualLayoutScaleSlider,
-                Pickable::default(),
+                VirtualLayoutScaleControls,
+                Pickable::IGNORE,
             ))
-            .with_children(|track| {
-                track.spawn((
-                    Node {
-                        width: Val::Percent(50.0),
-                        height: Val::Percent(100.0),
-                        border_radius: BorderRadius::all(Val::Px(2.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.32, 0.62, 0.72)),
-                    VirtualLayoutScaleFill,
+            .with_children(|controls| {
+                controls.spawn((
+                    localized_text("virtual.layout_scale", 14.0, Color::srgb(0.88, 0.9, 0.92)),
                     Pickable::IGNORE,
                 ));
+                controls
+                    .spawn((
+                        Node {
+                            width: Val::Px(320.0),
+                            height: Val::Px(28.0),
+                            padding: UiRect::all(Val::Px(3.0)),
+                            border: UiRect::all(Val::Px(1.0)),
+                            border_radius: BorderRadius::all(Val::Px(4.0)),
+                            justify_content: JustifyContent::FlexStart,
+                            align_items: AlignItems::Stretch,
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.22, 0.24, 0.26)),
+                        BorderColor::all(Color::srgb(0.4, 0.42, 0.45)),
+                        VirtualLayoutScaleSlider,
+                        Pickable::default(),
+                    ))
+                    .with_children(|track| {
+                        track.spawn((
+                            Node {
+                                width: Val::Percent(50.0),
+                                height: Val::Percent(100.0),
+                                border_radius: BorderRadius::all(Val::Px(2.0)),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.32, 0.62, 0.72)),
+                            VirtualLayoutScaleFill,
+                            Pickable::IGNORE,
+                        ));
+                    });
             });
         });
 }
@@ -358,6 +391,9 @@ pub fn exit_virtual_layout_editor(world: &mut World) {
     world.resource_mut::<VirtualLayoutEditorOpen>().0 = false;
     world.resource_mut::<VirtualLayoutEditorState>().selected = None;
     world.resource_mut::<VirtualLayoutEditorState>().drag_last = None;
+    world
+        .resource_mut::<VirtualLayoutEditorState>()
+        .scale_drag_start = None;
     world.resource_mut::<VirtualLayoutDraft>().dirty = false;
     let roots: Vec<Entity> = world
         .query_filtered::<Entity, With<VirtualLayoutEditorRoot>>()
@@ -494,8 +530,10 @@ pub fn on_editor_control_click(
                 let mut draft = world.resource_mut::<VirtualLayoutDraft>();
                 draft.layout = VirtualControlsLayout::DEFAULT.clone();
                 draft.dirty = true;
-                world.resource_mut::<VirtualLayoutEditorState>().selected = None;
-                world.resource_mut::<VirtualLayoutEditorState>().drag_last = None;
+                let mut editor = world.resource_mut::<VirtualLayoutEditorState>();
+                editor.selected = None;
+                editor.drag_last = None;
+                editor.scale_drag_start = None;
             });
         });
         return;
@@ -508,6 +546,7 @@ pub fn on_editor_control_click(
         click.propagate(false);
         editor.selected = None;
         editor.drag_last = None;
+        editor.scale_drag_start = None;
         return;
     }
     let Ok(control) = controls.get(click.entity) else {
@@ -516,6 +555,7 @@ pub fn on_editor_control_click(
     click.propagate(false);
     editor.selected = Some(control.0);
     editor.drag_last = None;
+    editor.scale_drag_start = None;
 }
 
 pub fn on_editor_drag(
@@ -531,18 +571,23 @@ pub fn on_editor_drag(
         return;
     }
 
-    // 缩放滑条：按轨道横向位置改选中控件大小，不取消选中
+    // 缩放滑条按拖动距离调整，落指时保留当前值，避免跳到轨道起点。
     if let Ok((node, transform)) = scale_sliders.get(drag.entity) {
         drag.propagate(false);
         let Some(selected) = editor.selected else {
+            return;
+        };
+        let Some((start_x, start_scale)) = editor.scale_drag_start else {
             return;
         };
         let bounds = ui_logical_bounds(node, transform);
         if bounds.width() <= 1.0 {
             return;
         }
-        let percent =
-            ((drag.pointer_location.position.x - bounds.min.x) / bounds.width()).clamp(0.0, 1.0);
+        let start_percent = scale_to_percent(start_scale) / 100.0;
+        let percent = (start_percent
+            + (drag.pointer_location.position.x - start_x) / bounds.width())
+        .clamp(0.0, 1.0);
         let mut t = draft.layout.transform(selected);
         t.scale = percent_to_scale(percent);
         draft.layout.set_transform(selected, t);
@@ -607,35 +652,30 @@ pub fn on_editor_release(
         return;
     }
     editor.drag_last = None;
+    editor.scale_drag_start = None;
 }
 
 pub fn on_editor_scale_press(
     mut press: On<Pointer<Press>>,
     editor_open: Res<VirtualLayoutEditorOpen>,
-    editor: Res<VirtualLayoutEditorState>,
-    mut draft: ResMut<VirtualLayoutDraft>,
-    scale_sliders: Query<(&ComputedNode, &UiGlobalTransform), With<VirtualLayoutScaleSlider>>,
+    mut editor: ResMut<VirtualLayoutEditorState>,
+    draft: Res<VirtualLayoutDraft>,
+    scale_sliders: Query<(), With<VirtualLayoutScaleSlider>>,
 ) {
     if !editor_open.0 || press.event.button != PointerButton::Primary {
         return;
     }
-    let Ok((node, transform)) = scale_sliders.get(press.entity) else {
+    if scale_sliders.get(press.entity).is_err() {
         return;
-    };
+    }
     press.propagate(false);
     let Some(selected) = editor.selected else {
         return;
     };
-    let bounds = ui_logical_bounds(node, transform);
-    if bounds.width() <= 1.0 {
-        return;
-    }
-    let percent =
-        ((press.pointer_location.position.x - bounds.min.x) / bounds.width()).clamp(0.0, 1.0);
-    let mut t = draft.layout.transform(selected);
-    t.scale = percent_to_scale(percent);
-    draft.layout.set_transform(selected, t);
-    draft.dirty = true;
+    editor.scale_drag_start = Some((
+        press.pointer_location.position.x,
+        draft.layout.transform(selected).scale,
+    ));
 }
 
 pub fn update_layout_editor_ui(
@@ -670,6 +710,25 @@ pub fn update_layout_editor_ui(
             With<VirtualLayoutScaleFill>,
             Without<VirtualRemoteControl>,
             Without<VirtualJoystickKnob>,
+            Without<VirtualLayoutSelectHint>,
+            Without<VirtualLayoutScaleControls>,
+        ),
+    >,
+    mut chrome_sections: Query<
+        (
+            &mut Node,
+            Option<&VirtualLayoutSelectHint>,
+            Option<&VirtualLayoutScaleControls>,
+        ),
+        (
+            Or<(
+                With<VirtualLayoutSelectHint>,
+                With<VirtualLayoutScaleControls>,
+            )>,
+            Without<VirtualLayoutPreview>,
+            Without<VirtualLayoutScaleFill>,
+            Without<VirtualRemoteControl>,
+            Without<VirtualJoystickKnob>,
         ),
     >,
 ) {
@@ -702,10 +761,24 @@ pub fn update_layout_editor_ui(
         }
     }
 
-    let fill_percent = editor
-        .selected
+    let selected = editor.selected;
+    for (mut node, hint, controls) in &mut chrome_sections {
+        node.display = if hint.is_some() {
+            if selected.is_none() {
+                Display::Flex
+            } else {
+                Display::None
+            }
+        } else if controls.is_some() && selected.is_some() {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    let fill_percent = selected
         .map(|id| scale_to_percent(draft.layout.transform(id).scale))
-        .unwrap_or(0.0);
+        .unwrap_or_default();
     for mut fill in &mut fills {
         fill.width = Val::Percent(fill_percent);
     }

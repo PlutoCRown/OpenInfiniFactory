@@ -316,23 +316,25 @@ pub fn set_control_pressed_style(
     bg: &mut BackgroundColor,
     border: &mut BorderColor,
     pressed: bool,
+    opacity: f32,
 ) {
-    if pressed {
-        *bg = CTRL_BG_PRESSED.into();
-        *border = pressed_border();
+    let base = if pressed { CTRL_BG_PRESSED } else { CTRL_BG };
+    *bg = base.with_alpha(base.alpha() * opacity).into();
+    *border = if pressed {
+        pressed_border()
     } else {
-        *bg = CTRL_BG.into();
-        *border = raised_border();
-    }
+        raised_border()
+    };
+    border.top = border.top.with_alpha(opacity);
+    border.right = border.right.with_alpha(opacity);
+    border.bottom = border.bottom.with_alpha(opacity);
+    border.left = border.left.with_alpha(opacity);
 }
 
 /// 摇杆芯按下外观
-pub fn set_knob_pressed_style(bg: &mut BackgroundColor, pressed: bool) {
-    *bg = if pressed {
-        KNOB_BG_PRESSED.into()
-    } else {
-        KNOB_BG.into()
-    };
+pub fn set_knob_pressed_style(bg: &mut BackgroundColor, pressed: bool, opacity: f32) {
+    let base = if pressed { KNOB_BG_PRESSED } else { KNOB_BG };
+    *bg = base.with_alpha(base.alpha() * opacity).into();
 }
 
 pub fn control_base_size(id: VirtualControlId) -> f32 {

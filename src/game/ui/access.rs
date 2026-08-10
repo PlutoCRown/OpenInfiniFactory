@@ -120,8 +120,12 @@ impl UiAccess {
                     gravity_scale: settings.gravity_scale,
                     mouse_sensitivity_x: settings.mouse_sensitivity_x,
                     mouse_sensitivity_y: settings.mouse_sensitivity_y,
+                    virtual_controls_opacity: settings.virtual_controls_opacity,
                 }
             };
+            let touch_enabled = world
+                .resource::<crate::shared::touch_profile::TouchProfile>()
+                .enabled;
             let (panel_w, panel_h) = {
                 use crate::game::ui::screens::settings_panel_size;
                 use bevy::window::PrimaryWindow;
@@ -136,7 +140,15 @@ impl UiAccess {
             };
             let mut state = SystemState::<UiHostCommands>::new(world);
             let mut params = state.get_mut(world).unwrap();
-            let id = params.mount_settings(commands, root, context, &settings, panel_w, panel_h);
+            let id = params.mount_settings(
+                commands,
+                root,
+                context,
+                &settings,
+                panel_w,
+                panel_h,
+                touch_enabled,
+            );
             state.apply(world);
             id
         })

@@ -45,6 +45,7 @@ pub enum SettingsField {
     Gravity,
     MouseSensitivityX,
     MouseSensitivityY,
+    VirtualControlsOpacity,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -176,10 +177,25 @@ pub const GRAPHICS_SETTINGS: &[SettingsItem] = &[
     },
 ];
 
+/// 仅在触控模式显示的设置项
+pub const TOUCH_SETTINGS: &[SettingsItem] = &[SettingsItem {
+    label_key: "settings.virtual_controls_opacity",
+    control: SettingsControl::Slider {
+        field: SettingsField::VirtualControlsOpacity,
+        config: SettingsSliderConfig {
+            min: 0.0,
+            max: 1.0,
+            step: 0.05,
+            trigger: SettingsSliderTrigger::Live,
+        },
+    },
+}];
+
 impl SettingsField {
     pub fn slider(self) -> Option<SettingsSliderConfig> {
         GAMEPLAY_SETTINGS
             .iter()
+            .chain(TOUCH_SETTINGS)
             .find_map(|item| match item.control {
                 SettingsControl::Slider { field, config } if field == self => Some(config),
                 _ => None,
@@ -220,6 +236,7 @@ impl SettingsField {
                     &[("scale", scale.as_str())],
                 )
             }
+            Self::VirtualControlsOpacity => format!("{:.2}", settings.virtual_controls_opacity),
         }
     }
 
@@ -252,6 +269,7 @@ impl SettingsField {
             Self::Gravity => settings.gravity_scale,
             Self::MouseSensitivityX => settings.mouse_sensitivity_x,
             Self::MouseSensitivityY => settings.mouse_sensitivity_y,
+            Self::VirtualControlsOpacity => settings.virtual_controls_opacity,
         }
     }
 
@@ -284,6 +302,10 @@ impl SettingsField {
             Self::MouseSensitivityY => {
                 settings.mouse_sensitivity_y = value;
                 config.mouse_sensitivity_y = value;
+            }
+            Self::VirtualControlsOpacity => {
+                settings.virtual_controls_opacity = value;
+                config.virtual_controls_opacity = value;
             }
         }
     }
@@ -357,6 +379,7 @@ pub enum SettingsAction {
     SetWindowMode(ConfigWindowMode),
     ToggleDropdown(SettingsDropdown),
     Bind(ActionKeyName),
+    OpenVirtualLayout,
     ResetDefaults,
     OpenFolder,
     StartDebugHttp,
@@ -369,6 +392,7 @@ impl UiActionLabel for SettingsAction {
             Self::TabGraphics => "button.graphics",
             Self::TabKeyBindings => "button.key_bindings",
             Self::Bind(action) => action.label_key(),
+            Self::OpenVirtualLayout => "virtual.layout_open",
             Self::ResetDefaults => "button.reset_defaults",
             Self::OpenFolder => "button.open_config_folder",
             Self::StartDebugHttp => "button.start_debug_http",

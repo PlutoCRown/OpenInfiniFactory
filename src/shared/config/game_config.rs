@@ -31,6 +31,7 @@ pub const DEFAULT_CONFIG: GameConfig = GameConfig {
     gravity_scale: 1.2,
     mouse_sensitivity_x: 1.0,
     mouse_sensitivity_y: 1.0,
+    virtual_controls_opacity: 1.0,
     shadows_enabled: true,
     ssao_quality: ConfigSsaoQuality::High,
     vsync_enabled: true,
@@ -54,6 +55,8 @@ pub struct GameConfig {
     pub mouse_sensitivity_x: f32,
     #[serde(default = "default_mouse_sensitivity")]
     pub mouse_sensitivity_y: f32,
+    #[serde(default = "default_virtual_controls_opacity")]
+    pub virtual_controls_opacity: f32,
     #[serde(default = "default_shadows_enabled")]
     pub shadows_enabled: bool,
     #[serde(default = "default_ssao_quality")]
@@ -93,6 +96,11 @@ fn default_gravity_scale() -> f32 {
 
 fn default_mouse_sensitivity() -> f32 {
     DEFAULT_CONFIG.mouse_sensitivity_x
+}
+
+/// 旧配置缺失触控控件透明度时使用默认值
+fn default_virtual_controls_opacity() -> f32 {
+    DEFAULT_CONFIG.virtual_controls_opacity
 }
 
 fn default_shadows_enabled() -> bool {

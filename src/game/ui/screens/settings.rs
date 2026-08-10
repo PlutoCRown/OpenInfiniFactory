@@ -9,7 +9,8 @@ use super::super::components::{
 };
 use super::super::types::{
     GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, PanelVisibility, SettingsAction, SettingsControl,
-    SettingsDropdown, SettingsDropdownRow, SettingsItem, SettingsTab, UiPanelBinding,
+    SettingsDropdown, SettingsDropdownRow, SettingsItem, SettingsTab, TOUCH_SETTINGS,
+    UiPanelBinding,
 };
 use super::super::widgets::{
     spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_dropdown_list,
@@ -36,6 +37,7 @@ pub fn spawn_settings_panel(
     settings: &GameSettings,
     panel_w: f32,
     panel_h: f32,
+    touch_enabled: bool,
 ) {
     spawn_panel(
         root,
@@ -47,7 +49,7 @@ pub fn spawn_settings_panel(
             spawn_settings_tabs(panel);
             spawn_gameplay_settings(panel, settings);
             spawn_graphics_settings(panel, settings);
-            spawn_key_bindings(panel);
+            spawn_key_bindings(panel, settings, touch_enabled);
         },
     );
     spawn_settings_dropdown_layers(root);
@@ -261,12 +263,22 @@ fn spawn_graphics_settings(panel: &mut ChildSpawnerCommands, settings: &GameSett
         });
 }
 
-fn spawn_key_bindings(panel: &mut ChildSpawnerCommands) {
+fn spawn_key_bindings(
+    panel: &mut ChildSpawnerCommands,
+    settings: &GameSettings,
+    touch_enabled: bool,
+) {
     panel
         .spawn(scroll_container())
         .insert(PanelVisibility::SettingsTab(SettingsTab::KeyBindings))
         .with_children(|container| {
             container.spawn(scroll_content()).with_children(|content| {
+                if touch_enabled {
+                    spawn_localized_settings_button(content, SettingsAction::OpenVirtualLayout);
+                    for item in TOUCH_SETTINGS {
+                        spawn_settings_item(content, *item, settings, SettingsTab::KeyBindings);
+                    }
+                }
                 content
                     .spawn(key_bindings_columns_bundle())
                     .with_children(|columns| {

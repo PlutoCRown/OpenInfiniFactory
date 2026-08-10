@@ -27,7 +27,7 @@ use super::{
 
 const JOYSTICK_DEADZONE: f32 = 0.18;
 const FLY_SWIPE_THRESHOLD: f32 = 24.0;
-const LOOK_SENSITIVITY: f32 = 1.0;
+const LOOK_SENSITIVITY: f32 = 1.5;
 
 pub fn update_virtual_remote_input(
     touch: Res<TouchProfile>,
@@ -516,6 +516,7 @@ pub fn apply_virtual_control_layout(
         (&mut Node, &mut BackgroundColor),
         (With<VirtualJoystickKnob>, Without<VirtualRemoteControl>),
     >,
+    mut labels: Query<&mut TextColor>,
 ) {
     if !touch.enabled || editor_open.0 {
         return;
@@ -528,14 +529,22 @@ pub fn apply_virtual_control_layout(
         let transform = config.virtual_controls.transform(control.0);
         apply_layout_to_node(control.0, transform, &mut node);
         let pressed = runtime.pressed_controls.contains(&control.0);
-        set_control_pressed_style(&mut bg, &mut border, pressed);
+        let opacity = config.virtual_controls_opacity.clamp(0.0, 1.0);
+        set_control_pressed_style(&mut bg, &mut border, pressed, opacity);
+        if let Some(children) = children {
+            for child in children.iter() {
+                if let Ok(mut label) = labels.get_mut(child) {
+                    label.0 = label.0.with_alpha(opacity);
+                }
+            }
+        }
         if control.0 == VirtualControlId::Joystick {
             let size = control_pixel_size(control.0, transform, height_unit);
             if let Some(children) = children {
                 for child in children.iter() {
                     if let Ok((mut knob, mut knob_bg)) = knobs.get_mut(child) {
                         apply_knob_node(&mut knob, size, runtime.joystick_stick_offset);
-                        set_knob_pressed_style(&mut knob_bg, pressed);
+                        set_knob_pressed_style(&mut knob_bg, pressed, opacity);
                     }
                 }
             }

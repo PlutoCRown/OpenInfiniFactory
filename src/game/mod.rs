@@ -95,9 +95,7 @@ impl Plugin for GamePlugin {
             .mouse_sensitivity_y
             .clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX);
         let touch_profile = TouchProfile::detect_with_force(
-            launch
-                .as_ref()
-                .is_some_and(|options| options.force_touch),
+            launch.as_ref().is_some_and(|options| options.force_touch),
         );
         let i18n = I18n::new(resolve_language(config.language));
         let settings = GameSettings {
@@ -106,6 +104,7 @@ impl Plugin for GamePlugin {
             gravity_scale: config.gravity_scale,
             mouse_sensitivity_x: config.mouse_sensitivity_x,
             mouse_sensitivity_y: config.mouse_sensitivity_y,
+            virtual_controls_opacity: config.virtual_controls_opacity.clamp(0.0, 1.0),
         };
 
         app.add_plugins(StoragePlugin)
@@ -139,9 +138,7 @@ impl Plugin for GamePlugin {
             .init_resource::<crate::game::world::rendering::SceneChunkMeshes>()
             .insert_resource(TurnCache::default())
             .insert_resource(settings)
-            .insert_resource(UiScale(
-                touch_profile.effective_ui_scale(config.ui_scale),
-            ))
+            .insert_resource(UiScale(touch_profile.effective_ui_scale(config.ui_scale)))
             .insert_resource(config)
             .insert_resource(i18n)
             .insert_resource(SaveState::default())
@@ -370,6 +367,7 @@ fn apply_storage_ready(
     loaded.mouse_sensitivity_y = loaded
         .mouse_sensitivity_y
         .clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX);
+    loaded.virtual_controls_opacity = loaded.virtual_controls_opacity.clamp(0.0, 1.0);
 
     *i18n = I18n::new(resolve_language(loaded.language));
     settings.fov_degrees = loaded.fov_degrees;
@@ -377,6 +375,7 @@ fn apply_storage_ready(
     settings.gravity_scale = loaded.gravity_scale;
     settings.mouse_sensitivity_x = loaded.mouse_sensitivity_x;
     settings.mouse_sensitivity_y = loaded.mouse_sensitivity_y;
+    settings.virtual_controls_opacity = loaded.virtual_controls_opacity;
     ui_scale.0 = touch.effective_ui_scale(loaded.ui_scale);
     *config = loaded;
     save_state.refresh();

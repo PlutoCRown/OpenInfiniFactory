@@ -3,8 +3,11 @@ use bevy::prelude::*;
 use crate::game::state::GameSettings;
 use crate::game::ui::access::i18n;
 use crate::game::ui::core::confirm_dialog::{ConfirmProps, ConfirmResult};
-use crate::game::{GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, MOUSE_SENSITIVITY_MAX, MOUSE_SENSITIVITY_MIN, UI_SCALE_MAX, UI_SCALE_MIN};
-use crate::shared::config::{save_config, GameConfig};
+use crate::game::{
+    GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, MOUSE_SENSITIVITY_MAX, MOUSE_SENSITIVITY_MIN,
+    UI_SCALE_MAX, UI_SCALE_MIN,
+};
+use crate::shared::config::{GameConfig, save_config};
 use crate::shared::touch_profile::TouchProfile;
 
 use super::types::{OpenSettingsDropdown, PendingKeyBind};
@@ -26,7 +29,14 @@ pub fn on_reset_defaults(result: ConfirmResult, world: &mut World) {
 
     *world.resource_mut::<GameConfig>() = GameConfig::default();
 
-    let (fov, ui_scale, gravity, mouse_sensitivity_x, mouse_sensitivity_y) = {
+    let (
+        fov,
+        ui_scale,
+        gravity,
+        mouse_sensitivity_x,
+        mouse_sensitivity_y,
+        virtual_controls_opacity,
+    ) = {
         let config = world.resource::<GameConfig>();
         (
             config.fov_degrees,
@@ -40,6 +50,7 @@ pub fn on_reset_defaults(result: ConfirmResult, world: &mut World) {
             config
                 .mouse_sensitivity_y
                 .clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX),
+            config.virtual_controls_opacity.clamp(0.0, 1.0),
         )
     };
 
@@ -50,6 +61,7 @@ pub fn on_reset_defaults(result: ConfirmResult, world: &mut World) {
         settings.gravity_scale = gravity;
         settings.mouse_sensitivity_x = mouse_sensitivity_x;
         settings.mouse_sensitivity_y = mouse_sensitivity_y;
+        settings.virtual_controls_opacity = virtual_controls_opacity;
     }
 
     let effective_ui_scale = world

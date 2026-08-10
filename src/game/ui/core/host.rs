@@ -112,6 +112,7 @@ impl UiHostCommands<'_> {
         settings: &GameSettings,
         panel_w: f32,
         panel_h: f32,
+        touch_enabled: bool,
     ) -> UiInstanceId {
         self.host.mount_settings(
             commands,
@@ -121,6 +122,7 @@ impl UiHostCommands<'_> {
             settings,
             panel_w,
             panel_h,
+            touch_enabled,
         )
     }
 
@@ -354,6 +356,7 @@ impl UiHost {
         settings: &GameSettings,
         panel_w: f32,
         panel_h: f32,
+        touch_enabled: bool,
     ) -> UiInstanceId {
         let id = self.next_id();
         self.unmount_panel(UiPanelId::Settings, runtime, Some(commands));
@@ -373,7 +376,7 @@ impl UiHost {
                         UiHostMountRoot,
                     ))
                     .with_children(|container| {
-                        spawn_settings_panel(container, settings, panel_w, panel_h);
+                        spawn_settings_panel(container, settings, panel_w, panel_h, touch_enabled);
                     })
                     .id();
                 container = Some(spawned);
