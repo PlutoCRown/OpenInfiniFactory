@@ -112,11 +112,13 @@ pub fn resolve_language(user_language: Option<Language>) -> Language {
         .unwrap_or(DEFAULT_LANGUAGE)
 }
 
+/// 根据系统首选 UI 语言初始化游戏语言
 pub fn detect_system_language() -> Option<Language> {
-    platform_language_tag().and_then(language_from_tag)
+    sys_locale::get_locales().find_map(|tag| language_from_tag(&tag))
 }
 
-fn language_from_tag(tag: String) -> Option<Language> {
+/// 把系统语言标签映射到游戏支持的语言
+fn language_from_tag(tag: &str) -> Option<Language> {
     let normalized = tag.replace('_', "-").to_ascii_lowercase();
     if normalized.starts_with("zh") {
         Some(Language::ChineseSimplified)
@@ -125,85 +127,4 @@ fn language_from_tag(tag: String) -> Option<Language> {
     } else {
         None
     }
-}
-
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
-fn platform_language_tag() -> Option<String> {
-    env_language_tag().or_else(system_ui_language_tag)
-}
-
-#[cfg(target_os = "android")]
-fn platform_language_tag() -> Option<String> {
-    bevy::android::ANDROID_APP
-        .get()
-        .and_then(|app| app.config().language())
-}
-
-#[cfg(not(any(
-    target_os = "macos",
-    target_os = "linux",
-    target_os = "windows",
-    target_os = "android"
-)))]
-fn platform_language_tag() -> Option<String> {
-    None
-}
-
-fn env_language_tag() -> Option<String> {
-    for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
-        if let Ok(value) = std::env::var(key) {
-            if is_meaningful_locale(&value) {
-                return Some(value);
-            }
-        }
-    }
-    None
-}
-
-fn is_meaningful_locale(value: &str) -> bool {
-    let value = value.trim();
-    !value.is_empty()
-        && !value.eq_ignore_ascii_case("C")
-        && !value.eq_ignore_ascii_case("C.UTF-8")
-        && !value.to_ascii_lowercase().starts_with("c.")
-}
-
-#[cfg(target_os = "macos")]
-fn system_ui_language_tag() -> Option<String> {
-    // Agent/Cursor shell 常是 LANG=C.UTF-8，回退读系统界面语言
-    std::process::Command::new("defaults")
-        .args(["read", "-g", "AppleLocale"])
-        .output()
-        .ok()
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-}
-
-/// 读取 Windows 当前用户的系统区域语言
-#[cfg(target_os = "windows")]
-fn system_ui_language_tag() -> Option<String> {
-    const LOCALE_NAME_MAX_LENGTH: usize = 85;
-
-    let mut locale_name = [0u16; LOCALE_NAME_MAX_LENGTH];
-    let length =
-        unsafe { get_user_default_locale_name(locale_name.as_mut_ptr(), locale_name.len() as i32) };
-    if length <= 1 {
-        return None;
-    }
-
-    String::from_utf16(&locale_name[..length as usize - 1]).ok()
-}
-
-/// Windows API：获取当前用户的默认区域名称
-#[cfg(target_os = "windows")]
-#[link(name = "kernel32")]
-unsafe extern "system" {
-    #[link_name = "GetUserDefaultLocaleName"]
-    fn get_user_default_locale_name(locale_name: *mut u16, locale_name_length: i32) -> i32;
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn system_ui_language_tag() -> Option<String> {
-    None
 }
