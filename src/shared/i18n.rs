@@ -180,7 +180,30 @@ fn system_ui_language_tag() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-#[cfg(not(target_os = "macos"))]
+/// 读取 Windows 当前用户的系统区域语言
+#[cfg(target_os = "windows")]
+fn system_ui_language_tag() -> Option<String> {
+    const LOCALE_NAME_MAX_LENGTH: usize = 85;
+
+    let mut locale_name = [0u16; LOCALE_NAME_MAX_LENGTH];
+    let length =
+        unsafe { get_user_default_locale_name(locale_name.as_mut_ptr(), locale_name.len() as i32) };
+    if length <= 1 {
+        return None;
+    }
+
+    String::from_utf16(&locale_name[..length as usize - 1]).ok()
+}
+
+/// Windows API：获取当前用户的默认区域名称
+#[cfg(target_os = "windows")]
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    #[link_name = "GetUserDefaultLocaleName"]
+    fn get_user_default_locale_name(locale_name: *mut u16, locale_name_length: i32) -> i32;
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn system_ui_language_tag() -> Option<String> {
     None
 }
