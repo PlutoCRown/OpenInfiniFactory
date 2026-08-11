@@ -32,6 +32,9 @@ pub const DEFAULT_CONFIG: GameConfig = GameConfig {
     mouse_sensitivity_x: 1.0,
     mouse_sensitivity_y: 1.0,
     virtual_controls_opacity: 1.0,
+    master_volume: 1.0,
+    music_volume: 1.0,
+    sfx_volume: 1.0,
     shadows_enabled: true,
     ssao_quality: ConfigSsaoQuality::High,
     vsync_enabled: true,
@@ -57,6 +60,12 @@ pub struct GameConfig {
     pub mouse_sensitivity_y: f32,
     #[serde(default = "default_virtual_controls_opacity")]
     pub virtual_controls_opacity: f32,
+    #[serde(default = "default_master_volume")]
+    pub master_volume: f32,
+    #[serde(default = "default_music_volume")]
+    pub music_volume: f32,
+    #[serde(default = "default_sfx_volume")]
+    pub sfx_volume: f32,
     #[serde(default = "default_shadows_enabled")]
     pub shadows_enabled: bool,
     #[serde(default = "default_ssao_quality")]
@@ -101,6 +110,18 @@ fn default_mouse_sensitivity() -> f32 {
 /// 旧配置缺失触控控件透明度时使用默认值
 fn default_virtual_controls_opacity() -> f32 {
     DEFAULT_CONFIG.virtual_controls_opacity
+}
+
+fn default_master_volume() -> f32 {
+    DEFAULT_CONFIG.master_volume
+}
+
+fn default_music_volume() -> f32 {
+    DEFAULT_CONFIG.music_volume
+}
+
+fn default_sfx_volume() -> f32 {
+    DEFAULT_CONFIG.sfx_volume
 }
 
 fn default_shadows_enabled() -> bool {

@@ -98,10 +98,6 @@ where
         self.0.is_detector_target()
     }
 
-    fn allows_stamp_passthrough(&self) -> bool {
-        self.0.allows_stamp_passthrough()
-    }
-
     fn accepts_material(&self) -> bool {
         self.0.accepts_material()
     }

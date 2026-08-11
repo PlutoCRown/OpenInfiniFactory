@@ -4,6 +4,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use std::collections::HashSet;
 
+use crate::game::audio::{PlaySound, SoundId};
 use crate::game::blocks::{BlockData, BlockPresent};
 use crate::game::edit_history::{FacePanelDelta, WorldPatch, build_cell_patch};
 use crate::game::local_player::LocalPlayerMut;
@@ -19,7 +20,7 @@ use crate::game::ui::features::GameplayToast;
 use crate::game::ui::features::block_panels::PendingBlockPanelOpen;
 use crate::game::ui::{AreaKind, InventoryItems};
 use crate::game::world::direction::Facing;
-use crate::game::world::grid::{MaterialFace, WorldBlocks};
+use crate::game::world::grid::{MaterialFace, WorldBlocks, grid_to_world};
 use crate::game::world::rendering::{
     BlockEntity, EditPreview, SceneChunkMeshes, WorldRenderAssets, despawn_edit_previews,
     spawn_block_preview,
@@ -68,6 +69,7 @@ pub fn placement_input(
     gate: GameplayPlayGate,
     mut player: LocalPlayerMut,
     queries: PlacementQueries,
+    mut sound_writer: MessageWriter<PlaySound>,
 ) {
     let PlacementQueries {
         mut commands,
@@ -215,6 +217,11 @@ pub fn placement_input(
                 &mut toast,
             ) {
                 solution_state.dirty = true;
+                sound_writer.write(PlaySound {
+                    sound: SoundId::UiClick,
+                    position: current_target_pos.map(grid_to_world),
+                    gain: 1.0,
+                });
             }
         }
         despawn_edit_previews(&mut commands, &edit_previews);
@@ -254,6 +261,11 @@ pub fn placement_input(
                 };
                 if alternate_block_at(&mut edit, pos) {
                     solution_state.dirty = true;
+                    sound_writer.write(PlaySound {
+                        sound: SoundId::UiClick,
+                        position: Some(grid_to_world(pos)),
+                        gain: 1.0,
+                    });
                     // C 切变体后：后续放置朝向跟这个方块对齐
                     if let Some(block) = edit.world.blocks.get(&pos) {
                         placement.preview_facing = block.facing;
@@ -305,6 +317,11 @@ pub fn placement_input(
                         placement.preview_facing = facing;
                     }
                     solution_state.dirty = true;
+                    sound_writer.write(PlaySound {
+                        sound: SoundId::UiClick,
+                        position: Some(grid_to_world(pos)),
+                        gain: 1.0,
+                    });
                 } else if selected_place_block(
                     &player.inventory,
                     builder_mode,
@@ -381,6 +398,11 @@ pub fn placement_input(
                         };
                         refresh_edit_changes(&mut scene, &world, &wire_neighbors);
                         solution_state.dirty = true;
+                        sound_writer.write(PlaySound {
+                            sound: SoundId::BlockBreak,
+                            position: Some(grid_to_world(target.pos)),
+                            gain: 1.0,
+                        });
                         placement.edit_gesture = None;
                         despawn_edit_previews(&mut commands, &edit_previews);
                         return;
@@ -458,6 +480,11 @@ pub fn placement_input(
                             refresh_edit_changes(&mut scene, &world, &wire_neighbors);
                             solution_state.dirty = true;
                             placed = true;
+                            sound_writer.write(PlaySound {
+                                sound: SoundId::BlockPlace,
+                                position: Some(grid_to_world(target.pos)),
+                                gain: 1.0,
+                            });
                         } else {
                             placed = true;
                         }
@@ -523,6 +550,7 @@ pub fn placement_input(
     if should_finish {
         if let Some(gesture) = placement.edit_gesture.take() {
             if !gesture.canceled {
+                let placing = matches!(&gesture.kind, EditGestureKind::Place { .. });
                 let surface_item = match &gesture.kind {
                     EditGestureKind::Place { block } if block.kind.attaches_to_factory_face() => {
                         Some(block.kind.name_key())
@@ -558,6 +586,20 @@ pub fn placement_input(
                 };
                 if committed {
                     solution_state.dirty = true;
+                    sound_writer.write(PlaySound {
+                        sound: if placing {
+                            SoundId::BlockPlace
+                        } else {
+                            SoundId::BlockBreak
+                        },
+                        position: (if placing {
+                            current_place_at
+                        } else {
+                            current_delete_at
+                        })
+                        .map(grid_to_world),
+                        gain: 1.0,
+                    });
                 } else if let Some(name_key) = surface_item {
                     let item_name = locale.t(name_key).to_string();
                     toast.show_cannot_place_on_surface(&locale, &item_name);

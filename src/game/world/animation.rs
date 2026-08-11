@@ -274,6 +274,26 @@ impl AnimatedBlock {
             ..Default::default()
         }
     }
+
+    /// 计算平移动画在本帧内应产生的世界位移。
+    pub fn translation_delta(&self, delta_seconds: f32) -> Option<Vec3> {
+        if !matches!(self.kind, BlockAnimationKind::Move) {
+            return None;
+        }
+        let duration = self.timing.duration.max(f32::EPSILON);
+        let ease = |elapsed: f32| {
+            let t = (elapsed / duration).clamp(0.0, 1.0);
+            match self.timing.easing {
+                AnimationEasing::Linear => t,
+                AnimationEasing::SmoothStep => t * t * (3.0 - 2.0 * t),
+            }
+        };
+        let from = self.from_translation.lerp(self.to_translation, ease(self.elapsed));
+        let to = self
+            .from_translation
+            .lerp(self.to_translation, ease(self.elapsed + delta_seconds));
+        Some(to - from)
+    }
 }
 
 impl WeldSpark {

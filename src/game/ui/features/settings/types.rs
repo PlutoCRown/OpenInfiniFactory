@@ -46,6 +46,9 @@ pub enum SettingsField {
     MouseSensitivityX,
     MouseSensitivityY,
     VirtualControlsOpacity,
+    MasterVolume,
+    MusicVolume,
+    SfxVolume,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -177,6 +180,45 @@ pub const GRAPHICS_SETTINGS: &[SettingsItem] = &[
     },
 ];
 
+pub const AUDIO_SETTINGS: &[SettingsItem] = &[
+    SettingsItem {
+        label_key: "settings.master_volume",
+        control: SettingsControl::Slider {
+            field: SettingsField::MasterVolume,
+            config: SettingsSliderConfig {
+                min: 0.0,
+                max: 1.0,
+                step: 0.05,
+                trigger: SettingsSliderTrigger::Live,
+            },
+        },
+    },
+    SettingsItem {
+        label_key: "settings.music_volume",
+        control: SettingsControl::Slider {
+            field: SettingsField::MusicVolume,
+            config: SettingsSliderConfig {
+                min: 0.0,
+                max: 1.0,
+                step: 0.05,
+                trigger: SettingsSliderTrigger::Live,
+            },
+        },
+    },
+    SettingsItem {
+        label_key: "settings.sfx_volume",
+        control: SettingsControl::Slider {
+            field: SettingsField::SfxVolume,
+            config: SettingsSliderConfig {
+                min: 0.0,
+                max: 1.0,
+                step: 0.05,
+                trigger: SettingsSliderTrigger::Live,
+            },
+        },
+    },
+];
+
 /// 仅在触控模式显示的设置项
 pub const TOUCH_SETTINGS: &[SettingsItem] = &[SettingsItem {
     label_key: "settings.virtual_controls_opacity",
@@ -195,6 +237,7 @@ impl SettingsField {
     pub fn slider(self) -> Option<SettingsSliderConfig> {
         GAMEPLAY_SETTINGS
             .iter()
+            .chain(AUDIO_SETTINGS)
             .chain(TOUCH_SETTINGS)
             .find_map(|item| match item.control {
                 SettingsControl::Slider { field, config } if field == self => Some(config),
@@ -237,6 +280,9 @@ impl SettingsField {
                 )
             }
             Self::VirtualControlsOpacity => format!("{:.2}", settings.virtual_controls_opacity),
+            Self::MasterVolume => format!("{:.0}%", settings.master_volume * 100.0),
+            Self::MusicVolume => format!("{:.0}%", settings.music_volume * 100.0),
+            Self::SfxVolume => format!("{:.0}%", settings.sfx_volume * 100.0),
         }
     }
 
@@ -270,6 +316,9 @@ impl SettingsField {
             Self::MouseSensitivityX => settings.mouse_sensitivity_x,
             Self::MouseSensitivityY => settings.mouse_sensitivity_y,
             Self::VirtualControlsOpacity => settings.virtual_controls_opacity,
+            Self::MasterVolume => settings.master_volume,
+            Self::MusicVolume => settings.music_volume,
+            Self::SfxVolume => settings.sfx_volume,
         }
     }
 
@@ -306,6 +355,18 @@ impl SettingsField {
             Self::VirtualControlsOpacity => {
                 settings.virtual_controls_opacity = value;
                 config.virtual_controls_opacity = value;
+            }
+            Self::MasterVolume => {
+                settings.master_volume = value;
+                config.master_volume = value;
+            }
+            Self::MusicVolume => {
+                settings.music_volume = value;
+                config.music_volume = value;
+            }
+            Self::SfxVolume => {
+                settings.sfx_volume = value;
+                config.sfx_volume = value;
             }
         }
     }
@@ -368,6 +429,7 @@ pub enum SettingsAction {
     TabGameplay,
     TabGraphics,
     TabKeyBindings,
+    TabAudio,
     Field(SettingsField),
     SetPlaceSelectionMode(ConfigSelectionMode),
     SetDeleteSelectionMode(ConfigSelectionMode),
@@ -391,6 +453,7 @@ impl UiActionLabel for SettingsAction {
             Self::TabGameplay => "button.gameplay",
             Self::TabGraphics => "button.graphics",
             Self::TabKeyBindings => "button.key_bindings",
+            Self::TabAudio => "button.audio",
             Self::Bind(action) => action.label_key(),
             Self::OpenVirtualLayout => "virtual.layout_open",
             Self::ResetDefaults => "button.reset_defaults",
@@ -417,6 +480,7 @@ impl SettingsAction {
             (Self::TabGameplay, SettingsTab::Gameplay)
                 | (Self::TabGraphics, SettingsTab::Graphics)
                 | (Self::TabKeyBindings, SettingsTab::KeyBindings)
+                | (Self::TabAudio, SettingsTab::Audio)
         )
     }
 
@@ -435,7 +499,7 @@ impl SettingsAction {
     pub fn is_tab(self) -> bool {
         matches!(
             self,
-            Self::TabGameplay | Self::TabGraphics | Self::TabKeyBindings
+            Self::TabGameplay | Self::TabGraphics | Self::TabKeyBindings | Self::TabAudio
         )
     }
 }
@@ -448,6 +512,7 @@ pub enum SettingsTab {
     Gameplay,
     Graphics,
     KeyBindings,
+    Audio,
 }
 
 impl Default for SettingsTab {

@@ -46,8 +46,6 @@ pub fn baked_block_icon_relpath(kind: BlockKind) -> Option<&'static str> {
         | BlockKind::Stamp(_)
         | BlockKind::WeldPoint
         | BlockKind::DrillHead
-        | BlockKind::RollerBody
-        | BlockKind::StamperBody
         | BlockKind::PusherHead => None,
     }
 }

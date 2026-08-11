@@ -293,6 +293,9 @@ pub struct GameSettings {
     pub mouse_sensitivity_x: f32,
     pub mouse_sensitivity_y: f32,
     pub virtual_controls_opacity: f32,
+    pub master_volume: f32,
+    pub music_volume: f32,
+    pub sfx_volume: f32,
 }
 
 impl Default for GameSettings {
@@ -304,6 +307,9 @@ impl Default for GameSettings {
             mouse_sensitivity_x: crate::game::MOUSE_SENSITIVITY_DEFAULT,
             mouse_sensitivity_y: crate::game::MOUSE_SENSITIVITY_DEFAULT,
             virtual_controls_opacity: 1.0,
+            master_volume: 1.0,
+            music_volume: 1.0,
+            sfx_volume: 1.0,
         }
     }
 }

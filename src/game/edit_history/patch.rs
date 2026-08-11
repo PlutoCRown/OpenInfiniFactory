@@ -406,7 +406,7 @@ fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<Cel
             world
                 .material_paints
                 .retain(|face, _| face.block != block.id);
-            world.material_attachments.remove(&block.id);
+            world.material_stamps.retain(|face, _| face.block != block.id);
             world.wire_face_panels.retain(|face| face.block != block.id);
             world.factory_attachments.remove(&block.id);
             let factory_children: Vec<_> = world

@@ -36,6 +36,9 @@ pub fn on_reset_defaults(result: ConfirmResult, world: &mut World) {
         mouse_sensitivity_x,
         mouse_sensitivity_y,
         virtual_controls_opacity,
+        master_volume,
+        music_volume,
+        sfx_volume,
     ) = {
         let config = world.resource::<GameConfig>();
         (
@@ -51,6 +54,9 @@ pub fn on_reset_defaults(result: ConfirmResult, world: &mut World) {
                 .mouse_sensitivity_y
                 .clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX),
             config.virtual_controls_opacity.clamp(0.0, 1.0),
+            config.master_volume.clamp(0.0, 1.0),
+            config.music_volume.clamp(0.0, 1.0),
+            config.sfx_volume.clamp(0.0, 1.0),
         )
     };
 
@@ -62,6 +68,9 @@ pub fn on_reset_defaults(result: ConfirmResult, world: &mut World) {
         settings.mouse_sensitivity_x = mouse_sensitivity_x;
         settings.mouse_sensitivity_y = mouse_sensitivity_y;
         settings.virtual_controls_opacity = virtual_controls_opacity;
+        settings.master_volume = master_volume;
+        settings.music_volume = music_volume;
+        settings.sfx_volume = sfx_volume;
     }
 
     let effective_ui_scale = world

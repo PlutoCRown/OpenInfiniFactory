@@ -175,15 +175,10 @@ impl WorldBlocks {
             settings.stamps.iter().copied().flatten().collect();
         required_stamps.sort_unstable();
         let mut actual_stamps: Vec<StampMaterialId> = self
-            .material_attachments
+            .material_stamps
             .iter()
-            .filter(|(_, att)| att.parent == block_id)
-            .filter_map(|(child_id, _)| {
-                self.blocks
-                    .values()
-                    .find(|block| block.id == *child_id)
-                    .and_then(|block| block.kind.stamp_id())
-            })
+            .filter(|(face, _)| face.block == block_id)
+            .map(|(_, stamp)| *stamp)
             .collect();
         actual_stamps.sort_unstable();
         if actual_stamps != required_stamps {

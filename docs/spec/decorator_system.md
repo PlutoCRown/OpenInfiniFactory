@@ -1,6 +1,6 @@
 # 装饰器系统
 
-以「面能力」为核：不占格附着（漆 / 灯面板）与占格附着（印花 / 告示）。按 L0–L5 分层落地。
+以「面能力」为核：不占格附着（漆 / 印花 / 灯面板）与占格附着（告示）。按 L0–L5 分层落地。
 
 ## 面门禁
 
@@ -26,16 +26,15 @@
 |----|------|------|
 | L0 | 面能力核；删 `MaterialFaceMark` 占位 | 已完成 |
 | L1 | 脆弱碎裂回合；`Glass` 材料 | 已完成 |
-| L2 | `RollerBody` / `StamperBody` 同格占位（有碰撞、无模型） | 已完成（L4 起写入 `machine_bodies`） |
+| L2 | 滚刷机 / 印花机作为普通工厂方块参与碰撞 | 已完成 |
 | L3 | 装饰漆 + 灯面板隔断 | 已完成 |
-| L4 | 印花占格附着 | 已完成 |
+| L4 | 印花面附着与凸出碰撞 | 已完成 |
 | L5 | 告示牌 | 已完成 |
 
-## L2 / L4 机身占格
+## 滚刷机 / 印花机层级
 
-- `Stamper` / `Roller` 仍为 System（`no_collision`），可与材料分槽
-- `StamperBody` / `RollerBody` 写入 **`machine_bodies`**（非 `blocks`），参与 `is_occupied` / 平台占用
-- 因此印花材料可与机身同格共存于 `blocks` + `machine_bodies`
+- `Stamper` / `Roller` 是普通 Factory，写入 `blocks`，因此玩家和材料都会正常碰撞
+- `Converter` 保留为无碰撞 System，因为它必须与待转换材料同格
 
 ## L3 细节
 
@@ -60,25 +59,21 @@
 
 - 资源包：`assets/stamp_materials/<id>/`（有厚度模型或 texture 立方体 fallback）
 - `MaterialProps`：`is_stamp`、不可 Connectable
-- 附着：`material_attachments`；外观由 Stamp 资源包决定（不再使用色片面片表）
+- 附着：`material_stamps`；外观由 Stamp 资源包决定（不再使用色片面片表）
 
-### 附着（`material_attachments`）
+### 附着（`material_stamps`）
 
-- 键：子 `BlockId` → `{ parent, parent_face_normal }`（从父指向子）
-- 并入 `material_structure`（与焊接一起 BFS）；宿主销毁则子印花一并删除
-- 旋转时 `parent_face_normal` 随结构绕 Y 转
+- 键：`MaterialFace { parent: BlockId, normal }` → `StampMaterialId`
+- 印花只作为宿主面的附着，不写入 `blocks`，也不占用印花所在格
+- 宿主销毁时清除；不参与 `material_structure` BFS
+- 旋转时法线随宿主结构绕 Y 转
+- 结构移动时，额外检查印花沿法线凸出的一格；撞到非脆弱方块则阻止移动，脆弱印花则碎裂后允许移动
 
 ### 印花机阶段
 
 - 面前宿主材料且该面（朝向机身）Connectable
-- 印花生成在 **机身格**（宿主面邻格 = 印花机格）
+- 印花生成在宿主的工作面上；宿主面邻格只是印花的视觉凸出位置，不是实际占格
 - 该面已有印花：非脆弱 → 跳过；脆弱 → 碎旧换新
-
-### StamperBody 透传
-
-- 普通材料 / 滚刷机身：一律实心
-- 印花：若附着法线与机身 facing 反向（工作朝向对齐）可进入机身格
-- 非对齐：非脆弱阻挡；脆弱走碎裂阶段
 
 详见 `simulation_turn_phases.md`。
 

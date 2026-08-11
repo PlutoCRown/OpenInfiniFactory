@@ -25,18 +25,16 @@ use crate::blocks::{AcceptorId, BlockData, BlockId, BlockKind, PaintMaterialId};
 /// 编辑瞄准最远距离（世界单位）
 pub const REACH: f32 = 12.0;
 
-/// 模拟世界方块网格：材料/系统/机身层与拓扑附属数据
+/// 模拟世界方块网格：材料/系统层与拓扑附属数据
 #[derive(Default, Clone)]
 pub struct WorldBlocks {
     pub blocks: HashMap<IVec3, BlockData>,
     pub system_blocks: HashMap<IVec3, BlockData>,
-    /// 有碰撞机身占位（StamperBody/RollerBody）：与 System 宿主同格，不占 blocks 材料槽
-    pub machine_bodies: HashMap<IVec3, BlockData>,
     pub material_welds: HashSet<MaterialWeld>,
     /// 材料面装饰漆：按 BlockId+法线键控，移动无需改写
     pub material_paints: HashMap<MaterialFace, PaintMaterialId>,
-    /// 印花占格附着：子 BlockId → (父 BlockId, 父面法线)
-    pub material_attachments: HashMap<BlockId, MaterialAttachment>,
+    /// 印花面附着：父材料面 → 印花材料，不占用网格格子
+    pub material_stamps: HashMap<MaterialFace, crate::blocks::StampMaterialId>,
     /// 告示等工厂占格附着：子工厂 BlockId → (父 BlockId, 父面法线)
     pub factory_attachments: HashMap<BlockId, MaterialAttachment>,
     /// 电线面灯面板：隔断该面信号连通，不占邻格
@@ -62,7 +60,7 @@ pub struct WorldBlocks {
     pub material_count: usize,
 }
 
-/// 印花等占格附着：子材料挂在父材料的某一面上
+/// 告示等占格附着：子工厂挂在父方块的某一面上
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct MaterialAttachment {
     pub parent: BlockId,
@@ -218,32 +216,9 @@ impl WorldBlocks {
             if !id.is_none() {
                 self.material_welds.retain(|weld| !weld.contains(id));
                 self.material_paints.retain(|face, _| face.block != id);
-                self.material_attachments.remove(&id);
+                self.material_stamps.retain(|face, _| face.block != id);
                 self.wire_face_panels.retain(|face| face.block != id);
                 self.factory_attachments.remove(&id);
-                // 宿主销毁时一并拆掉附着子块（印花材料 / 告示工厂）
-                let material_children: Vec<BlockId> = self
-                    .material_attachments
-                    .iter()
-                    .filter(|(_, att)| att.parent == id)
-                    .map(|(child, _)| *child)
-                    .collect();
-                for child_id in material_children {
-                    self.material_attachments.remove(&child_id);
-                    self.material_paints
-                        .retain(|face, _| face.block != child_id);
-                    if let Some(child_pos) = self
-                        .blocks
-                        .iter()
-                        .find(|(_, b)| b.id == child_id)
-                        .map(|(p, _)| *p)
-                    {
-                        if let Some(child) = self.blocks.remove(&child_pos) {
-                            self.adjust_block_count(child.kind, -1);
-                            self.block_settings.remove(&child_pos);
-                        }
-                    }
-                }
                 let factory_children: Vec<BlockId> = self
                     .factory_attachments
                     .iter()
@@ -295,19 +270,17 @@ impl WorldBlocks {
     pub fn clear(&mut self) {
         if !self.blocks.is_empty()
             || !self.system_blocks.is_empty()
-            || !self.machine_bodies.is_empty()
             || !self.acceptor_structures.is_empty()
             || !self.material_paints.is_empty()
-            || !self.material_attachments.is_empty()
+            || !self.material_stamps.is_empty()
             || !self.factory_attachments.is_empty()
             || !self.wire_face_panels.is_empty()
         {
             self.blocks.clear();
             self.system_blocks.clear();
-            self.machine_bodies.clear();
             self.material_welds.clear();
             self.material_paints.clear();
-            self.material_attachments.clear();
+            self.material_stamps.clear();
             self.factory_attachments.clear();
             self.wire_face_panels.clear();
             self.block_settings.clear();
@@ -331,8 +304,8 @@ impl WorldBlocks {
                 .retain(|face, _| alive.contains(&face.block));
             self.wire_face_panels
                 .retain(|face| alive.contains(&face.block));
-            self.material_attachments
-                .retain(|child, att| alive.contains(child) && alive.contains(&att.parent));
+            self.material_stamps
+                .retain(|face, _| alive.contains(&face.block));
             self.factory_attachments
                 .retain(|child, att| alive.contains(child) && alive.contains(&att.parent));
             self.block_settings.retain(|pos, _| {
@@ -350,12 +323,7 @@ impl WorldBlocks {
         let system_before = self.system_blocks.len();
         self.system_blocks
             .retain(|_, block| !block.kind.is_generated_marker());
-        let bodies_before = self.machine_bodies.len();
-        self.machine_bodies.clear();
-        if self.blocks.len() != blocks_before
-            || self.system_blocks.len() != system_before
-            || bodies_before != 0
-        {
+        if self.blocks.len() != blocks_before || self.system_blocks.len() != system_before {
             if self.blocks.len() != blocks_before {
                 self.recount_block_counts();
             }

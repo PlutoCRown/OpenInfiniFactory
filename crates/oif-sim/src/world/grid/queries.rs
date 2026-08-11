@@ -2,7 +2,7 @@
 
 use glam::IVec3;
 
-use crate::blocks::{BlockData, BlockId, BlockKind};
+use crate::blocks::{BlockId, BlockKind};
 
 use super::WorldBlocks;
 
@@ -13,19 +13,11 @@ impl WorldBlocks {
             .get(&pos)
             .is_some_and(|block| block.kind.has_collision())
             || self.blocks.contains_key(&pos)
-            || self
-                .machine_bodies
-                .get(&pos)
-                .is_some_and(|block| block.kind.has_collision())
     }
 
     /// 平台/工厂放置占用（blocks 层有块即占）
     pub fn is_platform_occupied(&self, pos: IVec3) -> bool {
         self.blocks.contains_key(&pos)
-            || self
-                .machine_bodies
-                .get(&pos)
-                .is_some_and(|block| block.kind.has_collision())
     }
 
     pub fn can_place_platform_at(&self, pos: IVec3) -> bool {
@@ -46,7 +38,6 @@ impl WorldBlocks {
                 .blocks
                 .get(&pos)
                 .is_some_and(|block| block.kind.is_generated_marker())
-            || self.machine_bodies.contains_key(&pos)
     }
 
     pub fn blocks_factory_or_scene_at(&self, pos: IVec3) -> bool {
@@ -96,36 +87,9 @@ impl WorldBlocks {
         !self.is_occupied(pos)
     }
 
-    /// 机身是否允许该印花材料沿工作朝向进入本格
-    pub fn stamper_body_allows_stamp(&self, pos: IVec3, stamp: &BlockData) -> bool {
-        let Some(body) = self.machine_bodies.get(&pos) else {
-            return false;
-        };
-        if !body.kind.allows_stamp_passthrough() {
-            return false;
-        }
-        if !stamp
-            .kind
-            .material_props()
-            .is_some_and(|props| props.is_stamp)
-        {
-            return false;
-        }
-        let Some(att) = self.material_attachments.get(&stamp.id) else {
-            return false;
-        };
-        // 附着法线从宿主指向印花；机身 facing 指向宿主，故两者反向
-        att.parent_face_normal == -body.facing.forward_ivec3()
-    }
-
-    /// 从 from 格移入 target 时是否可进入（含印花对 StamperBody 透传、脆弱让出）
-    pub fn cell_accepts_move_from(&self, from: IVec3, target: IVec3) -> bool {
-        if self.can_move_into(target) || self.is_fragile_material_at(target) {
-            return true;
-        }
-        self.blocks
-            .get(&from)
-            .is_some_and(|mover| self.stamper_body_allows_stamp(target, mover))
+    /// 从 from 格移入 target 时是否可进入（含脆弱材料让出）
+    pub fn cell_accepts_move_from(&self, _from: IVec3, target: IVec3) -> bool {
+        self.can_move_into(target) || self.is_fragile_material_at(target)
     }
 
     /// 格上是否为脆弱材料（运动冲突时让出并碎裂）

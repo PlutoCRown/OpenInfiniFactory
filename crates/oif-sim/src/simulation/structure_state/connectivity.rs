@@ -54,23 +54,6 @@ fn material_structure_from(
             structure.insert(neighbor);
             queue.push_back(other_id);
         }
-        for (child_id, att) in &world.material_attachments {
-            let other_id = if *child_id == id {
-                att.parent
-            } else if att.parent == id {
-                *child_id
-            } else {
-                continue;
-            };
-            if !seen_ids.insert(other_id) {
-                continue;
-            }
-            let Some(&neighbor) = id_to_pos.get(&other_id) else {
-                continue;
-            };
-            structure.insert(neighbor);
-            queue.push_back(other_id);
-        }
     }
 
     structure

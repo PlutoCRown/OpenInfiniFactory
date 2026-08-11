@@ -29,12 +29,10 @@ pub mod pusher;
 pub mod pusher_head;
 pub mod reverse_conveyor;
 pub mod roller;
-pub mod roller_body;
 pub mod rotator;
 pub mod sign;
 pub mod splitter;
 pub mod stamper;
-pub mod stamper_body;
 pub mod suction_cup;
 pub mod teleport;
 pub mod vertical_mirror;
@@ -143,14 +141,14 @@ pub enum FactoryBlock {
     Splitter,
     SuctionCup,
     Sign,
+    Roller,
+    Stamper,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum SystemBlock {
     Generator,
     Goal,
-    Stamper,
-    Roller,
     Converter,
     Teleport,
 }
@@ -159,10 +157,6 @@ pub enum SystemBlock {
 pub enum VirtualBlock {
     WeldPoint,
     DrillHead,
-    /// 滚刷机实体占格（有碰撞，写入 machine_bodies）
-    RollerBody,
-    /// 印花机实体占格（有碰撞，写入 machine_bodies；朝向与宿主同步）
-    StamperBody,
     /// 活塞/拦截器伸出头（有碰撞，写入 blocks；非每帧重生的 generated marker）
     PusherHead,
 }
@@ -181,14 +175,6 @@ pub enum MarkerBehavior {
     },
     DrillHead {
         offset: IVec3,
-        facing: Facing,
-    },
-    /// 滚刷机同格实体占位
-    RollerBody {
-        facing: Facing,
-    },
-    /// 印花机同格实体占位（朝向与宿主一致，供 L4 透传）
-    StamperBody {
         facing: Facing,
     },
 }
@@ -555,8 +541,6 @@ pub enum BlockKind {
     Stamp(StampMaterialId),
     WeldPoint,
     DrillHead,
-    RollerBody,
-    StamperBody,
     /// 活塞/拦截器伸出头占格（有碰撞）
     PusherHead,
 }
@@ -623,16 +607,14 @@ impl BlockKind {
             BlockKind::Splitter => BlockLayer::Factory(FactoryBlock::Splitter),
             BlockKind::SuctionCup => BlockLayer::Factory(FactoryBlock::SuctionCup),
             BlockKind::Sign => BlockLayer::Factory(FactoryBlock::Sign),
+            BlockKind::Roller => BlockLayer::Factory(FactoryBlock::Roller),
+            BlockKind::Stamper => BlockLayer::Factory(FactoryBlock::Stamper),
             BlockKind::Generator => BlockLayer::System(SystemBlock::Generator),
             BlockKind::Goal => BlockLayer::System(SystemBlock::Goal),
-            BlockKind::Stamper => BlockLayer::System(SystemBlock::Stamper),
-            BlockKind::Roller => BlockLayer::System(SystemBlock::Roller),
             BlockKind::Converter => BlockLayer::System(SystemBlock::Converter),
             BlockKind::Teleport => BlockLayer::System(SystemBlock::Teleport),
             BlockKind::WeldPoint => BlockLayer::Virtual(VirtualBlock::WeldPoint),
             BlockKind::DrillHead => BlockLayer::Virtual(VirtualBlock::DrillHead),
-            BlockKind::RollerBody => BlockLayer::Virtual(VirtualBlock::RollerBody),
-            BlockKind::StamperBody => BlockLayer::Virtual(VirtualBlock::StamperBody),
             BlockKind::PusherHead => BlockLayer::Virtual(VirtualBlock::PusherHead),
         }
     }
@@ -795,8 +777,6 @@ impl BlockKind {
             BlockLayer::Virtual(
                 VirtualBlock::WeldPoint
                     | VirtualBlock::DrillHead
-                    | VirtualBlock::RollerBody
-                    | VirtualBlock::StamperBody
             )
         )
     }
@@ -978,16 +958,6 @@ impl BlockKind {
             return None;
         }
         self.block().powered_side_effect()
-    }
-
-    pub fn allows_stamp_passthrough(self) -> bool {
-        if matches!(
-            self,
-            BlockKind::Scene(_) | BlockKind::Material(_) | BlockKind::Stamp(_)
-        ) {
-            return false;
-        }
-        self.block().allows_stamp_passthrough()
     }
 
     pub fn non_connection_face(self, facing: Facing) -> Option<IVec3> {

@@ -141,28 +141,6 @@ impl StructureState {
                     }
                 }
             }
-            for (child_id, att) in &world.material_attachments {
-                let other_id = if *child_id == block.id {
-                    att.parent
-                } else if att.parent == block.id {
-                    *child_id
-                } else {
-                    continue;
-                };
-                let Some(&other_pos) = id_to_pos.get(&other_id) else {
-                    continue;
-                };
-                seeds.insert(other_pos);
-                if let Some(&id) = self.structure_by_pos.get(&other_pos) {
-                    if self
-                        .structures
-                        .get(&id)
-                        .is_some_and(|structure| structure.kind == StructureKind::Material)
-                    {
-                        stale_ids.insert(id);
-                    }
-                }
-            }
         }
 
         let mut previous_ids: HashMap<Vec<u64>, StructureId> = HashMap::new();

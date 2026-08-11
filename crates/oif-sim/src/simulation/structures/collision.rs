@@ -271,6 +271,77 @@ fn expanded_move_structure(
     )
 }
 
+/// 移动后印花凸出的一格是否撞上外部方块；印花本身不进入世界占用表
+#[derive(Clone, Copy)]
+pub(super) struct StampCollision {
+    pub face: MaterialFace,
+    pub target: IVec3,
+}
+
+/// 收集结构平移后会撞上的印花面
+pub(super) fn stamp_collisions(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+    offset: IVec3,
+    occupancy: Option<&MovingOccupancy>,
+) -> Vec<StampCollision> {
+    if offset == IVec3::ZERO || world.material_stamps.is_empty() {
+        return Vec::new();
+    }
+    let parent_ids: HashSet<BlockId> = structure
+        .iter()
+        .filter_map(|pos| world.blocks.get(pos).map(|block| block.id))
+        .filter(|id| !id.is_none())
+        .collect();
+    let stamp_positions: HashSet<IVec3> = world
+        .material_stamps
+        .keys()
+        .filter(|face| parent_ids.contains(&face.block))
+        .filter_map(|face| {
+            let parent_pos = structure.iter().find(|pos| {
+                world
+                    .blocks
+                    .get(pos)
+                    .is_some_and(|block| block.id == face.block)
+            })?;
+            Some(*parent_pos + face.normal)
+        })
+        .collect();
+    let moving_volume: HashSet<IVec3> = structure
+        .iter()
+        .copied()
+        .chain(stamp_positions.iter().copied())
+        .collect();
+
+    world
+        .material_stamps
+        .iter()
+        .filter(|(face, _)| parent_ids.contains(&face.block))
+        .filter_map(|(face, _stamp)| {
+            let parent_pos = structure.iter().find(|pos| {
+                world
+                    .blocks
+                    .get(pos)
+                    .is_some_and(|block| block.id == face.block)
+            })?;
+            let stamp_pos = *parent_pos + face.normal;
+            let target = stamp_pos + offset;
+            if moving_volume.contains(&target)
+                || occupancy
+                    .and_then(|claims| claims.velocity_at(target))
+                    .is_some_and(|velocity| velocity == offset)
+                || world.can_move_into(target)
+            {
+                return None;
+            }
+            Some(StampCollision {
+                face: *face,
+                target,
+            })
+        })
+        .collect()
+}
+
 /// 展开推动链；`occupancy` 下同向离开的格视为空（不并入），异速占用则失败
 pub(super) fn expanded_move_structure_with_occupancy(
     world: &WorldBlocks,
@@ -284,6 +355,14 @@ pub(super) fn expanded_move_structure_with_occupancy(
     let structure = structures.linked_expand_pusher_subset(suction, structure, offset)?;
     let structure = with_factory_attachment_children(world, &structure);
     let structure = with_pusher_heads(world, &structure);
+
+    let stamp_collisions = stamp_collisions(world, &structure, offset, occupancy);
+    if stamp_collisions
+        .iter()
+        .any(|collision| !crate::blocks::stamp_def(world.material_stamps[&collision.face]).fragile)
+    {
+        return None;
+    }
 
     if offset.abs().element_sum() != 1 {
         return can_move_structure_without_push_occupancy(world, &structure, offset, occupancy)
@@ -473,10 +552,75 @@ pub(super) fn can_rotate_structure(
     pivot: IVec3,
     clockwise: bool,
 ) -> bool {
+    if stamp_collisions_for_rotation(world, structure, pivot, clockwise)
+        .iter()
+        .any(|collision| !crate::blocks::stamp_def(world.material_stamps[&collision.face]).fragile)
+    {
+        return false;
+    }
     structure.iter().all(|pos| {
         let target = rotate_pos_y(*pos, pivot, clockwise);
         target.y >= 0 && (structure.contains(&target) || world.can_place_platform_at(target))
     })
+}
+
+/// 收集结构旋转后会撞上的印花面
+pub(super) fn stamp_collisions_for_rotation(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+    pivot: IVec3,
+    clockwise: bool,
+) -> Vec<StampCollision> {
+    if world.material_stamps.is_empty() {
+        return Vec::new();
+    }
+    let parent_ids: HashSet<BlockId> = structure
+        .iter()
+        .filter_map(|pos| world.blocks.get(pos).map(|block| block.id))
+        .filter(|id| !id.is_none())
+        .collect();
+    let moving_volume: HashSet<IVec3> = structure
+        .iter()
+        .map(|pos| rotate_pos_y(*pos, pivot, clockwise))
+        .chain(world.material_stamps.keys().filter_map(|face| {
+            if !parent_ids.contains(&face.block) {
+                return None;
+            }
+            let parent_pos = structure.iter().find(|pos| {
+                world
+                    .blocks
+                    .get(pos)
+                    .is_some_and(|block| block.id == face.block)
+            })?;
+            Some(
+                rotate_pos_y(*parent_pos, pivot, clockwise)
+                    + rotate_offset_y(face.normal, clockwise),
+            )
+        }))
+        .collect();
+
+    world
+        .material_stamps
+        .iter()
+        .filter(|(face, _)| parent_ids.contains(&face.block))
+        .filter_map(|(face, _)| {
+            let parent_pos = structure.iter().find(|pos| {
+                world
+                    .blocks
+                    .get(pos)
+                    .is_some_and(|block| block.id == face.block)
+            })?;
+            let target = rotate_pos_y(*parent_pos, pivot, clockwise)
+                + rotate_offset_y(face.normal, clockwise);
+            if moving_volume.contains(&target) || world.can_move_into(target) {
+                return None;
+            }
+            Some(StampCollision {
+                face: *face,
+                target,
+            })
+        })
+        .collect()
 }
 
 pub(super) fn rotate_structure(
@@ -520,12 +664,25 @@ pub(super) fn rotate_structure(
         .collect();
     world.material_paints = updated_paints;
 
-    // 附着法线随结构绕 Y 旋转
-    for att in world.material_attachments.values_mut() {
-        if structure_ids.contains(&att.parent) {
-            att.parent_face_normal = rotate_offset_y(att.parent_face_normal, clockwise);
-        }
-    }
+    // 印花面法线随宿主结构绕 Y 旋转
+    let updated_stamps: HashMap<_, _> = world
+        .material_stamps
+        .iter()
+        .map(|(face, stamp)| {
+            if structure_ids.contains(&face.block) {
+                (
+                    MaterialFace {
+                        block: face.block,
+                        normal: rotate_offset_y(face.normal, clockwise),
+                    },
+                    *stamp,
+                )
+            } else {
+                (*face, *stamp)
+            }
+        })
+        .collect();
+    world.material_stamps = updated_stamps;
     for att in world.factory_attachments.values_mut() {
         if structure_ids.contains(&att.parent) {
             att.parent_face_normal = rotate_offset_y(att.parent_face_normal, clockwise);
