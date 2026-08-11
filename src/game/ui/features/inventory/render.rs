@@ -1,3 +1,4 @@
+use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
@@ -325,6 +326,7 @@ pub fn update_carried_item_ui(
     carried: Res<CarriedItem>,
     touch: Res<TouchProfile>,
     touch_inventory: Res<TouchInventoryState>,
+    touches: Res<Touches>,
     block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut preview: Query<(&mut Node, &mut ImageNode), With<CarriedItemPreview>>,
@@ -342,7 +344,15 @@ pub fn update_carried_item_ui(
     };
 
     let cursor = if touch.enabled {
-        touch_inventory.drag_pointer
+        touch_inventory
+            .drag_pointer_id
+            .and_then(|pointer| pointer.get_touch_id())
+            .and_then(|id| {
+                touches
+                    .get_pressed(id)
+                    .map(|touch| touch.position() - touch_inventory.drag_grab_offset)
+            })
+            .or(touch_inventory.drag_pointer)
     } else {
         windows.single().ok().and_then(Window::cursor_position)
     };

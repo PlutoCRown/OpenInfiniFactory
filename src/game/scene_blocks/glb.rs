@@ -261,6 +261,10 @@ fn standard_material_from_gltf(
     let pbr = gltf_material.pbr_metallic_roughness();
     let factor = pbr.base_color_factor();
     let base_color = Color::srgba(factor[0], factor[1], factor[2], factor[3]);
+    #[cfg(target_os = "android")]
+    let is_glass_material = gltf_material
+        .name()
+        .is_some_and(|name| name.eq_ignore_ascii_case("glass"));
     let base_color_texture = pbr.base_color_texture().and_then(|info| {
         let texture = info.texture();
         let image = gltf_images.get(texture.source().index())?;
@@ -282,13 +286,18 @@ fn standard_material_from_gltf(
         let image = gltf_images.get(texture.source().index())?;
         Some(images.add(bevy_image_from_gltf(image, &texture.sampler(), false)?))
     });
-    let alpha_mode = match gltf_material.alpha_mode() {
+    let mut alpha_mode = match gltf_material.alpha_mode() {
         gltf::material::AlphaMode::Opaque => AlphaMode::Opaque,
         gltf::material::AlphaMode::Mask => {
             AlphaMode::Mask(gltf_material.alpha_cutoff().unwrap_or(0.5))
         }
         gltf::material::AlphaMode::Blend => AlphaMode::Blend,
     };
+    #[cfg(target_os = "android")]
+    if is_glass_material {
+        // 玻璃贴图包含半透明像素；Android 上改用不透明合成，避免透明批次整块不可见。
+        alpha_mode = AlphaMode::Opaque;
+    }
     let cull_mode = if gltf_material.double_sided() {
         None
     } else {

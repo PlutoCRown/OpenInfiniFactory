@@ -2,7 +2,10 @@
 
 use bevy::prelude::*;
 
-use crate::game::blocks::{BlockKind, BlockPresent, PersistentLayer};
+#[cfg(not(target_os = "android"))]
+use crate::game::blocks::PersistentLayer;
+use crate::game::blocks::{BlockKind, BlockPresent};
+#[cfg(not(target_os = "android"))]
 use crate::game::world::rendering::depth_bias;
 
 /// 纯色方块材质
@@ -14,8 +17,17 @@ pub(super) fn block_material(kind: BlockKind) -> StandardMaterial {
         ..default()
     };
     if kind.is_transparent() {
-        material.alpha_mode = AlphaMode::Blend;
         material.unlit = kind.is_generated_marker();
+        #[cfg(target_os = "android")]
+        {
+            // 部分 Android GPU 对带深度偏置的透明壳不稳定，移动端用不透明壳保证可见。
+            material.base_color = kind.material().with_alpha(1.0);
+            material.alpha_mode = AlphaMode::Opaque;
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            material.alpha_mode = AlphaMode::Blend;
+        }
     }
     apply_system_shell_bias(&mut material, kind);
     material
@@ -35,9 +47,10 @@ pub(super) fn textured_block_material(kind: BlockKind, texture: Handle<Image>) -
 }
 
 /// 谜题系统满格壳：与邻接工厂/材料共面时用 bias 分层（替代旧 1.05 缩放）
-fn apply_system_shell_bias(material: &mut StandardMaterial, kind: BlockKind) {
-    if kind.is_system_block() && kind.persistent_layer() == Some(PersistentLayer::Puzzle) {
-        material.depth_bias = depth_bias::SYSTEM_SHELL;
+fn apply_system_shell_bias(_material: &mut StandardMaterial, _kind: BlockKind) {
+    #[cfg(not(target_os = "android"))]
+    if _kind.is_system_block() && _kind.persistent_layer() == Some(PersistentLayer::Puzzle) {
+        _material.depth_bias = depth_bias::SYSTEM_SHELL;
     }
 }
 

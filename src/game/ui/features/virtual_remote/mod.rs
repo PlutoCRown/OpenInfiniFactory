@@ -104,7 +104,7 @@ impl Plugin for VirtualRemotePlugin {
             .add_observer(update::on_virtual_drag)
             .add_observer(update::on_virtual_release)
             .add_observer(update::on_virtual_cancel)
-            .add_observer(editor::on_editor_control_click)
+            .add_observer(editor::on_editor_control_press)
             .add_observer(editor::on_editor_drag)
             .add_observer(editor::on_editor_release)
             .add_observer(editor::on_editor_scale_press)

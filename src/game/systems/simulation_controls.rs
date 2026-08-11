@@ -104,6 +104,12 @@ pub fn simulation_controls(
         *suppress_sim_fast_until_release = false;
     }
 
+    // 单步模拟暂停时，触控加速键等同于 F，恢复连续模拟。
+    if input.sim_fast && deps.simulation.is_active() && !deps.simulation.running {
+        request_continuous_run(&mut deps.simulation);
+        *suppress_sim_fast_until_release = true;
+    }
+
     deps.simulation.speed =
         if deps.simulation.running && input.sim_fast && !*suppress_sim_fast_until_release {
             4.0

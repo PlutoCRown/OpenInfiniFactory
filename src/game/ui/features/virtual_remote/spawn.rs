@@ -154,6 +154,12 @@ pub fn spawn_virtual_remote(
         spawn_control(hud, VirtualControlId::Inventory, Some("E"), for_editor);
         spawn_control(
             hud,
+            VirtualControlId::Pick,
+            Some("virtual.short.pick"),
+            for_editor,
+        );
+        spawn_control(
+            hud,
             VirtualControlId::BlockConfig,
             Some("virtual.short.config"),
             for_editor,
@@ -340,7 +346,10 @@ pub fn set_knob_pressed_style(bg: &mut BackgroundColor, pressed: bool, opacity: 
 pub fn control_base_size(id: VirtualControlId) -> f32 {
     match id {
         VirtualControlId::Joystick => JOYSTICK_BASE,
-        VirtualControlId::Jump | VirtualControlId::Place | VirtualControlId::Delete => ACTION_BTN,
+        VirtualControlId::Jump
+        | VirtualControlId::Place
+        | VirtualControlId::Delete
+        | VirtualControlId::Pick => ACTION_BTN,
         _ => SMALL_BTN,
     }
 }

@@ -1,5 +1,5 @@
 use bevy::picking::pointer::PointerButton;
-use bevy::picking::prelude::{Out, Over, Pointer, Press, Release};
+use bevy::picking::prelude::{Cancel, Out, Over, Pointer, Press, Release};
 use bevy::prelude::*;
 
 use super::text::default_button_size;
@@ -237,4 +237,20 @@ pub fn button_released(
     event.propagate(false);
     *background = BUTTON_HOVER_BG.into();
     *border = hover_border();
+}
+
+/// 触控被系统取消时恢复按钮外观，避免留下按下态
+pub fn button_cancelled(
+    mut event: On<Pointer<Cancel>>,
+    mut buttons: Query<
+        (&mut BackgroundColor, &mut BorderColor),
+        (With<HoverButton>, Without<DisabledButton>),
+    >,
+) {
+    let Ok((mut background, mut border)) = buttons.get_mut(event.entity) else {
+        return;
+    };
+    event.propagate(false);
+    *background = BUTTON_BG.into();
+    *border = raised_border();
 }

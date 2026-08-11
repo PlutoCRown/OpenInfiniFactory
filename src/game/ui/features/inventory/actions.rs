@@ -124,7 +124,7 @@ pub fn touch_inventory_drag_started(
     touch: Res<TouchProfile>,
     playing_ui: Res<PlayingUiState>,
     ui_host: Res<UiHost>,
-    slots: Query<&InventorySlot>,
+    slots: Query<(&InventorySlot, &ComputedNode, &UiGlobalTransform)>,
     inventory: Res<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
     mut touch_inventory: ResMut<TouchInventoryState>,
@@ -136,7 +136,7 @@ pub fn touch_inventory_drag_started(
     {
         return;
     }
-    let Ok(slot) = slots.get(drag_start.entity) else {
+    let Ok((slot, computed, transform)) = slots.get(drag_start.entity) else {
         return;
     };
     if slot.area != SlotArea::Backpack {
@@ -147,7 +147,11 @@ pub fn touch_inventory_drag_started(
     };
     drag_start.propagate(false);
     touch_inventory.selected_backpack = None;
-    touch_inventory.drag_pointer = Some(drag_start.pointer_location.position);
+    let pointer = drag_start.pointer_location.position;
+    let slot_center = ui_logical_bounds(computed, transform).center();
+    touch_inventory.drag_pointer = Some(slot_center);
+    touch_inventory.drag_pointer_id = Some(drag_start.pointer_id);
+    touch_inventory.drag_grab_offset = pointer - slot_center;
     touch_inventory.dragging = true;
     carried.set(Some(item));
 }
@@ -156,18 +160,14 @@ pub fn touch_inventory_drag_started(
 pub fn touch_inventory_dragged(
     mut drag: On<Pointer<Drag>>,
     touch: Res<TouchProfile>,
-    slots: Query<&InventorySlot>,
     mut touch_inventory: ResMut<TouchInventoryState>,
 ) {
-    if !touch.enabled
-        || !touch_inventory.dragging
-        || drag.event.button != PointerButton::Primary
-        || slots.get(drag.entity).is_err()
-    {
+    if !touch.enabled || !touch_inventory.dragging || drag.event.button != PointerButton::Primary {
         return;
     }
     drag.propagate(false);
-    touch_inventory.drag_pointer = Some(drag.pointer_location.position);
+    touch_inventory.drag_pointer =
+        Some(drag.pointer_location.position - touch_inventory.drag_grab_offset);
 }
 
 /// 触控拖动结束时放入手指下的快捷栏，否则取消手持

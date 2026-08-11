@@ -462,6 +462,11 @@ pub(crate) fn spawn_block_model(
     } else {
         transform.rotation = render_rotation(data, data.facing);
     }
+    #[cfg(target_os = "android")]
+    if data.kind.is_system_block() {
+        // 移动端不依赖大 depth_bias，把系统壳轻微放大以避免与同格材料共面。
+        transform.scale *= 1.004;
+    }
     if let Some((origin, _)) = icon_render {
         transform.translation += origin;
     }

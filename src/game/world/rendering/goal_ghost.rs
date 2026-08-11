@@ -46,6 +46,13 @@ impl Material for GoalGhostMaterial {
     }
 
     fn alpha_mode(&self) -> AlphaMode {
+        #[cfg(target_os = "android")]
+        {
+            // Android GLES/Vulkan 设备上透明自定义材质可能被深度测试整批丢弃；
+            // 保留扫光 shader，但用不透明合成确保验收块本体可见。
+            return AlphaMode::Opaque;
+        }
+        #[cfg(not(target_os = "android"))]
         AlphaMode::Blend
     }
 
@@ -69,6 +76,7 @@ impl Material for GoalGhostMaterial {
     ) -> Result<(), SpecializedMeshPipelineError> {
         if let Some(depth) = &mut descriptor.depth_stencil {
             depth.depth_write_enabled = Some(false);
+            #[cfg(not(target_os = "android"))]
             // 与 StandardMaterial 一样写入 GPU constant bias（否则只有半透明排序用到 depth_bias()）
             depth.bias.constant = super::depth_bias::GOAL_GHOST as i32;
         }

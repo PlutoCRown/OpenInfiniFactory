@@ -279,17 +279,23 @@ fn spawn_key_bindings(
                         spawn_settings_item(content, *item, settings, SettingsTab::KeyBindings);
                     }
                 }
-                content
-                    .spawn(key_bindings_columns_bundle())
-                    .with_children(|columns| {
-                        spawn_key_group(columns, "settings.group.general", &ActionKeyName::GENERAL);
-                        spawn_key_group(
-                            columns,
-                            "settings.group.simulation",
-                            &ActionKeyName::SIMULATION,
-                        );
-                        spawn_key_group(columns, "settings.group.mouse", &ActionKeyName::MOUSE);
-                    });
+                if !touch_enabled {
+                    content
+                        .spawn(key_bindings_columns_bundle())
+                        .with_children(|columns| {
+                            spawn_key_group(
+                                columns,
+                                "settings.group.general",
+                                &ActionKeyName::GENERAL,
+                            );
+                            spawn_key_group(
+                                columns,
+                                "settings.group.simulation",
+                                &ActionKeyName::SIMULATION,
+                            );
+                            spawn_key_group(columns, "settings.group.mouse", &ActionKeyName::MOUSE);
+                        });
+                }
             });
         });
 }

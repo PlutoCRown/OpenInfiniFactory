@@ -44,10 +44,17 @@ pub struct VirtualControlsLayout {
     pub block_config: VirtualControlTransform,
     #[serde(default = "default_virtual_inventory")]
     pub inventory: VirtualControlTransform,
+    #[serde(default = "default_virtual_pick")]
+    pub pick: VirtualControlTransform,
 }
 
 fn default_virtual_inventory() -> VirtualControlTransform {
     VirtualControlTransform::new(24.0, 282.0, 1.5)
+}
+
+/// 选取按钮的默认位置
+fn default_virtual_pick() -> VirtualControlTransform {
+    VirtualControlTransform::new(150.0, 282.0, 1.5)
 }
 
 impl VirtualControlsLayout {
@@ -67,6 +74,7 @@ impl VirtualControlsLayout {
         alternate: VirtualControlTransform::new(24.0, 110.0, 1.5),
         block_config: VirtualControlTransform::new(58.625, 268.75, 1.5),
         inventory: VirtualControlTransform::new(24.0, 282.0, 1.5),
+        pick: VirtualControlTransform::new(150.0, 282.0, 1.5),
     };
 
     pub fn transform(&self, id: VirtualControlId) -> VirtualControlTransform {
@@ -84,6 +92,7 @@ impl VirtualControlsLayout {
             VirtualControlId::Alternate => self.alternate,
             VirtualControlId::BlockConfig => self.block_config,
             VirtualControlId::Inventory => self.inventory,
+            VirtualControlId::Pick => self.pick,
         }
     }
 
@@ -102,6 +111,7 @@ impl VirtualControlsLayout {
             VirtualControlId::Alternate => self.alternate = transform,
             VirtualControlId::BlockConfig => self.block_config = transform,
             VirtualControlId::Inventory => self.inventory = transform,
+            VirtualControlId::Pick => self.pick = transform,
         }
     }
 }
@@ -122,6 +132,7 @@ pub enum VirtualControlId {
     Alternate,
     BlockConfig,
     Inventory,
+    Pick,
 }
 
 impl VirtualControlId {
@@ -139,6 +150,7 @@ impl VirtualControlId {
         Self::Alternate,
         Self::BlockConfig,
         Self::Inventory,
+        Self::Pick,
     ];
 
     pub fn anchor(self) -> VirtualControlAnchor {
@@ -152,6 +164,7 @@ impl VirtualControlId {
                 VirtualControlAnchor::TopRightColumn
             }
             Self::BlockConfig => VirtualControlAnchor::BottomCenter,
+            Self::Pick => VirtualControlAnchor::BottomCenter,
         }
     }
 
@@ -170,6 +183,7 @@ impl VirtualControlId {
             Self::Alternate => "action.alternate",
             Self::BlockConfig => "virtual.block_config",
             Self::Inventory => "action.inventory",
+            Self::Pick => "action.pick",
         }
     }
 }

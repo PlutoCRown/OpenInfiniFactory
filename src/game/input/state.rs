@@ -70,6 +70,7 @@ pub struct GameplayInputState {
     pub virtual_delete: ActionPulse,
     pub virtual_cancel_edit: bool,
     pub virtual_open_block_config: bool,
+    pub virtual_pick: bool,
     pub virtual_pause: bool,
     pub virtual_inventory: bool,
     pub virtual_rotate: bool,
@@ -159,6 +160,7 @@ pub fn gather_gameplay_input(
     let virtual_delete = input.virtual_delete;
     let virtual_cancel = input.virtual_cancel_edit;
     let virtual_open = input.virtual_open_block_config;
+    let virtual_pick = input.virtual_pick;
     let virtual_pause = input.virtual_pause;
     let virtual_inventory = input.virtual_inventory;
     let virtual_rotate = input.virtual_rotate;
@@ -198,7 +200,17 @@ pub fn gather_gameplay_input(
         fly_down: fly_down || virtual_fly_down,
         place,
         delete,
-        pick: ActionPulse::from_mouse(&mouse_buttons, pick_button),
+        pick: {
+            let mut pick = if touch.enabled {
+                ActionPulse::default()
+            } else {
+                ActionPulse::from_mouse(&mouse_buttons, pick_button)
+            };
+            if virtual_pick {
+                pick.just_pressed = true;
+            }
+            pick
+        },
         cancel_edit_gesture: virtual_cancel,
         open_block_config: virtual_open,
         pause: keys.just_pressed(bindings.pause.key_code()) || virtual_pause,

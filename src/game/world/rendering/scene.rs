@@ -108,15 +108,27 @@ pub fn setup_scene(
     ));
 
     let face_mesh = meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(0.5)));
-    let face_material = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.72, 0.92, 1.0, 0.10),
+    #[cfg(target_os = "android")]
+    let face_color = Color::srgb(0.22, 0.58, 0.88);
+    #[cfg(not(target_os = "android"))]
+    let face_color = Color::srgba(0.72, 0.92, 1.0, 0.10);
+    let mut face_material = StandardMaterial {
+        base_color: face_color,
         emissive: LinearRgba::from(Color::srgb(0.35, 0.72, 1.0)),
-        alpha_mode: AlphaMode::Blend,
+        alpha_mode: if cfg!(target_os = "android") {
+            AlphaMode::Opaque
+        } else {
+            AlphaMode::Blend
+        },
         unlit: true,
         cull_mode: None,
-        depth_bias: depth_bias::OVERLAY,
         ..default()
-    });
+    };
+    #[cfg(not(target_os = "android"))]
+    {
+        face_material.depth_bias = depth_bias::OVERLAY;
+    }
+    let face_material = materials.add(face_material);
 
     commands.spawn((
         Mesh3d(face_mesh),

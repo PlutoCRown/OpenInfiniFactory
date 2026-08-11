@@ -9,7 +9,13 @@ use crate::game::world::grid::grid_to_world;
 pub fn block_face_highlight_transform(block_pos: IVec3, normal: IVec3) -> Transform {
     let normal = normal.as_vec3().normalize();
     Transform {
-        translation: grid_to_world(block_pos) + normal * 0.5,
+        translation: grid_to_world(block_pos)
+            + normal
+                * if cfg!(target_os = "android") {
+                    0.503
+                } else {
+                    0.5
+                },
         rotation: Quat::from_rotation_arc(Vec3::Y, normal),
         scale: Vec3::ONE,
     }

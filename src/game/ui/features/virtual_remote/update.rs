@@ -41,6 +41,7 @@ pub fn update_virtual_remote_input(
     // 放置/删除边沿每帧由本系统独占写入
     input.virtual_place = ActionPulse::default();
     input.virtual_delete = ActionPulse::default();
+    input.virtual_pick = false;
 
     if !touch.enabled || editor_open.0 {
         runtime.pointers.clear();
@@ -274,6 +275,7 @@ pub fn on_virtual_press(
             | VirtualControlId::Rotate
             | VirtualControlId::Alternate
             | VirtualControlId::Inventory
+            | VirtualControlId::Pick
             | VirtualControlId::BlockConfig => {
                 runtime.pointers.push(VirtualPointerBinding {
                     pointer_id,
@@ -474,6 +476,7 @@ pub fn on_virtual_release(
                 }
             }
             VirtualControlId::BlockConfig => input.virtual_open_block_config = true,
+            VirtualControlId::Pick => input.virtual_pick = true,
             _ => {}
         }
     }

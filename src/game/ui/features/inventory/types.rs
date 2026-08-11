@@ -1,3 +1,4 @@
+use bevy::picking::pointer::PointerId;
 use bevy::prelude::*;
 
 use crate::game::ui::types::InventoryItem;
@@ -15,6 +16,8 @@ pub struct InventoryTabButton(pub crate::game::ui::types::FreeInventoryTab);
 pub struct TouchInventoryState {
     pub selected_backpack: Option<(usize, InventoryItem)>,
     pub drag_pointer: Option<Vec2>,
+    pub drag_pointer_id: Option<PointerId>,
+    pub drag_grab_offset: Vec2,
     pub dragging: bool,
 }
 
@@ -23,6 +26,8 @@ impl TouchInventoryState {
     pub fn clear(&mut self) {
         self.selected_backpack = None;
         self.drag_pointer = None;
+        self.drag_pointer_id = None;
+        self.drag_grab_offset = Vec2::ZERO;
         self.dragging = false;
     }
 }

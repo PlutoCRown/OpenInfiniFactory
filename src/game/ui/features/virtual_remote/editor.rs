@@ -2,7 +2,7 @@
 
 use bevy::ecs::system::SystemState;
 use bevy::picking::pointer::PointerButton;
-use bevy::picking::prelude::{Click, Drag, Pointer, Press, Release};
+use bevy::picking::prelude::{Drag, Pointer, Press, Release};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
@@ -457,8 +457,8 @@ fn percent_to_scale(percent: f32) -> f32 {
     SCALE_MIN + percent.clamp(0.0, 1.0) * (SCALE_MAX - SCALE_MIN)
 }
 
-pub fn on_editor_control_click(
-    mut click: On<Pointer<Click>>,
+pub fn on_editor_control_press(
+    mut click: On<Pointer<Press>>,
     editor_open: Res<VirtualLayoutEditorOpen>,
     mut editor: ResMut<VirtualLayoutEditorState>,
     draft: Res<VirtualLayoutDraft>,
