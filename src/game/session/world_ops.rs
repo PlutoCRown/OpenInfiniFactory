@@ -148,6 +148,10 @@ pub fn switch_to_edit_mode_and_rebuild(
     session.carried.clear();
     session.placement.selected = 0;
     session.save_state.current_kind = Some(SaveKind::Puzzle);
+    if let Some(puzzle_id) = session.solution_state.puzzle_id.clone() {
+        session.save_state.current = Some(SaveSlot::puzzle(puzzle_id));
+    }
+    session.solution_state.entry = WorldEntryMode::EditPuzzle;
     session.solution_state.puzzle_snapshot = None;
     session.solution_state.puzzle_id = None;
     session.playing_ui.paused = true;
@@ -218,7 +222,11 @@ pub fn load_world_into_session(
         WorldEntryMode::EditPuzzle => BuilderMode::Edit,
         WorldEntryMode::PlaySolution | WorldEntryMode::Free => BuilderMode::Play,
     };
-    *session.inventory = InventoryItems::for_entry(entry, *session.builder_mode);
+    *session.inventory = InventoryItems::for_entry_with_filter(
+        entry,
+        *session.builder_mode,
+        loaded.factory_block_filter.as_ref(),
+    );
     if let Some(hotbar) = loaded.hotbar {
         session.inventory.apply_saved_hotbar(hotbar);
     }
@@ -236,6 +244,8 @@ pub fn load_world_into_session(
     session.solution_state.dirty = false;
     *session.free_inventory_tab = FreeInventoryTab::default();
     session.solution_state.puzzle_id = loaded.puzzle_id;
+    session.solution_state.solution_spawn = loaded.solution_spawn;
+    session.solution_state.factory_block_filter = loaded.factory_block_filter;
     session.solution_state.puzzle_snapshot = match entry {
         WorldEntryMode::EditPuzzle | WorldEntryMode::Free => None,
         WorldEntryMode::PlaySolution => loaded
@@ -273,6 +283,8 @@ pub fn clear_loaded_world(playing: &mut PlayingWorldParams, session: &mut Sessio
         .insert_resource(crate::shared::save::PuzzleLighting::default());
     session.solution_state.puzzle_snapshot = None;
     session.solution_state.puzzle_id = None;
+    session.solution_state.solution_spawn = None;
+    session.solution_state.factory_block_filter = None;
     session.solution_state.dirty = false;
     session.solution_state.entry = WorldEntryMode::EditPuzzle;
     playing.clear_sim_sidecars();

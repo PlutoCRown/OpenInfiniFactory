@@ -269,6 +269,8 @@ pub struct SolutionState {
     pub entry: WorldEntryMode,
     pub dirty: bool,
     pub save_list_entry: WorldEntryMode,
+    pub solution_spawn: Option<crate::shared::save::PlayerSave>,
+    pub factory_block_filter: Option<crate::shared::save::FactoryBlockFilter>,
 }
 
 #[derive(Clone, Copy, Default, Eq, PartialEq)]

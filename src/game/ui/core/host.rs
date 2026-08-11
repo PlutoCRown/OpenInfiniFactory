@@ -13,7 +13,8 @@ use crate::game::ui::core::text_prompt::{
 };
 use crate::game::ui::features::save::types::SaveListAction;
 use crate::game::ui::features::settings::types::SettingsAction;
-use crate::game::ui::screens::spawn_settings_panel;
+use crate::game::ui::features::save_settings::types::SaveSettingsAction;
+use crate::game::ui::screens::{SaveSettingsSpawnCtx, spawn_save_settings_panel, spawn_settings_panel};
 use crate::game::ui::types::InventorySlot;
 #[derive(Resource, Clone, Copy)]
 pub struct UiRootEntity(pub Entity);
@@ -31,6 +32,7 @@ impl UiInstanceId {
     pub const START_MENU: Self = Self(u64::MAX);
     pub const SAVE_LIST: Self = Self(u64::MAX - 1);
     pub const SETTINGS: Self = Self(u64::MAX - 2);
+    pub const SAVE_SETTINGS: Self = Self(u64::MAX - 3);
     pub const INVENTORY: Self = Self(u64::MAX - 4);
     pub const PAUSE_MENU: Self = Self(u64::MAX - 5);
 }
@@ -51,6 +53,7 @@ pub struct UiAction {
 pub enum UiActionKind {
     SaveList(SaveListAction),
     Settings(SettingsAction),
+    SaveSettings(SaveSettingsAction),
     InventorySlot {
         slot: InventorySlot,
         button: PointerButton,
@@ -123,6 +126,22 @@ impl UiHostCommands<'_> {
             panel_w,
             panel_h,
             touch_enabled,
+        )
+    }
+
+    pub fn mount_save_settings(
+        &mut self,
+        commands: &mut Commands,
+        root: Option<Entity>,
+        context: UiPanelContext,
+        view: &SaveSettingsSpawnCtx,
+    ) -> UiInstanceId {
+        self.host.mount_save_settings(
+            commands,
+            root,
+            &mut self.runtime,
+            context,
+            view,
         )
     }
 
@@ -393,6 +412,48 @@ impl UiHost {
         id
     }
 
+    pub fn mount_save_settings(
+        &mut self,
+        commands: &mut Commands,
+        root: Option<Entity>,
+        runtime: &mut UiRuntime,
+        context: UiPanelContext,
+        view: &SaveSettingsSpawnCtx,
+    ) -> UiInstanceId {
+        self.unmount_panel(UiPanelId::Settings, runtime, Some(commands));
+        runtime.open(UiPanelId::Settings, context);
+        let entity = root.map(|root| {
+            let mut container = None;
+            commands.entity(root).with_children(|root| {
+                let spawned = root
+                    .spawn((
+                        Node {
+                            width: Val::Percent(100.0),
+                            height: Val::Percent(100.0),
+                            position_type: PositionType::Absolute,
+                            ..default()
+                        },
+                        BackgroundColor(Color::NONE),
+                        UiHostMountRoot,
+                    ))
+                    .with_children(|container| {
+                        spawn_save_settings_panel(container, view);
+                    })
+                    .id();
+                container = Some(spawned);
+            });
+            container.unwrap_or(root)
+        });
+        self.stack.push((
+            UiInstanceId::SAVE_SETTINGS,
+            MountedView::Panel {
+                panel: UiPanelId::Settings,
+                entity,
+            },
+        ));
+        UiInstanceId::SAVE_SETTINGS
+    }
+
     pub fn modal_open(&self) -> bool {
         self.stack.iter().any(|(_, view)| {
             matches!(
@@ -607,6 +668,7 @@ pub fn dispatch_ui_action(
             UiActionKind::TextPromptCancel => text_prompt.cancel(),
             UiActionKind::SaveList(_)
             | UiActionKind::Settings(_)
+            | UiActionKind::SaveSettings(_)
             | UiActionKind::InventorySlot { .. }
             | UiActionKind::InventoryTab(_) => {}
             UiActionKind::PanelClose => {}

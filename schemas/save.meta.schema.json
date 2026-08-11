@@ -90,6 +90,21 @@
       ],
       "description": "玩家相机位姿。null/省略表示使用默认出生点。"
     },
+    "solution_spawn": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/PlayerSave"
+        }
+      ],
+      "description": "Puzzle 创建 Solution 时使用的玩家出生点。"
+    },
+    "factory_block_filter": {
+      "$ref": "#/$defs/FactoryBlockFilter",
+      "description": "Puzzle 创建 Solution 时可用工厂方块的黑白名单。"
+    },
     "sun": {
       "$ref": "#/$defs/Sun",
       "description": "平行光与贴图天空盒亮度。各项均可选，省略的用内置默认。puzzle/free meta 自身生效；solution 读所属 puzzle。游戏内保存不会覆盖手写值。"
@@ -114,6 +129,15 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "position": {
+          "type": "array",
+          "description": "全局平行光实体位置。",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number"
+          }
+        },
         "direction": {
           "type": "array",
           "description": "光线前进方向（太阳 → 地面）。不必单位向量，加载时归一化。默认约 (-0.5, -0.7, -0.5) 量级（内置欧拉角）。",
@@ -244,6 +268,30 @@
         "flying": {
           "type": "boolean",
           "description": "是否飞行模式"
+        }
+      }
+    },
+    "FactoryBlockFilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "kinds"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "blacklist",
+            "whitelist"
+          ],
+          "default": "blacklist"
+        },
+        "kinds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BlockKind"
+          }
         }
       }
     },

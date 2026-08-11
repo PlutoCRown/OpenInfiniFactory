@@ -1,6 +1,7 @@
 mod inventory;
 mod menu;
 mod save_list;
+mod save_settings;
 mod settings;
 
 pub use inventory::{
@@ -10,5 +11,8 @@ pub use menu::{spawn_main_menu, spawn_pause_panel};
 pub use save_list::{
     SaveListSpawnCtx, save_list_panel_size, spawn_save_list, spawn_save_puzzle_row,
     spawn_save_solution_card,
+};
+pub use save_settings::{
+    SaveSettingsSpawnCtx, save_settings_panel_size, spawn_save_settings_panel,
 };
 pub use settings::{settings_panel_size, spawn_settings_panel};

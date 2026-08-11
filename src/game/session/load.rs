@@ -285,7 +285,11 @@ pub fn handle_create_new_solution(
             continue;
         };
         *playing.world = crate::game::world::grid::WorldBlocks(loaded.world);
-        *session.inventory = InventoryItems::for_mode(BuilderMode::Play);
+        *session.inventory = InventoryItems::for_entry_with_filter(
+            WorldEntryMode::PlaySolution,
+            BuilderMode::Play,
+            loaded.factory_block_filter.as_ref(),
+        );
         let Some(solution_slot) = save_solution_as(
             &playing.world,
             &request.puzzle,

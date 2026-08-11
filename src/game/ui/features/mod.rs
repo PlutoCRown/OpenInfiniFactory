@@ -4,6 +4,7 @@ pub mod inventory;
 pub mod pause_menu;
 pub mod playing_overlays;
 pub mod save;
+pub mod save_settings;
 pub mod session_busy;
 pub mod settings;
 pub mod start_menu;
@@ -25,6 +26,7 @@ pub use playing_overlays::PlayingOverlaysPlugin;
 pub use start_menu::StartMenuPlugin;
 pub use start_menu_mounts::StartMenuMountsPlugin;
 pub use save::SavePlugin;
+pub use save_settings::SaveSettingsPlugin;
 pub use session_busy::SessionBusyUiPlugin;
 pub use settings::SettingsPlugin;
 pub use virtual_remote::VirtualRemotePlugin;
@@ -42,6 +44,7 @@ impl Plugin for UiFeaturesPlugin {
             PauseMenuPlugin,
             PlayingOverlaysPlugin,
             SavePlugin,
+            SaveSettingsPlugin,
             SettingsPlugin,
             BlockPanelsPlugin,
             InventoryPlugin,

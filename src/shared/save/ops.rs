@@ -290,6 +290,88 @@ pub fn save_solution(
     )
 }
 
+/// 暂停菜单“存档设置”使用的可编辑配置快照。
+#[derive(Clone, Debug)]
+pub struct SaveSettingsData {
+    pub light_position: Option<Vec3>,
+    pub light_direction: Option<Vec3>,
+    pub light_intensity: f32,
+    pub solution_spawn: Option<PlayerSave>,
+    pub factory_block_filter: FactoryBlockFilter,
+}
+
+impl Default for SaveSettingsData {
+    fn default() -> Self {
+        let lighting = PuzzleLighting::default();
+        Self {
+            light_position: lighting.position,
+            light_direction: lighting.direction,
+            light_intensity: lighting.illuminance,
+            solution_spawn: None,
+            factory_block_filter: FactoryBlockFilter::default(),
+        }
+    }
+}
+
+/// 读取顶层 Free/Puzzle 的存档设置；Solution 设置继承所属 Puzzle。
+pub fn read_save_settings(slot: &SaveSlot) -> Option<SaveSettingsData> {
+    let save = read_save(slot)?;
+    let sun_slot = if save.meta.kind == SaveMetaKind::Solution {
+        SaveSlot::puzzle(&slot.puzzle)
+    } else {
+        slot.clone()
+    };
+    let lighting = if save.meta.kind == SaveMetaKind::Solution {
+        read_puzzle_lighting(&slot.puzzle)
+    } else {
+        resolve_lighting(&save.meta)
+    };
+    let settings_save = if save.meta.kind == SaveMetaKind::Solution {
+        read_save(&sun_slot)?
+    } else {
+        save
+    };
+    Some(SaveSettingsData {
+        light_position: lighting.position,
+        light_direction: lighting.direction,
+        light_intensity: lighting.illuminance,
+        solution_spawn: settings_save.meta.solution_spawn,
+        factory_block_filter: settings_save
+            .meta
+            .factory_block_filter
+            .unwrap_or_default(),
+    })
+}
+
+/// 只写入存档设置，不改变方块数据和玩家脏状态。
+pub fn write_save_settings(slot: &SaveSlot, settings: &SaveSettingsData) -> bool {
+    let Some(mut save) = read_save(slot) else {
+        return false;
+    };
+    let mut sun = save.meta.sun.take().unwrap_or_default();
+    sun.position = settings.light_position.map(|value| value.to_array());
+    sun.direction = settings.light_direction.map(|value| value.to_array());
+    sun.illuminance = Some(settings.light_intensity.max(0.0));
+    save.meta.sun = Some(sun);
+    if save.meta.kind == SaveMetaKind::Puzzle {
+        save.meta.solution_spawn = settings.solution_spawn.clone();
+        save.meta.factory_block_filter = Some(settings.factory_block_filter.clone());
+    }
+    save.meta.updated_at = Some(unix_now_secs());
+    let Ok(meta) = serde_json::to_string_pretty(&save.meta) else {
+        return false;
+    };
+    persistent_storage::write_save_text(&slot.storage_path(), META_FILE, &meta)
+}
+
+/// 替换存档天空盒图片；字节由渲染层按水平十字格式解码。
+pub fn write_save_skybox(slot: &SaveSlot, bytes: &[u8]) -> bool {
+    if bytes.is_empty() {
+        return false;
+    }
+    persistent_storage::write_save_bytes(&slot.storage_path(), SKYBOX_FILE, bytes)
+}
+
 pub fn load_world(world: &mut WorldBlocks, slot: &SaveSlot) -> Option<LoadedSave> {
     let loaded = decode_save_slot(slot)?;
     *world = loaded.world.clone();

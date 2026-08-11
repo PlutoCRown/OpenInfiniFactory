@@ -6,6 +6,7 @@ use crate::game::state::UiPanelId;
 pub enum UiPanelContext {
     SettingsFromStartMenu,
     SettingsFromPause,
+    SaveSettingsFromPause,
     Block { pos: IVec3 },
 }
 
@@ -51,7 +52,20 @@ impl UiRuntime {
     }
 
     pub fn is_settings_open(&self) -> bool {
-        self.active_panel().is_some_and(UiPanelId::is_settings)
+        self.active().is_some_and(|session| {
+            session.panel.is_settings()
+                && matches!(
+                    session.context,
+                    UiPanelContext::SettingsFromStartMenu | UiPanelContext::SettingsFromPause
+                )
+        })
+    }
+
+    pub fn is_save_settings_open(&self) -> bool {
+        self.active().is_some_and(|session| {
+            session.panel.is_settings()
+                && session.context == UiPanelContext::SaveSettingsFromPause
+        })
     }
 
     pub fn blocks_gameplay(&self) -> bool {

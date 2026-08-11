@@ -24,7 +24,9 @@ pub use crate::game::ui::features::settings::types::{
 use crate::game::blocks::{BlockKind, PLAY_BLOCKS, edit_blocks};
 use crate::game::state::{BuilderMode, WorldEntryMode};
 use crate::shared::config::ActionKeyName;
-use crate::shared::save::{SavedAreaKind, SavedHotbar, SavedHotbarItem};
+use crate::shared::save::{
+    FactoryBlockFilter, SavedAreaKind, SavedHotbar, SavedHotbarItem,
+};
 use oif_sim::blocks::{FALLBACK_MATERIAL_STRING_ID, material_catalog};
 
 pub const HOTBAR_SLOTS: usize = 9;
@@ -190,6 +192,13 @@ pub enum FreeInventoryTab {
 
 impl InventoryItems {
     pub fn for_mode(mode: BuilderMode) -> Self {
+        Self::for_mode_with_filter(mode, None)
+    }
+
+    fn for_mode_with_filter(
+        mode: BuilderMode,
+        factory_filter: Option<&FactoryBlockFilter>,
+    ) -> Self {
         let edit_blocks = edit_blocks();
         let blocks: &[BlockKind] = match mode {
             BuilderMode::Edit => &edit_blocks,
@@ -205,14 +214,25 @@ impl InventoryItems {
             }
             BuilderMode::Play => {
                 for (index, item) in PLAY_HOTBAR_ITEMS.iter().enumerate() {
-                    hotbar[index] = Some(*item);
+                    if item
+                        .block()
+                        .is_none_or(|kind| factory_filter.is_none_or(|filter| filter.allows(kind)))
+                    {
+                        hotbar[index] = Some(*item);
+                    }
                 }
             }
         }
 
         let mut backpack = [None; BACKPACK_SLOTS];
-        for (index, kind) in blocks.iter().take(BACKPACK_SLOTS).enumerate() {
-            backpack[index] = Some(InventoryItem::Block(*kind));
+        for (index, kind) in blocks
+            .iter()
+            .copied()
+            .filter(|kind| factory_filter.is_none_or(|filter| filter.allows(*kind)))
+            .take(BACKPACK_SLOTS)
+            .enumerate()
+        {
+            backpack[index] = Some(InventoryItem::Block(kind));
         }
         if mode == BuilderMode::Edit {
             if let Some(slot) = backpack.iter_mut().find(|slot| slot.is_none()) {
@@ -236,12 +256,24 @@ impl InventoryItems {
 
     /// 按进入模式构建物品栏（Free 用三页签默认 Edit 页签）
     pub fn for_entry(entry: WorldEntryMode, builder_mode: BuilderMode) -> Self {
+        Self::for_entry_with_filter(entry, builder_mode, None)
+    }
+
+    /// 按进入模式构建物品栏，并在 Solution 中应用 Puzzle 的工厂方块过滤。
+    pub fn for_entry_with_filter(
+        entry: WorldEntryMode,
+        builder_mode: BuilderMode,
+        factory_filter: Option<&FactoryBlockFilter>,
+    ) -> Self {
         if entry == WorldEntryMode::Free {
             let mut items = Self::for_mode(BuilderMode::Play);
             items.fill_free_backpack(FreeInventoryTab::Edit);
             items
         } else {
-            Self::for_mode(builder_mode)
+            Self::for_mode_with_filter(
+                builder_mode,
+                (entry == WorldEntryMode::PlaySolution).then_some(factory_filter).flatten(),
+            )
         }
     }
 
@@ -283,9 +315,9 @@ impl InventoryItems {
     }
 
     /// 编辑切游玩：暂存编辑快捷栏并换成游玩物品栏
-    pub fn begin_play_from_edit(&mut self) {
+    pub fn begin_play_from_edit(&mut self, factory_filter: Option<&FactoryBlockFilter>) {
         let edit_hotbar = self.hotbar;
-        *self = Self::for_mode(BuilderMode::Play);
+        *self = Self::for_mode_with_filter(BuilderMode::Play, factory_filter);
         self.stashed_edit_hotbar = Some(edit_hotbar);
     }
 

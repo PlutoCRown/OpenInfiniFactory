@@ -12,6 +12,8 @@ impl SaveFile {
                 puzzle_id: None,
                 hotbar: layer.hotbar,
                 player,
+                solution_spawn: None,
+                factory_block_filter: Some(FactoryBlockFilter::default()),
                 sun: None,
                 ambient: None,
                 sun_direction: None,
@@ -38,6 +40,8 @@ impl SaveFile {
                 puzzle_id: None,
                 hotbar: world.hotbar,
                 player,
+                solution_spawn: None,
+                factory_block_filter: None,
                 sun: None,
                 ambient: None,
                 sun_direction: None,
@@ -70,6 +74,8 @@ impl SaveFile {
                 puzzle_id: Some(puzzle_id.to_string()),
                 hotbar: Some(*hotbar),
                 player,
+                solution_spawn: None,
+                factory_block_filter: None,
                 sun: None,
                 ambient: None,
                 sun_direction: None,
@@ -109,6 +115,7 @@ impl SaveFile {
                 }
                 // 缺省快捷栏由 game 层按 BuilderMode 填默认
                 let hotbar = self.meta.hotbar;
+                let puzzle_meta = read_save(&SaveSlot::puzzle(&puzzle_id)).map(|save| save.meta);
                 let puzzle_world = load_puzzle_world(&puzzle_id)?;
                 let lighting = read_puzzle_lighting(&puzzle_id);
                 let mut world = puzzle_world.clone();
@@ -119,7 +126,16 @@ impl SaveFile {
                     puzzle_snapshot: Some(puzzle_world),
                     puzzle_id: Some(puzzle_id),
                     hotbar,
-                    player: self.meta.player,
+                    player: self
+                        .meta
+                        .player
+                        .or_else(|| puzzle_meta.as_ref().and_then(|meta| meta.solution_spawn.clone())),
+                    solution_spawn: puzzle_meta
+                        .as_ref()
+                        .and_then(|meta| meta.solution_spawn.clone()),
+                    factory_block_filter: puzzle_meta
+                        .as_ref()
+                        .and_then(|meta| meta.factory_block_filter.clone()),
                     lighting,
                 })
             }
@@ -139,6 +155,8 @@ impl SaveFile {
                     puzzle_id: None,
                     hotbar,
                     player: self.meta.player,
+                    solution_spawn: self.meta.solution_spawn,
+                    factory_block_filter: self.meta.factory_block_filter,
                     lighting,
                 })
             }
@@ -165,6 +183,8 @@ impl SaveFile {
                     puzzle_id: None,
                     hotbar,
                     player: self.meta.player,
+                    solution_spawn: None,
+                    factory_block_filter: None,
                     lighting,
                 })
             }
@@ -211,6 +231,8 @@ fn write_save(slot: &SaveSlot, mut save: SaveFile) -> bool {
         save.meta.sun = existing.meta.sun.clone();
         save.meta.ambient = existing.meta.ambient.clone();
         save.meta.sun_direction = existing.meta.sun_direction;
+        save.meta.solution_spawn = existing.meta.solution_spawn.clone();
+        save.meta.factory_block_filter = existing.meta.factory_block_filter.clone();
         save.meta.created_at = existing.meta.created_at.or(Some(now));
         save.meta.last_play_time = existing.meta.last_play_time;
         save.meta.favorite = existing.meta.favorite;
@@ -290,6 +312,7 @@ fn read_puzzle_lighting(puzzle: &str) -> PuzzleLighting {
 fn resolve_lighting(meta: &SaveMeta) -> PuzzleLighting {
     let mut lighting = PuzzleLighting::default();
     let sun = meta.sun.clone().unwrap_or_default();
+    lighting.position = sun.position.and_then(parse_vec3);
     let direction = sun
         .direction
         .or(meta.sun_direction)
@@ -330,6 +353,11 @@ fn parse_direction(raw: [f32; 3]) -> Option<Vec3> {
     let v = Vec3::new(raw[0], raw[1], raw[2]);
     let n = v.normalize_or_zero();
     (n != Vec3::ZERO).then_some(n)
+}
+
+fn parse_vec3(raw: [f32; 3]) -> Option<Vec3> {
+    let v = Vec3::new(raw[0], raw[1], raw[2]);
+    v.is_finite().then_some(v)
 }
 
 fn parse_rgb(raw: [f32; 3]) -> Option<[f32; 3]> {

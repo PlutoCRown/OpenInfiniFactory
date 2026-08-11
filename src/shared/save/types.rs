@@ -231,6 +231,37 @@ enum SaveMetaKind {
     Solution,
 }
 
+/// Solution 背包中的工厂方块过滤模式。
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FactoryBlockFilterMode {
+    #[default]
+    Blacklist,
+    Whitelist,
+}
+
+/// Puzzle 为其 Solution 提供的工厂方块黑白名单。
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct FactoryBlockFilter {
+    #[serde(default)]
+    pub mode: FactoryBlockFilterMode,
+    #[serde(default)]
+    pub kinds: Vec<BlockKind>,
+}
+
+impl FactoryBlockFilter {
+    pub fn allows(&self, kind: BlockKind) -> bool {
+        if !kind.is_factory() {
+            return true;
+        }
+        let listed = self.kinds.contains(&kind);
+        match self.mode {
+            FactoryBlockFilterMode::Blacklist => !listed,
+            FactoryBlockFilterMode::Whitelist => listed,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 struct SaveMeta {
     version: u32,
@@ -256,6 +287,12 @@ struct SaveMeta {
     hotbar: Option<SavedHotbar>,
     #[serde(default)]
     player: Option<PlayerSave>,
+    /// 编辑 Puzzle 时配置的 Solution 玩家出生点。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    solution_spawn: Option<PlayerSave>,
+    /// 编辑 Puzzle 时配置的 Solution 工厂方块过滤规则。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    factory_block_filter: Option<FactoryBlockFilter>,
     /// 平行光与天空光照；字段见 `schemas/save.meta.schema.json`（存档勿写 `$schema`）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sun: Option<SunMeta>,
@@ -270,6 +307,9 @@ struct SaveMeta {
 /// meta.json 里的平行光 / 天空盒亮度配置（各项均可选）
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct SunMeta {
+    /// 平行光实体位置；方向仍由 `direction` 表示。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    position: Option<[f32; 3]>,
     /// 光线前进方向（太阳 → 地面）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     direction: Option<[f32; 3]>,
@@ -299,6 +339,7 @@ struct AmbientMeta {
 /// 加载后解析好的谜题光照（缺省项已填默认值）
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct PuzzleLighting {
+    pub position: Option<Vec3>,
     pub direction: Option<Vec3>,
     pub illuminance: f32,
     pub color: Color,
@@ -310,6 +351,7 @@ pub struct PuzzleLighting {
 impl Default for PuzzleLighting {
     fn default() -> Self {
         Self {
+            position: None,
             direction: None,
             illuminance: 9500.0,
             color: Color::srgb(1.0, 0.97, 0.92),
@@ -342,6 +384,8 @@ pub struct LoadedSave {
     pub puzzle_id: Option<String>,
     pub hotbar: Option<SavedHotbar>,
     pub player: Option<PlayerSave>,
+    pub solution_spawn: Option<PlayerSave>,
+    pub factory_block_filter: Option<FactoryBlockFilter>,
     /// 谜题光照（来自 puzzle meta；solution 读所属 puzzle）
     pub lighting: PuzzleLighting,
 }

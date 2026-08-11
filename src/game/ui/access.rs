@@ -18,8 +18,10 @@ use crate::game::state::{GameSettings, UiPanelId};
 use crate::game::ui::core::confirm_dialog::{ConfirmProps, ConfirmResult};
 use crate::game::ui::core::host::{UiHostCommands, UiInstanceId};
 use crate::game::ui::core::runtime::UiPanelContext;
+use crate::game::ui::features::save_settings::SaveSettingsUiState;
 use crate::game::ui::core::text_prompt::{TextPromptProps, TextPromptResult};
 use crate::shared::i18n::{I18n, Language};
+use crate::shared::save::read_save_settings;
 
 thread_local! {
     static UI_WORLD: Cell<Option<NonNull<World>>> = const { Cell::new(None) };
@@ -156,6 +158,61 @@ impl UiAccess {
 
     pub fn unmount_panel(self, panel: UiPanelId, commands: &mut Commands) {
         with_ui(|host| host.unmount_panel(panel, commands));
+    }
+
+    pub fn mount_save_settings(
+        self,
+        commands: &mut Commands,
+        root: Option<Entity>,
+    ) -> UiInstanceId {
+        with_world(|world| {
+            let Some(slot) = world.resource::<crate::shared::save::SaveState>().current.clone() else {
+                return UiInstanceId::SAVE_SETTINGS;
+            };
+            let data = read_save_settings(&slot).unwrap_or_default();
+            let skybox_bytes = crate::shared::persistent_storage::read_save_bytes(
+                &slot.storage_path(),
+                crate::shared::save_format::SKYBOX_FILE,
+            );
+            let edit_mode = world.resource::<crate::game::state::SolutionState>().entry
+                == crate::game::state::WorldEntryMode::EditPuzzle;
+            let (panel_w, panel_h) = {
+                use crate::game::ui::screens::save_settings_panel_size;
+                use bevy::window::PrimaryWindow;
+                let scale = world.resource::<UiScale>().0.max(0.01);
+                let (window_w, window_h) = world
+                    .query_filtered::<&Window, With<PrimaryWindow>>()
+                    .iter(world)
+                    .next()
+                    .map(|window| (window.width(), window.height()))
+                    .unwrap_or((1280.0, 720.0));
+                save_settings_panel_size(window_w, window_h, scale)
+            };
+            world.resource_mut::<SaveSettingsUiState>().slot = Some(slot.clone());
+            let state = world.resource_mut::<SaveSettingsUiState>();
+            state.data = data.clone();
+            state.skybox_bytes = skybox_bytes.clone();
+            state.edit_mode = edit_mode;
+            state.picker_open = false;
+            let view = crate::game::ui::screens::SaveSettingsSpawnCtx {
+                slot,
+                data,
+                skybox_bytes,
+                edit_mode,
+                panel_w,
+                panel_h,
+            };
+            let mut system_state = SystemState::<UiHostCommands>::new(world);
+            let mut params = system_state.get_mut(world).unwrap();
+            let id = params.mount_save_settings(
+                commands,
+                root,
+                UiPanelContext::SaveSettingsFromPause,
+                &view,
+            );
+            system_state.apply(world);
+            id
+        })
     }
 
     /// 挂载方块面板并立即 flush，使实体同帧可被查询

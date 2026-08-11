@@ -54,6 +54,7 @@ struct SkyDome;
 #[derive(Default)]
 struct AppliedImageSkybox {
     puzzle: Option<String>,
+    bytes_hash: Option<u64>,
 }
 
 /// 与场景平行光一致的默认旋转
@@ -69,6 +70,15 @@ pub fn transform_for_sun_direction(dir: Option<Vec3>) -> Transform {
         }
         _ => Transform::from_rotation(sunlight_rotation()),
     }
+}
+
+/// 由存档中的位置和方向构造平行光 Transform。
+pub fn transform_for_sun(position: Option<Vec3>, direction: Option<Vec3>) -> Transform {
+    let mut transform = transform_for_sun_direction(direction);
+    if let Some(position) = position {
+        transform.translation = position;
+    }
+    transform
 }
 
 /// 解析后的光线前进方向（含默认）
@@ -229,14 +239,16 @@ fn sync_puzzle_image_skybox(
 
     let Ok(camera) = cameras.single() else {
         applied.puzzle = None;
+        applied.bytes_hash = None;
         return;
     };
 
     if !want_sky {
         if applied.puzzle.is_some() {
             commands.entity(camera).remove::<Skybox>();
-            applied.puzzle = None;
         }
+        applied.puzzle = None;
+        applied.bytes_hash = None;
         for mut vis in &mut sky_domes {
             *vis = Visibility::Hidden;
         }
@@ -247,10 +259,16 @@ fn sync_puzzle_image_skybox(
         let path = SaveSlot::puzzle(name).storage_path();
         persistent_storage::read_save_bytes(&path, SKYBOX_FILE)
     });
+    let bytes_hash = image_bytes.as_ref().map(|bytes| {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        bytes.hash(&mut hasher);
+        hasher.finish()
+    });
 
     match image_bytes {
         Some(bytes) => {
-            if applied.puzzle == puzzle {
+            if applied.puzzle == puzzle && applied.bytes_hash == bytes_hash {
                 for mut vis in &mut sky_domes {
                     *vis = Visibility::Hidden;
                 }
@@ -268,6 +286,7 @@ fn sync_puzzle_image_skybox(
                         *vis = Visibility::Hidden;
                     }
                     applied.puzzle = puzzle;
+                    applied.bytes_hash = bytes_hash;
                 }
                 Err(err) => {
                     bevy::log::warn!("skybox.png load failed: {err}");
@@ -276,6 +295,7 @@ fn sync_puzzle_image_skybox(
                         *vis = Visibility::Visible;
                     }
                     applied.puzzle = None;
+                    applied.bytes_hash = None;
                 }
             }
         }
@@ -283,6 +303,7 @@ fn sync_puzzle_image_skybox(
             if applied.puzzle.take().is_some() {
                 commands.entity(camera).remove::<Skybox>();
             }
+            applied.bytes_hash = None;
             for mut vis in &mut sky_domes {
                 *vis = Visibility::Visible;
             }
@@ -347,7 +368,7 @@ fn sync_puzzle_lighting(
     if !lighting.is_changed() && !config.is_changed() {
         return;
     }
-    let tf = transform_for_sun_direction(lighting.direction);
+    let tf = transform_for_sun(lighting.position, lighting.direction);
     let dir = resolved_sun_direction(lighting.direction);
     for (mut light_tf, mut light) in &mut lights {
         *light_tf = tf;

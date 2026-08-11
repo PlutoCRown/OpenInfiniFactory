@@ -5,8 +5,8 @@ use bevy::prelude::*;
 use crate::game::session;
 use crate::game::session::{SessionBusy, puzzle_save_needs_confirm};
 use crate::game::state::{
-    BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
-    WorldEntryMode,
+    BuilderMode, GameMode, PendingPlayerSpawn, PlacementState, PlayingUiState, SimulationState,
+    SolutionState, WorldEntryMode,
 };
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::{UiAccessScope, UiMainThread, i18n, ui};
@@ -42,6 +42,7 @@ struct PauseMenuCtx<'w> {
     playing_ui: &'w mut PlayingUiState,
     save_state: &'w mut SaveState,
     solution_state: &'w mut SolutionState,
+    pending_player: &'w mut PendingPlayerSpawn,
     playing_ui_root: Option<Entity>,
 }
 
@@ -95,7 +96,9 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
                     );
                     ctx.save_state.current = Some(SaveSlot::solution(&puzzle_id, &solution_name));
                     ctx.save_state.current_kind = Some(SaveKind::Solution);
-                    ctx.inventory.begin_play_from_edit();
+                    ctx.inventory
+                        .begin_play_from_edit(ctx.solution_state.factory_block_filter.as_ref());
+                    ctx.pending_player.0 = ctx.solution_state.solution_spawn.clone();
                     BuilderMode::Play
                 }
                 BuilderMode::Play => {
@@ -163,6 +166,15 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
         }
     };
     {
+        key: "button.save_settings"
+        visible(save, _solution) {
+            matches!(save.current_kind, Some(SaveKind::Free | SaveKind::Puzzle))
+        }
+        on_click(ctx, commands) {
+            ui.mount_save_settings(commands, ctx.playing_ui_root);
+        }
+    };
+    {
         key: "button.back_to_main_menu"
         on_click(ctx, commands) {
             if ctx.solution_state.dirty {
@@ -219,6 +231,7 @@ fn dispatch_pause_menu_clicks(
     mut world: ResMut<WorldBlocks>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
+    mut pending_player: ResMut<PendingPlayerSpawn>,
     busy: Res<SessionBusy>,
     playing_ui_root: Option<Res<PlayingUiRootEntity>>,
     mut commands: Commands,
@@ -244,6 +257,7 @@ fn dispatch_pause_menu_clicks(
             playing_ui: &mut playing_ui,
             save_state: &mut save_state,
             solution_state: &mut solution_state,
+            pending_player: &mut pending_player,
             playing_ui_root,
         };
         (button.on_click)(&mut ctx, &mut commands);
