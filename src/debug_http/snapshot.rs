@@ -594,6 +594,7 @@ pub fn save_status_json(save_state: &SaveState, solution_state: &SolutionState) 
         },
         "puzzle_id": solution_state.puzzle_id,
         "dirty": solution_state.dirty,
+        "exit_requires_save": solution_state.dirty,
     })
 }
 
@@ -643,6 +644,7 @@ pub fn embedded_status_json(
 pub fn headless_status_json(
     control: &SimulationControl,
     current_save: Option<&str>,
+    dirty: bool,
 ) -> Value {
     let phase = if !control.is_active() {
         "idle"
@@ -667,6 +669,8 @@ pub fn headless_status_json(
             "name": name,
             "kind": null,
             "path": name,
+            "dirty": dirty,
+            "exit_requires_save": dirty,
         })),
         "simulation": {
             "mode": "headless",

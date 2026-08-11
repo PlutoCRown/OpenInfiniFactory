@@ -403,6 +403,18 @@ fn apply_launch_load_save_when_ready(
         return;
     }
     *applied = true;
+    if let Some(name) = launch.create_test_free.as_deref() {
+        let Some(slot) = crate::shared::save::create_test_free_from_single_block(name) else {
+            bevy::log::warn!("failed to create test Free save `{name}`");
+            return;
+        };
+        bevy::log::info!(
+            "created test Free save `{}` from --create-test-free",
+            slot.storage_path()
+        );
+        session::load_world(&mut commands, slot, state::WorldEntryMode::Free);
+        return;
+    }
     let Some(raw) = launch.load_save.as_deref() else {
         return;
     };

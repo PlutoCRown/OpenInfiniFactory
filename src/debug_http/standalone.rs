@@ -14,6 +14,8 @@ pub struct HeadlessDebugState {
     pub current_save: Option<String>,
     /// 最近一次加载耗时（毫秒）
     pub last_load_ms: Option<f64>,
+    /// 当前无头会话相对磁盘存档是否有未保存修改
+    pub dirty: bool,
 }
 
 impl HeadlessDebugState {
@@ -23,6 +25,7 @@ impl HeadlessDebugState {
             session: SimSession::new(),
             current_save: None,
             last_load_ms: None,
+            dirty: false,
         }
     }
 

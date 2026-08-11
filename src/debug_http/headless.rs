@@ -5,6 +5,8 @@ use super::snapshot::{
     acceptors_json, block_json_with_structure, headless_perf_json, headless_status_json, pos_json,
     power_query_json, resolve_pos_query, resolve_structure_query, session_status_json,
 };
+use crate::game::world::grid::WorldBlocks;
+use crate::shared::save::{SaveKind, SaveSlot, SavedHotbar, save_free};
 use super::standalone::HeadlessDebugState;
 use super::world_ops::{
     block_kinds_json, load_save_into_session, parse_block_kind, parse_facing, place_blocks_box,
@@ -68,7 +70,7 @@ pub fn handle_headless_command(
         }),
         DebugHttpCommand::GetStatus => {
             let control = state.session.control();
-            headless_status_json(control, state.current_save.as_deref()).to_string()
+            headless_status_json(control, state.current_save.as_deref(), state.dirty).to_string()
         }
         DebugHttpCommand::GetPerf => {
             let load_ms = state.last_load_ms;
@@ -77,6 +79,7 @@ pub fn handle_headless_command(
         DebugHttpCommand::WorldReset => {
             state.current_save = None;
             state.last_load_ms = None;
+            state.dirty = false;
             state.with_core(|core| {
                 reset_session(core);
                 json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
@@ -85,6 +88,7 @@ pub fn handle_headless_command(
         DebugHttpCommand::SessionExit => {
             state.current_save = None;
             state.last_load_ms = None;
+            state.dirty = false;
             state.with_core(|core| {
                 reset_session(core);
                 json_ok(serde_json::json!({
@@ -94,12 +98,35 @@ pub fn handle_headless_command(
             })
         }
         DebugHttpCommand::SessionSave => {
-            json_error("session/save is not available in headless mode")
+            let Some(name) = state.current_save.clone() else {
+                return json_error("no save is loaded");
+            };
+            let Some(slot) = SaveSlot::from_storage_path(&name) else {
+                return json_error(&format!("invalid save path `{name}`"));
+            };
+            if slot.kind() != SaveKind::Free {
+                return json_error("headless session/save currently supports Free saves only");
+            }
+            let saved = state.with_core(|core| {
+                let world = WorldBlocks(std::mem::take(&mut core.world));
+                let saved = save_free(&world, &slot, &SavedHotbar::default(), None);
+                core.world = world.0;
+                saved
+            });
+            if !saved {
+                return json_error(&format!("failed to save `{name}`"));
+            }
+            crate::shared::persistent_storage::flush_now();
+            state.dirty = false;
+            json_ok(serde_json::json!({ "saved": true, "save": name }))
         }
-        DebugHttpCommand::BeginSimulation => state.with_core(|core| {
-            core.begin_simulation();
-            json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
-        }),
+        DebugHttpCommand::BeginSimulation => {
+            state.dirty = true;
+            state.with_core(|core| {
+                core.begin_simulation();
+                json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
+            })
+        }
         DebugHttpCommand::SimPause => state.with_core(|core| {
             core.control.running = false;
             json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
@@ -112,6 +139,7 @@ pub fn handle_headless_command(
                 Ok(load_ms) => {
                     state.current_save = Some(name.clone());
                     state.last_load_ms = Some(load_ms);
+                    state.dirty = false;
                     let control = state.session.control();
                     json_ok(serde_json::json!({
                         "save": name,
@@ -138,6 +166,7 @@ pub fn handle_headless_command(
             let Some(facing) = parse_facing(&facing) else {
                 return json_error(&format!("unknown facing `{facing}`"));
             };
+            state.dirty = true;
             state.with_core(|core| {
                 let a = IVec3::new(x, y, z);
                 let b = IVec3::new(x1.unwrap_or(x), y1.unwrap_or(y), z1.unwrap_or(z));
@@ -159,37 +188,46 @@ pub fn handle_headless_command(
                 }))
             })
         }
-        DebugHttpCommand::Run => state.with_core(|core| {
-            core.request_continuous_run();
-            core.log
-                .log(core.control().turn, "HTTP /run (headless batch)");
-            for _ in 0..10 {
+        DebugHttpCommand::Run => {
+            state.dirty = true;
+            state.with_core(|core| {
+                core.request_continuous_run();
+                core.log
+                    .log(core.control().turn, "HTTP /run (headless batch)");
+                for _ in 0..10 {
+                    core.simulate_next_turn();
+                }
+                json_ok(serde_json::json!({
+                    "simulation": session_status_json(core.control()),
+                    "note": "headless /run executes 10 turns immediately",
+                }))
+            })
+        }
+        DebugHttpCommand::RunOneTurn => {
+            state.dirty = true;
+            state.with_core(|core| {
+                core.begin_simulation();
                 core.simulate_next_turn();
-            }
-            json_ok(serde_json::json!({
-                "simulation": session_status_json(core.control()),
-                "note": "headless /run executes 10 turns immediately",
-            }))
-        }),
-        DebugHttpCommand::RunOneTurn => state.with_core(|core| {
-            core.begin_simulation();
-            core.simulate_next_turn();
-            core.log
-                .log(core.control().turn, "HTTP /runOneTurn (headless)");
-            json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
-        }),
-        DebugHttpCommand::RunN { n } => state.with_core(|core| {
-            core.begin_simulation();
-            for _ in 0..n {
-                core.simulate_next_turn();
-            }
-            core.log
-                .log(core.control().turn, format!("HTTP /runN n={n}"));
-            json_ok(serde_json::json!({
-                "simulation": session_status_json(core.control()),
-                "turns": n,
-            }))
-        }),
+                core.log
+                    .log(core.control().turn, "HTTP /runOneTurn (headless)");
+                json_ok(serde_json::json!({ "simulation": session_status_json(core.control()) }))
+            })
+        }
+        DebugHttpCommand::RunN { n } => {
+            state.dirty = true;
+            state.with_core(|core| {
+                core.begin_simulation();
+                for _ in 0..n {
+                    core.simulate_next_turn();
+                }
+                core.log
+                    .log(core.control().turn, format!("HTTP /runN n={n}"));
+                json_ok(serde_json::json!({
+                    "simulation": session_status_json(core.control()),
+                    "turns": n,
+                }))
+            })
+        }
         DebugHttpCommand::GetLogs { limit } => state.session.log.recent_json(limit),
         DebugHttpCommand::ClearLogs => {
             state.session.log.clear();

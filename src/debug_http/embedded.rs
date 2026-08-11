@@ -472,6 +472,11 @@ fn handle_embedded_debug_command(
             }
             let changed: HashSet<_> = placed.iter().copied().collect();
             refresh_world_after_edit_many(playing, changed);
+            if !placed.is_empty() {
+                commands.queue(|world: &mut World| {
+                    world.resource_mut::<SolutionState>().dirty = true;
+                });
+            }
             if simulation.is_active() {
                 simulation.last_powered_devices.clear();
                 invalidate_simulation_prefetch(

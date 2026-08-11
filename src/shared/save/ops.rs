@@ -52,6 +52,37 @@ pub fn create_free_from_default_template(name: &str) -> Option<SaveSlot> {
     create_top_level_from_template(name, SaveKind::Free)
 }
 
+/// 创建仅含原点草地方块的 Free 测试存档
+pub fn create_test_free_from_single_block(name: &str) -> Option<SaveSlot> {
+    let slot = allocate_free_slot(name)?;
+    let grass = oif_sim::blocks::resolve_scene_id("grass");
+    let save = SaveFile::free(
+        FreeWorldCapture {
+            scene_blocks: vec![SavedBlock {
+                x: 0,
+                y: 0,
+                z: 0,
+                kind: BlockKind::Scene(grass),
+                facing: None,
+                settings: None,
+            }],
+            system_blocks: Vec::new(),
+            factory_blocks: Vec::new(),
+            wire_face_panels: Vec::new(),
+            hotbar: None,
+        },
+        Some(PlayerSave {
+            x: 0.5,
+            y: 2.78,
+            z: 10.5,
+            yaw: 0.0,
+            pitch: -0.15,
+            flying: false,
+        }),
+    );
+    write_save(&slot, save).then_some(slot)
+}
+
 /// 用默认模板写顶层 Puzzle/Free 存档
 fn create_top_level_from_template(name: &str, kind: SaveKind) -> Option<SaveSlot> {
     let slot = match kind {

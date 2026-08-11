@@ -72,6 +72,15 @@ pub fn write_save_text(save_name: &str, file: &str, value: &str) -> bool {
     true
 }
 
+/// 无头调试器退出前同步刷出内存镜像中的持久化写入
+pub fn flush_now() {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let ops = { lock_vault().drain_persist() };
+        backend::native_fs::apply_ops(&ops);
+    }
+}
+
 pub fn save_exists(save_name: &str) -> bool {
     lock_vault()
         .get(&save_file_key(save_name, META_FILE))

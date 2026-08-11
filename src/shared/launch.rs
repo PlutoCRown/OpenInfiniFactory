@@ -14,6 +14,8 @@ pub const DEFAULT_DEBUG_HTTP_PORT: u16 = 8765;
 pub struct LaunchOptions {
     pub debug_http_port: Option<u16>,
     pub load_save: Option<String>,
+    /// 启动时创建并进入仅含一个测试方块的 Free 存档
+    pub create_test_free: Option<String>,
     pub config_path: Option<PathBuf>,
     pub language: Option<Language>,
     /// 强制启用虚拟遥感（桌面调试用）
@@ -56,6 +58,21 @@ impl LaunchOptions {
                 }
                 value if value.starts_with("--load-save=") => {
                     options.load_save = Some(value.trim_start_matches("--load-save=").into());
+                }
+                "--create-test-free" => {
+                    let name = args
+                        .next_if(|value| !value.starts_with('-'))
+                        .unwrap_or_else(|| "test_free".to_string());
+                    options.create_test_free = Some(name);
+                }
+                value if value.starts_with("--create-test-free=") => {
+                    let name = value.trim_start_matches("--create-test-free=");
+                    if name.trim().is_empty() {
+                        eprintln!("error: --create-test-free requires a save name");
+                        print_launch_help();
+                        std::process::exit(2);
+                    }
+                    options.create_test_free = Some(name.into());
                 }
                 "--config" => {
                     let Some(value) = args.next() else {
@@ -182,6 +199,8 @@ Options:
                             Examples: Important_Test
                                       Important_Test/solutions/Solution1
                                       free_sandbox
+  --create-test-free[=NAME] Create and enter a one-block Free test save
+                            Default name: test_free (a suffix is added if needed)
   -h, --help                Show this help
 
 Headless debug server (no window):

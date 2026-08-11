@@ -38,7 +38,7 @@ pub const DEFAULT_CONFIG: GameConfig = GameConfig {
     shadows_enabled: true,
     ssao_quality: ConfigSsaoQuality::High,
     vsync_enabled: true,
-    skybox_enabled: false,
+    skybox_enabled: true,
     window_mode: ConfigWindowMode::Windowed,
     language: None,
     place_selection_mode: ConfigSelectionMode::Point,

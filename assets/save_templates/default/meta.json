@@ -3,7 +3,14 @@
   "kind": "puzzle",
   "puzzle_id": null,
   "hotbar": null,
-  "player": null,
+  "player": {
+    "x": 0.5,
+    "y": 2.78,
+    "z": 10.5,
+    "yaw": 0.0,
+    "pitch": -0.15,
+    "flying": false
+  },
   "sun": {
     "direction": [
       0.85,

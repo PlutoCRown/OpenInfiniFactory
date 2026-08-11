@@ -1,6 +1,7 @@
 use open_infinifactory::debug_http::standalone::{run_headless_server, HeadlessDebugState};
 use open_infinifactory::debug_http::world_ops::load_save_into_session;
 use open_infinifactory::shared::launch::{LaunchOptions, DEFAULT_DEBUG_HTTP_PORT};
+use open_infinifactory::shared::save::create_test_free_from_single_block;
 use std::sync::{Arc, Mutex};
 
 fn main() {
@@ -13,8 +14,18 @@ fn main() {
     state.with_core(|core| {
         core.log.set_enabled(true);
     });
-    if let Some(save) = &launch.load_save {
-        match state.with_core(|core| load_save_into_session(core, save)) {
+    let launch_save = if let Some(name) = &launch.create_test_free {
+        let Some(slot) = create_test_free_from_single_block(name) else {
+            eprintln!("failed to create test Free save `{name}`");
+            std::process::exit(1);
+        };
+        open_infinifactory::shared::persistent_storage::flush_now();
+        Some(slot.storage_path())
+    } else {
+        launch.load_save.clone()
+    };
+    if let Some(save) = launch_save {
+        match state.with_core(|core| load_save_into_session(core, &save)) {
             Ok(load_ms) => {
                 state.current_save = Some(save.clone());
                 state.last_load_ms = Some(load_ms);
