@@ -11,8 +11,10 @@ pub struct SaveListViewCtx<'a> {
 
 pub struct ActionButtonView {
     pub label: String,
+    pub kind: Option<String>,
     /// 名字旁灰色相对时间（仅存档行）
     pub meta: Option<String>,
+    pub favorite: bool,
     pub enabled: bool,
     pub selected: bool,
     /// 非 None 时强制显隐（Free 选中时隐藏方案/编辑谜题相关按钮）
@@ -24,7 +26,9 @@ impl SaveListAction {
         let free_selected = selected_is_free(ctx.save_state);
         ActionButtonView {
             label: self.button_label(ctx),
+            kind: self.button_kind(ctx),
             meta: self.button_meta(ctx),
+            favorite: self.button_favorite(ctx),
             enabled: self.is_enabled(ctx.save_state),
             selected: self.button_selected(ctx),
             display: self.button_display(free_selected),
@@ -44,6 +48,10 @@ impl SaveListAction {
                 .any(|entry| entry.slot.solution.as_deref() == Some(storage.as_str())),
             Self::NewPuzzle | Self::NewFree | Self::Back => true,
             Self::NewSolution => selected_top_level_kind(save_state) == Some(SaveKind::Puzzle),
+            Self::ToggleFavorite(storage) => save_state
+                .top_level_worlds()
+                .iter()
+                .any(|entry| entry.slot.puzzle == *storage),
             Self::EditSelectedPuzzle => {
                 selected_top_level_kind(save_state) == Some(SaveKind::Puzzle)
             }
@@ -66,11 +74,17 @@ impl SaveListAction {
     fn button_label(&self, ctx: &SaveListViewCtx<'_>) -> String {
         let save_state = ctx.save_state;
         match self {
-            Self::SelectPuzzle(storage) => top_level_display_label(save_state, storage),
+            Self::SelectPuzzle(storage) => save_state
+                .top_level_worlds()
+                .into_iter()
+                .find(|entry| entry.slot.puzzle == *storage)
+                .map(|entry| entry.name.clone())
+                .unwrap_or_else(|| storage.to_string()),
             Self::SelectSolution(storage) => solution_display_name(save_state, storage),
             Self::NewPuzzle => i18n.t("button.new_puzzle"),
             Self::NewFree => i18n.t("button.new_free"),
             Self::NewSolution => i18n.t("button.new_solution"),
+            Self::ToggleFavorite(_) => String::new(),
             Self::EditSelectedPuzzle => i18n.t("button.edit_puzzle"),
             Self::RenameSelectedPuzzle | Self::RenameSelectedSolution => String::new(),
             Self::DeleteSelectedPuzzle | Self::DeleteSelectedSolution => String::new(),
@@ -93,12 +107,45 @@ impl SaveListAction {
                 .find(|entry| entry.slot.solution.as_deref() == Some(storage.as_str())),
             _ => None,
         }?;
-        let updated = entry.updated_at.or(entry.created_at)?;
+        let Some(last_play_time) = entry.last_play_time else {
+            return Some("—".to_string());
+        };
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
-            .unwrap_or(updated);
-        Some(format_relative_saved_at(updated, now))
+            .unwrap_or(last_play_time);
+        Some(format_relative_saved_at(last_play_time, now))
+    }
+
+    fn button_kind(&self, ctx: &SaveListViewCtx<'_>) -> Option<String> {
+        match self {
+            Self::SelectPuzzle(storage) => {
+                let entry = ctx
+                    .save_state
+                    .top_level_worlds()
+                    .into_iter()
+                    .find(|entry| entry.slot.puzzle == *storage)?;
+                let kind_key = match entry.kind {
+                    SaveKind::Puzzle => "save.kind.puzzle",
+                    SaveKind::Free => "save.kind.free",
+                    SaveKind::Solution => "save.kind.solution",
+                };
+                Some(i18n.t(kind_key))
+            }
+            _ => None,
+        }
+    }
+
+    fn button_favorite(&self, ctx: &SaveListViewCtx<'_>) -> bool {
+        match self {
+            Self::SelectPuzzle(storage) => ctx
+                .save_state
+                .top_level_worlds()
+                .into_iter()
+                .find(|entry| entry.slot.puzzle == *storage)
+                .is_some_and(|entry| entry.favorite),
+            _ => false,
+        }
     }
 
     fn button_selected(&self, ctx: &SaveListViewCtx<'_>) -> bool {
@@ -136,22 +183,6 @@ pub fn selected_top_level_kind(save_state: &SaveState) -> Option<SaveKind> {
 
 fn selected_is_free(save_state: &SaveState) -> bool {
     selected_top_level_kind(save_state) == Some(SaveKind::Free)
-}
-
-fn top_level_display_label(save_state: &SaveState, storage: &str) -> String {
-    let Some(entry) = save_state
-        .top_level_worlds()
-        .into_iter()
-        .find(|entry| entry.slot.puzzle == storage)
-    else {
-        return storage.to_string();
-    };
-    let kind_key = match entry.kind {
-        SaveKind::Puzzle => "save.kind.puzzle",
-        SaveKind::Free => "save.kind.free",
-        SaveKind::Solution => "save.kind.solution",
-    };
-    format!("{} · {}", i18n.t(kind_key), entry.name)
 }
 
 fn solution_display_name(save_state: &SaveState, storage: &str) -> String {

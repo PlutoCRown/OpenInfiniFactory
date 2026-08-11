@@ -52,7 +52,20 @@
         "null"
       ],
       "minimum": 0,
-      "description": "上次保存时间（unix 秒）。列表以相对时间展示；旧档可省略。"
+      "description": "上次保存时间（unix 秒）；旧档可省略。"
+    },
+    "last_play_time": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "玩家最近进入世界的时间（unix 秒），进入 Solution 时所属 Puzzle 也同步更新；旧档可省略。"
+    },
+    "favorite": {
+      "type": "boolean",
+      "default": false,
+      "description": "是否收藏该存档。"
     },
     "hotbar": {
       "type": [

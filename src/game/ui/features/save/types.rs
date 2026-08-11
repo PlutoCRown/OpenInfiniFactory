@@ -10,6 +10,8 @@ pub enum SaveListAction {
     SelectPuzzle(String),
     /// 选中上方方案卡片
     SelectSolution(String),
+    /// 切换左侧存档收藏状态
+    ToggleFavorite(String),
     /// 页脚左：编辑当前选中谜题
     EditSelectedPuzzle,
     /// 页脚左：重命名当前选中顶层世界
@@ -80,9 +82,21 @@ pub struct SaveListTitleText;
 #[derive(Component)]
 pub struct SaveListRowName;
 
-/// 存档行灰色相对时间
+/// 左侧存档列表的纯平背景行
+#[derive(Component)]
+pub struct SaveListSaveRow;
+
+/// 存档行类型
+#[derive(Component)]
+pub struct SaveListRowKind;
+
+/// 存档行最近进入时间
 #[derive(Component)]
 pub struct SaveListRowMeta;
+
+/// 存档行收藏星标
+#[derive(Component)]
+pub struct SaveListFavoriteStar;
 
 #[derive(Resource, Default)]
 pub struct SaveListRenderState {

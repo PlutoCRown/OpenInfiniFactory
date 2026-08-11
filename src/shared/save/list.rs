@@ -27,7 +27,7 @@ pub fn list_save_entries() -> Vec<SaveEntry> {
 }
 
 fn entry_from_slot(slot: SaveSlot, fallback: &str, kind: SaveKind) -> SaveEntry {
-    let (name, created_at, updated_at) = read_save(&slot)
+    let (name, created_at, updated_at, last_play_time, favorite) = read_save(&slot)
         .map(|save| {
             (
                 save.meta
@@ -36,15 +36,19 @@ fn entry_from_slot(slot: SaveSlot, fallback: &str, kind: SaveKind) -> SaveEntry 
                     .unwrap_or_else(|| fallback.to_string()),
                 save.meta.created_at,
                 save.meta.updated_at,
+                save.meta.last_play_time,
+                save.meta.favorite,
             )
         })
-        .unwrap_or_else(|| (fallback.to_string(), None, None));
+        .unwrap_or_else(|| (fallback.to_string(), None, None, None, false));
     SaveEntry {
         slot,
         name,
         kind,
         created_at,
         updated_at,
+        last_play_time,
+        favorite,
     }
 }
 

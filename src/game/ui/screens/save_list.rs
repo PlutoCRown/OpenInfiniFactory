@@ -9,9 +9,10 @@ use crate::game::ui::components::{
 
 use super::super::types::{
     LocalizedText, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListCoverHost,
-    SaveListCoverImage, SaveListCoverLoading, SaveListFreeHint, SaveListPanel, SaveListPuzzleRows,
-    SaveListPuzzleScroll, SaveListRowMeta, SaveListRowName, SaveListSolutionRows,
-    SaveListSolutionScroll, SaveListSolutionSection, SaveListTitleText,
+    SaveListCoverImage, SaveListCoverLoading, SaveListFavoriteStar, SaveListFreeHint,
+    SaveListPanel, SaveListPuzzleRows, SaveListPuzzleScroll, SaveListRowKind, SaveListRowMeta,
+    SaveListRowName, SaveListSaveRow, SaveListSolutionRows, SaveListSolutionScroll,
+    SaveListSolutionSection, SaveListTitleText,
 };
 
 /// 相对窗口逻辑像素的外边距（尽量贴边，给封面更多空间）
@@ -21,9 +22,9 @@ const SOLUTION_CARD_WIDTH: f32 = 140.0;
 /// 方案横滑区内边距
 const SOLUTION_STRIP_PAD: f32 = 6.0;
 /// 谜题列最小宽度
-const PUZZLE_COL_MIN: f32 = 168.0;
+const PUZZLE_COL_MIN: f32 = 236.0;
 /// 谜题列最大占比（相对内容区内宽）
-const PUZZLE_COL_MAX_FRACTION: f32 = 0.32;
+const PUZZLE_COL_MAX_FRACTION: f32 = 0.38;
 
 /// 面板外框：padding 8×2 + border 4×2
 const PANEL_CHROME_X: f32 = 24.0;
@@ -470,13 +471,13 @@ fn spawn_footer(panel: &mut ChildSpawnerCommands, icons: &UiIconAssets) {
 
 /// 挂载一条谜题选择行
 pub fn spawn_save_puzzle_row(parent: &mut ChildSpawnerCommands, storage: String) {
+    let favorite_storage = storage.clone();
     parent
         .spawn((
             styled_button(
                 Node {
                     width: Val::Percent(100.0),
-                    height: Val::Px(default_button_size(32.0)),
-                    border: button_border(),
+                    height: Val::Px(default_button_size(34.0)),
                     padding: UiRect::horizontal(Val::Px(10.0)),
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::FlexStart,
@@ -485,17 +486,46 @@ pub fn spawn_save_puzzle_row(parent: &mut ChildSpawnerCommands, storage: String)
                     overflow: Overflow::clip(),
                     ..default()
                 },
-                raised_border(),
-                BUTTON_BG,
+                BorderColor::all(Color::NONE),
+                Color::srgba(0.12, 0.12, 0.14, 0.96),
             ),
-            button_shadow(),
+            SaveListSaveRow,
             SaveListAction::SelectPuzzle(storage),
         ))
         .with_children(|button| {
+            button.spawn((
+                save_row_label("", 12.0, Color::srgb(0.68, 0.68, 0.70)),
+                SaveListRowKind,
+            ));
             button.spawn((save_row_label("", 13.0, Color::WHITE), SaveListRowName));
             button.spawn((
-                save_row_label("", 12.0, Color::srgb(0.55, 0.55, 0.58)),
+                text("", 12.0, Color::srgb(0.55, 0.55, 0.58)),
+                TextLayout::no_wrap(),
                 SaveListRowMeta,
+                Node {
+                    max_width: Val::Percent(100.0),
+                    margin: UiRect::left(Val::Auto),
+                    flex_shrink: 1.0,
+                    ..default()
+                },
+            ));
+            button.spawn((
+                text("★", 19.0, Color::srgb(0.45, 0.45, 0.47)),
+                TextLayout::no_wrap(),
+                SaveListFavoriteStar,
+                SaveListAction::ToggleFavorite(favorite_storage),
+                Pickable {
+                    should_block_lower: true,
+                    is_hoverable: true,
+                },
+                Node {
+                    width: Val::Px(22.0),
+                    height: Val::Px(26.0),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    flex_shrink: 0.0,
+                    ..default()
+                },
             ));
         });
 }
@@ -537,9 +567,9 @@ pub fn spawn_save_solution_card(parent: &mut ChildSpawnerCommands, storage: Opti
         });
 }
 
-/// 方案卡高度：扁一些，把竖直空间让给封面
+/// 方案卡高度：为更宽的左侧列表保留合适的右侧卡片比例
 fn solution_card_height() -> f32 {
-    default_button_size(48.0)
+    default_button_size(60.0)
 }
 
 fn save_row_label(value: impl Into<String>, font_size: f32, color: Color) -> impl Bundle {

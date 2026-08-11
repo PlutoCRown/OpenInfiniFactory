@@ -8,8 +8,8 @@ use crate::game::ui::{FreeInventoryTab, InventoryItems};
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::save::{
     LoadedSave, PlayerSave, SaveKind, SaveSlot, SaveState, has_solutions_for_puzzle,
-    invalidate_solutions_for_puzzle, next_named_save, reset_solution_world, save_free, save_puzzle,
-    save_solution, solution_names_for_puzzle, top_level_world_names,
+    invalidate_solutions_for_puzzle, mark_save_played, next_named_save, reset_solution_world,
+    save_free, save_puzzle, save_solution, solution_names_for_puzzle, top_level_world_names,
 };
 
 use super::world_access::{PlayingWorldParams, SessionStateParams};
@@ -194,6 +194,13 @@ pub fn load_world_into_session(
     current_mode: GameMode,
     next_state: &mut NextState<GameMode>,
 ) {
+    // 进入世界即记录最近游玩时间；进入 Solution 时同时更新所属 Puzzle
+    if !mark_save_played(slot) {
+        bevy::log::warn!(
+            "failed to update last play time for save `{}`",
+            slot.storage_path()
+        );
+    }
     let lighting = loaded.lighting;
     *playing.world = crate::game::world::grid::WorldBlocks(loaded.world);
 

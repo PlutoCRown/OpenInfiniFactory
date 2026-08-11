@@ -9,9 +9,10 @@ pub use crate::game::ui::core::{
 };
 pub use crate::game::ui::features::save::types::{
     SaveListAction, SaveListCloseButton, SaveListCoverHost, SaveListCoverImage,
-    SaveListCoverLoading, SaveListFreeHint, SaveListPanel, SaveListPuzzleRows,
-    SaveListPuzzleScroll, SaveListRenderState, SaveListRowMeta, SaveListRowName,
-    SaveListSolutionRows, SaveListSolutionScroll, SaveListSolutionSection, SaveListTitleText,
+    SaveListCoverLoading, SaveListFavoriteStar, SaveListFreeHint, SaveListPanel,
+    SaveListPuzzleRows, SaveListPuzzleScroll, SaveListRenderState, SaveListRowKind,
+    SaveListRowMeta, SaveListRowName, SaveListSaveRow, SaveListSolutionRows,
+    SaveListSolutionScroll, SaveListSolutionSection, SaveListTitleText,
 };
 pub use crate::game::ui::features::settings::types::{
     GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, OpenSettingsDropdown, PendingKeyBind, SettingsAction,

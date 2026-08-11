@@ -7,6 +7,8 @@ impl SaveFile {
                 name: None,
                 created_at: None,
                 updated_at: None,
+                last_play_time: None,
+                favorite: false,
                 puzzle_id: None,
                 hotbar: layer.hotbar,
                 player,
@@ -31,6 +33,8 @@ impl SaveFile {
                 name: None,
                 created_at: None,
                 updated_at: None,
+                last_play_time: None,
+                favorite: false,
                 puzzle_id: None,
                 hotbar: world.hotbar,
                 player,
@@ -61,6 +65,8 @@ impl SaveFile {
                 name: None,
                 created_at: None,
                 updated_at: None,
+                last_play_time: None,
+                favorite: false,
                 puzzle_id: Some(puzzle_id.to_string()),
                 hotbar: Some(*hotbar),
                 player,
@@ -199,12 +205,15 @@ fn load_puzzle_world(puzzle: &str) -> Option<WorldBlocks> {
 fn write_save(slot: &SaveSlot, mut save: SaveFile) -> bool {
     let now = unix_now_secs();
     // 覆盖保存：名字 / 光照 / 创建时间只保留磁盘上已有的；每次写入刷新 updated_at
-    if let Some(existing) = read_save(slot) {
-        save.meta.name = existing.meta.name;
-        save.meta.sun = existing.meta.sun;
-        save.meta.ambient = existing.meta.ambient;
+    let existing = read_save(slot);
+    if let Some(existing) = existing.as_ref() {
+        save.meta.name = existing.meta.name.clone();
+        save.meta.sun = existing.meta.sun.clone();
+        save.meta.ambient = existing.meta.ambient.clone();
         save.meta.sun_direction = existing.meta.sun_direction;
         save.meta.created_at = existing.meta.created_at.or(Some(now));
+        save.meta.last_play_time = existing.meta.last_play_time;
+        save.meta.favorite = existing.meta.favorite;
     } else {
         save.meta.created_at = Some(now);
     }
@@ -234,6 +243,40 @@ fn unix_now_secs() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+/// 记录进入存档的时间；进入 Solution 时同步更新所属 Puzzle
+pub fn mark_save_played(slot: &SaveSlot) -> bool {
+    let now = unix_now_secs();
+    let mut updated = mark_save_played_at(slot, now);
+    if slot.kind() == SaveKind::Solution {
+        updated = mark_save_played_at(&SaveSlot::puzzle(&slot.puzzle), now) && updated;
+    }
+    updated
+}
+
+/// 切换收藏状态，只写入存档元数据
+pub fn toggle_save_favorite(slot: &SaveSlot) -> bool {
+    let Some(mut save) = read_save(slot) else {
+        return false;
+    };
+    save.meta.favorite = !save.meta.favorite;
+    let Ok(meta) = serde_json::to_string_pretty(&save.meta) else {
+        return false;
+    };
+    persistent_storage::write_save_text(&slot.storage_path(), META_FILE, &meta)
+}
+
+/// 仅更新 meta.json 的进入时间，不触碰世界数据和保存脏状态
+fn mark_save_played_at(slot: &SaveSlot, last_play_time: u64) -> bool {
+    let Some(mut save) = read_save(slot) else {
+        return false;
+    };
+    save.meta.last_play_time = Some(last_play_time);
+    let Ok(meta) = serde_json::to_string_pretty(&save.meta) else {
+        return false;
+    };
+    persistent_storage::write_save_text(&slot.storage_path(), META_FILE, &meta)
 }
 
 /// 读谜题 meta 光照

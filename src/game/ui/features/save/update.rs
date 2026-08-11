@@ -13,9 +13,10 @@ use crate::game::ui::components::{
 use crate::game::ui::screens::{spawn_save_puzzle_row, spawn_save_solution_card};
 use crate::game::ui::types::{
     SaveListAction, SaveListCloseButton, SaveListCoverHost, SaveListCoverImage,
-    SaveListCoverLoading, SaveListFreeHint, SaveListPuzzleRows, SaveListPuzzleScroll,
-    SaveListRenderState, SaveListRowMeta, SaveListRowName, SaveListSolutionRows,
-    SaveListSolutionScroll, SaveListSolutionSection, SaveListTitleText, UiHoverState,
+    SaveListCoverLoading, SaveListFavoriteStar, SaveListFreeHint, SaveListPuzzleRows,
+    SaveListPuzzleScroll, SaveListRenderState, SaveListRowKind, SaveListRowMeta, SaveListRowName,
+    SaveListSaveRow, SaveListSolutionRows, SaveListSolutionScroll, SaveListSolutionSection,
+    SaveListTitleText, UiHoverState,
 };
 use crate::shared::save::{SaveKind, SaveSlot, SaveState, read_cover_png};
 
@@ -332,9 +333,11 @@ pub fn update_save_list_styles(
     hover: Res<UiHoverState>,
     mut render_state: ResMut<SaveListRenderState>,
     mut commands: Commands,
-    mut texts: Query<&mut Text, Without<SaveListTitleText>>,
+    mut texts: Query<&mut Text, (Without<SaveListTitleText>, Without<SaveListFavoriteStar>)>,
+    kind_texts: Query<(), With<SaveListRowKind>>,
     name_texts: Query<(), With<SaveListRowName>>,
     meta_texts: Query<(), With<SaveListRowMeta>>,
+    mut star_texts: Query<(&mut Text, &mut TextColor), With<SaveListFavoriteStar>>,
     mut meta_nodes: Query<&mut Node, (With<SaveListRowMeta>, Without<Button>)>,
     mut buttons: Query<
         (
@@ -344,6 +347,7 @@ pub fn update_save_list_styles(
             &mut BackgroundColor,
             &mut BorderColor,
             &mut Node,
+            Option<&SaveListSaveRow>,
             Option<&DisabledButton>,
         ),
         (With<Button>, Without<SaveListCloseButton>),
@@ -406,7 +410,17 @@ pub fn update_save_list_styles(
         save_state: &save_state,
     };
     render_state.last_hover = hover.entity;
-    for (entity, action, children, mut background, mut border, mut node, disabled) in &mut buttons {
+    for (
+        entity,
+        action,
+        children,
+        mut background,
+        mut border,
+        mut node,
+        save_row,
+        disabled,
+    ) in &mut buttons
+    {
         let view = action.button_view(&ctx);
         if let Some(display) = view.display {
             if node.display != display {
@@ -417,24 +431,35 @@ pub fn update_save_list_styles(
         }
         let hovered = view.enabled && hover.entity == Some(entity);
 
-        *background = if view.enabled && view.selected {
-            Color::srgba(0.22, 0.35, 0.32, 0.96).into()
-        } else if hovered {
-            BUTTON_HOVER_BG.into()
-        } else if view.enabled {
-            BUTTON_BG.into()
+        if save_row.is_some() {
+            *background = if view.selected {
+                Color::srgba(0.38, 0.28, 0.08, 0.98).into()
+            } else if hovered {
+                Color::srgba(0.20, 0.20, 0.21, 0.98).into()
+            } else {
+                Color::srgba(0.12, 0.12, 0.14, 0.96).into()
+            };
+            *border = BorderColor::all(Color::NONE);
         } else {
-            Color::srgba(0.12, 0.12, 0.13, 0.82).into()
-        };
-        *border = if view.selected {
-            pressed_border()
-        } else if hovered {
-            hover_border()
-        } else if view.enabled {
-            raised_border()
-        } else {
-            disabled_border()
-        };
+            *background = if view.enabled && view.selected {
+                Color::srgba(0.22, 0.35, 0.32, 0.96).into()
+            } else if hovered {
+                BUTTON_HOVER_BG.into()
+            } else if view.enabled {
+                BUTTON_BG.into()
+            } else {
+                Color::srgba(0.12, 0.12, 0.13, 0.82).into()
+            };
+            *border = if view.selected {
+                pressed_border()
+            } else if hovered {
+                hover_border()
+            } else if view.enabled {
+                raised_border()
+            } else {
+                disabled_border()
+            };
+        }
 
         // 同步禁用标记，挡住全局 HoverButton 的按下/悬停反馈
         match (view.enabled, disabled.is_some()) {
@@ -455,6 +480,13 @@ pub fn update_save_list_styles(
                             text.0 = view.label.clone();
                         }
                     }
+                } else if kind_texts.contains(child) {
+                    if let Ok(mut text) = texts.get_mut(child) {
+                        let kind = view.kind.clone().unwrap_or_default();
+                        if text.0 != kind {
+                            text.0 = kind;
+                        }
+                    }
                 } else if meta_texts.contains(child) {
                     let meta = view.meta.clone().unwrap_or_default();
                     if let Ok(mut text) = texts.get_mut(child) {
@@ -471,6 +503,18 @@ pub fn update_save_list_styles(
                         if node.display != display {
                             node.display = display;
                         }
+                    }
+                } else if let Ok((mut text, mut color)) = star_texts.get_mut(child) {
+                    let next_color = if view.favorite {
+                        Color::srgb(1.0, 0.78, 0.12)
+                    } else {
+                        Color::srgb(0.45, 0.45, 0.47)
+                    };
+                    if text.0 != "★" {
+                        text.0 = "★".to_string();
+                    }
+                    if color.0 != next_color {
+                        color.0 = next_color;
                     }
                 } else if let Ok(mut text) = texts.get_mut(child) {
                     // 页脚等无分栏按钮：整段写 label
@@ -508,7 +552,7 @@ fn update_puzzle_vscroll(
             .get(content_entity)
             .map(|c| c.len())
             .unwrap_or(0) as f32;
-        let content_h = row_count * 44.0 + 8.0;
+        let content_h = row_count * 47.0 + 8.0;
         let host_h = if host.is_empty() {
             0.0
         } else {

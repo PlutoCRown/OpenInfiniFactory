@@ -204,6 +204,10 @@ pub struct SaveEntry {
     pub created_at: Option<u64>,
     /// 上次保存时间（unix 秒）；旧档可能为 None
     pub updated_at: Option<u64>,
+    /// 玩家最近进入世界的时间（unix 秒）；旧档可能为 None
+    pub last_play_time: Option<u64>,
+    /// 是否收藏
+    pub favorite: bool,
 }
 
 impl SaveEntry {
@@ -240,6 +244,12 @@ struct SaveMeta {
     /// 上次写入时间（unix 秒）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     updated_at: Option<u64>,
+    /// 玩家最近进入世界的时间（unix 秒）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_play_time: Option<u64>,
+    /// 是否收藏
+    #[serde(default)]
+    favorite: bool,
     #[serde(default)]
     puzzle_id: Option<String>,
     #[serde(default)]

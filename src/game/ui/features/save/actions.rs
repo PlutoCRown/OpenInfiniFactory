@@ -7,7 +7,7 @@ use crate::game::ui::access::UiMainThread;
 use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::types::{SaveListCoverImage, SaveListRenderState};
-use crate::shared::save::{SaveKind, SaveSlot, SaveState};
+use crate::shared::save::{SaveKind, SaveSlot, SaveState, toggle_save_favorite};
 
 use super::confirm::open_delete_confirm;
 use super::prompt::{
@@ -115,6 +115,19 @@ pub fn dispatch_save_list_actions(
                     .any(|entry| entry.slot.solution.as_deref() == Some(storage.as_str()))
                 {
                     save_state.select_solution(Some(storage));
+                }
+            }
+            SaveListAction::ToggleFavorite(storage) => {
+                let Some(slot) = save_state
+                    .top_level_worlds()
+                    .into_iter()
+                    .find(|entry| entry.slot.puzzle == storage)
+                    .map(|entry| entry.slot.clone())
+                else {
+                    continue;
+                };
+                if toggle_save_favorite(&slot) {
+                    save_state.refresh();
                 }
             }
             SaveListAction::EditSelectedPuzzle => {
