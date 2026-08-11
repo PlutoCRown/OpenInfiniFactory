@@ -1,6 +1,6 @@
 use bevy::prelude::IVec3;
 
-use crate::game::blocks::{all_blocks, BlockData, BlockKind};
+use crate::game::blocks::{BlockData, BlockKind, all_blocks};
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::WorldBlocks;
@@ -9,7 +9,18 @@ use oif_sim::SimSession;
 
 /// 解析方块种类名（场景 / 材料 / 印花字符串 id，或工厂枚举 Debug 名）
 pub fn parse_block_kind(name: &str) -> Option<BlockKind> {
+    parse_block_kind_exact(name).or_else(|| {
+        // 未识别：材料兜底
+        Some(BlockKind::Material(oif_sim::blocks::fallback_material_id()))
+    })
+}
+
+/// 精确解析查询用的方块种类，不把未知名称静默转换为兜底材料
+pub fn parse_block_kind_exact(name: &str) -> Option<BlockKind> {
     let name = name.trim();
+    if name.is_empty() {
+        return None;
+    }
     let lower = name.to_ascii_lowercase();
     oif_sim::blocks::ensure_fallback_scene_catalog();
     oif_sim::blocks::ensure_fallback_material_catalog();
@@ -37,8 +48,7 @@ pub fn parse_block_kind(name: &str) -> Option<BlockKind> {
     {
         return Some(kind);
     }
-    // 未识别：材料兜底
-    Some(BlockKind::Material(oif_sim::blocks::fallback_material_id()))
+    None
 }
 
 /// 解析朝向名

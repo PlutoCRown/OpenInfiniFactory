@@ -10,12 +10,12 @@ use crate::debug_http::protocol::{
     DebugHttpCommand, DebugHttpRequest, help_json, json_error, json_ok,
 };
 use crate::debug_http::snapshot::{
-    acceptors_json, block_json_with_structure, cursor_target_json, embedded_status_json,
-    perf_stats_json, player_entry_json, pos_json, power_query_json, resolve_pos_query,
-    resolve_structure_query, simulation_status_json,
+    acceptors_json, block_json_with_structure, blocks_json, cursor_target_json,
+    embedded_status_json, perf_stats_json, player_entry_json, pos_json, power_query_json,
+    resolve_pos_query, resolve_structure_query, simulation_status_json,
 };
 use crate::debug_http::world_ops::{
-    block_kinds_json, parse_block_kind, parse_facing, place_blocks_box,
+    block_kinds_json, parse_block_kind, parse_block_kind_exact, parse_facing, place_blocks_box,
 };
 use crate::game::block_editing::world_refresh::refresh_world_after_edit_many;
 use crate::game::debug::SimulationDebugLog;
@@ -416,6 +416,41 @@ fn handle_embedded_debug_command(
                         json_error(&error)
                     }
                 }
+            }
+        }
+        DebugHttpCommand::GetBlocks {
+            kind,
+            x,
+            y,
+            z,
+            x1,
+            y1,
+            z1,
+            radius,
+            limit,
+        } => {
+            let kind = match kind.as_deref() {
+                Some(name) => match parse_block_kind_exact(name) {
+                    Some(kind) => Some(kind),
+                    None => return json_error(&format!("unknown block kind `{name}`")),
+                },
+                None => None,
+            };
+            match blocks_json(
+                &playing.world,
+                Some(&playing.structure_state),
+                kind,
+                x,
+                y,
+                z,
+                x1,
+                y1,
+                z1,
+                radius,
+                limit,
+            ) {
+                Ok(blocks) => json_ok(blocks),
+                Err(error) => json_error(&error),
             }
         }
         DebugHttpCommand::GetStructure {

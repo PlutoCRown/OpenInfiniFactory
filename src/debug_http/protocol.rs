@@ -9,6 +9,17 @@ pub enum DebugHttpCommand {
         z: Option<i32>,
         block_id: Option<u64>,
     },
+    GetBlocks {
+        kind: Option<String>,
+        x: Option<i32>,
+        y: Option<i32>,
+        z: Option<i32>,
+        x1: Option<i32>,
+        y1: Option<i32>,
+        z1: Option<i32>,
+        radius: Option<i32>,
+        limit: usize,
+    },
     GetStructure {
         x: Option<i32>,
         y: Option<i32>,
@@ -92,6 +103,21 @@ pub fn parse_http_request(request: &tiny_http::Request) -> DebugHttpCommand {
                 block_id: params.get("id").and_then(|v| v.parse().ok()),
             }
         }
+        ("GET", "/blocks") | ("GET", "/blocklist") => DebugHttpCommand::GetBlocks {
+            kind: params.get("kind").cloned(),
+            x: params.get("x").and_then(|v| v.parse().ok()),
+            y: params.get("y").and_then(|v| v.parse().ok()),
+            z: params.get("z").and_then(|v| v.parse().ok()),
+            x1: params.get("x1").and_then(|v| v.parse().ok()),
+            y1: params.get("y1").and_then(|v| v.parse().ok()),
+            z1: params.get("z1").and_then(|v| v.parse().ok()),
+            radius: params.get("radius").and_then(|v| v.parse().ok()),
+            limit: params
+                .get("limit")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(100)
+                .clamp(1, 1000),
+        },
         ("GET", "/getstructure") | ("GET", "/structure") => DebugHttpCommand::GetStructure {
             x: params.get("x").and_then(|v| v.parse().ok()),
             y: params.get("y").and_then(|v| v.parse().ok()),
@@ -116,7 +142,7 @@ pub fn parse_http_request(request: &tiny_http::Request) -> DebugHttpCommand {
         ("GET", "/acceptors") => DebugHttpCommand::GetAcceptors,
         ("GET", "/status") => DebugHttpCommand::GetStatus,
         ("GET", "/perf") => DebugHttpCommand::GetPerf,
-        ("GET", "/blockkinds") | ("GET", "/blocks") => DebugHttpCommand::BlockKinds,
+        ("GET", "/blockkinds") => DebugHttpCommand::BlockKinds,
         ("GET", "/logs") => DebugHttpCommand::GetLogs {
             limit: params
                 .get("limit")
@@ -204,6 +230,7 @@ pub fn help_json() -> String {
         "ok": true,
         "endpoints": [
             {"method": "GET", "path": "/block?x=&y=&z=|/block?id=", "desc": "block at coordinate or by id (alias /getPosBlock)"},
+            {"method": "GET", "path": "/blocks?kind=&x=&y=&z=&x1=&y1=&z1=&radius=&limit=", "desc": "list block instances by kind, inclusive range or nearest distance; limit is capped at 1000"},
             {"method": "GET", "path": "/structure?id=|/blockId=|x=&y=&z=", "desc": "structure by id / block id / position"},
             {"method": "GET", "path": "/power?x=&y=&z=|/power?id=", "desc": "signal network (wires + devices) at position/block id"},
             {"method": "GET", "path": "/players", "desc": "player camera position + look target"},

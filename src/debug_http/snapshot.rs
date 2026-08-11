@@ -296,6 +296,113 @@ pub fn resolve_pos_query(
     Err("requires ?x=&y=&z= or ?id=".into())
 }
 
+/// 按方块种类、范围或距离查询世界中的方块实例
+pub fn blocks_json(
+    world: &oif_sim::WorldBlocks,
+    structures: Option<&oif_sim::simulation::structure_state::StructureState>,
+    kind: Option<BlockKind>,
+    x: Option<i32>,
+    y: Option<i32>,
+    z: Option<i32>,
+    x1: Option<i32>,
+    y1: Option<i32>,
+    z1: Option<i32>,
+    radius: Option<i32>,
+    limit: usize,
+) -> Result<Value, String> {
+    let center = match (x, y, z) {
+        (Some(x), Some(y), Some(z)) => Some(IVec3::new(x, y, z)),
+        (None, None, None) => None,
+        _ => return Err("blocks query requires x, y and z together".into()),
+    };
+    let range = match (center, x1, y1, z1) {
+        (Some(start), Some(x1), Some(y1), Some(z1)) => {
+            let end = IVec3::new(x1, y1, z1);
+            Some((start.min(end), start.max(end)))
+        }
+        (Some(_), None, None, None) | (None, None, None, None) => None,
+        _ => return Err("blocks range requires x1, y1 and z1 together with x, y and z".into()),
+    };
+    let radius_squared = match radius {
+        Some(value) if value < 0 => return Err("blocks radius cannot be negative".into()),
+        Some(value) => Some(i64::from(value) * i64::from(value)),
+        None => None,
+    };
+    if radius_squared.is_some() && center.is_none() {
+        return Err("blocks radius requires x, y and z".into());
+    }
+    let limit = limit.clamp(1, 1000);
+
+    let mut matches = world
+        .blocks
+        .iter()
+        .chain(world.system_blocks.iter())
+        .filter_map(|(pos, block)| {
+            if kind.is_some_and(|wanted| wanted != block.kind) {
+                return None;
+            }
+            if let Some((min, max)) = range
+                && ((*pos).x < min.x
+                    || (*pos).y < min.y
+                    || (*pos).z < min.z
+                    || (*pos).x > max.x
+                    || (*pos).y > max.y
+                    || (*pos).z > max.z)
+            {
+                return None;
+            }
+            let distance_squared = center.map(|origin| {
+                let delta = *pos - origin;
+                i64::from(delta.x) * i64::from(delta.x)
+                    + i64::from(delta.y) * i64::from(delta.y)
+                    + i64::from(delta.z) * i64::from(delta.z)
+            });
+            if radius_squared.is_some_and(|max_distance| {
+                distance_squared.map_or(true, |distance| distance > max_distance)
+            }) {
+                return None;
+            }
+            Some((*pos, distance_squared, block.id.0))
+        })
+        .collect::<Vec<_>>();
+
+    matches.sort_by_key(|(pos, distance_squared, id)| {
+        (
+            distance_squared.unwrap_or(i64::MAX),
+            pos.x,
+            pos.y,
+            pos.z,
+            *id,
+        )
+    });
+    let matched = matches.len();
+    let blocks = matches
+        .into_iter()
+        .take(limit)
+        .map(|(pos, distance_squared, _)| {
+            let mut block = block_json_with_structure(world, structures, pos);
+            if let Some(object) = block.as_object_mut() {
+                object.insert("pos".into(), pos_json(pos));
+                if let Some(distance_squared) = distance_squared {
+                    object.insert("distance".into(), json!((distance_squared as f64).sqrt()));
+                }
+            }
+            block
+        })
+        .collect::<Vec<_>>();
+
+    Ok(json!({
+        "kind": kind.map(|value| format!("{value:?}")),
+        "center": center.map(pos_json),
+        "radius": radius,
+        "range": range.map(|(min, max)| json!({ "min": pos_json(min), "max": pos_json(max) })),
+        "matched": matched,
+        "limit": limit,
+        "truncated": matched > limit,
+        "blocks": blocks,
+    }))
+}
+
 /// 电力网络调试 JSON
 pub fn power_query_json(
     cache: &mut oif_sim::simulation::signals::SignalNetworkCache,

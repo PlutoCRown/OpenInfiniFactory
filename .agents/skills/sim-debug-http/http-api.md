@@ -14,6 +14,7 @@
 |------|------|------|
 | GET | `/help` | 端点列表 |
 | GET | `/block?x=&y=&z=` 或 `?id=` | 方块详情（含 acceptor_count）；别名 `/getPosBlock` |
+| GET | `/blocks?kind=&x=&y=&z=&x1=&y1=&z1=&radius=&limit=` | 方块实例列表；可按 `kind` 筛选、按 `(x,y,z)` 到 `(x1,y1,z1)` 做包围盒筛选，或以 `(x,y,z)` 为中心按 `radius` 查找并按距离排序；`limit` 默认 100，最大 1000 |
 | GET | `/structure?...` | 结构查询（`id` / `blockId` / `x,y,z`）；别名 `/getStructure` |
 | GET | `/power?x=&y=&z=` 或 `?id=` | 信号网络：连通分量导线 + 用电器（刷新 SignalNetworkCache） |
 | GET | `/players` | `[{position, look_target}]`；无头 `[]`；内嵌为相机位置 + 准星 |
@@ -22,6 +23,9 @@
 | GET | `/perf` | `load_ms` + `sim_turn` + `frame`（无头 frame=null） |
 | GET | `/logs?limit=` | 模拟日志 |
 | GET | `/blockKinds` | 方块种类表 |
+
+`/blocks` 返回 `matched`、`limit`、`truncated` 和 `blocks`；提供中心点时每个结果带
+`distance`。`/acceptors` 保留为验收结构专用列表，返回结构的 `positions` 和 `count`。
 
 ## Control
 

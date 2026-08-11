@@ -2,13 +2,14 @@ use bevy::prelude::IVec3;
 
 use super::protocol::{DebugHttpCommand, help_json, json_error, json_ok};
 use super::snapshot::{
-    acceptors_json, block_json_with_structure, headless_perf_json, headless_status_json, pos_json,
-    power_query_json, resolve_pos_query, resolve_structure_query, session_status_json,
+    acceptors_json, block_json_with_structure, blocks_json, headless_perf_json,
+    headless_status_json, pos_json, power_query_json, resolve_pos_query, resolve_structure_query,
+    session_status_json,
 };
 use super::standalone::HeadlessDebugState;
 use super::world_ops::{
-    block_kinds_json, load_save_into_session, parse_block_kind, parse_facing, place_blocks_box,
-    reset_session,
+    block_kinds_json, load_save_into_session, parse_block_kind, parse_block_kind_exact,
+    parse_facing, place_blocks_box, reset_session,
 };
 
 /// 处理无头 debug HTTP 命令
@@ -32,6 +33,43 @@ pub fn handle_headless_command(
                 Err(error) => json_error(&error),
             }
         }),
+        DebugHttpCommand::GetBlocks {
+            kind,
+            x,
+            y,
+            z,
+            x1,
+            y1,
+            z1,
+            radius,
+            limit,
+        } => {
+            let kind = match kind.as_deref() {
+                Some(name) => match parse_block_kind_exact(name) {
+                    Some(kind) => Some(kind),
+                    None => return json_error(&format!("unknown block kind `{name}`")),
+                },
+                None => None,
+            };
+            state.with_core(|core| {
+                match blocks_json(
+                    core.world_blocks(),
+                    Some(&core.structure_state),
+                    kind,
+                    x,
+                    y,
+                    z,
+                    x1,
+                    y1,
+                    z1,
+                    radius,
+                    limit,
+                ) {
+                    Ok(blocks) => json_ok(blocks),
+                    Err(error) => json_error(&error),
+                }
+            })
+        }
         DebugHttpCommand::GetStructure {
             x,
             y,
