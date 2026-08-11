@@ -18,8 +18,8 @@ use crate::game::state::{GameSettings, UiPanelId};
 use crate::game::ui::core::confirm_dialog::{ConfirmProps, ConfirmResult};
 use crate::game::ui::core::host::{UiHostCommands, UiInstanceId};
 use crate::game::ui::core::runtime::UiPanelContext;
-use crate::game::ui::features::save_settings::SaveSettingsUiState;
 use crate::game::ui::core::text_prompt::{TextPromptProps, TextPromptResult};
+use crate::game::ui::features::save_settings::SaveSettingsUiState;
 use crate::shared::i18n::{I18n, Language};
 use crate::shared::save::read_save_settings;
 
@@ -123,6 +123,9 @@ impl UiAccess {
                     mouse_sensitivity_x: settings.mouse_sensitivity_x,
                     mouse_sensitivity_y: settings.mouse_sensitivity_y,
                     virtual_controls_opacity: settings.virtual_controls_opacity,
+                    master_volume: settings.master_volume,
+                    music_volume: settings.music_volume,
+                    sfx_volume: settings.sfx_volume,
                 }
             };
             let touch_enabled = world
@@ -166,7 +169,11 @@ impl UiAccess {
         root: Option<Entity>,
     ) -> UiInstanceId {
         with_world(|world| {
-            let Some(slot) = world.resource::<crate::shared::save::SaveState>().current.clone() else {
+            let Some(slot) = world
+                .resource::<crate::shared::save::SaveState>()
+                .current
+                .clone()
+            else {
                 return UiInstanceId::SAVE_SETTINGS;
             };
             let data = read_save_settings(&slot).unwrap_or_default();
@@ -188,12 +195,14 @@ impl UiAccess {
                     .unwrap_or((1280.0, 720.0));
                 save_settings_panel_size(window_w, window_h, scale)
             };
-            world.resource_mut::<SaveSettingsUiState>().slot = Some(slot.clone());
-            let state = world.resource_mut::<SaveSettingsUiState>();
-            state.data = data.clone();
-            state.skybox_bytes = skybox_bytes.clone();
-            state.edit_mode = edit_mode;
-            state.picker_open = false;
+            {
+                let mut state = world.resource_mut::<SaveSettingsUiState>();
+                state.slot = Some(slot.clone());
+                state.data = data.clone();
+                state.skybox_bytes = skybox_bytes.clone();
+                state.edit_mode = edit_mode;
+                state.picker_open = false;
+            }
             let view = crate::game::ui::screens::SaveSettingsSpawnCtx {
                 slot,
                 data,

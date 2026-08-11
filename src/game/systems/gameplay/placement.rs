@@ -96,6 +96,7 @@ pub fn placement_input(
 
     if !gate.allows_active_play(&player.playing_ui) {
         placement.edit_gesture = None;
+        placement.gesture_audio_cells = None;
         despawn_edit_previews(&mut commands, &edit_previews);
         return;
     }
@@ -118,6 +119,7 @@ pub fn placement_input(
     // 模拟期禁止编辑，但仍允许右键传送玩家
     if gate.simulation.is_active() {
         placement.edit_gesture = None;
+        placement.gesture_audio_cells = None;
         despawn_edit_previews(&mut commands, &edit_previews);
         if builder_mode == BuilderMode::Play && input.delete.just_pressed {
             let current_target_pos = placement.target.map(|target| target.pos);
@@ -219,7 +221,7 @@ pub fn placement_input(
                 solution_state.dirty = true;
                 sound_writer.write(PlaySound {
                     sound: SoundId::UiClick,
-                    position: current_target_pos.map(grid_to_world),
+                    position: None,
                     gain: 1.0,
                 });
             }
@@ -263,7 +265,7 @@ pub fn placement_input(
                     solution_state.dirty = true;
                     sound_writer.write(PlaySound {
                         sound: SoundId::UiClick,
-                        position: Some(grid_to_world(pos)),
+                        position: None,
                         gain: 1.0,
                     });
                     // C 切变体后：后续放置朝向跟这个方块对齐
@@ -319,7 +321,7 @@ pub fn placement_input(
                     solution_state.dirty = true;
                     sound_writer.write(PlaySound {
                         sound: SoundId::UiClick,
-                        position: Some(grid_to_world(pos)),
+                        position: None,
                         gain: 1.0,
                     });
                 } else if selected_place_block(
@@ -400,7 +402,7 @@ pub fn placement_input(
                         solution_state.dirty = true;
                         sound_writer.write(PlaySound {
                             sound: SoundId::BlockBreak,
-                            position: Some(grid_to_world(target.pos)),
+                            position: None,
                             gain: 1.0,
                         });
                         placement.edit_gesture = None;
@@ -482,7 +484,7 @@ pub fn placement_input(
                             placed = true;
                             sound_writer.write(PlaySound {
                                 sound: SoundId::BlockPlace,
-                                position: Some(grid_to_world(target.pos)),
+                                position: None,
                                 gain: 1.0,
                             });
                         } else {
@@ -592,12 +594,7 @@ pub fn placement_input(
                         } else {
                             SoundId::BlockBreak
                         },
-                        position: (if placing {
-                            current_place_at
-                        } else {
-                            current_delete_at
-                        })
-                        .map(grid_to_world),
+                        position: None,
                         gain: 1.0,
                     });
                 } else if let Some(name_key) = surface_item {
@@ -611,6 +608,26 @@ pub fn placement_input(
     despawn_edit_previews(&mut commands, &edit_previews);
     if let Some(gesture) = &placement.edit_gesture {
         if !gesture.canceled {
+            let end = match &gesture.kind {
+                EditGestureKind::Place { .. } => current_place_at.unwrap_or(gesture.start),
+                EditGestureKind::Delete => current_delete_at.unwrap_or(gesture.start),
+            };
+            let mode = match &gesture.kind {
+                EditGestureKind::Place { .. } => config.place_selection_mode,
+                EditGestureKind::Delete => config.delete_selection_mode,
+            };
+            let cells = selection_positions(mode, gesture.start, end).len();
+            if placement.gesture_audio_cells != Some(cells) {
+                let had_previous = placement.gesture_audio_cells.is_some();
+                placement.gesture_audio_cells = Some(cells);
+                if had_previous {
+                    sound_writer.write(PlaySound {
+                        sound: SoundId::SelectionTick,
+                        position: None,
+                        gain: 0.55,
+                    });
+                }
+            }
             spawn_gesture_previews(
                 gesture,
                 current_place_at,
@@ -623,7 +640,11 @@ pub fn placement_input(
                 &mut meshes,
                 &render_assets,
             );
+        } else {
+            placement.gesture_audio_cells = None;
         }
+    } else {
+        placement.gesture_audio_cells = None;
     }
 
     let _ = (place_button, delete_button, pick_button);

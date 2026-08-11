@@ -76,9 +76,11 @@ impl Material for GoalGhostMaterial {
     ) -> Result<(), SpecializedMeshPipelineError> {
         if let Some(depth) = &mut descriptor.depth_stencil {
             depth.depth_write_enabled = Some(false);
-            #[cfg(not(target_os = "android"))]
             // 与 StandardMaterial 一样写入 GPU constant bias（否则只有半透明排序用到 depth_bias()）
-            depth.bias.constant = super::depth_bias::GOAL_GHOST as i32;
+            #[cfg(not(target_os = "android"))]
+            {
+                depth.bias.constant = super::depth_bias::GOAL_GHOST as i32;
+            }
         }
         Ok(())
     }

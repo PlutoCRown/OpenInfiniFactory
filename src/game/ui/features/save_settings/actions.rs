@@ -48,7 +48,8 @@ fn parse_values(value: &str, count: usize) -> Option<Vec<f32>> {
         .split(|character: char| character == ',' || character.is_ascii_whitespace())
         .filter(|part| !part.is_empty())
         .map(str::parse)
-        .collect::<Result<_, _>>()?;
+        .collect::<Result<_, _>>()
+        .ok()?;
     (values.len() == count && values.iter().all(|value| value.is_finite())).then_some(values)
 }
 

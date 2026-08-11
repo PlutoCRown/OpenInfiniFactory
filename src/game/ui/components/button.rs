@@ -2,6 +2,8 @@ use bevy::picking::pointer::PointerButton;
 use bevy::picking::prelude::{Cancel, Out, Over, Pointer, Press, Release};
 use bevy::prelude::*;
 
+use crate::game::audio::{PlaySound, SoundId};
+
 use super::text::default_button_size;
 
 pub const BUTTON_BG: Color = Color::srgb(0.56, 0.56, 0.56);
@@ -209,6 +211,7 @@ pub fn button_pressed(
         (&mut BackgroundColor, &mut BorderColor),
         (With<HoverButton>, Without<DisabledButton>),
     >,
+    mut sounds: MessageWriter<PlaySound>,
 ) {
     if event.event.button != PointerButton::Primary {
         return;
@@ -219,6 +222,11 @@ pub fn button_pressed(
     event.propagate(false);
     *background = BUTTON_PRESSED_BG.into();
     *border = pressed_border();
+    sounds.write(PlaySound {
+        sound: SoundId::SelectionTick,
+        position: None,
+        gain: 0.55,
+    });
 }
 
 pub fn button_released(

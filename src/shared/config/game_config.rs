@@ -33,7 +33,7 @@ pub const DEFAULT_CONFIG: GameConfig = GameConfig {
     mouse_sensitivity_y: 1.0,
     virtual_controls_opacity: 1.0,
     master_volume: 1.0,
-    music_volume: 1.0,
+    music_volume: 0.0,
     sfx_volume: 1.0,
     shadows_enabled: true,
     ssao_quality: ConfigSsaoQuality::High,

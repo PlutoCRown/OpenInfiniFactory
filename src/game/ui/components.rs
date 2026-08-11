@@ -8,9 +8,10 @@ mod text;
 
 pub use button::{
     BUTTON_BG, BUTTON_BORDER_X, BUTTON_HOVER_BG, BUTTON_PRESSED_BG, DisabledButton,
-    auto_width_button, button_border, button_hovered, button_pressed, button_released,
-    button_shadow, button_unhovered, disabled_border, full_width_button, hover_border,
-    inset_border, menu_button, pressed_border, raised_border, styled_button, text_button,
+    auto_width_button, button_border, button_cancelled, button_hovered, button_pressed,
+    button_released, button_shadow, button_unhovered, disabled_border, full_width_button,
+    hover_border, inset_border, menu_button, pressed_border, raised_border, styled_button,
+    text_button,
 };
 pub use icon::{UiIconAssets, spawn_ui_icon};
 pub use layout::{flex_row, flex_row_auto, root_node, transparent_node, ui_logical_bounds};

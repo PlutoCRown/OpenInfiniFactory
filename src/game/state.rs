@@ -11,6 +11,8 @@ pub struct PlacementState {
     pub preview_facing: Facing,
     pub edit_gesture: Option<EditGesture>,
     pub selection: SelectionState,
+    /// 放置/删除框选音效用：上一帧选区格数（变化时播轻微咔哒）
+    pub gesture_audio_cells: Option<usize>,
 }
 
 impl Default for PlacementState {
@@ -21,6 +23,7 @@ impl Default for PlacementState {
             preview_facing: Facing::North,
             edit_gesture: None,
             selection: SelectionState::default(),
+            gesture_audio_cells: None,
         }
     }
 }
@@ -310,7 +313,7 @@ impl Default for GameSettings {
             mouse_sensitivity_y: crate::game::MOUSE_SENSITIVITY_DEFAULT,
             virtual_controls_opacity: 1.0,
             master_volume: 1.0,
-            music_volume: 1.0,
+            music_volume: 0.0,
             sfx_volume: 1.0,
         }
     }

@@ -43,11 +43,34 @@ pub fn update_save_settings_ui(
     mut preview: Query<&mut ImageNode, With<SaveSettingsSkyboxPreview>>,
     mut images: ResMut<Assets<Image>>,
     mut values: Query<(&SaveSettingsValueText, &mut Text)>,
-    mut block_images: Query<(&SaveSettingsBlockIcon, &mut ImageNode)>,
+    mut block_images: Query<
+        (&SaveSettingsBlockIcon, &mut ImageNode),
+        Without<SaveSettingsSkyboxPreview>,
+    >,
     mut picker: Query<&mut Node, With<SaveSettingsFactoryPicker>>,
-    mut marks: Query<(&SaveSettingsFilterMark, &Children, &mut Visibility)>,
-    mut check_marks: Query<&mut Visibility, With<SaveSettingsCheckMark>>,
-    mut cross_marks: Query<&mut Visibility, With<SaveSettingsCrossMark>>,
+    mut marks: Query<
+        (&SaveSettingsFilterMark, &Children, &mut Visibility),
+        (
+            Without<SaveSettingsCheckMark>,
+            Without<SaveSettingsCrossMark>,
+        ),
+    >,
+    mut check_marks: Query<
+        &mut Visibility,
+        (
+            With<SaveSettingsCheckMark>,
+            Without<SaveSettingsFilterMark>,
+            Without<SaveSettingsCrossMark>,
+        ),
+    >,
+    mut cross_marks: Query<
+        &mut Visibility,
+        (
+            With<SaveSettingsCrossMark>,
+            Without<SaveSettingsFilterMark>,
+            Without<SaveSettingsCheckMark>,
+        ),
+    >,
     added_preview: Query<(), Added<SaveSettingsSkyboxPreview>>,
 ) {
     if !runtime.is_save_settings_open() {

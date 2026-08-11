@@ -15,8 +15,8 @@ pub use crate::game::ui::features::save::types::{
     SaveListSolutionScroll, SaveListSolutionSection, SaveListTitleText,
 };
 pub use crate::game::ui::features::settings::types::{
-    GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, OpenSettingsDropdown, PendingKeyBind, SettingsAction,
-    SettingsControl, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList,
+    AUDIO_SETTINGS, GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, OpenSettingsDropdown, PendingKeyBind,
+    SettingsAction, SettingsControl, SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList,
     SettingsDropdownRow, SettingsField, SettingsItem, SettingsSliderFill, SettingsSliderKnob,
     SettingsTab, SettingsText, SettingsTextKind, SettingsValueText, TOUCH_SETTINGS,
 };
@@ -24,9 +24,7 @@ pub use crate::game::ui::features::settings::types::{
 use crate::game::blocks::{BlockKind, PLAY_BLOCKS, edit_blocks};
 use crate::game::state::{BuilderMode, WorldEntryMode};
 use crate::shared::config::ActionKeyName;
-use crate::shared::save::{
-    FactoryBlockFilter, SavedAreaKind, SavedHotbar, SavedHotbarItem,
-};
+use crate::shared::save::{FactoryBlockFilter, SavedAreaKind, SavedHotbar, SavedHotbarItem};
 use oif_sim::blocks::{FALLBACK_MATERIAL_STRING_ID, material_catalog};
 
 pub const HOTBAR_SLOTS: usize = 9;
@@ -272,7 +270,9 @@ impl InventoryItems {
         } else {
             Self::for_mode_with_filter(
                 builder_mode,
-                (entry == WorldEntryMode::PlaySolution).then_some(factory_filter).flatten(),
+                (entry == WorldEntryMode::PlaySolution)
+                    .then_some(factory_filter)
+                    .flatten(),
             )
         }
     }
