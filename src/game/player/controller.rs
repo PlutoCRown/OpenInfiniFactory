@@ -120,6 +120,7 @@ pub fn spawn_player(
             },
             GameplayCamera,
             GameplayScene,
+            SpatialListener::new(0.25),
             environment_map_light(&mut images, &lighting),
         ))
         .insert((

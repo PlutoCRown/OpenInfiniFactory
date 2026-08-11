@@ -1,6 +1,7 @@
 pub mod block_editing;
 pub mod blocks;
 pub mod cameras;
+pub mod audio;
 pub mod debug;
 pub mod edit_history;
 pub mod input;
@@ -105,6 +106,9 @@ impl Plugin for GamePlugin {
             mouse_sensitivity_x: config.mouse_sensitivity_x,
             mouse_sensitivity_y: config.mouse_sensitivity_y,
             virtual_controls_opacity: config.virtual_controls_opacity.clamp(0.0, 1.0),
+            master_volume: config.master_volume.clamp(0.0, 1.0),
+            music_volume: config.music_volume.clamp(0.0, 1.0),
+            sfx_volume: config.sfx_volume.clamp(0.0, 1.0),
         };
 
         app.add_plugins(StoragePlugin)
@@ -154,6 +158,7 @@ impl Plugin for GamePlugin {
             .init_resource::<material_blocks::PaintMaterialRegistry>()
             .insert_resource(systems::debug::DebugState::default())
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
+            .add_plugins(audio::GameAudioPlugin)
             .add_plugins(input::GameplayInputPlugin)
             .add_plugins(SessionPlugin)
             .add_plugins(GameUiPlugin)
@@ -368,6 +373,9 @@ fn apply_storage_ready(
         .mouse_sensitivity_y
         .clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX);
     loaded.virtual_controls_opacity = loaded.virtual_controls_opacity.clamp(0.0, 1.0);
+    loaded.master_volume = loaded.master_volume.clamp(0.0, 1.0);
+    loaded.music_volume = loaded.music_volume.clamp(0.0, 1.0);
+    loaded.sfx_volume = loaded.sfx_volume.clamp(0.0, 1.0);
 
     *i18n = I18n::new(resolve_language(loaded.language));
     settings.fov_degrees = loaded.fov_degrees;
@@ -376,6 +384,9 @@ fn apply_storage_ready(
     settings.mouse_sensitivity_x = loaded.mouse_sensitivity_x;
     settings.mouse_sensitivity_y = loaded.mouse_sensitivity_y;
     settings.virtual_controls_opacity = loaded.virtual_controls_opacity;
+    settings.master_volume = loaded.master_volume;
+    settings.music_volume = loaded.music_volume;
+    settings.sfx_volume = loaded.sfx_volume;
     ui_scale.0 = touch.effective_ui_scale(loaded.ui_scale);
     *config = loaded;
     save_state.refresh();

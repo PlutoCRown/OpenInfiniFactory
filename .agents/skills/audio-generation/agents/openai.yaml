@@ -1,0 +1,4 @@
+interface:
+  display_name: "Audio Generation"
+  short_description: "Generate game audio with NumPy SciPy Pedalboard and Pyo"
+  default_prompt: "Use $audio-generation to create and validate game audio assets for this project."

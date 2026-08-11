@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 use super::{CachedTurn, SimSnapshot, SimulationWorker, TurnCache};
+use crate::game::audio::{PlaySound, SoundId};
 use crate::game::simulation::core::prepare_upcoming_generation;
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::pending::PendingGeneratedMaterials;
@@ -15,7 +16,7 @@ use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     AnimationTiming, BlockAnimation, BlockAnimationKind, SIMULATION_TURN_SECONDS,
 };
-use crate::game::world::grid::WorldBlocks;
+use crate::game::world::grid::{WorldBlocks, grid_to_world};
 use crate::game::world::rendering::{
     PendingGeneratedPreview, PortalFlashQueue, SceneChunkMeshes, WorldRenderAssets,
     despawn_pending_generated_previews, spawn_pending_generated_block,
@@ -252,6 +253,67 @@ fn present_turn(
         &mut deps.sim_stats,
         &mut deps.portal_flash_queue,
     );
+    for &(from, to) in &cached.output.weld_sparks {
+        commands.write_message(PlaySound {
+            sound: SoundId::Weld,
+            position: Some(grid_to_world(from).lerp(grid_to_world(to), 0.5)),
+            gain: 1.0,
+        });
+    }
+    for debris in &cached.output.break_debris {
+        commands.write_message(PlaySound {
+            sound: SoundId::DrillBreak,
+            position: Some(grid_to_world(debris.pos)),
+            gain: 1.0,
+        });
+    }
+    for debris in &cached.output.acceptance_sparks {
+        commands.write_message(PlaySound {
+            sound: SoundId::Acceptance,
+            position: Some(grid_to_world(debris.pos)),
+            gain: 1.0,
+        });
+    }
+    for &(from, to, _) in &cached.output.teleport_flashes {
+        commands.write_message(PlaySound {
+            sound: SoundId::SciFi,
+            position: Some(grid_to_world(from).lerp(grid_to_world(to), 0.5)),
+            gain: 1.0,
+        });
+    }
+    for &pos in &cached.output.behavior_sparks {
+        commands.write_message(PlaySound {
+            sound: SoundId::MachineWork,
+            position: Some(grid_to_world(pos)),
+            gain: 0.7,
+        });
+    }
+    for &pos in cached.output.pusher_animations.keys() {
+        commands.write_message(PlaySound {
+            sound: SoundId::MachineWork,
+            position: Some(grid_to_world(pos)),
+            gain: 1.0,
+        });
+    }
+    for &pos in &cached.output.powered_devices {
+        let Some(block) = deps.world.blocks.get(&pos) else {
+            continue;
+        };
+        if matches!(
+            block.kind,
+            oif_sim::blocks::BlockKind::Rotator
+                | oif_sim::blocks::BlockKind::CounterRotator
+                | oif_sim::blocks::BlockKind::Lifter
+                | oif_sim::blocks::BlockKind::Welder
+                | oif_sim::blocks::BlockKind::DownWelder
+        ) {
+            commands.write_message(PlaySound {
+                sound: SoundId::MachineWork,
+                position: Some(grid_to_world(pos)),
+                gain: 0.75,
+            });
+        }
+    }
     deps.presentation.last_powered_wires = cached.output.powered_wires.clone();
     *last_powered_devices = cached.output.powered_devices.clone();
     deps.presentation.committed_world = deps.world.clone();

@@ -172,6 +172,10 @@ pub fn dispatch_settings_actions(
                 *settings_tab = SettingsTab::KeyBindings;
                 open_dropdown.0 = None;
             }
+            SettingsAction::TabAudio => {
+                *settings_tab = SettingsTab::Audio;
+                open_dropdown.0 = None;
+            }
             SettingsAction::Field(field) => {
                 active_slider.0 = Some(field);
             }

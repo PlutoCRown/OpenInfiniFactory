@@ -8,9 +8,9 @@ use super::super::components::{
     spawn_panel, transparent_node,
 };
 use super::super::types::{
-    GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, PanelVisibility, SettingsAction, SettingsControl,
-    SettingsDropdown, SettingsDropdownRow, SettingsItem, SettingsTab, TOUCH_SETTINGS,
-    UiPanelBinding,
+    AUDIO_SETTINGS, GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, PanelVisibility, SettingsAction,
+    SettingsControl, SettingsDropdown, SettingsDropdownRow, SettingsItem, SettingsTab,
+    TOUCH_SETTINGS, UiPanelBinding,
 };
 use super::super::widgets::{
     spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_dropdown_list,
@@ -50,6 +50,7 @@ pub fn spawn_settings_panel(
             spawn_gameplay_settings(panel, settings);
             spawn_graphics_settings(panel, settings);
             spawn_key_bindings(panel, settings, touch_enabled);
+            spawn_audio_settings(panel, settings);
         },
     );
     spawn_settings_dropdown_layers(root);
@@ -69,6 +70,7 @@ fn spawn_settings_tabs(panel: &mut ChildSpawnerCommands) {
             spawn_settings_tab(tabs, SettingsAction::TabGameplay);
             spawn_settings_tab(tabs, SettingsAction::TabGraphics);
             spawn_settings_tab(tabs, SettingsAction::TabKeyBindings);
+            spawn_settings_tab(tabs, SettingsAction::TabAudio);
         });
 }
 
@@ -290,6 +292,19 @@ fn spawn_key_bindings(
                         );
                         spawn_key_group(columns, "settings.group.mouse", &ActionKeyName::MOUSE);
                     });
+            });
+        });
+}
+
+fn spawn_audio_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
+    panel
+        .spawn(scroll_container())
+        .insert(PanelVisibility::SettingsTab(SettingsTab::Audio))
+        .with_children(|container| {
+            container.spawn(scroll_content()).with_children(|content| {
+                for item in AUDIO_SETTINGS {
+                    spawn_settings_item(content, *item, settings, SettingsTab::Audio);
+                }
             });
         });
 }
