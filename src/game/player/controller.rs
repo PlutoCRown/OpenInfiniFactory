@@ -14,16 +14,26 @@ use crate::game::cameras::{
 };
 use crate::game::local_player::LocalPlayer;
 use crate::game::scene_blocks::SceneBlockRegistry;
-use crate::game::state::GameSettings;
+use crate::game::state::{GameSettings, SimulationState};
 use crate::game::systems::gameplay::GameplayPlayGate;
+use crate::game::world::animation::{AnimatedBlock, SIMULATION_TURN_SECONDS};
 use crate::game::world::grid::{WorldBlocks, grid_to_world};
-use crate::game::world::rendering::{GameplayScene, environment_map_light, gameplay_ssao};
+use crate::game::world::rendering::{
+    BlockEntity, GameplayScene, environment_map_light, gameplay_ssao,
+};
 use crate::shared::config::GameConfig;
 use crate::shared::save::PuzzleLighting;
 
 pub const EYE_HEIGHT: f32 = 1.7;
 pub const PLAYER_RADIUS: f32 = 0.28;
 pub const PLAYER_HEIGHT: f32 = EYE_HEIGHT;
+/// 玩家附近正在平移的方块碰撞代理。
+struct DynamicBlockCollision {
+    min: Vec3,
+    max: Vec3,
+    delta: Vec3,
+}
+
 const FLOOR_TOP_Y: f32 = 1.0;
 const SPAWN_EYE_Y: f32 = FLOOR_TOP_Y + EYE_HEIGHT + 0.08;
 const PLAYER_SPEED: f32 = 5.5;
@@ -204,11 +214,16 @@ pub fn camera_move(
     input: Res<crate::game::input::GameplayInputState>,
     keys: Res<ButtonInput<KeyCode>>,
     settings: Res<GameSettings>,
+    simulation: Res<SimulationState>,
     gate: GameplayPlayGate,
     player: LocalPlayer,
     world: Res<WorldBlocks>,
     scene_registry: Res<SceneBlockRegistry>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
+    animated_blocks: Query<
+        (&Transform, &BlockEntity, &AnimatedBlock),
+        Without<FlyCamera>,
+    >,
 ) {
     if !gate.allows_active_play(&player.playing_ui) {
         return;
@@ -217,6 +232,149 @@ pub fn camera_move(
     let Ok((mut camera, mut transform)) = query.single_mut() else {
         return;
     };
+
+    let mut dynamic_blocks = Vec::new();
+    let mut dynamic_targets = Vec::new();
+    if simulation.is_active() {
+        let search_min = transform.translation - Vec3::splat(2.5);
+        let search_max = transform.translation + Vec3::splat(2.5);
+        for (block_transform, entity, animation) in &animated_blocks {
+            let Some(delta) = animation.translation_delta(time.delta_secs()) else {
+                continue;
+            };
+            let center = block_transform.translation;
+            let min = center - Vec3::splat(0.5);
+            let max = center + Vec3::splat(0.5);
+            let next_min = min + delta;
+            let next_max = max + delta;
+            if (max.x < search_min.x && next_max.x < search_min.x)
+                || (min.x > search_max.x && next_min.x > search_max.x)
+                || (max.y < search_min.y && next_max.y < search_min.y)
+                || (min.y > search_max.y && next_min.y > search_max.y)
+                || (max.z < search_min.z && next_max.z < search_min.z)
+                || (min.z > search_max.z && next_min.z > search_max.z)
+            {
+                continue;
+            }
+            if world
+                .blocks
+                .get(&entity.pos)
+                .copied()
+                .filter(|block| block.id == entity.id && block.kind.has_collision())
+                .or_else(|| {
+                    world
+                        .blocks
+                        .values()
+                        .copied()
+                        .find(|block| block.id == entity.id && block.kind.has_collision())
+                })
+                .is_none()
+            {
+                continue;
+            }
+            dynamic_targets.push(entity.pos);
+            dynamic_blocks.push(DynamicBlockCollision {
+                min,
+                max,
+                delta,
+            });
+        }
+    }
+
+    // 移动方块由玩家侧采样：先带走站在方块上的玩家，再处理侧向推动。
+    if !camera.flying {
+        let (player_min, player_max) = player_aabb(transform.translation);
+        let support_min = Vec3::new(player_min.x, player_min.y - 0.04, player_min.z);
+        let support_max = Vec3::new(player_max.x, player_min.y, player_max.z);
+        let mut carried = false;
+        for dynamic in &dynamic_blocks {
+            if carried
+                || !aabb_intersects(support_min, support_max, dynamic.min, dynamic.max)
+            {
+                continue;
+            }
+            move_with_collision(
+                &mut transform.translation,
+                dynamic.delta,
+                &world,
+                &scene_registry,
+                &dynamic_blocks,
+                &dynamic_targets,
+                false,
+                false,
+            );
+            carried = true;
+        }
+        for dynamic in &dynamic_blocks {
+            let next_min = dynamic.min + dynamic.delta;
+            let next_max = dynamic.max + dynamic.delta;
+            if aabb_intersects(player_min, player_max, next_min, next_max) {
+                move_with_collision(
+                    &mut transform.translation,
+                    dynamic.delta,
+                    &world,
+                    &scene_registry,
+                    &dynamic_blocks,
+                    &dynamic_targets,
+                    false,
+                    false,
+                );
+                break;
+            }
+        }
+    }
+
+    // 传送带是静态方块，运输由玩家在脚下局部查询完成。
+    if simulation.running && !camera.flying {
+        let (player_min, player_max) = player_aabb(transform.translation);
+        let probe_min = Vec3::new(player_min.x, player_min.y - 0.04, player_min.z);
+        let probe_max = Vec3::new(player_max.x, player_min.y, player_max.z);
+        let min_block = probe_min.floor().as_ivec3();
+        let max_block = (probe_max - Vec3::splat(AABB_EPSILON)).floor().as_ivec3();
+        let duration = SIMULATION_TURN_SECONDS / simulation.speed.max(0.001);
+        let distance = (time.delta_secs() / duration).min(1.0);
+        let mut conveyor_delta = Vec3::ZERO;
+        'conveyor: for x in min_block.x..=max_block.x {
+            for y in (min_block.y - 1)..=max_block.y {
+                for z in min_block.z..=max_block.z {
+                    let pos = IVec3::new(x, y, z);
+                    let Some(block) = world.blocks.get(&pos) else {
+                        continue;
+                    };
+                    let direction = match block.kind {
+                        crate::game::blocks::BlockKind::Conveyor => block.facing.forward_ivec3(),
+                        crate::game::blocks::BlockKind::ReverseConveyor => {
+                            -block.facing.forward_ivec3()
+                        }
+                        _ => continue,
+                    };
+                    if player_hits_block(
+                        probe_min,
+                        probe_max,
+                        pos,
+                        &world,
+                        &scene_registry,
+                        &dynamic_targets,
+                    ) {
+                        conveyor_delta = direction.as_vec3() * distance;
+                        break 'conveyor;
+                    }
+                }
+            }
+        }
+        if conveyor_delta != Vec3::ZERO {
+            move_with_collision(
+                &mut transform.translation,
+                conveyor_delta,
+                &world,
+                &scene_registry,
+                &dynamic_blocks,
+                &dynamic_targets,
+                false,
+                false,
+            );
+        }
+    }
 
     let now = time.elapsed_secs();
 
@@ -256,6 +414,8 @@ pub fn camera_move(
             delta,
             &world,
             &scene_registry,
+            &dynamic_blocks,
+            &dynamic_targets,
             true,
             camera.grounded && !camera.flying,
         );
@@ -286,6 +446,8 @@ pub fn camera_move(
                 drift,
                 &world,
                 &scene_registry,
+                &dynamic_blocks,
+                &dynamic_targets,
                 true,
                 false,
             );
@@ -307,12 +469,20 @@ pub fn camera_move(
                 Vec3::Y * vertical * FLY_SPEED * time.delta_secs(),
                 &world,
                 &scene_registry,
+                &dynamic_blocks,
+                &dynamic_targets,
                 false,
                 false,
             );
             if vertical < 0.0
                 && (transform.translation.y == before_y
-                    || is_supported(transform.translation, &world, &scene_registry))
+                    || is_supported(
+                        transform.translation,
+                        &world,
+                        &scene_registry,
+                        &dynamic_blocks,
+                        &dynamic_targets,
+                    ))
             {
                 camera.flying = false;
                 camera.grounded = true;
@@ -332,6 +502,8 @@ pub fn camera_move(
             vertical_delta,
             &world,
             &scene_registry,
+            &dynamic_blocks,
+            &dynamic_targets,
             false,
             false,
         );
@@ -340,9 +512,21 @@ pub fn camera_move(
             camera.grounded = false;
         } else if transform.translation.y == before.y && camera.velocity_y <= 0.0 {
             camera.velocity_y = 0.0;
-            camera.grounded = is_supported(transform.translation, &world, &scene_registry);
+            camera.grounded = is_supported(
+                transform.translation,
+                &world,
+                &scene_registry,
+                &dynamic_blocks,
+                &dynamic_targets,
+            );
         } else {
-            camera.grounded = is_supported(transform.translation, &world, &scene_registry);
+            camera.grounded = is_supported(
+                transform.translation,
+                &world,
+                &scene_registry,
+                &dynamic_blocks,
+                &dynamic_targets,
+            );
         }
     }
 
@@ -467,28 +651,43 @@ fn move_with_collision(
     delta: Vec3,
     world: &WorldBlocks,
     scene_registry: &SceneBlockRegistry,
+    dynamic_blocks: &[DynamicBlockCollision],
+    dynamic_targets: &[IVec3],
     allow_step_up: bool,
     ground_snap: bool,
 ) {
-    let overlap0 = collision_overlap_score(*position, world, scene_registry);
+    let overlap0 = collision_overlap_score(
+        *position,
+        world,
+        scene_registry,
+        dynamic_blocks,
+        dynamic_targets,
+    );
 
     // X：可走则走；否则在 STEP_HEIGHT 内二分最小抬升（贴斜面，而非整级蹦）
     let mut next = *position;
     next.x += delta.x;
-    if can_move_to(next, overlap0, world, scene_registry) {
+    if can_move_to(next, overlap0, world, scene_registry, dynamic_blocks, dynamic_targets) {
         position.x = next.x;
     } else if allow_step_up && delta.x.abs() > AABB_EPSILON {
         let base_y = position.y;
         let mut probe = *position;
         probe.x += delta.x;
         probe.y = base_y + STEP_HEIGHT;
-        if can_move_to(probe, overlap0, world, scene_registry) {
+        if can_move_to(probe, overlap0, world, scene_registry, dynamic_blocks, dynamic_targets) {
             let mut lo = 0.0;
             let mut hi = STEP_HEIGHT;
             for _ in 0..12 {
                 let mid = (lo + hi) * 0.5;
                 probe.y = base_y + mid;
-                if can_move_to(probe, overlap0, world, scene_registry) {
+                if can_move_to(
+                    probe,
+                    overlap0,
+                    world,
+                    scene_registry,
+                    dynamic_blocks,
+                    dynamic_targets,
+                ) {
                     hi = mid;
                 } else {
                     lo = mid;
@@ -499,25 +698,38 @@ fn move_with_collision(
         }
     }
 
-    let overlap1 = collision_overlap_score(*position, world, scene_registry);
+    let overlap1 = collision_overlap_score(
+        *position,
+        world,
+        scene_registry,
+        dynamic_blocks,
+        dynamic_targets,
+    );
 
     // Z
     next = *position;
     next.z += delta.z;
-    if can_move_to(next, overlap1, world, scene_registry) {
+    if can_move_to(next, overlap1, world, scene_registry, dynamic_blocks, dynamic_targets) {
         position.z = next.z;
     } else if allow_step_up && delta.z.abs() > AABB_EPSILON {
         let base_y = position.y;
         let mut probe = *position;
         probe.z += delta.z;
         probe.y = base_y + STEP_HEIGHT;
-        if can_move_to(probe, overlap1, world, scene_registry) {
+        if can_move_to(probe, overlap1, world, scene_registry, dynamic_blocks, dynamic_targets) {
             let mut lo = 0.0;
             let mut hi = STEP_HEIGHT;
             for _ in 0..12 {
                 let mid = (lo + hi) * 0.5;
                 probe.y = base_y + mid;
-                if can_move_to(probe, overlap1, world, scene_registry) {
+                if can_move_to(
+                    probe,
+                    overlap1,
+                    world,
+                    scene_registry,
+                    dynamic_blocks,
+                    dynamic_targets,
+                ) {
                     hi = mid;
                 } else {
                     lo = mid;
@@ -533,13 +745,15 @@ fn move_with_collision(
         let start_y = position.y;
         let mut probe = *position;
         probe.y = start_y - STEP_HEIGHT;
-        if collides(*position, world, scene_registry) {
+        if collides(*position, world, scene_registry, dynamic_blocks, dynamic_targets) {
             // 已陷入则交给 overlap 脱困，不硬拽
-        } else if collides(probe, world, scene_registry)
+        } else if collides(probe, world, scene_registry, dynamic_blocks, dynamic_targets)
             || is_supported(
                 Vec3::new(position.x, start_y - STEP_HEIGHT + 0.02, position.z),
                 world,
                 scene_registry,
+                dynamic_blocks,
+                dynamic_targets,
             )
         {
             let mut lo = 0.0;
@@ -547,7 +761,7 @@ fn move_with_collision(
             for _ in 0..12 {
                 let mid = (lo + hi) * 0.5;
                 probe.y = start_y - mid;
-                if collides(probe, world, scene_registry) {
+                if collides(probe, world, scene_registry, dynamic_blocks, dynamic_targets) {
                     hi = mid;
                 } else {
                     lo = mid;
@@ -558,12 +772,18 @@ fn move_with_collision(
         }
     }
 
-    let overlap2 = collision_overlap_score(*position, world, scene_registry);
+    let overlap2 = collision_overlap_score(
+        *position,
+        world,
+        scene_registry,
+        dynamic_blocks,
+        dynamic_targets,
+    );
 
     // Y（重力 / 飞行竖移）
     next = *position;
     next.y += delta.y;
-    if can_move_to(next, overlap2, world, scene_registry) {
+    if can_move_to(next, overlap2, world, scene_registry, dynamic_blocks, dynamic_targets) {
         position.y = next.y;
     }
 }
@@ -574,7 +794,11 @@ fn player_hits_block(
     block_pos: IVec3,
     world: &WorldBlocks,
     scene_registry: &SceneBlockRegistry,
+    dynamic_targets: &[IVec3],
 ) -> bool {
+    if dynamic_targets.contains(&block_pos) {
+        return false;
+    }
     let Some(block) = world.blocks.get(&block_pos) else {
         return false;
     };
@@ -588,7 +812,13 @@ fn player_hits_block(
     aabb_intersects(player_min, player_max, block_min, block_min + Vec3::ONE)
 }
 
-fn collides(position: Vec3, world: &WorldBlocks, scene_registry: &SceneBlockRegistry) -> bool {
+fn collides(
+    position: Vec3,
+    world: &WorldBlocks,
+    scene_registry: &SceneBlockRegistry,
+    dynamic_blocks: &[DynamicBlockCollision],
+    dynamic_targets: &[IVec3],
+) -> bool {
     let (min, max) = player_aabb(position);
 
     let min_block = min.floor().as_ivec3();
@@ -597,11 +827,25 @@ fn collides(position: Vec3, world: &WorldBlocks, scene_registry: &SceneBlockRegi
     for x in min_block.x..=max_block.x {
         for y in min_block.y..=max_block.y {
             for z in min_block.z..=max_block.z {
-                if player_hits_block(min, max, IVec3::new(x, y, z), world, scene_registry) {
+                if player_hits_block(
+                    min,
+                    max,
+                    IVec3::new(x, y, z),
+                    world,
+                    scene_registry,
+                    dynamic_targets,
+                ) {
                     return true;
                 }
             }
         }
+    }
+
+    if dynamic_blocks
+        .iter()
+        .any(|dynamic| aabb_intersects(min, max, dynamic.min, dynamic.max))
+    {
+        return true;
     }
 
     false
@@ -612,18 +856,29 @@ fn can_move_to(
     current_overlap: f32,
     world: &WorldBlocks,
     scene_registry: &SceneBlockRegistry,
+    dynamic_blocks: &[DynamicBlockCollision],
+    dynamic_targets: &[IVec3],
 ) -> bool {
-    if !collides(next, world, scene_registry) {
+    if !collides(next, world, scene_registry, dynamic_blocks, dynamic_targets) {
         return true;
     }
 
-    current_overlap > 0.0 && collision_overlap_score(next, world, scene_registry) < current_overlap
+    current_overlap > 0.0
+        && collision_overlap_score(
+            next,
+            world,
+            scene_registry,
+            dynamic_blocks,
+            dynamic_targets,
+        ) < current_overlap
 }
 
 fn collision_overlap_score(
     position: Vec3,
     world: &WorldBlocks,
     scene_registry: &SceneBlockRegistry,
+    dynamic_blocks: &[DynamicBlockCollision],
+    dynamic_targets: &[IVec3],
 ) -> f32 {
     let (min, max) = player_aabb(position);
     let min_block = min.floor().as_ivec3();
@@ -634,7 +889,14 @@ fn collision_overlap_score(
         for y in min_block.y..=max_block.y {
             for z in min_block.z..=max_block.z {
                 let block_pos = IVec3::new(x, y, z);
-                if !player_hits_block(min, max, block_pos, world, scene_registry) {
+                if !player_hits_block(
+                    min,
+                    max,
+                    block_pos,
+                    world,
+                    scene_registry,
+                    dynamic_targets,
+                ) {
                     continue;
                 }
 
@@ -645,10 +907,21 @@ fn collision_overlap_score(
         }
     }
 
+    for dynamic in dynamic_blocks {
+        let overlap = (max.min(dynamic.max) - min.max(dynamic.min)).max(Vec3::ZERO);
+        score += overlap.x * overlap.y * overlap.z;
+    }
+
     score
 }
 
-fn is_supported(position: Vec3, world: &WorldBlocks, scene_registry: &SceneBlockRegistry) -> bool {
+fn is_supported(
+    position: Vec3,
+    world: &WorldBlocks,
+    scene_registry: &SceneBlockRegistry,
+    dynamic_blocks: &[DynamicBlockCollision],
+    dynamic_targets: &[IVec3],
+) -> bool {
     let (min, max) = player_aabb(position);
     let probe_min = Vec3::new(min.x, min.y - 0.04, min.z);
     let probe_max = Vec3::new(max.x, min.y, max.z);
@@ -672,6 +945,7 @@ fn is_supported(position: Vec3, world: &WorldBlocks, scene_registry: &SceneBlock
                     IVec3::new(x, y, z),
                     world,
                     scene_registry,
+                    dynamic_targets,
                 ) {
                     return true;
                 }
@@ -679,7 +953,9 @@ fn is_supported(position: Vec3, world: &WorldBlocks, scene_registry: &SceneBlock
         }
     }
 
-    false
+    dynamic_blocks
+        .iter()
+        .any(|dynamic| aabb_intersects(probe_min, probe_max, dynamic.min, dynamic.max))
 }
 
 /// 碰撞体世界 AABB（网格用顶点外包；否则整格）
