@@ -5,8 +5,6 @@ use super::snapshot::{
     acceptors_json, block_json_with_structure, headless_perf_json, headless_status_json, pos_json,
     power_query_json, resolve_pos_query, resolve_structure_query, session_status_json,
 };
-use crate::game::world::grid::WorldBlocks;
-use crate::shared::save::{SaveKind, SaveSlot, SavedHotbar, save_free};
 use super::standalone::HeadlessDebugState;
 use super::world_ops::{
     block_kinds_json, load_save_into_session, parse_block_kind, parse_facing, place_blocks_box,
@@ -98,27 +96,7 @@ pub fn handle_headless_command(
             })
         }
         DebugHttpCommand::SessionSave => {
-            let Some(name) = state.current_save.clone() else {
-                return json_error("no save is loaded");
-            };
-            let Some(slot) = SaveSlot::from_storage_path(&name) else {
-                return json_error(&format!("invalid save path `{name}`"));
-            };
-            if slot.kind() != SaveKind::Free {
-                return json_error("headless session/save currently supports Free saves only");
-            }
-            let saved = state.with_core(|core| {
-                let world = WorldBlocks(std::mem::take(&mut core.world));
-                let saved = save_free(&world, &slot, &SavedHotbar::default(), None);
-                core.world = world.0;
-                saved
-            });
-            if !saved {
-                return json_error(&format!("failed to save `{name}`"));
-            }
-            crate::shared::persistent_storage::flush_now();
-            state.dirty = false;
-            json_ok(serde_json::json!({ "saved": true, "save": name }))
+            json_error("session/save is disabled for ephemeral headless test saves")
         }
         DebugHttpCommand::BeginSimulation => {
             state.dirty = true;

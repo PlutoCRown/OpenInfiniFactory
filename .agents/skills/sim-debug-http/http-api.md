@@ -29,7 +29,7 @@
 |------|------|------|
 | POST | `/session/enter?name=` | 加载存档（别名 `/loadSave`）；无头记录 current_save + load_ms |
 | POST | `/session/exit` | 无头：重置世界并清空存档名；内嵌：退回主菜单 |
-| POST | `/session/save` | 保存当前世界；内嵌支持当前游戏存档，无头支持当前 Free 测试存档 |
+| POST | `/session/save` | 内嵌保存玩家正式存档；无头测试存档为临时内存数据，不支持保存 |
 | POST | `/world/place?x=&y=&z=&kind=&facing=&x1=&y1=&z1=` | 放置方块（含材料）；`x1/y1/z1` 可选，与 `x/y/z` 组成包容 AABB 批量放置 |
 | POST | `/world/reset` | 清空世界（无头） |
 | POST | `/sim/begin` | 进入模拟（别名 `/beginSimulation`） |

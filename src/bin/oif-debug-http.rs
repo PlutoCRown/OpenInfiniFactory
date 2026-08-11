@@ -19,7 +19,6 @@ fn main() {
             eprintln!("failed to create test Free save `{name}`");
             std::process::exit(1);
         };
-        open_infinifactory::shared::persistent_storage::flush_now();
         Some(slot.storage_path())
     } else {
         launch.load_save.clone()

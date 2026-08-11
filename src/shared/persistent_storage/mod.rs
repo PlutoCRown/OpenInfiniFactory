@@ -71,14 +71,12 @@ pub fn write_save_text(save_name: &str, file: &str, value: &str) -> bool {
     lock_vault().put_text(save_file_key(save_name, file), value);
     true
 }
-
-/// 无头调试器退出前同步刷出内存镜像中的持久化写入
-pub fn flush_now() {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let ops = { lock_vault().drain_persist() };
-        backend::native_fs::apply_ops(&ops);
-    }
+/// 写入仅供当前进程使用的测试存档，不进入持久化队列
+pub(crate) fn write_ephemeral_save(save_name: &str, file: &str, value: &[u8]) -> bool {
+    lock_vault()
+        .entries
+        .insert(save_file_key(save_name, file), value.to_vec());
+    true
 }
 
 pub fn save_exists(save_name: &str) -> bool {

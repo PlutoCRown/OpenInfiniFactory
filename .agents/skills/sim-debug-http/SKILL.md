@@ -22,7 +22,7 @@ curl -s http://127.0.0.1:8765/status
 
 1. `save.path` 非空，并且确认是玩家当前正在看的存档。
 2. `save.dirty == false` 且 `save.exit_requires_save == false`。
-3. 重启前都先调用 `POST /session/save`，这样即使世界本身不脏，也会把玩家当前坐标和朝向写入存档；如果存档原本是脏的，再轮询 `/status`，直到脏状态变成 false。
+3. 重启前都先调用 `POST /session/save`，这样即使世界本身不脏，也会把玩家当前坐标和朝向写入存档；如果存档原本是脏的，再轮询 `/status`，直到脏状态变成 false。此规则只适用于玩家已有的正式存档。
 4. 保存失败、状态查询失败、存档路径不明或状态仍为脏时，禁止擅自关闭玩家客户端；应把阻塞原因告诉玩家。
 
 保存完成后，可以用同一个路径启动并回到玩家位置：
@@ -35,26 +35,26 @@ cargo run -- --debug-http --load-save=<save.path>
 
 ## 创建独立测试用例
 
-`--create-test-free[=NAME]` 会立即创建并进入一个 Free 存档。存档默认名为
+`--create-test-free[=NAME]` 会立即创建并进入一个仅存在于当前进程内存的 Free 测试存档。存档默认名为
 `test_free`，若重名会自动追加后缀；初始世界只在 `(0, 0, 0)` 放置一个草地方块，
-并带有默认玩家位置，适合验证渲染和输入问题：
+并带有默认玩家位置，适合验证渲染和输入问题。它不会进入持久化队列，测试进程结束后用例自动消失：
 
 ```bash
-cargo run --bin oif-debug-http -- --create-test-free=android_render_case --debug-http=8765
+cargo run -- --create-test-free=android_render_case --debug-http
 ```
 
-通过 `/status` 读取实际的 `save.path`（可能因重名带后缀），然后按需放置方块、执行模拟：
+通过 `/status` 确认已进入测试世界，然后按需放置方块、执行模拟。测试用例禁止调用
+`POST /session/save`，也不要尝试通过 `--load-save` 在新进程中恢复它：
 
 ```bash
 curl -X POST 'http://127.0.0.1:8765/world/place?x=1&y=0&z=0&kind=grass'
 curl -X POST 'http://127.0.0.1:8765/sim/begin'
 curl -X POST 'http://127.0.0.1:8765/sim/run?n=10'
-curl -X POST 'http://127.0.0.1:8765/session/save'
 ```
 
-保存后停止无头调试进程，再用 `--load-save=<save.path> --debug-http` 启动游戏客户端，
-即可把测试用例交给玩家查看。无头调试器目前支持保存 Free 测试存档；Puzzle/Solution
-仍应使用游戏客户端保存。
+需要展示给玩家时，直接把当前这个带 `--debug-http` 的游戏客户端交给玩家查看；如果测试进程
+结束，应重新创建测试用例，不要把它转成正式存档。无头调试器仍可创建、放置和执行模拟，但
+`/session/save` 对无头测试明确禁用。
 
 完整 API 见 [http-api.md](http-api.md)。
 

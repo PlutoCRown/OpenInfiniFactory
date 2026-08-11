@@ -213,7 +213,7 @@ pub fn help_json() -> String {
             {"method": "GET", "path": "/blockKinds", "desc": "all registered block kinds"},
             {"method": "POST", "path": "/session/enter?name=", "desc": "load save (alias /loadSave)"},
             {"method": "POST", "path": "/session/exit", "desc": "exit world / reset headless session"},
-            {"method": "POST", "path": "/session/save", "desc": "save current world (embedded; headless Free test saves)"},
+            {"method": "POST", "path": "/session/save", "desc": "save current world (embedded only; headless tests are ephemeral)"},
             {"method": "POST", "path": "/world/reset", "desc": "clear session world"},
             {"method": "POST", "path": "/world/place?x=&y=&z=&kind=&facing=&x1=&y1=&z1=", "desc": "place block(s) in inclusive AABB (omit x1/y1/z1 for one cell)"},
             {"method": "POST", "path": "/sim/begin", "desc": "begin simulation (alias /beginSimulation)"},

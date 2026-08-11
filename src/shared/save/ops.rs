@@ -56,7 +56,7 @@ pub fn create_free_from_default_template(name: &str) -> Option<SaveSlot> {
 pub fn create_test_free_from_single_block(name: &str) -> Option<SaveSlot> {
     let slot = allocate_free_slot(name)?;
     let grass = oif_sim::blocks::resolve_scene_id("grass");
-    let save = SaveFile::free(
+    let mut save = SaveFile::free(
         FreeWorldCapture {
             scene_blocks: vec![SavedBlock {
                 x: 0,
@@ -80,7 +80,16 @@ pub fn create_test_free_from_single_block(name: &str) -> Option<SaveSlot> {
             flying: false,
         }),
     );
-    write_save(&slot, save).then_some(slot)
+    let now = unix_now_secs();
+    save.meta.name = Some(name.trim().to_string());
+    save.meta.created_at = Some(now);
+    save.meta.updated_at = Some(now);
+    let meta = serde_json::to_string_pretty(&save.meta).ok()?;
+    let blocks = save_format::encode_blocks(&save.blocks);
+    let path = slot.storage_path();
+    persistent_storage::write_ephemeral_save(&path, META_FILE, meta.as_bytes());
+    persistent_storage::write_ephemeral_save(&path, BLOCKS_FILE, &blocks);
+    Some(slot)
 }
 
 /// 用默认模板写顶层 Puzzle/Free 存档
