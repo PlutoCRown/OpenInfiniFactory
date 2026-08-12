@@ -1,4 +1,4 @@
-//! 兼容 re-export facade：模拟逻辑在 `oif_sim`，此处包装为 Bevy Resource 并保留旧路径
+//! 模拟类型兼容 facade：直接复用 `oif_sim` 的权威 ECS Resource
 
 pub use oif_sim::simulation::{BreakDebris, LaserBeam, LaserBeamStop};
 
@@ -15,65 +15,25 @@ pub mod motion {
 }
 
 pub mod pending {
-    use bevy::prelude::*;
-
-    /// 跨回合挂起的生成材料（Bevy Resource）
-    #[derive(Resource, Deref, DerefMut, Clone, Default)]
-    pub struct PendingGeneratedMaterials(
-        pub oif_sim::simulation::pending::PendingGeneratedMaterials,
-    );
+    pub use oif_sim::simulation::pending::*;
 }
 
 pub mod signals {
-    use bevy::prelude::*;
-    pub use oif_sim::simulation::signals::SignalComponentId;
-
-    /// 信号网络缓存（Bevy Resource）
-    #[derive(Resource, Deref, DerefMut, Clone, Default)]
-    pub struct SignalNetworkCache(pub oif_sim::simulation::signals::SignalNetworkCache);
+    pub use oif_sim::simulation::signals::*;
 }
 
 pub mod stats {
-    use bevy::prelude::*;
-
-    /// 单回合模拟各阶段耗时采样（Bevy Resource）
-    #[derive(Resource, Deref, DerefMut, Clone, Default)]
-    pub struct SimulationStepStats(pub oif_sim::simulation::stats::SimulationStepStats);
+    pub use oif_sim::simulation::stats::*;
 }
 
 pub mod structure_state {
-    use bevy::prelude::*;
-    pub use oif_sim::simulation::structure_state::{
-        DeformGroup, FactoryActivity, StructureFreedom, StructureId, StructureKind,
-        material_structure, query_factory_structure,
-    };
-
-    /// 结构运行时状态（Bevy Resource）
-    #[derive(Resource, Deref, DerefMut, Clone, Default)]
-    pub struct StructureState(pub oif_sim::simulation::structure_state::StructureState);
+    pub use oif_sim::simulation::structure_state::*;
 }
 
 pub mod structures {
-    use bevy::prelude::*;
-
-    /// 运动影响缓存（Bevy Resource）
-    #[derive(Resource, Deref, DerefMut, Clone, Default)]
-    pub struct MovementInfluenceCache(pub oif_sim::simulation::structures::MovementInfluenceCache);
+    pub use oif_sim::simulation::structures::*;
 }
 
 pub mod movement {
-    use bevy::prelude::*;
-
-    use crate::game::world::grid::WorldBlocks;
-
-    /// 推杆伸出状态（Bevy Resource）
-    #[derive(Resource, Deref, DerefMut, Clone, Default)]
-    pub struct PusherState(pub oif_sim::simulation::movement::PusherState);
-
-    impl PusherState {
-        /// 从世界重建推杆状态
-        pub fn rebuild_from_world(world: &WorldBlocks) -> Self {
-            Self(oif_sim::simulation::movement::PusherState::rebuild_from_world(world))
-        }
-    }
+    pub use oif_sim::simulation::movement::*;
 }

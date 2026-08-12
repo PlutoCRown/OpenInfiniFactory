@@ -37,7 +37,7 @@
 | --- | -------------------------------------------------------------- | --------------------------------- |
 | 1   | `camera_move`、`camera_look`、`gameplay_input`、`placement_input` | 玩家移动、视角、基础输入、放置 / 删除 / 旋转。        |
 | 2   | 菜单 action 系统                                                   | 主菜单、保存列表、暂停菜单、方块配置面板等按钮处理。        |
-| 3   | `simulation_controls`、`tick_simulation`                        | 模拟开始 / 暂停 / 单步 / 回滚，以及模拟回合 tick。  |
+| 3   | `simulation_controls`、`advance_simulation`、`present_simulation_turns` | 模拟控制、权威回合推进及表现提交。 |
 | 4   | `apply_fov`、`update_hover`、`draw_hover_structure_bounds`       | 相机参数、瞄准目标、结构线框。                   |
 | 5   | `animate_blocks`                                               | 方块和活塞动画插值。                        |
 | 6   | UI 更新系统                                                        | 状态栏、按钮 hover、面板可见性、背包、保存列表、配置文本等。 |
@@ -57,7 +57,7 @@
 | `placement_input`     | 不在 Playing、UI 阻塞、模拟正在运行             | 鼠标点击放置 / 删除、按键旋转、切换方块形态、拖拽选择区域。 |
 | 菜单 action 系统          | 当前 `GameMode` 或面板不匹配、按钮没有 `Pressed` | 用户点击菜单、保存列表、暂停菜单、方块设置面板。        |
 | `simulation_controls` | 不是 Play 模式、不是 Playing、UI 阻塞         | 按模拟、单步、快速、回滚按键。                 |
-| `tick_simulation`     | 不在 Play，或者模拟未运行且没有单步请求              | 模拟运行中累计时间到一回合，或收到单步请求。          |
+| `advance_simulation`  | 不在 Play，或者模拟未运行且没有单步请求              | 模拟运行中累计时间到一回合，或收到单步请求。          |
 | `update_hover`        | UI 阻塞或无目标                           | 更新当前瞄准方块和 hover 结构包围盒。          |
 | UI 更新系统               | 对应面板不可见或数据未变化                       | 面板打开、文本变化、按钮 hover、滚动 / 拖动。     |
 | debug 系统              | debug 未打开或按键未触发                     | 切换调试显示、更新调试文本、绘制调试 gizmo。       |
@@ -99,7 +99,7 @@
 
 ## 模拟回合执行
 
-模拟回合入口是 `tick_simulation`。它每帧调度，但只有两种情况会调用 `run_turn`：
+模拟回合入口是 `advance_simulation`。它每帧调度，但只有两种情况会调用 `simulate_turn`：
 
 - 玩家请求单步。
 - 模拟正在运行，并且累积时间达到一个回合。
@@ -134,7 +134,7 @@
 
 每帧真正持续运行的是 `animate_blocks`，它只更新已经带有 `AnimatedBlock` 或 `AnimatedPusher` 组件的实体插值；动画结束后会移除对应组件。
 
-pending generator preview 是例外：`tick_simulation` 在 Play 模式下会刷新预览实体，用当前 accumulator 表示生成进度。这是为了让生成器预览动画能在模拟回合之间连续显示。
+pending generator preview 由独立表现系统刷新，用当前 accumulator 表示生成进度，使预览动画能在模拟回合之间连续显示。
 
 ## 性能含义
 

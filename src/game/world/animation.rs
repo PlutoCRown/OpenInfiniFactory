@@ -288,7 +288,9 @@ impl AnimatedBlock {
                 AnimationEasing::SmoothStep => t * t * (3.0 - 2.0 * t),
             }
         };
-        let from = self.from_translation.lerp(self.to_translation, ease(self.elapsed));
+        let from = self
+            .from_translation
+            .lerp(self.to_translation, ease(self.elapsed));
         let to = self
             .from_translation
             .lerp(self.to_translation, ease(self.elapsed + delta_seconds));
@@ -561,6 +563,7 @@ pub fn scroll_conveyor_belts(
 /// 仅在开停模拟或回合推进（电力集合更新）时刷新，与传送带/钻头同节奏。
 pub fn update_lifter_disk_glow(
     simulation: Res<crate::game::state::SimulationState>,
+    presentation: Res<crate::sim_bridge::SimulationPresentationState>,
     world: Res<crate::game::world::grid::WorldBlocks>,
     mut disks: Query<(&LifterDiskGlow, &mut MeshMaterial3d<StandardMaterial>)>,
     mut last: Local<(bool, u64)>,
@@ -590,7 +593,7 @@ pub fn update_lifter_disk_glow(
     for (glow, mut material) in &mut disks {
         let lit = id_to_pos
             .get(&glow.block_id)
-            .is_some_and(|pos| !simulation.last_powered_devices.contains(pos));
+            .is_some_and(|pos| !presentation.last_powered_devices.contains(pos));
         let target = if lit { &glow.lit } else { &glow.idle };
         if material.0 != *target {
             material.0 = target.clone();

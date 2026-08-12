@@ -122,10 +122,7 @@ fn commit_save_current_world(
     };
     if saved {
         let ms = started.elapsed().as_secs_f64() * 1000.0;
-        bevy::log::info!(
-            "saved `{}` ({kind:?}) in {ms:.1}ms",
-            slot.storage_path()
-        );
+        bevy::log::info!("saved `{}` ({kind:?}) in {ms:.1}ms", slot.storage_path());
         save_state.current = Some(slot);
         save_state.current_kind = Some(kind);
         solution_state.dirty = false;
@@ -166,12 +163,7 @@ pub fn reset_current_solution(playing: &mut PlayingWorldParams, session: &mut Se
     };
     reset_solution_world(&mut playing.world, puzzle_snapshot);
     refresh_static_generated_markers(&mut playing.world);
-    session.simulation.running = false;
-    session.simulation.step_requested = false;
-    session.simulation.turn = 0;
-    session.simulation.accumulator = 0.0;
-    session.simulation.start_snapshot = None;
-    session.simulation.start_structures = None;
+    session.simulation.reset();
     playing.clear_sim_sidecars();
     playing.rebuild_scene();
 }
@@ -206,14 +198,9 @@ pub fn load_world_into_session(
         );
     }
     let lighting = loaded.lighting;
-    *playing.world = crate::game::world::grid::WorldBlocks(loaded.world);
+    *playing.world = loaded.world;
 
-    session.simulation.running = false;
-    session.simulation.step_requested = false;
-    session.simulation.turn = 0;
-    session.simulation.accumulator = 0.0;
-    session.simulation.start_snapshot = None;
-    session.simulation.start_structures = None;
+    session.simulation.reset();
     session.placement.selection.clear();
     session.placement.edit_gesture = None;
     session.carried.clear();
@@ -248,9 +235,7 @@ pub fn load_world_into_session(
     session.solution_state.factory_block_filter = loaded.factory_block_filter;
     session.solution_state.puzzle_snapshot = match entry {
         WorldEntryMode::EditPuzzle | WorldEntryMode::Free => None,
-        WorldEntryMode::PlaySolution => loaded
-            .puzzle_snapshot
-            .map(crate::game::world::grid::WorldBlocks),
+        WorldEntryMode::PlaySolution => loaded.puzzle_snapshot,
     };
     session.pending_player.0 = loaded.player;
 
@@ -267,11 +252,7 @@ pub fn load_world_into_session(
 
 /// 清空已加载世界与会话 sidecar（不切换 GameMode）
 pub fn clear_loaded_world(playing: &mut PlayingWorldParams, session: &mut SessionStateParams) {
-    session.simulation.running = false;
-    session.simulation.step_requested = false;
-    session.simulation.accumulator = 0.0;
-    session.simulation.start_snapshot = None;
-    session.simulation.start_structures = None;
+    session.simulation.reset();
     session.placement.selection.clear();
     session.placement.edit_gesture = None;
     playing.world.clear();

@@ -3,8 +3,7 @@ use bevy::prelude::IVec3;
 use crate::game::blocks::{BlockData, BlockKind, all_blocks};
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::world::direction::Facing;
-use crate::game::world::grid::WorldBlocks;
-use crate::shared::save::{load_world, SaveSlot};
+use crate::shared::save::{SaveSlot, load_world};
 use oif_sim::SimSession;
 
 /// 解析方块种类名（场景 / 材料 / 印花字符串 id，或工厂枚举 Debug 名）
@@ -102,12 +101,12 @@ pub fn place_blocks_box(
 pub fn load_save_into_session(core: &mut SimSession, name: &str) -> Result<f64, String> {
     let started = std::time::Instant::now();
     reset_session(core);
-    let mut world = WorldBlocks(std::mem::take(&mut core.world));
-    let slot = SaveSlot::from_storage_path(name)
-        .ok_or_else(|| format!("invalid save path `{name}`"))?;
+    let mut world = std::mem::take(&mut core.world);
+    let slot =
+        SaveSlot::from_storage_path(name).ok_or_else(|| format!("invalid save path `{name}`"))?;
     load_world(&mut world, &slot).ok_or_else(|| format!("save `{name}` not found"))?;
     refresh_static_generated_markers(&mut world);
-    core.world = world.0;
+    core.world = world;
     Ok(started.elapsed().as_secs_f64() * 1000.0)
 }
 

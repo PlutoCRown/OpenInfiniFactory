@@ -98,8 +98,8 @@ flowchart TB
 
 终态目录要点：
 
-- `crates/oif-sim/`：模拟核心（**纯 glam/serde，无 Bevy**）；含 world、blocks meta/behavior、simulation、自有 `SimSession`；`TurnOutput` 含运动 / 激光等纯数据 DTO（属模拟输出）
-- `src/sim_bridge/`：表现编排 + 预取（`present` / `SimulationWorker` / `TurnCache`）；会话类型 re-export 自 `oif-sim`
+- `crates/oif-sim/`：模拟核心（仅依赖 `bevy_ecs`、glam/serde，不依赖 Bevy 表现层）；含权威 Resource、blocks meta/behavior、simulation 与无头 `SimSession`
+- `src/sim_bridge/`：原地推进权威模拟状态，把 `TurnOutput` 增量应用到表现层
 - `src/game/blocks/<kind>/{render,ui}.rs`：仅表现
 - `debug_http` 只打 `SimSession`；已删除反向依赖的 `oif-sim-core` facade
 
@@ -142,7 +142,7 @@ flowchart TB
 
 ### 已知剩余债务
 
-无架构债务。
+回合入口仍是较长的单事务函数；只有阶段出现独立调度、并行或复用需求时再拆为 ECS System。
 
 ## 8. 明确不做
 

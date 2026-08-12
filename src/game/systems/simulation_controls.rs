@@ -4,7 +4,6 @@ use bevy::prelude::*;
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::pending::PendingGeneratedMaterials;
-use crate::game::simulation::signals::SignalNetworkCache;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
@@ -16,7 +15,7 @@ use crate::game::world::rendering::{
     despawn_world, rebuild_world_for_debug_state,
 };
 use crate::sim_bridge::SimulationPresentationState;
-use crate::sim_bridge::{SimulationWorker, TurnCache, invalidate_simulation_prefetch};
+use crate::sim_bridge::reset_simulation_presentation;
 
 #[derive(SystemParam)]
 pub struct SimulationControlDeps<'w> {
@@ -26,13 +25,10 @@ pub struct SimulationControlDeps<'w> {
     ui_runtime: Res<'w, UiRuntime>,
     simulation: ResMut<'w, SimulationState>,
     pending_generated: ResMut<'w, PendingGeneratedMaterials>,
-    signal_cache: Res<'w, SignalNetworkCache>,
     structure_state: ResMut<'w, StructureState>,
     movement_influence: ResMut<'w, MovementInfluenceCache>,
     pusher_state: ResMut<'w, PusherState>,
     world: ResMut<'w, WorldBlocks>,
-    turn_cache: ResMut<'w, TurnCache>,
-    worker: Option<Res<'w, SimulationWorker>>,
     presentation: ResMut<'w, SimulationPresentationState>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
     debug: Res<'w, DebugState>,
@@ -62,26 +58,12 @@ pub fn simulation_controls(
 
     if input.simulate {
         let was_running = deps.simulation.running;
-        start_simulation_if_needed(
-            &mut deps.simulation,
+        deps.simulation.run(
             &deps.world,
             &mut deps.structure_state,
             &mut deps.pusher_state,
         );
-        deps.simulation.last_powered_devices.clear();
-        invalidate_simulation_prefetch(
-            &mut deps.turn_cache,
-            &mut deps.presentation,
-            deps.worker.as_deref(),
-            &deps.world,
-            &deps.pending_generated,
-            &deps.signal_cache,
-            &deps.structure_state,
-            &deps.movement_influence,
-            &deps.pusher_state,
-            deps.simulation.turn,
-        );
-        request_continuous_run(&mut deps.simulation);
+        reset_simulation_presentation(&mut deps.presentation);
         // 未运行/暂停时按 F 是启动；与加速同键时需松手再按才加速
         if !was_running {
             *suppress_sim_fast_until_release = true;
@@ -93,8 +75,7 @@ pub fn simulation_controls(
             return;
         }
         if deps.simulation.running {
-            deps.simulation.running = false;
-            deps.simulation.speed = 1.0;
+            deps.simulation.pause();
         } else {
             deps.simulation.step_requested = true;
         }
@@ -106,7 +87,11 @@ pub fn simulation_controls(
 
     // 单步模拟暂停时，触控加速键等同于 F，恢复连续模拟。
     if input.sim_fast && deps.simulation.is_active() && !deps.simulation.running {
-        request_continuous_run(&mut deps.simulation);
+        deps.simulation.run(
+            &deps.world,
+            &mut deps.structure_state,
+            &mut deps.pusher_state,
+        );
         *suppress_sim_fast_until_release = true;
     }
 
@@ -118,30 +103,15 @@ pub fn simulation_controls(
         };
 
     if input.rollback && deps.simulation.is_active() {
-        let factory_snapshot = rollback_simulation(&mut deps.simulation, &mut deps.world);
-        refresh_static_generated_markers(&mut deps.world);
-        deps.pending_generated.clear();
-        deps.structure_state.clear();
-        deps.movement_influence.clear();
-        deps.pusher_state.clear();
-        deps.simulation.last_powered_devices.clear();
-        invalidate_simulation_prefetch(
-            &mut deps.turn_cache,
-            &mut deps.presentation,
-            deps.worker.as_deref(),
-            &deps.world,
-            &deps.pending_generated,
-            &deps.signal_cache,
-            &deps.structure_state,
-            &deps.movement_influence,
-            &deps.pusher_state,
-            0,
+        deps.simulation.rollback(
+            &mut deps.world,
+            &mut deps.pending_generated,
+            &mut deps.structure_state,
+            &mut deps.movement_influence,
+            &mut deps.pusher_state,
         );
-        if let Some(snapshot) = factory_snapshot {
-            *deps.structure_state = snapshot;
-        } else {
-            deps.structure_state.rebuild_for_simulation(&deps.world);
-        }
+        refresh_static_generated_markers(&mut deps.world);
+        reset_simulation_presentation(&mut deps.presentation);
         despawn_world(
             &mut commands,
             &mut meshes,
@@ -160,44 +130,6 @@ pub fn simulation_controls(
             &mut scene_chunks,
         );
     }
-}
-
-fn start_simulation_state(
-    simulation: &mut SimulationState,
-    world: &WorldBlocks,
-    structure_state: &mut StructureState,
-    pusher_state: &mut PusherState,
-) {
-    // 编辑 Undo/Redo 保留到退出世界；模拟期间输入侧已禁用撤销
-    simulation.start_snapshot = Some(world.clone());
-    *pusher_state = PusherState::rebuild_from_world(world);
-    structure_state.refresh_for_simulation_start(world);
-    simulation.start_structures = Some(structure_state.clone());
-}
-
-pub fn start_simulation_if_needed(
-    simulation: &mut SimulationState,
-    world: &WorldBlocks,
-    structure_state: &mut StructureState,
-    pusher_state: &mut PusherState,
-) {
-    if !simulation.is_active() {
-        start_simulation_state(simulation, world, structure_state, pusher_state);
-    }
-}
-
-pub fn request_continuous_run(simulation: &mut SimulationState) {
-    simulation.running = true;
-}
-
-pub fn request_one_turn(simulation: &mut SimulationState) -> Result<(), &'static str> {
-    if !simulation.is_active() {
-        return Err("simulation is not active");
-    }
-    simulation.running = false;
-    simulation.speed = 1.0;
-    simulation.step_requested = true;
-    Ok(())
 }
 
 /// 模拟激活时隐藏生成块配置材料小预览，退出后恢复
@@ -219,22 +151,4 @@ pub fn sync_generator_config_material_preview(
     for mut preview_visibility in &mut previews {
         *preview_visibility = visibility;
     }
-}
-
-fn rollback_simulation(
-    simulation: &mut SimulationState,
-    world: &mut WorldBlocks,
-) -> Option<StructureState> {
-    simulation.running = false;
-    simulation.step_requested = false;
-    simulation.turn = 0;
-    simulation.accumulator = 0.0;
-    let factory_snapshot = simulation.start_structures.take();
-    if let Some(snapshot) = simulation.start_snapshot.take() {
-        *world = snapshot;
-    } else {
-        world.retain(|_, block| !block.kind.is_material());
-        world.clear_generated_markers();
-    }
-    factory_snapshot
 }

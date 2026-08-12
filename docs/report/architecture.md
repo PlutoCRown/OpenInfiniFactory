@@ -1,6 +1,6 @@
-# 系统架构（四层）
+# 系统架构（单一权威模拟状态）
 
-OpenInfiniFactory 按依赖向下分层。模拟核心在独立 crate（无 Bevy）；主 crate 只做表现、UI 与调试接入。
+OpenInfiniFactory 按依赖向下分层。模拟核心在独立 crate，仅依赖 `bevy_ecs`、`glam` 与序列化库；主 crate 负责表现、UI 与平台接入。
 
 ```
 ┌─────────────────────────────────────────┐
@@ -8,42 +8,41 @@ OpenInfiniFactory 按依赖向下分层。模拟核心在独立 crate（无 Bevy
 ├─────────────────────────────────────────┤
 │  场景渲染（scene/, game/world/render）  │
 ├─────────────────────────────────────────┤
-│  表现桥接 + 预取（sim_bridge）          │
+│  表现桥接（sim_bridge）                 │
 ├─────────────────────────────────────────┤
-│  模拟核心 crates/oif-sim（glam/serde）  │
+│  模拟核心 crates/oif-sim（ECS Resource）│
 └─────────────────────────────────────────┘
 ```
 
 ## 1. 模拟核心（`crates/oif-sim`）
 
-主 crate 依赖 `oif-sim`。职责：世界状态、方块 Meta/Behavior、`simulate_turn()`、自有 `SimSession`（无 Bevy App）。
+主 crate 依赖 `oif-sim`。职责：定义唯一的权威世界与模拟状态、方块 Meta/Behavior、`simulate_turn()`，以及供无头工具组合使用的 `SimSession`。
 
 | 模块 | 说明 |
 |------|------|
 | `world/` | 网格、朝向等纯世界数据（glam） |
 | `blocks/` | `BlockMeta` / `BlockBehavior` + 各方块声明 |
 | `simulation/` | 四阶段 `simulate_turn` → `TurnOutput`（含运动 / 激光等纯数据 DTO） |
-| `session/` | 自有 `SimSession`、控制面与日志 |
+| `session/` | 游戏与无头端共用的 `SimulationControl`、`SimSession` 与日志 |
 
 回合四阶段：信号探测 → 运动标记 → 执行运动 → 结构后处理。细节见 [`simulation_turn_phases.md`](simulation_turn_phases.md)。
 
-游戏侧通过 `Deref` Resource 包装（如 `game::world::grid::WorldBlocks`）把同一数据挂进 Bevy。
+`WorldBlocks`、结构、信号、推杆和跨回合挂起状态直接实现 `Resource`。游戏侧只 re-export，不再维护包装类型或第二套控制状态。
 
-## 2. 表现桥接与预取（`src/sim_bridge/`）
+## 2. 表现桥接（`src/sim_bridge/`）
 
-`sim_bridge` 同时负责表现编排与预取：把 `SimSnapshot` / `TurnOutput` 增量应用到 Bevy，并用 `SimulationWorker` / `TurnCache` 预计算未来回合；会话类型 re-export 自 `oif_sim`。
+`sim_bridge` 在主线程原地推进权威模拟 Resource，把 `TurnOutput` 增量应用到场景。表现状态只保存通电集合等可丢弃数据，不保存世界副本。
 
 | 模块 | 说明 |
 |------|------|
-| `present.rs` | 把快照 / 回合输出应用到 Bevy 世界与渲染 |
-| `cache.rs` / `worker.rs` / `snapshot.rs` | 预取缓存、后台 worker、`SimSnapshot` / `CachedTurn` |
+| `present.rs` | 推进权威状态，并把回合输出应用到 Bevy 场景、动画和音效 |
 
 游戏内回合流程：
 
-1. `SimulationWorker` 预计算未来回合，写入 `TurnCache`
-2. `poll_simulation_worker` 同步意图并 ingest
-3. `tick_simulation` 从缓存取出回合，增量 `apply_turn_output`
-4. 编辑期放置/删除：`scene/incremental` 只刷改动邻域
+1. 输入或 HTTP 更新共用的 `SimulationControl`
+2. `advance_simulation` 原地调用 `simulate_turn`，发布 `TurnCommitted`
+3. `present_simulation_turns` 消费事件，增量驱动场景、动画和音效
+4. 编辑期放置/删除由 `scene/incremental` 只刷新改动邻域
 
 ## 3. HTTP Debug
 
@@ -56,7 +55,7 @@ OpenInfiniFactory 按依赖向下分层。模拟核心在独立 crate（无 Bevy
 
 ## 4. UI 与场景
 
-- **UI**：菜单、HUD、建造；经 Resource / session API 读写世界，不直接改模拟阶段。
+- **UI**：菜单、HUD、建造；经领域控制 API 读写权威 Resource，不复制模拟状态。
 - **场景**：`scene/` + `game/world/rendering` 可视化 `TurnOutput` 与编辑 diff。
 - **表现类型**：`RenderBehavior` / `BlockModel` 等在 `game/blocks/render_types.rs`，不进入 `oif-sim`。
 
@@ -64,12 +63,12 @@ OpenInfiniFactory 按依赖向下分层。模拟核心在独立 crate（无 Bevy
 
 - `simulate_turn` 不得依赖 `Commands`、渲染资产或 UI 类型
 - UI / HTTP 只触发会话或消费 `TurnOutput`，不复制回合逻辑
-- 回滚时清空 `TurnCache`
-- `oif-sim` 不得依赖 Bevy
+- `oif-sim` 只允许依赖 `bevy_ecs`，不得依赖渲染、窗口、输入或平台 API
+- 表现层不得保存 `WorldBlocks` 副本
 
 ## 已知剩余债务
 
-无架构债务。
+`simulate_turn` 仍是单一回合事务入口。只有在阶段需要独立调度、并行或复用时才继续拆成 ECS System，避免制造只有一处调用的薄函数。
 
 ## 调试存档
 

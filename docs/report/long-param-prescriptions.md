@@ -8,7 +8,7 @@
 |---|---|---|
 | C1 | `SceneRenderMut` | **已落地** `src/scene/scene_render.rs` |
 | C2 | `WorldEditScene`（内嵌 C1） | **已落地** `src/scene/world_edit.rs` |
-| C3 | `SimulationTickDeps` | **已有且透传** `present_turn` |
+| C3 | `SimulationPresentationDeps` | **已有且透传**回合表现系统 |
 | C4 | `PanelCloseDeps` | **已贯穿** dismiss / 关钮 / Esc（定义迁至 `panels.rs`） |
 | C5 | `SpawnBlockOpts` + `SpawnMode` | **已落地** `spawn.rs` |
 | C6 | `BlockPanelDropdownDeps` | **已落地** `block_editing/panel_dropdown_deps.rs` |

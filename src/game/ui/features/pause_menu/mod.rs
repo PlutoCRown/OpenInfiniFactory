@@ -73,11 +73,7 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
             }
             *ctx.builder_mode = match *ctx.builder_mode {
                 BuilderMode::Edit => {
-                    ctx.simulation.running = false;
-                    ctx.simulation.step_requested = false;
-                    ctx.simulation.accumulator = 0.0;
-                    ctx.simulation.start_snapshot = None;
-                    ctx.simulation.start_structures = None;
+                    ctx.simulation.reset();
                     ctx.solution_state.puzzle_snapshot = Some(ctx.world.clone());
                     ctx.solution_state.puzzle_id = ctx
                         .save_state

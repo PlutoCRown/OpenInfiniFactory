@@ -61,49 +61,36 @@ impl SimSession {
 
     /// 开局：快照世界与结构，重建推杆状态
     pub fn begin_simulation(&mut self) {
-        if self.is_active() {
-            return;
-        }
-        self.control.start_snapshot = Some(self.world.clone());
-        self.pusher_state = PusherState::rebuild_from_world(&self.world);
-        self.structure_state.refresh_for_simulation_start(&self.world);
-        self.control.start_structures = Some(self.structure_state.clone());
+        self.control.begin(
+            &self.world,
+            &mut self.structure_state,
+            &mut self.pusher_state,
+        );
     }
 
     /// 请求连续跑回合
     pub fn request_continuous_run(&mut self) {
-        self.begin_simulation();
-        self.control.running = true;
+        self.control.run(
+            &self.world,
+            &mut self.structure_state,
+            &mut self.pusher_state,
+        );
     }
 
     /// 请求单步（须已激活）
     pub fn request_one_turn(&mut self) -> Result<(), &'static str> {
-        if !self.is_active() {
-            return Err("simulation is not active");
-        }
-        self.control.running = false;
-        self.control.speed = 1.0;
-        self.control.step_requested = true;
-        Ok(())
+        self.control.step()
     }
 
-    /// 回滚到开局快照；返回开局结构状态
-    pub fn rollback(&mut self) -> Option<StructureState> {
-        self.control.running = false;
-        self.control.step_requested = false;
-        self.control.turn = 0;
-        self.control.accumulator = 0.0;
-        self.pending_generated.clear();
-        self.movement_influence.clear();
-        self.pusher_state.clear();
-        let factory_snapshot = self.control.start_structures.take();
-        if let Some(snapshot) = self.control.start_snapshot.take() {
-            self.world = snapshot;
-        } else {
-            self.world.retain(|_, block| !block.kind.is_material());
-            self.world.clear_generated_markers();
-        }
-        factory_snapshot
+    /// 回滚到开局检查点
+    pub fn rollback(&mut self) {
+        self.control.rollback(
+            &mut self.world,
+            &mut self.pending_generated,
+            &mut self.structure_state,
+            &mut self.movement_influence,
+            &mut self.pusher_state,
+        );
     }
 
     /// 清空会话到默认空世界
@@ -115,11 +102,7 @@ impl SimSession {
         self.structure_state.clear();
         self.movement_influence.clear();
         self.pusher_state.clear();
-        self.control.turn = 0;
-        self.control.running = false;
-        self.control.step_requested = false;
-        self.control.accumulator = 0.0;
-        self.control.speed = 1.0;
+        self.control.reset();
     }
 
     /// 推进下一回合并更新控制面回合计数

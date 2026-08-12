@@ -21,7 +21,6 @@ use crate::game::block_editing::world_refresh::refresh_world_after_edit_many;
 use crate::game::debug::SimulationDebugLog;
 use crate::game::player::controller::{FlyCamera, apply_player_save};
 use crate::game::session::{self, PlayingWorldParams};
-use crate::game::simulation::pending::PendingGeneratedMaterials;
 use crate::game::simulation::signals::SignalNetworkCache;
 use crate::game::simulation::stats::SimulationStepStats;
 use crate::game::state::{
@@ -29,16 +28,12 @@ use crate::game::state::{
     WorldEntryMode,
 };
 use crate::game::systems::perf::PerfStats;
-use crate::game::systems::simulation_controls::{
-    request_continuous_run, request_one_turn, start_simulation_if_needed,
-};
 use crate::game::ui::UiRuntime;
 use crate::game::world::animation::AnimatedBlock;
 use crate::game::world::rendering::BlockEntity;
 use crate::shared::launch::{DEFAULT_DEBUG_HTTP_PORT, LaunchOptions};
 use crate::shared::save::{SaveKind, SaveSlot, SaveState};
-use crate::sim_bridge::SimulationPresentationState;
-use crate::sim_bridge::{SimulationWorker, TurnCache, invalidate_simulation_prefetch};
+use crate::sim_bridge::{SimulationPresentationState, reset_simulation_presentation};
 
 #[derive(Resource)]
 pub struct DebugHttpBridge {
@@ -234,10 +229,7 @@ pub fn poll_debug_http(
     mut simulation: ResMut<SimulationState>,
     mut sim_log: ResMut<SimulationDebugLog>,
     mut presentation: ResMut<SimulationPresentationState>,
-    mut pending_generated: ResMut<PendingGeneratedMaterials>,
     mut signal_cache: ResMut<SignalNetworkCache>,
-    mut turn_cache: ResMut<TurnCache>,
-    worker: Option<Res<SimulationWorker>>,
     bridge: Option<Res<DebugHttpBridge>>,
     mut playing: PlayingWorldParams,
     mut player: Query<(&mut Transform, &mut FlyCamera), With<FlyCamera>>,
@@ -256,10 +248,7 @@ pub fn poll_debug_http(
             &mut simulation,
             &mut sim_log,
             &mut presentation,
-            &mut pending_generated,
             &mut signal_cache,
-            &mut turn_cache,
-            worker.as_deref(),
             render_ready,
             &mut playing,
             &mut player,
@@ -277,10 +266,7 @@ fn handle_embedded_debug_command(
     simulation: &mut SimulationState,
     sim_log: &mut SimulationDebugLog,
     presentation: &mut SimulationPresentationState,
-    pending_generated: &mut PendingGeneratedMaterials,
     signal_cache: &mut SignalNetworkCache,
-    turn_cache: &mut TurnCache,
-    worker: Option<&SimulationWorker>,
     render_ready: bool,
     playing: &mut PlayingWorldParams,
     player: &mut Query<'_, '_, (&mut Transform, &mut FlyCamera), With<FlyCamera>>,
@@ -473,7 +459,7 @@ fn handle_embedded_debug_command(
         },
         DebugHttpCommand::GetPower { x, y, z, block_id } => {
             match resolve_pos_query(&playing.world, x, y, z, block_id) {
-                Ok(pos) => json_ok(power_query_json(&mut signal_cache.0, &playing.world, pos)),
+                Ok(pos) => json_ok(power_query_json(signal_cache, &playing.world, pos)),
                 Err(error) => json_error(&error),
             }
         }
@@ -513,19 +499,7 @@ fn handle_embedded_debug_command(
                 });
             }
             if simulation.is_active() {
-                simulation.last_powered_devices.clear();
-                invalidate_simulation_prefetch(
-                    turn_cache,
-                    presentation,
-                    worker,
-                    &playing.world,
-                    pending_generated,
-                    signal_cache,
-                    &playing.structure_state,
-                    &playing.movement_influence,
-                    &playing.pusher_state,
-                    simulation.turn,
-                );
+                reset_simulation_presentation(presentation);
             }
             json_ok(serde_json::json!({
                 "from": pos_json(a),
@@ -547,28 +521,14 @@ fn handle_embedded_debug_command(
                 return json_error("world render assets are not ready");
             }
             let starting = !simulation.is_active();
-            start_simulation_if_needed(
-                simulation,
+            simulation.run(
                 &playing.world,
                 &mut playing.structure_state,
                 &mut playing.pusher_state,
             );
             if starting {
-                simulation.last_powered_devices.clear();
-                invalidate_simulation_prefetch(
-                    turn_cache,
-                    presentation,
-                    worker,
-                    &playing.world,
-                    pending_generated,
-                    signal_cache,
-                    &playing.structure_state,
-                    &playing.movement_influence,
-                    &playing.pusher_state,
-                    simulation.turn,
-                );
+                reset_simulation_presentation(presentation);
             }
-            request_continuous_run(simulation);
             sim_log.log(simulation.turn, "HTTP /run");
             serde_json::json!({
                 "ok": true,
@@ -587,29 +547,15 @@ fn handle_embedded_debug_command(
                 return json_error("world render assets are not ready");
             }
             let starting = !simulation.is_active();
-            start_simulation_if_needed(
-                simulation,
+            simulation.begin(
                 &playing.world,
                 &mut playing.structure_state,
                 &mut playing.pusher_state,
             );
             if starting {
-                simulation.last_powered_devices.clear();
-                invalidate_simulation_prefetch(
-                    turn_cache,
-                    presentation,
-                    worker,
-                    &playing.world,
-                    pending_generated,
-                    signal_cache,
-                    &playing.structure_state,
-                    &playing.movement_influence,
-                    &playing.pusher_state,
-                    simulation.turn,
-                );
-                request_continuous_run(simulation);
+                reset_simulation_presentation(presentation);
             }
-            match request_one_turn(simulation) {
+            match simulation.step() {
                 Ok(()) => {
                     sim_log.log(simulation.turn.saturating_add(1), "HTTP /runOneTurn queued");
                     serde_json::json!({
@@ -632,26 +578,13 @@ fn handle_embedded_debug_command(
                 return json_error("world render assets are not ready");
             }
             let starting = !simulation.is_active();
-            start_simulation_if_needed(
-                simulation,
+            simulation.begin(
                 &playing.world,
                 &mut playing.structure_state,
                 &mut playing.pusher_state,
             );
             if starting {
-                simulation.last_powered_devices.clear();
-                invalidate_simulation_prefetch(
-                    turn_cache,
-                    presentation,
-                    worker,
-                    &playing.world,
-                    pending_generated,
-                    signal_cache,
-                    &playing.structure_state,
-                    &playing.movement_influence,
-                    &playing.pusher_state,
-                    simulation.turn,
-                );
+                reset_simulation_presentation(presentation);
             }
             sim_log.log(simulation.turn, "HTTP /beginSimulation");
             serde_json::json!({
@@ -662,7 +595,7 @@ fn handle_embedded_debug_command(
             .to_string()
         }
         DebugHttpCommand::SimPause => {
-            simulation.running = false;
+            simulation.pause();
             json_ok(serde_json::json!({
                 "simulation": simulation_status_json(simulation, builder_mode, animating),
             }))

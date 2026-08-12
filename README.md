@@ -64,7 +64,7 @@ flowchart TB
     subgraph runtime["主 crate"]
         UI["UI 与输入<br/>game/ui · game/systems"]
         Render["场景渲染<br/>scene/ · game/world"]
-        Bridge["表现桥接 + 预取<br/>sim_bridge/"]
+        Bridge["表现桥接<br/>sim_bridge/"]
         HTTP["HTTP 调试<br/>debug_http/"]
     end
 
@@ -77,7 +77,6 @@ flowchart TB
     UI --> Bridge
     Render --> Bridge
     Bridge --> SimTurn
-    Bridge --> Session
     HTTP --> Session
     SimTurn --> State
     Session --> State
@@ -86,11 +85,11 @@ flowchart TB
 | 模块 | 职责 |
 |------|------|
 | `crates/oif-sim` | 世界、方块 Meta/Behavior、`simulate_turn`、无头会话；`TurnOutput` 含运动 / 激光等纯数据 DTO |
-| `sim_bridge/` | 表现编排 + 预取（`present` / `SimulationWorker` / `TurnCache`）；会话类型 re-export 自 `oif-sim` |
+| `sim_bridge/` | 原地推进权威模拟 Resource，并把 `TurnOutput` 增量应用到场景、动画与音效 |
 
 | 运行时 | 入口 | 窗口 | 用途 |
 |--------|------|------|------|
-| 游戏客户端 | `cargo run` | 有 | 游玩、编辑；预取 + 增量渲染 |
+| 游戏客户端 | `cargo run` | 有 | 游玩、编辑；权威状态原地推进 + 增量渲染 |
 | 无头模拟 | `cargo run --bin oif-debug-http` | 无 | CI、脚本 |
 
 HTTP 调试可嵌入（`--debug-http`）或独立无头；共用 `debug_http/protocol.rs`。详见 [`docs/report/architecture.md`](docs/report/architecture.md)。

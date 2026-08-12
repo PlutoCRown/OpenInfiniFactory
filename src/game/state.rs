@@ -221,49 +221,8 @@ impl Default for BuilderMode {
     }
 }
 
-/// 游戏侧模拟 UI/调度状态（Bevy Resource）：运行意图、倍速与开局快照。
-/// 与 `oif_sim::SimulationControl` 字段相近但职责不同——后者服务无头 `SimSession`，勿合并。
-#[derive(Resource)]
-pub struct SimulationState {
-    pub running: bool,
-    pub step_requested: bool,
-    pub speed: f32,
-    pub turn: u64,
-    pub accumulator: f32,
-    pub start_snapshot: Option<crate::game::world::grid::WorldBlocks>,
-    pub start_structures: Option<crate::game::simulation::structure_state::StructureState>,
-    /// 上一回合通电的用电器格（抬升器顶盘等表现用）
-    pub last_powered_devices: std::collections::HashSet<IVec3>,
-}
-
-impl Default for SimulationState {
-    fn default() -> Self {
-        Self {
-            running: false,
-            step_requested: false,
-            speed: 1.0,
-            turn: 0,
-            accumulator: 0.0,
-            start_snapshot: None,
-            start_structures: None,
-            last_powered_devices: std::collections::HashSet::new(),
-        }
-    }
-}
-
-impl SimulationState {
-    pub fn is_active(&self) -> bool {
-        // 已拍开局快照即算进入模拟（可停在 turn=0 回合边界，供调试器 beginSimulation）
-        self.start_snapshot.is_some() || self.running || self.turn > 0
-    }
-
-    pub fn authoring_world<'a>(
-        &'a self,
-        current: &'a crate::game::world::grid::WorldBlocks,
-    ) -> &'a crate::game::world::grid::WorldBlocks {
-        self.start_snapshot.as_ref().unwrap_or(current)
-    }
-}
+/// 游戏与无头调试共用的权威模拟控制状态
+pub use oif_sim::SimulationControl as SimulationState;
 
 #[derive(Resource, Default)]
 pub struct SolutionState {

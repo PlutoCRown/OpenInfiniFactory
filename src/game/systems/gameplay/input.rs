@@ -5,8 +5,8 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
 use crate::game::state::{GameMode, SimulationState, SolutionState};
-use crate::game::ui::PanelCloseDeps;
 use crate::game::ui::HOTBAR_SLOTS;
+use crate::game::ui::PanelCloseDeps;
 
 /// 处理暂停、背包与快捷栏切换输入
 pub fn gameplay_input(
@@ -51,9 +51,7 @@ pub fn gameplay_input(
         } else {
             player.playing_ui.paused = !player.playing_ui.paused;
             if player.playing_ui.paused {
-                simulation.running = false;
-                simulation.step_requested = false;
-                simulation.speed = 1.0;
+                simulation.pause();
             }
         }
     }
@@ -102,7 +100,8 @@ pub fn gameplay_input(
     let wheel_delta: f32 = mouse_wheel.read().map(|event| event.y).sum();
     if wheel_delta.abs() > f32::EPSILON {
         let direction = if wheel_delta > 0.0 { -1 } else { 1 };
-        let selected = (player.placement.selected as i32 + direction).rem_euclid(HOTBAR_SLOTS as i32);
+        let selected =
+            (player.placement.selected as i32 + direction).rem_euclid(HOTBAR_SLOTS as i32);
         if player.placement.selected != selected as usize {
             player.placement.selection.clear();
             player.placement.edit_gesture = None;

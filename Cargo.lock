@@ -3988,6 +3988,7 @@ dependencies = [
 name = "oif-sim"
 version = "0.1.0"
 dependencies = [
+ "bevy_ecs",
  "glam",
  "inventory",
  "paste",

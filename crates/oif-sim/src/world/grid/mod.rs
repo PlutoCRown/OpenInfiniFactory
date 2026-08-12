@@ -26,7 +26,7 @@ use crate::blocks::{AcceptorId, BlockData, BlockId, BlockKind, PaintMaterialId};
 pub const REACH: f32 = 12.0;
 
 /// 模拟世界方块网格：材料/系统层与拓扑附属数据
-#[derive(Default, Clone)]
+#[derive(bevy_ecs::prelude::Resource, Default, Clone)]
 pub struct WorldBlocks {
     pub blocks: HashMap<IVec3, BlockData>,
     pub system_blocks: HashMap<IVec3, BlockData>,

@@ -436,7 +436,8 @@
 | `show_input_row`                                 | Update                                                          |
 | `simulation_controls`                            | Update                                                          |
 | `sim_bridge::poll_simulation_worker`             | Update                                                          |
-| `sim_bridge::tick_simulation`                    | Update                                                          |
+| `sim_bridge::advance_simulation`                 | Update                                                          |
+| `sim_bridge::present_simulation_turns`           | Update                                                          |
 | `spawn_player`                                   | OnEnter(Playing)                                                |
 | `spawn_ui_camera`                                | Startup                                                         |
 | `start_debug_http_server`                        | Startup（非 wasm + debug_http）                                 |
@@ -530,7 +531,7 @@
 | `I18nRevision`              | `game/ui/access.rs`                   |
 | `InlineTextEditState`       | `game/ui/core/text_input.rs`          |
 | `InventoryItems`            | `game/ui/types.rs`                    |
-| `MovementInfluenceCache`    | `game/simulation/structures.rs`       |
+| `MovementInfluenceCache`    | `oif-sim/simulation/structures/`      |
 | `OpenBlockPanelDropdown`    | `game/block_editing/panel_state.rs`   |
 | `OpenSettingsDropdown`      | `game/ui/features/settings/types.rs`  |
 | `PanelDragState`            | `game/ui/core/panel.rs`               |
@@ -541,36 +542,33 @@
 | `PlacementState`            | `game/state.rs`                       |
 | `PlayingUiRootEntity`       | `game/ui/core/host.rs`                |
 | `PlayingUiState`            | `game/state.rs`                       |
-| `PusherState`               | `game/simulation/movement.rs`         |
+| `PusherState`               | `oif-sim/simulation/movement/`        |
 | `SaveListRenderState`       | `game/ui/features/save/types.rs`      |
 | `SaveState`                 | `shared/save.rs`                      |
 | `SettingsTab`               | `game/ui/features/settings/types.rs`  |
-| `SignalNetworkCache`        | `game/simulation/signals.rs`          |
-| `SimulationState`           | `game/state.rs`                       |
+| `SignalNetworkCache`        | `oif-sim/simulation/signals.rs`       |
+| `SimulationControl`         | `oif-sim/session/control.rs`          |
 | `SimulationStepStats`       | `oif-sim/simulation/stats.rs`         |
 | `SolutionState`             | `game/state.rs`                       |
 | `StartMenuScreen`           | `game/state.rs`                       |
-| `StructureState`            | `game/simulation/structure_state.rs`  |
+| `StructureState`            | `oif-sim/simulation/structure_state/` |
 | `TextPromptState`           | `game/ui/core/text_prompt.rs`         |
 | `UiFont`                    | `game/ui/systems/font.rs`             |
 | `UiHost`                    | `game/ui/core/host.rs`                |
 | `UiHoverState`              | `game/ui/core/panel.rs`               |
 | `UiRootEntity`              | `game/ui/core/host.rs`                |
 | `UiRuntime`                 | `game/ui/core/runtime.rs`             |
-| `WorldBlocks`               | `game/world/grid.rs`                  |
+| `WorldBlocks`               | `oif-sim/world/grid/mod.rs`           |
 | `WorldRenderAssets`         | `game/world/render_assets.rs`         |
 
-### 4.2 手动 `impl Resource`（无 derive）
+### 4.2 其他 Resource
 
 | 名称                          | 定义文件                                                 |
 | ----------------------------- | -------------------------------------------------------- |
 | `BlockEntityIndex`            | `scene/entity_index.rs`（impl 于 `game/bevy_bridge.rs`） |
 | `LaunchOptions`               | `shared/launch.rs`                                       |
-| `SimulationControl`           | `oif-sim/session/control.rs`                             |
 | `SimulationDebugLog`          | `oif-sim/session/log.rs`                                 |
 | `SimulationPresentationState` | `sim_bridge/present.rs`                                  |
-| `SimulationWorker`            | `sim_bridge/worker.rs`                                   |
-| `TurnCache`                   | `sim_bridge/cache.rs`                                    |
 
 ### 4.3 NonSend Resource
 

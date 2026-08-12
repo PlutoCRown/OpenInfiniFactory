@@ -286,7 +286,7 @@ fn standard_material_from_gltf(
         let image = gltf_images.get(texture.source().index())?;
         Some(images.add(bevy_image_from_gltf(image, &texture.sampler(), false)?))
     });
-    let mut alpha_mode = match gltf_material.alpha_mode() {
+    let alpha_mode = match gltf_material.alpha_mode() {
         gltf::material::AlphaMode::Opaque => AlphaMode::Opaque,
         gltf::material::AlphaMode::Mask => {
             AlphaMode::Mask(gltf_material.alpha_cutoff().unwrap_or(0.5))
@@ -294,10 +294,12 @@ fn standard_material_from_gltf(
         gltf::material::AlphaMode::Blend => AlphaMode::Blend,
     };
     #[cfg(target_os = "android")]
-    if is_glass_material {
+    let alpha_mode = if is_glass_material {
         // 玻璃贴图包含半透明像素；Android 上改用不透明合成，避免透明批次整块不可见。
-        alpha_mode = AlphaMode::Opaque;
-    }
+        AlphaMode::Opaque
+    } else {
+        alpha_mode
+    };
     let cull_mode = if gltf_material.double_sided() {
         None
     } else {

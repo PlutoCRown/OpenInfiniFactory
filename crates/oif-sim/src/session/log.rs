@@ -10,7 +10,7 @@ struct LogEntry {
 }
 
 /// 模拟调试日志缓冲
-#[derive(Default)]
+#[derive(bevy_ecs::prelude::Resource, Default)]
 pub struct SimulationDebugLog {
     pub enabled: bool,
     entries: VecDeque<LogEntry>,

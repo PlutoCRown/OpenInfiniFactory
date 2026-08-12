@@ -835,7 +835,7 @@ pub fn perf_stats_json(
         .collect();
     json!({
         "load_ms": null,
-        "sim_turn": sim_turn_stats_json(&**sim_stats),
+        "sim_turn": sim_turn_stats_json(sim_stats),
         "frame": {
             "fps": fps,
             "frame_ms": perf.frame_ms(),

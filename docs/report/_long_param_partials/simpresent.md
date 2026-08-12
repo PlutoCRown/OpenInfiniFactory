@@ -10,7 +10,7 @@
 
 | 函数 | params | kind | 手段 | 共享簇ID[] | local-only说明 | 风险 | 优先级 |
 |---|---:|---|---|---|---|---|---|
-| `present_turn` | 18 | helper | **1** | **C3** | — | `SimulationTickDeps` 字段同模块私有，透传 `&mut deps` 即可；`commands` / `CachedTurn` / `animation_duration` / `last_powered_devices` 留调用期 | **P0** |
+| `present_simulation_turns` | 3 | system | ECS | **C3** | — | 已由 `SimulationPresentationDeps` 聚合表现依赖，并通过 `TurnCommitted` 与模拟推进解耦 | **已完成** |
 | `apply_turn_output` | 14 | helper | **1** | **C1** | 薄转发，不另拆空函数 | 与 incremental 签名对齐；`stats`/`portal_flash_queue` 留调用期 | **P0** |
 | `apply_turn_output_incremental` | 14 | helper | **1** | **C1** | — | 内调 `apply_structure_animations` + `refresh_positions` 须同传 `&mut SceneRenderMut` | **P0** |
 | `apply_structure_animations` | 13 | helper | **1** | **C1** | `_debug`/`_structure_state` 随 C1 带入即可，勿为减参另造子集类型 | 无 `scene_chunks` 使用；仍吃完整 C1，避免平行半包 | **P1** |
@@ -23,7 +23,7 @@
 ### 目标签名（示意）
 
 **`present_turn`（C3）**  
-`present_turn(cached, animation_duration, last_powered_devices, &mut deps: SimulationTickDeps, &mut commands)`  
+`present_simulation_turns(MessageReader<TurnCommitted>, Commands, SimulationPresentationDeps)`  
 → 约 5 参。内部用 deps 做 snapshot + 组装 C1 调 `apply_turn_output`。
 
 **`apply_turn_output` / `apply_turn_output_incremental`（C1）**  
@@ -51,11 +51,11 @@
 
 | 手段 | 本清单结论 |
 |---|---|
-| **1 聚合** | 7/7。C3 已存在却被拆开（`tick_simulation`→18 参瀑布）；C1 在 turn/edit 刷新链重复；C5 收 spawn 包装。 |
+| **1 聚合** | 7/7。C3 聚合表现依赖；`TurnCommitted` 隔离模拟推进与场景；C1 在 turn/edit 刷新链复用。 |
 | **2 消息** | **0**。`present_turn`/`apply_*`/`spawn_*` 必须同帧同步完成，禁消息总线。 |
 | **3 accept/拆职责** | 仅辅：`apply_turn_output` 与 `spawn_and_index` 为薄包装，可随 C1/C5 落地选择内联，**不**为此新建类型。 |
 
-**非 Rust 风格提醒：** 不要为每个函数私有一个 PresentCtx；已有 `SimulationTickDeps` 应直接透传（惯用 SystemParam→`&mut` helper）。
+**非 Rust 风格提醒：** 不要为每个函数私有一个 PresentCtx；表现系统统一使用 `SimulationPresentationDeps`。
 
 ---
 

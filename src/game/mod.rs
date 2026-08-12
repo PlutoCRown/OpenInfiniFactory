@@ -1,7 +1,7 @@
+pub mod audio;
 pub mod block_editing;
 pub mod blocks;
 pub mod cameras;
-pub mod audio;
 pub mod debug;
 pub mod edit_history;
 pub mod input;
@@ -28,7 +28,6 @@ use crate::shared::launch::LaunchOptions;
 use crate::shared::persistent_storage::{self, StoragePlugin, StorageReady};
 use crate::shared::save::SaveState;
 use crate::shared::touch_profile::TouchProfile;
-use crate::sim_bridge::TurnCache;
 
 use cameras::{spawn_ui_camera, sync_gameplay_view_image_size};
 #[cfg(not(target_arch = "wasm32"))]
@@ -138,9 +137,9 @@ impl Plugin for GamePlugin {
             .insert_resource(simulation::movement::PusherState::default())
             .insert_resource(simulation::structures::MovementInfluenceCache::default())
             .insert_resource(crate::sim_bridge::SimulationPresentationState::default())
+            .add_message::<crate::sim_bridge::TurnCommitted>()
             .insert_resource(BlockEntityIndex::default())
             .init_resource::<crate::game::world::rendering::SceneChunkMeshes>()
-            .insert_resource(TurnCache::default())
             .insert_resource(settings)
             .insert_resource(UiScale(touch_profile.effective_ui_scale(config.ui_scale)))
             .insert_resource(config)
@@ -282,7 +281,7 @@ impl Plugin for GamePlugin {
                 Update,
                 simulation_controls
                     .after(PerfScope::Menus)
-                    .before(crate::sim_bridge::tick_simulation),
+                    .before(crate::sim_bridge::advance_simulation),
             )
             .add_systems(
                 Update,
@@ -292,19 +291,20 @@ impl Plugin for GamePlugin {
             )
             .add_systems(
                 Update,
-                crate::sim_bridge::poll_simulation_worker
-                    .after(simulation_controls)
-                    .before(crate::sim_bridge::tick_simulation),
-            )
-            .add_systems(
-                Update,
                 (
-                    crate::sim_bridge::tick_simulation,
+                    crate::sim_bridge::advance_simulation,
+                    crate::sim_bridge::present_simulation_turns,
                     // 先落地 present/despawn，再跑动画，避免对已销毁实体 remove/insert
                     ApplyDeferred,
                 )
                     .chain()
-                    .after(crate::sim_bridge::poll_simulation_worker)
+                    .after(simulation_controls)
+                    .before(PerfScope::Simulation),
+            )
+            .add_systems(
+                Update,
+                crate::sim_bridge::refresh_pending_generated_previews
+                    .after(crate::sim_bridge::present_simulation_turns)
                     .before(PerfScope::Simulation),
             )
             .add_systems(

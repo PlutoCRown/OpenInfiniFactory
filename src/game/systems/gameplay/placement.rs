@@ -20,7 +20,7 @@ use crate::game::ui::features::GameplayToast;
 use crate::game::ui::features::block_panels::PendingBlockPanelOpen;
 use crate::game::ui::{AreaKind, InventoryItems};
 use crate::game::world::direction::Facing;
-use crate::game::world::grid::{MaterialFace, WorldBlocks, grid_to_world};
+use crate::game::world::grid::{MaterialFace, WorldBlocks};
 use crate::game::world::rendering::{
     BlockEntity, EditPreview, SceneChunkMeshes, WorldRenderAssets, despawn_edit_previews,
     spawn_block_preview,

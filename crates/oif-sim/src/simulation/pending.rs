@@ -5,7 +5,7 @@ use crate::blocks::{BlockData, BlockId, BlockKind, PaintMaterialId, StampMateria
 use crate::world::grid::MaterialFace;
 
 /// 跨回合挂起：生成、延后销毁、延后漆/印花（等移动动画播完再落地）
-#[derive(Default, Clone)]
+#[derive(bevy_ecs::prelude::Resource, Default, Clone)]
 pub struct PendingGeneratedMaterials {
     pending: HashMap<IVec3, PendingGeneratedMaterial>,
     /// 钻头/验收销毁：本回合只标记，下一回合开始再移除

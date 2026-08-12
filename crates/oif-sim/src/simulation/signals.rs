@@ -21,7 +21,7 @@ pub struct PowerQuery {
 }
 
 /// 信号网络缓存：导线/用电器按 BlockId 索引，移动后身份仍有效
-#[derive(Default, Clone)]
+#[derive(bevy_ecs::prelude::Resource, Default, Clone)]
 pub struct SignalNetworkCache {
     topology_revision: u64,
     wire_components: HashMap<BlockId, SignalComponentId>,
@@ -309,4 +309,3 @@ fn detector_activated(
     };
     world.is_detectable_by_detector_at(detector_pos + detection_pos)
 }
-

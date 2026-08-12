@@ -5,6 +5,7 @@ edition = "2024"
 description = "OpenInfiniFactory simulation core (world, blocks meta/behavior, simulate_turn, session)"
 
 [dependencies]
+bevy_ecs = { version = "0.19", default-features = false }
 glam = { version = "0.32", features = ["serde"] }
 inventory = "0.3"
 paste = "1"

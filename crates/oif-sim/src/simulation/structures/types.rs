@@ -39,7 +39,7 @@ pub(super) enum PusherAnimationKind {
     Retract,
 }
 
-#[derive(Default, Clone)]
+#[derive(bevy_ecs::prelude::Resource, Default, Clone)]
 pub struct MovementInfluenceCache {
     /// 按结构 ID + 推动源方块 ID 累计；结构 ID 稳定时跨回合保留，优先未作用过的源
     counts: HashMap<StructureId, HashMap<BlockId, u32>>,

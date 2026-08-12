@@ -1,4 +1,4 @@
-//! 世界网格：Bevy Resource 包装 `oif_sim::WorldBlocks`
+//! 世界网格：直接复用 `oif_sim` 的权威 ECS Resource
 
 pub use oif_sim::world::grid::{
     BlockSettings, ConverterMode, ConverterSettings, EditSelectionMode, GeneratorMode,
@@ -12,9 +12,7 @@ use oif_sim::world::grid::EditSelectionMode as SimEditSelectionMode;
 
 use crate::shared::config::ConfigSelectionMode;
 
-/// 游戏世界方块网格（Bevy Resource，Deref 到 oif-sim）
-#[derive(Resource, Deref, DerefMut, Clone, Default)]
-pub struct WorldBlocks(pub oif_sim::WorldBlocks);
+pub use oif_sim::WorldBlocks;
 
 /// 配置层框选 → 模拟侧框选，再调用 oif-sim 射线
 pub fn raycast_edit_drag_grid(

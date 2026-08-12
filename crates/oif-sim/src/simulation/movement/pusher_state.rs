@@ -1,5 +1,5 @@
 /// 活塞/拦截器伸出状态，按方块运行时 ID 索引（随实体移动，不跟格子走）
-#[derive(Default, Clone)]
+#[derive(bevy_ecs::prelude::Resource, Default, Clone)]
 pub struct PusherState {
     entries: HashMap<BlockId, PusherStateEntry>,
 }

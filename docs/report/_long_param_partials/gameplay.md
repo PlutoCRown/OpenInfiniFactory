@@ -66,7 +66,7 @@
 |---|---|---:|---|
 | **C1** | SceneRenderMut | 0 直接 / **7 经 C2 嵌套** | 经 C2：handle / move / copy / spawn_selection_result / commit / alternate / rotate；（`EditHistoryApply`≈C1，算已有非主簇） |
 | **C2** | WorldEditScene | **8** | handle_selection_area_input, move_selection, copy_selection, spawn_selection_result, commit_edit_gesture, alternate_block_at, rotate_block_at；+ placement_input（组装下传） |
-| **C3** | SimulationTickDeps | **0** | — |
+| **C3** | SimulationPresentationDeps | **0** | — |
 | **C4** | PanelCloseDeps | **1** | gameplay_input（关闭路径，已落地） |
 | **C5** | SpawnBlockOpts+SpawnMode | **0** | spawn_gesture_previews 明确不套 |
 | **C6** | BlockPanelDropdownDeps | **1** | update_color_select_dropdowns |

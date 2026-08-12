@@ -1,5 +1,5 @@
 /// 单回合模拟各阶段耗时采样（HUD / debug 采样）
-#[derive(Clone)]
+#[derive(bevy_ecs::prelude::Resource, Clone)]
 pub struct SimulationStepStats {
     pub has_sample: bool,
     pub total_ms: f64,

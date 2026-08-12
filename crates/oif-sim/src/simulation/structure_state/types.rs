@@ -95,7 +95,7 @@ pub struct AcceptorStructure {
 }
 
 /// 世界结构表：工厂/材料连通、可变形子集、回合 held
-#[derive(Default, Clone)]
+#[derive(bevy_ecs::prelude::Resource, Default, Clone)]
 pub struct StructureState {
     structures: HashMap<StructureId, Structure>,
     structure_by_pos: HashMap<IVec3, StructureId>,

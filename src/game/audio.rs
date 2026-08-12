@@ -183,6 +183,7 @@ fn sync_machine_audio_loops(
     assets: Res<SoundAssets>,
     settings: Res<GameSettings>,
     simulation: Res<SimulationState>,
+    presentation: Res<crate::sim_bridge::SimulationPresentationState>,
     world: Res<WorldBlocks>,
     listener: Query<&GlobalTransform, With<FlyCamera>>,
     loops: Query<(Entity, &MachineAudioLoop)>,
@@ -200,7 +201,7 @@ fn sync_machine_audio_loops(
                     block.kind,
                     BlockKind::Conveyor | BlockKind::ReverseConveyor | BlockKind::Drill
                 );
-                (motor && simulation.last_powered_devices.contains(&pos)).then_some(pos)
+                (motor && presentation.last_powered_devices.contains(&pos)).then_some(pos)
             })
             .map(|pos| {
                 let world_pos = grid_to_world(pos);
