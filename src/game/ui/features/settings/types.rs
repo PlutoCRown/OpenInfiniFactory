@@ -5,7 +5,9 @@ use crate::game::{
     GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, MOUSE_SENSITIVITY_MAX, MOUSE_SENSITIVITY_MIN,
     UI_SCALE_MAX, UI_SCALE_MIN,
 };
-use crate::shared::config::{ActionKeyName, ConfigSelectionMode, ConfigWindowMode};
+use crate::shared::config::{
+    ActionKeyName, ConfigGameplayRenderRate, ConfigSelectionMode, ConfigWindowMode,
+};
 use crate::shared::i18n::Language;
 use crate::shared::touch_profile::TouchProfile;
 
@@ -165,6 +167,10 @@ pub const GRAPHICS_SETTINGS: &[SettingsItem] = &[
     SettingsItem {
         label_key: "settings.ssao",
         control: SettingsControl::Dropdown(SettingsDropdown::Ssao),
+    },
+    SettingsItem {
+        label_key: "settings.render_rate",
+        control: SettingsControl::Dropdown(SettingsDropdown::GameplayRenderRate),
     },
     SettingsItem {
         label_key: "settings.vsync",
@@ -387,6 +393,7 @@ pub enum SettingsDropdown {
     DeleteSelectionMode,
     Shadows,
     Ssao,
+    GameplayRenderRate,
     Vsync,
     Skybox,
     WindowMode,
@@ -417,6 +424,7 @@ impl SettingsDropdown {
                 "settings.option_off"
             }),
             Self::Ssao => i18n.t(config.ssao_quality.label_key()),
+            Self::GameplayRenderRate => i18n.t(config.gameplay_render_rate.label_key()),
             Self::Vsync => i18n.t(if config.vsync_enabled {
                 "settings.option_on"
             } else {
@@ -444,6 +452,7 @@ pub enum SettingsAction {
     SetLanguage(Language),
     SetShadowsEnabled(bool),
     SetSsaoQuality(crate::shared::config::ConfigSsaoQuality),
+    SetGameplayRenderRate(ConfigGameplayRenderRate),
     SetVsyncEnabled(bool),
     SetSkyboxEnabled(bool),
     SetWindowMode(ConfigWindowMode),
@@ -473,6 +482,7 @@ impl UiActionLabel for SettingsAction {
             | Self::SetLanguage(_)
             | Self::SetShadowsEnabled(_)
             | Self::SetSsaoQuality(_)
+            | Self::SetGameplayRenderRate(_)
             | Self::SetVsyncEnabled(_)
             | Self::SetSkyboxEnabled(_)
             | Self::SetWindowMode(_)

@@ -1,11 +1,11 @@
 pub use oif_sim::blocks::goal::GoalBlock;
 
-use bevy::prelude::Color;
-use crate::game::blocks::traits::{BlockRender, PlaceableBlock};
-use crate::game::blocks::ColorSpecExt;
-use crate::game::blocks::{rgba};
-use crate::game::blocks::adapter::BlockImpl;
 use crate::game::blocks::BlockKind;
+use crate::game::blocks::ColorSpecExt;
+use crate::game::blocks::adapter::BlockImpl;
+use crate::game::blocks::rgba;
+use crate::game::blocks::traits::{BlockRender, PlaceableBlock};
+use bevy::prelude::Color;
 
 pub static BLOCK: BlockImpl<GoalBlock> = BlockImpl(GoalBlock);
 

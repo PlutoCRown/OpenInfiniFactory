@@ -49,11 +49,7 @@ pub(super) fn can_place_block_at(
 }
 
 /// 判断当前进入模式/建造模式下该方块种类是否可放置
-pub(super) fn can_place_in_mode(
-    kind: BlockKind,
-    mode: BuilderMode,
-    entry: WorldEntryMode,
-) -> bool {
+pub(super) fn can_place_in_mode(kind: BlockKind, mode: BuilderMode, entry: WorldEntryMode) -> bool {
     if entry == WorldEntryMode::Free {
         return kind.is_editable() || kind.is_factory() || kind.is_material();
     }

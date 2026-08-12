@@ -5,8 +5,8 @@ mod meta;
 mod registry;
 
 pub use load::{
-    load_global_material_packs, merge_puzzle_material_packs, reload_global_only,
-    MaterialPackRegistries,
+    MaterialPackRegistries, load_global_material_packs, merge_puzzle_material_packs,
+    reload_global_only,
 };
 pub use registry::{
     MaterialBlockPresentation, MaterialBlockRegistry, PaintMaterialPresentation,

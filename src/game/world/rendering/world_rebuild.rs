@@ -2,8 +2,10 @@ use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 use super::components::BlockEntity;
-use super::scene_chunks::{clear_scene_chunks, rebuild_all_scene_chunks, SceneChunkMeshes};
-use super::spawn::{block_render_material, spawn_block, spawn_block_model, SpawnBlockOpts, SpawnMode};
+use super::scene_chunks::{SceneChunkMeshes, clear_scene_chunks, rebuild_all_scene_chunks};
+use super::spawn::{
+    SpawnBlockOpts, SpawnMode, block_render_material, spawn_block, spawn_block_model,
+};
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{AnimationTiming, BlockAnimation, PusherAnimation};
@@ -50,28 +52,10 @@ pub fn rebuild_world(
         if data.kind.is_scene() {
             continue;
         }
-        spawn_block(
-            commands,
-            meshes,
-            assets,
-            world,
-            *pos,
-            *data,
-            None,
-            index,
-        );
+        spawn_block(commands, meshes, assets, world, *pos, *data, None, index);
     }
     for (pos, data) in &world.system_blocks {
-        spawn_block(
-            commands,
-            meshes,
-            assets,
-            world,
-            *pos,
-            *data,
-            None,
-            index,
-        );
+        spawn_block(commands, meshes, assets, world, *pos, *data, None, index);
     }
     rebuild_all_scene_chunks(commands, meshes, world, assets, scene_chunks);
 }
@@ -87,15 +71,7 @@ pub fn rebuild_world_for_debug_state(
     index: &mut BlockEntityIndex,
     scene_chunks: &mut SceneChunkMeshes,
 ) {
-    rebuild_world(
-        commands,
-        meshes,
-        world,
-        assets,
-        None,
-        index,
-        scene_chunks,
-    );
+    rebuild_world(commands, meshes, world, assets, None, index, scene_chunks);
 }
 
 /// 带编辑动画的全量重建

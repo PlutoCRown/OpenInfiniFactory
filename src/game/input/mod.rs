@@ -2,7 +2,7 @@
 
 mod state;
 
-pub use state::{gather_gameplay_input, ActionPulse, GameplayInputState};
+pub use state::{ActionPulse, GameplayInputState, gather_gameplay_input};
 
 use bevy::prelude::*;
 

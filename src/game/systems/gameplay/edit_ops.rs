@@ -7,9 +7,7 @@ use crate::game::state::PlacementState;
 use crate::game::ui::InventoryItems;
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::WorldBlocks;
-use crate::game::world::rendering::{
-    rebuild_world_for_debug_state, rebuild_world_with_animations,
-};
+use crate::game::world::rendering::{rebuild_world_for_debug_state, rebuild_world_with_animations};
 use crate::scene::WorldEditScene;
 
 use super::placement::{despawn_block_entities, refresh_edit_generated_markers};

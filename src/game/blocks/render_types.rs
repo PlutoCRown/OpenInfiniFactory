@@ -29,9 +29,13 @@ pub enum WeldConnectorBehavior {
 pub enum WireConnectorBehavior {
     Wire,
     /// 除该面外可接
-    Device { blocked_offset: IVec3 },
+    Device {
+        blocked_offset: IVec3,
+    },
     /// 仅该面可接
-    AllowOnly { offset: IVec3 },
+    AllowOnly {
+        offset: IVec3,
+    },
 }
 
 /// 仅底面接线的用电器（旋转器、抬升器）

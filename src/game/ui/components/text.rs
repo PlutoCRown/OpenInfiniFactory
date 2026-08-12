@@ -31,8 +31,5 @@ pub fn localized_text(
     font_size: f32,
     color: Color,
 ) -> (impl Bundle, LocalizedText) {
-    (
-        text(i18n.t(key), font_size, color),
-        LocalizedText { key },
-    )
+    (text(i18n.t(key), font_size, color), LocalizedText { key })
 }

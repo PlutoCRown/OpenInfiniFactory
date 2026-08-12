@@ -4,7 +4,7 @@ use super::components::{
     DeleteBoundsOverlay, DeleteBoundsPart, EditPreview, GameplayScene, PendingGeneratedPreview,
     SelectionBoundsOverlay, SelectionBoundsPart,
 };
-use super::spawn::{spawn_block_model, SpawnBlockOpts, SpawnMode};
+use super::spawn::{SpawnBlockOpts, SpawnMode, spawn_block_model};
 use crate::game::blocks::BlockData;
 use crate::game::world::animation::AnimationTiming;
 use crate::game::world::grid::{WorldBlocks, grid_to_world};

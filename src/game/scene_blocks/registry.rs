@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use bevy::prelude::*;
 
-use crate::game::blocks::{scene_catalog, BlockKind, ColorSpec, SceneBlockId};
+use crate::game::blocks::{BlockKind, ColorSpec, SceneBlockId, scene_catalog};
 
 /// 单个场景方块的表现数据（优先 model.glb，否则 texture.png 贴单位立方体）
 #[derive(Clone, Debug)]

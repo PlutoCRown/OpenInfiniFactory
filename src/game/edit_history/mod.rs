@@ -3,17 +3,17 @@ mod patch;
 
 pub use input::edit_history_input;
 pub use patch::{
-    build_cell_patch, build_relocate_patch, build_rotation_patch, build_settings_patch,
-    capture_cell, capture_welds_for_ids, weld_diff, FacePanelDelta, WorldPatch,
+    FacePanelDelta, WorldPatch, build_cell_patch, build_relocate_patch, build_rotation_patch,
+    build_settings_patch, capture_cell, capture_welds_for_ids, weld_diff,
 };
 
 use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 
+use crate::game::state::{SelectionSnapshot, SelectionState};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{BlockSettings, WorldBlocks};
-use crate::game::state::{SelectionSnapshot, SelectionState};
 
 use patch::CellSnapshot;
 

@@ -37,6 +37,7 @@ pub const DEFAULT_CONFIG: GameConfig = GameConfig {
     sfx_volume: 1.0,
     shadows_enabled: true,
     ssao_quality: ConfigSsaoQuality::High,
+    gameplay_render_rate: ConfigGameplayRenderRate::Fps60,
     vsync_enabled: true,
     skybox_enabled: true,
     window_mode: ConfigWindowMode::Windowed,
@@ -70,6 +71,8 @@ pub struct GameConfig {
     pub shadows_enabled: bool,
     #[serde(default = "default_ssao_quality")]
     pub ssao_quality: ConfigSsaoQuality,
+    #[serde(default = "default_gameplay_render_rate")]
+    pub gameplay_render_rate: ConfigGameplayRenderRate,
     #[serde(default = "default_vsync_enabled")]
     pub vsync_enabled: bool,
     #[serde(default = "default_skybox_enabled")]
@@ -130,6 +133,10 @@ fn default_shadows_enabled() -> bool {
 
 fn default_ssao_quality() -> ConfigSsaoQuality {
     DEFAULT_CONFIG.ssao_quality
+}
+
+fn default_gameplay_render_rate() -> ConfigGameplayRenderRate {
+    DEFAULT_CONFIG.gameplay_render_rate
 }
 
 fn default_vsync_enabled() -> bool {

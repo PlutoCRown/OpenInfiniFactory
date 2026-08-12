@@ -155,6 +155,48 @@ impl ConfigSelectionMode {
     }
 }
 
+/// 3D 游戏画面的独立刷新率；UI 仍按窗口刷新率绘制
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Reflect, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigGameplayRenderRate {
+    FollowUi,
+    Fps120,
+    Fps90,
+    #[default]
+    Fps60,
+    Fps30,
+}
+
+impl ConfigGameplayRenderRate {
+    pub const ALL: [ConfigGameplayRenderRate; 5] = [
+        ConfigGameplayRenderRate::FollowUi,
+        ConfigGameplayRenderRate::Fps120,
+        ConfigGameplayRenderRate::Fps90,
+        ConfigGameplayRenderRate::Fps60,
+        ConfigGameplayRenderRate::Fps30,
+    ];
+
+    pub fn fps(self) -> Option<f64> {
+        match self {
+            Self::FollowUi => None,
+            Self::Fps120 => Some(120.0),
+            Self::Fps90 => Some(90.0),
+            Self::Fps60 => Some(60.0),
+            Self::Fps30 => Some(30.0),
+        }
+    }
+
+    pub fn label_key(self) -> &'static str {
+        match self {
+            Self::FollowUi => "settings.render_rate.follow_ui",
+            Self::Fps120 => "settings.render_rate.120",
+            Self::Fps90 => "settings.render_rate.90",
+            Self::Fps60 => "settings.render_rate.60",
+            Self::Fps30 => "settings.render_rate.30",
+        }
+    }
+}
+
 /// 屏幕空间环境光遮蔽（SSAO）质量档
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Reflect, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

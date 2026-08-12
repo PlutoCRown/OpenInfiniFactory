@@ -5,9 +5,7 @@ use std::path::PathBuf;
 
 use bevy::prelude::*;
 
-use crate::game::blocks::{
-    ColorSpec, MaterialBlockId, PaintMaterialId, StampMaterialId,
-};
+use crate::game::blocks::{ColorSpec, MaterialBlockId, PaintMaterialId, StampMaterialId};
 
 /// 单个材料方块的表现数据
 #[derive(Clone, Debug)]

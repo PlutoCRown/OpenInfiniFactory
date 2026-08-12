@@ -11,8 +11,8 @@ use oif_sim::blocks::{
     PoweredSideEffect, SignalBehavior, WeldBehavior,
 };
 
+use super::RenderBehavior;
 use super::traits::{BlockRender, BlockUi, PlaceableBlock};
-use super::{RenderBehavior};
 
 /// 包装各方块类型，使分文件的 sub-trait impl 能注册进 inventory
 pub struct BlockImpl<T>(pub T);

@@ -1,7 +1,7 @@
 use super::BlockerBlock;
 
 use crate::game::blocks::traits::BlockRender;
-use crate::game::blocks::{render_directional_wire_device, RenderBehavior};
+use crate::game::blocks::{RenderBehavior, render_directional_wire_device};
 use crate::game::world::direction::Facing;
 
 impl BlockRender for BlockerBlock {

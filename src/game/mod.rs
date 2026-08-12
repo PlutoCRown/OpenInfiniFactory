@@ -29,7 +29,10 @@ use crate::shared::persistent_storage::{self, StoragePlugin, StorageReady};
 use crate::shared::save::SaveState;
 use crate::shared::touch_profile::TouchProfile;
 
-use cameras::{spawn_ui_camera, sync_gameplay_view_image_size};
+use cameras::{
+    GameplayRenderThrottle, spawn_ui_camera, sync_gameplay_render_rate,
+    sync_gameplay_view_image_size,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use debug::DebugToolsPlugin;
 use edit_history::{EditHistory, edit_history_input};
@@ -123,6 +126,7 @@ impl Plugin for GamePlugin {
             .insert_resource(PlacementState::default())
             .init_resource::<AimFocus>()
             .insert_resource(InventoryItems::default())
+            .init_resource::<GameplayRenderThrottle>()
             .init_resource::<crate::game::systems::gameplay::EditBatchTiming>()
             .init_state::<GameMode>()
             .insert_resource(BuilderMode::default())
@@ -226,6 +230,7 @@ impl Plugin for GamePlugin {
                 Update,
                 (
                     sync_gameplay_view_image_size,
+                    sync_gameplay_render_rate,
                     world::rendering::sync_shadow_settings,
                     world::rendering::sync_ssao_settings,
                     world::rendering::sync_vsync_settings,

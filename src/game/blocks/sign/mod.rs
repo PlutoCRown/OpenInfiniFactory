@@ -1,11 +1,11 @@
 use crate::game::blocks::ColorSpecExt;
 pub use oif_sim::blocks::sign::SignBlock;
 
-use bevy::prelude::Color;
+use crate::game::blocks::BlockKind;
 use crate::game::blocks::adapter::BlockImpl;
 use crate::game::blocks::rgb;
 use crate::game::blocks::traits::PlaceableBlock;
-use crate::game::blocks::BlockKind;
+use bevy::prelude::Color;
 
 pub static BLOCK: BlockImpl<SignBlock> = BlockImpl(SignBlock);
 

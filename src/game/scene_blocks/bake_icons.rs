@@ -21,7 +21,7 @@ use crate::game::material_blocks::{
 use crate::game::world::animation::AnimationTiming;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::render_assets::WorldRenderAssets;
-use crate::game::world::rendering::spawn::{spawn_block_model, SpawnBlockOpts, SpawnMode};
+use crate::game::world::rendering::spawn::{SpawnBlockOpts, SpawnMode, spawn_block_model};
 use crate::game::world::rendering::{
     BlockIconRenderEntity, BlockIconRenderRoot, ShadowProxyMaterial, bakeable_block_icon_kinds,
     baked_block_icon_only_id, baked_block_icon_path, light_panel_icon_path, selection_icon_path,

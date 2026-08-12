@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 
-use crate::shared::config::{ActionKeyName, ConfigSelectionMode, ConfigWindowMode};
+use crate::shared::config::{
+    ActionKeyName, ConfigGameplayRenderRate, ConfigSelectionMode, ConfigWindowMode,
+};
 use crate::shared::platform::StoragePlatform;
 
 use super::super::components::{
@@ -120,7 +122,11 @@ fn spawn_settings_radio_row(
 
 fn spawn_settings_dropdown_layers(root: &mut ChildSpawnerCommands) {
     // 仅保留仍为下拉的项；单选组不再挂列表层
-    let mut dropdowns = vec![SettingsDropdown::Language, SettingsDropdown::Ssao];
+    let mut dropdowns = vec![
+        SettingsDropdown::Language,
+        SettingsDropdown::Ssao,
+        SettingsDropdown::GameplayRenderRate,
+    ];
     if StoragePlatform::current() == StoragePlatform::Desktop {
         dropdowns.push(SettingsDropdown::WindowMode);
     }
@@ -419,6 +425,15 @@ fn settings_choice_options(dropdown: SettingsDropdown) -> Vec<(String, SettingsA
                 (
                     i18n.t(quality.label_key()),
                     SettingsAction::SetSsaoQuality(quality),
+                )
+            })
+            .collect(),
+        SettingsDropdown::GameplayRenderRate => ConfigGameplayRenderRate::ALL
+            .into_iter()
+            .map(|rate| {
+                (
+                    i18n.t(rate.label_key()),
+                    SettingsAction::SetGameplayRenderRate(rate),
                 )
             })
             .collect(),

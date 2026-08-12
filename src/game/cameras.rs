@@ -2,11 +2,20 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureFormat};
 use bevy::window::PrimaryWindow;
 
+use crate::shared::config::{ConfigGameplayRenderRate, GameConfig};
+
 #[derive(Component)]
 pub struct UiCamera;
 
 #[derive(Component)]
 pub struct GameplayCamera;
+
+/// 记录 3D 离屏画面的刷新节奏，不影响 UI、输入和模拟更新
+#[derive(Resource, Default)]
+pub struct GameplayRenderThrottle {
+    elapsed: f64,
+    rate: Option<ConfigGameplayRenderRate>,
+}
 
 /// 游玩 UI 叠加相机：只向窗口画 2D UI，不画 3D
 #[derive(Component)]
@@ -97,4 +106,42 @@ pub fn sync_gameplay_view_image_size(
         height,
         depth_or_array_layers: 1,
     });
+}
+
+/// 按设置跳过部分 3D 相机渲染帧，UI 相机继续复用上一张离屏画面
+pub fn sync_gameplay_render_rate(
+    time: Res<Time<Real>>,
+    config: Res<GameConfig>,
+    mut throttle: ResMut<GameplayRenderThrottle>,
+    mut cameras: Query<&mut Camera, With<GameplayCamera>>,
+) {
+    let Ok(mut camera) = cameras.single_mut() else {
+        throttle.elapsed = 0.0;
+        throttle.rate = None;
+        return;
+    };
+
+    let rate = config.gameplay_render_rate;
+    let render = if let Some(fps) = rate.fps() {
+        let interval = 1.0 / fps;
+        if throttle.rate != Some(rate) {
+            throttle.elapsed = 0.0;
+            true
+        } else {
+            throttle.elapsed += time.delta_secs_f64();
+            if throttle.elapsed >= interval {
+                throttle.elapsed %= interval;
+                true
+            } else {
+                false
+            }
+        }
+    } else {
+        throttle.elapsed = 0.0;
+        true
+    };
+    throttle.rate = Some(rate);
+    if camera.is_active != render {
+        camera.is_active = render;
+    }
 }

@@ -15,8 +15,8 @@ use super::messages::{
     SwitchToEditMode,
 };
 use super::world_ops::{
-    save_current_world as save_current_world_impl, save_current_world_invalidate_solutions,
-    SaveCurrentWorldResult,
+    SaveCurrentWorldResult, save_current_world as save_current_world_impl,
+    save_current_world_invalidate_solutions,
 };
 
 pub use super::world_ops::puzzle_save_needs_confirm;
@@ -33,11 +33,7 @@ pub fn exit_to_main_menu(commands: &mut Commands, save_first: bool) {
     });
 }
 
-pub fn exit_to_main_menu_in_world(
-    world: &mut World,
-    save_first: bool,
-    invalidate_solutions: bool,
-) {
+pub fn exit_to_main_menu_in_world(world: &mut World, save_first: bool, invalidate_solutions: bool) {
     world.write_message(ExitToMainMenu {
         save_first,
         invalidate_solutions,
