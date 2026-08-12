@@ -1,6 +1,6 @@
 pub fn update_hud_visibility(
     mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
+    ui_navigation: Res<UiNavigation>,
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
     save_state: Res<SaveState>,
@@ -23,7 +23,7 @@ pub fn update_hud_visibility(
 ) {
     let dirty = !*primed
         || mode.is_changed()
-        || playing_ui.is_changed()
+        || ui_navigation.is_changed()
         || builder_mode.is_changed()
         || simulation.is_changed()
         || save_state.is_changed()
@@ -35,7 +35,7 @@ pub fn update_hud_visibility(
 
     let has_world = save_state.current.is_some();
     let hide_gameplay_hud = *builder_mode == BuilderMode::Play && simulation.is_active();
-    let active_play = playing_ui.active_play();
+    let active_play = ui_navigation.active_play();
 
     let hud_display = if has_world {
         Display::Flex

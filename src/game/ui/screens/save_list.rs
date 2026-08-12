@@ -1,11 +1,11 @@
 use bevy::prelude::*;
 
-use crate::game::state::StartMenuScreen;
 use crate::game::ui::components::{
     BUTTON_BG, PanelOptions, UiIconAssets, button_border, button_shadow, default_button_size,
     raised_border, spawn_panel_with_title, spawn_ui_icon, styled_button, text, text_button,
     transparent_node,
 };
+use crate::game::ui::core::StartMenuPage;
 
 use super::super::types::{
     LocalizedText, PanelVisibility, SaveListAction, SaveListCloseButton, SaveListCoverHost,
@@ -123,7 +123,7 @@ pub fn spawn_save_list(
             .closable(),
         (
             SaveListPanel,
-            PanelVisibility::StartMenuScreen(StartMenuScreen::SaveList),
+            PanelVisibility::StartMenuPage(StartMenuPage::SaveList),
         ),
         title,
         SaveListTitleText,

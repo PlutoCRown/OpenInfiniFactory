@@ -236,12 +236,14 @@ fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, settings: &GameSett
         .spawn(scroll_container())
         .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
         .with_children(|container| {
-            container.spawn(scroll_content()).with_children(|content| {
-                for item in GAMEPLAY_SETTINGS {
-                    spawn_settings_item(content, *item, settings, SettingsTab::Gameplay);
-                }
-                spawn_settings_footer(content);
-            });
+            container
+                .spawn(scroll_content(24.0))
+                .with_children(|content| {
+                    for item in GAMEPLAY_SETTINGS {
+                        spawn_settings_item(content, *item, settings, SettingsTab::Gameplay);
+                    }
+                    spawn_settings_footer(content);
+                });
         });
 }
 
@@ -250,18 +252,20 @@ fn spawn_graphics_settings(panel: &mut ChildSpawnerCommands, settings: &GameSett
         .spawn(scroll_container())
         .insert(PanelVisibility::SettingsTab(SettingsTab::Graphics))
         .with_children(|container| {
-            container.spawn(scroll_content()).with_children(|content| {
-                for item in GRAPHICS_SETTINGS {
-                    if matches!(
-                        item.control,
-                        SettingsControl::Dropdown(SettingsDropdown::WindowMode)
-                    ) && StoragePlatform::current() != StoragePlatform::Desktop
-                    {
-                        continue;
+            container
+                .spawn(scroll_content(24.0))
+                .with_children(|content| {
+                    for item in GRAPHICS_SETTINGS {
+                        if matches!(
+                            item.control,
+                            SettingsControl::Dropdown(SettingsDropdown::WindowMode)
+                        ) && StoragePlatform::current() != StoragePlatform::Desktop
+                        {
+                            continue;
+                        }
+                        spawn_settings_item(content, *item, settings, SettingsTab::Graphics);
                     }
-                    spawn_settings_item(content, *item, settings, SettingsTab::Graphics);
-                }
-            });
+                });
         });
 }
 
@@ -274,31 +278,37 @@ fn spawn_key_bindings(
         .spawn(scroll_container())
         .insert(PanelVisibility::SettingsTab(SettingsTab::KeyBindings))
         .with_children(|container| {
-            container.spawn(scroll_content()).with_children(|content| {
-                if touch_enabled {
-                    spawn_localized_settings_button(content, SettingsAction::OpenVirtualLayout);
-                    for item in TOUCH_SETTINGS {
-                        spawn_settings_item(content, *item, settings, SettingsTab::KeyBindings);
+            container
+                .spawn(scroll_content(24.0))
+                .with_children(|content| {
+                    if touch_enabled {
+                        spawn_localized_settings_button(content, SettingsAction::OpenVirtualLayout);
+                        for item in TOUCH_SETTINGS {
+                            spawn_settings_item(content, *item, settings, SettingsTab::KeyBindings);
+                        }
                     }
-                }
-                if !touch_enabled {
-                    content
-                        .spawn(key_bindings_columns_bundle())
-                        .with_children(|columns| {
-                            spawn_key_group(
-                                columns,
-                                "settings.group.general",
-                                &ActionKeyName::GENERAL,
-                            );
-                            spawn_key_group(
-                                columns,
-                                "settings.group.simulation",
-                                &ActionKeyName::SIMULATION,
-                            );
-                            spawn_key_group(columns, "settings.group.mouse", &ActionKeyName::MOUSE);
-                        });
-                }
-            });
+                    if !touch_enabled {
+                        content
+                            .spawn(key_bindings_columns_bundle())
+                            .with_children(|columns| {
+                                spawn_key_group(
+                                    columns,
+                                    "settings.group.general",
+                                    &ActionKeyName::GENERAL,
+                                );
+                                spawn_key_group(
+                                    columns,
+                                    "settings.group.simulation",
+                                    &ActionKeyName::SIMULATION,
+                                );
+                                spawn_key_group(
+                                    columns,
+                                    "settings.group.mouse",
+                                    &ActionKeyName::MOUSE,
+                                );
+                            });
+                    }
+                });
         });
 }
 
@@ -307,11 +317,13 @@ fn spawn_audio_settings(panel: &mut ChildSpawnerCommands, settings: &GameSetting
         .spawn(scroll_container())
         .insert(PanelVisibility::SettingsTab(SettingsTab::Audio))
         .with_children(|container| {
-            container.spawn(scroll_content()).with_children(|content| {
-                for item in AUDIO_SETTINGS {
-                    spawn_settings_item(content, *item, settings, SettingsTab::Audio);
-                }
-            });
+            container
+                .spawn(scroll_content(24.0))
+                .with_children(|content| {
+                    for item in AUDIO_SETTINGS {
+                        spawn_settings_item(content, *item, settings, SettingsTab::Audio);
+                    }
+                });
         });
 }
 

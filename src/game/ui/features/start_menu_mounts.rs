@@ -4,12 +4,13 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::game::session::SessionBusy;
-use crate::game::state::{GameMode, StartMenuScreen};
+use crate::game::state::GameMode;
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::UiAccessScope;
 use crate::game::ui::access::{i18n, with_ui_world};
 use crate::game::ui::components::UiIconAssets;
 use crate::game::ui::core::host::{UiHostMountRoot, UiRootEntity};
+use crate::game::ui::core::{StartMenuPage, UiMountCache, UiNavigation};
 use crate::game::ui::features::save::save_list_title;
 use crate::game::ui::features::save::types::SaveListRenderState;
 use crate::game::ui::features::session_busy::spawn_session_busy_overlay;
@@ -17,29 +18,21 @@ use crate::game::ui::screens::{
     SaveListSpawnCtx, save_list_panel_size, spawn_main_menu, spawn_save_list,
 };
 
-/// 菜单态已挂载的覆盖层
-#[derive(Resource, Default)]
-pub struct StartMenuMounts {
-    pub main: Option<Entity>,
-    pub save_list: Option<Entity>,
-    pub session_busy: Option<Entity>,
-}
-
 /// 按当前屏同步挂载主菜单与存档列表
 pub fn sync_start_menu_mounts(
     _ui_thread: crate::game::ui::access::UiMainThread,
     mode: Res<State<GameMode>>,
-    screen: Res<StartMenuScreen>,
+    navigation: Res<UiNavigation>,
     busy: Res<SessionBusy>,
     root: Option<Res<UiRootEntity>>,
     ui_scale: Res<UiScale>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut mounts: ResMut<StartMenuMounts>,
+    mut mounts: ResMut<UiMountCache>,
     mut save_list_render: ResMut<SaveListRenderState>,
     mut commands: Commands,
 ) {
     if *mode.get() != GameMode::StartMenu {
-        for entity in [mounts.main.take(), mounts.save_list.take()]
+        for entity in [mounts.main_menu.take(), mounts.save_list.take()]
             .into_iter()
             .flatten()
         {
@@ -84,10 +77,10 @@ pub fn sync_start_menu_mounts(
         mounts.session_busy = entity;
     }
 
-    let want_main = *screen == StartMenuScreen::Main;
-    let want_save = *screen == StartMenuScreen::SaveList;
+    let want_main = navigation.start_menu() == StartMenuPage::Main;
+    let want_save = navigation.start_menu() == StartMenuPage::SaveList;
 
-    match (want_main, mounts.main) {
+    match (want_main, mounts.main_menu) {
         (true, None) => {
             let mut entity = None;
             commands.entity(root).with_children(|root| {
@@ -109,11 +102,11 @@ pub fn sync_start_menu_mounts(
                     .id(),
                 );
             });
-            mounts.main = entity;
+            mounts.main_menu = entity;
         }
         (false, Some(entity)) => {
             commands.entity(entity).despawn();
-            mounts.main = None;
+            mounts.main_menu = None;
         }
         _ => {}
     }
@@ -171,7 +164,7 @@ pub struct StartMenuMountsPlugin;
 
 impl Plugin for StartMenuMountsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<StartMenuMounts>().add_systems(
+        app.add_systems(
             Update,
             sync_start_menu_mounts
                 .in_set(UiAccessScope)

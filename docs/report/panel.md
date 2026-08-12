@@ -2,7 +2,7 @@
 
 本文档统计当前项目中的 Panel 实体，说明各自语义，并区分**全局层面 UI**与**游戏内方块相关 UI**。
 
-*最后更新：2026-06-07*
+*最后更新：2026-08-12*
 
 ---
 
@@ -10,9 +10,9 @@
 
 | 类别 | 数量 | 挂载根 | 典型可见性驱动 |
 | --- | --- | --- | --- |
-| 全局 / 菜单层 Panel | 4 | `UiRoot`（Startup） | `GameMode::StartMenu`、`StartMenuScreen`、`UiHost` / `TextPromptState` |
-| 游玩流程 Panel | 2 | `PlayingUiRoot`（`OnEnter(Playing)`） | `PlayingUiState`（暂停 / 背包） |
-| 方块配置 Panel | 5 | `PlayingUiRoot` | `UiRuntime.open_block` + `UiPanelBinding` |
+| 全局 / 菜单层 Panel | 4 | `UiRoot`（Startup） | `GameMode::StartMenu` + `UiNavigation` |
+| 游玩流程 Panel | 3 | `PlayingUiRoot`（`OnEnter(Playing)`） | `UiNavigation`（暂停 / 背包 / 教程） |
+| 方块配置 Panel | 5 | `PlayingUiRoot` | `UiNavigation.open_block` + `UiPanelBinding` |
 | 跨层全局配置 | 1（设置） | `UiHost` 动态挂到当前 UI root | `UiHost::mount_settings` / `unmount_panel` |
 | 非 Panel 浮层 | 1 组 | `PlayingUiRoot` | `OpenBlockPanelDropdown`（材料 / 颜色 / 传送门配对下拉） |
 
@@ -45,9 +45,9 @@
 
 | Panel | 源码 | 可见条件 | 语义 |
 | --- | --- | --- | --- |
-| 主菜单 | `screens/menu.rs` | `StartMenu` + `StartMenuScreen::Main` | 编辑谜题、游玩、设置、退出 |
-| 存档列表 | `screens/save_list.rs` | `StartMenu` + `StartMenuScreen::SaveList` | 谜题/解法列表、新建、重命名、删除 |
-| 设置 | `screens/settings.rs` | `UiHost::mount_settings` 动态 spawn，`UiRuntime` 栈顶为 `Settings` + 当前 `SettingsTab` | Gameplay 滑块 / 键位绑定（840px 宽） |
+| 主菜单 | `screens/menu.rs` | `StartMenu` + `UiNavigation::start_menu()` | 编辑谜题、游玩、设置、退出 |
+| 存档列表 | `screens/save_list.rs` | `StartMenu` + `UiNavigation::start_menu()` | 谜题/解法列表、新建、重命名、删除 |
+| 设置 | `screens/settings.rs` | `UiNavigation` 栈顶为 `Settings` + 当前 `SettingsTab` | Gameplay 滑块 / 键位绑定（840px 宽） |
 | 确认框 | `layout.rs` `spawn_confirm_dialog` | `UiHost` 中存在 Confirm 实例 | 存档删除等二次确认 |
 | 文本输入 | `layout.rs` `spawn_text_prompt` | `TextPromptState` open | 通用单行输入（存档重命名等） |
 
@@ -55,19 +55,20 @@
 
 ### 2. 游玩层（非方块）
 
-**定义**：仅在 `GameMode::Playing` 下存在，由 `PlayingUiState` 或 HUD 规则驱动，与具体方块坐标无关。
+**定义**：仅在 `GameMode::Playing` 下存在，由 `UiNavigation` 或 HUD 规则驱动，与具体方块坐标无关。
 
 | UI | 类型 | 源码 | 可见条件 | 语义 |
 | --- | --- | --- | --- | --- |
-| 暂停菜单 | Panel | `screens/menu.rs` | `playing_ui.paused` | 继续、存盘、回主菜单、打开设置等 |
-| 背包 | Panel | `screens/inventory.rs` | `playing_ui.inventory_open` | 热键栏 + 背包格子 |
+| 暂停菜单 | Panel | `screens/menu.rs` | `UiNavigation::is_paused()` | 继续、存盘、回主菜单、打开设置等 |
+| 背包 | Panel | `screens/inventory.rs` | `UiNavigation::is_inventory_open()` | 热键栏 + 背包格子 |
+| 教程 | Panel | `features/tutorial.rs` | `UiNavigation::tutorial()` | 所有数据驱动教程共用的步骤面板壳 |
 | 热键栏 | HUD 节点 | `screens/inventory.rs` | `GameplayHudVisibility` | 底部快捷栏，非 Panel |
 | 准星 / 状态文字 | HUD 文本 | `layout.rs` `spawn_status_overlays` | `InGameHudVisibility` / `GameplayHudVisibility` | 模拟状态、当前存档名等 |
 | 携带物预览 / tooltip | HUD 节点 | `screens/inventory.rs` | 数据驱动 | 拖拽方块时的跟随 UI |
 
 ### 3. 方块配置层
 
-**定义**：通过 `UiPanelBinding(UiPanelId::…)` 标记；打开时 `UiRuntime` 栈写入 `UiPanelContext::Block { pos }`，内容随 `WorldBlocks::system_blocks` 中该格方块刷新。
+**定义**：通过 `UiPanelBinding(UiPanelId::…)` 标记；打开时 `UiNavigation` 写入 `UiPanelContext::Block { pos }`，内容随 `WorldBlocks::system_blocks` 中该格方块刷新。
 
 | Panel | `UiPanelId` | 对应方块类型 | 配置项 |
 | --- | --- | --- | --- |
@@ -102,12 +103,12 @@
 | 机制 | 标记 / 资源 | 更新系统 | 适用对象 |
 | --- | --- | --- | --- |
 | 流程可见性 | `PanelVisibility` | `update_panel_visibility` → `panel_visible()` | 主菜单、存档列表、暂停、背包、设置 Tab、确认框 |
-| 栈顶 Panel | `UiPanelBinding` + `UiRuntime` | 同上，`active_panel == binding.0` | 设置 + 5 个方块 Panel |
+| 栈顶 Panel | `UiPanelBinding` + `UiNavigation` | 同上，`active_panel == binding.0` | 设置 + 5 个方块 Panel |
 | 独立状态 | `TextPromptState` | `update_text_prompt_ui` | TextPrompt（有 `PanelWindow` 但排除在 `panel_visible` 之外） |
 
 `PanelWindow` 实体在 `display: None` 时还会重置 `PanelPosition`（取消拖动居中），并通过 `Visibility::Hidden` 避免误渲染。
 
-层级：`update_ui_layers` 按 `UiRuntime` 栈深度与 `UiHost` Confirm 实例计算 `GlobalZIndex`。Modal 打开时由业务 action emitter 检查 `UiHost::modal_open()`，不再使用 `ModalScrim` 节点阻挡下层点击。
+层级：`update_ui_layers` 按 `UiNavigation` 栈深度和模态状态计算 `GlobalZIndex`。业务 action emitter 同样只检查 `UiNavigation::modal()`。
 
 ---
 

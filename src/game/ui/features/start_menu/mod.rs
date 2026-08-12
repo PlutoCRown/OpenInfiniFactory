@@ -1,13 +1,14 @@
 use bevy::prelude::*;
 
 use crate::game::input::GameplayInputState;
-use crate::game::state::{GameMode, SolutionState, StartMenuScreen, WorldEntryMode};
+use crate::game::state::{GameMode, SolutionState, WorldEntryMode};
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::PanelCloseDeps;
 use crate::game::ui::access::UiMainThread;
 use crate::game::ui::access::{UiAccessScope, ui};
 use crate::game::ui::core::host::UiRootEntity;
 use crate::game::ui::core::runtime::UiPanelContext;
+use crate::game::ui::core::{StartMenuPage, UiNavigation};
 use crate::game::ui::menu_button::{MenuButtonClick, MenuButtonSet, spawn_menu_button};
 use crate::list_ui_config;
 use crate::shared::save::SaveState;
@@ -15,7 +16,7 @@ use crate::shared::save::SaveState;
 pub struct StartMenuPlugin;
 
 struct StartMenuCtx<'w> {
-    start_menu_screen: &'w mut StartMenuScreen,
+    navigation: &'w mut UiNavigation,
     save_state: &'w mut SaveState,
     solution_state: &'w mut SolutionState,
     ui_root: Option<Entity>,
@@ -36,7 +37,7 @@ const START_MENU_BUTTONS: &[StartMenuButton] = list_ui_config!(
             ctx.save_state.select_puzzle(None);
             ctx.save_state.select_solution(None);
             ctx.solution_state.save_list_entry = WorldEntryMode::PlaySolution;
-            *ctx.start_menu_screen = StartMenuScreen::SaveList;
+            ctx.navigation.show_start_menu(StartMenuPage::SaveList);
         }
     };
     {
@@ -102,7 +103,7 @@ fn dispatch_start_menu_clicks(
     _ui_thread: UiMainThread,
     mut clicks: MessageReader<MenuButtonClick>,
     mode: Res<State<GameMode>>,
-    mut start_menu_screen: ResMut<StartMenuScreen>,
+    mut navigation: ResMut<UiNavigation>,
     mut save_state: ResMut<SaveState>,
     mut solution_state: ResMut<SolutionState>,
     ui_root: Option<Res<UiRootEntity>>,
@@ -121,7 +122,7 @@ fn dispatch_start_menu_clicks(
             continue;
         };
         let mut ctx = StartMenuCtx {
-            start_menu_screen: &mut start_menu_screen,
+            navigation: &mut navigation,
             save_state: &mut save_state,
             solution_state: &mut solution_state,
             ui_root,
@@ -134,7 +135,6 @@ fn dispatch_start_menu_clicks(
 fn start_menu_escape(
     input: Res<GameplayInputState>,
     mode: Res<State<GameMode>>,
-    mut start_menu_screen: ResMut<StartMenuScreen>,
     mut close: PanelCloseDeps,
     mut commands: Commands,
 ) {
@@ -148,5 +148,5 @@ fn start_menu_escape(
     {
         return;
     }
-    let _ = close.dismiss_start_menu_overlay(&mut start_menu_screen, &mut commands);
+    let _ = close.dismiss_start_menu_overlay(&mut commands);
 }

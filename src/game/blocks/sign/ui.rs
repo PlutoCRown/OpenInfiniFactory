@@ -22,8 +22,7 @@ use crate::game::ui::components::{
     localized_text, raised_border, spawn_panel as spawn_ui_panel, spawn_ui_icon, styled_button,
     text, transparent_node,
 };
-use crate::game::ui::core::host::UiHost;
-use crate::game::ui::core::runtime::UiRuntime;
+use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::core::text_prompt::{TextPromptProps, TextPromptResult};
 use crate::game::ui::features::block_panels::BlockPanelSystems;
@@ -187,8 +186,7 @@ fn spawn_edit_text_button(parent: &mut ChildSpawnerCommands) {
 
 fn on_click(
     mut click: On<Pointer<Click>>,
-    ui_host: Res<UiHost>,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut carried: ResMut<CarriedItem>,
     mut pending_text: ResMut<PendingSignTextEdit>,
@@ -197,17 +195,17 @@ fn on_click(
     mut world: PlayingWorldParams,
     actions: Query<&SignAction>,
 ) {
-    if ui_host.modal_open() || !primary_click(&mut click) {
+    if ui_navigation.modal().is_some() || !primary_click(&mut click) {
         return;
     }
-    if ui_runtime.active_panel() != Some(UiPanelId::Sign) {
+    if ui_navigation.active_panel() != Some(UiPanelId::Sign) {
         return;
     }
     let Ok(action) = actions.get(click.entity).copied() else {
         return;
     };
     click.propagate(false);
-    let Some(pos) = ui_runtime.active_block_pos() else {
+    let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
 
@@ -319,14 +317,14 @@ fn flush_sign_visual_refresh(
 
 fn update_panel(
     _ui_thread: UiMainThread,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     world: Res<WorldBlocks>,
     mut preview: Query<&mut Text, With<SignTextPreview>>,
 ) {
-    let Some(pos) = ui_runtime.active_block_pos() else {
+    let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
-    if ui_runtime.active_panel() != Some(UiPanelId::Sign) {
+    if ui_navigation.active_panel() != Some(UiPanelId::Sign) {
         return;
     }
     let settings = world.sign_settings(pos);
@@ -347,22 +345,29 @@ fn update_dropdowns(
     mut display_slots: Query<(Entity, &SignDisplaySlot, &Children)>,
     mut material_options: Query<(&SignMaterialOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
-    mut lists: Query<(&SignDisplayList, &mut Node, &ComputedNode)>,
+    mut lists: Query<(&SignDisplayList, &mut Node, &mut Visibility, &ComputedNode)>,
     triggers: Query<(&SignAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     let panel = UiPanelId::Sign;
-    let panel_active = deps.ui_runtime.active_panel() == Some(panel);
+    let panel_active = deps.ui_navigation.active_panel() == Some(panel);
     let open = panel_active && deps.open_dropdown.is_open(panel, DISPLAY_SLOT);
 
     let window = deps.windows.single().ok();
     let viewport = window
-        .map(|w| Vec2::new(w.width(), w.height()))
+        .map(|w| Vec2::new(w.width(), w.height()) / deps.ui_scale.0.max(0.01))
         .unwrap_or(Vec2::ZERO);
-    for (_, mut style, list_node) in &mut lists {
+    for (_, mut style, mut visibility, list_node) in &mut lists {
         let trigger = triggers.iter().find_map(|(action, node, transform)| {
             (*action == SignAction::ToggleDisplay && !node.is_empty()).then_some((node, transform))
         });
-        sync_dropdown_overlay(open, &mut style, list_node, trigger, viewport);
+        sync_dropdown_overlay(
+            open,
+            &mut style,
+            &mut visibility,
+            list_node,
+            trigger,
+            viewport,
+        );
     }
 
     if !panel_active {
@@ -378,7 +383,7 @@ fn update_dropdowns(
         update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
     }
 
-    let material = deps.ui_runtime.active_block_pos().and_then(|pos| {
+    let material = deps.ui_navigation.active_block_pos().and_then(|pos| {
         match deps.world.sign_settings(pos).display {
             Some(SignDisplay::Material(material)) => Some(material),
             _ => None,
@@ -386,6 +391,10 @@ fn update_dropdowns(
     });
     for (entity, _, children) in &mut display_slots {
         update_material_icon(children, material, block_icons, &mut material_icons);
-        set_hover_tooltip(&mut deps.commands, entity, material.map(hover_tooltip_material));
+        set_hover_tooltip(
+            &mut deps.commands,
+            entity,
+            material.map(hover_tooltip_material),
+        );
     }
 }

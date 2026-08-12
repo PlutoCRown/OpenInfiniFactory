@@ -24,11 +24,10 @@ use crate::game::session::{self, PlayingWorldParams};
 use crate::game::simulation::signals::SignalNetworkCache;
 use crate::game::simulation::stats::SimulationStepStats;
 use crate::game::state::{
-    BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
-    WorldEntryMode,
+    BuilderMode, GameMode, PlacementState, SimulationState, SolutionState, WorldEntryMode,
 };
 use crate::game::systems::perf::PerfStats;
-use crate::game::ui::UiRuntime;
+use crate::game::ui::UiNavigation;
 use crate::game::world::animation::AnimatedBlock;
 use crate::game::world::rendering::BlockEntity;
 use crate::shared::launch::{DEFAULT_DEBUG_HTTP_PORT, LaunchOptions};
@@ -51,8 +50,7 @@ pub struct PendingDebugHttpStart(pub bool);
 pub struct DebugHttpSessionSnapshot<'w, 's> {
     mode: Res<'w, State<GameMode>>,
     builder_mode: Res<'w, BuilderMode>,
-    playing_ui: Res<'w, PlayingUiState>,
-    ui_runtime: Res<'w, UiRuntime>,
+    ui_navigation: Res<'w, UiNavigation>,
     save_state: Res<'w, SaveState>,
     solution_state: Res<'w, SolutionState>,
     animated: Query<'w, 's, Entity, With<AnimatedBlock>>,
@@ -72,8 +70,7 @@ impl<'w, 's> DebugHttpSessionSnapshot<'w, 's> {
         embedded_status_json(
             *self.mode.get(),
             *self.builder_mode,
-            &self.playing_ui,
-            &self.ui_runtime,
+            &self.ui_navigation,
             simulation,
             &self.save_state,
             &self.solution_state,
@@ -273,8 +270,7 @@ fn handle_embedded_debug_command(
 ) -> String {
     let mode = *session.mode.get();
     let builder_mode = *session.builder_mode;
-    let playing_ui = &*session.playing_ui;
-    let ui_runtime = &*session.ui_runtime;
+    let ui_navigation = &*session.ui_navigation;
     let animating = session.animating();
 
     match &command {
@@ -514,7 +510,7 @@ fn handle_embedded_debug_command(
             if builder_mode != BuilderMode::Play {
                 return json_error("switch to Play mode first");
             }
-            if !playing_ui.active_play() || ui_runtime.blocks_gameplay() {
+            if !ui_navigation.active_play() || ui_navigation.blocks_gameplay() {
                 return json_error("gameplay UI is blocking simulation controls");
             }
             if !render_ready {
@@ -540,7 +536,7 @@ fn handle_embedded_debug_command(
             if builder_mode != BuilderMode::Play {
                 return json_error("switch to Play mode first");
             }
-            if !playing_ui.active_play() || ui_runtime.blocks_gameplay() {
+            if !ui_navigation.active_play() || ui_navigation.blocks_gameplay() {
                 return json_error("gameplay UI is blocking simulation controls");
             }
             if !render_ready {
@@ -571,7 +567,7 @@ fn handle_embedded_debug_command(
             if builder_mode != BuilderMode::Play {
                 return json_error("switch to Play mode first");
             }
-            if !playing_ui.active_play() || ui_runtime.blocks_gameplay() {
+            if !ui_navigation.active_play() || ui_navigation.blocks_gameplay() {
                 return json_error("gameplay UI is blocking simulation controls");
             }
             if !render_ready {
@@ -604,7 +600,7 @@ fn handle_embedded_debug_command(
             if builder_mode != BuilderMode::Play {
                 return json_error("switch to Play mode first");
             }
-            if !playing_ui.active_play() || ui_runtime.blocks_gameplay() {
+            if !ui_navigation.active_play() || ui_navigation.blocks_gameplay() {
                 return json_error("gameplay UI is blocking simulation controls");
             }
             if !render_ready {

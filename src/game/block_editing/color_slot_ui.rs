@@ -68,22 +68,29 @@ pub(crate) fn update_color_select_dropdowns(
     mut slots: Query<(Entity, &ColorSelectSlot, &Children)>,
     mut options: Query<(&ColorSelectOption, &Children)>,
     mut icons: Query<&mut ImageNode>,
-    mut lists: Query<(&ColorSelectList, &mut Node, &ComputedNode)>,
+    mut lists: Query<(&ColorSelectList, &mut Node, &mut Visibility, &ComputedNode)>,
     triggers: Query<(&ColorSelectSlot, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
-    let panel = deps.ui_runtime.active_panel();
+    let panel = deps.ui_navigation.active_panel();
     let color_panel = matches!(panel, Some(UiPanelId::Stamper) | Some(UiPanelId::Roller));
     let open = color_panel && panel.is_some_and(|p| deps.open_dropdown.is_open(p, COLOR_SLOT));
 
     let window = deps.windows.single().ok();
     let viewport = window
-        .map(|w| Vec2::new(w.width(), w.height()))
+        .map(|w| Vec2::new(w.width(), w.height()) / deps.ui_scale.0.max(0.01))
         .unwrap_or(Vec2::ZERO);
     let trigger = triggers
         .iter()
         .find_map(|(_, node, transform)| (!node.is_empty()).then_some((node, transform)));
-    for (_, mut style, list_node) in &mut lists {
-        sync_dropdown_overlay(open, &mut style, list_node, trigger, viewport);
+    for (_, mut style, mut visibility, list_node) in &mut lists {
+        sync_dropdown_overlay(
+            open,
+            &mut style,
+            &mut visibility,
+            list_node,
+            trigger,
+            viewport,
+        );
     }
 
     if !color_panel {
@@ -99,15 +106,18 @@ pub(crate) fn update_color_select_dropdowns(
         update_slot_icon(children, option.icon(block_icons), &mut icons);
     }
 
-    let selected = deps.ui_runtime.active_block_pos().and_then(|pos| match panel {
-        Some(UiPanelId::Stamper) => {
-            Some(ColorSelectOption::Stamp(deps.world.stamper_settings(pos).stamp))
-        }
-        Some(UiPanelId::Roller) => {
-            Some(ColorSelectOption::Paint(deps.world.roller_settings(pos).paint))
-        }
-        _ => None,
-    });
+    let selected = deps
+        .ui_navigation
+        .active_block_pos()
+        .and_then(|pos| match panel {
+            Some(UiPanelId::Stamper) => Some(ColorSelectOption::Stamp(
+                deps.world.stamper_settings(pos).stamp,
+            )),
+            Some(UiPanelId::Roller) => Some(ColorSelectOption::Paint(
+                deps.world.roller_settings(pos).paint,
+            )),
+            _ => None,
+        });
     let tip = selected.map(|opt| match opt {
         ColorSelectOption::Stamp(id) => hover_tooltip_stamp(id),
         ColorSelectOption::Paint(id) => hover_tooltip_paint(id),

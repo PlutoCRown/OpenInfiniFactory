@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 
 use crate::game::blocks::{
-    material_def, paint_def, stamp_def, BlockKind, MaterialBlockId, PaintMaterialId, StampMaterialId,
+    BlockKind, MaterialBlockId, PaintMaterialId, StampMaterialId, material_def, paint_def,
+    stamp_def,
 };
 use crate::game::state::UiPanelId;
 use crate::game::ui::access::UiMainThread;
@@ -10,6 +11,7 @@ use crate::game::ui::components::{
     inset_border, localized_text, menu_button, raised_border, styled_button, text,
     transparent_node, ui_logical_bounds,
 };
+use crate::game::ui::core::DropdownSurface;
 use crate::game::ui::types::{CarriedItem, HoverTooltip, UiActionLabel};
 use crate::game::world::direction::Facing;
 use crate::game::world::rendering::BlockIconAssets;
@@ -188,6 +190,7 @@ pub fn spawn_text_dropdown_toggle<A, L>(
                         Color::srgba(0.18, 0.20, 0.22, 0.96),
                     ),
                     toggle_action,
+                    DropdownSurface,
                 ))
                 .with_children(|button| {
                     button.spawn((
@@ -220,7 +223,12 @@ pub fn spawn_text_dropdown_list<A, L>(
     L: Component + Copy,
 {
     parent
-        .spawn((dropdown_list_node(230.0), GlobalZIndex(20_000), list_marker))
+        .spawn((
+            dropdown_list_node(230.0),
+            GlobalZIndex(20_000),
+            list_marker,
+            DropdownSurface,
+        ))
         .with_children(|list| {
             for (label, action) in options {
                 spawn_text_option(list, label, action);
@@ -274,7 +282,12 @@ pub fn spawn_material_icon_toggle<A, S>(
     S: Component + Copy,
 {
     parent
-        .spawn((material_slot_button(), slot_marker, toggle_action))
+        .spawn((
+            material_slot_button(),
+            slot_marker,
+            toggle_action,
+            DropdownSurface,
+        ))
         .with_children(|slot| {
             slot.spawn(material_icon_node());
         });
@@ -293,14 +306,16 @@ pub fn spawn_material_icon_list<A, O, L, Id>(
     Id: Copy,
 {
     parent
-        .spawn((icon_dropdown_list_node(), GlobalZIndex(20_000), list_marker))
+        .spawn((
+            icon_dropdown_list_node(),
+            GlobalZIndex(20_000),
+            list_marker,
+            DropdownSurface,
+        ))
         .with_children(|list| {
             for (material, action) in options {
-                let mut entity = list.spawn((
-                    material_slot_button(),
-                    option_marker(material),
-                    action,
-                ));
+                let mut entity =
+                    list.spawn((material_slot_button(), option_marker(material), action));
                 if let Some(tip) = tooltip_of(material) {
                     entity.insert(tip);
                 }
@@ -381,18 +396,18 @@ pub fn position_dropdown_from_trigger(
 ) -> Option<(f32, f32)> {
     let trigger = ui_logical_bounds(trigger_node, transform);
     let list_size = list_node.size() * list_node.inverse_scale_factor();
-    let below = trigger.max.y + 4.0;
-    let above = trigger.min.y - list_size.y - 4.0;
-    let top = if below + list_size.y <= viewport.y - 10.0 || above < 10.0 {
+    let below = trigger.max.y + 8.0;
+    let above = trigger.min.y - list_size.y - 8.0;
+    let top = if below + list_size.y <= viewport.y - 12.0 || above < 12.0 {
         below
     } else {
-        above.max(10.0)
+        above.max(12.0)
     };
-    let top = top.clamp(10.0, (viewport.y - list_size.y - 10.0).max(10.0));
+    let top = top.clamp(12.0, (viewport.y - list_size.y - 12.0).max(12.0));
     let left = trigger
         .min
         .x
-        .clamp(10.0, (viewport.x - list_size.x - 10.0).max(10.0));
+        .clamp(12.0, (viewport.x - list_size.x - 12.0).max(12.0));
     Some((left, top))
 }
 
@@ -400,15 +415,26 @@ pub fn position_dropdown_from_trigger(
 pub fn sync_dropdown_overlay(
     open: bool,
     style: &mut Node,
+    visibility: &mut Visibility,
     list_node: &ComputedNode,
     trigger: Option<(&ComputedNode, &UiGlobalTransform)>,
     viewport: Vec2,
 ) {
+    let was_closed = style.display == Display::None;
     let next = if open { Display::Flex } else { Display::None };
     if style.display != next {
         style.display = next;
     }
     if !open {
+        if *visibility != Visibility::Hidden {
+            *visibility = Visibility::Hidden;
+        }
+        return;
+    }
+    if was_closed || list_node.is_empty() || list_node.size().y <= 1.0 {
+        if *visibility != Visibility::Hidden {
+            *visibility = Visibility::Hidden;
+        }
         return;
     }
     let Some((trigger_node, transform)) = trigger else {
@@ -424,6 +450,9 @@ pub fn sync_dropdown_overlay(
         }
         if style.top != top {
             style.top = top;
+        }
+        if *visibility != Visibility::Visible {
+            *visibility = Visibility::Visible;
         }
     }
 }
@@ -514,11 +543,21 @@ fn dropdown_list_node(width: f32) -> impl Bundle {
             left: Val::Px(0.0),
             top: Val::Px(0.0),
             flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(3.0),
-            padding: UiRect::all(Val::Px(4.0)),
+            row_gap: Val::Px(5.0),
+            padding: UiRect::all(Val::Px(8.0)),
+            border: UiRect::all(Val::Px(1.0)),
             ..default()
         },
         BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
+        BorderColor::all(Color::srgba(0.48, 0.54, 0.58, 0.85)),
+        BoxShadow::new(
+            Color::srgba(0.0, 0.0, 0.0, 0.58),
+            Val::Px(0.0),
+            Val::Px(5.0),
+            Val::Px(1.0),
+            Val::Px(12.0),
+        ),
+        Visibility::Hidden,
     )
 }
 
@@ -526,7 +565,7 @@ fn icon_dropdown_list_node() -> impl Bundle {
     // 一行 5 格：5×槽宽 + 4×间距 + 两侧 padding
     const SLOTS_PER_ROW: f32 = 5.0;
     const SLOT_GAP: f32 = 4.0;
-    const LIST_PADDING: f32 = 4.0;
+    const LIST_PADDING: f32 = 8.0;
     let slot = default_button_size(54.0);
     let width = SLOTS_PER_ROW * slot + (SLOTS_PER_ROW - 1.0) * SLOT_GAP + LIST_PADDING * 2.0;
     (
@@ -541,9 +580,19 @@ fn icon_dropdown_list_node() -> impl Bundle {
             row_gap: Val::Px(SLOT_GAP),
             column_gap: Val::Px(SLOT_GAP),
             padding: UiRect::all(Val::Px(LIST_PADDING)),
+            border: UiRect::all(Val::Px(1.0)),
             ..default()
         },
         BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
+        BorderColor::all(Color::srgba(0.48, 0.54, 0.58, 0.85)),
+        BoxShadow::new(
+            Color::srgba(0.0, 0.0, 0.0, 0.58),
+            Val::Px(0.0),
+            Val::Px(5.0),
+            Val::Px(1.0),
+            Val::Px(12.0),
+        ),
+        Visibility::Hidden,
     )
 }
 

@@ -6,9 +6,9 @@ use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::pending::PendingGeneratedMaterials;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;
-use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
+use crate::game::state::{BuilderMode, GameMode, SimulationState};
 use crate::game::systems::debug::DebugState;
-use crate::game::ui::UiRuntime;
+use crate::game::ui::UiNavigation;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     BlockEntity, GeneratorConfigMaterialPreview, SceneChunkMeshes, WorldRenderAssets,
@@ -21,8 +21,7 @@ use crate::sim_bridge::reset_simulation_presentation;
 pub struct SimulationControlDeps<'w> {
     builder_mode: Res<'w, BuilderMode>,
     mode: Res<'w, State<GameMode>>,
-    playing_ui: Res<'w, PlayingUiState>,
-    ui_runtime: Res<'w, UiRuntime>,
+    ui_navigation: Res<'w, UiNavigation>,
     simulation: ResMut<'w, SimulationState>,
     pending_generated: ResMut<'w, PendingGeneratedMaterials>,
     structure_state: ResMut<'w, StructureState>,
@@ -47,8 +46,8 @@ pub fn simulation_controls(
 ) {
     if *deps.builder_mode != BuilderMode::Play
         || *deps.mode.get() != GameMode::Playing
-        || !deps.playing_ui.active_play()
-        || deps.ui_runtime.blocks_gameplay()
+        || !deps.ui_navigation.active_play()
+        || deps.ui_navigation.blocks_gameplay()
     {
         return;
     }

@@ -5,27 +5,25 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::game::state::{GameMode, PlayingUiState, SimulationState};
-use crate::game::ui::UiRuntime;
+use crate::game::state::{GameMode, SimulationState};
+use crate::game::ui::UiNavigation;
 
 /// Playing 态输入门控：模式 / UI 挡操作 / 模拟是否在跑
 #[derive(SystemParam)]
 pub struct GameplayPlayGate<'w> {
     pub mode: Res<'w, State<GameMode>>,
-    pub ui_runtime: Res<'w, UiRuntime>,
+    pub ui_navigation: Res<'w, UiNavigation>,
     pub simulation: Res<'w, SimulationState>,
 }
 
 impl GameplayPlayGate<'_> {
     /// Playing 且未暂停，且 UI 未挡住玩法
-    pub fn allows_active_play(&self, playing_ui: &PlayingUiState) -> bool {
-        *self.mode.get() == GameMode::Playing
-            && playing_ui.active_play()
-            && !self.ui_runtime.blocks_gameplay()
+    pub fn allows_active_play(&self) -> bool {
+        *self.mode.get() == GameMode::Playing && self.ui_navigation.active_play()
     }
 
     /// 允许改世界（active play 且模拟未跑）
-    pub fn allows_world_edit(&self, playing_ui: &PlayingUiState) -> bool {
-        self.allows_active_play(playing_ui) && !self.simulation.is_active()
+    pub fn allows_world_edit(&self) -> bool {
+        self.allows_active_play() && !self.simulation.is_active()
     }
 }

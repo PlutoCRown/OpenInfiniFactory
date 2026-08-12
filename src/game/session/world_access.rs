@@ -6,16 +6,17 @@ use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementInfluenceCache;
 use crate::game::state::{
-    BuilderMode, PendingPlayerSpawn, PlacementState, PlayingUiState, SimulationState, SolutionState,
+    BuilderMode, PendingPlayerSpawn, PlacementState, SimulationState, SolutionState,
 };
 use crate::game::systems::debug::DebugState;
+use crate::game::ui::core::UiNavigation;
 use crate::game::ui::{CarriedItem, FreeInventoryTab, InventoryItems};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     BlockEntity, SceneChunkMeshes, WorldRenderAssets, despawn_world, rebuild_world_for_debug_state,
 };
-use crate::scene::{SceneRenderMut, refresh_edit_changes};
 use crate::scene::BlockEntityIndex;
+use crate::scene::{SceneRenderMut, refresh_edit_changes};
 use crate::shared::save::SaveState;
 
 /// 已加载玩法世界及其渲染/模拟 sidecar 的 ECS 访问包
@@ -62,7 +63,8 @@ impl PlayingWorldParams<'_, '_> {
     /// 有渲染资源时拆掉场景并按当前 debug 状态重建
     pub fn rebuild_scene(&mut self) {
         self.structure_state.rebuild_for_simulation(&self.world);
-        let Some(render_assets) = self.render_assets.as_ref().map(|assets| (**assets).clone()) else {
+        let Some(render_assets) = self.render_assets.as_ref().map(|assets| (**assets).clone())
+        else {
             return;
         };
         despawn_world(
@@ -93,7 +95,7 @@ pub struct SessionStateParams<'w> {
     pub free_inventory_tab: ResMut<'w, FreeInventoryTab>,
     pub carried: ResMut<'w, CarriedItem>,
     pub placement: ResMut<'w, PlacementState>,
-    pub playing_ui: ResMut<'w, PlayingUiState>,
+    pub ui_navigation: ResMut<'w, UiNavigation>,
     pub save_state: ResMut<'w, SaveState>,
     pub solution_state: ResMut<'w, SolutionState>,
     pub simulation: ResMut<'w, SimulationState>,

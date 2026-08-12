@@ -16,10 +16,10 @@ use bevy::prelude::*;
 pub use access::{UiAccessScope, bind_ui_scope, i18n, ui};
 pub use layout::{setup_menu_ui, setup_playing_ui_system};
 pub use systems::{
-    PanelCloseDeps, apply_ui_font, load_ui_font, load_ui_icons, panel_close_clicked,
-    panel_drag_ended, panel_drag_started, panel_dragged, ui_hovered, ui_unhovered,
-    update_hud_visibility, update_localized_ui, update_panel_visibility, update_status_ui,
-    update_ui_layers,
+    PanelCloseDeps, apply_ui_font, dismiss_dropdowns_on_outside_click, load_ui_font, load_ui_icons,
+    panel_close_clicked, panel_drag_ended, panel_drag_started, panel_dragged, ui_hovered,
+    ui_unhovered, update_hud_visibility, update_localized_ui, update_panel_visibility,
+    update_status_ui, update_ui_layers,
 };
 pub use types::*;
 
@@ -35,6 +35,7 @@ use components::{
     button_cancelled, button_hovered, button_pressed, button_released, button_unhovered,
     fix_scroll_clip_picking, scroll_dragged, update_scroll_containers,
 };
+use core::UiMountCache;
 use features::UiFeaturesPlugin;
 use menu_button::register_menu_button_clicks;
 
@@ -46,7 +47,8 @@ impl Plugin for GameUiPlugin {
             .add_systems(Update, bind_ui_scope.before(UiAccessScope))
             .add_systems(Update, unbind_ui_scope.after(UiAccessScope))
             .add_message::<UiAction>()
-            .insert_resource(UiRuntime::default())
+            .insert_resource(UiNavigation::default())
+            .insert_resource(UiMountCache::default())
             .insert_resource(crate::game::ui::core::host::UiHost::default())
             .insert_resource(crate::game::ui::core::text_prompt::TextPromptState::default())
             .insert_resource(crate::game::ui::core::confirm_dialog::ConfirmDialogState::default())
@@ -59,6 +61,7 @@ impl Plugin for GameUiPlugin {
             .add_plugins(UiFeaturesPlugin);
         register_menu_button_clicks(app);
         app.add_observer(panel_close_clicked)
+            .add_observer(dismiss_dropdowns_on_outside_click)
             .add_observer(panel_drag_started)
             .add_observer(panel_dragged)
             .add_observer(panel_drag_ended)

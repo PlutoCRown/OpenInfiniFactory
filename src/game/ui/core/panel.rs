@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game::state::StartMenuScreen;
+use super::runtime::StartMenuPage;
 
 #[derive(Component)]
 pub struct PanelWindow;
@@ -24,6 +24,10 @@ pub struct PanelTitleText;
 #[derive(Component)]
 pub struct PanelCloseButton;
 
+/// 下拉触发器与弹层共同标记；用于判断点击是否发生在当前下拉内部
+#[derive(Component)]
+pub struct DropdownSurface;
+
 #[derive(Resource, Default)]
 pub struct PanelDragState {
     pub panel: Option<Entity>,
@@ -45,7 +49,7 @@ pub struct UiHoverState {
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub enum PanelVisibility {
-    StartMenuScreen(StartMenuScreen),
+    StartMenuPage(StartMenuPage),
     PauseMenu,
     Inventory,
     SettingsTab(crate::game::ui::features::settings::types::SettingsTab),

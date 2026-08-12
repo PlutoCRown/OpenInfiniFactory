@@ -17,8 +17,16 @@ pub fn root_node() -> impl Bundle {
 
 /// Logical-pixel bounds in window space (same convention as Bevy's UI viewport widget).
 pub fn ui_logical_bounds(computed: &ComputedNode, transform: &UiGlobalTransform) -> Rect {
-    let inv = computed.inverse_scale_factor();
-    Rect::from_center_size(transform.translation.trunc() * inv, computed.size() * inv)
+    let inverse_scale = computed.inverse_scale_factor();
+    Rect::from_center_size(
+        transform.translation.trunc() * inverse_scale,
+        computed.size() * inverse_scale,
+    )
+}
+
+/// 把窗口逻辑像素换成 UiScale 之后的 UI 布局坐标
+pub fn window_to_ui(position: Vec2, ui_scale: &UiScale) -> Vec2 {
+    position / ui_scale.0.max(0.01)
 }
 
 pub fn flex_row(height: f32, column_gap: f32) -> impl Bundle {

@@ -16,8 +16,7 @@ use crate::game::session::PlayingWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::access::{UiMainThread, i18n};
 use crate::game::ui::components::{PanelOptions, spawn_panel_with_title_marker};
-use crate::game::ui::core::host::UiHost;
-use crate::game::ui::core::runtime::UiRuntime;
+use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{UiActionLabel, UiPanelBinding};
@@ -84,25 +83,24 @@ inventory::submit! {
 
 fn on_click(
     mut click: On<Pointer<Click>>,
-    ui_host: Res<UiHost>,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
     mut world: PlayingWorldParams,
     actions: Query<&RollerAction>,
 ) {
-    if ui_host.modal_open() || !primary_click(&mut click) {
+    if ui_navigation.modal().is_some() || !primary_click(&mut click) {
         return;
     }
-    if ui_runtime.active_panel() != Some(UiPanelId::Roller) {
+    if ui_navigation.active_panel() != Some(UiPanelId::Roller) {
         return;
     }
     let Ok(action) = actions.get(click.entity).copied() else {
         return;
     };
     click.propagate(false);
-    let Some(pos) = ui_runtime.active_block_pos() else {
+    let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
 
@@ -129,10 +127,10 @@ fn on_click(
 
 fn update_title(
     _ui_thread: UiMainThread,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     mut titles: Query<&mut Text, With<RollerPanelTitle>>,
 ) {
-    if ui_runtime.active_panel() != Some(UiPanelId::Roller) {
+    if ui_navigation.active_panel() != Some(UiPanelId::Roller) {
         return;
     }
     let title = i18n.t("roller.title");

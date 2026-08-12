@@ -8,7 +8,7 @@ use crate::game::state::UiPanelId;
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::{UiAccessScope, UiMainThread, ui};
 use crate::game::ui::core::host::PlayingUiRootEntity;
-use crate::game::ui::core::runtime::UiRuntime;
+use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::core::text_input::InlineTextEditState;
 
 /// 方块属性面板刷新（须在 UiAccessScope 内）
@@ -20,8 +20,8 @@ pub struct BlockPanelSystems;
 pub struct PendingBlockPanelOpen(pub Option<(IVec3, UiPanelId)>);
 
 /// 仅在打开非设置类方块面板时跑面板刷新
-fn block_panel_systems_active(ui_runtime: Res<UiRuntime>) -> bool {
-    ui_runtime
+fn block_panel_systems_active(ui_navigation: Res<UiNavigation>) -> bool {
+    ui_navigation
         .active_panel()
         .is_some_and(|panel| !panel.is_settings())
 }
@@ -62,11 +62,7 @@ impl Plugin for BlockPanelsPlugin {
         )
         .add_systems(
             Update,
-            (
-                update_material_slot_hover,
-                update_color_select_dropdowns,
-            )
-                .in_set(BlockPanelSystems),
+            (update_material_slot_hover, update_color_select_dropdowns).in_set(BlockPanelSystems),
         );
         register_all_panels(app);
     }

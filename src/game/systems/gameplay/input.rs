@@ -34,13 +34,12 @@ pub fn gameplay_input(
     }
 
     // 模拟中若背包仍开着则关掉，并禁止再次打开
-    if simulation.is_active() && player.playing_ui.inventory_open {
-        player.playing_ui.inventory_open = false;
+    if simulation.is_active() && panel_close.ui_navigation.is_inventory_open() {
+        panel_close.ui_navigation.close_inventory();
     }
 
     if input.pause {
         if panel_close.dismiss_playing_overlay(
-            &mut player.playing_ui,
             &mut player.carried,
             &mut player.inventory,
             &player.placement,
@@ -49,8 +48,7 @@ pub fn gameplay_input(
         ) {
             // Overlay dismissed.
         } else {
-            player.playing_ui.paused = !player.playing_ui.paused;
-            if player.playing_ui.paused {
+            if panel_close.ui_navigation.toggle_pause() {
                 simulation.pause();
             }
         }
@@ -58,7 +56,6 @@ pub fn gameplay_input(
 
     if input.inventory {
         if panel_close.dismiss_playing_overlay(
-            &mut player.playing_ui,
             &mut player.carried,
             &mut player.inventory,
             &player.placement,
@@ -68,11 +65,11 @@ pub fn gameplay_input(
             // Overlay dismissed.
         } else if !simulation.is_active() {
             // 模拟期禁止打开背包
-            player.playing_ui.inventory_open = true;
+            panel_close.ui_navigation.open_inventory();
         }
     }
 
-    if panel_close.ui_runtime.blocks_gameplay() || !player.playing_ui.active_play() {
+    if panel_close.ui_navigation.blocks_gameplay() {
         mouse_wheel.clear();
         return;
     }

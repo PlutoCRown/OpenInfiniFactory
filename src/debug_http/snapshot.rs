@@ -4,11 +4,10 @@ use serde_json::{Value, json};
 use crate::game::blocks::BlockKind;
 use crate::game::simulation::stats::SimulationStepStats;
 use crate::game::state::{
-    BuilderMode, GameMode, PlacementState, PlayingUiState, SimulationState, SolutionState,
-    WorldEntryMode,
+    BuilderMode, GameMode, PlacementState, SimulationState, SolutionState, WorldEntryMode,
 };
 use crate::game::systems::perf::{PerfScope, PerfStats};
-use crate::game::ui::UiRuntime;
+use crate::game::ui::UiNavigation;
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{TargetHit, WorldBlocks};
 use crate::shared::save::{SaveKind, SaveState};
@@ -709,8 +708,7 @@ pub fn save_status_json(save_state: &SaveState, solution_state: &SolutionState) 
 pub fn embedded_status_json(
     mode: GameMode,
     builder_mode: BuilderMode,
-    playing_ui: &PlayingUiState,
-    ui_runtime: &UiRuntime,
+    ui_navigation: &UiNavigation,
     simulation: &SimulationState,
     save_state: &SaveState,
     solution_state: &SolutionState,
@@ -736,10 +734,10 @@ pub fn embedded_status_json(
             WorldEntryMode::PlaySolution => "play_solution",
             WorldEntryMode::Free => "free",
         },
-        "paused": playing_ui.paused,
-        "inventory_open": playing_ui.inventory_open,
-        "active_play": playing_ui.active_play(),
-        "ui_blocks_gameplay": ui_runtime.blocks_gameplay(),
+        "paused": ui_navigation.is_paused(),
+        "inventory_open": ui_navigation.is_inventory_open(),
+        "active_play": ui_navigation.active_play(),
+        "ui_blocks_gameplay": ui_navigation.blocks_gameplay(),
         "render_ready": render_ready,
         "save": save_status_json(save_state, solution_state),
         "simulation": simulation_status_json(simulation, builder_mode, animating),

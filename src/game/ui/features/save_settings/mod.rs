@@ -10,7 +10,7 @@ pub use types::SaveSettingsUiState;
 
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::{UiAccessScope, UiMainThread, i18n};
-use crate::game::ui::core::runtime::UiRuntime;
+use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::screens::{
     SaveSettingsBlockIcon, SaveSettingsCheckMark, SaveSettingsCrossMark, SaveSettingsFactoryPicker,
     SaveSettingsFilterMark, SaveSettingsSkyboxPreview, SaveSettingsValueText,
@@ -37,7 +37,7 @@ impl Plugin for SaveSettingsPlugin {
 
 pub fn update_save_settings_ui(
     _ui_thread: UiMainThread,
-    runtime: Res<UiRuntime>,
+    runtime: Res<UiNavigation>,
     state: Res<SaveSettingsUiState>,
     block_icons: Option<Res<BlockIconAssets>>,
     mut preview: Query<&mut ImageNode, With<SaveSettingsSkyboxPreview>>,

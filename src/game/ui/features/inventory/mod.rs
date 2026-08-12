@@ -15,9 +15,10 @@ pub use render::{
 };
 pub use types::{InventoryTabButton, InventoryTitleText, TouchInventoryState};
 
-use crate::game::state::{GameMode, PlayingUiState};
+use crate::game::state::GameMode;
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::UiAccessScope;
+use crate::game::ui::core::UiNavigation;
 
 pub struct InventoryPlugin;
 
@@ -55,7 +56,7 @@ impl Plugin for InventoryPlugin {
             .add_systems(
                 Update,
                 (update_inventory_title, update_inventory_tabs)
-                    .run_if(|playing_ui: Res<PlayingUiState>| playing_ui.inventory_open)
+                    .run_if(|ui_navigation: Res<UiNavigation>| ui_navigation.is_inventory_open())
                     .in_set(UiAccessScope)
                     .after(PerfScope::Animation)
                     .before(crate::game::systems::perf::perf_mark_ui_inventory),

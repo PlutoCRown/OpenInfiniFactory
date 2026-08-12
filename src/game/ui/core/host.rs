@@ -7,14 +7,16 @@ use crate::game::state::{GameSettings, UiPanelId};
 use crate::game::ui::core::confirm_dialog::{
     ConfirmDialogState, ConfirmProps, ConfirmResult, PendingConfirmHandler, spawn_confirm_dialog,
 };
-use crate::game::ui::core::runtime::{UiPanelContext, UiRuntime};
+use crate::game::ui::core::runtime::{UiModal, UiNavigation, UiPanelContext};
 use crate::game::ui::core::text_prompt::{
     PendingTextPromptHandler, TextPromptProps, TextPromptResult, TextPromptState, spawn_text_prompt,
 };
 use crate::game::ui::features::save::types::SaveListAction;
-use crate::game::ui::features::settings::types::SettingsAction;
 use crate::game::ui::features::save_settings::types::SaveSettingsAction;
-use crate::game::ui::screens::{SaveSettingsSpawnCtx, spawn_save_settings_panel, spawn_settings_panel};
+use crate::game::ui::features::settings::types::SettingsAction;
+use crate::game::ui::screens::{
+    SaveSettingsSpawnCtx, spawn_save_settings_panel, spawn_settings_panel,
+};
 use crate::game::ui::types::InventorySlot;
 #[derive(Resource, Clone, Copy)]
 pub struct UiRootEntity(pub Entity);
@@ -90,7 +92,7 @@ pub struct UiHost {
 #[derive(SystemParam)]
 pub(crate) struct UiHostCommands<'w> {
     pub host: ResMut<'w, UiHost>,
-    pub runtime: ResMut<'w, UiRuntime>,
+    pub navigation: ResMut<'w, UiNavigation>,
     pub confirm_dialog: ResMut<'w, ConfirmDialogState>,
     pub text_prompt: ResMut<'w, TextPromptState>,
     pub confirm_pending: NonSendMut<'w, PendingConfirmHandler>,
@@ -120,7 +122,7 @@ impl UiHostCommands<'_> {
         self.host.mount_settings(
             commands,
             root,
-            &mut self.runtime,
+            &mut self.navigation,
             context,
             settings,
             panel_w,
@@ -136,18 +138,13 @@ impl UiHostCommands<'_> {
         context: UiPanelContext,
         view: &SaveSettingsSpawnCtx,
     ) -> UiInstanceId {
-        self.host.mount_save_settings(
-            commands,
-            root,
-            &mut self.runtime,
-            context,
-            view,
-        )
+        self.host
+            .mount_save_settings(commands, root, &mut self.navigation, context, view)
     }
 
     pub fn unmount_panel(&mut self, panel: UiPanelId, commands: &mut Commands) {
         self.host
-            .unmount_panel(panel, &mut self.runtime, Some(commands));
+            .unmount_panel(panel, &mut self.navigation, Some(commands));
     }
 
     pub fn mount_block_panel(
@@ -158,7 +155,7 @@ impl UiHostCommands<'_> {
         pos: IVec3,
     ) -> UiInstanceId {
         self.host
-            .mount_block_panel(commands, root, &mut self.runtime, panel, pos)
+            .mount_block_panel(commands, root, &mut self.navigation, panel, pos)
     }
 
     pub fn open_confirm_then(
@@ -171,6 +168,7 @@ impl UiHostCommands<'_> {
         self.host.open_confirm_then(
             commands,
             root,
+            &mut self.navigation,
             props,
             &mut self.confirm_dialog,
             &mut self.text_prompt,
@@ -189,6 +187,7 @@ impl UiHostCommands<'_> {
         self.host.open_text_prompt_then(
             commands,
             root,
+            &mut self.navigation,
             props,
             &mut self.confirm_dialog,
             &mut self.text_prompt,
@@ -212,13 +211,20 @@ impl UiHost {
     }
 
     pub fn has_instance(&self, id: UiInstanceId) -> bool {
-        self.stack.iter().any(|(instance, _)| *instance == id)
+        matches!(
+            id,
+            UiInstanceId::START_MENU
+                | UiInstanceId::SAVE_LIST
+                | UiInstanceId::INVENTORY
+                | UiInstanceId::PAUSE_MENU
+        ) || self.stack.iter().any(|(instance, _)| *instance == id)
     }
 
     pub fn mount(
         &mut self,
         commands: &mut Commands,
         root: Option<Entity>,
+        navigation: &mut UiNavigation,
         spec: ViewSpec,
         confirm_dialog: &mut ConfirmDialogState,
         text_prompt: &mut TextPromptState,
@@ -227,11 +233,13 @@ impl UiHost {
         let id = self.next_id();
         match spec {
             ViewSpec::Confirm(props) => {
+                navigation.open_modal(UiModal::Confirm);
                 confirm_dialog.reset_for_open(props);
                 let entity = spawn_modal_child(commands, root, spawn_confirm_dialog);
                 self.push_modal(id, MountedView::Confirm { entity });
             }
             ViewSpec::TextPrompt(props) => {
+                navigation.open_modal(UiModal::TextPrompt);
                 text_prompt.reset_for_open(props);
                 let entity = spawn_modal_child(commands, root, spawn_text_prompt);
                 self.push_modal(id, MountedView::TextPrompt { entity });
@@ -243,7 +251,7 @@ impl UiHost {
     pub fn unmount(
         &mut self,
         id: UiInstanceId,
-        runtime: &mut UiRuntime,
+        runtime: &mut UiNavigation,
         commands: Option<&mut Commands>,
     ) {
         let Some(index) = self.stack.iter().position(|(instance, _)| *instance == id) else {
@@ -258,6 +266,7 @@ impl UiHost {
                 }
             }
             MountedView::Confirm { entity } | MountedView::TextPrompt { entity } => {
+                runtime.close_modal();
                 if let (Some(commands), Some(entity)) = (commands, entity) {
                     commands.entity(entity).despawn();
                 }
@@ -268,7 +277,7 @@ impl UiHost {
     pub fn unmount_panel(
         &mut self,
         panel: UiPanelId,
-        runtime: &mut UiRuntime,
+        runtime: &mut UiNavigation,
         commands: Option<&mut Commands>,
     ) {
         if let Some(index) = self
@@ -286,7 +295,7 @@ impl UiHost {
     /// 卸掉所有已挂载面板（退出 Playing 时用，可不传 commands）
     pub fn unmount_all_panels(
         &mut self,
-        runtime: &mut UiRuntime,
+        runtime: &mut UiNavigation,
         mut commands: Option<&mut Commands>,
     ) {
         let panels: Vec<UiPanelId> = self
@@ -300,6 +309,7 @@ impl UiHost {
         for panel in panels {
             self.unmount_panel(panel, runtime, commands.as_deref_mut());
         }
+        runtime.close_all_panels();
     }
 
     /// 按需挂载方块属性面板（含下拉 overlay）
@@ -307,7 +317,7 @@ impl UiHost {
         &mut self,
         commands: &mut Commands,
         root: Option<Entity>,
-        runtime: &mut UiRuntime,
+        runtime: &mut UiNavigation,
         panel: UiPanelId,
         pos: IVec3,
     ) -> UiInstanceId {
@@ -370,7 +380,7 @@ impl UiHost {
         &mut self,
         commands: &mut Commands,
         root: Option<Entity>,
-        runtime: &mut UiRuntime,
+        runtime: &mut UiNavigation,
         context: UiPanelContext,
         settings: &GameSettings,
         panel_w: f32,
@@ -416,7 +426,7 @@ impl UiHost {
         &mut self,
         commands: &mut Commands,
         root: Option<Entity>,
-        runtime: &mut UiRuntime,
+        runtime: &mut UiNavigation,
         context: UiPanelContext,
         view: &SaveSettingsSpawnCtx,
     ) -> UiInstanceId {
@@ -454,37 +464,24 @@ impl UiHost {
         UiInstanceId::SAVE_SETTINGS
     }
 
-    pub fn modal_open(&self) -> bool {
-        self.stack.iter().any(|(_, view)| {
-            matches!(
-                view,
-                MountedView::Confirm { .. } | MountedView::TextPrompt { .. }
-            )
-        })
-    }
-
-    pub fn confirm_open(&self) -> bool {
-        self.stack
-            .iter()
-            .any(|(_, view)| matches!(view, MountedView::Confirm { .. }))
-    }
-
     pub fn dispatch_completions(
         &mut self,
+        navigation: &mut UiNavigation,
         confirm_dialog: &mut ConfirmDialogState,
         confirm_pending: &mut PendingConfirmHandler,
         text_prompt: &mut TextPromptState,
         text_prompt_pending: &mut PendingTextPromptHandler,
         commands: &mut Commands,
     ) {
-        self.complete_confirm(confirm_dialog, confirm_pending, commands);
-        self.complete_text_prompt(text_prompt, text_prompt_pending, commands);
+        self.complete_confirm(navigation, confirm_dialog, confirm_pending, commands);
+        self.complete_text_prompt(navigation, text_prompt, text_prompt_pending, commands);
     }
 
     pub fn open_confirm_then(
         &mut self,
         commands: &mut Commands,
         root: Option<Entity>,
+        navigation: &mut UiNavigation,
         props: ConfirmProps,
         confirm_dialog: &mut ConfirmDialogState,
         text_prompt: &mut TextPromptState,
@@ -494,6 +491,7 @@ impl UiHost {
         let id = self.mount(
             commands,
             root,
+            navigation,
             ViewSpec::Confirm(props),
             confirm_dialog,
             text_prompt,
@@ -506,6 +504,7 @@ impl UiHost {
         &mut self,
         commands: &mut Commands,
         root: Option<Entity>,
+        navigation: &mut UiNavigation,
         props: TextPromptProps,
         confirm_dialog: &mut ConfirmDialogState,
         text_prompt: &mut TextPromptState,
@@ -515,6 +514,7 @@ impl UiHost {
         let id = self.mount(
             commands,
             root,
+            navigation,
             ViewSpec::TextPrompt(props),
             confirm_dialog,
             text_prompt,
@@ -561,6 +561,7 @@ impl UiHost {
 
     fn complete_confirm(
         &mut self,
+        navigation: &mut UiNavigation,
         confirm_dialog: &mut ConfirmDialogState,
         pending: &mut PendingConfirmHandler,
         commands: &mut Commands,
@@ -577,6 +578,7 @@ impl UiHost {
         });
         self.stack
             .retain(|(_, view)| !matches!(view, MountedView::Confirm { .. }));
+        navigation.close_modal();
         if let Some(entity) = entity {
             commands.entity(entity).despawn();
         }
@@ -590,6 +592,7 @@ impl UiHost {
 
     fn complete_text_prompt(
         &mut self,
+        navigation: &mut UiNavigation,
         text_prompt: &mut TextPromptState,
         pending: &mut PendingTextPromptHandler,
         commands: &mut Commands,
@@ -606,6 +609,7 @@ impl UiHost {
         });
         self.stack
             .retain(|(_, view)| !matches!(view, MountedView::TextPrompt { .. }));
+        navigation.close_modal();
         if let Some(entity) = entity {
             commands.entity(entity).despawn();
         }
@@ -634,6 +638,7 @@ fn spawn_modal_child(
 
 pub fn dispatch_ui_host_completions(
     mut host: ResMut<UiHost>,
+    mut navigation: ResMut<UiNavigation>,
     mut confirm_dialog: ResMut<ConfirmDialogState>,
     mut confirm_pending: NonSendMut<PendingConfirmHandler>,
     mut text_prompt: ResMut<TextPromptState>,
@@ -641,6 +646,7 @@ pub fn dispatch_ui_host_completions(
     mut commands: Commands,
 ) {
     host.dispatch_completions(
+        &mut navigation,
         &mut confirm_dialog,
         &mut confirm_pending,
         &mut text_prompt,

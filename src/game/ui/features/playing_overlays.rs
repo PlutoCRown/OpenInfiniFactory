@@ -2,26 +2,20 @@
 
 use bevy::prelude::*;
 
-use crate::game::state::{GameMode, PlayingUiState};
+use crate::game::state::GameMode;
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::UiAccessScope;
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHostMountRoot};
+use crate::game::ui::core::{UiMountCache, UiNavigation};
 use crate::game::ui::screens::spawn_pause_panel;
 
-/// 记录当前已挂载的游玩覆盖层根实体
-#[derive(Resource, Default)]
-pub struct PlayingOverlayMounts {
-    pub inventory: Option<Entity>,
-    pub pause: Option<Entity>,
-}
-
-/// 同步暂停菜单挂载；背包由 setup_playing_ui 常驻，只靠 Display 显隐
+/// 同步暂停菜单挂载；背包由 setup_ui_navigation 常驻，只靠 Display 显隐
 pub fn sync_playing_overlay_mounts(
     _ui_thread: crate::game::ui::access::UiMainThread,
     mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
+    ui_navigation: Res<UiNavigation>,
     root: Option<Res<PlayingUiRootEntity>>,
-    mut mounts: ResMut<PlayingOverlayMounts>,
+    mut mounts: ResMut<UiMountCache>,
     mut commands: Commands,
 ) {
     if *mode.get() != GameMode::Playing {
@@ -34,7 +28,7 @@ pub fn sync_playing_overlay_mounts(
         return;
     };
 
-    match (playing_ui.paused, mounts.pause) {
+    match (ui_navigation.is_paused(), mounts.pause) {
         (true, None) => {
             let mut entity = None;
             commands.entity(root).with_children(|root| {
@@ -70,7 +64,7 @@ pub struct PlayingOverlaysPlugin;
 
 impl Plugin for PlayingOverlaysPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PlayingOverlayMounts>().add_systems(
+        app.add_systems(
             Update,
             sync_playing_overlay_mounts
                 .in_set(UiAccessScope)

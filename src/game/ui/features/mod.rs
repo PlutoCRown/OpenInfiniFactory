@@ -9,6 +9,7 @@ pub mod session_busy;
 pub mod settings;
 pub mod start_menu;
 pub mod start_menu_mounts;
+pub mod tutorial;
 pub mod virtual_remote;
 
 use bevy::prelude::*;
@@ -23,12 +24,15 @@ pub use gameplay_toast::{GameplayToast, GameplayToastPlugin};
 pub use inventory::InventoryPlugin;
 pub use pause_menu::PauseMenuPlugin;
 pub use playing_overlays::PlayingOverlaysPlugin;
-pub use start_menu::StartMenuPlugin;
-pub use start_menu_mounts::StartMenuMountsPlugin;
 pub use save::SavePlugin;
 pub use save_settings::SaveSettingsPlugin;
 pub use session_busy::SessionBusyUiPlugin;
 pub use settings::SettingsPlugin;
+pub use start_menu::StartMenuPlugin;
+pub use start_menu_mounts::StartMenuMountsPlugin;
+pub use tutorial::{
+    TutorialCatalog, TutorialDefinition, TutorialIntent, TutorialPlugin, TutorialStep,
+};
 pub use virtual_remote::VirtualRemotePlugin;
 
 use crate::game::systems::perf::PerfScope;
@@ -51,6 +55,7 @@ impl Plugin for UiFeaturesPlugin {
             GameplayToastPlugin,
             SessionBusyUiPlugin,
             VirtualRemotePlugin,
+            TutorialPlugin,
         ))
         .add_systems(
             Update,

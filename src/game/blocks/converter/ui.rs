@@ -20,8 +20,7 @@ use crate::game::ui::components::{
     PanelOptions, default_button_size, localized_text, spawn_panel as spawn_ui_panel,
     transparent_node,
 };
-use crate::game::ui::core::host::UiHost;
-use crate::game::ui::core::runtime::UiRuntime;
+use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{CarriedItem, UiActionLabel, UiPanelBinding};
@@ -177,8 +176,7 @@ fn spawn_row(
 
 fn on_click(
     mut click: On<Pointer<Click>>,
-    ui_host: Res<UiHost>,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut carried: ResMut<CarriedItem>,
     mut solution_state: ResMut<SolutionState>,
@@ -186,17 +184,17 @@ fn on_click(
     mut world: PlayingWorldParams,
     actions: Query<&ConverterAction>,
 ) {
-    if ui_host.modal_open() || !primary_click(&mut click) {
+    if ui_navigation.modal().is_some() || !primary_click(&mut click) {
         return;
     }
-    if ui_runtime.active_panel() != Some(UiPanelId::Converter) {
+    if ui_navigation.active_panel() != Some(UiPanelId::Converter) {
         return;
     }
     let Ok(action) = actions.get(click.entity).copied() else {
         return;
     };
     click.propagate(false);
-    let Some(pos) = ui_runtime.active_block_pos() else {
+    let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
 
@@ -251,8 +249,11 @@ fn on_click(
     }
 }
 
-fn show_input_row(ui_runtime: Res<UiRuntime>, mut rows: Query<&mut Node, With<ConverterInputRow>>) {
-    if ui_runtime.active_panel() != Some(UiPanelId::Converter) {
+fn show_input_row(
+    ui_navigation: Res<UiNavigation>,
+    mut rows: Query<&mut Node, With<ConverterInputRow>>,
+) {
+    if ui_navigation.active_panel() != Some(UiPanelId::Converter) {
         return;
     }
     for mut style in &mut rows {
@@ -269,19 +270,29 @@ fn update_dropdowns(
     mut material_options: Query<(&ConverterMaterialOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
     mut list_queries: ParamSet<(
-        Query<(&ConverterInputList, &mut Node, &ComputedNode)>,
-        Query<(&ConverterOutputList, &mut Node, &ComputedNode)>,
+        Query<(
+            &ConverterInputList,
+            &mut Node,
+            &mut Visibility,
+            &ComputedNode,
+        )>,
+        Query<(
+            &ConverterOutputList,
+            &mut Node,
+            &mut Visibility,
+            &ComputedNode,
+        )>,
     )>,
     triggers: Query<(&ConverterAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     let panel = UiPanelId::Converter;
-    let panel_active = deps.ui_runtime.active_panel() == Some(panel);
+    let panel_active = deps.ui_navigation.active_panel() == Some(panel);
     let input_open = panel_active && deps.open_dropdown.is_open(panel, INPUT_SLOT);
     let output_open = panel_active && deps.open_dropdown.is_open(panel, OUTPUT_SLOT);
 
     let window = deps.windows.single().ok();
     let viewport = window
-        .map(|w| Vec2::new(w.width(), w.height()))
+        .map(|w| Vec2::new(w.width(), w.height()) / deps.ui_scale.0.max(0.01))
         .unwrap_or(Vec2::ZERO);
 
     update_material_list(
@@ -313,7 +324,7 @@ fn update_dropdowns(
     }
 
     let slot_materials = deps
-        .ui_runtime
+        .ui_navigation
         .active_block_pos()
         .map(|pos| {
             let settings = deps.world.converter_settings(pos);
@@ -341,16 +352,23 @@ fn update_dropdowns(
 fn update_material_list<L>(
     open: bool,
     toggle: ConverterAction,
-    lists: &mut Query<(&L, &mut Node, &ComputedNode)>,
+    lists: &mut Query<(&L, &mut Node, &mut Visibility, &ComputedNode)>,
     triggers: &Query<(&ConverterAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
     viewport: Vec2,
 ) where
     L: Component,
 {
-    for (_, mut style, list_node) in lists.iter_mut() {
+    for (_, mut style, mut visibility, list_node) in lists.iter_mut() {
         let trigger = triggers.iter().find_map(|(action, node, transform)| {
             (*action == toggle && !node.is_empty()).then_some((node, transform))
         });
-        sync_dropdown_overlay(open, &mut style, list_node, trigger, viewport);
+        sync_dropdown_overlay(
+            open,
+            &mut style,
+            &mut visibility,
+            list_node,
+            trigger,
+            viewport,
+        );
     }
 }

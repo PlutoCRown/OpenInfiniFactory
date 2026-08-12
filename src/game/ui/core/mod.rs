@@ -10,9 +10,12 @@ pub use action::UiActionLabel;
 pub use confirm_dialog::ConfirmButtonId;
 pub use host::UiHost;
 pub use panel::{
-    PanelCloseButton, PanelDragState, PanelFlowLayout, PanelPosition, PanelTitleBar,
-    PanelTitleText, PanelVisibility, PanelWindow, UiHoverState,
+    DropdownSurface, PanelCloseButton, PanelDragState, PanelFlowLayout, PanelPosition,
+    PanelTitleBar, PanelTitleText, PanelVisibility, PanelWindow, UiHoverState,
 };
-pub use runtime::{UiPanelBinding, UiRuntime};
+pub use runtime::{
+    StartMenuPage, TutorialSession, UiModal, UiMountCache, UiNavigation, UiOverlay, UiPanelBinding,
+    UiPanelContext,
+};
 pub use text_input::InlineTextEditState;
 pub use text_prompt::{TextPromptRoot, TextPromptState};

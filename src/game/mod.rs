@@ -39,8 +39,8 @@ use player::controller::{
 };
 use session::{SessionPlugin, on_exit_playing, prepare_playing_session, rebuild_playing_world};
 use state::{
-    BuilderMode, GameMode, GameSettings, PendingPlayerSpawn, PlacementState, PlayingUiState,
-    SimulationState, SolutionState, StartMenuScreen,
+    BuilderMode, GameMode, GameSettings, PendingPlayerSpawn, PlacementState, SimulationState,
+    SolutionState,
 };
 use systems::gameplay::{
     AimFocus, BlockSettingsClipboard, SelectionToolSwap, apply_fov, clipboard_input,
@@ -125,8 +125,6 @@ impl Plugin for GamePlugin {
             .insert_resource(InventoryItems::default())
             .init_resource::<crate::game::systems::gameplay::EditBatchTiming>()
             .init_state::<GameMode>()
-            .insert_resource(StartMenuScreen::default())
-            .insert_resource(PlayingUiState::default())
             .insert_resource(BuilderMode::default())
             .insert_resource(SimulationState::default())
             .insert_resource(SolutionState::default())

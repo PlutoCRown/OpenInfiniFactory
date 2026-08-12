@@ -14,8 +14,8 @@ use crate::game::session::SessionBusy;
 use crate::game::state::{BuilderMode, SolutionState, WorldEntryMode};
 use crate::game::ui::access::with_ui_world;
 use crate::game::ui::components::UiIconAssets;
+use crate::game::ui::core::UiMountCache;
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHostMountRoot, UiRootEntity};
-use crate::game::ui::features::playing_overlays::PlayingOverlayMounts;
 use crate::game::ui::features::session_busy::spawn_session_busy_overlay;
 use crate::game::ui::features::virtual_remote::spawn_virtual_remote;
 use crate::shared::touch_profile::TouchProfile;
@@ -68,10 +68,8 @@ pub fn setup_playing_ui_system(world: &mut World) {
         .unwrap_or_default();
     let mut commands = world.commands();
     let inventory = setup_playing_ui(&mut commands, image, touch, builder_mode, entry, busy);
-    commands.insert_resource(PlayingOverlayMounts {
-        inventory: Some(inventory),
-        pause: None,
-    });
+    drop(commands);
+    world.resource_mut::<UiMountCache>().inventory = Some(inventory);
     unbind_ui_scope(world);
 }
 

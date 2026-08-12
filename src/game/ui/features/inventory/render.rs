@@ -2,11 +2,10 @@ use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::game::state::{
-    BuilderMode, PlacementState, PlayingUiState, SolutionState, WorldEntryMode,
-};
+use crate::game::state::{BuilderMode, PlacementState, SolutionState, WorldEntryMode};
 use crate::game::ui::access::{UiMainThread, i18n};
-use crate::game::ui::components::{default_button_size, hover_border, inset_border};
+use crate::game::ui::components::{default_button_size, hover_border, inset_border, window_to_ui};
+use crate::game::ui::core::UiNavigation;
 use crate::game::ui::features::inventory::InventoryTabButton;
 use crate::game::ui::types::{
     AreaKind, CarriedItem, CarriedItemPreview, FreeInventoryTab, HoverTooltip, InventoryItem,
@@ -222,7 +221,8 @@ pub fn update_item_tooltip(
     _ui_thread: UiMainThread,
     carried: Res<CarriedItem>,
     touch: Res<TouchProfile>,
-    playing_ui: Res<PlayingUiState>,
+    ui_navigation: Res<UiNavigation>,
+    ui_scale: Res<UiScale>,
     touch_inventory: Res<TouchInventoryState>,
     targets: Query<(&HoverTooltip, &Interaction)>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -236,7 +236,7 @@ pub fn update_item_tooltip(
     };
 
     if touch.enabled {
-        let selected = if playing_ui.inventory_open && !touch_inventory.dragging {
+        let selected = if ui_navigation.is_inventory_open() && !touch_inventory.dragging {
             touch_inventory.selected_backpack.map(|(_, item)| item)
         } else {
             None
@@ -297,7 +297,10 @@ pub fn update_item_tooltip(
         *last_keys = None;
         return;
     };
-    let Some(cursor) = window.cursor_position() else {
+    let Some(cursor) = window
+        .cursor_position()
+        .map(|cursor| window_to_ui(cursor, &ui_scale))
+    else {
         tooltip_node.display = Display::None;
         tooltip_visibility.set_if_neq(Visibility::Hidden);
         *last_keys = None;
@@ -327,6 +330,7 @@ pub fn update_carried_item_ui(
     touch: Res<TouchProfile>,
     touch_inventory: Res<TouchInventoryState>,
     touches: Res<Touches>,
+    ui_scale: Res<UiScale>,
     block_icons: Option<Res<BlockIconAssets>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut preview: Query<(&mut Node, &mut ImageNode), With<CarriedItemPreview>>,
@@ -364,6 +368,7 @@ pub fn update_carried_item_ui(
     };
 
     // 图标中心对准光标，避免偏右下显得「不跟手」
+    let cursor = window_to_ui(cursor, &ui_scale);
     let half = default_button_size(46.0) * 0.5;
     style.display = Display::Flex;
     style.left = Val::Px(cursor.x - half);

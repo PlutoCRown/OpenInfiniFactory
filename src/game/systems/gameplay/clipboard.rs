@@ -24,7 +24,7 @@ pub fn clipboard_input(
     mut world: PlayingWorldParams,
     mut solution_state: ResMut<SolutionState>,
 ) {
-    if !gate.allows_world_edit(&player.playing_ui) || inline_edit.is_active() {
+    if !gate.allows_world_edit() || inline_edit.is_active() {
         return;
     }
 

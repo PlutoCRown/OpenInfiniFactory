@@ -425,13 +425,14 @@ fn open_layout_confirm(
         .or_else(|| world.get_resource::<UiRootEntity>().map(|root| root.0));
     let mut state = SystemState::<(
         ResMut<UiHost>,
+        ResMut<crate::game::ui::core::UiNavigation>,
         ResMut<ConfirmDialogState>,
         ResMut<TextPromptState>,
         NonSendMut<PendingConfirmHandler>,
         Commands,
     )>::new(world);
     {
-        let Ok((mut host, mut dialog, mut prompt, mut pending, mut commands)) =
+        let Ok((mut host, mut navigation, mut dialog, mut prompt, mut pending, mut commands)) =
             state.get_mut(world)
         else {
             return;
@@ -439,6 +440,7 @@ fn open_layout_confirm(
         host.open_confirm_then(
             &mut commands,
             root,
+            &mut navigation,
             props,
             &mut dialog,
             &mut prompt,

@@ -1,9 +1,7 @@
 use bevy::prelude::*;
 
 use crate::game::simulation::markers::refresh_static_generated_markers;
-use crate::game::state::{
-    BuilderMode, GameMode, SimulationState, SolutionState, StartMenuScreen, WorldEntryMode,
-};
+use crate::game::state::{BuilderMode, GameMode, SimulationState, SolutionState, WorldEntryMode};
 use crate::game::ui::{FreeInventoryTab, InventoryItems};
 use crate::game::world::grid::WorldBlocks;
 use crate::shared::save::{
@@ -151,7 +149,7 @@ pub fn switch_to_edit_mode_and_rebuild(
     session.solution_state.entry = WorldEntryMode::EditPuzzle;
     session.solution_state.puzzle_snapshot = None;
     session.solution_state.puzzle_id = None;
-    session.playing_ui.paused = true;
+    session.ui_navigation.open_pause();
     playing.clear_sim_sidecars();
     playing.rebuild_scene();
 }
@@ -173,10 +171,9 @@ pub fn exit_to_main_menu(
     playing: &mut PlayingWorldParams,
     session: &mut SessionStateParams,
     next_state: &mut NextState<GameMode>,
-    start_menu_screen: &mut StartMenuScreen,
 ) {
     clear_loaded_world(playing, session);
-    *start_menu_screen = StartMenuScreen::Main;
+    session.ui_navigation.reset_for_start_menu();
     next_state.set(GameMode::StartMenu);
 }
 

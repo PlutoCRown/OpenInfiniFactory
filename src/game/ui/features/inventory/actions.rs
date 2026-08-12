@@ -2,15 +2,15 @@ use bevy::picking::pointer::PointerButton;
 use bevy::picking::prelude::{Click, Drag, DragEnd, DragStart, Pointer};
 use bevy::prelude::*;
 
-use crate::game::state::{GameMode, PlacementState, PlayingUiState, SolutionState, WorldEntryMode};
+use crate::game::state::{GameMode, PlacementState, SolutionState, WorldEntryMode};
 use crate::game::ui::components::ui_logical_bounds;
-use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
+use crate::game::ui::core::host::{UiAction, UiActionKind, UiInstanceId};
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::inventory::InventoryTabButton;
 use crate::game::ui::types::FreeInventoryTab;
 use crate::game::ui::{
     CarriedItem, HOTBAR_SLOTS, InlineTextEditState, InventoryItems, InventorySlot, PendingKeyBind,
-    SlotArea, TextPromptState, UiRuntime,
+    SlotArea, TextPromptState, UiNavigation,
 };
 use crate::shared::config::{ActionKeyName, GameConfig};
 use crate::shared::touch_profile::TouchProfile;
@@ -22,17 +22,16 @@ pub fn emit_inventory_slot_actions(
     mut writer: MessageWriter<UiAction>,
     slots: Query<&InventorySlot>,
     mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
-    ui_host: Res<UiHost>,
+    ui_navigation: Res<UiNavigation>,
 ) {
-    if ui_host.modal_open() || *mode.get() != GameMode::Playing {
+    if ui_navigation.modal().is_some() || *mode.get() != GameMode::Playing {
         return;
     }
     let Ok(slot) = slots.get(click.entity) else {
         return;
     };
     // 背包关闭时只接受快捷栏点击（触屏切换选中）
-    if !playing_ui.inventory_open && slot.area != SlotArea::Hotbar {
+    if !ui_navigation.is_inventory_open() && slot.area != SlotArea::Hotbar {
         return;
     }
     let button = click.event.button;
@@ -52,13 +51,12 @@ pub fn emit_inventory_tab_actions(
     mut writer: MessageWriter<UiAction>,
     tabs: Query<&InventoryTabButton>,
     mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
+    ui_navigation: Res<UiNavigation>,
     solution_state: Res<SolutionState>,
-    ui_host: Res<UiHost>,
 ) {
-    if ui_host.modal_open()
+    if ui_navigation.modal().is_some()
         || *mode.get() != GameMode::Playing
-        || !playing_ui.inventory_open
+        || !ui_navigation.is_inventory_open()
         || solution_state.entry != WorldEntryMode::Free
         || !primary_click(&mut click)
     {
@@ -84,7 +82,7 @@ pub fn dispatch_inventory_slot_actions(
     mut free_tab: ResMut<FreeInventoryTab>,
     touch: Res<TouchProfile>,
     mut touch_inventory: ResMut<TouchInventoryState>,
-    playing_ui: Res<PlayingUiState>,
+    ui_navigation: Res<UiNavigation>,
 ) {
     for action in actions.read() {
         if action.instance != UiInstanceId::INVENTORY {
@@ -103,7 +101,7 @@ pub fn dispatch_inventory_slot_actions(
                 dispatch_inventory_slot_action(
                     slot,
                     button,
-                    playing_ui.inventory_open,
+                    ui_navigation.is_inventory_open(),
                     &config,
                     &mut inventory,
                     &mut carried,
@@ -122,16 +120,15 @@ pub fn dispatch_inventory_slot_actions(
 pub fn touch_inventory_drag_started(
     mut drag_start: On<Pointer<DragStart>>,
     touch: Res<TouchProfile>,
-    playing_ui: Res<PlayingUiState>,
-    ui_host: Res<UiHost>,
+    ui_navigation: Res<UiNavigation>,
     slots: Query<(&InventorySlot, &ComputedNode, &UiGlobalTransform)>,
     inventory: Res<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
     mut touch_inventory: ResMut<TouchInventoryState>,
 ) {
     if !touch.enabled
-        || !playing_ui.inventory_open
-        || ui_host.modal_open()
+        || !ui_navigation.is_inventory_open()
+        || ui_navigation.modal().is_some()
         || drag_start.event.button != PointerButton::Primary
     {
         return;
@@ -215,12 +212,12 @@ pub fn touch_inventory_drag_ended(
 /// 背包关闭后清除触控点选和拖动状态，避免下次打开残留
 pub fn reset_closed_touch_inventory(
     touch: Res<TouchProfile>,
-    playing_ui: Res<PlayingUiState>,
+    ui_navigation: Res<UiNavigation>,
     mut carried: ResMut<CarriedItem>,
     mut touch_inventory: ResMut<TouchInventoryState>,
 ) {
     if touch.enabled
-        && !playing_ui.inventory_open
+        && !ui_navigation.is_inventory_open()
         && (touch_inventory.selected_backpack.is_some() || touch_inventory.dragging)
     {
         carried.clear();
@@ -232,8 +229,7 @@ pub fn reset_closed_touch_inventory(
 pub fn inventory_hotbar_digit_input(
     keys: Res<ButtonInput<KeyCode>>,
     mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     text_prompt: Res<TextPromptState>,
     pending_key_bind: Res<PendingKeyBind>,
     inline_edit: Res<InlineTextEditState>,
@@ -242,11 +238,11 @@ pub fn inventory_hotbar_digit_input(
     mut placement: ResMut<PlacementState>,
     mut solution_state: ResMut<SolutionState>,
 ) {
-    if *mode.get() != GameMode::Playing || !playing_ui.inventory_open {
+    if *mode.get() != GameMode::Playing || !ui_navigation.is_inventory_open() {
         return;
     }
     let typing = pending_key_bind.0.is_some() || text_prompt.is_open() || inline_edit.is_active();
-    if typing || ui_runtime.blocks_gameplay() {
+    if typing || ui_navigation.modal().is_some() {
         return;
     }
 

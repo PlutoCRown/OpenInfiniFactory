@@ -14,7 +14,9 @@ pub use button::{
     text_button,
 };
 pub use icon::{UiIconAssets, spawn_ui_icon};
-pub use layout::{flex_row, flex_row_auto, root_node, transparent_node, ui_logical_bounds};
+pub use layout::{
+    flex_row, flex_row_auto, root_node, transparent_node, ui_logical_bounds, window_to_ui,
+};
 pub use panel::{
     INVENTORY_SLOT_GAP, INVENTORY_TRAY_PADDING, PanelOptions, STATUS_TEXT, absolute_text_bundle,
     compact_raised_panel, inventory_tray_row_bundle, panel_bundle, panel_bundle_auto,

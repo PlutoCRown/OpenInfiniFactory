@@ -6,7 +6,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::game::edit_history::EditHistory;
-use crate::game::state::{BuilderMode, PlacementState, PlayingUiState};
+use crate::game::state::{BuilderMode, PlacementState};
 use crate::game::ui::{CarriedItem, FreeInventoryTab, InventoryItem, InventoryItems};
 use crate::game::world::grid::BlockSettings;
 
@@ -29,7 +29,6 @@ pub struct LocalPlayer<'w> {
     pub free_inventory_tab: Res<'w, FreeInventoryTab>,
     pub builder_mode: Res<'w, BuilderMode>,
     pub edit_history: Res<'w, EditHistory>,
-    pub playing_ui: Res<'w, PlayingUiState>,
     pub clipboard: Res<'w, BlockSettingsClipboard>,
     pub tool_swap: Res<'w, SelectionToolSwap>,
 }
@@ -43,7 +42,6 @@ pub struct LocalPlayerMut<'w> {
     pub free_inventory_tab: ResMut<'w, FreeInventoryTab>,
     pub builder_mode: ResMut<'w, BuilderMode>,
     pub edit_history: ResMut<'w, EditHistory>,
-    pub playing_ui: ResMut<'w, PlayingUiState>,
     pub clipboard: ResMut<'w, BlockSettingsClipboard>,
     pub tool_swap: ResMut<'w, SelectionToolSwap>,
 }

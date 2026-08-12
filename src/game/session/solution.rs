@@ -18,7 +18,7 @@ pub fn handle_reset_solution(
     for _ in requests.read() {
         edit_history.clear();
         reset_current_solution(&mut playing, &mut session);
-        session.playing_ui.paused = true;
+        session.ui_navigation.open_pause();
     }
 }
 

@@ -28,7 +28,11 @@ pub struct EditHistoryApply<'w, 's> {
 
 impl<'w, 's> EditHistoryApply<'w, 's> {
     /// 撤销/重做后增量刷新受影响格的渲染
-    fn refresh_edit_changes(&mut self, world: &WorldBlocks, changed: &std::collections::HashSet<IVec3>) {
+    fn refresh_edit_changes(
+        &mut self,
+        world: &WorldBlocks,
+        changed: &std::collections::HashSet<IVec3>,
+    ) {
         let Some(render_assets) = self.render_assets.as_ref() else {
             return;
         };
@@ -56,7 +60,7 @@ pub fn edit_history_input(
     mut solution_state: ResMut<SolutionState>,
     mut apply: EditHistoryApply,
 ) {
-    if !gate.allows_world_edit(&player.playing_ui) || inline_edit.is_active() {
+    if !gate.allows_world_edit() || inline_edit.is_active() {
         return;
     }
 

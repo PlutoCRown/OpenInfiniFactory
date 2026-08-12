@@ -65,14 +65,16 @@ pub fn spawn_save_settings_panel(root: &mut ChildSpawnerCommands, view: &SaveSet
         UiPanelBinding(UiPanelId::Settings),
         |panel| {
             panel.spawn(scroll_container()).with_children(|container| {
-                container.spawn(scroll_content()).with_children(|content| {
-                    spawn_skybox_section(content);
-                    spawn_light_section(content, &view.data);
-                    if view.edit_mode {
-                        spawn_solution_spawn_section(content, &view.data);
-                        spawn_factory_filter_section(content, &view.data);
-                    }
-                });
+                container
+                    .spawn(scroll_content(0.0))
+                    .with_children(|content| {
+                        spawn_skybox_section(content);
+                        spawn_light_section(content, &view.data);
+                        if view.edit_mode {
+                            spawn_solution_spawn_section(content, &view.data);
+                            spawn_factory_filter_section(content, &view.data);
+                        }
+                    });
             });
         },
     );

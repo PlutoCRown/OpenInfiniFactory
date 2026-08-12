@@ -23,8 +23,7 @@ use crate::game::ui::components::{
     PanelOptions, default_button_size, localized_text, spawn_panel as spawn_ui_panel, text,
     transparent_node,
 };
-use crate::game::ui::core::host::UiHost;
-use crate::game::ui::core::runtime::UiRuntime;
+use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{CarriedItem, UiActionLabel, UiPanelBinding};
@@ -224,8 +223,7 @@ fn spawn_tagged_row<T: Component>(
 
 fn on_click(
     mut click: On<Pointer<Click>>,
-    ui_host: Res<UiHost>,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut carried: ResMut<CarriedItem>,
     mut solution_state: ResMut<SolutionState>,
@@ -233,17 +231,17 @@ fn on_click(
     mut world: PlayingWorldParams,
     actions: Query<&GeneratorAction>,
 ) {
-    if ui_host.modal_open() || !primary_click(&mut click) {
+    if ui_navigation.modal().is_some() || !primary_click(&mut click) {
         return;
     }
-    if ui_runtime.active_panel() != Some(UiPanelId::Generator) {
+    if ui_navigation.active_panel() != Some(UiPanelId::Generator) {
         return;
     }
     let Ok(action) = actions.get(click.entity).copied() else {
         return;
     };
     click.propagate(false);
-    let Some(pos) = ui_runtime.active_block_pos() else {
+    let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
     dispatch_action(
@@ -375,7 +373,7 @@ fn cycle_anchor(current: Option<IVec3>, anchors: &[IVec3], forward: bool) -> Opt
 
 fn update_panel(
     _ui_thread: UiMainThread,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     world: Res<WorldBlocks>,
     mut mode_text: Query<&mut Text, With<GeneratorModeText>>,
     mut period_text: Query<&mut Text, (With<GeneratorPeriodText>, Without<GeneratorModeText>)>,
@@ -420,10 +418,10 @@ fn update_panel(
         With<Button>,
     >,
 ) {
-    let Some(pos) = ui_runtime.active_block_pos() else {
+    let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
-    if ui_runtime.active_panel() != Some(UiPanelId::Generator) {
+    if ui_navigation.active_panel() != Some(UiPanelId::Generator) {
         return;
     }
     let settings = world.generator_settings(pos);
@@ -458,12 +456,14 @@ fn update_panel(
         };
     }
     if show_facing {
-        sync_facing_radio_buttons(&mut facing_buttons, settings.facing, |action| {
-            match action {
+        sync_facing_radio_buttons(
+            &mut facing_buttons,
+            settings.facing,
+            |action| match action {
                 GeneratorAction::SetFacing(facing) => Some(*facing),
                 _ => None,
-            }
-        });
+            },
+        );
     }
 
     match settings.mode {
@@ -497,23 +497,35 @@ fn update_dropdowns(
     mut material_slots: Query<(Entity, &GeneratorMaterialSlot, &Children)>,
     mut material_options: Query<(&GeneratorMaterialOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
-    mut lists: Query<(&GeneratorMaterialList, &mut Node, &ComputedNode)>,
+    mut lists: Query<(
+        &GeneratorMaterialList,
+        &mut Node,
+        &mut Visibility,
+        &ComputedNode,
+    )>,
     triggers: Query<(&GeneratorAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     let panel = UiPanelId::Generator;
-    let panel_active = deps.ui_runtime.active_panel() == Some(panel);
+    let panel_active = deps.ui_navigation.active_panel() == Some(panel);
     let open = panel_active && deps.open_dropdown.is_open(panel, MATERIAL_SLOT);
 
     let window = deps.windows.single().ok();
     let viewport = window
-        .map(|window| Vec2::new(window.width(), window.height()))
+        .map(|window| Vec2::new(window.width(), window.height()) / deps.ui_scale.0.max(0.01))
         .unwrap_or(Vec2::ZERO);
-    for (_, mut style, list_node) in &mut lists {
+    for (_, mut style, mut visibility, list_node) in &mut lists {
         let trigger = triggers.iter().find_map(|(action, node, transform)| {
             (*action == GeneratorAction::ToggleMaterial && !node.is_empty())
                 .then_some((node, transform))
         });
-        sync_dropdown_overlay(open, &mut style, list_node, trigger, viewport);
+        sync_dropdown_overlay(
+            open,
+            &mut style,
+            &mut visibility,
+            list_node,
+            trigger,
+            viewport,
+        );
     }
 
     if !panel_active {
@@ -530,7 +542,7 @@ fn update_dropdowns(
     }
 
     let material = deps
-        .ui_runtime
+        .ui_navigation
         .active_block_pos()
         .map(|pos| deps.world.generator_settings(pos).material);
     for (entity, _, children) in &mut material_slots {

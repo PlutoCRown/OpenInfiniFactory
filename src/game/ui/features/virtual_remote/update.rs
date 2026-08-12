@@ -252,7 +252,7 @@ pub fn on_virtual_press(
 ) {
     if !touch.enabled
         || editor_open.0
-        || !gate.allows_active_play(&player.playing_ui)
+        || !gate.allows_active_play()
         || press.event.button != PointerButton::Primary
     {
         return;
@@ -433,7 +433,6 @@ pub fn on_virtual_release(
     touch: Res<TouchProfile>,
     editor_open: Res<VirtualLayoutEditorOpen>,
     gate: GameplayPlayGate,
-    player: LocalPlayer,
     controls: Query<&VirtualRemoteControl>,
     look_zones: Query<(), With<VirtualLookZone>>,
     mut runtime: ResMut<VirtualRemoteRuntime>,
@@ -446,7 +445,7 @@ pub fn on_virtual_release(
     let ended = end_pointer_binding(&mut runtime, pointer_id);
     let released_control = controls.get(release.entity).ok().map(|control| control.0);
     if !editor_open.0
-        && gate.allows_active_play(&player.playing_ui)
+        && gate.allows_active_play()
         && let Some(VirtualPointerKind::Tap(control)) = ended
         && released_control == Some(control)
     {
@@ -603,7 +602,7 @@ pub fn sync_virtual_remote_visibility(
         return;
     }
 
-    let show = gate.allows_active_play(&player.playing_ui);
+    let show = gate.allows_active_play();
     let sim_active = gate.simulation.is_active();
     let play_mode = *player.builder_mode == BuilderMode::Play;
     let show_config = show

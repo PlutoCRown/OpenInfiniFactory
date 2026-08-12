@@ -112,7 +112,7 @@ pub fn update_hover(
 ) {
     // 勿提前 `&mut *placement`：Bevy 会在 DerefMut 时标 changed，即使本帧没改字段
 
-    if !gate.allows_active_play(&player.playing_ui) {
+    if !gate.allows_active_play() {
         if player.placement.target.is_some() {
             player.placement.target = None;
         }

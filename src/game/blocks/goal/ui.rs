@@ -27,8 +27,7 @@ use crate::game::ui::components::{
     PanelOptions, default_button_size, localized_text, spawn_panel as spawn_ui_panel, text,
     transparent_node,
 };
-use crate::game::ui::core::host::UiHost;
-use crate::game::ui::core::runtime::UiRuntime;
+use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{CarriedItem, UiActionLabel, UiPanelBinding};
@@ -300,8 +299,7 @@ fn clear_unsupported_attachments(settings: &mut GoalSettings) -> bool {
 
 fn on_click(
     mut click: On<Pointer<Click>>,
-    ui_host: Res<UiHost>,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut carried: ResMut<CarriedItem>,
     mut solution_state: ResMut<SolutionState>,
@@ -309,17 +307,17 @@ fn on_click(
     mut world: PlayingWorldParams,
     actions: Query<&GoalAction>,
 ) {
-    if ui_host.modal_open() || !primary_click(&mut click) {
+    if ui_navigation.modal().is_some() || !primary_click(&mut click) {
         return;
     }
-    if ui_runtime.active_panel() != Some(UiPanelId::Goal) {
+    if ui_navigation.active_panel() != Some(UiPanelId::Goal) {
         return;
     }
     let Ok(action) = actions.get(click.entity).copied() else {
         return;
     };
     click.propagate(false);
-    let Some(pos) = ui_runtime.active_block_pos() else {
+    let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
 
@@ -426,16 +424,16 @@ fn open_paint_index(open_dropdown: &OpenBlockPanelDropdown) -> Option<usize> {
 
 fn update_panel(
     _ui_thread: UiMainThread,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     world: Res<WorldBlocks>,
     mut id_text: Query<&mut Text, With<GoalAcceptorIdText>>,
     mut facing_rows: Query<&mut Node, With<GoalFacingRow>>,
     mut facing_buttons: Query<(&GoalAction, &mut BackgroundColor, &mut BorderColor), With<Button>>,
 ) {
-    let Some(pos) = ui_runtime.active_block_pos() else {
+    let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
-    if ui_runtime.active_panel() != Some(UiPanelId::Goal) {
+    if ui_navigation.active_panel() != Some(UiPanelId::Goal) {
         return;
     }
     let settings = world.goal_settings(pos);
@@ -471,34 +469,36 @@ fn update_panel(
 
 fn update_dropdown_overlays(
     _ui_thread: UiMainThread,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     open_dropdown: Res<OpenBlockPanelDropdown>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    ui_scale: Res<UiScale>,
     mut lists: ParamSet<(
-        Query<(&GoalMaterialList, &mut Node, &ComputedNode)>,
-        Query<(&GoalStampList, &mut Node, &ComputedNode)>,
-        Query<(&GoalPaintList, &mut Node, &ComputedNode)>,
+        Query<(&GoalMaterialList, &mut Node, &mut Visibility, &ComputedNode)>,
+        Query<(&GoalStampList, &mut Node, &mut Visibility, &ComputedNode)>,
+        Query<(&GoalPaintList, &mut Node, &mut Visibility, &ComputedNode)>,
     )>,
     triggers: Query<(&GoalAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
     let panel = UiPanelId::Goal;
-    let panel_active = ui_runtime.active_panel() == Some(panel);
+    let panel_active = ui_navigation.active_panel() == Some(panel);
     let material_open = panel_active && open_dropdown.is_open(panel, MATERIAL_SLOT);
     let stamp_open = panel_active && open_stamp_index(&open_dropdown).is_some();
     let paint_open = panel_active && open_paint_index(&open_dropdown).is_some();
 
     let window = windows.single().ok();
     let viewport = window
-        .map(|w| Vec2::new(w.width(), w.height()))
+        .map(|w| Vec2::new(w.width(), w.height()) / ui_scale.0.max(0.01))
         .unwrap_or(Vec2::ZERO);
 
     let material_trigger = triggers.iter().find_map(|(action, node, transform)| {
         (*action == GoalAction::ToggleMaterial && !node.is_empty()).then_some((node, transform))
     });
-    for (_, mut style, list_node) in &mut lists.p0() {
+    for (_, mut style, mut visibility, list_node) in &mut lists.p0() {
         sync_dropdown_overlay(
             material_open,
             &mut style,
+            &mut visibility,
             list_node,
             material_trigger,
             viewport,
@@ -517,8 +517,15 @@ fn update_dropdown_overlays(
                 }
                 _ => None,
             });
-    for (_, mut style, list_node) in &mut lists.p1() {
-        sync_dropdown_overlay(stamp_open, &mut style, list_node, stamp_trigger, viewport);
+    for (_, mut style, mut visibility, list_node) in &mut lists.p1() {
+        sync_dropdown_overlay(
+            stamp_open,
+            &mut style,
+            &mut visibility,
+            list_node,
+            stamp_trigger,
+            viewport,
+        );
     }
 
     let open_paint = open_paint_index(&open_dropdown);
@@ -533,8 +540,15 @@ fn update_dropdown_overlays(
                 }
                 _ => None,
             });
-    for (_, mut style, list_node) in &mut lists.p2() {
-        sync_dropdown_overlay(paint_open, &mut style, list_node, paint_trigger, viewport);
+    for (_, mut style, mut visibility, list_node) in &mut lists.p2() {
+        sync_dropdown_overlay(
+            paint_open,
+            &mut style,
+            &mut visibility,
+            list_node,
+            paint_trigger,
+            viewport,
+        );
     }
 }
 
@@ -558,7 +572,7 @@ fn update_slot_icons(
     mut paint_options: Query<(&GoalPaintOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
 ) {
-    if deps.ui_runtime.active_panel() != Some(UiPanelId::Goal) {
+    if deps.ui_navigation.active_panel() != Some(UiPanelId::Goal) {
         return;
     }
 
@@ -587,7 +601,7 @@ fn update_slot_icons(
     }
 
     let settings = deps
-        .ui_runtime
+        .ui_navigation
         .active_block_pos()
         .map(|pos| deps.world.goal_settings(pos));
     for (entity, _, children) in &mut material_slots {
@@ -637,7 +651,7 @@ fn update_slot_icons(
 /// 不可附着面：打 Blocked 标记并关掉已打开的下拉；顺带清掉无效设定
 fn sync_attachment_slot_blocked(
     mut commands: Commands,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
@@ -645,10 +659,10 @@ fn sync_attachment_slot_blocked(
     stamp_slots: Query<(Entity, &GoalStampSlot, Option<&MaterialIconSlotBlocked>)>,
     paint_slots: Query<(Entity, &GoalPaintSlot, Option<&MaterialIconSlotBlocked>)>,
 ) {
-    if ui_runtime.active_panel() != Some(UiPanelId::Goal) {
+    if ui_navigation.active_panel() != Some(UiPanelId::Goal) {
         return;
     }
-    let Some(pos) = ui_runtime.active_block_pos() else {
+    let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
     let mut settings = playing.world.goal_settings(pos);
@@ -690,10 +704,11 @@ fn sync_attachment_slot_blocked(
 /// 不可附着槽悬停：跟随光标的提示（风格同背包 tooltip）
 fn update_face_tooltip(
     _ui_thread: UiMainThread,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     stamp_slots: Query<(&GoalStampSlot, &Interaction), With<MaterialIconSlotBlocked>>,
     paint_slots: Query<(&GoalPaintSlot, &Interaction), With<MaterialIconSlotBlocked>>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    ui_scale: Res<UiScale>,
     mut tooltip: Query<(&mut Node, &mut Visibility), (With<GoalFaceTooltip>, Without<Button>)>,
     mut tooltip_text: Query<&mut Text, With<GoalFaceTooltipText>>,
 ) {
@@ -701,7 +716,7 @@ fn update_face_tooltip(
         return;
     };
 
-    let show = ui_runtime.active_panel() == Some(UiPanelId::Goal)
+    let show = ui_navigation.active_panel() == Some(UiPanelId::Goal)
         && (stamp_slots
             .iter()
             .any(|(_, interaction)| *interaction == Interaction::Hovered)
@@ -721,7 +736,10 @@ fn update_face_tooltip(
         tooltip_visibility.set_if_neq(Visibility::Hidden);
         return;
     };
-    let Some(cursor) = window.cursor_position() else {
+    let Some(cursor) = window
+        .cursor_position()
+        .map(|cursor| crate::game::ui::components::window_to_ui(cursor, &ui_scale))
+    else {
         tooltip_node.display = Display::None;
         tooltip_visibility.set_if_neq(Visibility::Hidden);
         return;

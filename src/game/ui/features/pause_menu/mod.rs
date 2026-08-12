@@ -5,13 +5,13 @@ use bevy::prelude::*;
 use crate::game::session;
 use crate::game::session::{SessionBusy, puzzle_save_needs_confirm};
 use crate::game::state::{
-    BuilderMode, GameMode, PendingPlayerSpawn, PlacementState, PlayingUiState, SimulationState,
-    SolutionState, WorldEntryMode,
+    BuilderMode, GameMode, PendingPlayerSpawn, PlacementState, SimulationState, SolutionState,
+    WorldEntryMode,
 };
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::{UiAccessScope, UiMainThread, i18n, ui};
 use crate::game::ui::core::host::PlayingUiRootEntity;
-use crate::game::ui::core::runtime::UiPanelContext;
+use crate::game::ui::core::runtime::{UiNavigation, UiPanelContext};
 use crate::game::ui::features::save::{
     open_export_as_puzzle_prompt, open_save_as_new_puzzle_prompt, open_save_puzzle_confirm,
 };
@@ -39,11 +39,11 @@ struct PauseMenuCtx<'w> {
     carried: &'w mut CarriedItem,
     placement: &'w mut PlacementState,
     world: &'w mut WorldBlocks,
-    playing_ui: &'w mut PlayingUiState,
+    ui_navigation: &'w mut UiNavigation,
     save_state: &'w mut SaveState,
     solution_state: &'w mut SolutionState,
     pending_player: &'w mut PendingPlayerSpawn,
-    playing_ui_root: Option<Entity>,
+    ui_navigation_root: Option<Entity>,
 }
 
 struct PauseMenuButton {
@@ -59,7 +59,7 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
     {
         key: "button.resume"
         on_click(ctx, _commands) {
-            ctx.playing_ui.paused = false;
+            ctx.ui_navigation.close_pause();
         }
     };
     {
@@ -104,7 +104,7 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
             };
             ctx.carried.clear();
             ctx.placement.selected = 0;
-            ctx.playing_ui.paused = false;
+            ctx.ui_navigation.close_pause();
         }
     };
     {
@@ -156,7 +156,7 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
         on_click(ctx, commands) {
             ui.mount_settings(
                 commands,
-                ctx.playing_ui_root,
+                ctx.ui_navigation_root,
                 UiPanelContext::SettingsFromPause,
             );
         }
@@ -167,7 +167,7 @@ const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
             matches!(save.current_kind, Some(SaveKind::Free | SaveKind::Puzzle))
         }
         on_click(ctx, commands) {
-            ui.mount_save_settings(commands, ctx.playing_ui_root);
+            ui.mount_save_settings(commands, ctx.ui_navigation_root);
         }
     };
     {
@@ -192,7 +192,7 @@ impl Plugin for PauseMenuPlugin {
                     .after(PerfScope::Placement)
                     .before(PerfScope::Menus),
                 sync_pause_menu_buttons
-                    .run_if(|playing_ui: Res<PlayingUiState>| playing_ui.paused)
+                    .run_if(|ui_navigation: Res<UiNavigation>| ui_navigation.is_paused())
                     .in_set(UiAccessScope)
                     .after(crate::game::ui::update_localized_ui)
                     .after(crate::game::systems::perf::perf_mark_ui_chrome)
@@ -218,7 +218,7 @@ fn dispatch_pause_menu_clicks(
     _ui_thread: UiMainThread,
     mut clicks: MessageReader<MenuButtonClick>,
     mode: Res<State<GameMode>>,
-    mut playing_ui: ResMut<PlayingUiState>,
+    mut ui_navigation: ResMut<UiNavigation>,
     mut builder_mode: ResMut<BuilderMode>,
     mut simulation: ResMut<SimulationState>,
     mut inventory: ResMut<InventoryItems>,
@@ -229,13 +229,13 @@ fn dispatch_pause_menu_clicks(
     mut solution_state: ResMut<SolutionState>,
     mut pending_player: ResMut<PendingPlayerSpawn>,
     busy: Res<SessionBusy>,
-    playing_ui_root: Option<Res<PlayingUiRootEntity>>,
+    ui_navigation_root: Option<Res<PlayingUiRootEntity>>,
     mut commands: Commands,
 ) {
-    if *mode.get() != GameMode::Playing || !playing_ui.paused || busy.is_busy() {
+    if *mode.get() != GameMode::Playing || !ui_navigation.is_paused() || busy.is_busy() {
         return;
     }
-    let playing_ui_root = playing_ui_root.as_deref().map(|root| root.0);
+    let ui_navigation_root = ui_navigation_root.as_deref().map(|root| root.0);
     for click in clicks.read() {
         if click.set != MenuButtonSet::PauseMenu {
             continue;
@@ -250,11 +250,11 @@ fn dispatch_pause_menu_clicks(
             carried: &mut carried,
             placement: &mut placement,
             world: &mut world,
-            playing_ui: &mut playing_ui,
+            ui_navigation: &mut ui_navigation,
             save_state: &mut save_state,
             solution_state: &mut solution_state,
             pending_player: &mut pending_player,
-            playing_ui_root,
+            ui_navigation_root,
         };
         (button.on_click)(&mut ctx, &mut commands);
     }

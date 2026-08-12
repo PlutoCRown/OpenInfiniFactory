@@ -14,8 +14,8 @@ use crate::game::state::{
     SelectionSnapshot, WorldEntryMode,
 };
 use crate::game::systems::gameplay::GameplayPlayGate;
-use crate::game::ui::features::GameplayToast;
 use crate::game::ui::AreaKind;
+use crate::game::ui::features::GameplayToast;
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
@@ -284,12 +284,23 @@ fn move_selection(
     if selected.is_empty() {
         let mut after = selection_before.clone();
         after.bounds = Some(bounds.moved(offset));
-        edit.edit_history
-            .record_with_selection(Default::default(), selection_before.clone(), after);
+        edit.edit_history.record_with_selection(
+            Default::default(),
+            selection_before.clone(),
+            after,
+        );
         return true;
     }
 
-    if !selection_can_place(edit.world, &selected, offset, true, builder_mode, entry, force) {
+    if !selection_can_place(
+        edit.world,
+        &selected,
+        offset,
+        true,
+        builder_mode,
+        entry,
+        force,
+    ) {
         return false;
     }
 
@@ -380,12 +391,23 @@ fn copy_selection(
     if selected.is_empty() {
         let mut after = selection_before.clone();
         after.bounds = Some(bounds.moved(offset));
-        edit.edit_history
-            .record_with_selection(Default::default(), selection_before.clone(), after);
+        edit.edit_history.record_with_selection(
+            Default::default(),
+            selection_before.clone(),
+            after,
+        );
         return true;
     }
 
-    if !selection_can_place(edit.world, &selected, offset, false, builder_mode, entry, force) {
+    if !selection_can_place(
+        edit.world,
+        &selected,
+        offset,
+        false,
+        builder_mode,
+        entry,
+        force,
+    ) {
         return false;
     }
 
@@ -648,7 +670,7 @@ pub fn sync_edit_bounds_overlays(
         return;
     };
 
-    if !gate.allows_world_edit(&player.playing_ui) {
+    if !gate.allows_world_edit() {
         update_selection_bounds_overlay(&mut selection_parts, assets, None);
         update_delete_bounds_overlay(&mut delete_parts, None);
         return;
@@ -690,12 +712,7 @@ pub fn sync_edit_bounds_overlays(
                 let deletable: Vec<IVec3> = positions
                     .into_iter()
                     .filter(|pos| {
-                        can_delete_at(
-                            *pos,
-                            *player.builder_mode,
-                            solution_state.entry,
-                            &world,
-                        )
+                        can_delete_at(*pos, *player.builder_mode, solution_state.entry, &world)
                     })
                     .collect();
                 SelectionBounds::from_positions(&deletable).map(|bounds| (bounds.min, bounds.max))

@@ -150,29 +150,6 @@ pub enum GameMode {
     Playing,
 }
 
-#[derive(Resource, Debug, Clone, Copy, Default, Eq, PartialEq)]
-pub enum StartMenuScreen {
-    #[default]
-    Main,
-    SaveList,
-}
-
-#[derive(Resource, Default, Debug, Clone, Copy)]
-pub struct PlayingUiState {
-    pub paused: bool,
-    pub inventory_open: bool,
-}
-
-impl PlayingUiState {
-    pub fn reset(&mut self) {
-        *self = Self::default();
-    }
-
-    pub fn active_play(&self) -> bool {
-        !self.paused && !self.inventory_open
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum UiPanelId {
     Settings,

@@ -5,9 +5,9 @@ use bevy::text::LineBreak;
 use bevy::window::PrimaryWindow;
 
 use crate::game::player::controller::FlyCamera;
-use crate::game::state::{GameMode, PlayingUiState};
+use crate::game::state::GameMode;
 use crate::game::systems::gameplay::AimFocus;
-use crate::game::ui::UiRuntime;
+use crate::game::ui::UiNavigation;
 use crate::game::ui::components::default_font_size;
 use crate::game::world::grid::grid_to_world;
 
@@ -63,8 +63,7 @@ pub fn spawn_sign_nametag(root: &mut ChildSpawnerCommands) {
 /// 瞄准带文本的告示牌时，把名牌钉在该格中心的屏幕投影上
 pub fn sync_sign_nametag(
     mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     aim: Res<AimFocus>,
     windows: Query<&Window, With<PrimaryWindow>>,
     camera: Query<(&Camera, &GlobalTransform), With<FlyCamera>>,
@@ -76,8 +75,8 @@ pub fn sync_sign_nametag(
     };
 
     let hide = *mode.get() != GameMode::Playing
-        || !playing_ui.active_play()
-        || ui_runtime.blocks_gameplay();
+        || !ui_navigation.active_play()
+        || ui_navigation.blocks_gameplay();
     let label = aim.sign_label.as_deref().filter(|_| !hide);
     let pos = aim.hit.map(|hit| hit.pos).filter(|_| label.is_some());
 

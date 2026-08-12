@@ -34,10 +34,7 @@ pub fn spawn_menu_button(
     const FONT_SIZE: f32 = 16.0;
 
     parent
-        .spawn((
-            full_width_button(HEIGHT),
-            MenuButtonMarker { set, index },
-        ))
+        .spawn((full_width_button(HEIGHT), MenuButtonMarker { set, index }))
         .with_children(|button| {
             button.spawn(localized_text(label_key, FONT_SIZE, Color::WHITE));
         });
@@ -46,10 +43,10 @@ pub fn spawn_menu_button(
 pub fn on_menu_button_click(
     mut click: On<Pointer<Click>>,
     mut writer: MessageWriter<MenuButtonClick>,
-    ui_host: Res<crate::game::ui::core::host::UiHost>,
+    navigation: Res<crate::game::ui::core::UiNavigation>,
     markers: Query<&MenuButtonMarker>,
 ) {
-    if ui_host.modal_open() || !primary_click(&mut click) {
+    if navigation.modal().is_some() || !primary_click(&mut click) {
         return;
     }
     let Ok(marker) = markers.get(click.entity) else {

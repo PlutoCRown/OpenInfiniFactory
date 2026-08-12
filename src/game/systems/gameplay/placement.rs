@@ -94,7 +94,7 @@ pub fn placement_input(
     let edit_history = &mut *player.edit_history;
     let builder_mode = *player.builder_mode;
 
-    if !gate.allows_active_play(&player.playing_ui) {
+    if !gate.allows_active_play() {
         placement.edit_gesture = None;
         placement.gesture_audio_cells = None;
         despawn_edit_previews(&mut commands, &edit_previews);

@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::game::edit_history::EditHistory;
 use crate::game::player::controller::{FlyCamera, capture_player_save};
-use crate::game::state::{GameMode, StartMenuScreen};
+use crate::game::state::GameMode;
 
 use super::busy::SessionBusy;
 #[cfg(not(target_arch = "wasm32"))]
@@ -48,7 +48,6 @@ pub fn process_deferred_main_menu_exit(
     mut session: SessionStateParams,
     player: Query<(&FlyCamera, &Transform)>,
     mut next_state: ResMut<NextState<GameMode>>,
-    mut start_menu_screen: ResMut<StartMenuScreen>,
     mut pending_exit: ResMut<PendingMainMenuExit>,
     mut edit_history: ResMut<EditHistory>,
     mut busy: ResMut<SessionBusy>,
@@ -107,12 +106,7 @@ pub fn process_deferred_main_menu_exit(
         }
     }
     edit_history.clear();
-    exit_to_main_menu(
-        &mut playing,
-        &mut session,
-        &mut next_state,
-        &mut start_menu_screen,
-    );
+    exit_to_main_menu(&mut playing, &mut session, &mut next_state);
     if deferred.save_first {
         // OnExit(Playing) 拆景在下一帧；等回 StartMenu 后再清 busy
         pending_exit.release_busy_after_menu = true;
@@ -127,7 +121,6 @@ pub fn finish_pending_main_menu_exit(
     mut playing: PlayingWorldParams,
     mut session: SessionStateParams,
     mut next_state: ResMut<NextState<GameMode>>,
-    mut start_menu_screen: ResMut<StartMenuScreen>,
     mut pending_exit: ResMut<PendingMainMenuExit>,
     mut edit_history: ResMut<EditHistory>,
 ) {
@@ -137,12 +130,7 @@ pub fn finish_pending_main_menu_exit(
     for _ in complete.read() {
         pending_exit.waiting_cover = false;
         edit_history.clear();
-        exit_to_main_menu(
-            &mut playing,
-            &mut session,
-            &mut next_state,
-            &mut start_menu_screen,
-        );
+        exit_to_main_menu(&mut playing, &mut session, &mut next_state);
         pending_exit.release_busy_after_menu = true;
     }
 }

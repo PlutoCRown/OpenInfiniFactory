@@ -252,37 +252,45 @@ impl SettingsField {
         ((self.value(settings) - slider.min) / (slider.max - slider.min) * 100.0).clamp(0.0, 100.0)
     }
 
-    pub fn display(self, settings: &GameSettings) -> String {
+    pub fn display(self, settings: &GameSettings, preview: Option<f32>) -> String {
         use crate::game::ui::access::i18n;
 
+        let value = preview
+            .and_then(|percent| {
+                self.slider().map(|slider| {
+                    let raw = slider.min + percent.clamp(0.0, 1.0) * (slider.max - slider.min);
+                    ((raw / slider.step).round() * slider.step).clamp(slider.min, slider.max)
+                })
+            })
+            .unwrap_or_else(|| self.value(settings));
         match self {
-            Self::Fov => format!("FOV {:.0}", settings.fov_degrees),
+            Self::Fov => format!("FOV {value:.0}"),
             Self::UiScale => {
-                let scale = format!("{:.1}", settings.ui_scale);
+                let scale = format!("{value:.1}");
                 i18n.fmt("settings.ui_scale", &[("scale", scale.as_str())])
             }
             Self::Gravity => {
-                let scale = format!("{:.1}", settings.gravity_scale);
+                let scale = format!("{value:.1}");
                 i18n.fmt("settings.gravity_value", &[("scale", scale.as_str())])
             }
             Self::MouseSensitivityX => {
-                let scale = format!("{:.1}", settings.mouse_sensitivity_x);
+                let scale = format!("{value:.1}");
                 i18n.fmt(
                     "settings.mouse_sensitivity_value",
                     &[("scale", scale.as_str())],
                 )
             }
             Self::MouseSensitivityY => {
-                let scale = format!("{:.1}", settings.mouse_sensitivity_y);
+                let scale = format!("{value:.1}");
                 i18n.fmt(
                     "settings.mouse_sensitivity_value",
                     &[("scale", scale.as_str())],
                 )
             }
-            Self::VirtualControlsOpacity => format!("{:.2}", settings.virtual_controls_opacity),
-            Self::MasterVolume => format!("{:.0}%", settings.master_volume * 100.0),
-            Self::MusicVolume => format!("{:.0}%", settings.music_volume * 100.0),
-            Self::SfxVolume => format!("{:.0}%", settings.sfx_volume * 100.0),
+            Self::VirtualControlsOpacity => format!("{value:.2}"),
+            Self::MasterVolume | Self::MusicVolume | Self::SfxVolume => {
+                format!("{:.0}%", value * 100.0)
+            }
         }
     }
 
@@ -504,8 +512,22 @@ impl SettingsAction {
     }
 }
 
+/// 设置滑条正在交互的预览值；提交型滑条在松手前不修改游戏设置
 #[derive(Resource, Default)]
-pub struct ActiveSettingsSlider(pub Option<SettingsField>);
+pub struct ActiveSettingsSlider {
+    pub field: Option<SettingsField>,
+    pub percent: f32,
+}
+
+impl ActiveSettingsSlider {
+    pub fn preview(&self, field: SettingsField) -> Option<f32> {
+        (self.field == Some(field)).then_some(self.percent)
+    }
+
+    pub fn clear(&mut self) {
+        self.field = None;
+    }
+}
 
 #[derive(Resource, Clone, Copy, Eq, PartialEq)]
 pub enum SettingsTab {

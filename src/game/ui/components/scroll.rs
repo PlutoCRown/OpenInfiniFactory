@@ -39,7 +39,7 @@ pub fn scroll_container() -> (impl Bundle, ScrollContainer) {
 }
 
 /// 滚动内容列
-pub fn scroll_content() -> impl Bundle {
+pub fn scroll_content(horizontal_padding: f32) -> impl Bundle {
     (
         ScrollContent,
         Node {
@@ -49,6 +49,7 @@ pub fn scroll_content() -> impl Bundle {
             top: Val::Px(0.0),
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(8.0),
+            padding: UiRect::horizontal(Val::Px(horizontal_padding)),
             flex_shrink: 0.0,
             // Bevy 0.19.0：Visible 祖先会截断 clip_check，必须非 Visible 才能走到容器裁剪
             overflow: Overflow::clip(),

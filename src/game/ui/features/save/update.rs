@@ -4,12 +4,13 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, block_on, futures_lite::future};
 
-use crate::game::state::{GameMode, StartMenuScreen};
+use crate::game::state::GameMode;
 use crate::game::ui::access::UiMainThread;
 use crate::game::ui::components::{
     BUTTON_BG, BUTTON_HOVER_BG, DisabledButton, disabled_border, hover_border, pressed_border,
     raised_border,
 };
+use crate::game::ui::core::{StartMenuPage, UiNavigation};
 use crate::game::ui::screens::{spawn_save_puzzle_row, spawn_save_solution_card};
 use crate::game::ui::types::{
     SaveListAction, SaveListCloseButton, SaveListCoverHost, SaveListCoverImage,
@@ -24,15 +25,15 @@ use super::view::{
     SaveListViewCtx, save_list_puzzle_rows, save_list_title, selected_top_level_kind,
 };
 
-fn save_list_visible(mode: &State<GameMode>, screen: &StartMenuScreen) -> bool {
-    *mode.get() == GameMode::StartMenu && *screen == StartMenuScreen::SaveList
+fn save_list_visible(mode: &State<GameMode>, navigation: &UiNavigation) -> bool {
+    *mode.get() == GameMode::StartMenu && navigation.start_menu() == StartMenuPage::SaveList
 }
 
 /// 重建谜题/方案行，并刷新标题
 pub fn update_save_list_rows(
     _ui_thread: UiMainThread,
     mode: Res<State<GameMode>>,
-    start_menu_screen: Res<StartMenuScreen>,
+    navigation: Res<UiNavigation>,
     save_state: Res<SaveState>,
     mut render_state: ResMut<SaveListRenderState>,
     mut commands: Commands,
@@ -41,7 +42,7 @@ pub fn update_save_list_rows(
     solution_rows_query: Query<Entity, With<SaveListSolutionRows>>,
     children_query: Query<&Children>,
 ) {
-    if !save_list_visible(&mode, &start_menu_screen) {
+    if !save_list_visible(&mode, &navigation) {
         return;
     }
 
@@ -57,8 +58,7 @@ pub fn update_save_list_rows(
             .collect::<Vec<_>>()
     };
 
-    let structure_changed =
-        mode.is_changed() || start_menu_screen.is_changed() || save_state.is_changed();
+    let structure_changed = mode.is_changed() || navigation.is_changed() || save_state.is_changed();
 
     let puzzle_rows_stale =
         row_hosts_stale(puzzle_rows_query.iter(), &children_query, puzzle_rows.len())
@@ -134,7 +134,7 @@ pub fn update_save_list_rows(
 /// 刷新封面图（后台读盘解码，不阻塞点选；含 object-fit: cover 尺寸）
 pub fn update_save_list_cover(
     mode: Res<State<GameMode>>,
-    start_menu_screen: Res<StartMenuScreen>,
+    navigation: Res<UiNavigation>,
     save_state: Res<SaveState>,
     mut render_state: ResMut<SaveListRenderState>,
     mut images: ResMut<Assets<Image>>,
@@ -142,7 +142,7 @@ pub fn update_save_list_cover(
     mut cover_loading: Query<&mut Visibility, With<SaveListCoverLoading>>,
     cover_hosts: Query<&ComputedNode, With<SaveListCoverHost>>,
 ) {
-    if !save_list_visible(&mode, &start_menu_screen) {
+    if !save_list_visible(&mode, &navigation) {
         render_state.cover_task = None;
         return;
     }
@@ -282,7 +282,7 @@ pub fn update_save_list_cover(
 /// 谜题纵滑 + 方案横滑
 pub fn update_save_list_scroll(
     mode: Res<State<GameMode>>,
-    start_menu_screen: Res<StartMenuScreen>,
+    navigation: Res<UiNavigation>,
     hover: Res<UiHoverState>,
     children_query: Query<&Children>,
     parents: Query<&ChildOf>,
@@ -300,7 +300,7 @@ pub fn update_save_list_scroll(
         (With<SaveListSolutionRows>, Without<SaveListPuzzleRows>),
     >,
 ) {
-    if !save_list_visible(&mode, &start_menu_screen) {
+    if !save_list_visible(&mode, &navigation) {
         mouse_wheel.clear();
         return;
     }
@@ -328,7 +328,7 @@ pub fn update_save_list_scroll(
 pub fn update_save_list_styles(
     _ui_thread: UiMainThread,
     mode: Res<State<GameMode>>,
-    start_menu_screen: Res<StartMenuScreen>,
+    navigation: Res<UiNavigation>,
     save_state: Res<SaveState>,
     hover: Res<UiHoverState>,
     mut render_state: ResMut<SaveListRenderState>,
@@ -370,12 +370,11 @@ pub fn update_save_list_styles(
         ),
     >,
 ) {
-    if !save_list_visible(&mode, &start_menu_screen) {
+    if !save_list_visible(&mode, &navigation) {
         return;
     }
 
-    let structure_changed =
-        mode.is_changed() || start_menu_screen.is_changed() || save_state.is_changed();
+    let structure_changed = mode.is_changed() || navigation.is_changed() || save_state.is_changed();
     let paint_labels = structure_changed || render_state.paint_buttons;
     let style_changed = structure_changed || hover.is_changed() || render_state.paint_buttons;
     if !render_state.rows_rebuilt {
@@ -410,16 +409,8 @@ pub fn update_save_list_styles(
         save_state: &save_state,
     };
     render_state.last_hover = hover.entity;
-    for (
-        entity,
-        action,
-        children,
-        mut background,
-        mut border,
-        mut node,
-        save_row,
-        disabled,
-    ) in &mut buttons
+    for (entity, action, children, mut background, mut border, mut node, save_row, disabled) in
+        &mut buttons
     {
         let view = action.button_view(&ctx);
         if let Some(display) = view.display {

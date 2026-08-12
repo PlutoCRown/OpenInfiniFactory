@@ -9,9 +9,10 @@ use super::components::{
     text_button,
 };
 use super::types::{
-    AreaKind, InventoryItem, InventorySlot, KeyBindingButton, SettingsAction, SettingsDropdown,
-    SettingsDropdownLabel, SettingsDropdownList, SettingsField, SettingsSliderFill,
-    SettingsSliderKnob, SettingsText, SettingsTextKind, SettingsValueText, SlotArea, UiActionLabel,
+    AreaKind, DropdownSurface, InventoryItem, InventorySlot, KeyBindingButton, SettingsAction,
+    SettingsDropdown, SettingsDropdownLabel, SettingsDropdownList, SettingsField,
+    SettingsSliderFill, SettingsSliderKnob, SettingsText, SettingsTextKind, SettingsValueText,
+    SlotArea, UiActionLabel,
 };
 
 fn label_text(value: impl Into<String>, font_size: f32, color: Color) -> impl Bundle {
@@ -202,6 +203,7 @@ pub(super) fn spawn_settings_dropdown(
                         BUTTON_BG,
                     ),
                     SettingsAction::ToggleDropdown(dropdown),
+                    DropdownSurface,
                 ))
                 .with_children(|button| {
                     button
@@ -322,6 +324,7 @@ pub(super) fn spawn_settings_dropdown_list(
             dropdown_list_node(),
             GlobalZIndex(20_000),
             SettingsDropdownList(dropdown),
+            DropdownSurface,
         ))
         .with_children(|list| {
             for (label, action) in options {
@@ -339,11 +342,21 @@ fn dropdown_list_node() -> impl Bundle {
             left: Val::Px(0.0),
             top: Val::Px(0.0),
             flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(3.0),
-            padding: UiRect::all(Val::Px(4.0)),
+            row_gap: Val::Px(5.0),
+            padding: UiRect::all(Val::Px(8.0)),
+            border: UiRect::all(Val::Px(1.0)),
             ..default()
         },
         BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
+        BorderColor::all(Color::srgba(0.48, 0.54, 0.58, 0.85)),
+        BoxShadow::new(
+            Color::srgba(0.0, 0.0, 0.0, 0.58),
+            Val::Px(0.0),
+            Val::Px(5.0),
+            Val::Px(1.0),
+            Val::Px(12.0),
+        ),
+        Visibility::Hidden,
     )
 }
 

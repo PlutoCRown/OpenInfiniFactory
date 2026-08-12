@@ -4,8 +4,8 @@ use bevy::prelude::*;
 use crate::game::player::controller::{FlyCamera, capture_player_save};
 use crate::game::state::SolutionState;
 use crate::game::ui::access::{UiMainThread, i18n, ui};
-use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
-use crate::game::ui::core::runtime::UiRuntime;
+use crate::game::ui::core::host::{UiAction, UiActionKind, UiInstanceId};
+use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::core::text_input::primary_click;
 use crate::shared::save::{PuzzleLighting, read_save_settings, write_save_settings};
 
@@ -13,12 +13,14 @@ use super::types::{SaveSettingsAction, SaveSettingsUiState};
 
 pub fn emit_save_settings_actions(
     mut click: On<Pointer<Click>>,
-    ui_host: Res<UiHost>,
-    runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     mut writer: MessageWriter<UiAction>,
     actions: Query<&SaveSettingsAction>,
 ) {
-    if ui_host.modal_open() || !primary_click(&mut click) || !runtime.is_save_settings_open() {
+    if ui_navigation.modal().is_some()
+        || !primary_click(&mut click)
+        || !ui_navigation.is_save_settings_open()
+    {
         return;
     }
     let Ok(action) = actions.get(click.entity).copied() else {

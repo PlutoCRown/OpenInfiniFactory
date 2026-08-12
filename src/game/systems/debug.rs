@@ -4,8 +4,9 @@ use bevy::prelude::*;
 
 use crate::game::player::controller::{FlyCamera, player_collision_box};
 use crate::game::simulation::stats::SimulationStepStats;
-use crate::game::state::{BuilderMode, GameMode, PlayingUiState, SimulationState};
+use crate::game::state::{BuilderMode, GameMode, SimulationState};
 use crate::game::systems::gameplay::EditBatchTiming;
+use crate::game::ui::core::UiNavigation;
 use crate::game::ui::core::host::PlayingUiRootEntity;
 use crate::game::ui::{PendingKeyBind, TextPromptState};
 use crate::game::world::grid::WorldBlocks;
@@ -39,10 +40,10 @@ pub fn load_debug_font(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) 
 pub fn setup_debug_ui(
     mut commands: Commands,
     debug_font: Res<DebugFont>,
-    playing_ui_root: Res<PlayingUiRootEntity>,
+    ui_navigation_root: Res<PlayingUiRootEntity>,
 ) {
     // 挂在 PlayingUiRoot 下，由 PlayingUiCamera 渲染；独立根节点在菜单相机关闭后不会显示
-    commands.entity(playing_ui_root.0).with_children(|root| {
+    commands.entity(ui_navigation_root.0).with_children(|root| {
         root.spawn((
             Text::new(""),
             TextFont {
@@ -74,12 +75,12 @@ pub fn toggle_debug(
     pending_key_bind: Res<PendingKeyBind>,
     text_prompt: Res<TextPromptState>,
     mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
+    ui_navigation: Res<UiNavigation>,
     mut debug: ResMut<DebugState>,
 ) {
     if pending_key_bind.0.is_some()
         || text_prompt.is_open()
-        || !in_playing(*mode.get(), &playing_ui)
+        || !in_playing(*mode.get(), &ui_navigation)
     {
         return;
     }
@@ -95,12 +96,12 @@ pub fn toggle_factory_activity_debug(
     pending_key_bind: Res<PendingKeyBind>,
     text_prompt: Res<TextPromptState>,
     mode: Res<State<GameMode>>,
-    playing_ui: Res<PlayingUiState>,
+    ui_navigation: Res<UiNavigation>,
     mut debug: ResMut<DebugState>,
 ) {
     if pending_key_bind.0.is_some()
         || text_prompt.is_open()
-        || !in_playing(*mode.get(), &playing_ui)
+        || !in_playing(*mode.get(), &ui_navigation)
     {
         return;
     }
@@ -110,7 +111,7 @@ pub fn toggle_factory_activity_debug(
     }
 }
 
-fn in_playing(_mode: GameMode, _playing_ui: &PlayingUiState) -> bool {
+fn in_playing(_mode: GameMode, _ui_navigation: &UiNavigation) -> bool {
     true
 }
 

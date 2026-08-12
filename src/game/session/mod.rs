@@ -30,11 +30,12 @@ use bevy::prelude::*;
 
 use crate::game::cameras::GameplayViewImage;
 use crate::game::simulation::structure_state::StructureState;
-use crate::game::state::{PlayingUiState, StartMenuScreen};
 use crate::game::systems::debug::DebugState;
 use crate::game::systems::perf::PerfScope;
+use crate::game::ui::PlayingUiRoot;
+use crate::game::ui::core::UiMountCache;
+use crate::game::ui::core::UiNavigation;
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost};
-use crate::game::ui::{PlayingUiRoot, UiRuntime};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     BlockIconRenderRoot, GameplayScene, WorldRenderAssets, teardown_playing_scene,
@@ -120,12 +121,8 @@ impl Plugin for SessionPlugin {
     }
 }
 
-pub fn prepare_playing_session(
-    mut playing_ui: ResMut<PlayingUiState>,
-    mut start_menu_screen: ResMut<StartMenuScreen>,
-) {
-    playing_ui.reset();
-    *start_menu_screen = StartMenuScreen::Main;
+pub fn prepare_playing_session(mut ui_navigation: ResMut<UiNavigation>) {
+    ui_navigation.reset_for_playing();
 }
 
 pub fn rebuild_playing_world(
@@ -154,16 +151,16 @@ pub fn rebuild_playing_world(
 
 pub fn on_exit_playing(
     mut commands: Commands,
-    mut playing_ui: ResMut<PlayingUiState>,
-    mut ui_runtime: ResMut<UiRuntime>,
+    mut ui_navigation: ResMut<UiNavigation>,
     mut ui_host: ResMut<UiHost>,
+    mut ui_mounts: ResMut<UiMountCache>,
     gameplay_scene: Query<Entity, With<GameplayScene>>,
     icon_roots: Query<Entity, With<BlockIconRenderRoot>>,
-    playing_ui_roots: Query<Entity, With<PlayingUiRoot>>,
+    ui_navigation_roots: Query<Entity, With<PlayingUiRoot>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut scene_chunks: ResMut<crate::game::world::rendering::SceneChunkMeshes>,
 ) {
-    playing_ui.reset();
+    ui_navigation.reset_for_start_menu();
 
     for entity in &gameplay_scene {
         commands.entity(entity).despawn();
@@ -171,13 +168,13 @@ pub fn on_exit_playing(
     for entity in &icon_roots {
         commands.entity(entity).despawn();
     }
-    for entity in &playing_ui_roots {
+    for entity in &ui_navigation_roots {
         commands.entity(entity).despawn();
     }
-    ui_host.unmount_all_panels(&mut ui_runtime, None);
-    commands.insert_resource(
-        crate::game::ui::features::playing_overlays::PlayingOverlayMounts::default(),
-    );
+    ui_host.unmount_all_panels(&mut ui_navigation, None);
+    ui_mounts.inventory = None;
+    ui_mounts.pause = None;
+    ui_mounts.tutorial = None;
     commands.remove_resource::<PlayingUiRootEntity>();
 
     crate::game::world::rendering::forget_scene_chunks(&mut meshes, &mut scene_chunks);

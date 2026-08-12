@@ -19,8 +19,8 @@ use crate::game::ui::components::{
     default_font_size, localized_text, menu_button, raised_border, spawn_panel as spawn_ui_panel,
     spawn_ui_icon, styled_button, text, transparent_node,
 };
-use crate::game::ui::core::host::UiHost;
-use crate::game::ui::core::runtime::UiRuntime;
+use crate::game::ui::core::DropdownSurface;
+use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{UiActionLabel, UiPanelBinding};
@@ -89,12 +89,23 @@ pub fn spawn_overlays(root: &mut ChildSpawnerCommands) {
             top: Val::Px(0.0),
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(3.0),
-            padding: UiRect::all(Val::Px(4.0)),
+            padding: UiRect::all(Val::Px(8.0)),
+            border: UiRect::all(Val::Px(1.0)),
             ..default()
         },
         BackgroundColor(Color::srgba(0.10, 0.11, 0.12, 0.98)),
+        BorderColor::all(Color::srgba(0.48, 0.54, 0.58, 0.85)),
+        BoxShadow::new(
+            Color::srgba(0.0, 0.0, 0.0, 0.58),
+            Val::Px(0.0),
+            Val::Px(5.0),
+            Val::Px(1.0),
+            Val::Px(12.0),
+        ),
+        Visibility::Hidden,
         GlobalZIndex(20_000),
         TeleportPairList,
+        DropdownSurface,
     ));
 }
 
@@ -125,7 +136,7 @@ inventory::submit! {
 pub fn dispatch_teleport_action(
     action: TeleportAction,
     pos: IVec3,
-    _ui_runtime: &UiRuntime,
+    _ui_navigation: &UiNavigation,
     world: &mut PlayingWorldParams,
     solution_state: &mut SolutionState,
     open_dropdown: &mut OpenBlockPanelDropdown,
@@ -201,8 +212,7 @@ fn spawn_rename_icon_button(parent: &mut ChildSpawnerCommands) {
 
 fn on_click(
     mut click: On<Pointer<Click>>,
-    ui_host: Res<UiHost>,
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut pending_rename: ResMut<PendingTeleportRename>,
     mut solution_state: ResMut<SolutionState>,
@@ -210,17 +220,17 @@ fn on_click(
     mut world: PlayingWorldParams,
     actions: Query<&TeleportAction>,
 ) {
-    if ui_host.modal_open() || !primary_click(&mut click) {
+    if ui_navigation.modal().is_some() || !primary_click(&mut click) {
         return;
     }
-    if ui_runtime.active_panel() != Some(UiPanelId::Teleport) {
+    if ui_navigation.active_panel() != Some(UiPanelId::Teleport) {
         return;
     }
     let Ok(action) = actions.get(click.entity).copied() else {
         return;
     };
     click.propagate(false);
-    let Some(pos) = ui_runtime.active_block_pos() else {
+    let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
     if action == TeleportAction::StartRename {
@@ -230,7 +240,7 @@ fn on_click(
     dispatch_teleport_action(
         action,
         pos,
-        &ui_runtime,
+        &ui_navigation,
         &mut world,
         &mut solution_state,
         &mut open_dropdown,
@@ -253,14 +263,14 @@ fn process_teleport_rename_prompt(
 }
 
 fn update_panel(
-    ui_runtime: Res<UiRuntime>,
+    ui_navigation: Res<UiNavigation>,
     world: Res<WorldBlocks>,
     mut name_text: Query<&mut Text, With<TeleportNameText>>,
 ) {
-    if ui_runtime.active_panel() != Some(UiPanelId::Teleport) {
+    if ui_navigation.active_panel() != Some(UiPanelId::Teleport) {
         return;
     }
-    let Some(pos) = ui_runtime.active_block_pos() else {
+    let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
     let name = world.teleport_settings(pos).name;
@@ -282,6 +292,7 @@ fn update_dropdowns(
         Entity,
         &TeleportPairList,
         &mut Node,
+        &mut Visibility,
         &ComputedNode,
         Option<&Children>,
     )>,
@@ -290,8 +301,8 @@ fn update_dropdowns(
     mut pair_cache: Local<Option<(Option<IVec3>, u64, bool)>>,
 ) {
     let panel = UiPanelId::Teleport;
-    let panel_active = deps.ui_runtime.active_panel() == Some(panel);
-    let active_pos = deps.ui_runtime.active_block_pos();
+    let panel_active = deps.ui_navigation.active_panel() == Some(panel);
+    let active_pos = deps.ui_navigation.active_block_pos();
     let pair_open = panel_active && deps.open_dropdown.is_open(panel, PAIR_SLOT);
 
     if panel_active {
@@ -320,14 +331,26 @@ fn update_dropdowns(
 
     let window = deps.windows.single().ok();
     let viewport = window
-        .map(|w| Vec2::new(w.width(), w.height()))
+        .map(|w| Vec2::new(w.width(), w.height()) / deps.ui_scale.0.max(0.01))
         .unwrap_or(Vec2::ZERO);
 
-    for (entity, _, mut style, list_node, children) in &mut lists {
+    for (entity, _, mut style, mut visibility, list_node, children) in &mut lists {
         let trigger = triggers.iter().find_map(|(action, node, transform)| {
             (*action == TeleportAction::TogglePair && !node.is_empty()).then_some((node, transform))
         });
-        sync_dropdown_overlay(pair_open, &mut style, list_node, trigger, viewport);
+        if rebuild && pair_open {
+            style.display = Display::Flex;
+            visibility.set_if_neq(Visibility::Hidden);
+        } else {
+            sync_dropdown_overlay(
+                pair_open,
+                &mut style,
+                &mut visibility,
+                list_node,
+                trigger,
+                viewport,
+            );
+        }
         if !pair_open {
             continue;
         }

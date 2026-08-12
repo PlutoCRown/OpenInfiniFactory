@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::game::ui::access::UiMainThread;
-use crate::game::ui::core::runtime::UiRuntime;
+use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockIconAssets;
 
@@ -13,10 +13,11 @@ use super::panel_state::OpenBlockPanelDropdown;
 #[derive(SystemParam)]
 pub struct BlockPanelDropdownDeps<'w, 's> {
     pub _ui_thread: UiMainThread,
-    pub ui_runtime: Res<'w, UiRuntime>,
+    pub ui_navigation: Res<'w, UiNavigation>,
     pub open_dropdown: Res<'w, OpenBlockPanelDropdown>,
     pub world: Res<'w, WorldBlocks>,
     pub block_icons: Option<Res<'w, BlockIconAssets>>,
+    pub ui_scale: Res<'w, UiScale>,
     pub commands: Commands<'w, 's>,
     pub windows: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
 }

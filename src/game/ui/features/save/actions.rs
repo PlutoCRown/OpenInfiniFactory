@@ -2,10 +2,11 @@ use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
 use crate::game::session::{LoadWorld, SessionBusy, SessionBusyCover};
-use crate::game::state::{GameMode, StartMenuScreen, WorldEntryMode};
+use crate::game::state::{GameMode, WorldEntryMode};
 use crate::game::ui::access::UiMainThread;
-use crate::game::ui::core::host::{UiAction, UiActionKind, UiHost, UiInstanceId};
+use crate::game::ui::core::host::{UiAction, UiActionKind, UiInstanceId};
 use crate::game::ui::core::text_input::primary_click;
+use crate::game::ui::core::{StartMenuPage, UiNavigation};
 use crate::game::ui::types::{SaveListCoverImage, SaveListRenderState};
 use crate::shared::save::{SaveKind, SaveSlot, SaveState, toggle_save_favorite};
 
@@ -20,18 +21,17 @@ use super::view::selected_top_level_kind;
 pub fn emit_save_list_actions(
     mut click: On<Pointer<Click>>,
     mode: Res<State<GameMode>>,
-    start_menu_screen: Res<StartMenuScreen>,
+    navigation: Res<UiNavigation>,
     save_state: Res<SaveState>,
-    ui_host: Res<UiHost>,
     busy: Res<SessionBusy>,
     mut writer: MessageWriter<UiAction>,
     actions: Query<&SaveListAction>,
 ) {
     if busy.is_busy()
-        || ui_host.modal_open()
+        || navigation.modal().is_some()
         || !primary_click(&mut click)
         || *mode.get() != GameMode::StartMenu
-        || *start_menu_screen != StartMenuScreen::SaveList
+        || navigation.start_menu() != StartMenuPage::SaveList
     {
         return;
     }
@@ -66,7 +66,7 @@ pub fn emit_save_list_actions(
 pub fn dispatch_save_list_actions(
     _ui_thread: UiMainThread,
     mut actions: MessageReader<UiAction>,
-    mut start_menu_screen: ResMut<StartMenuScreen>,
+    mut navigation: ResMut<UiNavigation>,
     mut save_state: ResMut<SaveState>,
     mut busy_cover: ResMut<SessionBusyCover>,
     busy: Res<SessionBusy>,
@@ -97,7 +97,7 @@ pub fn dispatch_save_list_actions(
                 open_new_solution_prompt(puzzle_name);
             }
             SaveListAction::Back => {
-                *start_menu_screen = StartMenuScreen::Main;
+                navigation.show_start_menu(StartMenuPage::Main);
             }
             SaveListAction::SelectPuzzle(storage) => {
                 if save_state
@@ -266,10 +266,9 @@ fn capture_busy_cover(
             .map(|name| SaveSlot::free(name.clone()).storage_path()),
         Some(SaveKind::Puzzle) => {
             if let Some(solution) = save_state.selected_solution.as_ref() {
-                save_state
-                    .selected_puzzle
-                    .as_ref()
-                    .map(|puzzle| SaveSlot::solution(puzzle.clone(), solution.clone()).storage_path())
+                save_state.selected_puzzle.as_ref().map(|puzzle| {
+                    SaveSlot::solution(puzzle.clone(), solution.clone()).storage_path()
+                })
             } else {
                 save_state
                     .selected_puzzle
