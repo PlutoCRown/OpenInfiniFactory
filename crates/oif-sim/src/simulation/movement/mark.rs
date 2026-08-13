@@ -13,14 +13,22 @@ pub(super) fn mark_structure_movement_phase(
         .filter_map(|(pos, block)| {
             // 仅运动设备收集规则，避免场景等方块走 dyn movement_rule
             let rule = match block.kind {
-                BlockKind::Conveyor => Some(MovementRule::Translate {
-                    source: IVec3::Y,
-                    offset: block.facing.forward_ivec3(),
-                }),
-                BlockKind::ReverseConveyor => Some(MovementRule::Translate {
-                    source: IVec3::NEG_Y,
-                    offset: -block.facing.forward_ivec3(),
-                }),
+                BlockKind::Conveyor => {
+                    world
+                        .is_occupied(*pos + IVec3::Y)
+                        .then_some(MovementRule::Translate {
+                            source: IVec3::Y,
+                            offset: block.facing.forward_ivec3(),
+                        })
+                }
+                BlockKind::ReverseConveyor => {
+                    world
+                        .is_occupied(*pos + IVec3::NEG_Y)
+                        .then_some(MovementRule::Translate {
+                            source: IVec3::NEG_Y,
+                            offset: -block.facing.forward_ivec3(),
+                        })
+                }
                 BlockKind::Lifter
                 | BlockKind::Rotator
                 | BlockKind::CounterRotator
@@ -439,6 +447,9 @@ fn mark_pusher_movement(
 
     let head = pos + source;
     let structure_id = ctx.structures.id_at(pos)?;
+    let lazy_anchored = ctx.structures.get(structure_id).is_some_and(|structure| {
+        structure.activity == FactoryActivity::Inactive && structure.head_of.is_empty()
+    });
 
     // 体已 held：不可再发动其它 deform；仅当某动作组已成功时挂共轴动画
     if ctx.structures.held_blocks.contains(&id) || ctx.motion_held.contains(&pos) {
@@ -470,6 +481,23 @@ fn mark_pusher_movement(
     }
 
     if desired_extended {
+        if lazy_anchored
+            && (ctx.world.is_fragile_material_at(head) || !ctx.world.is_occupied(head))
+        {
+            if !ctx.claimed_heads.insert(head) {
+                return None;
+            }
+            return Some(
+                StructureMove::translate_by_pusher_actor(
+                    structure_id,
+                    HashSet::from([pos]),
+                    IVec3::ZERO,
+                    PusherActor { id, pos, animation },
+                    MovementMark::Push,
+                )
+                .with_source(id, pos),
+            );
+        }
         if let Some(movement) =
             try_deform_action(ctx, pos, id, structure_id, true, offset, animation, true)
         {
@@ -483,7 +511,8 @@ fn mark_pusher_movement(
                 ctx.structures
                     .nodes_to_positions(ctx.world, seed, nodes)
                     .is_empty()
-            });
+            })
+            || lazy_anchored;
         if forward_physical_empty && !ctx.world.is_fragile_material_at(head) {
             if let Some(front_id) = ctx.world.blocks.get(&head).map(|b| b.id) {
                 let external = ctx
@@ -542,6 +571,9 @@ fn mark_pusher_movement(
                 }
             }
         }
+        if lazy_anchored {
+            return None;
+        }
         if PUSHER_REVERSE_ENABLED {
             // 正推失败后反推自身；仍走 Extend：到位后进入伸出并停住（避免每回合再退）
             return try_deform_action(ctx, pos, id, structure_id, false, -offset, animation, false);
@@ -589,27 +621,6 @@ fn try_deform_action(
     };
 
     for group_idx in group_indices {
-        let (nodes, actions) = {
-            let structure = ctx.structures.get(structure_id)?;
-            let group = structure.deform_groups.get(group_idx as usize)?;
-            (group.nodes.clone(), group.actions.clone())
-        };
-
-        // 共轴组：actions 里列出的同伴本回合必须同样在伸/缩（与是否在 nodes 无关）
-        let peers_ready = actions.iter().all(|(body, action_fwd)| {
-            if *body == id || *action_fwd != forward {
-                return true;
-            }
-            if forward {
-                ctx.actuating_extend.contains(body)
-            } else {
-                ctx.actuating_retract.contains(body)
-            }
-        });
-        if !peers_ready {
-            continue;
-        }
-
         if ctx.succeeded_deform.contains(&(structure_id, group_idx)) {
             if claim_head {
                 let head = pos
@@ -648,6 +659,27 @@ fn try_deform_action(
                 .with_source(id, pos),
             );
         }
+
+        let nodes = {
+            let structure = ctx.structures.get(structure_id)?;
+            let group = structure.deform_groups.get(group_idx as usize)?;
+            // 共轴组：actions 里列出的同伴本回合必须同样在伸/缩（与是否在 nodes 无关）。
+            // 同组已成功后的其余 actor 走上方快速路径，不再重复扫描整组同伴。
+            let peers_ready = group.actions.iter().all(|(body, action_fwd)| {
+                if *body == id || *action_fwd != forward {
+                    return true;
+                }
+                if forward {
+                    ctx.actuating_extend.contains(body)
+                } else {
+                    ctx.actuating_retract.contains(body)
+                }
+            });
+            if !peers_ready {
+                continue;
+            }
+            group.nodes.clone()
+        };
 
         if nodes.iter().any(|n| ctx.structures.held_blocks.contains(n)) {
             continue;

@@ -818,6 +818,7 @@ pub fn perf_stats_json(
     block_count: usize,
     entity_count: usize,
     player: Option<Vec3>,
+    window: Option<&Window>,
 ) -> Value {
     let render_remainder_ms = (perf.render_other_ms() - perf.render_gap_ms()).max(0.0);
     let scopes: Vec<Value> = PerfScope::ORDER
@@ -850,6 +851,13 @@ pub fn perf_stats_json(
                 BuilderMode::Play => "Play",
             },
             "simulation_active": simulation.is_active(),
+            "window": window.map(|window| json!({
+                "focused": window.focused,
+                "present_mode": format!("{:?}", window.present_mode),
+                "physical_width": window.physical_width(),
+                "physical_height": window.physical_height(),
+                "scale_factor": window.scale_factor(),
+            })),
             "player": player.map(|pos| json!({
                 "x": pos.x,
                 "y": pos.y,

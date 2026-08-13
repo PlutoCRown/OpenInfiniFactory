@@ -58,6 +58,10 @@ pub struct WorldBlocks {
     pub factory_count: usize,
     /// blocks 层材料方块数量
     pub material_count: usize,
+    /// 会生成静态 marker 的方块数量（包含 blocks 与 system_blocks）
+    pub marker_source_count: usize,
+    /// 当前静态生成 marker 数量（包含 blocks 与 system_blocks）
+    pub generated_marker_count: usize,
 }
 
 /// 告示等占格附着：子工厂挂在父方块的某一面上
@@ -152,11 +156,32 @@ impl WorldBlocks {
         }
     }
 
+    /// 增减静态 marker 来源与生成物计数，避免空场景反复全表扫描
+    pub fn adjust_marker_count(&mut self, block: BlockData, delta: i32) {
+        let amount = delta.unsigned_abs() as usize;
+        if block.kind.marker_behavior(block.facing).is_some() {
+            if delta >= 0 {
+                self.marker_source_count = self.marker_source_count.saturating_add(amount);
+            } else {
+                self.marker_source_count = self.marker_source_count.saturating_sub(amount);
+            }
+        }
+        if block.kind.is_generated_marker() {
+            if delta >= 0 {
+                self.generated_marker_count = self.generated_marker_count.saturating_add(amount);
+            } else {
+                self.generated_marker_count = self.generated_marker_count.saturating_sub(amount);
+            }
+        }
+    }
+
     /// 从 blocks 全表重建分层计数（retain 等批量路径用）
     pub fn recount_block_counts(&mut self) {
         let mut scene = 0usize;
         let mut factory = 0usize;
         let mut material = 0usize;
+        let mut marker_sources = 0usize;
+        let mut generated_markers = 0usize;
         for block in self.blocks.values() {
             if block.kind.is_scene() {
                 scene += 1;
@@ -165,10 +190,18 @@ impl WorldBlocks {
             } else if block.kind.is_material() {
                 material += 1;
             }
+            marker_sources += usize::from(block.kind.marker_behavior(block.facing).is_some());
+            generated_markers += usize::from(block.kind.is_generated_marker());
+        }
+        for block in self.system_blocks.values() {
+            marker_sources += usize::from(block.kind.marker_behavior(block.facing).is_some());
+            generated_markers += usize::from(block.kind.is_generated_marker());
         }
         self.scene_count = scene;
         self.factory_count = factory;
         self.material_count = material;
+        self.marker_source_count = marker_sources;
+        self.generated_marker_count = generated_markers;
     }
 
     pub fn insert(&mut self, pos: IVec3, mut block: BlockData) -> Option<BlockData> {
@@ -183,10 +216,12 @@ impl WorldBlocks {
             if !prev.kind.is_system_layer() {
                 self.adjust_block_count(prev.kind, -1);
             }
+            self.adjust_marker_count(*prev, -1);
         }
         if !kind.is_system_layer() {
             self.adjust_block_count(kind, 1);
         }
+        self.adjust_marker_count(block, 1);
         if !self.block_settings.contains_key(&pos) {
             if let Some(mut settings) = kind.default_settings(pos) {
                 if let BlockSettings::Teleport(teleport_settings) = &mut settings {
@@ -208,6 +243,7 @@ impl WorldBlocks {
         let removed = self.blocks.remove(pos);
         if let Some(ref block) = removed {
             self.adjust_block_count(block.kind, -1);
+            self.adjust_marker_count(*block, -1);
             let id = block.id;
             // 材料可与系统块同格；有系统宿主时保留其 settings（如传送门配对）
             if !self.system_blocks.contains_key(pos) {
@@ -235,6 +271,7 @@ impl WorldBlocks {
                     {
                         if let Some(child) = self.blocks.remove(&child_pos) {
                             self.adjust_block_count(child.kind, -1);
+                            self.adjust_marker_count(child, -1);
                             self.block_settings.remove(&child_pos);
                         }
                     }
@@ -247,10 +284,9 @@ impl WorldBlocks {
 
     pub fn remove_system(&mut self, pos: &IVec3) -> Option<BlockData> {
         let removed = self.system_blocks.remove(pos);
-        if removed.is_some() {
-            let was_acceptor = removed
-                .as_ref()
-                .is_some_and(|block| block.kind.accepts_material());
+        if let Some(block) = removed {
+            self.adjust_marker_count(block, -1);
+            let was_acceptor = block.kind.accepts_material();
             self.block_settings.remove(pos);
             for settings in self.block_settings.values_mut() {
                 if let BlockSettings::Teleport(settings) = settings {
@@ -263,8 +299,9 @@ impl WorldBlocks {
             if was_acceptor {
                 self.resync_acceptor_structures();
             }
+            return Some(block);
         }
-        removed
+        None
     }
 
     pub fn clear(&mut self) {
@@ -289,6 +326,8 @@ impl WorldBlocks {
             self.scene_count = 0;
             self.factory_count = 0;
             self.material_count = 0;
+            self.marker_source_count = 0;
+            self.generated_marker_count = 0;
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }
@@ -327,6 +366,7 @@ impl WorldBlocks {
             if self.blocks.len() != blocks_before {
                 self.recount_block_counts();
             }
+            self.generated_marker_count = 0;
             self.topology_revision = self.topology_revision.wrapping_add(1);
         }
     }

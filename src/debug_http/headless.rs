@@ -8,8 +8,8 @@ use super::snapshot::{
 };
 use super::standalone::HeadlessDebugState;
 use super::world_ops::{
-    block_kinds_json, load_save_into_session, parse_block_kind, parse_block_kind_exact,
-    parse_facing, place_blocks_box, reset_session,
+    block_kinds_json, load_save_into_session, parse_block_kind_exact, parse_facing,
+    place_blocks_box, reset_session,
 };
 
 /// 处理无头 debug HTTP 命令
@@ -176,7 +176,7 @@ pub fn handle_headless_command(
             kind,
             facing,
         } => {
-            let Some(kind) = parse_block_kind(&kind) else {
+            let Some(kind) = parse_block_kind_exact(&kind) else {
                 return json_error(&format!("unknown block kind `{kind}`"));
             };
             let Some(facing) = parse_facing(&facing) else {
@@ -194,13 +194,17 @@ pub fn handle_headless_command(
                         a.x, a.y, a.z, b.x, b.y, b.z
                     ));
                 }
+                let positions_truncated = placed.len() + skipped.len() > 1000;
                 json_ok(serde_json::json!({
                     "from": pos_json(a),
                     "to": pos_json(b),
-                    "placed": placed.iter().map(|pos| pos_json(*pos)).collect::<Vec<_>>(),
-                    "skipped": skipped.iter().map(|pos| pos_json(*pos)).collect::<Vec<_>>(),
+                    "placed": (!positions_truncated).then(|| placed.iter().map(|pos| pos_json(*pos)).collect::<Vec<_>>()),
+                    "skipped": (!positions_truncated).then(|| skipped.iter().map(|pos| pos_json(*pos)).collect::<Vec<_>>()),
+                    "first_placed": placed.first().map(|pos| pos_json(*pos)),
+                    "last_placed": placed.last().map(|pos| pos_json(*pos)),
                     "placed_count": placed.len(),
                     "skipped_count": skipped.len(),
+                    "positions_truncated": positions_truncated,
                 }))
             })
         }
@@ -232,15 +236,48 @@ pub fn handle_headless_command(
         DebugHttpCommand::RunN { n } => {
             state.dirty = true;
             state.with_core(|core| {
+                let begin_started = std::time::Instant::now();
                 core.begin_simulation();
+                let begin_ms = begin_started.elapsed().as_secs_f64() * 1000.0;
+                let mut samples = Vec::with_capacity(n.min(100_000) as usize);
                 for _ in 0..n {
-                    core.simulate_next_turn();
+                    samples.push(core.simulate_next_turn_with_logging(false).stats);
                 }
                 core.log
                     .log(core.control().turn, format!("HTTP /runN n={n}"));
+                let mut total_ms: Vec<f64> = samples.iter().map(|stats| stats.total_ms).collect();
+                total_ms.sort_by(f64::total_cmp);
+                let sample_count = total_ms.len();
+                let percentile = |fraction: f64| {
+                    let index = ((sample_count.saturating_sub(1) as f64) * fraction).round() as usize;
+                    total_ms[index]
+                };
+                let divisor = sample_count as f64;
                 json_ok(serde_json::json!({
                     "simulation": session_status_json(core.control()),
                     "turns": n,
+                    "perf": {
+                        "begin_ms": begin_ms,
+                        "samples": sample_count,
+                        "total_ms": {
+                            "mean": total_ms.iter().sum::<f64>() / divisor,
+                            "min": total_ms[0],
+                            "p50": percentile(0.50),
+                            "p95": percentile(0.95),
+                            "max": total_ms[sample_count - 1],
+                        },
+                        "stage_mean_ms": {
+                            "prep": samples.iter().map(|stats| stats.prep_ms).sum::<f64>() / divisor,
+                            "gravity": samples.iter().map(|stats| stats.gravity_ms).sum::<f64>() / divisor,
+                            "signal": samples.iter().map(|stats| stats.signal_ms).sum::<f64>() / divisor,
+                            "marker_before_move": samples.iter().map(|stats| stats.marker_before_move_ms).sum::<f64>() / divisor,
+                            "movement_mark": samples.iter().map(|stats| stats.movement_mark_ms).sum::<f64>() / divisor,
+                            "movement_execute": samples.iter().map(|stats| stats.movement_execute_ms).sum::<f64>() / divisor,
+                            "marker_after_move": samples.iter().map(|stats| stats.marker_after_move_ms).sum::<f64>() / divisor,
+                            "behavior": samples.iter().map(|stats| stats.behavior_ms).sum::<f64>() / divisor,
+                            "signal_refresh": samples.iter().map(|stats| stats.signal_refresh_ms).sum::<f64>() / divisor,
+                        },
+                    },
                 }))
             })
         }

@@ -1,6 +1,6 @@
 impl StructureState {
     /// 为单个工厂结构分配逻辑头并构建共轴 DeformGroup
-    fn rebuild_deform_for(&mut self, world: &WorldBlocks, id: StructureId) {
+    pub(crate) fn rebuild_deform_for(&mut self, world: &WorldBlocks, id: StructureId) {
         self.sync_head_counter(world);
         let Some(structure) = self.structures.get(&id) else {
             return;
@@ -11,17 +11,7 @@ impl StructureState {
         let positions = structure.positions.clone();
         let mut prev_heads = structure.head_of.clone();
 
-        let scene_touching: HashSet<IVec3> = positions
-            .iter()
-            .copied()
-            .filter(|pos| {
-                signal_offsets().into_iter().any(|offset| {
-                    let neighbor = *pos + offset;
-                    world.is_scene_at(neighbor)
-                        && !is_blocked_factory_connection(world, *pos, neighbor)
-                })
-            })
-            .collect();
+        let scene_touching = structure.scene_touching.clone();
 
         // body → head；复用旧 head id
         let mut head_of: HashMap<BlockId, BlockId> = HashMap::new();
@@ -208,27 +198,20 @@ impl StructureState {
             };
             let axis = axis_of(b_fwd);
 
-            // 同轴其它推杆：枚举「也切断」子集 → 每条成功传播都是该动作的候选
-            let mut peers: Vec<BlockId> = bodies
+            // 候选只保留“该杆独立动作”和“全部同轴杆共同行动”；中间子集会让复杂度指数增长，
+            // 也会产生依赖 BlockId 截断顺序的不稳定结果。
+            let coaxial_cuts: HashSet<BlockId> = bodies
                 .iter()
                 .copied()
-                .filter(|p| *p != body && facing_of.get(p).is_some_and(|f| axis_of(*f) == axis))
+                .filter(|peer| facing_of.get(peer).is_some_and(|f| axis_of(*f) == axis))
                 .collect();
-            peers.sort_by_key(|id| id.0);
-            if peers.len() > 12 {
-                peers.truncate(12);
-            }
 
             let mut candidate_sets: Vec<(bool, Vec<BlockId>)> = Vec::new();
-            let peer_n = peers.len();
-            let masks = 1u32 << peer_n;
-            for mask in 0..masks {
-                let mut cuts = HashSet::from([body]);
-                for (i, peer) in peers.iter().enumerate() {
-                    if mask & (1 << i) != 0 {
-                        cuts.insert(*peer);
-                    }
-                }
+            let mut cut_sets = vec![HashSet::from([body])];
+            if coaxial_cuts.len() > 1 {
+                cut_sets.push(coaxial_cuts);
+            }
+            for cuts in cut_sets {
                 if let Some(nodes) = propagate_with_cuts(head, body, &cuts, false) {
                     if !nodes.is_empty() {
                         candidate_sets.push((true, nodes));

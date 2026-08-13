@@ -20,7 +20,7 @@
 | GET | `/players` | `[{position, look_target}]`；无头 `[]`；内嵌为相机位置 + 准星 |
 | GET | `/acceptors` | `[{id, positions, count}]`；有 StructureState 用其 count，否则世界结构 count=0 |
 | GET | `/status` | `mode` / `in_world` / save / builder / entry / sim phase·turn；`save.path` 为当前存档路径，`save.dirty` 和 `save.exit_requires_save` 表示退出前是否需要保存 |
-| GET | `/perf` | `load_ms` + `sim_turn` + `frame`（无头 frame=null） |
+| GET | `/perf` | `load_ms` + `sim_turn` + `frame`；内嵌 frame 含窗口焦点、实际 PresentMode 和物理尺寸（无头 frame=null） |
 | GET | `/logs?limit=` | 模拟日志 |
 | GET | `/blockKinds` | 方块种类表 |
 
@@ -38,7 +38,7 @@
 | POST | `/world/reset` | 清空世界（无头） |
 | POST | `/sim/begin` | 进入模拟（别名 `/beginSimulation`） |
 | POST | `/sim/pause` | 停止连续跑 |
-| POST | `/sim/run?n=` | 推进 N 回合（别名 `/runN`；无头完整支持） |
+| POST | `/sim/run?n=` | 推进 N 回合（别名 `/runN`；无头返回开局预处理耗时、总耗时分位数与各阶段平均值） |
 | POST | `/runOneTurn` | 推进一回合 |
 | POST | `/players/0/teleport?x&y&z&yaw&pitch` | 传送玩家（仅内嵌）；可选 `lookAt=x,y,z`（格子坐标，看向中心） |
 
@@ -53,6 +53,8 @@
 ## 备注
 
 - 材料一般不进存档；调试时用 `/world/place` 临时放置（支持 `x1/y1/z1` 范围）。
+- `/world/place` 超过 1000 个结果时只返回数量和首尾坐标，避免基准请求把时间耗在巨大 JSON 上。
+- `/sim/run?n=` 批量运行关闭逐块模拟日志，避免格式化与日志内存占用污染性能数据；单步接口仍保留详细日志。
 - 内嵌 `session/enter`：仅主菜单可排队 `LoadWorld`；已在世界中会报错。
 - 交互式重启前必须检查 `/status.save.path` 和 `/status.save.dirty`；脏状态未清除或保存失败时禁止关闭玩家客户端。
 - 内嵌 `/sim/run?n=` 请改用无头二进制，或用 `/run` / `/runOneTurn`。

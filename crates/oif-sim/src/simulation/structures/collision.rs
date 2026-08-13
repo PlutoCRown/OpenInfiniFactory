@@ -101,14 +101,6 @@ fn structure_id_gravity_grounded(
 
 /// 运动执行前：按计划压碎/让出冲突的脆弱材料（与钻头/激光销毁分离）
 /// 返回碎裂格子与种类，供表现层生成碎片
-/// 按运行时 BlockId 查找当前坐标
-fn block_pos_by_id(world: &WorldBlocks, id: BlockId) -> Option<IVec3> {
-    world
-        .blocks
-        .iter()
-        .find_map(|(pos, block)| (block.id == id).then_some(*pos))
-}
-
 fn can_move_gravity_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,

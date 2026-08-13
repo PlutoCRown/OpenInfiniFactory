@@ -62,7 +62,7 @@ impl PlayingWorldParams<'_, '_> {
 
     /// 有渲染资源时拆掉场景并按当前 debug 状态重建
     pub fn rebuild_scene(&mut self) {
-        self.structure_state.rebuild_for_simulation(&self.world);
+        self.structure_state.rebuild_for_runtime(&self.world);
         let Some(render_assets) = self.render_assets.as_ref().map(|assets| (**assets).clone())
         else {
             return;

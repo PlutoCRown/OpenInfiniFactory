@@ -6,14 +6,6 @@ use crate::game::world::direction::Facing;
 use crate::shared::save::{SaveSlot, load_world};
 use oif_sim::SimSession;
 
-/// 解析方块种类名（场景 / 材料 / 印花字符串 id，或工厂枚举 Debug 名）
-pub fn parse_block_kind(name: &str) -> Option<BlockKind> {
-    parse_block_kind_exact(name).or_else(|| {
-        // 未识别：材料兜底
-        Some(BlockKind::Material(oif_sim::blocks::fallback_material_id()))
-    })
-}
-
 /// 精确解析查询用的方块种类，不把未知名称静默转换为兜底材料
 pub fn parse_block_kind_exact(name: &str) -> Option<BlockKind> {
     let name = name.trim();

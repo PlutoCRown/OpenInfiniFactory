@@ -59,8 +59,8 @@ fn run_pusher_phase(
         &heads,
         &suction,
     );
-    for (id, extended) in commits {
-        pusher_state.set_extended(world, id, extended);
+    for (id, (pos, extended)) in commits {
+        pusher_state.set_extended(world, id, pos, extended);
     }
 }
 
@@ -663,8 +663,8 @@ fn opposing_blocker_ring_one_push_one_reverse_keeps_one_structure() {
         &heads,
         &suction,
     );
-    for (id, extended) in commits {
-        pusher_state.set_extended(&mut world, id, extended);
+    for (id, (pos, extended)) in commits {
+        pusher_state.set_extended(&mut world, id, pos, extended);
     }
     structures.rebuild_for_simulation(&world);
 

@@ -103,7 +103,7 @@ impl SimulationControl {
         if let Some(snapshot) = factory_snapshot {
             *structure_state = snapshot;
         } else {
-            structure_state.rebuild_for_simulation(world);
+            structure_state.rebuild_for_runtime(world);
         }
     }
 }

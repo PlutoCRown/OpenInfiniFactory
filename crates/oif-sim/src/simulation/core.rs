@@ -68,8 +68,7 @@ pub fn simulate_turn(
         sim_log.log(turn, "turn begin");
     }
 
-    // 回合初：只清生成标记并重建静态 marker；不做焊/传送/生成/销毁落地
-    world.clear_generated_markers();
+    // 回合初：只重建静态 marker；不做焊/传送/生成/销毁落地
     run_static_marker_phase(world);
     sample.prep_ms = mark_elapsed_ms(&mut mark);
 
@@ -150,6 +149,34 @@ pub fn simulate_turn(
     }
 
     let actuating_devices = pusher_state.actuating_devices(world, &powered_devices);
+    let actuating_structure_ids: HashSet<_> = actuating_devices
+        .iter()
+        .filter_map(|pos| structure_state.id_at(*pos))
+        .collect();
+    for id in actuating_structure_ids {
+        let needs_deform = structure_state.get(id).is_some_and(|structure| {
+            structure.head_of.is_empty()
+                && actuating_devices.iter().any(|pos| {
+                    if structure_state.id_at(*pos) != Some(id) {
+                        return false;
+                    }
+                    let Some(block) = world.blocks.get(pos) else {
+                        return false;
+                    };
+                    let head = *pos + block.facing.forward_ivec3();
+                    structure.activity == super::structure_state::FactoryActivity::Active
+                        || world
+                            .blocks
+                            .get(&head)
+                            .is_some_and(|head| head.kind == crate::blocks::BlockKind::PusherHead)
+                        || (structure_state.id_at(head) == Some(id)
+                            && !structure.scene_touching.contains(&head))
+                })
+        });
+        if needs_deform {
+            structure_state.rebuild_deform_for(world, id);
+        }
+    }
     if let Some(sim_log) = sim_log.as_mut() {
         for pos in actuating_devices.iter().copied().collect::<Vec<_>>() {
             sim_log.log(
@@ -218,8 +245,7 @@ pub fn simulate_turn(
         structure_state,
         world,
     );
-    movement_plan =
-        arbitrate_movement_plan(world, structure_state, &suction, movement_plan);
+    movement_plan = arbitrate_movement_plan(world, structure_state, &suction, movement_plan);
     if let Some(sim_log) = sim_log.as_mut() {
         log_movement_plan(turn, sim_log, world, "merged", &movement_plan);
     }
@@ -239,8 +265,8 @@ pub fn simulate_turn(
         &suction,
     );
     // 粘头/空头推动只有执行成功才提交伸出/收回（按 BlockId，避免互推后坐标过期）
-    for (id, extended) in extension_commits {
-        pusher_state.set_extended(world, id, extended);
+    for (id, (pos, extended)) in extension_commits {
+        pusher_state.set_extended(world, id, pos, extended);
     }
     let mut pusher_animations = pusher_animations;
     for (pos, animation) in pusher_state.sustained_animations(world) {
@@ -258,27 +284,50 @@ pub fn simulate_turn(
             .into_iter()
             .map(|(pos, kind)| BreakDebris { pos, kind }),
     );
+    let had_materials = world.material_count > 0;
     // 材料销毁：钻头挂起至 turn+1；通电激光当场移除（与阶段 1 探测同一批激光设备）
-    let (laser_destroy_sparks, laser_debris) =
-        run_material_destroy_phase(world, pending_generated, &laser_devices, turn + 1);
+    let (laser_destroy_sparks, laser_debris) = if had_materials || !laser_devices.is_empty() {
+        run_material_destroy_phase(world, pending_generated, &laser_devices, turn + 1)
+    } else {
+        (Vec::new(), Vec::new())
+    };
     behavior_sparks.extend(laser_destroy_sparks);
     break_debris.extend(laser_debris);
 
     // 传送：本回合当场落地（拆焊 + 搬到配对口），与焊接同拍
-    let teleport_flashes = run_material_teleport_phase(world);
-    run_material_conversion_phase(world);
+    let teleport_flashes = if had_materials && !world.system_blocks.is_empty() {
+        run_material_teleport_phase(world)
+    } else {
+        Vec::new()
+    };
+    if had_materials && !world.system_blocks.is_empty() {
+        run_material_conversion_phase(world);
+    }
 
     // 验收：计数立刻生效，材料挂起至 turn+1 再删
-    let accepted_acceptors =
-        run_material_acceptance_phase(world, structure_state, pending_generated, turn);
+    let accepted_acceptors = if had_materials && !structure_state.acceptor_structures().is_empty() {
+        run_material_acceptance_phase(world, structure_state, pending_generated, turn)
+    } else {
+        HashSet::new()
+    };
 
     // 只调度下一回合生成；落地已在回合初完成
-    prepare_upcoming_generation(world, pending_generated, turn + 1, &accepted_acceptors);
+    if !world.system_blocks.is_empty() {
+        prepare_upcoming_generation(world, pending_generated, turn + 1, &accepted_acceptors);
+    }
 
-    let weld_sparks = run_weld_behavior_phase(world);
+    let weld_sparks = if had_materials && !world.system_blocks.is_empty() {
+        run_weld_behavior_phase(world)
+    } else {
+        Vec::new()
+    };
     // 漆/印花：挂起至 turn+1，等本回合移动动画播完再附着
-    run_material_label_phase(world, pending_generated, turn + 1);
-    structure_state.refresh_material_structures(world);
+    if had_materials {
+        run_material_label_phase(world, pending_generated, turn + 1);
+    }
+    if had_materials || world.material_count > 0 {
+        structure_state.refresh_material_structures(world);
+    }
     sample.behavior_ms = mark_elapsed_ms(&mut mark);
 
     signal_cache.refresh(world);

@@ -144,6 +144,9 @@ impl SignalNetworkCache {
         world: &WorldBlocks,
         laser_hit_detectors: &HashSet<IVec3>,
     ) -> HashSet<SignalComponentId> {
+        if self.component_detectors.is_empty() {
+            return HashSet::new();
+        }
         let id_to_pos: HashMap<BlockId, IVec3> = world
             .blocks
             .iter()
@@ -172,6 +175,9 @@ impl SignalNetworkCache {
         world: &WorldBlocks,
         powered_components: &HashSet<SignalComponentId>,
     ) -> HashSet<IVec3> {
+        if powered_components.is_empty() || self.device_components.is_empty() {
+            return HashSet::new();
+        }
         world
             .blocks
             .iter()
@@ -194,6 +200,9 @@ impl SignalNetworkCache {
         world: &WorldBlocks,
         powered_components: &HashSet<SignalComponentId>,
     ) -> HashSet<IVec3> {
+        if powered_components.is_empty() || self.wire_components.is_empty() {
+            return HashSet::new();
+        }
         world
             .blocks
             .iter()

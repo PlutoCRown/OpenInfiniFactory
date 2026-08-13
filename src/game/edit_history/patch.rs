@@ -398,10 +398,13 @@ pub fn build_rotation_patch(
 }
 
 fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<CellSnapshot>) {
-    let _ = world.system_blocks.remove(&pos);
+    if let Some(block) = world.system_blocks.remove(&pos) {
+        world.adjust_marker_count(block, -1);
+    }
     let removed_factory = world.blocks.remove(&pos);
     if let Some(block) = removed_factory {
         world.adjust_block_count(block.kind, -1);
+        world.adjust_marker_count(block, -1);
         if !block.id.is_none() {
             world
                 .material_paints
@@ -427,6 +430,7 @@ fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<Cel
                 {
                     if let Some(child) = world.blocks.remove(&child_pos) {
                         world.adjust_block_count(child.kind, -1);
+                        world.adjust_marker_count(child, -1);
                         world.block_settings.remove(&child_pos);
                     }
                 }
@@ -448,6 +452,7 @@ fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<Cel
         BlockLayer::Factory => {
             world.blocks.insert(pos, block);
             world.adjust_block_count(block.kind, 1);
+            world.adjust_marker_count(block, 1);
             if let Some(settings) = snapshot.settings {
                 world.block_settings.insert(pos, settings);
             } else if let Some(default_settings) = block.kind.default_settings(pos) {
@@ -456,6 +461,7 @@ fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<Cel
         }
         BlockLayer::System => {
             world.system_blocks.insert(pos, block);
+            world.adjust_marker_count(block, 1);
             if let Some(settings) = snapshot.settings {
                 world.block_settings.insert(pos, settings);
             } else if let Some(default_settings) = block.kind.default_settings(pos) {

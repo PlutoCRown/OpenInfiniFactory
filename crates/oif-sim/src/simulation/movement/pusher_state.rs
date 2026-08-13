@@ -122,7 +122,13 @@ impl PusherState {
     }
 
     /// 推动/收回执行成功后提交伸出状态，并同步真实头方块
-    pub(super) fn set_extended(&mut self, world: &mut WorldBlocks, id: BlockId, extended: bool) {
+    pub(super) fn set_extended(
+        &mut self,
+        world: &mut WorldBlocks,
+        id: BlockId,
+        pos: IVec3,
+        extended: bool,
+    ) {
         let Some(entry) = self.entries.get_mut(&id) else {
             return;
         };
@@ -130,12 +136,7 @@ impl PusherState {
             return;
         }
         entry.extended = extended;
-        let Some((pos, facing)) = world
-            .blocks
-            .iter()
-            .find(|(_, block)| block.id == id)
-            .map(|(pos, block)| (*pos, block.facing))
-        else {
+        let Some(facing) = world.blocks.get(&pos).map(|block| block.facing) else {
             return;
         };
         let head = pos + facing.forward_ivec3();

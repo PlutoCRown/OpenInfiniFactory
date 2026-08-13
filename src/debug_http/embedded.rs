@@ -1,6 +1,7 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 use std::collections::HashSet;
 use std::sync::{Mutex, mpsc};
 #[cfg(not(target_arch = "wasm32"))]
@@ -15,7 +16,7 @@ use crate::debug_http::snapshot::{
     resolve_pos_query, resolve_structure_query, simulation_status_json,
 };
 use crate::debug_http::world_ops::{
-    block_kinds_json, parse_block_kind, parse_block_kind_exact, parse_facing, place_blocks_box,
+    block_kinds_json, parse_block_kind_exact, parse_facing, place_blocks_box,
 };
 use crate::game::block_editing::world_refresh::refresh_world_after_edit_many;
 use crate::game::debug::SimulationDebugLog;
@@ -88,6 +89,7 @@ pub struct DebugHttpPerfSnapshot<'w, 's> {
     diagnostics: Res<'w, DiagnosticsStore>,
     sim_stats: Res<'w, SimulationStepStats>,
     block_entities: Query<'w, 's, Entity, With<BlockEntity>>,
+    windows: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
 }
 
 impl<'w, 's> DebugHttpPerfSnapshot<'w, 's> {
@@ -103,6 +105,7 @@ impl<'w, 's> DebugHttpPerfSnapshot<'w, 's> {
             .get(&FrameTimeDiagnosticsPlugin::FPS)
             .and_then(|fps| fps.smoothed())
             .unwrap_or(0.0);
+        let window = self.windows.single().ok();
         perf_stats_json(
             fps,
             &self.perf,
@@ -112,6 +115,7 @@ impl<'w, 's> DebugHttpPerfSnapshot<'w, 's> {
             block_count,
             self.block_entities.iter().len(),
             player_pos,
+            window,
         )
     }
 }
@@ -472,7 +476,7 @@ fn handle_embedded_debug_command(
             kind,
             facing,
         } => {
-            let Some(kind) = parse_block_kind(&kind) else {
+            let Some(kind) = parse_block_kind_exact(&kind) else {
                 return json_error(&format!("unknown block kind `{kind}`"));
             };
             let Some(facing) = parse_facing(&facing) else {
@@ -497,13 +501,17 @@ fn handle_embedded_debug_command(
             if simulation.is_active() {
                 reset_simulation_presentation(presentation);
             }
+            let positions_truncated = placed.len() + skipped.len() > 1000;
             json_ok(serde_json::json!({
                 "from": pos_json(a),
                 "to": pos_json(b),
-                "placed": placed.iter().map(|pos| pos_json(*pos)).collect::<Vec<_>>(),
-                "skipped": skipped.iter().map(|pos| pos_json(*pos)).collect::<Vec<_>>(),
+                "placed": (!positions_truncated).then(|| placed.iter().map(|pos| pos_json(*pos)).collect::<Vec<_>>()),
+                "skipped": (!positions_truncated).then(|| skipped.iter().map(|pos| pos_json(*pos)).collect::<Vec<_>>()),
+                "first_placed": placed.first().map(|pos| pos_json(*pos)),
+                "last_placed": placed.last().map(|pos| pos_json(*pos)),
                 "placed_count": placed.len(),
                 "skipped_count": skipped.len(),
+                "positions_truncated": positions_truncated,
             }))
         }
         DebugHttpCommand::Run => {

@@ -107,6 +107,11 @@ impl SimSession {
 
     /// 推进下一回合并更新控制面回合计数
     pub fn simulate_next_turn(&mut self) -> TurnOutput {
+        self.simulate_next_turn_with_logging(true)
+    }
+
+    /// 推进下一回合；批量性能测试可关闭逐块日志，避免观测本身污染耗时
+    pub fn simulate_next_turn_with_logging(&mut self, logging: bool) -> TurnOutput {
         let next_turn = self.control.turn + 1;
         let output = simulate_turn(
             &mut self.world,
@@ -116,7 +121,7 @@ impl SimSession {
             &mut self.structure_state,
             &mut self.movement_influence,
             &mut self.pusher_state,
-            Some(&mut self.log),
+            logging.then_some(&mut self.log),
             Some(&mut self.stats),
         );
         self.control.turn = next_turn;
@@ -183,5 +188,42 @@ mod tests {
             sid_body, sid_front,
             "body and front must remain one structure through the arm"
         );
+    }
+
+    /// 整排直接锚定的拦截器只允许空头伸出，不为不可动的内部成员构建变形
+    #[test]
+    fn grounded_blocker_row_only_extends_into_empty_head() {
+        let mut session = SimSession::new();
+        for x in 0..3 {
+            session.world.insert(
+                IVec3::new(x, 0, 0),
+                BlockData::new(BlockKind::Scene(crate::blocks::SceneBlockId(0)), Facing::North),
+            );
+            session.world.insert(
+                IVec3::new(x, 1, 0),
+                BlockData::new(BlockKind::Blocker, Facing::East),
+            );
+        }
+
+        session.begin_simulation();
+        session.simulate_next_turn();
+
+        assert_eq!(
+            session
+                .structure_state
+                .get(session.structure_state.id_at(IVec3::new(0, 1, 0)).unwrap())
+                .map(|structure| structure.deform_groups.len()),
+            Some(0)
+        );
+        assert_eq!(
+            session.world.blocks.get(&IVec3::new(3, 1, 0)).map(|block| block.kind),
+            Some(BlockKind::PusherHead)
+        );
+        for x in 0..3 {
+            assert_eq!(
+                session.world.blocks.get(&IVec3::new(x, 1, 0)).map(|block| block.kind),
+                Some(BlockKind::Blocker)
+            );
+        }
     }
 }

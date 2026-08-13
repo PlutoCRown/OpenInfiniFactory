@@ -31,12 +31,24 @@ impl StructureState {
 
     /// 全量重建：工厂连通 + 贴场景 activity + deform + 验收口 + 材料
     pub fn rebuild_for_simulation(&mut self, world: &WorldBlocks) {
+        self.rebuild_for_simulation_mode(world, true);
+    }
+
+    /// 游戏运行时重建结构，推杆 deform 延迟到结构首次实际动作
+    pub fn rebuild_for_runtime(&mut self, world: &WorldBlocks) {
+        self.rebuild_for_simulation_mode(world, false);
+    }
+
+    /// 按需重建完整结构；模拟开局可延迟尚未动作的推杆 deform
+    fn rebuild_for_simulation_mode(&mut self, world: &WorldBlocks, rebuild_deform: bool) {
         let next_head = self.next_head_id.max(world.next_block_id).max(1);
         *self = Self::default();
         self.next_head_id = next_head;
         self.append_factory_structures(world);
         self.refresh_all_factory_activity_from_scene(world);
-        self.rebuild_all_factory_deform(world);
+        if rebuild_deform {
+            self.rebuild_all_factory_deform(world);
+        }
         self.append_acceptor_structures(world);
         self.append_material_structures(world, &HashMap::new(), &HashMap::new());
     }
@@ -49,7 +61,7 @@ impl StructureState {
             .values()
             .any(|structure| structure.kind == StructureKind::Factory)
         {
-            self.rebuild_for_simulation(world);
+            self.rebuild_for_simulation_mode(world, false);
             return;
         }
         self.acceptor_structures.clear();
@@ -334,7 +346,19 @@ impl StructureState {
             if structure.kind != StructureKind::Factory {
                 continue;
             }
-            if touches_scene(world, &structure.positions) {
+            structure.scene_touching = structure
+                .positions
+                .iter()
+                .copied()
+                .filter(|pos| {
+                    signal_offsets().into_iter().any(|offset| {
+                        let neighbor = *pos + offset;
+                        world.is_scene_at(neighbor)
+                            && !is_blocked_factory_connection(world, *pos, neighbor)
+                    })
+                })
+                .collect();
+            if !structure.scene_touching.is_empty() {
                 structure.activity = FactoryActivity::Inactive;
                 structure.freedom = StructureFreedom::None;
             } else {
@@ -413,9 +437,6 @@ impl StructureState {
 
         if !new_ids.is_empty() {
             self.refresh_factory_activity_from_scene(world, new_ids.iter().copied());
-            for id in &new_ids {
-                self.rebuild_deform_for(world, *id);
-            }
         }
         self.apply_material_edit(world, changed);
     }

@@ -133,7 +133,7 @@ pub(super) fn execute_structure_moves_with_pushers(
 ) -> (
     HashMap<IVec3, BlockMotion>,
     HashMap<IVec3, PusherMotion>,
-    HashMap<BlockId, bool>,
+    HashMap<BlockId, (IVec3, bool)>,
 ) {
     let mut moved = HashSet::new();
     let mut gravity_held = HashSet::new();
@@ -143,12 +143,22 @@ pub(super) fn execute_structure_moves_with_pushers(
     let mut extension_commits = HashMap::new();
     let mut executed = Vec::new();
     let mut heads = hard_pusher_head_occupancy.clone();
+    let mut gravity_held_structures = HashSet::new();
+    let mut block_positions: HashMap<BlockId, IVec3> = moves
+        .iter()
+        .filter_map(|movement| match movement {
+            StructureMove::Translate { actors, .. } => Some(actors.iter()),
+            StructureMove::Rotate { .. } => None,
+        })
+        .flatten()
+        .map(|actor| (actor.id, actor.pos))
+        .collect();
     // 本回合收回的头先逻辑腾出，便于对向「伸+收」同向共用中间格
     for movement in &moves {
         if let StructureMove::Translate { actors, .. } = movement {
             for actor in actors {
                 if matches!(actor.animation, PusherAnimationKind::Retract) {
-                    let actor_pos = block_pos_by_id(world, actor.id).unwrap_or(actor.pos);
+                    let actor_pos = block_positions.get(&actor.id).copied().unwrap_or(actor.pos);
                     if let Some(block) = world.blocks.get(&actor_pos) {
                         heads.remove(&(actor_pos + block.facing.forward_ivec3()));
                     }
@@ -187,7 +197,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                 let mut heads_for_check = heads.clone();
                 for actor in &actors {
                     if matches!(actor.animation, PusherAnimationKind::Retract) {
-                        let actor_pos = block_pos_by_id(world, actor.id).unwrap_or(actor.pos);
+                        let actor_pos = block_positions.get(&actor.id).copied().unwrap_or(actor.pos);
                         if let Some(block) = world.blocks.get(&actor_pos) {
                             heads_for_check.remove(&(actor_pos + block.facing.forward_ivec3()));
                         }
@@ -247,9 +257,9 @@ pub(super) fn execute_structure_moves_with_pushers(
                     .into_iter()
                     .filter(|actor| {
                         if matches!(actor.animation, PusherAnimationKind::Retract) {
-                            return block_pos_by_id(world, actor.id).is_some();
+                            return block_positions.contains_key(&actor.id);
                         }
-                        let Some(actor_pos) = block_pos_by_id(world, actor.id) else {
+                        let Some(actor_pos) = block_positions.get(&actor.id).copied() else {
                             return false;
                         };
                         let Some(block) = world.blocks.get(&actor_pos) else {
@@ -265,6 +275,13 @@ pub(super) fn execute_structure_moves_with_pushers(
                     })
                     .collect();
                 if offset != IVec3::ZERO {
+                    for pos in &structure {
+                        if let Some(block) = world.blocks.get(pos) {
+                            if let Some(actor_pos) = block_positions.get_mut(&block.id) {
+                                *actor_pos = *pos + offset;
+                            }
+                        }
+                    }
                     for pos in &structure {
                         if let Some(block) = world.blocks.get(pos) {
                             if block.kind == BlockKind::PusherHead {
@@ -305,7 +322,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                     push_held.extend(target_structure);
                 }
                 for actor in actors {
-                    let Some(actor_pos) = block_pos_by_id(world, actor.id) else {
+                    let Some(actor_pos) = block_positions.get(&actor.id).copied() else {
                         continue;
                     };
                     let Some(block) = world.blocks.get(&actor_pos).copied() else {
@@ -322,7 +339,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                             to_extension,
                         },
                     );
-                    extension_commits.insert(actor.id, to_extension > 0.5);
+                    extension_commits.insert(actor.id, (actor_pos, to_extension > 0.5));
                     let head = actor_pos + block.facing.forward_ivec3();
                     match actor.animation {
                         PusherAnimationKind::Extend => {
@@ -335,8 +352,9 @@ pub(super) fn execute_structure_moves_with_pushers(
                     // 推杆开启动画：整坨抑重力；push_held 只锁本体，
                     // 避免挡住同结构其它杆对另一侧子集的 BoundFront
                     if let Some(actor_structure_id) = structures.id_at(actor_pos) {
-                        if let Some(actor_structure) =
-                            structures.structure_positions(actor_structure_id)
+                        if gravity_held_structures.insert(actor_structure_id)
+                            && let Some(actor_structure) =
+                                structures.structure_positions(actor_structure_id)
                         {
                             gravity_held.extend(actor_structure.iter().copied());
                         }
@@ -363,6 +381,13 @@ pub(super) fn execute_structure_moves_with_pushers(
                     continue;
                 }
                 if can_rotate_structure(world, &structure, pivot, clockwise) {
+                    for pos in &structure {
+                        if let Some(block) = world.blocks.get(pos) {
+                            if let Some(actor_pos) = block_positions.get_mut(&block.id) {
+                                *actor_pos = rotate_pos_y(*pos, pivot, clockwise);
+                            }
+                        }
+                    }
                     let targets: Vec<IVec3> = structure
                         .iter()
                         .map(|pos| rotate_pos_y(*pos, pivot, clockwise))

@@ -71,7 +71,7 @@ pub struct Structure {
     /// (体, 正推?) → 候选组下标，按 nodes.len() 升序（优先多杆共轴、少节点）
     action_to_groups: HashMap<(BlockId, bool), Vec<u32>>,
     /// 开局/编辑时贴场景的成员格（锚死快照，中途落地不改）
-    scene_touching: HashSet<IVec3>,
+    pub(crate) scene_touching: HashSet<IVec3>,
 }
 
 impl Structure {

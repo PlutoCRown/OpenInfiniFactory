@@ -24,7 +24,7 @@ pub fn rebuild_world_on_enter(
     index: &mut BlockEntityIndex,
     scene_chunks: &mut SceneChunkMeshes,
 ) {
-    structure_state.rebuild_for_simulation(world);
+    structure_state.rebuild_for_runtime(world);
     rebuild_world_for_debug_state(
         commands,
         meshes,
