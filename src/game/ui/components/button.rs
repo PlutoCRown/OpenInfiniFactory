@@ -226,6 +226,8 @@ pub fn button_pressed(
         sound: SoundId::SelectionTick,
         position: None,
         gain: 0.55,
+        delay: 0.0,
+        speed: 1.0,
     });
 }
 

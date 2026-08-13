@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 use crate::game::audio::{PlaySound, SoundId};
+use crate::game::simulation::core::PresentationPhase;
 use crate::game::simulation::core::{prepare_upcoming_generation, simulate_turn};
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::pending::PendingGeneratedMaterials;
@@ -150,6 +151,7 @@ pub fn advance_simulation(
 pub fn present_simulation_turns(
     mut committed_turns: MessageReader<TurnCommitted>,
     mut commands: Commands,
+    mut sounds: MessageWriter<PlaySound>,
     mut deps: SimulationPresentationDeps,
 ) {
     let Some(render_assets) = deps.render_assets.as_ref() else {
@@ -179,46 +181,69 @@ pub fn present_simulation_turns(
             &mut deps.portal_flash_queue,
         );
         commands.insert_resource(presentation_stats);
+        let turn_start =
+            output.presentation_delay(PresentationPhase::TurnStart, committed.animation_duration);
+        let after_motion =
+            output.presentation_delay(PresentationPhase::AfterMotion, committed.animation_duration);
         for &(from, to) in &output.weld_sparks {
-            commands.write_message(PlaySound {
+            sounds.write(PlaySound {
                 sound: SoundId::Weld,
                 position: Some(grid_to_world(from).lerp(grid_to_world(to), 0.5)),
                 gain: 1.0,
+                delay: after_motion,
+                speed: 1.0,
             });
         }
         for debris in &output.break_debris {
-            commands.write_message(PlaySound {
+            sounds.write(PlaySound {
                 sound: SoundId::DrillBreak,
                 position: Some(grid_to_world(debris.pos)),
                 gain: 1.0,
+                delay: turn_start,
+                speed: 1.0,
             });
         }
         for debris in &output.acceptance_sparks {
-            commands.write_message(PlaySound {
+            sounds.write(PlaySound {
                 sound: SoundId::Acceptance,
                 position: Some(grid_to_world(debris.pos)),
                 gain: 1.0,
+                delay: turn_start,
+                speed: 1.0,
             });
         }
         for &(from, to, _) in &output.teleport_flashes {
-            commands.write_message(PlaySound {
+            sounds.write(PlaySound {
                 sound: SoundId::SciFi,
                 position: Some(grid_to_world(from).lerp(grid_to_world(to), 0.5)),
                 gain: 1.0,
+                delay: turn_start,
+                speed: 1.0,
             });
         }
         for &pos in &output.behavior_sparks {
-            commands.write_message(PlaySound {
+            sounds.write(PlaySound {
                 sound: SoundId::MachineWork,
                 position: Some(grid_to_world(pos)),
                 gain: 0.7,
+                delay: turn_start,
+                speed: 1.0,
             });
         }
-        for &pos in output.pusher_animations.keys() {
-            commands.write_message(PlaySound {
-                sound: SoundId::MachineWork,
+        for (&pos, motion) in &output.pusher_animations {
+            if motion.from_extension == motion.to_extension {
+                continue;
+            }
+            sounds.write(PlaySound {
+                sound: if motion.to_extension > motion.from_extension {
+                    SoundId::PusherExtend
+                } else {
+                    SoundId::PusherRetract
+                },
                 position: Some(grid_to_world(pos)),
                 gain: 1.0,
+                delay: turn_start,
+                speed: SIMULATION_TURN_SECONDS / committed.animation_duration.max(f32::EPSILON),
             });
         }
         for &pos in &output.powered_devices {
@@ -230,13 +255,13 @@ pub fn present_simulation_turns(
                 oif_sim::blocks::BlockKind::Rotator
                     | oif_sim::blocks::BlockKind::CounterRotator
                     | oif_sim::blocks::BlockKind::Lifter
-                    | oif_sim::blocks::BlockKind::Welder
-                    | oif_sim::blocks::BlockKind::DownWelder
             ) {
-                commands.write_message(PlaySound {
+                sounds.write(PlaySound {
                     sound: SoundId::MachineWork,
                     position: Some(grid_to_world(pos)),
                     gain: 0.75,
+                    delay: turn_start,
+                    speed: 1.0,
                 });
             }
         }

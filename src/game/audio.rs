@@ -22,6 +22,10 @@ pub struct PlaySound {
     pub sound: SoundId,
     pub position: Option<Vec3>,
     pub gain: f32,
+    /// 相对收到事件的延迟秒数；用于与回合内动画阶段对齐。
+    pub delay: f32,
+    /// 播放速度；周期型动作音效据此贴合动画时长。
+    pub speed: f32,
 }
 
 /// 游戏内可播放的基础音效分类。
@@ -34,6 +38,8 @@ pub enum SoundId {
     MachineWork,
     MachineMotor,
     Weld,
+    PusherExtend,
+    PusherRetract,
     DrillBreak,
     SciFi,
     Acceptance,
@@ -50,6 +56,8 @@ struct SoundAssets {
     machine_work: Handle<AudioSource>,
     machine_motor: Handle<AudioSource>,
     weld: Handle<AudioSource>,
+    pusher_extend: Handle<AudioSource>,
+    pusher_retract: Handle<AudioSource>,
     drill_break: Handle<AudioSource>,
     sci_fi: Handle<AudioSource>,
     acceptance: Handle<AudioSource>,
@@ -67,6 +75,8 @@ impl FromWorld for SoundAssets {
             machine_work: asset_server.load("audio/machine_work.wav"),
             machine_motor: asset_server.load("audio/machine_motor.wav"),
             weld: asset_server.load("audio/weld.wav"),
+            pusher_extend: asset_server.load("audio/pusher_extend.wav"),
+            pusher_retract: asset_server.load("audio/pusher_retract.wav"),
             drill_break: asset_server.load("audio/drill_break.wav"),
             sci_fi: asset_server.load("audio/sci_fi.wav"),
             acceptance: asset_server.load("audio/acceptance.wav"),
@@ -84,6 +94,8 @@ impl SoundAssets {
             SoundId::MachineWork => self.machine_work.clone(),
             SoundId::MachineMotor => self.machine_motor.clone(),
             SoundId::Weld => self.weld.clone(),
+            SoundId::PusherExtend => self.pusher_extend.clone(),
+            SoundId::PusherRetract => self.pusher_retract.clone(),
             SoundId::DrillBreak => self.drill_break.clone(),
             SoundId::SciFi => self.sci_fi.clone(),
             SoundId::Acceptance => self.acceptance.clone(),
@@ -112,7 +124,7 @@ impl Plugin for GameAudioPlugin {
             .add_systems(
                 Update,
                 (
-                    play_sound_events,
+                    play_sound_events.after(crate::sim_bridge::present_simulation_turns),
                     sync_machine_audio_loops,
                     update_music_volume,
                     update_machine_audio_volumes,
@@ -135,17 +147,27 @@ fn start_music(mut commands: Commands, assets: Res<SoundAssets>, settings: Res<G
 
 /// 把音频事件转换成一次性播放实体；交互反馈类不走空间衰减。
 fn play_sound_events(
+    time: Res<Time>,
     mut commands: Commands,
     mut events: MessageReader<PlaySound>,
     assets: Res<SoundAssets>,
     settings: Res<GameSettings>,
     listener: Query<&GlobalTransform, With<FlyCamera>>,
+    mut scheduled: Local<Vec<(PlaySound, f32)>>,
 ) {
     let listener_position = listener
         .single()
         .ok()
         .map(|transform| transform.translation());
-    for event in events.read() {
+    scheduled.extend(events.read().map(|event| (*event, event.delay.max(0.0))));
+    let mut index = 0;
+    while index < scheduled.len() {
+        scheduled[index].1 -= time.delta_secs();
+        if scheduled[index].1 > 0.0 {
+            index += 1;
+            continue;
+        }
+        let (event, _) = scheduled.swap_remove(index);
         let ui_feedback = matches!(
             event.sound,
             SoundId::UiClick | SoundId::BlockPlace | SoundId::BlockBreak | SoundId::SelectionTick
@@ -158,6 +180,7 @@ fn play_sound_events(
                 AudioPlayer::new(assets.source(event.sound)),
                 PlaybackSettings::DESPAWN
                     .with_spatial(true)
+                    .with_speed(event.speed.max(0.01))
                     .with_volume(Volume::Linear(
                         settings.master_volume * settings.sfx_volume * event.gain * distance_gain,
                     )),
@@ -166,12 +189,14 @@ fn play_sound_events(
         } else {
             commands.spawn((
                 AudioPlayer::new(assets.source(event.sound)),
-                PlaybackSettings::DESPAWN.with_volume(Volume::Linear(
-                    settings.master_volume
-                        * settings.sfx_volume
-                        * event.gain
-                        * if ui_feedback { UI_FEEDBACK_GAIN } else { 1.0 },
-                )),
+                PlaybackSettings::DESPAWN
+                    .with_speed(event.speed.max(0.01))
+                    .with_volume(Volume::Linear(
+                        settings.master_volume
+                            * settings.sfx_volume
+                            * event.gain
+                            * if ui_feedback { UI_FEEDBACK_GAIN } else { 1.0 },
+                    )),
             ));
         }
     }

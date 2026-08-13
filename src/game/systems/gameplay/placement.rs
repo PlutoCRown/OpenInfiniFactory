@@ -223,6 +223,8 @@ pub fn placement_input(
                     sound: SoundId::UiClick,
                     position: None,
                     gain: 1.0,
+                    delay: 0.0,
+                    speed: 1.0,
                 });
             }
         }
@@ -267,6 +269,8 @@ pub fn placement_input(
                         sound: SoundId::UiClick,
                         position: None,
                         gain: 1.0,
+                        delay: 0.0,
+                        speed: 1.0,
                     });
                     // C 切变体后：后续放置朝向跟这个方块对齐
                     if let Some(block) = edit.world.blocks.get(&pos) {
@@ -323,6 +327,8 @@ pub fn placement_input(
                         sound: SoundId::UiClick,
                         position: None,
                         gain: 1.0,
+                        delay: 0.0,
+                        speed: 1.0,
                     });
                 } else if selected_place_block(
                     &player.inventory,
@@ -404,6 +410,8 @@ pub fn placement_input(
                             sound: SoundId::BlockBreak,
                             position: None,
                             gain: 1.0,
+                            delay: 0.0,
+                            speed: 1.0,
                         });
                         placement.edit_gesture = None;
                         despawn_edit_previews(&mut commands, &edit_previews);
@@ -486,6 +494,8 @@ pub fn placement_input(
                                 sound: SoundId::BlockPlace,
                                 position: None,
                                 gain: 1.0,
+                                delay: 0.0,
+                                speed: 1.0,
                             });
                         } else {
                             placed = true;
@@ -596,6 +606,8 @@ pub fn placement_input(
                         },
                         position: None,
                         gain: 1.0,
+                        delay: 0.0,
+                        speed: 1.0,
                     });
                 } else if let Some(name_key) = surface_item {
                     let item_name = locale.t(name_key).to_string();
@@ -625,6 +637,8 @@ pub fn placement_input(
                         sound: SoundId::SelectionTick,
                         position: None,
                         gain: 0.55,
+                        delay: 0.0,
+                        speed: 1.0,
                     });
                 }
             }

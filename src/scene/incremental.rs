@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::game::blocks::BlockPresent;
 use crate::game::blocks::{BlockData, BlockKind};
+use crate::game::simulation::core::PresentationPhase;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
@@ -897,11 +898,7 @@ pub fn apply_turn_output_incremental(
     stats.render_fill_ms = elapsed_ms(mark);
     mark = bevy::platform::time::Instant::now();
 
-    let weld_delay = if output.animations.is_empty() && output.pusher_animations.is_empty() {
-        0.0
-    } else {
-        animation_duration
-    };
+    let weld_delay = output.presentation_delay(PresentationPhase::AfterMotion, animation_duration);
     spawn_weld_bursts(commands, assets, &output.weld_sparks, weld_delay);
     spawn_weld_sparks(commands, assets, &output.behavior_sparks, 0.0);
     spawn_break_debris(commands, meshes, assets, &output.break_debris);

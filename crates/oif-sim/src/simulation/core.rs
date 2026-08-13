@@ -25,6 +25,13 @@ use super::structures::{
 };
 use super::suction::SuctionLinks;
 
+/// 回合表现事件相对运动动画所处的阶段。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PresentationPhase {
+    TurnStart,
+    AfterMotion,
+}
+
 /// 单回合模拟输出：运动 DTO、通电表现与行为火花
 #[derive(Clone)]
 pub struct TurnOutput {
@@ -34,7 +41,7 @@ pub struct TurnOutput {
     pub powered_wires: HashSet<IVec3>,
     /// 本回合通电的用电器格（抬升器顶盘熄灭等）
     pub powered_devices: HashSet<IVec3>,
-    /// 成功焊接的焊点对（两端格心连线中点播扩散粒子）
+    /// 成功焊接的焊点对（本回合运动结束后，在两端格心连线中点播扩散粒子）
     pub weld_sparks: Vec<(IVec3, IVec3)>,
     /// 本回合成功落地的传送（源口、目标口、方块 id）；表现层闪烁并瞬时挪实体，不走移动动画
     pub teleport_flashes: Vec<(IVec3, IVec3, crate::blocks::BlockId)>,
@@ -43,9 +50,28 @@ pub struct TurnOutput {
     /// 钻头/激光毁掉的材料碎片
     pub break_debris: Vec<BreakDebris>,
     pub laser_beams: Vec<LaserBeam>,
-    /// 验收销毁：带材料种类，表现层采样贴图
+    /// 上一回合挂起、本回合开头落地的验收销毁：带材料种类，表现层采样贴图
     pub acceptance_sparks: Vec<BreakDebris>,
     pub stats: SimulationStepStats,
+}
+
+impl TurnOutput {
+    /// 把语义阶段统一换算成表现延迟，避免粒子与声音各自猜测播放时机。
+    pub fn presentation_delay(&self, phase: PresentationPhase, animation_duration: f32) -> f32 {
+        match phase {
+            PresentationPhase::TurnStart => 0.0,
+            PresentationPhase::AfterMotion
+                if !self.animations.is_empty()
+                    || self
+                        .pusher_animations
+                        .values()
+                        .any(|motion| motion.from_extension != motion.to_extension) =>
+            {
+                animation_duration
+            }
+            PresentationPhase::AfterMotion => 0.0,
+        }
+    }
 }
 
 /// 执行一整回合模拟（信号 → 运动标记 → 脆弱碎裂 → 执行运动 → 结构后处理）并产出表现数据
