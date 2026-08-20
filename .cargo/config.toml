@@ -1,3 +1,5 @@
 [alias]
+# 桌面开发：动态链接 Bevy 以缩短增量链接时间，并监听资源文件变化。
+dev = "run --features bevy/dynamic_linking,bevy/file_watcher"
 build-web = "build --target wasm32-unknown-unknown"
 check-web = "check --target wasm32-unknown-unknown"
