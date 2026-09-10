@@ -55,7 +55,7 @@ OpenInfiniFactory 按依赖向下分层。模拟核心在独立 crate，仅依�
 
 ## 4. UI 与场景
 
-- **UI**：`UiNavigation` 是页面、覆盖层、面板、模态框和教程的唯一导航状态；`UiMountCache` 只缓存实体句柄。交互通过意图更新导航，挂载系统据此增量同步实体树。
+- **UI**：`UiNavigation` 是页面、覆盖层、面板、模态框和教程的唯一导航状态；`UiMountState` 负责登记已挂载的实体句柄。交互通过意图更新导航，挂载系统据此增量同步实体树。
 - **教程**：`TutorialCatalog` 注册数据化步骤，所有教程共用一个面板壳；新增教程无需增加新的 Rust 面板类型。
 - **场景**：`scene/` + `game/world/rendering` 可视化 `TurnOutput` 与编辑 diff。
 - **表现类型**：`RenderBehavior` / `BlockModel` 等在 `game/blocks/render_types.rs`，不进入 `oif-sim`。

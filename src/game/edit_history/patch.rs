@@ -128,6 +128,19 @@ impl WorldPatch {
     }
 
     fn apply(&self, world: &mut WorldBlocks, forward: bool) {
+        if !self.cells.is_empty() || !self.welds_add.is_empty() || !self.welds_remove.is_empty() {
+            world.invalidate_material_topology();
+        }
+        // 撤销/重做直接恢复格子，统一使涉及接线的索引失效。
+        if self.cells.iter().any(|delta| {
+            delta
+                .before
+                .iter()
+                .chain(delta.after.iter())
+                .any(|cell| cell.block.kind.signal_behavior(cell.block.facing).is_some())
+        }) {
+            world.invalidate_signal_topology();
+        }
         for delta in &self.settings {
             let value = if forward {
                 delta.after.clone()

@@ -10,9 +10,9 @@ pub use runtime::{StoragePlugin, StorageReady};
 pub use vault::is_ready;
 
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
-use keys::{save_file_key, save_folder_prefix, META_FILE, SAVE_PREFIX};
+use keys::{META_FILE, SAVE_PREFIX, save_file_key, save_folder_prefix};
 use vault::lock_vault;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -53,9 +53,15 @@ pub fn write(key: &str, value: &str) -> bool {
 }
 
 pub fn read_save_bytes(save_name: &str, file: &str) -> Option<Vec<u8>> {
+    read_save_asset(save_name, file).map(|bytes| bytes.to_vec())
+}
+
+/// 借用不可变存储条目；同一内容保持身份，资源消费者无需复制或每帧哈希
+pub fn read_save_asset(save_name: &str, file: &str) -> Option<Arc<[u8]>> {
     lock_vault()
+        .entries
         .get(&save_file_key(save_name, file))
-        .map(|bytes| bytes.to_vec())
+        .cloned()
 }
 
 pub fn write_save_bytes(save_name: &str, file: &str, value: &[u8]) -> bool {
@@ -75,7 +81,7 @@ pub fn write_save_text(save_name: &str, file: &str, value: &str) -> bool {
 pub(crate) fn write_ephemeral_save(save_name: &str, file: &str, value: &[u8]) -> bool {
     lock_vault()
         .entries
-        .insert(save_file_key(save_name, file), value.to_vec());
+        .insert(save_file_key(save_name, file), Arc::from(value));
     true
 }
 
@@ -177,10 +183,7 @@ pub fn list_solution_names(puzzle: &str) -> Vec<String> {
     names
 }
 
-fn save_meta_kind_in_vault(
-    vault: &vault::MemoryVault,
-    storage_path: &str,
-) -> Option<&'static str> {
+fn save_meta_kind_in_vault(vault: &vault::MemoryVault, storage_path: &str) -> Option<&'static str> {
     let text = vault.get_text(&save_file_key(storage_path, META_FILE))?;
     let meta: serde_json::Value = serde_json::from_str(&text).ok()?;
     match meta.get("kind")?.as_str()? {

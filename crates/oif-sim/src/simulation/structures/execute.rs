@@ -57,9 +57,8 @@ pub(super) fn apply_fragile_shatter_before_execute(
                 clockwise,
                 ..
             } => {
-                for collision in stamp_collisions_for_rotation(
-                    world, structure, *pivot, *clockwise,
-                ) {
+                for collision in stamp_collisions_for_rotation(world, structure, *pivot, *clockwise)
+                {
                     if let Some(stamp) = world.material_stamps.get(&collision.face).copied() {
                         if crate::blocks::stamp_def(stamp).fragile {
                             shatter_stamps.insert(
@@ -127,7 +126,7 @@ pub(super) fn execute_structure_moves_with_pushers(
     world: &mut WorldBlocks,
     moves: Vec<StructureMove>,
     structures: &mut StructureState,
-    influence_cache: &mut MovementInfluenceCache,
+    history: &mut MovementHistory,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
     suction: &SuctionLinks,
 ) -> (
@@ -197,7 +196,8 @@ pub(super) fn execute_structure_moves_with_pushers(
                 let mut heads_for_check = heads.clone();
                 for actor in &actors {
                     if matches!(actor.animation, PusherAnimationKind::Retract) {
-                        let actor_pos = block_positions.get(&actor.id).copied().unwrap_or(actor.pos);
+                        let actor_pos =
+                            block_positions.get(&actor.id).copied().unwrap_or(actor.pos);
                         if let Some(block) = world.blocks.get(&actor_pos) {
                             heads_for_check.remove(&(actor_pos + block.facing.forward_ivec3()));
                         }
@@ -310,8 +310,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                     push_held.extend(structure.iter().copied());
                     // 真实头并入集合后由 relocate 一并平移
                     let structure = with_pusher_heads(world, &structure);
-                    move_structure(world, &structure, offset);
-                    structures.move_positions(&structure, offset);
+                    structures.translate(world, &structure, offset);
                     for head in own_heads_before {
                         heads.remove(&head);
                         heads.insert(head + offset);
@@ -409,7 +408,7 @@ pub(super) fn execute_structure_moves_with_pushers(
                         }
                     }
                     moved.extend(structure.iter().copied());
-                    rotate_structure(world, &structure, pivot, clockwise);
+                    rotate_structure(world, structures, &structure, pivot, clockwise);
                     if let Some(rotator_pos) = source_pos {
                         if let Some(id) = world
                             .blocks
@@ -421,11 +420,6 @@ pub(super) fn execute_structure_moves_with_pushers(
                         }
                     }
                     let target_structure: HashSet<IVec3> = targets.iter().copied().collect();
-                    structures.replace_structure_positions(
-                        world,
-                        &structure,
-                        target_structure.clone(),
-                    );
                     if let Some(source) = source {
                         executed.push(ExecutedMovement {
                             structure_id,
@@ -437,6 +431,6 @@ pub(super) fn execute_structure_moves_with_pushers(
             }
         }
     }
-    influence_cache.record_executed(executed);
+    history.record_executed(executed);
     (animations, pusher_animations, extension_commits)
 }

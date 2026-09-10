@@ -2,7 +2,7 @@ use super::*;
 use crate::blocks::{BlockData, BlockKind, SceneBlockId};
 use crate::simulation::structure_state::StructureState;
 use crate::simulation::structures::{
-    MovementInfluenceCache, MovementMark, StructureMove, execute_structure_moves_with_pushers,
+    MovementHistory, MovementMark, StructureMove, execute_structure_moves_with_pushers,
 };
 use crate::simulation::suction::SuctionLinks;
 use crate::world::Facing;
@@ -50,7 +50,7 @@ fn run_pusher_phase(
     let (moves, _) =
         mark_structure_movement_phase(world, powered, structures, pusher_state, &suction);
     let heads = PusherState::hard_head_occupancy(world);
-    let mut influence = MovementInfluenceCache::default();
+    let mut influence = MovementHistory::default();
     let (_a, _p, commits) = execute_structure_moves_with_pushers(
         world,
         moves,
@@ -654,7 +654,7 @@ fn opposing_blocker_ring_one_push_one_reverse_keeps_one_structure() {
     );
 
     let heads = PusherState::hard_head_occupancy(&world);
-    let mut influence = MovementInfluenceCache::default();
+    let mut influence = MovementHistory::default();
     let (_a, _p, commits) = execute_structure_moves_with_pushers(
         &mut world,
         moves,
@@ -710,9 +710,9 @@ fn opposing_blocker_ring_one_push_one_reverse_keeps_one_structure() {
 #[test]
 fn face_pair_south_lower_id_and_second_turn_forward() {
     use crate::simulation::core::simulate_turn;
-    use crate::simulation::pending::PendingGeneratedMaterials;
+    use crate::simulation::pending::PendingTurnEffects;
     use crate::simulation::signals::SignalNetworkCache;
-    use crate::simulation::structures::MovementInfluenceCache;
+    use crate::simulation::structures::MovementHistory;
 
     fn floor(world: &mut WorldBlocks, x0: i32, x1: i32, z0: i32, z1: i32) {
         for z in z0..z1 {
@@ -748,9 +748,9 @@ fn face_pair_south_lower_id_and_second_turn_forward() {
         let mut structures = StructureState::default();
         structures.rebuild_for_simulation(&world);
         let mut pusher = PusherState::rebuild_from_world(&world);
-        let mut pending = PendingGeneratedMaterials::default();
+        let mut pending = PendingTurnEffects::default();
         let mut signals = SignalNetworkCache::default();
-        let mut influence = MovementInfluenceCache::default();
+        let mut influence = MovementHistory::default();
         simulate_turn(
             &mut world,
             &mut pending,
@@ -823,9 +823,9 @@ fn face_pair_south_lower_id_and_second_turn_forward() {
         let mut structures = StructureState::default();
         structures.rebuild_for_simulation(&world);
         let mut pusher = PusherState::rebuild_from_world(&world);
-        let mut pending = PendingGeneratedMaterials::default();
+        let mut pending = PendingTurnEffects::default();
         let mut signals = SignalNetworkCache::default();
-        let mut influence = MovementInfluenceCache::default();
+        let mut influence = MovementHistory::default();
         simulate_turn(
             &mut world,
             &mut pending,
@@ -889,9 +889,9 @@ mod moving_occupancy_cases {
     use super::*;
     use crate::blocks::BlockKind;
     use crate::simulation::core::simulate_turn;
-    use crate::simulation::pending::PendingGeneratedMaterials;
+    use crate::simulation::pending::PendingTurnEffects;
     use crate::simulation::signals::SignalNetworkCache;
-    use crate::simulation::structures::MovementInfluenceCache;
+    use crate::simulation::structures::MovementHistory;
 
     fn mat() -> BlockData {
         BlockData::new(BlockKind::material("iron"), Facing::North)
@@ -907,9 +907,9 @@ mod moving_occupancy_cases {
         pusher: &mut PusherState,
         n: u64,
     ) {
-        let mut pending = PendingGeneratedMaterials::default();
+        let mut pending = PendingTurnEffects::default();
         let mut signals = SignalNetworkCache::default();
-        let mut influence = MovementInfluenceCache::default();
+        let mut influence = MovementHistory::default();
         simulate_turn(
             world,
             &mut pending,
@@ -1147,13 +1147,17 @@ mod moving_occupancy_cases {
         );
     }
 
-
     /// Active 结构高低交错支撑时，gravity grounded 不得死递归
     #[test]
     fn interleaved_active_support_cycle_does_not_hang() {
         // 材料 A 与工厂蛇 B 不相连；A 压在 B 上、B 又绕到 A 上方 → grounded 查询环
         let plat = || BlockData::new(BlockKind::Platform, Facing::North);
-        let mat = || BlockData::new(BlockKind::Material(crate::blocks::MaterialBlockId(0)), Facing::North);
+        let mat = || {
+            BlockData::new(
+                BlockKind::Material(crate::blocks::MaterialBlockId(0)),
+                Facing::North,
+            )
+        };
         let mut world = WorldBlocks::default();
         world.insert(IVec3::new(0, 2, 0), mat()); // A
         world.insert(IVec3::new(0, 1, 0), plat()); // B
@@ -1168,9 +1172,9 @@ mod moving_occupancy_cases {
         assert_ne!(a, b);
         assert_eq!(structures.id_at(IVec3::new(0, 3, 0)), Some(b));
         let mut pusher = PusherState::rebuild_from_world(&world);
-        let mut pending = crate::simulation::pending::PendingGeneratedMaterials::default();
+        let mut pending = crate::simulation::pending::PendingTurnEffects::default();
         let mut signals = crate::simulation::signals::SignalNetworkCache::default();
-        let mut influence = MovementInfluenceCache::default();
+        let mut influence = MovementHistory::default();
         let _ = crate::simulation::core::simulate_turn(
             &mut world,
             &mut pending,
@@ -1183,5 +1187,4 @@ mod moving_occupancy_cases {
             None,
         );
     }
-
 }

@@ -8,6 +8,9 @@ use crate::shared::save::SaveKind;
 
 /// 游戏状态栏缓存：世界/手持很少变，瞄准行跟 AimFocus 变
 pub struct GameplayStatusCache {
+    /// 只记录文案使用的字段，不让动画累计时间触发重排
+    simulation_key: Option<(bool, bool, bool, u64, BuilderMode)>,
+    block_counts: Option<(usize, usize, usize)>,
     world_line: String,
     blocks_line: String,
     blocks_tpl: String,
@@ -40,6 +43,8 @@ pub struct GameplayStatusCache {
 impl Default for GameplayStatusCache {
     fn default() -> Self {
         Self {
+            simulation_key: None,
+            block_counts: None,
             world_line: String::new(),
             blocks_line: String::new(),
             blocks_tpl: String::new(),
@@ -86,8 +91,9 @@ pub fn update_status_ui(
     mut last_held: Local<Option<InventoryItem>>,
     mut gameplay_cache: Local<GameplayStatusCache>,
     mut texts: Query<(&StatusText, &mut Text)>,
+    added_texts: Query<(), Added<StatusText>>,
 ) {
-    let force = !*primed;
+    let force = !*primed || locale.is_changed() || !added_texts.is_empty();
     let held = inventory.hotbar[placement.selected];
     // 勿用 inventory.is_changed()：其它系统若误 DerefMut 会每帧脏，状态栏文案其实没变
     let headers_dirty = force
@@ -95,10 +101,20 @@ pub fn update_status_ui(
         || placement.selected != *last_selected
         || held != *last_held;
     let aim_dirty = force || aim.is_changed();
-    let blocks_dirty = force || world.is_changed();
+    let block_counts = (world.scene_count, world.factory_count, world.material_count);
+    let blocks_dirty = force || gameplay_cache.block_counts != Some(block_counts);
+    gameplay_cache.block_counts = Some(block_counts);
     let gameplay_dirty = headers_dirty || aim_dirty || blocks_dirty;
+    let simulation_key = (
+        simulation.is_active(),
+        simulation.running,
+        simulation.speed > 1.0,
+        simulation.turn,
+        *builder_mode,
+    );
     let simulation_dirty =
-        force || builder_mode.is_changed() || simulation.is_changed() || config.is_changed();
+        force || gameplay_cache.simulation_key != Some(simulation_key) || config.is_changed();
+    gameplay_cache.simulation_key = Some(simulation_key);
     *primed = true;
     *last_selected = placement.selected;
     *last_held = held;

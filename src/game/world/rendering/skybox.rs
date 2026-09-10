@@ -1,5 +1,7 @@
 //! 天空盒：默认程序化 WGSL；存档有 skybox.png（水平十字）时用 Bevy Skybox 覆盖
 
+use std::sync::Arc;
+
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::Camera3d;
 use bevy::image::ImageSampler;
@@ -54,7 +56,10 @@ struct SkyDome;
 #[derive(Default)]
 struct AppliedImageSkybox {
     puzzle: Option<String>,
-    bytes_hash: Option<u64>,
+    source: Option<Arc<[u8]>>,
+    camera: Option<Entity>,
+    enabled: Option<bool>,
+    image_visible: bool,
 }
 
 /// 与场景平行光一致的默认旋转
@@ -227,6 +232,7 @@ fn sync_puzzle_image_skybox(
     mut commands: Commands,
     cameras: Query<Entity, With<GameplayCamera>>,
     mut sky_domes: Query<&mut Visibility, With<SkyDome>>,
+    added_sky_domes: Query<(), Added<SkyDome>>,
     mut applied: Local<AppliedImageSkybox>,
 ) {
     let puzzle = save_state.current.as_ref().map(|slot| slot.puzzle.clone());
@@ -238,76 +244,71 @@ fn sync_puzzle_image_skybox(
     };
 
     let Ok(camera) = cameras.single() else {
-        applied.puzzle = None;
-        applied.bytes_hash = None;
+        *applied = AppliedImageSkybox::default();
         return;
     };
-
-    if !want_sky {
-        if applied.puzzle.is_some() {
-            commands.entity(camera).remove::<Skybox>();
-        }
-        applied.puzzle = None;
-        applied.bytes_hash = None;
-        for mut vis in &mut sky_domes {
-            *vis = Visibility::Hidden;
+    let source = want_sky
+        .then(|| {
+            puzzle.as_ref().and_then(|name| {
+                persistent_storage::read_save_asset(
+                    &SaveSlot::puzzle(name).storage_path(),
+                    SKYBOX_FILE,
+                )
+            })
+        })
+        .flatten();
+    let same_source = match (&applied.source, &source) {
+        (Some(old), Some(new)) => Arc::ptr_eq(old, new),
+        (None, None) => true,
+        _ => false,
+    };
+    if applied.camera == Some(camera)
+        && applied.enabled == Some(want_sky)
+        && applied.puzzle == puzzle
+        && same_source
+    {
+        if !added_sky_domes.is_empty() {
+            let visibility = if want_sky && !applied.image_visible {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            };
+            for mut vis in &mut sky_domes {
+                vis.set_if_neq(visibility);
+            }
         }
         return;
     }
-
-    let image_bytes = puzzle.as_ref().and_then(|name| {
-        let path = SaveSlot::puzzle(name).storage_path();
-        persistent_storage::read_save_bytes(&path, SKYBOX_FILE)
-    });
-    let bytes_hash = image_bytes.as_ref().map(|bytes| {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        bytes.hash(&mut hasher);
-        hasher.finish()
-    });
-
-    match image_bytes {
-        Some(bytes) => {
-            if applied.puzzle == puzzle && applied.bytes_hash == bytes_hash {
-                for mut vis in &mut sky_domes {
-                    *vis = Visibility::Hidden;
-                }
-                return;
+    // 失败也记录输入身份，内容更新前不逐帧重试损坏图片。
+    applied.camera = Some(camera);
+    applied.enabled = Some(want_sky);
+    applied.puzzle = puzzle;
+    applied.source = source.clone();
+    let mut image_visible = false;
+    if let Some(bytes) = source {
+        match horizontal_cross_png_to_cubemap(&bytes) {
+            Ok(image) => {
+                commands.entity(camera).insert(Skybox {
+                    image: Some(images.add(image)),
+                    brightness: skybox_brightness,
+                    ..default()
+                });
+                image_visible = true;
             }
-            match horizontal_cross_png_to_cubemap(&bytes) {
-                Ok(image) => {
-                    let handle = images.add(image);
-                    commands.entity(camera).insert(Skybox {
-                        image: Some(handle),
-                        brightness: skybox_brightness,
-                        ..default()
-                    });
-                    for mut vis in &mut sky_domes {
-                        *vis = Visibility::Hidden;
-                    }
-                    applied.puzzle = puzzle;
-                    applied.bytes_hash = bytes_hash;
-                }
-                Err(err) => {
-                    bevy::log::warn!("skybox.png load failed: {err}");
-                    commands.entity(camera).remove::<Skybox>();
-                    for mut vis in &mut sky_domes {
-                        *vis = Visibility::Visible;
-                    }
-                    applied.puzzle = None;
-                    applied.bytes_hash = None;
-                }
-            }
+            Err(err) => bevy::log::warn!("skybox.png load failed: {err}"),
         }
-        None => {
-            if applied.puzzle.take().is_some() {
-                commands.entity(camera).remove::<Skybox>();
-            }
-            applied.bytes_hash = None;
-            for mut vis in &mut sky_domes {
-                *vis = Visibility::Visible;
-            }
-        }
+    }
+    applied.image_visible = image_visible;
+    if !image_visible {
+        commands.entity(camera).remove::<Skybox>();
+    }
+    let visibility = if want_sky && !image_visible {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    for mut vis in &mut sky_domes {
+        vis.set_if_neq(visibility);
     }
 }
 

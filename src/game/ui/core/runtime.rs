@@ -48,9 +48,9 @@ pub struct TutorialSession {
     pub step: usize,
 }
 
-/// UI 实体树的渲染缓存；字段存在不代表页面应当打开。
+/// UI 宿主持有的实体挂载登记；页面意图仅由 UiNavigation 决定。
 #[derive(Resource, Default)]
-pub struct UiMountCache {
+pub struct UiMountState {
     pub main_menu: Option<Entity>,
     pub save_list: Option<Entity>,
     pub session_busy: Option<Entity>,

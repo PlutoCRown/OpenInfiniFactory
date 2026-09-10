@@ -33,7 +33,7 @@ use crate::game::simulation::structure_state::StructureState;
 use crate::game::systems::debug::DebugState;
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::PlayingUiRoot;
-use crate::game::ui::core::UiMountCache;
+use crate::game::ui::core::UiMountState;
 use crate::game::ui::core::UiNavigation;
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHost};
 use crate::game::world::grid::WorldBlocks;
@@ -153,7 +153,7 @@ pub fn on_exit_playing(
     mut commands: Commands,
     mut ui_navigation: ResMut<UiNavigation>,
     mut ui_host: ResMut<UiHost>,
-    mut ui_mounts: ResMut<UiMountCache>,
+    mut ui_mounts: ResMut<UiMountState>,
     gameplay_scene: Query<Entity, With<GameplayScene>>,
     icon_roots: Query<Entity, With<BlockIconRenderRoot>>,
     ui_navigation_roots: Query<Entity, With<PlayingUiRoot>>,

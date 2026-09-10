@@ -531,11 +531,11 @@
 | `I18nRevision`              | `game/ui/access.rs`                   |
 | `InlineTextEditState`       | `game/ui/core/text_input.rs`          |
 | `InventoryItems`            | `game/ui/types.rs`                    |
-| `MovementInfluenceCache`    | `oif-sim/simulation/structures/`      |
+| `MovementHistory`    | `oif-sim/simulation/structures/`      |
 | `OpenBlockPanelDropdown`    | `game/block_editing/panel_state.rs`   |
 | `OpenSettingsDropdown`      | `game/ui/features/settings/types.rs`  |
 | `PanelDragState`            | `game/ui/core/panel.rs`               |
-| `PendingGeneratedMaterials` | `oif-sim/simulation/pending.rs`       |
+| `PendingTurnEffects` | `oif-sim/simulation/pending.rs`       |
 | `PendingKeyBind`            | `game/ui/features/settings/types.rs`  |
 | `PendingTeleportRename`     | `game/blocks/teleport_entrance/ui.rs` |
 | `PerfStats`                 | `game/systems/perf.rs`                |

@@ -14,7 +14,7 @@ pub use panel::{
     PanelTitleBar, PanelTitleText, PanelVisibility, PanelWindow, UiHoverState,
 };
 pub use runtime::{
-    StartMenuPage, TutorialSession, UiModal, UiMountCache, UiNavigation, UiOverlay, UiPanelBinding,
+    StartMenuPage, TutorialSession, UiModal, UiMountState, UiNavigation, UiOverlay, UiPanelBinding,
     UiPanelContext,
 };
 pub use text_input::InlineTextEditState;

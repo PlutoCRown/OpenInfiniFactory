@@ -6,7 +6,7 @@ use crate::game::state::{BuilderMode, GameMode, WorldEntryMode};
 use crate::game::ui::InventoryItems;
 use crate::shared::save::{
     LoadedSave, SaveSlot, create_free_from_default_template, create_puzzle_from_default_template,
-    decode_save_slot, load_world, save_solution_as,
+    decode_save_slot, save_solution_as,
 };
 use crate::sim_bridge::{SimulationPresentationState, reset_simulation_presentation};
 
@@ -228,20 +228,19 @@ pub fn handle_create_new_solution(
 ) {
     for request in requests.read() {
         let puzzle_slot = SaveSlot::puzzle(&request.puzzle);
-        let Some(loaded) = load_world(&mut playing.world, &puzzle_slot) else {
+        let Some(loaded) = decode_save_slot(&puzzle_slot) else {
             continue;
         };
-        *playing.world = loaded.world;
-        *session.inventory = InventoryItems::for_entry_with_filter(
+        let inventory = InventoryItems::for_entry_with_filter(
             WorldEntryMode::PlaySolution,
             BuilderMode::Play,
             loaded.factory_block_filter.as_ref(),
         );
         let Some(solution_slot) = save_solution_as(
-            &playing.world,
+            &loaded.world,
             &request.puzzle,
             &request.name,
-            &session.inventory.to_saved_hotbar(),
+            &inventory.to_saved_hotbar(),
             None,
         ) else {
             continue;

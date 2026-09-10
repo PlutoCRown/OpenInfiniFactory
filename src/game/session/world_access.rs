@@ -3,8 +3,10 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 use crate::game::simulation::movement::PusherState;
+use crate::game::simulation::pending::PendingTurnEffects;
+use crate::game::simulation::signals::SignalNetworkCache;
 use crate::game::simulation::structure_state::StructureState;
-use crate::game::simulation::structures::MovementInfluenceCache;
+use crate::game::simulation::structures::MovementHistory;
 use crate::game::state::{
     BuilderMode, PendingPlayerSpawn, PlacementState, SimulationState, SolutionState,
 };
@@ -19,7 +21,7 @@ use crate::scene::BlockEntityIndex;
 use crate::scene::{SceneRenderMut, refresh_edit_changes};
 use crate::shared::save::SaveState;
 
-/// 已加载玩法世界及其渲染/模拟 sidecar 的 ECS 访问包
+/// 已加载玩法世界、模拟状态与渲染索引的 ECS 访问包
 #[derive(SystemParam)]
 pub struct PlayingWorldParams<'w, 's> {
     pub commands: Commands<'w, 's>,
@@ -28,8 +30,10 @@ pub struct PlayingWorldParams<'w, 's> {
     pub render_assets: Option<Res<'w, WorldRenderAssets>>,
     pub debug: Res<'w, DebugState>,
     pub structure_state: ResMut<'w, StructureState>,
-    pub movement_influence: ResMut<'w, MovementInfluenceCache>,
+    pub movement_history: ResMut<'w, MovementHistory>,
     pub pusher_state: ResMut<'w, PusherState>,
+    pub pending_effects: ResMut<'w, PendingTurnEffects>,
+    pub signal_cache: ResMut<'w, SignalNetworkCache>,
     pub block_index: ResMut<'w, BlockEntityIndex>,
     pub scene_chunks: ResMut<'w, SceneChunkMeshes>,
     pub block_entities: Query<'w, 's, Entity, With<BlockEntity>>,
@@ -53,11 +57,13 @@ impl PlayingWorldParams<'_, '_> {
         refresh_edit_changes(&mut scene, &self.world, changed);
     }
 
-    /// 清空结构/运动/推杆缓存
-    pub fn clear_sim_sidecars(&mut self) {
+    /// 世界替换时统一重置模拟历史、待执行操作和派生索引
+    pub fn reset_simulation_state(&mut self) {
         self.structure_state.clear();
-        self.movement_influence.clear();
+        self.movement_history.clear();
         self.pusher_state.clear();
+        self.pending_effects.clear();
+        *self.signal_cache = SignalNetworkCache::default();
     }
 
     /// 有渲染资源时拆掉场景并按当前 debug 状态重建
@@ -100,4 +106,62 @@ pub struct SessionStateParams<'w> {
     pub solution_state: ResMut<'w, SolutionState>,
     pub simulation: ResMut<'w, SimulationState>,
     pub pending_player: ResMut<'w, PendingPlayerSpawn>,
+}
+
+/// 游戏会话切换时的状态清理回归
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::SystemState;
+    use oif_sim::blocks::{BlockData, BlockKind};
+    use oif_sim::world::Facing;
+    use oif_sim::world::grid::{GeneratorMode, GeneratorSettings};
+
+    /// 通过实际 ECS 访问包清空挂起操作和结构，验证资源组合没有借用冲突
+    #[test]
+    fn reset_clears_pending_effects_and_structure_state() {
+        let mut ecs = World::new();
+        ecs.init_resource::<Assets<Mesh>>();
+        ecs.init_resource::<WorldBlocks>();
+        ecs.init_resource::<DebugState>();
+        ecs.init_resource::<StructureState>();
+        ecs.init_resource::<MovementHistory>();
+        ecs.init_resource::<PusherState>();
+        ecs.init_resource::<PendingTurnEffects>();
+        ecs.init_resource::<SignalNetworkCache>();
+        ecs.init_resource::<BlockEntityIndex>();
+        ecs.init_resource::<SceneChunkMeshes>();
+        let mut access = SystemState::<PlayingWorldParams>::new(&mut ecs);
+        {
+            let mut playing = access.get_mut(&mut ecs).unwrap();
+            playing.world.insert(
+                IVec3::ZERO,
+                BlockData::new(BlockKind::Generator, Facing::North),
+            );
+            playing.world.set_generator_settings(
+                IVec3::ZERO,
+                GeneratorSettings {
+                    mode: GeneratorMode::Period {
+                        period: 1,
+                        offset: 0,
+                    },
+                    ..Default::default()
+                },
+            );
+            playing
+                .world
+                .insert(IVec3::X, BlockData::new(BlockKind::Wire, Facing::North));
+            playing
+                .pending_effects
+                .schedule_generation(&playing.world, 1, &HashSet::new());
+            playing.structure_state.rebuild_for_runtime(&playing.world);
+            playing.signal_cache.refresh(&playing.world);
+            assert_eq!(playing.pending_effects.pending_entries().count(), 1);
+            assert!(!playing.structure_state.is_empty());
+            playing.reset_simulation_state();
+            assert_eq!(playing.pending_effects.pending_entries().count(), 0);
+            assert!(playing.structure_state.is_empty());
+        }
+        access.apply(&mut ecs);
+    }
 }

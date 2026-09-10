@@ -558,3 +558,65 @@ fn factory_edit_merges_and_splits_activity_locally() {
     assert_eq!(state.get(left).unwrap().activity, FactoryActivity::Active);
     assert_eq!(state.get(left).unwrap().freedom, StructureFreedom::All);
 }
+
+/// 整体平移同步世界、反向索引和包围盒，并保留运行历史
+#[test]
+fn translation_preserves_structure_history_and_updates_bounds() {
+    let mut world = WorldBlocks::default();
+    let material = BlockKind::Material(crate::blocks::MaterialBlockId(0));
+    let positions = HashSet::from([IVec3::Y, IVec3::Y + IVec3::X]);
+    for &pos in &positions {
+        place(&mut world, pos, material, Facing::North);
+    }
+    assert!(world.weld_materials(IVec3::Y, IVec3::Y + IVec3::X));
+    let mut structures = StructureState::default();
+    structures.rebuild_for_runtime(&world);
+    let id = structures.id_at(IVec3::Y).unwrap();
+    structures.structures.get_mut(&id).unwrap().gravity_support = vec![(IVec3::Y, IVec3::NEG_Y)];
+    let allocated = structures.next_structure_id;
+    let offset = IVec3::new(4, 2, -3);
+    structures.translate(&mut world, &positions, offset);
+    structures.refresh_material_structures(&world);
+    assert_eq!(structures.next_structure_id, allocated);
+    for pos in positions {
+        assert!(!world.blocks.contains_key(&pos));
+        assert_eq!(structures.id_at(pos), None);
+        assert!(world.is_material_at(pos + offset));
+        assert_eq!(structures.id_at(pos + offset), Some(id));
+    }
+    let structure = structures.get(id).unwrap();
+    assert_eq!(
+        structure.bounds,
+        Some(GridBounds {
+            min: IVec3::Y + offset,
+            max: IVec3::Y + IVec3::X + offset
+        })
+    );
+    assert_eq!(
+        structure.gravity_support,
+        vec![(IVec3::Y + offset, IVec3::NEG_Y)]
+    );
+}
+
+/// 焊接和拆除会重建材料连通，纯工厂调试重建后仍能恢复材料索引
+#[test]
+fn topology_changes_refresh_material_membership() {
+    let mut world = WorldBlocks::default();
+    let material = BlockKind::Material(crate::blocks::MaterialBlockId(0));
+    for x in 0..3 {
+        place(&mut world, IVec3::new(x, 1, 0), material, Facing::North);
+    }
+    let mut structures = StructureState::default();
+    structures.rebuild_for_runtime(&world);
+    assert_eq!(structures.structure_ids().count(), 3);
+    assert!(world.weld_materials(IVec3::Y, IVec3::Y + IVec3::X));
+    assert!(world.weld_materials(IVec3::Y + IVec3::X, IVec3::Y + IVec3::X * 2));
+    structures.refresh_material_structures(&world);
+    assert_eq!(structures.structure_ids().count(), 1);
+    world.remove(&(IVec3::Y + IVec3::X));
+    structures.refresh_material_structures(&world);
+    assert_eq!(structures.structure_ids().count(), 2);
+    structures.rebuild_factory_for_debug(&world);
+    structures.refresh_material_structures(&world);
+    assert_eq!(structures.structure_ids().count(), 2);
+}

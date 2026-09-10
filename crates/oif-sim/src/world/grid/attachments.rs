@@ -15,6 +15,7 @@ impl WorldBlocks {
         };
         if changed {
             self.topology_revision = self.topology_revision.wrapping_add(1);
+            self.invalidate_signal_topology();
         }
         changed
     }
@@ -23,6 +24,9 @@ impl WorldBlocks {
     pub fn relocate_blocks(&mut self, moves: Vec<(IVec3, IVec3, BlockData)>) {
         if moves.is_empty() {
             return;
+        }
+        if moves.iter().any(|(_, _, block)| block.kind.is_material()) {
+            self.invalidate_material_topology();
         }
         let touches_signals = moves
             .iter()
@@ -51,6 +55,7 @@ impl WorldBlocks {
         }
         if touches_signals {
             self.topology_revision = self.topology_revision.wrapping_add(1);
+            self.invalidate_signal_topology();
         }
     }
 
@@ -178,6 +183,7 @@ impl WorldBlocks {
             .insert(MaterialWeld::new(block_a.id, block_b.id))
         {
             self.topology_revision = self.topology_revision.wrapping_add(1);
+            self.invalidate_material_topology();
             true
         } else {
             false

@@ -1,7 +1,7 @@
 use crate::simulation::movement::PusherState;
-use crate::simulation::pending::PendingGeneratedMaterials;
+use crate::simulation::pending::PendingTurnEffects;
 use crate::simulation::structure_state::StructureState;
-use crate::simulation::structures::MovementInfluenceCache;
+use crate::simulation::structures::MovementHistory;
 use crate::world::grid::WorldBlocks;
 
 /// 游戏与无头调试共用的模拟控制面：回合计数、运行意图与回滚检查点
@@ -81,17 +81,17 @@ impl SimulationControl {
     pub fn rollback(
         &mut self,
         world: &mut WorldBlocks,
-        pending_generated: &mut PendingGeneratedMaterials,
+        pending_effects: &mut PendingTurnEffects,
         structure_state: &mut StructureState,
-        movement_influence: &mut MovementInfluenceCache,
+        movement_history: &mut MovementHistory,
         pusher_state: &mut PusherState,
     ) {
         self.running = false;
         self.step_requested = false;
         self.turn = 0;
         self.accumulator = 0.0;
-        pending_generated.clear();
-        movement_influence.clear();
+        pending_effects.clear();
+        movement_history.clear();
         pusher_state.clear();
         let factory_snapshot = self.start_structures.take();
         if let Some(snapshot) = self.start_snapshot.take() {

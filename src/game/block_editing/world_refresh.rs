@@ -13,7 +13,7 @@ pub fn refresh_world_after_edit(world: &mut PlayingWorldParams, pos: IVec3) {
 }
 
 pub fn refresh_world_after_edit_many(world: &mut PlayingWorldParams, changed: HashSet<IVec3>) {
-    world.movement_influence.clear();
+    world.movement_history.clear();
     world.pusher_state.clear();
     world.refresh_edit_changes(&changed);
 }

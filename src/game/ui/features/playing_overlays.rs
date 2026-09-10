@@ -6,7 +6,7 @@ use crate::game::state::GameMode;
 use crate::game::systems::perf::PerfScope;
 use crate::game::ui::access::UiAccessScope;
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHostMountRoot};
-use crate::game::ui::core::{UiMountCache, UiNavigation};
+use crate::game::ui::core::{UiMountState, UiNavigation};
 use crate::game::ui::screens::spawn_pause_panel;
 
 /// 同步暂停菜单挂载；背包由 setup_ui_navigation 常驻，只靠 Display 显隐
@@ -15,7 +15,7 @@ pub fn sync_playing_overlay_mounts(
     mode: Res<State<GameMode>>,
     ui_navigation: Res<UiNavigation>,
     root: Option<Res<PlayingUiRootEntity>>,
-    mut mounts: ResMut<UiMountCache>,
+    mut mounts: ResMut<UiMountState>,
     mut commands: Commands,
 ) {
     if *mode.get() != GameMode::Playing {

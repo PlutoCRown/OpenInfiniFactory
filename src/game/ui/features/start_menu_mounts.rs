@@ -10,7 +10,7 @@ use crate::game::ui::access::UiAccessScope;
 use crate::game::ui::access::{i18n, with_ui_world};
 use crate::game::ui::components::UiIconAssets;
 use crate::game::ui::core::host::{UiHostMountRoot, UiRootEntity};
-use crate::game::ui::core::{StartMenuPage, UiMountCache, UiNavigation};
+use crate::game::ui::core::{StartMenuPage, UiMountState, UiNavigation};
 use crate::game::ui::features::save::save_list_title;
 use crate::game::ui::features::save::types::SaveListRenderState;
 use crate::game::ui::features::session_busy::spawn_session_busy_overlay;
@@ -27,7 +27,7 @@ pub fn sync_start_menu_mounts(
     root: Option<Res<UiRootEntity>>,
     ui_scale: Res<UiScale>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut mounts: ResMut<UiMountCache>,
+    mut mounts: ResMut<UiMountState>,
     mut save_list_render: ResMut<SaveListRenderState>,
     mut commands: Commands,
 ) {

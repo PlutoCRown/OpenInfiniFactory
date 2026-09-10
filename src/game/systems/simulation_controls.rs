@@ -3,9 +3,9 @@ use bevy::prelude::*;
 
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::movement::PusherState;
-use crate::game::simulation::pending::PendingGeneratedMaterials;
+use crate::game::simulation::pending::PendingTurnEffects;
 use crate::game::simulation::structure_state::StructureState;
-use crate::game::simulation::structures::MovementInfluenceCache;
+use crate::game::simulation::structures::MovementHistory;
 use crate::game::state::{BuilderMode, GameMode, SimulationState};
 use crate::game::systems::debug::DebugState;
 use crate::game::ui::UiNavigation;
@@ -23,9 +23,9 @@ pub struct SimulationControlDeps<'w> {
     mode: Res<'w, State<GameMode>>,
     ui_navigation: Res<'w, UiNavigation>,
     simulation: ResMut<'w, SimulationState>,
-    pending_generated: ResMut<'w, PendingGeneratedMaterials>,
+    pending_effects: ResMut<'w, PendingTurnEffects>,
     structure_state: ResMut<'w, StructureState>,
-    movement_influence: ResMut<'w, MovementInfluenceCache>,
+    movement_history: ResMut<'w, MovementHistory>,
     pusher_state: ResMut<'w, PusherState>,
     world: ResMut<'w, WorldBlocks>,
     presentation: ResMut<'w, SimulationPresentationState>,
@@ -94,19 +94,21 @@ pub fn simulation_controls(
         *suppress_sim_fast_until_release = true;
     }
 
-    deps.simulation.speed =
-        if deps.simulation.running && input.sim_fast && !*suppress_sim_fast_until_release {
-            4.0
-        } else {
-            1.0
-        };
+    let speed = if deps.simulation.running && input.sim_fast && !*suppress_sim_fast_until_release {
+        4.0
+    } else {
+        1.0
+    };
+    if deps.simulation.speed != speed {
+        deps.simulation.speed = speed;
+    }
 
     if input.rollback && deps.simulation.is_active() {
         deps.simulation.rollback(
             &mut deps.world,
-            &mut deps.pending_generated,
+            &mut deps.pending_effects,
             &mut deps.structure_state,
-            &mut deps.movement_influence,
+            &mut deps.movement_history,
             &mut deps.pusher_state,
         );
         refresh_static_generated_markers(&mut deps.world);
@@ -135,10 +137,11 @@ pub fn simulation_controls(
 pub fn sync_generator_config_material_preview(
     simulation: Res<SimulationState>,
     mut was_active: Local<Option<bool>>,
+    added: Query<(), Added<GeneratorConfigMaterialPreview>>,
     mut previews: Query<&mut Visibility, With<GeneratorConfigMaterialPreview>>,
 ) {
     let active = simulation.is_active();
-    if *was_active == Some(active) {
+    if *was_active == Some(active) && added.is_empty() {
         return;
     }
     *was_active = Some(active);

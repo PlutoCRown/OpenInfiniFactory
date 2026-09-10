@@ -1,12 +1,12 @@
 use glam::IVec3;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::blocks::{BlockData, BlockId, BlockKind, PaintMaterialId, StampMaterialId};
 use crate::world::grid::MaterialFace;
 
 /// 跨回合挂起：生成、延后销毁、延后漆/印花（等移动动画播完再落地）
 #[derive(bevy_ecs::prelude::Resource, Default, Clone)]
-pub struct PendingGeneratedMaterials {
+pub struct PendingTurnEffects {
     pending: HashMap<IVec3, PendingGeneratedMaterial>,
     /// 钻头/验收销毁：本回合只标记，下一回合开始再移除
     pending_destroyed: HashMap<IVec3, PendingDestroyedMaterial>,
@@ -23,7 +23,7 @@ pub enum PendingDestroyReason {
     Accept,
 }
 
-impl PendingGeneratedMaterials {
+impl PendingTurnEffects {
     pub fn clear(&mut self) {
         self.pending.clear();
         self.pending_destroyed.clear();
@@ -31,14 +31,25 @@ impl PendingGeneratedMaterials {
         self.pending_stamps.clear();
     }
 
-    pub(crate) fn pending_keys(&self) -> impl Iterator<Item = IVec3> + '_ {
-        self.pending.keys().copied()
-    }
-
-    pub(crate) fn insert_pending(&mut self, pos: IVec3, block: BlockData, ready_turn: u64) {
-        self.pending
-            .entry(pos)
-            .or_insert(PendingGeneratedMaterial { block, ready_turn });
+    /// 回合提交下一次生成操作；编辑预览不得写入这份队列
+    pub fn schedule_generation(
+        &mut self,
+        world: &crate::world::grid::WorldBlocks,
+        ready_turn: u64,
+        accepted_acceptors: &HashSet<crate::blocks::AcceptorId>,
+    ) {
+        self.pending = super::planned_generation(world, ready_turn, accepted_acceptors)
+            .into_iter()
+            .map(|generated| {
+                (
+                    generated.pos,
+                    PendingGeneratedMaterial {
+                        block: generated.block,
+                        ready_turn,
+                    },
+                )
+            })
+            .collect();
     }
 
     pub(crate) fn mark_destroyed(
@@ -181,4 +192,46 @@ pub(crate) struct PendingStamp {
     pub face_normal: IVec3,
     pub stamp: StampMaterialId,
     ready_turn: u64,
+}
+
+/// 编辑预览和跨回合操作的生命周期回归
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::blocks::MaterialBlockId;
+    use crate::world::Facing;
+    use crate::world::grid::{GeneratorMode, GeneratorSettings, WorldBlocks};
+
+    /// 编辑预览读取最新配置但不改已提交队列，重新提交也不保留删除的源
+    #[test]
+    fn preview_is_independent_from_committed_generation() {
+        let mut world = WorldBlocks::default();
+        world.insert(
+            IVec3::ZERO,
+            BlockData::new(BlockKind::Generator, Facing::North),
+        );
+        let mut settings = GeneratorSettings {
+            mode: GeneratorMode::Period {
+                period: 1,
+                offset: 0,
+            },
+            material: MaterialBlockId(0),
+            facing: Facing::North,
+        };
+        world.set_generator_settings(IVec3::ZERO, settings);
+        let mut pending = PendingTurnEffects::default();
+        pending.schedule_generation(&world, 2, &HashSet::new());
+        settings.facing = Facing::East;
+        world.set_generator_settings(IVec3::ZERO, settings);
+        let preview = super::super::planned_generation(&world, 1, &HashSet::new());
+        assert_eq!(preview[0].block.facing, Facing::East);
+        assert_eq!(
+            pending.pending_entries().next().unwrap().1.facing,
+            Facing::North
+        );
+        world.remove_system(&IVec3::ZERO);
+        assert!(super::super::planned_generation(&world, 1, &HashSet::new()).is_empty());
+        pending.schedule_generation(&world, 3, &HashSet::new());
+        assert_eq!(pending.pending_entries().count(), 0);
+    }
 }

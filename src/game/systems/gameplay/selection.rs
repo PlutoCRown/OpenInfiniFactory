@@ -328,6 +328,7 @@ fn move_selection(
         .retain(|weld| selected_ids.contains(&weld.a) == selected_ids.contains(&weld.b));
     if edit.world.material_welds.len() != weld_count {
         edit.world.topology_revision = edit.world.topology_revision.wrapping_add(1);
+        edit.world.invalidate_material_topology();
     }
 
     let mut despawn_positions: Vec<IVec3> = selected.iter().map(|(pos, _)| *pos).collect();
@@ -479,6 +480,7 @@ fn copy_selection(
         }
         if added_weld {
             world.topology_revision = world.topology_revision.wrapping_add(1);
+            world.invalidate_material_topology();
         }
     });
 

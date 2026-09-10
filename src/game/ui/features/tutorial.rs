@@ -12,7 +12,7 @@ use crate::game::ui::components::{
     panel_title_label, text,
 };
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHostMountRoot};
-use crate::game::ui::core::{UiMountCache, UiNavigation};
+use crate::game::ui::core::{UiMountState, UiNavigation};
 use crate::shared::i18n::I18n;
 
 /// 教程步骤在屏幕或世界中的指向目标。
@@ -169,7 +169,7 @@ fn reconcile_tutorial_panel(
     catalog: Res<TutorialCatalog>,
     i18n: Res<I18n>,
     root: Option<Res<PlayingUiRootEntity>>,
-    mut mounts: ResMut<UiMountCache>,
+    mut mounts: ResMut<UiMountState>,
     mut commands: Commands,
     mut titles: Query<&mut Text, With<TutorialTitle>>,
     mut bodies: Query<&mut Text, (With<TutorialBody>, Without<TutorialTitle>)>,

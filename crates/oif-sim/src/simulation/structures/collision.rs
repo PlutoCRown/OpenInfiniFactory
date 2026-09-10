@@ -524,20 +524,6 @@ fn pushable_structure_at(
     None
 }
 
-pub(super) fn move_structure(world: &mut WorldBlocks, structure: &HashSet<IVec3>, offset: IVec3) {
-    let moves: Vec<(IVec3, IVec3, BlockData)> = structure
-        .iter()
-        .filter_map(|pos| {
-            world
-                .blocks
-                .get(pos)
-                .copied()
-                .map(|block| (*pos, *pos + offset, block))
-        })
-        .collect();
-    world.relocate_blocks(moves);
-}
-
 pub(super) fn can_rotate_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
@@ -615,12 +601,18 @@ pub(super) fn stamp_collisions_for_rotation(
         .collect()
 }
 
+/// 同步提交旋转后的世界占格、面附着与结构索引
 pub(super) fn rotate_structure(
     world: &mut WorldBlocks,
+    structures: &mut StructureState,
     structure: &HashSet<IVec3>,
     pivot: IVec3,
     clockwise: bool,
 ) {
+    let was_synced = structures
+        .material_topology
+        .as_ref()
+        .is_some_and(|revision| std::sync::Arc::ptr_eq(revision, &world.material_topology));
     let structure_ids: HashSet<BlockId> = structure
         .iter()
         .filter_map(|pos| world.blocks.get(pos).map(|block| block.id))
@@ -698,6 +690,15 @@ pub(super) fn rotate_structure(
     if updated_panels != world.wire_face_panels {
         world.wire_face_panels = updated_panels;
         world.topology_revision = world.topology_revision.wrapping_add(1);
+        world.invalidate_signal_topology();
+    }
+    let target_positions = structure
+        .iter()
+        .map(|pos| rotate_pos_y(*pos, pivot, clockwise))
+        .collect();
+    structures.replace_structure_positions(world, structure, target_positions);
+    if was_synced {
+        structures.material_topology = Some(world.material_topology.clone());
     }
 }
 

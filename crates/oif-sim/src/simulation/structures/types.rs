@@ -39,13 +39,14 @@ pub(super) enum PusherAnimationKind {
     Retract,
 }
 
+/// 模拟裁决历史：累计已执行的推动来源，清空会改变后续运动优先级
 #[derive(bevy_ecs::prelude::Resource, Default, Clone)]
-pub struct MovementInfluenceCache {
+pub struct MovementHistory {
     /// 按结构 ID + 推动源方块 ID 累计；结构 ID 稳定时跨回合保留，优先未作用过的源
     counts: HashMap<StructureId, HashMap<BlockId, u32>>,
 }
 
-impl MovementInfluenceCache {
+impl MovementHistory {
     pub fn clear(&mut self) {
         self.counts.clear();
     }

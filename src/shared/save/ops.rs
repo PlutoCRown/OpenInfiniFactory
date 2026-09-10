@@ -336,10 +336,7 @@ pub fn read_save_settings(slot: &SaveSlot) -> Option<SaveSettingsData> {
         light_direction: lighting.direction,
         light_intensity: lighting.illuminance,
         solution_spawn: settings_save.meta.solution_spawn,
-        factory_block_filter: settings_save
-            .meta
-            .factory_block_filter
-            .unwrap_or_default(),
+        factory_block_filter: settings_save.meta.factory_block_filter.unwrap_or_default(),
     })
 }
 
@@ -372,6 +369,7 @@ pub fn write_save_skybox(slot: &SaveSlot, bytes: &[u8]) -> bool {
     persistent_storage::write_save_bytes(&slot.storage_path(), SKYBOX_FILE, bytes)
 }
 
+/// 解码并替换调用方的世界，供调试工具使用
 pub fn load_world(world: &mut WorldBlocks, slot: &SaveSlot) -> Option<LoadedSave> {
     let loaded = decode_save_slot(slot)?;
     *world = loaded.world.clone();

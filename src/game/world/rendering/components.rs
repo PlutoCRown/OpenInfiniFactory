@@ -99,7 +99,7 @@ pub struct HoverStructureBounds {
 }
 
 /// 结构轴对齐包围盒
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct StructureBounds {
     pub kind: StructureKind,
     pub min: IVec3,

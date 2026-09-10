@@ -3,8 +3,7 @@ use std::collections::HashSet;
 
 use crate::blocks::{
     AcceptorId, BlockData, BlockKind, MaterialDestroyer, MaterialLabeler, MaterialProcessor,
-    stamp_def,
-    SignalBehavior,
+    SignalBehavior, stamp_def,
 };
 use crate::world::direction::Facing;
 use crate::world::grid::{ConverterMode, GeneratorMode, MaterialFace, WorldBlocks};
@@ -59,7 +58,7 @@ fn destroy_powered_lasers(
 /// 阶段 4 材料销毁：钻头挂起至下一回合；通电激光当场移除
 pub(super) fn run_material_destroy_phase(
     world: &mut WorldBlocks,
-    pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    pending_effects: &mut super::pending::PendingTurnEffects,
     powered_laser_devices: &HashSet<IVec3>,
     ready_turn: u64,
 ) -> (Vec<IVec3>, Vec<BreakDebris>) {
@@ -79,7 +78,7 @@ pub(super) fn run_material_destroy_phase(
             MaterialDestroyer::Drill { target } => {
                 mark_material_destroy(
                     world,
-                    pending_generated,
+                    pending_effects,
                     pos + target,
                     ready_turn,
                     super::pending::PendingDestroyReason::Drill,
@@ -89,7 +88,7 @@ pub(super) fn run_material_destroy_phase(
                 for offset in signal_offsets() {
                     mark_material_destroy(
                         world,
-                        pending_generated,
+                        pending_effects,
                         pos + offset,
                         ready_turn,
                         super::pending::PendingDestroyReason::Drill,
@@ -205,7 +204,7 @@ pub(super) fn run_weld_behavior_phase(world: &mut WorldBlocks) -> Vec<(IVec3, IV
 /// 阶段 4 材料打标：滚刷漆 / 印花，只挂起，下一回合开始再落地（等移动动画播完）
 pub(super) fn run_material_label_phase(
     world: &WorldBlocks,
-    pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    pending_effects: &mut super::pending::PendingTurnEffects,
     ready_turn: u64,
 ) {
     let labelers: Vec<(IVec3, Facing, MaterialLabeler)> = world
@@ -238,7 +237,7 @@ pub(super) fn run_material_label_phase(
                     continue;
                 }
                 let paint = world.roller_settings(pos).paint;
-                pending_generated.mark_paint(face, paint, ready_turn);
+                pending_effects.mark_paint(face, paint, ready_turn);
             }
             MaterialLabeler::Stamper { .. } => {
                 let forward = facing.forward_ivec3();
@@ -270,13 +269,7 @@ pub(super) fn run_material_label_phase(
                 }
 
                 let stamp_id = world.stamper_settings(pos).stamp;
-                pending_generated.mark_stamp(
-                    pos,
-                    host.id,
-                    face_normal,
-                    stamp_id,
-                    ready_turn,
-                );
+                pending_effects.mark_stamp(pos, host.id, face_normal, stamp_id, ready_turn);
             }
         }
     }
@@ -285,11 +278,11 @@ pub(super) fn run_material_label_phase(
 /// 回合初落地延后漆（宿主仍在则写入）
 pub(super) fn apply_pending_paints(
     world: &mut WorldBlocks,
-    pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    pending_effects: &mut super::pending::PendingTurnEffects,
     turn: u64,
 ) -> bool {
     let mut any = false;
-    for (face, paint) in pending_generated.take_ready_paints(turn) {
+    for (face, paint) in pending_effects.take_ready_paints(turn) {
         if !world.blocks.values().any(|block| block.id == face.block) {
             continue;
         }
@@ -302,11 +295,11 @@ pub(super) fn apply_pending_paints(
 /// 回合初落地延后印花
 pub(super) fn apply_pending_stamps(
     world: &mut WorldBlocks,
-    pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    pending_effects: &mut super::pending::PendingTurnEffects,
     turn: u64,
 ) -> bool {
     let mut any = false;
-    for (_stamper_pos, pending) in pending_generated.take_ready_stamps(turn) {
+    for (_stamper_pos, pending) in pending_effects.take_ready_stamps(turn) {
         if !world.blocks.values().any(|block| block.id == pending.host) {
             continue;
         }
@@ -326,16 +319,15 @@ pub(super) fn apply_pending_stamps(
 
 /// 本回合生成判定用的材料源结果
 #[derive(Clone, Copy)]
-pub(super) struct GeneratedMaterial {
+pub struct GeneratedMaterial {
     pub pos: IVec3,
     pub block: BlockData,
 }
 
 /// 按生成器设定收集本回合应调度的材料
-pub(super) fn material_source_generation(
+pub fn planned_generation(
     world: &WorldBlocks,
     turn: u64,
-    blocked_generation: &HashSet<IVec3>,
     accepted_acceptors: &HashSet<AcceptorId>,
 ) -> Vec<GeneratedMaterial> {
     let mut generated = Vec::new();
@@ -365,7 +357,7 @@ pub(super) fn material_source_generation(
         }
 
         let spawn_pos = pos;
-        if world.can_place_platform_at(spawn_pos) && !blocked_generation.contains(&spawn_pos) {
+        if world.can_place_platform_at(spawn_pos) {
             generated.push(GeneratedMaterial {
                 pos: spawn_pos,
                 block: BlockData::new(BlockKind::Material(settings.material), settings.facing),
@@ -411,7 +403,7 @@ pub(super) fn run_material_conversion_phase(world: &mut WorldBlocks) {
 pub(super) fn run_material_acceptance_phase(
     world: &WorldBlocks,
     structure_state: &mut StructureState,
-    pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    pending_effects: &mut super::pending::PendingTurnEffects,
     turn: u64,
 ) -> HashSet<AcceptorId> {
     let ready_turn = turn + 1;
@@ -465,7 +457,7 @@ pub(super) fn run_material_acceptance_phase(
         for pos in &welded_material {
             mark_material_destroy(
                 world,
-                pending_generated,
+                pending_effects,
                 *pos,
                 ready_turn,
                 super::pending::PendingDestroyReason::Accept,
@@ -525,7 +517,7 @@ fn run_lasers(
 /// 挂起销毁：本回合不删格，下一回合开始再落地
 fn mark_material_destroy(
     world: &WorldBlocks,
-    pending_generated: &mut super::pending::PendingGeneratedMaterials,
+    pending_effects: &mut super::pending::PendingTurnEffects,
     pos: IVec3,
     ready_turn: u64,
     reason: super::pending::PendingDestroyReason,
@@ -536,12 +528,16 @@ fn mark_material_destroy(
     if !block.kind.is_material() {
         return;
     }
-    pending_generated.mark_destroyed(pos, block.kind, ready_turn, reason);
+    pending_effects.mark_destroyed(pos, block.kind, ready_turn, reason);
 }
 
 fn detach_material_block(world: &mut WorldBlocks, pos: IVec3) {
     if let Some(id) = world.blocks.get(&pos).map(|block| block.id) {
+        let before = world.material_welds.len();
         world.material_welds.retain(|weld| !weld.contains(id));
+        if world.material_welds.len() != before {
+            world.invalidate_material_topology();
+        }
     }
 }
 

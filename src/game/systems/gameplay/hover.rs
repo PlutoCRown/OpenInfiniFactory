@@ -7,8 +7,7 @@ use bevy::prelude::*;
 
 use crate::game::player::controller::FlyCamera;
 use crate::game::simulation::structure_state::{
-    StructureFreedom, StructureId, StructureKind, StructureState, material_structure,
-    query_factory_structure,
+    StructureFreedom, StructureId, StructureKind, StructureState,
 };
 use crate::game::state::{EditGestureKind, GameSettings, PlacementState, SolutionState};
 use crate::game::systems::debug::DebugState;
@@ -88,7 +87,6 @@ pub fn update_hover(
     structure_state: Res<StructureState>,
     mut hover_bounds: ResMut<HoverStructureBounds>,
     mut last_preview: Local<Option<HoverPreviewKey>>,
-    mut last_bounds_target: Local<Option<(IVec3, bool)>>,
     mut marker: Query<
         (
             &mut Transform,
@@ -119,7 +117,6 @@ pub fn update_hover(
         }
         hover_bounds.bounds = None;
         *last_preview = None;
-        *last_bounds_target = None;
         if let Ok((_, mut visibility, _)) = marker.single_mut() {
             *visibility = Visibility::Hidden;
         }
@@ -198,7 +195,6 @@ pub fn update_hover(
         *face_visibility = Visibility::Hidden;
         hover_bounds.bounds = None;
         *last_preview = None;
-        *last_bounds_target = None;
         despawn_edit_previews(&mut preview_deps.commands, &preview_deps.edit_previews);
         return;
     }
@@ -209,23 +205,26 @@ pub fn update_hover(
         *face_visibility = Visibility::Hidden;
     }
 
-    if player.placement.edit_gesture.is_none() {
-        let next_bounds_target = player
-            .placement
-            .target
-            .map(|target| (target.pos, debug.factory_activity));
-        if *last_bounds_target != next_bounds_target
-            || world.is_changed()
-            || structure_state.is_changed()
-        {
-            hover_bounds.bounds = player.placement.target.and_then(|target| {
-                hover_structure_bounds(&world, &structure_state, debug.factory_activity, target.pos)
-            });
-            *last_bounds_target = next_bounds_target;
-        }
+    let next_bounds = if player.placement.edit_gesture.is_none() {
+        player.placement.target.and_then(|target| {
+            let id = structure_state.structure_id_at(target.pos)?;
+            let structure = structure_state.get(id)?;
+            if structure.kind == StructureKind::Factory
+                && (!debug.factory_activity || structure.freedom == StructureFreedom::None)
+            {
+                return None;
+            }
+            structure.bounds.map(|bounds| StructureBounds {
+                kind: structure.kind,
+                min: bounds.min,
+                max: bounds.max,
+            })
+        })
     } else {
-        hover_bounds.bounds = None;
-        *last_bounds_target = None;
+        None
+    };
+    if hover_bounds.bounds != next_bounds {
+        hover_bounds.bounds = next_bounds;
     }
 
     if player.placement.edit_gesture.is_none() {
@@ -331,57 +330,6 @@ pub fn update_hover(
             }
         }
     }
-}
-
-/// 计算悬停位置所属结构的包围盒
-fn hover_structure_bounds(
-    world: &WorldBlocks,
-    structure_state: &StructureState,
-    debug_factory: bool,
-    pos: IVec3,
-) -> Option<StructureBounds> {
-    let block = world.blocks.get(&pos)?;
-    if block.kind.is_scene() {
-        return None;
-    }
-    if block.kind.is_material() {
-        let positions = structure_state.pushable_structure_positions_at(pos, IVec3::ZERO);
-        return match positions {
-            Some(positions) => structure_bounds(StructureKind::Material, positions.iter().copied()),
-            None => structure_bounds(
-                StructureKind::Material,
-                material_structure(world, pos).into_iter(),
-            ),
-        };
-    }
-    if block.kind.is_factory() {
-        if !debug_factory {
-            return None;
-        }
-        if structure_state.freedom_at(pos) == Some(StructureFreedom::None) {
-            return None;
-        }
-        let positions = structure_state
-            .movable_structure_at(pos)
-            .or_else(|| query_factory_structure(world, pos))?;
-        return structure_bounds(StructureKind::Factory, positions.into_iter());
-    }
-    None
-}
-
-/// 由一组格子位置生成结构包围盒
-fn structure_bounds(
-    kind: StructureKind,
-    mut positions: impl Iterator<Item = IVec3>,
-) -> Option<StructureBounds> {
-    let first = positions.next()?;
-    let mut min = first;
-    let mut max = first;
-    for pos in positions {
-        min = IVec3::new(min.x.min(pos.x), min.y.min(pos.y), min.z.min(pos.z));
-        max = IVec3::new(max.x.max(pos.x), max.y.max(pos.y), max.z.max(pos.z));
-    }
-    Some(StructureBounds { kind, min, max })
 }
 
 /// 用 gizmos 绘制悬停结构包围盒

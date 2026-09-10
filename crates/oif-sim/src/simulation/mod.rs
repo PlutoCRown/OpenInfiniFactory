@@ -12,7 +12,7 @@ pub mod structure_state;
 pub mod structures;
 mod suction;
 
-pub use behaviors::{BreakDebris, LaserBeam, LaserBeamStop};
+pub use behaviors::{BreakDebris, GeneratedMaterial, LaserBeam, LaserBeamStop, planned_generation};
 pub use suction::SuctionLinks;
 
 use glam::IVec3;

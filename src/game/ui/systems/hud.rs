@@ -4,7 +4,7 @@ pub fn update_hud_visibility(
     builder_mode: Res<BuilderMode>,
     simulation: Res<SimulationState>,
     save_state: Res<SaveState>,
-    mut primed: Local<bool>,
+    mut applied: Local<Option<(bool, bool, bool, bool)>>,
     added_hud: Query<
         (),
         Or<(
@@ -21,21 +21,19 @@ pub fn update_hud_visibility(
         Query<&mut Visibility, With<GameplayHudVisibility>>,
     )>,
 ) {
-    let dirty = !*primed
-        || mode.is_changed()
-        || ui_navigation.is_changed()
-        || builder_mode.is_changed()
-        || simulation.is_changed()
-        || save_state.is_changed()
-        || !added_hud.is_empty();
-    if !dirty {
-        return;
-    }
-    *primed = true;
-
     let has_world = save_state.current.is_some();
     let hide_gameplay_hud = *builder_mode == BuilderMode::Play && simulation.is_active();
     let active_play = ui_navigation.active_play();
+    let key = (
+        has_world,
+        hide_gameplay_hud,
+        active_play,
+        *mode.get() == GameMode::Playing,
+    );
+    if *applied == Some(key) && added_hud.is_empty() {
+        return;
+    }
+    *applied = Some(key);
 
     let hud_display = if has_world {
         Display::Flex

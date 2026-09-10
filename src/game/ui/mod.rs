@@ -35,7 +35,7 @@ use components::{
     button_cancelled, button_hovered, button_pressed, button_released, button_unhovered,
     fix_scroll_clip_picking, scroll_dragged, update_scroll_containers,
 };
-use core::UiMountCache;
+use core::UiMountState;
 use features::UiFeaturesPlugin;
 use menu_button::register_menu_button_clicks;
 
@@ -48,7 +48,7 @@ impl Plugin for GameUiPlugin {
             .add_systems(Update, unbind_ui_scope.after(UiAccessScope))
             .add_message::<UiAction>()
             .insert_resource(UiNavigation::default())
-            .insert_resource(UiMountCache::default())
+            .insert_resource(UiMountState::default())
             .insert_resource(crate::game::ui::core::host::UiHost::default())
             .insert_resource(crate::game::ui::core::text_prompt::TextPromptState::default())
             .insert_resource(crate::game::ui::core::confirm_dialog::ConfirmDialogState::default())

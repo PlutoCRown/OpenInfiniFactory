@@ -48,7 +48,7 @@ pub(super) fn pick_target_block(
 /// 切换目标方块的变体并重建场景
 pub(super) fn alternate_block_at(edit: &mut WorldEditScene, pos: IVec3) -> bool {
     let patch = build_cell_patch(edit.world, &[pos], |world| {
-        let Some(block) = world.blocks.get_mut(&pos) else {
+        let Some(mut block) = world.blocks.get(&pos).copied() else {
             return;
         };
         let Some(kind) = block.kind.alternate() else {
@@ -59,6 +59,7 @@ pub(super) fn alternate_block_at(edit: &mut WorldEditScene, pos: IVec3) -> bool 
             block.facing = block.facing.rotate().rotate();
         }
         block.kind = kind;
+        world.insert(pos, block);
     });
     if patch.is_empty() {
         return false;
@@ -91,11 +92,12 @@ pub(super) fn alternate_block_at(edit: &mut WorldEditScene, pos: IVec3) -> bool 
 /// 旋转目标方块朝向并重建场景
 pub(super) fn rotate_block_at(edit: &mut WorldEditScene, pos: IVec3, reverse: bool) -> bool {
     let in_system = !edit.world.blocks.contains_key(&pos);
-    let Some(block) = (if in_system {
-        edit.world.system_blocks.get_mut(&pos)
+    let Some(mut block) = (if in_system {
+        edit.world.system_blocks.get(&pos)
     } else {
-        edit.world.blocks.get_mut(&pos)
-    }) else {
+        edit.world.blocks.get(&pos)
+    })
+    .copied() else {
         return false;
     };
     if !can_manual_rotate(block.kind) {
@@ -104,7 +106,8 @@ pub(super) fn rotate_block_at(edit: &mut WorldEditScene, pos: IVec3, reverse: bo
 
     let from_facing = block.facing;
     block.facing = rotate_facing(block.facing, reverse);
-    let updated = *block;
+    let updated = block;
+    edit.world.insert(pos, updated);
 
     refresh_edit_generated_markers(edit.world);
     let mut animations = std::collections::HashMap::new();

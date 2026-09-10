@@ -2,13 +2,13 @@
 pub(super) fn merge_structure_movement_plan(
     mut planned_moves: Vec<StructureMove>,
     device_moves: Vec<StructureMove>,
-    influence_cache: &mut MovementInfluenceCache,
+    history: &mut MovementHistory,
     structures: &StructureState,
     world: &WorldBlocks,
 ) -> Vec<StructureMove> {
     let living_structures: HashSet<StructureId> = structures.structure_ids().collect();
     let living_blocks: HashSet<BlockId> = world.blocks.values().map(|block| block.id).collect();
-    influence_cache.prune_missing(&living_structures, &living_blocks);
+    history.prune_missing(&living_structures, &living_blocks);
     planned_moves.extend(device_moves);
     // 抬升标签本身表达「压住重力」：重叠格子上的重力标签直接丢掉
     let lift_positions: HashSet<IVec3> = planned_moves
@@ -37,7 +37,7 @@ pub(super) fn merge_structure_movement_plan(
             )
         });
     }
-    planned_moves.sort_by(|a, b| compare_movement_priority(a, b, influence_cache));
+    planned_moves.sort_by(|a, b| compare_movement_priority(a, b, history));
     // 同结构同位移的 Push 合并推杆，粘头也能同回合同步推
     coalesce_same_push_moves(planned_moves)
 }
@@ -90,21 +90,19 @@ fn coalesce_same_push_moves(moves: Vec<StructureMove>) -> Vec<StructureMove> {
 fn compare_movement_priority(
     a: &StructureMove,
     b: &StructureMove,
-    influence_cache: &MovementInfluenceCache,
+    history: &MovementHistory,
 ) -> Ordering {
-    movement_priority_key(a, influence_cache).cmp(&movement_priority_key(b, influence_cache))
+    movement_priority_key(a, history).cmp(&movement_priority_key(b, history))
 }
 
 fn movement_priority_key(
     movement: &StructureMove,
-    influence_cache: &MovementInfluenceCache,
+    history: &MovementHistory,
 ) -> (u8, u32, ConveyorSourcePriority) {
     // 种类优先：活塞 > 抬升 > 下落 > 旋转 > 传送带
     (
         movement_kind_priority(movement),
-        movement
-            .source()
-            .map_or(0, |_| influence_cache.count(movement)),
+        movement.source().map_or(0, |_| history.count(movement)),
         conveyor_source_priority(movement),
     )
 }

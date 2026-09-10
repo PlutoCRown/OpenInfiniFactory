@@ -22,7 +22,6 @@ use crate::game::block_editing::world_refresh::refresh_world_after_edit_many;
 use crate::game::debug::SimulationDebugLog;
 use crate::game::player::controller::{FlyCamera, apply_player_save};
 use crate::game::session::{self, PlayingWorldParams};
-use crate::game::simulation::signals::SignalNetworkCache;
 use crate::game::simulation::stats::SimulationStepStats;
 use crate::game::state::{
     BuilderMode, GameMode, PlacementState, SimulationState, SolutionState, WorldEntryMode,
@@ -230,7 +229,6 @@ pub fn poll_debug_http(
     mut simulation: ResMut<SimulationState>,
     mut sim_log: ResMut<SimulationDebugLog>,
     mut presentation: ResMut<SimulationPresentationState>,
-    mut signal_cache: ResMut<SignalNetworkCache>,
     bridge: Option<Res<DebugHttpBridge>>,
     mut playing: PlayingWorldParams,
     mut player: Query<(&mut Transform, &mut FlyCamera), With<FlyCamera>>,
@@ -249,7 +247,6 @@ pub fn poll_debug_http(
             &mut simulation,
             &mut sim_log,
             &mut presentation,
-            &mut signal_cache,
             render_ready,
             &mut playing,
             &mut player,
@@ -267,7 +264,6 @@ fn handle_embedded_debug_command(
     simulation: &mut SimulationState,
     sim_log: &mut SimulationDebugLog,
     presentation: &mut SimulationPresentationState,
-    signal_cache: &mut SignalNetworkCache,
     render_ready: bool,
     playing: &mut PlayingWorldParams,
     player: &mut Query<'_, '_, (&mut Transform, &mut FlyCamera), With<FlyCamera>>,
@@ -459,7 +455,11 @@ fn handle_embedded_debug_command(
         },
         DebugHttpCommand::GetPower { x, y, z, block_id } => {
             match resolve_pos_query(&playing.world, x, y, z, block_id) {
-                Ok(pos) => json_ok(power_query_json(signal_cache, &playing.world, pos)),
+                Ok(pos) => json_ok(power_query_json(
+                    &mut playing.signal_cache,
+                    &playing.world,
+                    pos,
+                )),
                 Err(error) => json_error(&error),
             }
         }

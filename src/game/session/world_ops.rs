@@ -150,7 +150,7 @@ pub fn switch_to_edit_mode_and_rebuild(
     session.solution_state.puzzle_snapshot = None;
     session.solution_state.puzzle_id = None;
     session.ui_navigation.open_pause();
-    playing.clear_sim_sidecars();
+    playing.reset_simulation_state();
     playing.rebuild_scene();
 }
 
@@ -162,7 +162,7 @@ pub fn reset_current_solution(playing: &mut PlayingWorldParams, session: &mut Se
     reset_solution_world(&mut playing.world, puzzle_snapshot);
     refresh_static_generated_markers(&mut playing.world);
     session.simulation.reset();
-    playing.clear_sim_sidecars();
+    playing.reset_simulation_state();
     playing.rebuild_scene();
 }
 
@@ -239,7 +239,7 @@ pub fn load_world_into_session(
     playing.commands.insert_resource(lighting);
 
     refresh_static_generated_markers(&mut playing.world);
-    playing.clear_sim_sidecars();
+    playing.reset_simulation_state();
 
     match current_mode {
         GameMode::StartMenu => next_state.set(GameMode::Playing),
@@ -265,6 +265,6 @@ pub fn clear_loaded_world(playing: &mut PlayingWorldParams, session: &mut Sessio
     session.solution_state.factory_block_filter = None;
     session.solution_state.dirty = false;
     session.solution_state.entry = WorldEntryMode::EditPuzzle;
-    playing.clear_sim_sidecars();
+    playing.reset_simulation_state();
     playing.rebuild_scene();
 }

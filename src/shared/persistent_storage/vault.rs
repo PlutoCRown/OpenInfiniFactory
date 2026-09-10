@@ -1,7 +1,7 @@
 //! 内存镜像：游戏侧同步读写；落盘由 runtime 异步刷出。
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// 待写入/删除的持久化任务
 #[derive(Clone, Debug)]
@@ -13,14 +13,14 @@ pub enum PersistOp {
 /// 进程内 KV 镜像与落盘队列
 #[derive(Default)]
 pub struct MemoryVault {
-    pub entries: HashMap<String, Vec<u8>>,
+    pub entries: HashMap<String, Arc<[u8]>>,
     pub ready: bool,
     pub persist_queue: VecDeque<PersistOp>,
 }
 
 impl MemoryVault {
     pub fn get(&self, key: &str) -> Option<&[u8]> {
-        self.entries.get(key).map(|v| v.as_slice())
+        self.entries.get(key).map(|v| v.as_ref())
     }
 
     pub fn get_text(&self, key: &str) -> Option<String> {
@@ -29,7 +29,10 @@ impl MemoryVault {
     }
 
     pub fn put(&mut self, key: String, value: Vec<u8>) {
-        self.entries.insert(key.clone(), value.clone());
+        if self.get(&key) == Some(value.as_slice()) {
+            return;
+        }
+        self.entries.insert(key.clone(), Arc::from(value.clone()));
         self.persist_queue.push_back(PersistOp::Put { key, value });
     }
 
@@ -57,7 +60,7 @@ impl MemoryVault {
     }
 
     pub fn rename_prefix(&mut self, old_prefix: &str, new_prefix: &str) -> bool {
-        let pairs: Vec<(String, Vec<u8>)> = self
+        let pairs: Vec<(String, Arc<[u8]>)> = self
             .entries
             .iter()
             .filter_map(|(key, value)| {
@@ -73,7 +76,7 @@ impl MemoryVault {
         }
         self.remove_prefix(old_prefix);
         for (key, value) in pairs {
-            self.put(key, value);
+            self.put(key, value.to_vec());
         }
         true
     }
@@ -90,7 +93,10 @@ impl MemoryVault {
     }
 
     pub fn replace_all(&mut self, entries: HashMap<String, Vec<u8>>) {
-        self.entries = entries;
+        self.entries = entries
+            .into_iter()
+            .map(|(key, bytes)| (key, Arc::from(bytes)))
+            .collect();
         self.persist_queue.clear();
         self.ready = true;
     }
@@ -107,7 +113,9 @@ pub fn lock_vault() -> std::sync::MutexGuard<'static, MemoryVault> {
     let mutex = VAULT.get_or_init(|| Mutex::new(MemoryVault::default()));
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let mut guard = mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut guard = mutex
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if !guard.ready {
             let entries = crate::shared::persistent_storage::backend::native_fs::load_all();
             guard.replace_all(entries);
@@ -116,11 +124,41 @@ pub fn lock_vault() -> std::sync::MutexGuard<'static, MemoryVault> {
     }
     #[cfg(target_arch = "wasm32")]
     {
-        mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        mutex
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
 /// 存储是否已对游戏可读（Web 需等 IndexedDB hydrate）
 pub fn is_ready() -> bool {
     lock_vault().ready
+}
+
+/// 共享资源身份与持久化写入行为回归
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 相同写入保留资源身份，覆盖、删除和重新加载必须反映新内容
+    #[test]
+    fn asset_identity_tracks_content_changes() {
+        let mut vault = MemoryVault::default();
+        vault.put("sky.png".into(), vec![1, 2, 3]);
+        let first = vault.entries["sky.png"].clone();
+        vault.put("sky.png".into(), vec![1, 2, 3]);
+        assert!(Arc::ptr_eq(&first, &vault.entries["sky.png"]));
+        assert_eq!(vault.drain_persist().len(), 1);
+        vault.put("sky.png".into(), vec![4, 5, 6]);
+        assert!(!Arc::ptr_eq(&first, &vault.entries["sky.png"]));
+        assert_eq!(&*first, &[1, 2, 3]);
+        assert!(vault.rename_prefix("sky.png", "new.png"));
+        assert!(vault.get("sky.png").is_none());
+        assert_eq!(vault.get("new.png"), Some([4, 5, 6].as_slice()));
+        assert!(vault.remove_prefix("new.png"));
+        assert!(vault.get("new.png").is_none());
+        vault.replace_all(HashMap::from([("sky.png".into(), vec![7])]));
+        assert_eq!(vault.get("sky.png"), Some([7].as_slice()));
+        assert!(vault.drain_persist().is_empty());
+    }
 }

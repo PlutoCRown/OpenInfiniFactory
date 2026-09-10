@@ -87,7 +87,15 @@ impl StructureState {
         self.rebuild_all_factory_deform(world);
     }
 
+    /// 只在材料成员或连接变化时重建，保持静止/整体移动结构的运行历史
     pub fn refresh_material_structures(&mut self, world: &WorldBlocks) {
+        if self
+            .material_topology
+            .as_ref()
+            .is_some_and(|revision| std::sync::Arc::ptr_eq(revision, &world.material_topology))
+        {
+            return;
+        }
         let mut previous_ids: HashMap<Vec<u64>, StructureId> = HashMap::new();
         let mut previous_support: HashMap<StructureId, Vec<GravitySupportContact>> = HashMap::new();
         for (id, structure) in &self.structures {
@@ -178,6 +186,7 @@ impl StructureState {
         }
 
         if seeds.is_empty() {
+            self.material_topology = Some(world.material_topology.clone());
             return;
         }
         let mut starts: Vec<IVec3> = seeds.into_iter().collect();
@@ -190,9 +199,11 @@ impl StructureState {
             &id_to_pos,
             &weld_neighbors,
         );
+        self.material_topology = Some(world.material_topology.clone());
     }
 
     fn retain_factory_only(&mut self) {
+        self.material_topology = None;
         self.structures
             .retain(|_, structure| structure.kind == StructureKind::Factory);
         self.structure_by_pos.clear();
@@ -244,6 +255,7 @@ impl StructureState {
             &id_to_pos,
             &weld_neighbors,
         );
+        self.material_topology = Some(world.material_topology.clone());
     }
 
     fn append_material_at_starts(
@@ -285,6 +297,7 @@ impl StructureState {
                 Structure {
                     id,
                     kind: StructureKind::Material,
+                    bounds: GridBounds::from_positions(&positions),
                     positions,
                     activity: FactoryActivity::Active,
                     freedom: StructureFreedom::All,
@@ -327,6 +340,7 @@ impl StructureState {
                 Structure {
                     id,
                     kind: StructureKind::Factory,
+                    bounds: GridBounds::from_positions(&positions),
                     positions,
                     activity: FactoryActivity::Active,
                     freedom: StructureFreedom::All,

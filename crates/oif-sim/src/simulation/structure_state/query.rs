@@ -250,7 +250,28 @@ impl StructureState {
         }
     }
 
-    pub fn move_positions(&mut self, positions: &HashSet<IVec3>, offset: IVec3) {
+    /// 原子提交平移：世界占格、结构位置、支撑和包围盒由同一入口维护
+    pub fn translate(
+        &mut self,
+        world: &mut WorldBlocks,
+        positions: &HashSet<IVec3>,
+        offset: IVec3,
+    ) {
+        let was_synced = self
+            .material_topology
+            .as_ref()
+            .is_some_and(|revision| std::sync::Arc::ptr_eq(revision, &world.material_topology));
+        let moves = positions
+            .iter()
+            .filter_map(|pos| {
+                world
+                    .blocks
+                    .get(pos)
+                    .copied()
+                    .map(|block| (*pos, *pos + offset, block))
+            })
+            .collect();
+        world.relocate_blocks(moves);
         let mut changed_ids = HashSet::new();
         for pos in positions {
             if let Some(id) = self.structure_by_pos.get(pos).copied() {
@@ -280,6 +301,7 @@ impl StructureState {
                     }
                 })
                 .collect();
+            structure.bounds = GridBounds::from_positions(&structure.positions);
             for (member, _dir) in &mut structure.gravity_support {
                 if positions.contains(member) {
                     *member += offset;
@@ -299,6 +321,9 @@ impl StructureState {
             for pos in &structure.positions {
                 self.structure_by_pos.insert(*pos, id);
             }
+        }
+        if was_synced {
+            self.material_topology = Some(world.material_topology.clone());
         }
     }
 
@@ -320,6 +345,7 @@ impl StructureState {
         let Some(structure) = self.structures.get_mut(&id) else {
             return;
         };
+        structure.bounds = GridBounds::from_positions(&new_positions);
         structure.positions = new_positions;
         structure.gravity_support.clear();
         for pos in &structure.positions {

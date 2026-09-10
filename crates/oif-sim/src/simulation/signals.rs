@@ -1,5 +1,6 @@
 use glam::IVec3;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::Arc;
 
 use crate::blocks::{BlockId, SignalBehavior, WireFacePolicy};
 use crate::world::grid::{MaterialFace, WorldBlocks};
@@ -23,25 +24,27 @@ pub struct PowerQuery {
 /// 信号网络缓存：导线/用电器按 BlockId 索引，移动后身份仍有效
 #[derive(bevy_ecs::prelude::Resource, Default, Clone)]
 pub struct SignalNetworkCache {
-    topology_revision: u64,
+    topology: Option<Arc<()>>,
     wire_components: HashMap<BlockId, SignalComponentId>,
     component_detectors: Vec<Vec<BlockId>>,
     device_components: HashMap<BlockId, Vec<SignalComponentId>>,
-    initialized: bool,
 }
 
 impl SignalNetworkCache {
     /// 按世界拓扑重建导线连通分量与用电器接线
     pub fn refresh(&mut self, world: &WorldBlocks) {
-        if self.initialized && self.topology_revision == world.topology_revision {
+        if self
+            .topology
+            .as_ref()
+            .is_some_and(|topology| Arc::ptr_eq(topology, &world.signal_topology))
+        {
             return;
         }
 
-        self.topology_revision = world.topology_revision;
+        self.topology = Some(world.signal_topology.clone());
         self.wire_components.clear();
         self.component_detectors.clear();
         self.device_components.clear();
-        self.initialized = true;
 
         for (&pos, block) in &world.blocks {
             if !matches!(
@@ -317,4 +320,67 @@ fn detector_activated(
         return false;
     };
     world.is_detectable_by_detector_at(detector_pos + detection_pos)
+}
+
+/// 信号索引的世界切换与精确失效回归
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::blocks::{BlockData, BlockKind, MaterialBlockId};
+    use crate::world::Facing;
+
+    /// 数字修订相同的新世界和分叉快照都不能复用旧接线
+    #[test]
+    fn independent_worlds_and_snapshot_branches_have_distinct_topology() {
+        let mut first = WorldBlocks::default();
+        first.insert(IVec3::ZERO, BlockData::new(BlockKind::Wire, Facing::North));
+        let mut second = WorldBlocks::default();
+        second.insert(
+            IVec3::ZERO,
+            BlockData::new(BlockKind::Platform, Facing::North),
+        );
+        assert_eq!(first.topology_revision, second.topology_revision);
+        let mut cache = SignalNetworkCache::default();
+        cache.refresh(&first);
+        assert_eq!(cache.wire_components.len(), 1);
+        cache.refresh(&second);
+        assert!(cache.wire_components.is_empty());
+
+        let mut branch = first.clone();
+        branch.remove(&IVec3::ZERO);
+        cache.refresh(&branch);
+        assert!(cache.wire_components.is_empty());
+        cache.refresh(&first);
+        assert_eq!(cache.wire_components.len(), 1);
+    }
+
+    /// 材料变化不重建接线，面板和电线位移必须更新连通结果
+    #[test]
+    fn material_edits_preserve_network_but_panels_and_moves_invalidate() {
+        let mut world = WorldBlocks::default();
+        for pos in [IVec3::ZERO, IVec3::X] {
+            world.insert(pos, BlockData::new(BlockKind::Wire, Facing::North));
+        }
+        let mut cache = SignalNetworkCache::default();
+        cache.refresh(&world);
+        let topology = cache.topology.clone().unwrap();
+        world.insert(
+            IVec3::Y,
+            BlockData::new(BlockKind::Material(MaterialBlockId(0)), Facing::North),
+        );
+        cache.refresh(&world);
+        assert!(Arc::ptr_eq(&topology, cache.topology.as_ref().unwrap()));
+        assert_eq!(cache.component_detectors.len(), 1);
+        let wire = world.blocks[&IVec3::ZERO];
+        let panel = MaterialFace::new(wire.id, IVec3::X);
+        world.set_wire_face_panel(panel, true);
+        cache.refresh(&world);
+        assert_eq!(cache.component_detectors.len(), 2);
+        world.set_wire_face_panel(panel, false);
+        cache.refresh(&world);
+        assert_eq!(cache.component_detectors.len(), 1);
+        world.relocate_blocks(vec![(IVec3::ZERO, IVec3::new(-3, 0, 0), wire)]);
+        cache.refresh(&world);
+        assert_eq!(cache.component_detectors.len(), 2);
+    }
 }

@@ -6,22 +6,21 @@ use glam::IVec3;
 use crate::world::grid::WorldBlocks;
 
 use super::behaviors::{
-    BreakDebris, LaserBeam, apply_pending_paints, apply_pending_stamps, material_source_generation,
-    probe_lasers, run_material_acceptance_phase, run_material_conversion_phase,
-    run_material_destroy_phase, run_material_label_phase, run_material_teleport_phase,
-    run_weld_behavior_phase,
+    BreakDebris, LaserBeam, apply_pending_paints, apply_pending_stamps, probe_lasers,
+    run_material_acceptance_phase, run_material_conversion_phase, run_material_destroy_phase,
+    run_material_label_phase, run_material_teleport_phase, run_weld_behavior_phase,
 };
 use super::gravity::mark_gravity_phase;
 use super::markers::run_static_marker_phase;
 use super::motion::{BlockMotion, PusherMotion};
 use super::movement::{PusherState, mark_structure_movement_phase};
-use super::pending::{PendingDestroyReason, PendingGeneratedMaterials};
+use super::pending::{PendingDestroyReason, PendingTurnEffects};
 use super::signals::SignalNetworkCache;
 use super::stats::SimulationStepStats;
 use super::structure_state::StructureState;
 use super::structures::{
-    MovementInfluenceCache, StructureMove, apply_fragile_shatter_before_execute,
-    arbitrate_movement_plan, execute_structure_moves_with_pushers, merge_structure_movement_plan,
+    MovementHistory, StructureMove, apply_fragile_shatter_before_execute, arbitrate_movement_plan,
+    execute_structure_moves_with_pushers, merge_structure_movement_plan,
 };
 use super::suction::SuctionLinks;
 
@@ -77,11 +76,11 @@ impl TurnOutput {
 /// 执行一整回合模拟（信号 → 运动标记 → 脆弱碎裂 → 执行运动 → 结构后处理）并产出表现数据
 pub fn simulate_turn(
     world: &mut WorldBlocks,
-    pending_generated: &mut PendingGeneratedMaterials,
+    pending_effects: &mut PendingTurnEffects,
     signal_cache: &mut SignalNetworkCache,
     turn: u64,
     structure_state: &mut StructureState,
-    movement_influence: &mut MovementInfluenceCache,
+    movement_history: &mut MovementHistory,
     pusher_state: &mut PusherState,
     mut sim_log: Option<&mut crate::session::SimulationDebugLog>,
     stats: Option<&mut SimulationStepStats>,
@@ -102,7 +101,7 @@ pub fn simulate_turn(
     let mut break_debris = Vec::new();
     let mut acceptance_sparks = Vec::new();
     let mut structures_dirty = false;
-    for (pos, kind, reason) in pending_generated.take_ready_destroyed(turn) {
+    for (pos, kind, reason) in pending_effects.take_ready_destroyed(turn) {
         if !world.is_material_at(pos) {
             continue;
         }
@@ -118,14 +117,18 @@ pub fn simulate_turn(
         }
     }
     // 上一回合挂起的滚刷漆 / 印花：停稳后再附着
-    if apply_pending_paints(world, pending_generated, turn) {
+    if apply_pending_paints(world, pending_effects, turn) {
         structures_dirty = true;
     }
-    if apply_pending_stamps(world, pending_generated, turn) {
+    if apply_pending_stamps(world, pending_effects, turn) {
         structures_dirty = true;
+    }
+    // 首回合在模拟内部提交初始生成，GUI 预览和无头会话使用同一判定。
+    if turn == 1 {
+        pending_effects.schedule_generation(world, turn, &HashSet::new());
     }
     // 上一回合调度的生成：须在重力前落地，否则会多悬一回合才下落
-    if place_ready_generated_materials(world, pending_generated, turn) {
+    if place_ready_generated_materials(world, pending_effects, turn) {
         structures_dirty = true;
     }
     if structures_dirty {
@@ -267,7 +270,7 @@ pub fn simulate_turn(
     movement_plan = merge_structure_movement_plan(
         movement_plan,
         device_movement_plan,
-        movement_influence,
+        movement_history,
         structure_state,
         world,
     );
@@ -286,7 +289,7 @@ pub fn simulate_turn(
         world,
         movement_plan,
         structure_state,
-        movement_influence,
+        movement_history,
         &hard_pusher_head_occupancy,
         &suction,
     );
@@ -313,7 +316,7 @@ pub fn simulate_turn(
     let had_materials = world.material_count > 0;
     // 材料销毁：钻头挂起至 turn+1；通电激光当场移除（与阶段 1 探测同一批激光设备）
     let (laser_destroy_sparks, laser_debris) = if had_materials || !laser_devices.is_empty() {
-        run_material_destroy_phase(world, pending_generated, &laser_devices, turn + 1)
+        run_material_destroy_phase(world, pending_effects, &laser_devices, turn + 1)
     } else {
         (Vec::new(), Vec::new())
     };
@@ -332,15 +335,13 @@ pub fn simulate_turn(
 
     // 验收：计数立刻生效，材料挂起至 turn+1 再删
     let accepted_acceptors = if had_materials && !structure_state.acceptor_structures().is_empty() {
-        run_material_acceptance_phase(world, structure_state, pending_generated, turn)
+        run_material_acceptance_phase(world, structure_state, pending_effects, turn)
     } else {
         HashSet::new()
     };
 
     // 只调度下一回合生成；落地已在回合初完成
-    if !world.system_blocks.is_empty() {
-        prepare_upcoming_generation(world, pending_generated, turn + 1, &accepted_acceptors);
-    }
+    pending_effects.schedule_generation(world, turn + 1, &accepted_acceptors);
 
     let weld_sparks = if had_materials && !world.system_blocks.is_empty() {
         run_weld_behavior_phase(world)
@@ -349,7 +350,7 @@ pub fn simulate_turn(
     };
     // 漆/印花：挂起至 turn+1，等本回合移动动画播完再附着
     if had_materials {
-        run_material_label_phase(world, pending_generated, turn + 1);
+        run_material_label_phase(world, pending_effects, turn + 1);
     }
     if had_materials || world.material_count > 0 {
         structure_state.refresh_material_structures(world);
@@ -396,31 +397,16 @@ pub fn simulate_turn(
     }
 }
 
-/// 为下一回合调度生成器 pending（仅写入，不落地）
-pub fn prepare_upcoming_generation(
-    world: &WorldBlocks,
-    pending_generated: &mut PendingGeneratedMaterials,
-    ready_turn: u64,
-    accepted_acceptors: &HashSet<crate::blocks::AcceptorId>,
-) {
-    let blocked_generation: HashSet<IVec3> = pending_generated.pending_keys().collect();
-    let generated =
-        material_source_generation(world, ready_turn, &blocked_generation, accepted_acceptors);
-    for generated in generated {
-        pending_generated.insert_pending(generated.pos, generated.block, ready_turn);
-    }
-}
-
 /// 落地 ready_turn 已到的生成材料，并焊接同参共生成块；有落地则返回 true
 fn place_ready_generated_materials(
     world: &mut WorldBlocks,
-    pending_generated: &mut PendingGeneratedMaterials,
+    pending_effects: &mut PendingTurnEffects,
     turn: u64,
 ) -> bool {
-    let ready = pending_generated.ready_pending_positions(turn);
+    let ready = pending_effects.ready_pending_positions(turn);
     let mut placed = Vec::new();
     for pos in ready {
-        let Some(block) = pending_generated.take_pending_block(pos) else {
+        let Some(block) = pending_effects.take_pending_block(pos) else {
             continue;
         };
         if world.can_place_platform_at(pos) {

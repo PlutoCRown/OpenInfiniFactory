@@ -19,6 +19,7 @@ pub use settings::{
 use glam::IVec3;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use crate::blocks::{AcceptorId, BlockData, BlockId, BlockKind, PaintMaterialId};
 
@@ -44,6 +45,10 @@ pub struct WorldBlocks {
     /// 编辑态维护的验收结构（含持久 ID）
     pub acceptor_structures: Vec<StoredAcceptorStructure>,
     pub topology_revision: u64,
+    /// 信号接线身份：快照共享，接线变化后分离，避免跨世界版本号碰撞
+    pub(crate) signal_topology: Arc<()>,
+    /// 材料成员与焊接变化身份；结构提交位姿时同步消费这次变化
+    pub(crate) material_topology: Arc<()>,
     /// 下一个可分配的方块实例 ID（0 表示未分配）
     pub next_block_id: u64,
     /// 下一个可分配的验收结构 ID
@@ -124,6 +129,16 @@ impl MaterialWeld {
 }
 
 impl WorldBlocks {
+    /// 接线变更时更换身份，供信号索引判断是否需要重建
+    pub fn invalidate_signal_topology(&mut self) {
+        self.signal_topology = Arc::new(());
+    }
+
+    /// 材料成员或焊接改变后，使结构派生数据失效
+    pub fn invalidate_material_topology(&mut self) {
+        self.material_topology = Arc::new(());
+    }
+
     pub fn assign_block_id(&mut self, block: &mut BlockData) {
         if !(block.kind.is_factory() || block.kind.is_material()) {
             block.id = crate::blocks::BlockId::NONE;
@@ -232,6 +247,14 @@ impl WorldBlocks {
         }
         if previous != Some(block) {
             self.topology_revision = self.topology_revision.wrapping_add(1);
+            if block.kind.is_material() || previous.is_some_and(|old| old.kind.is_material()) {
+                self.invalidate_material_topology();
+            }
+            if block.kind.signal_behavior(block.facing).is_some()
+                || previous.is_some_and(|old| old.kind.signal_behavior(old.facing).is_some())
+            {
+                self.invalidate_signal_topology();
+            }
         }
         if kind.accepts_material() {
             self.resync_acceptor_structures();
@@ -242,6 +265,12 @@ impl WorldBlocks {
     pub fn remove(&mut self, pos: &IVec3) -> Option<BlockData> {
         let removed = self.blocks.remove(pos);
         if let Some(ref block) = removed {
+            if block.kind.is_material() {
+                self.invalidate_material_topology();
+            }
+            if block.kind.signal_behavior(block.facing).is_some() {
+                self.invalidate_signal_topology();
+            }
             self.adjust_block_count(block.kind, -1);
             self.adjust_marker_count(*block, -1);
             let id = block.id;
@@ -305,6 +334,8 @@ impl WorldBlocks {
     }
 
     pub fn clear(&mut self) {
+        self.invalidate_signal_topology();
+        self.invalidate_material_topology();
         if !self.blocks.is_empty()
             || !self.system_blocks.is_empty()
             || !self.acceptor_structures.is_empty()
@@ -334,7 +365,20 @@ impl WorldBlocks {
 
     pub fn retain(&mut self, mut keep: impl FnMut(&IVec3, &BlockData) -> bool) {
         let before = self.blocks.len();
-        self.blocks.retain(|pos, block| keep(pos, block));
+        let mut removed_signal = false;
+        let mut removed_material = false;
+        self.blocks.retain(|pos, block| {
+            let retained = keep(pos, block);
+            removed_material |= !retained && block.kind.is_material();
+            removed_signal |= !retained && block.kind.signal_behavior(block.facing).is_some();
+            retained
+        });
+        if removed_signal {
+            self.invalidate_signal_topology();
+        }
+        if removed_material {
+            self.invalidate_material_topology();
+        }
         if self.blocks.len() != before {
             let alive: HashSet<BlockId> = self.blocks.values().map(|block| block.id).collect();
             self.material_welds

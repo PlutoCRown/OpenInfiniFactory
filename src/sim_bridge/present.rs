@@ -4,12 +4,12 @@ use std::collections::{HashMap, HashSet};
 
 use crate::game::audio::{PlaySound, SoundId};
 use crate::game::simulation::core::PresentationPhase;
-use crate::game::simulation::core::{prepare_upcoming_generation, simulate_turn};
+use crate::game::simulation::core::simulate_turn;
 use crate::game::simulation::movement::PusherState;
-use crate::game::simulation::pending::PendingGeneratedMaterials;
+use crate::game::simulation::pending::PendingTurnEffects;
 use crate::game::simulation::signals::SignalNetworkCache;
 use crate::game::simulation::structure_state::StructureState;
-use crate::game::simulation::structures::MovementInfluenceCache;
+use crate::game::simulation::structures::MovementHistory;
 use crate::game::state::{BuilderMode, SimulationState};
 use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
@@ -57,21 +57,13 @@ pub fn advance_simulation(
     builder_mode: Res<BuilderMode>,
     mut simulation: ResMut<SimulationState>,
     mut world: ResMut<WorldBlocks>,
-    mut pending_generated: ResMut<PendingGeneratedMaterials>,
+    mut pending_effects: ResMut<PendingTurnEffects>,
     mut signal_cache: ResMut<SignalNetworkCache>,
     mut structure_state: ResMut<StructureState>,
-    mut movement_influence: ResMut<MovementInfluenceCache>,
+    mut movement_history: ResMut<MovementHistory>,
     mut pusher_state: ResMut<PusherState>,
     mut committed_turns: MessageWriter<TurnCommitted>,
 ) {
-    if world.is_changed() {
-        prepare_upcoming_generation(
-            &world,
-            &mut pending_generated,
-            simulation.turn + 1,
-            &HashSet::new(),
-        );
-    }
     if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
         return;
     }
@@ -91,11 +83,11 @@ pub fn advance_simulation(
         let before = world.clone();
         let output = simulate_turn(
             &mut world,
-            &mut pending_generated,
+            &mut pending_effects,
             &mut signal_cache,
             next_turn,
             &mut structure_state,
-            &mut movement_influence,
+            &mut movement_history,
             &mut pusher_state,
             None,
             None,
@@ -117,11 +109,11 @@ pub fn advance_simulation(
         let before = world.clone();
         let output = simulate_turn(
             &mut world,
-            &mut pending_generated,
+            &mut pending_effects,
             &mut signal_cache,
             next_turn,
             &mut structure_state,
-            &mut movement_influence,
+            &mut movement_history,
             &mut pusher_state,
             None,
             None,
@@ -259,37 +251,56 @@ pub fn present_simulation_turns(
     }
 }
 
-/// 按当前权威状态刷新生成材料预览
+/// 将编辑预测或已提交操作投影到预览实体；只有模拟队列会影响材料落地
 pub fn refresh_pending_generated_previews(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut pending_previews: Query<(Entity, &PendingGeneratedPreview, &mut Transform)>,
     render_assets: Option<Res<WorldRenderAssets>>,
     world: Res<WorldBlocks>,
-    pending_generated: Res<PendingGeneratedMaterials>,
+    pending_effects: Res<PendingTurnEffects>,
     simulation: Res<SimulationState>,
+    mut committed_source: Local<Option<bool>>,
 ) {
     let Some(render_assets) = render_assets else {
         return;
     };
-    let pending: HashMap<IVec3, _> = pending_generated
-        .pending_entries()
-        .map(|(pos, block, ready_turn)| (pos, (block, ready_turn)))
-        .collect();
-    let mut retained = HashSet::new();
-    for (entity, preview, mut transform) in &mut pending_previews {
-        let Some(&(block, ready_turn)) = pending.get(&preview.pos) else {
-            commands.entity(entity).despawn();
-            continue;
+    let committed = simulation.turn > 0;
+    let reconcile = *committed_source != Some(committed)
+        || render_assets.is_changed()
+        || if committed {
+            pending_effects.is_changed()
+        } else {
+            world.is_changed()
         };
-        if preview.block != block || preview.ready_turn != ready_turn {
-            commands.entity(entity).despawn();
-            continue;
+    *committed_source = Some(committed);
+    // 每帧只推进已有实体的生长；增删对齐时才构建待生成位置表。
+    let mut remaining: HashMap<IVec3, _> = if reconcile {
+        if committed {
+            pending_effects
+                .pending_entries()
+                .map(|(pos, block, ready_turn)| (pos, (block, ready_turn)))
+                .collect()
+        } else {
+            oif_sim::simulation::planned_generation(&world, 1, &HashSet::new())
+                .into_iter()
+                .map(|generated| (generated.pos, (generated.block, 1)))
+                .collect()
         }
-        retained.insert(preview.pos);
-        let progress = if ready_turn <= simulation.turn {
+    } else {
+        HashMap::new()
+    };
+    for (entity, preview, mut transform) in &mut pending_previews {
+        if reconcile {
+            if remaining.get(&preview.pos) != Some(&(preview.block, preview.ready_turn)) {
+                commands.entity(entity).despawn();
+                continue;
+            }
+            remaining.remove(&preview.pos);
+        }
+        let progress = if preview.ready_turn <= simulation.turn {
             1.0
-        } else if ready_turn == simulation.turn + 1 {
+        } else if preview.ready_turn == simulation.turn + 1 {
             simulation.accumulator
         } else {
             0.0
@@ -300,10 +311,7 @@ pub fn refresh_pending_generated_previews(
             transform.scale = scale;
         }
     }
-    for (pos, (block, ready_turn)) in pending {
-        if retained.contains(&pos) {
-            continue;
-        }
+    for (pos, (block, ready_turn)) in remaining {
         let progress = if ready_turn <= simulation.turn {
             1.0
         } else if ready_turn == simulation.turn + 1 {
@@ -312,7 +320,6 @@ pub fn refresh_pending_generated_previews(
             0.0
         }
         .clamp(0.0, 1.0);
-
         spawn_pending_generated_block(
             &mut commands,
             &mut meshes,

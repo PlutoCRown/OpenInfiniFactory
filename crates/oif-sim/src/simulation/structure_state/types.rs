@@ -54,12 +54,37 @@ pub struct DeformSides {
     pub target_anchored: bool,
 }
 
+/// 结构成员的整数包围盒，由成员变更和位姿提交维护
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GridBounds {
+    pub min: IVec3,
+    pub max: IVec3,
+}
+
+impl GridBounds {
+    /// 从成员坐标构造包围盒，空结构没有包围盒
+    pub fn from_positions(positions: &HashSet<IVec3>) -> Option<Self> {
+        let mut positions = positions.iter().copied();
+        let first = positions.next()?;
+        let mut bounds = Self {
+            min: first,
+            max: first,
+        };
+        for pos in positions {
+            bounds.min = bounds.min.min(pos);
+            bounds.max = bounds.max.max(pos);
+        }
+        Some(bounds)
+    }
+}
+
 /// 单个连通结构（工厂或材料）
 #[derive(Clone)]
 pub struct Structure {
     pub id: StructureId,
     pub kind: StructureKind,
     pub positions: HashSet<IVec3>,
+    pub bounds: Option<GridBounds>,
     pub activity: FactoryActivity,
     pub freedom: StructureFreedom,
     gravity_support: Vec<GravitySupportContact>,
@@ -97,6 +122,8 @@ pub struct AcceptorStructure {
 /// 世界结构表：工厂/材料连通、可变形子集、回合 held
 #[derive(bevy_ecs::prelude::Resource, Default, Clone)]
 pub struct StructureState {
+    /// 已同步的材料身份；纯位姿提交保留成员历史，拓扑变化才重建
+    pub(crate) material_topology: Option<std::sync::Arc<()>>,
     structures: HashMap<StructureId, Structure>,
     structure_by_pos: HashMap<IVec3, StructureId>,
     next_structure_id: u64,

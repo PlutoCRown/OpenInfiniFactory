@@ -1,10 +1,10 @@
 use crate::simulation::core::{TurnOutput, simulate_turn};
 use crate::simulation::movement::PusherState;
-use crate::simulation::pending::PendingGeneratedMaterials;
+use crate::simulation::pending::PendingTurnEffects;
 use crate::simulation::signals::SignalNetworkCache;
 use crate::simulation::stats::SimulationStepStats;
 use crate::simulation::structure_state::StructureState;
-use crate::simulation::structures::MovementInfluenceCache;
+use crate::simulation::structures::MovementHistory;
 use crate::world::grid::WorldBlocks;
 
 use super::SimulationDebugLog;
@@ -13,10 +13,10 @@ use super::control::SimulationControl;
 /// 自有模拟会话：世界与回合状态，无 Bevy App
 pub struct SimSession {
     pub world: WorldBlocks,
-    pub pending_generated: PendingGeneratedMaterials,
+    pub pending_effects: PendingTurnEffects,
     pub signal_cache: SignalNetworkCache,
     pub structure_state: StructureState,
-    pub movement_influence: MovementInfluenceCache,
+    pub movement_history: MovementHistory,
     pub pusher_state: PusherState,
     pub control: SimulationControl,
     pub log: SimulationDebugLog,
@@ -28,10 +28,10 @@ impl SimSession {
     pub fn new() -> Self {
         Self {
             world: WorldBlocks::default(),
-            pending_generated: PendingGeneratedMaterials::default(),
+            pending_effects: PendingTurnEffects::default(),
             signal_cache: SignalNetworkCache::default(),
             structure_state: StructureState::default(),
-            movement_influence: MovementInfluenceCache::default(),
+            movement_history: MovementHistory::default(),
             pusher_state: PusherState::default(),
             control: SimulationControl::default(),
             log: SimulationDebugLog::default(),
@@ -86,9 +86,9 @@ impl SimSession {
     pub fn rollback(&mut self) {
         self.control.rollback(
             &mut self.world,
-            &mut self.pending_generated,
+            &mut self.pending_effects,
             &mut self.structure_state,
-            &mut self.movement_influence,
+            &mut self.movement_history,
             &mut self.pusher_state,
         );
     }
@@ -97,10 +97,10 @@ impl SimSession {
     pub fn reset(&mut self) {
         self.rollback();
         self.world = WorldBlocks::default();
-        self.pending_generated.clear();
+        self.pending_effects.clear();
         self.signal_cache = SignalNetworkCache::default();
         self.structure_state.clear();
-        self.movement_influence.clear();
+        self.movement_history.clear();
         self.pusher_state.clear();
         self.control.reset();
     }
@@ -115,11 +115,11 @@ impl SimSession {
         let next_turn = self.control.turn + 1;
         let output = simulate_turn(
             &mut self.world,
-            &mut self.pending_generated,
+            &mut self.pending_effects,
             &mut self.signal_cache,
             next_turn,
             &mut self.structure_state,
-            &mut self.movement_influence,
+            &mut self.movement_history,
             &mut self.pusher_state,
             logging.then_some(&mut self.log),
             Some(&mut self.stats),
@@ -197,7 +197,10 @@ mod tests {
         for x in 0..3 {
             session.world.insert(
                 IVec3::new(x, 0, 0),
-                BlockData::new(BlockKind::Scene(crate::blocks::SceneBlockId(0)), Facing::North),
+                BlockData::new(
+                    BlockKind::Scene(crate::blocks::SceneBlockId(0)),
+                    Facing::North,
+                ),
             );
             session.world.insert(
                 IVec3::new(x, 1, 0),
@@ -216,14 +219,52 @@ mod tests {
             Some(0)
         );
         assert_eq!(
-            session.world.blocks.get(&IVec3::new(3, 1, 0)).map(|block| block.kind),
+            session
+                .world
+                .blocks
+                .get(&IVec3::new(3, 1, 0))
+                .map(|block| block.kind),
             Some(BlockKind::PusherHead)
         );
         for x in 0..3 {
             assert_eq!(
-                session.world.blocks.get(&IVec3::new(x, 1, 0)).map(|block| block.kind),
+                session
+                    .world
+                    .blocks
+                    .get(&IVec3::new(x, 1, 0))
+                    .map(|block| block.kind),
                 Some(BlockKind::Blocker)
             );
         }
+    }
+
+    /// 首回合从当前设置生成，重置后不携带旧世界的延后操作
+    #[test]
+    fn first_turn_generation_and_reset_use_current_world() {
+        use crate::world::grid::{GeneratorMode, GeneratorSettings};
+        let mut session = SimSession::new();
+        session.world.insert(
+            IVec3::Y,
+            BlockData::new(BlockKind::Generator, Facing::North),
+        );
+        session.world.set_generator_settings(
+            IVec3::Y,
+            GeneratorSettings {
+                mode: GeneratorMode::Period {
+                    period: 1,
+                    offset: 0,
+                },
+                ..Default::default()
+            },
+        );
+        session.begin_simulation();
+        session.simulate_next_turn();
+        assert_eq!(session.world.material_count, 1);
+        assert_eq!(session.pending_effects.pending_entries().count(), 1);
+        session.reset();
+        assert_eq!(session.pending_effects.pending_entries().count(), 0);
+        session.begin_simulation();
+        session.simulate_next_turn();
+        assert_eq!(session.world.material_count, 0);
     }
 }
