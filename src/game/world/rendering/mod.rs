@@ -45,8 +45,8 @@ pub use goal_ghost::{GoalGhostMaterial, GoalGhostPlugin};
 pub use icons::{retire_block_icon_renderers, setup_block_icons};
 pub use portal_material::{PortalFlashQueue, PortalMaterial, PortalMaterialPlugin};
 pub use previews::{
-    despawn_edit_previews, despawn_pending_generated_previews, spawn_block_preview,
-    spawn_edit_preview, update_delete_bounds_overlay, update_selection_bounds_overlay,
+    despawn_edit_previews, spawn_block_preview, spawn_edit_preview, update_delete_bounds_overlay,
+    update_selection_bounds_overlay,
 };
 pub use scene::{
     gameplay_ssao, setup_scene, sync_shadow_settings, sync_ssao_settings, sync_vsync_settings,

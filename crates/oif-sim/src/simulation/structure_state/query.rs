@@ -12,11 +12,20 @@ impl StructureState {
     }
 
     pub fn pushable_structure_at(&self, pos: IVec3, offset: IVec3) -> Option<HashSet<IVec3>> {
+        self.pushable_structure_positions_at(pos, offset).cloned()
+    }
+
+    /// 查询可推动结构的位置引用，供只读热点避免复制整组坐标
+    pub fn pushable_structure_positions_at(
+        &self,
+        pos: IVec3,
+        offset: IVec3,
+    ) -> Option<&HashSet<IVec3>> {
         let structure = self.structure(pos)?;
         if !structure.is_pushable() || !structure.freedom.can_translate(offset) {
             return None;
         }
-        Some(structure.positions.clone())
+        Some(&structure.positions)
     }
 
     pub fn active_structure_at(&self, pos: IVec3, offset: IVec3) -> Option<HashSet<IVec3>> {

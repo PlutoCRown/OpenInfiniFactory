@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::game::blocks::BlockKind;
+use crate::game::blocks::{BlockData, BlockKind};
 use crate::game::simulation::structure_state::StructureKind;
 use crate::game::world::grid::grid_to_world;
 
@@ -116,7 +116,11 @@ pub struct EditPreview;
 
 /// 待生成方块的半透明预览标记
 #[derive(Component)]
-pub struct PendingGeneratedPreview;
+pub struct PendingGeneratedPreview {
+    pub pos: IVec3,
+    pub block: BlockData,
+    pub ready_turn: u64,
+}
 
 /// 生成块上表示所选材料的配置小预览（模拟激活时隐藏）
 #[derive(Component)]

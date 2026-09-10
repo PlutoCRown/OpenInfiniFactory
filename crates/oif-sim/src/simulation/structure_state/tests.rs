@@ -7,6 +7,41 @@ fn place(world: &mut WorldBlocks, pos: IVec3, kind: BlockKind, facing: Facing) -
     world.blocks.get(&pos).unwrap().id
 }
 
+/// 材料焊接邻接查询在断开焊缝和删除成员后保持连通结果正确
+#[test]
+fn material_connectivity_follows_weld_and_block_removal() {
+    let mut world = WorldBlocks::default();
+    let material = BlockKind::Material(crate::blocks::MaterialBlockId(0));
+    let a_pos = IVec3::new(0, 1, 0);
+    let b_pos = IVec3::new(1, 1, 0);
+    let c_pos = IVec3::new(4, 1, 0);
+    let d_pos = IVec3::new(5, 1, 0);
+    let a = place(&mut world, a_pos, material, Facing::North);
+    let b = place(&mut world, b_pos, material, Facing::North);
+    let c = place(&mut world, c_pos, material, Facing::North);
+    let d = place(&mut world, d_pos, material, Facing::North);
+    let ab = crate::world::grid::MaterialWeld::new(a, b);
+    world.material_welds.insert(ab);
+    world
+        .material_welds
+        .insert(crate::world::grid::MaterialWeld::new(c, d));
+
+    assert_eq!(
+        material_structure(&world, a_pos),
+        HashSet::from([a_pos, b_pos])
+    );
+    assert_eq!(
+        material_structure(&world, c_pos),
+        HashSet::from([c_pos, d_pos])
+    );
+
+    world.material_welds.remove(&ab);
+    assert_eq!(material_structure(&world, a_pos), HashSet::from([a_pos]));
+
+    world.remove(&d_pos);
+    assert_eq!(material_structure(&world, c_pos), HashSet::from([c_pos]));
+}
+
 fn preferred_nodes(structure: &Structure, body: BlockId, forward: bool) -> &[BlockId] {
     let idx = structure.action_to_groups.get(&(body, forward)).unwrap()[0];
     structure.deform_groups[idx as usize].nodes.as_slice()

@@ -305,11 +305,11 @@ pub fn collect_sim_refresh_positions(
     before: &WorldBlocks,
     after: &WorldBlocks,
     output: &TurnOutput,
+    changed: &HashSet<IVec3>,
 ) -> HashSet<IVec3> {
-    let changed = diff_block_positions(before, after);
     let animated_destinations: HashSet<IVec3> = output.animations.keys().copied().collect();
     let mut refresh = HashSet::new();
-    for &pos in &changed {
+    for &pos in changed {
         if after.blocks.get(&pos).is_some_and(|b| b.kind.is_material()) {
             if !animated_destinations.contains(&pos) {
                 refresh.insert(pos);
@@ -328,7 +328,7 @@ pub fn collect_sim_refresh_positions(
             }
         }
     }
-    expand_wire_connectivity(after, &changed, &mut refresh);
+    expand_wire_connectivity(after, changed, &mut refresh);
     expand_weld_connectivity(after, &mut refresh);
     // 空头伸出/收回只改 PusherState 动画，世界格子不变；必须单独纳入刷新
     refresh.extend(output.pusher_animations.keys().copied());
@@ -829,7 +829,8 @@ pub fn apply_turn_output_incremental(
     stats.render_teleport_ms = elapsed_ms(mark);
     mark = bevy::platform::time::Instant::now();
 
-    let mut refresh = collect_sim_refresh_positions(before, after, output);
+    let changed = diff_block_positions(before, after);
+    let mut refresh = collect_sim_refresh_positions(before, after, output, &changed);
     refresh.extend(collect_wire_power_refresh_positions(
         after,
         &output.powered_wires,
@@ -856,8 +857,7 @@ pub fn apply_turn_output_incremental(
     mark = bevy::platform::time::Instant::now();
 
     // 仅场景块增删改才刷合并 mesh；工厂/电线/材料不影响场景 AO
-    let scene_dirty =
-        collect_scene_mesh_dirty(Some(before), after, &diff_block_positions(before, after));
+    let scene_dirty = collect_scene_mesh_dirty(Some(before), after, &changed);
     if !scene_dirty.is_empty() {
         sync_scene_chunks_for_positions(commands, meshes, after, assets, scene_chunks, scene_dirty);
     }

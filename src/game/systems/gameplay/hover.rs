@@ -88,6 +88,7 @@ pub fn update_hover(
     structure_state: Res<StructureState>,
     mut hover_bounds: ResMut<HoverStructureBounds>,
     mut last_preview: Local<Option<HoverPreviewKey>>,
+    mut last_bounds_target: Local<Option<(IVec3, bool)>>,
     mut marker: Query<
         (
             &mut Transform,
@@ -118,6 +119,7 @@ pub fn update_hover(
         }
         hover_bounds.bounds = None;
         *last_preview = None;
+        *last_bounds_target = None;
         if let Ok((_, mut visibility, _)) = marker.single_mut() {
             *visibility = Visibility::Hidden;
         }
@@ -196,6 +198,7 @@ pub fn update_hover(
         *face_visibility = Visibility::Hidden;
         hover_bounds.bounds = None;
         *last_preview = None;
+        *last_bounds_target = None;
         despawn_edit_previews(&mut preview_deps.commands, &preview_deps.edit_previews);
         return;
     }
@@ -207,11 +210,22 @@ pub fn update_hover(
     }
 
     if player.placement.edit_gesture.is_none() {
-        hover_bounds.bounds = player.placement.target.and_then(|target| {
-            hover_structure_bounds(&world, &structure_state, debug.factory_activity, target.pos)
-        });
+        let next_bounds_target = player
+            .placement
+            .target
+            .map(|target| (target.pos, debug.factory_activity));
+        if *last_bounds_target != next_bounds_target
+            || world.is_changed()
+            || structure_state.is_changed()
+        {
+            hover_bounds.bounds = player.placement.target.and_then(|target| {
+                hover_structure_bounds(&world, &structure_state, debug.factory_activity, target.pos)
+            });
+            *last_bounds_target = next_bounds_target;
+        }
     } else {
         hover_bounds.bounds = None;
+        *last_bounds_target = None;
     }
 
     if player.placement.edit_gesture.is_none() {
@@ -331,10 +345,14 @@ fn hover_structure_bounds(
         return None;
     }
     if block.kind.is_material() {
-        let positions = structure_state
-            .pushable_structure_at(pos, IVec3::ZERO)
-            .unwrap_or_else(|| material_structure(world, pos));
-        return structure_bounds(StructureKind::Material, positions.into_iter());
+        let positions = structure_state.pushable_structure_positions_at(pos, IVec3::ZERO);
+        return match positions {
+            Some(positions) => structure_bounds(StructureKind::Material, positions.iter().copied()),
+            None => structure_bounds(
+                StructureKind::Material,
+                material_structure(world, pos).into_iter(),
+            ),
+        };
     }
     if block.kind.is_factory() {
         if !debug_factory {

@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 use super::components::{
-    DeleteBoundsOverlay, DeleteBoundsPart, EditPreview, GameplayScene, PendingGeneratedPreview,
-    SelectionBoundsOverlay, SelectionBoundsPart,
+    DeleteBoundsOverlay, DeleteBoundsPart, EditPreview, GameplayScene, SelectionBoundsOverlay,
+    SelectionBoundsPart,
 };
 use super::spawn::{SpawnBlockOpts, SpawnMode, spawn_block_model};
 use crate::game::blocks::BlockData;
@@ -17,16 +17,6 @@ const BOUNDS_CORNER_S: f32 = 0.044;
 
 /// 清除所有编辑预览实体
 pub fn despawn_edit_previews(commands: &mut Commands, previews: &Query<Entity, With<EditPreview>>) {
-    for entity in previews {
-        commands.entity(entity).despawn();
-    }
-}
-
-/// 清除所有待生成预览实体
-pub fn despawn_pending_generated_previews(
-    commands: &mut Commands,
-    previews: &Query<Entity, With<PendingGeneratedPreview>>,
-) {
     for entity in previews {
         commands.entity(entity).despawn();
     }

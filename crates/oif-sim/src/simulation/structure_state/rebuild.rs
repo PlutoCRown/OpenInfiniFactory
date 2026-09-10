@@ -127,6 +127,7 @@ impl StructureState {
         }
 
         let id_to_pos = material_id_to_pos(world);
+        let weld_neighbors = material_weld_neighbors(world);
         for &pos in changed {
             let Some(block) = world
                 .blocks
@@ -135,10 +136,7 @@ impl StructureState {
             else {
                 continue;
             };
-            for weld in &world.material_welds {
-                let Some(other_id) = weld.other(block.id) else {
-                    continue;
-                };
+            for &other_id in weld_neighbors.get(&block.id).into_iter().flatten() {
                 let Some(&other_pos) = id_to_pos.get(&other_id) else {
                     continue;
                 };
@@ -190,6 +188,7 @@ impl StructureState {
             &previous_ids,
             &previous_support,
             &id_to_pos,
+            &weld_neighbors,
         );
     }
 
@@ -230,13 +229,21 @@ impl StructureState {
         previous_support: &HashMap<StructureId, Vec<GravitySupportContact>>,
     ) {
         let id_to_pos = material_id_to_pos(world);
+        let weld_neighbors = material_weld_neighbors(world);
         let mut starts: Vec<IVec3> = world
             .blocks
             .iter()
             .filter_map(|(pos, block)| block.kind.is_material().then_some(*pos))
             .collect();
         starts.sort_by_key(|pos| (pos.x, pos.y, pos.z));
-        self.append_material_at_starts(world, &starts, previous_ids, previous_support, &id_to_pos);
+        self.append_material_at_starts(
+            world,
+            &starts,
+            previous_ids,
+            previous_support,
+            &id_to_pos,
+            &weld_neighbors,
+        );
     }
 
     fn append_material_at_starts(
@@ -246,6 +253,7 @@ impl StructureState {
         previous_ids: &HashMap<Vec<u64>, StructureId>,
         previous_support: &HashMap<StructureId, Vec<GravitySupportContact>>,
         id_to_pos: &HashMap<BlockId, IVec3>,
+        weld_neighbors: &HashMap<BlockId, Vec<BlockId>>,
     ) {
         let mut handled = self
             .structure_by_pos
@@ -257,7 +265,7 @@ impl StructureState {
             if handled.contains(&start) || !world.is_material_at(start) {
                 continue;
             }
-            let positions = material_structure_from(world, start, id_to_pos);
+            let positions = material_structure_from(world, start, id_to_pos, weld_neighbors);
             let mut members: Vec<u64> = positions
                 .iter()
                 .filter_map(|pos| world.blocks.get(pos).map(|block| block.id.0))

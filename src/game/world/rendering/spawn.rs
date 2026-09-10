@@ -325,10 +325,11 @@ pub fn spawn_pending_generated_block(
     world: &WorldBlocks,
     pos: IVec3,
     data: BlockData,
+    ready_turn: u64,
     animation: Option<BlockAnimation>,
     timing: AnimationTiming,
 ) {
-    spawn_block_model(
+    let entity = spawn_block_model(
         commands,
         meshes,
         assets,
@@ -343,6 +344,11 @@ pub fn spawn_pending_generated_block(
             mode: SpawnMode::PendingGen,
         },
     );
+    commands.entity(entity).insert(PendingGeneratedPreview {
+        pos,
+        block: data,
+        ready_turn,
+    });
 }
 
 /// 增量场景用：生成完整世界方块实体
@@ -565,10 +571,6 @@ pub(crate) fn spawn_block_model(
         } else {
             debug_assert!(false, "with_block_entity 时必须传入 BlockEntityIndex");
         }
-    }
-
-    if pending_generated_preview {
-        entity.insert(PendingGeneratedPreview);
     }
 
     if let Some(edit_preview) = edit_preview {

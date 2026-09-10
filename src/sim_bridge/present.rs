@@ -1,6 +1,6 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::game::audio::{PlaySound, SoundId};
 use crate::game::simulation::core::PresentationPhase;
@@ -18,7 +18,7 @@ use crate::game::world::animation::{
 use crate::game::world::grid::{WorldBlocks, grid_to_world};
 use crate::game::world::rendering::{
     PendingGeneratedPreview, PortalFlashQueue, SceneChunkMeshes, WorldRenderAssets,
-    despawn_pending_generated_previews, spawn_pending_generated_block,
+    spawn_pending_generated_block,
 };
 use crate::scene::{BlockEntityIndex, SceneRenderMut, apply_turn_output};
 
@@ -64,13 +64,15 @@ pub fn advance_simulation(
     mut pusher_state: ResMut<PusherState>,
     mut committed_turns: MessageWriter<TurnCommitted>,
 ) {
-    if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
+    if world.is_changed() {
         prepare_upcoming_generation(
             &world,
             &mut pending_generated,
             simulation.turn + 1,
             &HashSet::new(),
         );
+    }
+    if *builder_mode != BuilderMode::Play || (!simulation.running && !simulation.step_requested) {
         return;
     }
 
@@ -104,12 +106,6 @@ pub fn advance_simulation(
             output,
             animation_duration: animation_duration_for(simulation.running, simulation.speed),
         });
-        prepare_upcoming_generation(
-            &world,
-            &mut pending_generated,
-            simulation.turn + 1,
-            &HashSet::new(),
-        );
         return;
     }
 
@@ -138,13 +134,6 @@ pub fn advance_simulation(
             animation_duration: animation_duration_for(simulation.running, simulation.speed),
         });
     }
-
-    prepare_upcoming_generation(
-        &world,
-        &mut pending_generated,
-        simulation.turn + 1,
-        &HashSet::new(),
-    );
 }
 
 /// 消费已提交回合并更新场景、动画、音效和表现统计
@@ -274,7 +263,7 @@ pub fn present_simulation_turns(
 pub fn refresh_pending_generated_previews(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    pending_previews: Query<Entity, With<PendingGeneratedPreview>>,
+    mut pending_previews: Query<(Entity, &PendingGeneratedPreview, &mut Transform)>,
     render_assets: Option<Res<WorldRenderAssets>>,
     world: Res<WorldBlocks>,
     pending_generated: Res<PendingGeneratedMaterials>,
@@ -283,8 +272,38 @@ pub fn refresh_pending_generated_previews(
     let Some(render_assets) = render_assets else {
         return;
     };
-    despawn_pending_generated_previews(&mut commands, &pending_previews);
-    for (pos, block, ready_turn) in pending_generated.pending_entries() {
+    let pending: HashMap<IVec3, _> = pending_generated
+        .pending_entries()
+        .map(|(pos, block, ready_turn)| (pos, (block, ready_turn)))
+        .collect();
+    let mut retained = HashSet::new();
+    for (entity, preview, mut transform) in &mut pending_previews {
+        let Some(&(block, ready_turn)) = pending.get(&preview.pos) else {
+            commands.entity(entity).despawn();
+            continue;
+        };
+        if preview.block != block || preview.ready_turn != ready_turn {
+            commands.entity(entity).despawn();
+            continue;
+        }
+        retained.insert(preview.pos);
+        let progress = if ready_turn <= simulation.turn {
+            1.0
+        } else if ready_turn == simulation.turn + 1 {
+            simulation.accumulator
+        } else {
+            0.0
+        }
+        .clamp(0.0, 1.0);
+        let scale = Vec3::splat(progress);
+        if transform.scale != scale {
+            transform.scale = scale;
+        }
+    }
+    for (pos, (block, ready_turn)) in pending {
+        if retained.contains(&pos) {
+            continue;
+        }
         let progress = if ready_turn <= simulation.turn {
             1.0
         } else if ready_turn == simulation.turn + 1 {
@@ -301,6 +320,7 @@ pub fn refresh_pending_generated_previews(
             &world,
             pos,
             block,
+            ready_turn,
             Some(BlockAnimation {
                 block_id: block.id,
                 from_pos: pos,

@@ -12,16 +12,28 @@ fn material_id_to_pos(world: &WorldBlocks) -> HashMap<BlockId, IVec3> {
         .collect()
 }
 
+/// 材料焊接邻接表（同轮多次洪水复用，避免逐节点扫描全部焊缝）
+fn material_weld_neighbors(world: &WorldBlocks) -> HashMap<BlockId, Vec<BlockId>> {
+    let mut neighbors: HashMap<BlockId, Vec<BlockId>> = HashMap::new();
+    for weld in &world.material_welds {
+        neighbors.entry(weld.a).or_default().push(weld.b);
+        neighbors.entry(weld.b).or_default().push(weld.a);
+    }
+    neighbors
+}
+
 /// 材料焊接连通（即时）
 pub fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     let id_to_pos = material_id_to_pos(world);
-    material_structure_from(world, start, &id_to_pos)
+    let weld_neighbors = material_weld_neighbors(world);
+    material_structure_from(world, start, &id_to_pos, &weld_neighbors)
 }
 
 fn material_structure_from(
     world: &WorldBlocks,
     start: IVec3,
     id_to_pos: &HashMap<BlockId, IVec3>,
+    weld_neighbors: &HashMap<BlockId, Vec<BlockId>>,
 ) -> HashSet<IVec3> {
     let Some(start_id) = world
         .blocks
@@ -38,10 +50,7 @@ fn material_structure_from(
     structure.insert(start);
 
     while let Some(id) = queue.pop_front() {
-        for weld in &world.material_welds {
-            let Some(other_id) = weld.other(id) else {
-                continue;
-            };
+        for &other_id in weld_neighbors.get(&id).into_iter().flatten() {
             if !seen_ids.insert(other_id) {
                 continue;
             }
