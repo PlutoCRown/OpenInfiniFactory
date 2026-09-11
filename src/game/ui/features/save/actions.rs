@@ -3,8 +3,8 @@ use bevy::prelude::*;
 
 use crate::game::session::{LoadWorld, SessionBusy, SessionBusyCover};
 use crate::game::state::{GameMode, WorldEntryMode};
-use crate::game::ui::access::UiMainThread;
-use crate::game::ui::core::host::{UiAction, UiActionKind, UiInstanceId};
+use crate::game::ui::access::UiContext;
+use crate::game::ui::core::host::{UiAction, UiInstanceId};
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::core::{StartMenuPage, UiNavigation};
 use crate::game::ui::types::{SaveListCoverImage, SaveListRenderState};
@@ -24,7 +24,7 @@ pub fn emit_save_list_actions(
     navigation: Res<UiNavigation>,
     save_state: Res<SaveState>,
     busy: Res<SessionBusy>,
-    mut writer: MessageWriter<UiAction>,
+    mut writer: MessageWriter<UiAction<SaveListAction>>,
     actions: Query<&SaveListAction>,
 ) {
     if busy.is_busy()
@@ -44,7 +44,7 @@ pub fn emit_save_list_actions(
     click.propagate(false);
     writer.write(UiAction {
         instance: UiInstanceId::SAVE_LIST,
-        kind: UiActionKind::SaveList(action.clone()),
+        kind: action.clone(),
     });
     // 方案卡双击：选中后直接开始游戏
     if click.event.count >= 2 {
@@ -56,7 +56,7 @@ pub fn emit_save_list_actions(
             {
                 writer.write(UiAction {
                     instance: UiInstanceId::SAVE_LIST,
-                    kind: UiActionKind::SaveList(SaveListAction::StartGame),
+                    kind: SaveListAction::StartGame,
                 });
             }
         }
@@ -64,8 +64,9 @@ pub fn emit_save_list_actions(
 }
 
 pub fn dispatch_save_list_actions(
-    _ui_thread: UiMainThread,
-    mut actions: MessageReader<UiAction>,
+    mut commands: Commands,
+    ui_context: UiContext,
+    mut actions: MessageReader<UiAction<SaveListAction>>,
     mut navigation: ResMut<UiNavigation>,
     mut save_state: ResMut<SaveState>,
     mut busy_cover: ResMut<SessionBusyCover>,
@@ -74,6 +75,7 @@ pub fn dispatch_save_list_actions(
     mut load_requests: MessageWriter<LoadWorld>,
     cover_images: Query<(&ImageNode, &Node), With<SaveListCoverImage>>,
 ) {
+    let _ui_scope = ui_context.enter();
     if busy.is_busy() {
         return;
     }
@@ -81,12 +83,10 @@ pub fn dispatch_save_list_actions(
         if action.instance != UiInstanceId::SAVE_LIST {
             continue;
         }
-        let UiActionKind::SaveList(action) = action.kind.clone() else {
-            continue;
-        };
+        let action = action.kind.clone();
         match action {
-            SaveListAction::NewPuzzle => open_new_puzzle_prompt(),
-            SaveListAction::NewFree => open_new_free_prompt(),
+            SaveListAction::NewPuzzle => open_new_puzzle_prompt(&mut commands),
+            SaveListAction::NewFree => open_new_free_prompt(&mut commands),
             SaveListAction::NewSolution => {
                 if selected_top_level_kind(&save_state) != Some(SaveKind::Puzzle) {
                     continue;
@@ -94,7 +94,7 @@ pub fn dispatch_save_list_actions(
                 let Some(puzzle_name) = save_state.selected_puzzle.clone() else {
                     continue;
                 };
-                open_new_solution_prompt(puzzle_name);
+                open_new_solution_prompt(&mut commands, puzzle_name);
             }
             SaveListAction::Back => {
                 navigation.show_start_menu(StartMenuPage::Main);
@@ -102,7 +102,6 @@ pub fn dispatch_save_list_actions(
             SaveListAction::SelectPuzzle(storage) => {
                 if save_state
                     .top_level_worlds()
-                    .iter()
                     .any(|entry| entry.slot.puzzle == storage)
                 {
                     save_state.select_puzzle(Some(storage));
@@ -120,7 +119,6 @@ pub fn dispatch_save_list_actions(
             SaveListAction::ToggleFavorite(storage) => {
                 let Some(slot) = save_state
                     .top_level_worlds()
-                    .into_iter()
                     .find(|entry| entry.slot.puzzle == storage)
                     .map(|entry| entry.slot.clone())
                 else {
@@ -149,13 +147,12 @@ pub fn dispatch_save_list_actions(
                 };
                 let Some(entry) = save_state
                     .top_level_worlds()
-                    .iter()
                     .find(|entry| entry.slot.puzzle == puzzle)
                     .map(|entry| (*entry).clone())
                 else {
                     continue;
                 };
-                open_rename_puzzle_prompt(entry.slot.clone(), entry.name);
+                open_rename_puzzle_prompt(&mut commands, entry.slot.clone(), entry.name);
             }
             SaveListAction::DeleteSelectedPuzzle => {
                 let Some(puzzle) = save_state.selected_puzzle.clone() else {
@@ -169,7 +166,7 @@ pub fn dispatch_save_list_actions(
                     SaveKind::Free => SaveSlot::free(puzzle),
                     SaveKind::Solution => continue,
                 };
-                open_delete_confirm(slot);
+                open_delete_confirm(&mut commands, slot);
             }
             SaveListAction::RenameSelectedSolution => {
                 let Some(puzzle) = save_state.selected_puzzle.clone() else {
@@ -189,7 +186,7 @@ pub fn dispatch_save_list_actions(
                 if entry.slot.puzzle != puzzle {
                     continue;
                 }
-                open_rename_solution_prompt(entry.slot, entry.name);
+                open_rename_solution_prompt(&mut commands, entry.slot, entry.name);
             }
             SaveListAction::DeleteSelectedSolution => {
                 let Some(puzzle) = save_state.selected_puzzle.clone() else {
@@ -203,7 +200,7 @@ pub fn dispatch_save_list_actions(
                     .iter()
                     .any(|entry| entry.slot.solution.as_deref() == Some(solution.as_str()))
                 {
-                    open_delete_confirm(SaveSlot::solution(puzzle, solution));
+                    open_delete_confirm(&mut commands, SaveSlot::solution(puzzle, solution));
                 }
             }
             SaveListAction::StartGame => {

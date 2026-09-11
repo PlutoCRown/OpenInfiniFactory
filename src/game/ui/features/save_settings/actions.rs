@@ -3,8 +3,8 @@ use bevy::prelude::*;
 
 use crate::game::player::controller::{FlyCamera, capture_player_save};
 use crate::game::state::SolutionState;
-use crate::game::ui::access::{UiMainThread, i18n, ui};
-use crate::game::ui::core::host::{UiAction, UiActionKind, UiInstanceId};
+use crate::game::ui::access::{UiContext, i18n, ui};
+use crate::game::ui::core::host::{UiAction, UiInstanceId};
 use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::core::text_input::primary_click;
 use crate::shared::save::{PuzzleLighting, read_save_settings, write_save_settings};
@@ -14,7 +14,7 @@ use super::types::{SaveSettingsAction, SaveSettingsUiState};
 pub fn emit_save_settings_actions(
     mut click: On<Pointer<Click>>,
     ui_navigation: Res<UiNavigation>,
-    mut writer: MessageWriter<UiAction>,
+    mut writer: MessageWriter<UiAction<SaveSettingsAction>>,
     actions: Query<&SaveSettingsAction>,
 ) {
     if ui_navigation.modal().is_some()
@@ -29,7 +29,7 @@ pub fn emit_save_settings_actions(
     click.propagate(false);
     writer.write(UiAction {
         instance: UiInstanceId::SAVE_SETTINGS,
-        kind: UiActionKind::SaveSettings(action),
+        kind: action,
     });
 }
 
@@ -61,7 +61,11 @@ fn format_vec3(value: Option<Vec3>) -> String {
         .unwrap_or_default()
 }
 
-fn open_value_prompt(action: SaveSettingsAction, state: &SaveSettingsUiState) {
+fn open_value_prompt(
+    mut commands: &mut Commands,
+    action: SaveSettingsAction,
+    state: &SaveSettingsUiState,
+) {
     let (title, default_value, count) = match action {
         SaveSettingsAction::EditLightPosition => (
             "save_settings.light_position",
@@ -99,6 +103,7 @@ fn open_value_prompt(action: SaveSettingsAction, state: &SaveSettingsUiState) {
         return;
     };
     ui.open_text_prompt_then(
+        &mut commands,
         crate::game::ui::core::text_prompt::TextPromptProps {
             title: i18n.t(title),
             default_value,
@@ -156,26 +161,26 @@ fn open_value_prompt(action: SaveSettingsAction, state: &SaveSettingsUiState) {
 }
 
 pub fn dispatch_save_settings_actions(
-    _ui_thread: UiMainThread,
-    mut actions: MessageReader<UiAction>,
+    mut commands: Commands,
+    ui_context: UiContext,
+    mut actions: MessageReader<UiAction<SaveSettingsAction>>,
     mut state: ResMut<SaveSettingsUiState>,
     mut solution_state: ResMut<SolutionState>,
     mut lighting: ResMut<PuzzleLighting>,
     player: Query<(&FlyCamera, &Transform)>,
 ) {
+    let _ui_scope = ui_context.enter();
     for message in actions.read() {
         if message.instance != UiInstanceId::SAVE_SETTINGS {
             continue;
         }
-        let UiActionKind::SaveSettings(action) = message.kind.clone() else {
-            continue;
-        };
+        let action = message.kind.clone();
         match action {
             SaveSettingsAction::EditLightPosition
             | SaveSettingsAction::EditLightDirection
             | SaveSettingsAction::EditLightIntensity
             | SaveSettingsAction::EditSolutionSpawn => {
-                open_value_prompt(action, &state);
+                open_value_prompt(&mut commands, action, &state);
             }
             SaveSettingsAction::CaptureLightPose => {
                 let Ok((_, transform)) = player.single() else {
@@ -225,6 +230,7 @@ pub fn dispatch_save_settings_actions(
                     continue;
                 };
                 ui.open_text_prompt_then(
+                    &mut commands,
                     crate::game::ui::core::text_prompt::TextPromptProps {
                         title: i18n.t("save_settings.skybox_upload"),
                         default_value: String::new(),
@@ -242,7 +248,7 @@ pub fn dispatch_save_settings_actions(
                         if let Ok(bytes) = std::fs::read(path.trim()) {
                             if crate::shared::save::write_save_skybox(&slot, &bytes) {
                                 world.resource_mut::<SaveSettingsUiState>().skybox_bytes =
-                                    Some(bytes);
+                                    Some(bytes.into());
                             }
                         }
                     },

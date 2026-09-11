@@ -92,7 +92,7 @@ pub fn sync_aim_focus(
 }
 
 fn resolve_aimed_block(world: &WorldBlocks, pos: IVec3) -> (Option<AimBlockInfo>, Option<String>) {
-    if let Some(block) = world.blocks.get(&pos) {
+    if let Some(block) = world.blocks().get(&pos) {
         let sign_label = (block.kind == BlockKind::Sign)
             .then(|| world.sign_settings(pos))
             .and_then(|settings| settings.text)
@@ -108,7 +108,7 @@ fn resolve_aimed_block(world: &WorldBlocks, pos: IVec3) -> (Option<AimBlockInfo>
             sign_label,
         );
     }
-    if let Some(block) = world.system_blocks.get(&pos) {
+    if let Some(block) = world.system_blocks().get(&pos) {
         return (
             Some(AimBlockInfo {
                 kind: block.kind,

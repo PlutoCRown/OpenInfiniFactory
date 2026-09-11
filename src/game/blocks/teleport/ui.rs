@@ -11,13 +11,13 @@ use crate::game::block_editing::world_refresh::apply_teleport_pair_edit;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
 use crate::game::edit_history::EditHistory;
-use crate::game::session::PlayingWorldParams;
+use crate::game::session::EditableWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
-use crate::game::ui::access::{UiMainThread, i18n, with_ui_world};
+use crate::game::ui::access::{UiContext, i18n, ui_icons};
 use crate::game::ui::components::{
-    BUTTON_BG, PanelOptions, UiIconAssets, button_border, button_shadow, default_button_size,
-    default_font_size, localized_text, menu_button, raised_border, spawn_panel as spawn_ui_panel,
-    spawn_ui_icon, styled_button, text, transparent_node,
+    BUTTON_BG, PanelOptions, button_border, button_shadow, default_button_size, default_font_size,
+    localized_text, menu_button, raised_border, spawn_panel as spawn_ui_panel, spawn_ui_icon,
+    styled_button, text, transparent_node,
 };
 use crate::game::ui::core::DropdownSurface;
 use crate::game::ui::core::runtime::UiNavigation;
@@ -137,7 +137,7 @@ pub fn dispatch_teleport_action(
     action: TeleportAction,
     pos: IVec3,
     _ui_navigation: &UiNavigation,
-    world: &mut PlayingWorldParams,
+    world: &mut EditableWorldParams,
     solution_state: &mut SolutionState,
     open_dropdown: &mut OpenBlockPanelDropdown,
     edit_history: &mut EditHistory,
@@ -185,7 +185,7 @@ fn spawn_row(
 
 /// 名字后的编辑图标按钮
 fn spawn_rename_icon_button(parent: &mut ChildSpawnerCommands) {
-    let edit = with_ui_world(|world| world.resource::<UiIconAssets>().edit.clone());
+    let edit = ui_icons().edit;
     let size = default_button_size(36.0);
     parent
         .spawn((
@@ -217,7 +217,7 @@ fn on_click(
     mut pending_rename: ResMut<PendingTeleportRename>,
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
-    mut world: PlayingWorldParams,
+    mut world: EditableWorldParams,
     actions: Query<&TeleportAction>,
 ) {
     if ui_navigation.modal().is_some() || !primary_click(&mut click) {
@@ -249,17 +249,19 @@ fn on_click(
 }
 
 fn process_teleport_rename_prompt(
-    _ui_thread: UiMainThread,
+    mut commands: Commands,
+    ui_context: UiContext,
     mut pending_rename: ResMut<PendingTeleportRename>,
     world: Res<WorldBlocks>,
 ) {
+    let _ui_scope = ui_context.enter();
     let Some(pos) = pending_rename.0.take() else {
         return;
     };
-    if !world.system_blocks.contains_key(&pos) {
+    if !world.system_blocks().contains_key(&pos) {
         return;
     }
-    open_teleport_rename_prompt(pos, world.teleport_settings(pos).name);
+    open_teleport_rename_prompt(&mut commands, pos, world.teleport_settings(pos).name);
 }
 
 fn update_panel(
@@ -300,6 +302,7 @@ fn update_dropdowns(
     triggers: Query<(&TeleportAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
     mut pair_cache: Local<Option<(Option<IVec3>, u64, bool)>>,
 ) {
+    let _ui_scope = deps.ui_context.enter();
     let panel = UiPanelId::Teleport;
     let panel_active = deps.ui_navigation.active_panel() == Some(panel);
     let active_pos = deps.ui_navigation.active_block_pos();
@@ -323,7 +326,7 @@ fn update_dropdowns(
         *last_label = None;
     }
 
-    let cache_key = (active_pos, deps.world.topology_revision, pair_open);
+    let cache_key = (active_pos, deps.world.topology_revision(), pair_open);
     let rebuild = *pair_cache != Some(cache_key);
     if rebuild {
         *pair_cache = Some(cache_key);
@@ -399,7 +402,7 @@ fn spawn_pair_option(parent: &mut ChildSpawnerCommands, label: String, pair: Opt
 
 fn pair_candidates(world: &WorldBlocks, pos: IVec3) -> Vec<IVec3> {
     let mut candidates: Vec<IVec3> = world
-        .system_blocks
+        .system_blocks()
         .iter()
         .filter_map(|(candidate_pos, candidate)| {
             if *candidate_pos == pos {

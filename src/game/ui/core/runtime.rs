@@ -18,6 +18,10 @@ pub enum UiOverlay {
     Tutorial,
 }
 
+/// 覆盖层关闭结果；功能插件各自处理关闭后的业务。
+#[derive(Event)]
+pub struct OverlayClosed(pub UiOverlay);
+
 /// 当前唯一允许打开的模态框种类。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UiModal {

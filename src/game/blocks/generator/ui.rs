@@ -16,9 +16,9 @@ use crate::game::block_editing::world_refresh::apply_block_settings_edit;
 use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
 use crate::game::blocks::{BlockKind, MaterialBlockId, material_catalog};
-use crate::game::session::PlayingWorldParams;
+use crate::game::session::EditableWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
-use crate::game::ui::access::{UiMainThread, i18n};
+use crate::game::ui::access::{UiContext, i18n};
 use crate::game::ui::components::{
     PanelOptions, default_button_size, localized_text, spawn_panel as spawn_ui_panel, text,
     transparent_node,
@@ -28,7 +28,8 @@ use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::block_panels::BlockPanelSystems;
 use crate::game::ui::types::{CarriedItem, UiActionLabel, UiPanelBinding};
 use crate::game::world::direction::Facing;
-use crate::game::world::grid::{GeneratorMode, WorldBlocks};
+use crate::game::world::grid::{GeneratorMode, GeneratorSettings, WorldBlocks};
+use crate::shared::i18n::I18n;
 
 const MATERIAL_SLOT: u8 = 0;
 
@@ -228,7 +229,7 @@ fn on_click(
     mut carried: ResMut<CarriedItem>,
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
-    mut world: PlayingWorldParams,
+    mut world: EditableWorldParams,
     actions: Query<&GeneratorAction>,
 ) {
     if ui_navigation.modal().is_some() || !primary_click(&mut click) {
@@ -258,7 +259,7 @@ fn on_click(
 fn dispatch_action(
     action: GeneratorAction,
     pos: IVec3,
-    world: &mut PlayingWorldParams,
+    world: &mut EditableWorldParams,
     solution_state: &mut SolutionState,
     open_dropdown: &mut OpenBlockPanelDropdown,
     carried: &mut CarriedItem,
@@ -267,7 +268,7 @@ fn dispatch_action(
     let mut settings = world.world.generator_settings(pos);
     let acceptor_anchors: Vec<IVec3> = world
         .world
-        .acceptor_structures
+        .stored_acceptor_structures()
         .iter()
         .filter_map(|structure| structure.positions.first().copied())
         .collect();
@@ -372,9 +373,10 @@ fn cycle_anchor(current: Option<IVec3>, anchors: &[IVec3], forward: bool) -> Opt
 }
 
 fn update_panel(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     ui_navigation: Res<UiNavigation>,
     world: Res<WorldBlocks>,
+    locale: Res<I18n>,
     mut mode_text: Query<&mut Text, With<GeneratorModeText>>,
     mut period_text: Query<&mut Text, (With<GeneratorPeriodText>, Without<GeneratorModeText>)>,
     mut offset_text: Query<
@@ -417,7 +419,18 @@ fn update_panel(
         (&GeneratorAction, &mut BackgroundColor, &mut BorderColor),
         With<Button>,
     >,
+    added_panel: Query<
+        (),
+        Or<(
+            Added<GeneratorModeText>,
+            Added<GeneratorPeriodText>,
+            Added<GeneratorOffsetText>,
+            Added<GeneratorAcceptorText>,
+        )>,
+    >,
+    mut last_settings: Local<Option<(IVec3, GeneratorSettings)>>,
 ) {
+    let _ui_scope = ui_context.enter();
     let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
@@ -425,35 +438,55 @@ fn update_panel(
         return;
     }
     let settings = world.generator_settings(pos);
+    if *last_settings == Some((pos, settings))
+        && !world.is_changed()
+        && !locale.is_changed()
+        && added_panel.is_empty()
+    {
+        return;
+    }
+    *last_settings = Some((pos, settings));
     let is_period = matches!(settings.mode, GeneratorMode::Period { .. });
     let show_facing = BlockKind::Material(settings.material).is_directional();
     for mut node in &mut period_rows {
-        node.display = if is_period {
+        let display = if is_period {
             Display::Flex
         } else {
             Display::None
         };
+        if node.display != display {
+            node.display = display;
+        }
     }
     for mut node in &mut offset_rows {
-        node.display = if is_period {
+        let display = if is_period {
             Display::Flex
         } else {
             Display::None
         };
+        if node.display != display {
+            node.display = display;
+        }
     }
     for mut node in &mut acceptor_rows {
-        node.display = if is_period {
+        let display = if is_period {
             Display::None
         } else {
             Display::Flex
         };
+        if node.display != display {
+            node.display = display;
+        }
     }
     for mut node in &mut facing_rows {
-        node.display = if show_facing {
+        let display = if show_facing {
             Display::Flex
         } else {
             Display::None
         };
+        if node.display != display {
+            node.display = display;
+        }
     }
     if show_facing {
         sync_facing_radio_buttons(
@@ -469,24 +502,39 @@ fn update_panel(
     match settings.mode {
         GeneratorMode::Period { period, offset } => {
             for mut text in &mut mode_text {
-                text.0 = i18n.t("generator.mode_period");
+                let next = i18n.t("generator.mode_period");
+                if text.0 != next {
+                    text.0 = next;
+                }
             }
             for mut text in &mut period_text {
-                text.0 = period.to_string();
+                let next = period.to_string();
+                if text.0 != next {
+                    text.0 = next;
+                }
             }
             for mut text in &mut offset_text {
-                text.0 = offset.to_string();
+                let next = offset.to_string();
+                if text.0 != next {
+                    text.0 = next;
+                }
             }
         }
         GeneratorMode::Link { anchor } => {
             for mut text in &mut mode_text {
-                text.0 = i18n.t("generator.mode_link");
+                let next = i18n.t("generator.mode_link");
+                if text.0 != next {
+                    text.0 = next;
+                }
             }
             for mut text in &mut acceptor_text {
-                text.0 = match anchor.and_then(|pos| world.acceptor_id_at(pos)) {
+                let next = match anchor.and_then(|pos| world.acceptor_id_at(pos)) {
                     None => "-".to_string(),
                     Some(id) => format!("#{}", id.0),
                 };
+                if text.0 != next {
+                    text.0 = next;
+                }
             }
         }
     }
@@ -504,7 +552,11 @@ fn update_dropdowns(
         &ComputedNode,
     )>,
     triggers: Query<(&GeneratorAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
+    added_options: Query<(), Added<GeneratorMaterialOption>>,
+    added_slots: Query<(), Added<GeneratorMaterialSlot>>,
+    mut last_slot: Local<Option<(IVec3, MaterialBlockId)>>,
 ) {
+    let _ui_scope = deps.ui_context.enter();
     let panel = UiPanelId::Generator;
     let panel_active = deps.ui_navigation.active_panel() == Some(panel);
     let open = panel_active && deps.open_dropdown.is_open(panel, MATERIAL_SLOT);
@@ -532,19 +584,24 @@ fn update_dropdowns(
         return;
     }
 
-    // 不缓存「已填充」：关面板时本系统被 run_if 跳过，Local 清不掉，二次打开会跳过刷新
     let Some(icons) = deps.block_icons.as_ref() else {
         return;
     };
     let block_icons = icons.as_ref();
-    for (option, children) in &mut material_options {
-        update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
+    if icons.is_changed() || !added_options.is_empty() {
+        for (option, children) in &mut material_options {
+            update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
+        }
     }
-
-    let material = deps
+    let slot = deps
         .ui_navigation
         .active_block_pos()
-        .map(|pos| deps.world.generator_settings(pos).material);
+        .map(|pos| (pos, deps.world.generator_settings(pos).material));
+    if slot == *last_slot && added_slots.is_empty() && !icons.is_changed() {
+        return;
+    }
+    *last_slot = slot;
+    let material = slot.map(|(_, material)| material);
     for (entity, _, children) in &mut material_slots {
         update_material_icon(children, material, block_icons, &mut material_icons);
         set_hover_tooltip(

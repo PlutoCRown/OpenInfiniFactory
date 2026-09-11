@@ -4,8 +4,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use crate::game::blocks::BlockPresent;
 use crate::game::blocks::{BlockData, BlockKind};
 use crate::game::simulation::core::PresentationPhase;
-use crate::game::simulation::structure_state::StructureState;
-use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     AnimatedBlock, AnimationTiming, BlockAnimation, PusherAnimation,
 };
@@ -15,17 +13,17 @@ use crate::game::world::rendering::{
     spawn_acceptance_sparks, spawn_break_debris, spawn_laser_beams, spawn_weld_bursts,
     spawn_weld_sparks, spawn_world_block_entity, sync_scene_chunks_for_positions,
 };
-use crate::sim_bridge::TurnOutput;
+use oif_sim::simulation::core::TurnOutput;
 
 use super::entity_index::BlockEntityIndex;
 use super::scene_render::SceneRenderMut;
 
 pub fn block_data_at(world: &WorldBlocks, pos: IVec3) -> Option<BlockData> {
     world
-        .blocks
+        .blocks()
         .get(&pos)
         .copied()
-        .or_else(|| world.system_blocks.get(&pos).copied())
+        .or_else(|| world.system_blocks().get(&pos).copied())
 }
 
 fn despawn_animatable_at(commands: &mut Commands, index: &mut BlockEntityIndex, pos: IVec3) {
@@ -94,7 +92,7 @@ fn snap_teleport_entity(
     index.insert(to, block_id, BlockEntityLayer::Animatable, entity);
 
     let rotation = after
-        .blocks
+        .blocks()
         .values()
         .find(|block| block.id == block_id)
         .map(|data| {
@@ -155,7 +153,6 @@ fn spawn_and_index(
     pusher_animation: Option<PusherAnimation>,
     timing: AnimationTiming,
     powered_wire: bool,
-    factory_debug: Option<&StructureState>,
 ) {
     spawn_world_block_entity(
         commands,
@@ -169,7 +166,6 @@ fn spawn_and_index(
         pusher_animation,
         timing,
         powered_wire,
-        factory_debug,
     );
 }
 
@@ -195,7 +191,7 @@ fn insert_connectivity_neighbors(world: &WorldBlocks, refresh: &mut HashSet<IVec
     for offset in signal_neighbor_offsets() {
         let neighbor = pos + offset;
         if world
-            .blocks
+            .blocks()
             .get(&neighbor)
             .is_some_and(|block| block.kind.is_material())
         {
@@ -210,7 +206,7 @@ fn expand_wire_connectivity(world: &WorldBlocks, seeds: &HashSet<IVec3>, out: &m
         .iter()
         .filter(|&&pos| {
             world
-                .blocks
+                .blocks()
                 .get(&pos)
                 .is_some_and(|b| b.kind == BlockKind::Wire)
         })
@@ -223,7 +219,7 @@ fn expand_wire_connectivity(world: &WorldBlocks, seeds: &HashSet<IVec3>, out: &m
         for offset in signal_neighbor_offsets() {
             let neighbor = pos + offset;
             if world
-                .blocks
+                .blocks()
                 .get(&neighbor)
                 .is_some_and(|block| block.kind.is_material())
             {
@@ -231,7 +227,7 @@ fn expand_wire_connectivity(world: &WorldBlocks, seeds: &HashSet<IVec3>, out: &m
             }
             out.insert(neighbor);
             if world
-                .blocks
+                .blocks()
                 .get(&neighbor)
                 .is_some_and(|b| b.kind == BlockKind::Wire)
             {
@@ -286,14 +282,14 @@ pub fn collect_edit_refresh_positions(
 pub fn diff_block_positions(before: &WorldBlocks, after: &WorldBlocks) -> HashSet<IVec3> {
     let mut changed = HashSet::new();
     for pos in before
-        .blocks
+        .blocks()
         .keys()
-        .chain(before.system_blocks.keys())
-        .chain(after.blocks.keys())
-        .chain(after.system_blocks.keys())
+        .chain(before.system_blocks().keys())
+        .chain(after.blocks().keys())
+        .chain(after.system_blocks().keys())
     {
-        let blocks_changed = before.blocks.get(pos) != after.blocks.get(pos);
-        let system_changed = before.system_blocks.get(pos) != after.system_blocks.get(pos);
+        let blocks_changed = before.blocks().get(pos) != after.blocks().get(pos);
+        let system_changed = before.system_blocks().get(pos) != after.system_blocks().get(pos);
         if blocks_changed || system_changed {
             changed.insert(*pos);
         }
@@ -310,7 +306,11 @@ pub fn collect_sim_refresh_positions(
     let animated_destinations: HashSet<IVec3> = output.animations.keys().copied().collect();
     let mut refresh = HashSet::new();
     for &pos in changed {
-        if after.blocks.get(&pos).is_some_and(|b| b.kind.is_material()) {
+        if after
+            .blocks()
+            .get(&pos)
+            .is_some_and(|b| b.kind.is_material())
+        {
             if !animated_destinations.contains(&pos) {
                 refresh.insert(pos);
             }
@@ -340,16 +340,16 @@ pub fn collect_sim_refresh_positions(
 
     // 装饰漆变化：材料格未动也要重建
     let id_to_pos: HashMap<crate::game::blocks::BlockId, IVec3> = after
-        .blocks
+        .blocks()
         .iter()
         .map(|(pos, block)| (block.id, *pos))
         .collect();
     for face in before
-        .material_paints
+        .material_paints()
         .keys()
-        .chain(after.material_paints.keys())
+        .chain(after.material_paints().keys())
     {
-        if before.material_paints.get(face) != after.material_paints.get(face) {
+        if before.material_paints().get(face) != after.material_paints().get(face) {
             if let Some(&pos) = id_to_pos.get(&face.block) {
                 refresh.insert(pos);
             }
@@ -367,7 +367,7 @@ pub fn collect_wire_power_refresh_positions(
     for &pos in powered_wires.symmetric_difference(previous_powered_wires) {
         refresh.insert(pos);
         if world
-            .blocks
+            .blocks()
             .get(&pos)
             .is_some_and(|b| b.kind == BlockKind::Wire)
         {
@@ -382,7 +382,7 @@ pub fn collect_wire_power_refresh_positions(
 /// 该格对场景合并 mesh 的贡献（AO/面剔除只认场景挡场景）
 fn scene_mesh_contribution(world: &WorldBlocks, pos: IVec3) -> Option<BlockData> {
     world
-        .blocks
+        .blocks()
         .get(&pos)
         .copied()
         .filter(|block| block.kind.is_scene())
@@ -418,22 +418,19 @@ pub fn refresh_positions(
     index: &mut BlockEntityIndex,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
-    _debug: &DebugState,
-    _structure_state: &StructureState,
     powered_wires: &HashSet<IVec3>,
     positions: &HashSet<IVec3>,
     skip: &HashSet<IVec3>,
     pusher_animations: &HashMap<IVec3, PusherAnimation>,
     timing: AnimationTiming,
 ) {
-    let factory_debug = None::<&StructureState>;
     for &pos in positions {
         if skip.contains(&pos) {
             continue;
         }
 
         // blocks 层（工厂/材料/场景）
-        match world.blocks.get(&pos).copied() {
+        match world.blocks().get(&pos).copied() {
             Some(data) if data.kind.is_scene() => {
                 despawn_animatable_at(commands, index, pos);
             }
@@ -459,7 +456,6 @@ pub fn refresh_positions(
                         pusher_anim,
                         timing,
                         powered_wires.contains(&pos),
-                        factory_debug,
                     );
                 }
             }
@@ -467,18 +463,7 @@ pub fn refresh_positions(
                 despawn_animatable_at(commands, index, pos);
                 despawn_scene_at(commands, index, pos);
                 spawn_and_index(
-                    commands,
-                    meshes,
-                    index,
-                    world,
-                    assets,
-                    pos,
-                    data,
-                    None,
-                    None,
-                    timing,
-                    false,
-                    factory_debug,
+                    commands, meshes, index, world, assets, pos, data, None, None, timing, false,
                 );
             }
             None => {
@@ -488,22 +473,12 @@ pub fn refresh_positions(
         }
 
         // 系统/虚拟层：与上者重叠，绝不参与工厂材料动画
-        match world.system_blocks.get(&pos).copied() {
+        match world.system_blocks().get(&pos).copied() {
             Some(data) => {
                 if index.get_system(pos).is_none() {
                     spawn_and_index(
-                        commands,
-                        meshes,
-                        index,
-                        world,
-                        assets,
-                        pos,
-                        data,
-                        None,
-                        None,
-                        timing,
+                        commands, meshes, index, world, assets, pos, data, None, None, timing,
                         false,
-                        factory_debug,
                     );
                 }
             }
@@ -520,8 +495,6 @@ pub fn apply_structure_animations(
     index: &mut BlockEntityIndex,
     world: &WorldBlocks,
     assets: &WorldRenderAssets,
-    _debug: &DebugState,
-    _structure_state: &StructureState,
     powered_wires: &HashSet<IVec3>,
     animations: &HashMap<IVec3, BlockAnimation>,
     pusher_animations: &HashMap<IVec3, PusherAnimation>,
@@ -530,7 +503,6 @@ pub fn apply_structure_animations(
     // 本回合已传到出口的源口 → 方块 id（仍要播进入源口的移动动画）
     teleported_from: &HashMap<IVec3, crate::game::blocks::BlockId>,
 ) -> HashSet<IVec3> {
-    let factory_debug = None::<&StructureState>;
     let mut handled = HashSet::new();
     // 本函数已排队销毁的实体：禁止再 insert（Bevy 0.19 对已 despawn 实体 insert 会 panic）
     let mut despawned = HashSet::new();
@@ -538,10 +510,16 @@ pub fn apply_structure_animations(
     // 先收集本回合所有可动画移动，避免 HashMap 迭代顺序导致「后到的目标格把先走的实体误删」
     let mut planned: Vec<(IVec3, BlockAnimation, BlockData, Option<Entity>)> = Vec::new();
     for (&pos, animation) in animations {
-        let data = world.blocks.get(&pos).copied().or_else(|| {
+        let data = world.blocks().get(&pos).copied().or_else(|| {
             let id = *teleported_from.get(&pos)?;
             (animation.block_id == id)
-                .then(|| world.blocks.values().find(|block| block.id == id).copied())
+                .then(|| {
+                    world
+                        .blocks()
+                        .values()
+                        .find(|block| block.id == id)
+                        .copied()
+                })
                 .flatten()
         });
         let Some(data) = data else {
@@ -651,7 +629,6 @@ pub fn apply_structure_animations(
             pusher_anim,
             timing,
             powered_wires.contains(&pos),
-            factory_debug,
         );
     }
     handled
@@ -668,21 +645,17 @@ pub fn refresh_edit_changes(
         render_assets: assets,
         block_index: index,
         scene_chunks,
-        debug,
-        structure_state,
     } = scene;
-
-    structure_state.apply_factory_edit(world, changed);
     let refresh = collect_edit_refresh_positions(world, changed);
     // 编辑常只改 block_settings（材料预览等），BlockData 不变；
     // refresh_positions 对已存在的系统实体会跳过，这里先拆掉再重建。
     for &pos in &refresh {
-        if world.system_blocks.contains_key(&pos) {
+        if world.system_blocks().contains_key(&pos) {
             despawn_system_at(commands, index, pos);
         }
         // 告示正面 icon 只读 settings：强制拆再建
         if world
-            .blocks
+            .blocks()
             .get(&pos)
             .is_some_and(|block| block.kind == BlockKind::Sign)
         {
@@ -695,8 +668,6 @@ pub fn refresh_edit_changes(
         index,
         world,
         assets,
-        debug,
-        structure_state,
         &HashSet::new(),
         &refresh,
         &HashSet::new(),
@@ -710,7 +681,8 @@ pub fn refresh_edit_changes(
     }
 }
 
-pub fn apply_turn_output_incremental(
+/// 将一回合模拟输出增量应用到场景实体
+pub fn apply_turn_output(
     before: &WorldBlocks,
     after: &WorldBlocks,
     output: &TurnOutput,
@@ -726,8 +698,6 @@ pub fn apply_turn_output_incremental(
         render_assets: assets,
         block_index: index,
         scene_chunks,
-        debug,
-        structure_state,
     } = scene;
 
     let render_start = bevy::platform::time::Instant::now();
@@ -753,10 +723,10 @@ pub fn apply_turn_output_incremental(
         })
         .collect();
     let paint_changed_ids: HashSet<crate::game::blocks::BlockId> = before
-        .material_paints
+        .material_paints()
         .keys()
-        .chain(after.material_paints.keys())
-        .filter(|face| before.material_paints.get(face) != after.material_paints.get(face))
+        .chain(after.material_paints().keys())
+        .filter(|face| before.material_paints().get(face) != after.material_paints().get(face))
         .map(|face| face.block)
         .collect();
     let teleported_from: HashMap<IVec3, crate::game::blocks::BlockId> = output
@@ -770,8 +740,6 @@ pub fn apply_turn_output_incremental(
         index,
         after,
         assets,
-        debug,
-        structure_state,
         &output.powered_wires,
         &animations,
         &pusher_animations,
@@ -845,8 +813,6 @@ pub fn apply_turn_output_incremental(
         index,
         after,
         assets,
-        debug,
-        structure_state,
         &output.powered_wires,
         &refresh,
         &skip,
@@ -864,7 +830,7 @@ pub fn apply_turn_output_incremental(
     stats.render_scene_ms = elapsed_ms(mark);
     mark = bevy::platform::time::Instant::now();
 
-    for (&pos, data) in &after.blocks {
+    for (&pos, data) in after.blocks() {
         if !data.kind.is_material() || index.get_animatable(pos).is_some() {
             continue;
         }
@@ -884,15 +850,14 @@ pub fn apply_turn_output_incremental(
             pusher_animations.get(&pos).copied(),
             timing,
             output.powered_wires.contains(&pos),
-            None,
         );
     }
-    for (&pos, data) in &after.system_blocks {
+    for (&pos, data) in after.system_blocks() {
         if index.get_system(pos).is_some() {
             continue;
         }
         spawn_and_index(
-            commands, meshes, index, after, assets, pos, *data, None, None, timing, false, None,
+            commands, meshes, index, after, assets, pos, *data, None, None, timing, false,
         );
     }
     stats.render_fill_ms = elapsed_ms(mark);

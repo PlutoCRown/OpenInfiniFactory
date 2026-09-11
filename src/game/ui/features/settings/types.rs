@@ -558,3 +558,7 @@ pub struct PendingKeyBind(pub Option<ActionKeyName>);
 
 #[derive(Resource, Default)]
 pub struct OpenSettingsDropdown(pub Option<SettingsDropdown>);
+
+/// 设置页自己的可见性标记，通用面板不理解设置标签。
+#[derive(Component)]
+pub struct SettingsTabPanel(pub SettingsTab);

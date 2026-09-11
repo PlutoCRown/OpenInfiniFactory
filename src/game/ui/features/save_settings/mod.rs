@@ -6,10 +6,9 @@ use bevy::image::{CompressedImageFormats, ImageFormat, ImageSampler, ImageType};
 use bevy::prelude::*;
 
 pub use actions::{dispatch_save_settings_actions, emit_save_settings_actions};
-pub use types::SaveSettingsUiState;
+pub use types::{SaveSettingsSkyboxPreviewCache, SaveSettingsUiState};
 
-use crate::game::systems::perf::PerfScope;
-use crate::game::ui::access::{UiAccessScope, UiMainThread, i18n};
+use crate::game::ui::access::{UiContext, i18n};
 use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::screens::{
     SaveSettingsBlockIcon, SaveSettingsCheckMark, SaveSettingsCrossMark, SaveSettingsFactoryPicker,
@@ -22,34 +21,36 @@ pub struct SaveSettingsPlugin;
 
 impl Plugin for SaveSettingsPlugin {
     fn build(&self, app: &mut App) {
+        app.add_message::<crate::game::ui::core::host::UiAction<types::SaveSettingsAction>>();
         app.init_resource::<SaveSettingsUiState>()
+            .init_resource::<SaveSettingsSkyboxPreviewCache>()
             .add_observer(emit_save_settings_actions)
             .add_systems(
                 Update,
                 (dispatch_save_settings_actions, update_save_settings_ui)
                     .chain()
-                    .in_set(UiAccessScope)
-                    .after(PerfScope::Placement)
-                    .before(PerfScope::Menus),
+                    .in_set(crate::game::schedule::GameSet::Menus),
             );
     }
 }
 
 pub fn update_save_settings_ui(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     runtime: Res<UiNavigation>,
     state: Res<SaveSettingsUiState>,
+    mut preview_cache: ResMut<SaveSettingsSkyboxPreviewCache>,
+    mut last_filter: Local<Option<crate::shared::save::FactoryBlockFilter>>,
     block_icons: Option<Res<BlockIconAssets>>,
     mut preview: Query<&mut ImageNode, With<SaveSettingsSkyboxPreview>>,
     mut images: ResMut<Assets<Image>>,
     mut values: Query<(&SaveSettingsValueText, &mut Text)>,
     mut block_images: Query<
-        (&SaveSettingsBlockIcon, &mut ImageNode),
+        (Ref<SaveSettingsBlockIcon>, &mut ImageNode),
         Without<SaveSettingsSkyboxPreview>,
     >,
     mut picker: Query<&mut Node, With<SaveSettingsFactoryPicker>>,
     mut marks: Query<
-        (&SaveSettingsFilterMark, &Children, &mut Visibility),
+        (Ref<SaveSettingsFilterMark>, &Children, &mut Visibility),
         (
             Without<SaveSettingsCheckMark>,
             Without<SaveSettingsCrossMark>,
@@ -73,73 +74,99 @@ pub fn update_save_settings_ui(
     >,
     added_preview: Query<(), Added<SaveSettingsSkyboxPreview>>,
 ) {
+    let locale_changed = ui_context.locale_changed();
+    let _ui_scope = ui_context.enter();
     if !runtime.is_save_settings_open() {
         return;
     }
-    if state.is_changed() || !added_preview.is_empty() {
+    let skybox_changed = match (&preview_cache.source, &state.skybox_bytes) {
+        (Some(cached), Some(current)) => !std::sync::Arc::ptr_eq(cached, current),
+        (None, None) => false,
+        _ => true,
+    };
+    if skybox_changed {
+        preview_cache.source.clone_from(&state.skybox_bytes);
+        preview_cache.handle = state.skybox_bytes.as_deref().and_then(|bytes| {
+            Image::from_buffer(
+                bytes,
+                ImageType::Format(ImageFormat::Png),
+                CompressedImageFormats::NONE,
+                true,
+                ImageSampler::Default,
+                RenderAssetUsages::default(),
+            )
+            .ok()
+            .map(|image| images.add(image))
+        });
+    }
+    if preview_cache.is_changed() || !added_preview.is_empty() {
         for mut image_node in &mut preview {
-            *image_node = state
-                .skybox_bytes
-                .as_deref()
-                .and_then(|bytes| {
-                    Image::from_buffer(
-                        bytes,
-                        ImageType::Format(ImageFormat::Png),
-                        CompressedImageFormats::NONE,
-                        true,
-                        ImageSampler::Default,
-                        RenderAssetUsages::default(),
-                    )
-                    .ok()
-                    .map(|image| ImageNode::new(images.add(image)))
-                })
+            let next = preview_cache
+                .handle
+                .clone()
+                .map(ImageNode::new)
                 .unwrap_or_default();
+            *image_node = next;
         }
     }
     for mut node in &mut picker {
-        node.display = if state.picker_open {
+        let display = if state.picker_open {
             Display::Flex
         } else {
             Display::None
         };
+        if node.display != display {
+            node.display = display;
+        }
     }
-    if state.is_changed() || block_icons.as_ref().is_some_and(|icons| icons.is_changed()) {
-        for (marker, mut image_node) in &mut block_images {
-            *image_node = block_icons
+    let icons_changed = block_icons.as_ref().is_some_and(|icons| icons.is_changed());
+    for (marker, mut image_node) in &mut block_images {
+        if icons_changed || marker.is_added() {
+            let next = block_icons
                 .as_deref()
                 .and_then(|icons| icons.get(marker.0))
                 .map(ImageNode::new)
                 .unwrap_or_default();
+            *image_node = next;
         }
-        for (marker, children, mut visibility) in &mut marks {
+    }
+    let filter_changed = last_filter.as_ref() != Some(&state.data.factory_block_filter);
+    if filter_changed {
+        *last_filter = Some(state.data.factory_block_filter.clone());
+    }
+    for (marker, children, mut visibility) in &mut marks {
+        if filter_changed || marker.is_added() {
             let selected = state.data.factory_block_filter.kinds.contains(&marker.0);
-            *visibility = if selected {
+            visibility.set_if_neq(if selected {
                 Visibility::Visible
             } else {
                 Visibility::Hidden
-            };
+            });
             let show_check = selected
                 && state.data.factory_block_filter.mode
                     == crate::shared::save::FactoryBlockFilterMode::Whitelist;
             for child in children.iter() {
                 if let Ok(mut mark_visibility) = check_marks.get_mut(child) {
-                    *mark_visibility = if show_check {
+                    mark_visibility.set_if_neq(if show_check {
                         Visibility::Visible
                     } else {
                         Visibility::Hidden
-                    };
+                    });
                 }
                 if let Ok(mut mark_visibility) = cross_marks.get_mut(child) {
-                    *mark_visibility = if show_check {
+                    mark_visibility.set_if_neq(if show_check {
                         Visibility::Hidden
                     } else {
                         Visibility::Visible
-                    };
+                    });
                 }
             }
         }
+    }
+    let state_changed = state.is_changed();
+    if state_changed || locale_changed {
         for (marker, mut text) in &mut values {
-            text.0 = match marker {
+            let next = match marker {
                 SaveSettingsValueText::LightPosition => format_vec3(state.data.light_position),
                 SaveSettingsValueText::LightDirection => format_vec3(state.data.light_direction),
                 SaveSettingsValueText::LightIntensity => {
@@ -165,6 +192,9 @@ pub fn update_save_settings_ui(
                     }
                 },
             };
+            if text.0 != next {
+                text.0 = next;
+            }
         }
     }
 }
@@ -173,4 +203,54 @@ fn format_vec3(value: Option<Vec3>) -> String {
     value
         .map(|value| format!("{:.3}, {:.3}, {:.3}", value.x, value.y, value.z))
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::game::state::UiPanelId;
+    use crate::game::ui::core::runtime::UiPanelContext;
+
+    /// 打开选择器只改变 UI 状态，不会再次解码同一天空盒。
+    #[test]
+    fn picker_change_reuses_skybox_handle() {
+        let mut navigation = UiNavigation::default();
+        navigation.open(UiPanelId::Settings, UiPanelContext::SaveSettingsFromPause);
+        let png: &[u8] = &[
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1,
+            8, 4, 0, 0, 0, 181, 28, 12, 2, 0, 0, 0, 11, 73, 68, 65, 84, 120, 218, 99, 100, 248, 15,
+            0, 1, 5, 1, 1, 39, 24, 227, 102, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+        ];
+        let mut app = App::new();
+        app.insert_resource(navigation)
+            .insert_resource(crate::shared::i18n::I18n::new(
+                crate::shared::i18n::DEFAULT_LANGUAGE,
+            ))
+            .insert_resource(SaveSettingsUiState {
+                skybox_bytes: Some(png.into()),
+                ..default()
+            })
+            .init_resource::<SaveSettingsSkyboxPreviewCache>()
+            .init_resource::<Assets<Image>>()
+            .add_systems(Update, update_save_settings_ui);
+        app.world_mut()
+            .spawn((SaveSettingsSkyboxPreview, ImageNode::default()));
+        app.update();
+        let first = app
+            .world()
+            .resource::<SaveSettingsSkyboxPreviewCache>()
+            .handle
+            .clone();
+        app.world_mut()
+            .resource_mut::<SaveSettingsUiState>()
+            .picker_open = true;
+        app.update();
+        let second = app
+            .world()
+            .resource::<SaveSettingsSkyboxPreviewCache>()
+            .handle
+            .clone();
+        assert_eq!(first, second);
+        assert!(first.is_some());
+    }
 }

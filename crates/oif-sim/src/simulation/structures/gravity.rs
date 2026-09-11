@@ -1,4 +1,10 @@
-pub(super) fn gravity_moves(
+use super::{
+    HashMap, HashSet, IVec3, MovementMark, StructureId, StructureMove, StructureState,
+    SuctionLinks, WorldBlocks, can_move_gravity_structure, structure_id_gravity_grounded,
+    structure_supported_by_lifter,
+};
+
+pub(in crate::simulation) fn gravity_moves(
     world: &WorldBlocks,
     structures: &mut StructureState,
     skip_factory_positions: &HashSet<IVec3>,

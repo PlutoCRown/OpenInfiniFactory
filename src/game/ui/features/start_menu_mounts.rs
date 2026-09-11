@@ -5,10 +5,7 @@ use bevy::window::PrimaryWindow;
 
 use crate::game::session::SessionBusy;
 use crate::game::state::GameMode;
-use crate::game::systems::perf::PerfScope;
-use crate::game::ui::access::UiAccessScope;
-use crate::game::ui::access::{i18n, with_ui_world};
-use crate::game::ui::components::UiIconAssets;
+use crate::game::ui::access::{i18n, ui_icons};
 use crate::game::ui::core::host::{UiHostMountRoot, UiRootEntity};
 use crate::game::ui::core::{StartMenuPage, UiMountState, UiNavigation};
 use crate::game::ui::features::save::save_list_title;
@@ -20,7 +17,7 @@ use crate::game::ui::screens::{
 
 /// 按当前屏同步挂载主菜单与存档列表
 pub fn sync_start_menu_mounts(
-    _ui_thread: crate::game::ui::access::UiMainThread,
+    ui_context: crate::game::ui::access::UiContext,
     mode: Res<State<GameMode>>,
     navigation: Res<UiNavigation>,
     busy: Res<SessionBusy>,
@@ -31,6 +28,7 @@ pub fn sync_start_menu_mounts(
     mut save_list_render: ResMut<SaveListRenderState>,
     mut commands: Commands,
 ) {
+    let _ui_scope = ui_context.enter();
     if *mode.get() != GameMode::StartMenu {
         for entity in [mounts.main_menu.take(), mounts.save_list.take()]
             .into_iter()
@@ -119,12 +117,12 @@ pub fn sync_start_menu_mounts(
                 .unwrap_or((1280.0, 720.0));
             let (panel_w, panel_h) = save_list_panel_size(win_w, win_h, ui_scale.0);
             let window_aspect = (win_w / win_h.max(1.0)).max(0.5);
-            // 须在 with_children 延后执行前解析完（延后阶段已离开 UiAccessScope）
+            // 须在 with_children 延后执行前解析完（延后阶段已离开 UI 命令提交）
             let spawn_ctx = SaveListSpawnCtx {
                 title: save_list_title(),
                 puzzle_heading: i18n.t("save.title.select_puzzle_list"),
                 solution_heading: i18n.t("save.title.select_solution"),
-                icons: with_ui_world(|world| world.resource::<UiIconAssets>().clone()),
+                icons: ui_icons(),
             };
             let mut entity = None;
             commands.entity(root).with_children(|root| {
@@ -157,19 +155,5 @@ pub fn sync_start_menu_mounts(
             *save_list_render = SaveListRenderState::default();
         }
         _ => {}
-    }
-}
-
-pub struct StartMenuMountsPlugin;
-
-impl Plugin for StartMenuMountsPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            sync_start_menu_mounts
-                .in_set(UiAccessScope)
-                .after(PerfScope::Placement)
-                .before(PerfScope::Menus),
-        );
     }
 }

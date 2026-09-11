@@ -7,17 +7,16 @@ use std::collections::HashSet;
 use crate::game::audio::{PlaySound, SoundId};
 use crate::game::blocks::{BlockData, BlockPresent};
 use crate::game::edit_history::{FacePanelDelta, WorldPatch, build_cell_patch};
-use crate::game::local_player::LocalPlayerMut;
+use crate::game::local_player::PlacementPlayerMut;
 use crate::game::player::controller::{FlyCamera, teleport_player_preserve_offset};
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::{
     BuilderMode, EditGesture, EditGestureKind, PlacementState, SolutionState, WorldEntryMode,
 };
-use crate::game::systems::debug::DebugState;
 use crate::game::systems::gameplay::GameplayPlayGate;
 use crate::game::ui::features::GameplayToast;
-use crate::game::ui::features::block_panels::PendingBlockPanelOpen;
+use crate::game::ui::features::block_panels::OpenBlockPanelRequest;
 use crate::game::ui::{AreaKind, InventoryItems};
 use crate::game::world::direction::Facing;
 use crate::game::world::grid::{MaterialFace, WorldBlocks};
@@ -45,15 +44,13 @@ pub struct PlacementQueries<'w, 's> {
     meshes: ResMut<'w, Assets<Mesh>>,
     block_entities: Query<'w, 's, (Entity, &'static BlockEntity)>,
     edit_previews: Query<'w, 's, Entity, With<EditPreview>>,
-    fly_camera: Query<'w, 's, (&'static mut FlyCamera, &'static mut Transform), With<FlyCamera>>,
+    fly_camera: Query<'w, 's, &'static Transform, With<FlyCamera>>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
-    debug: Res<'w, DebugState>,
     structure_state: ResMut<'w, StructureState>,
     block_index: ResMut<'w, BlockEntityIndex>,
     scene_chunks: ResMut<'w, SceneChunkMeshes>,
     input: Res<'w, crate::game::input::GameplayInputState>,
     touch: Res<'w, crate::shared::touch_profile::TouchProfile>,
-    pending_block_panel: ResMut<'w, PendingBlockPanelOpen>,
     locale: Res<'w, I18n>,
     toast: ResMut<'w, GameplayToast>,
     edit_timing: ResMut<'w, EditBatchTiming>,
@@ -67,24 +64,24 @@ pub fn placement_input(
     mut solution_state: ResMut<SolutionState>,
     config: Res<GameConfig>,
     gate: GameplayPlayGate,
-    mut player: LocalPlayerMut,
+    mut player: PlacementPlayerMut,
     queries: PlacementQueries,
     mut sound_writer: MessageWriter<PlaySound>,
+    mut panel_requests: MessageWriter<OpenBlockPanelRequest>,
+    mut teleport_requests: MessageWriter<PlayerTeleportRequest>,
 ) {
     let PlacementQueries {
         mut commands,
         mut meshes,
         block_entities,
         edit_previews,
-        mut fly_camera,
+        fly_camera,
         render_assets,
-        debug,
         mut structure_state,
         mut block_index,
         mut scene_chunks,
         input,
         touch,
-        mut pending_block_panel,
         locale,
         mut toast,
         mut edit_timing,
@@ -123,7 +120,9 @@ pub fn placement_input(
         despawn_edit_previews(&mut commands, &edit_previews);
         if builder_mode == BuilderMode::Play && input.delete.just_pressed {
             let current_target_pos = placement.target.map(|target| target.pos);
-            try_player_teleport(current_target_pos, &world, &mut fly_camera);
+            if let Some(pos) = current_target_pos {
+                teleport_requests.write(PlayerTeleportRequest(pos));
+            }
         }
         return;
     }
@@ -141,7 +140,7 @@ pub fn placement_input(
             &world,
             builder_mode,
             solution_state.entry,
-            &mut pending_block_panel,
+            &mut panel_requests,
         ) {
             placement.edit_gesture = None;
             placement.selection.clear();
@@ -177,7 +176,7 @@ pub fn placement_input(
             &world,
             builder_mode,
             solution_state.entry,
-            &mut pending_block_panel,
+            &mut panel_requests,
         )
     {
         placement.edit_gesture = None;
@@ -196,10 +195,9 @@ pub fn placement_input(
                     render_assets: &render_assets,
                     block_index: &mut block_index,
                     scene_chunks: &mut scene_chunks,
-                    debug: &debug,
-                    structure_state: &mut structure_state,
                 },
                 world: &mut world,
+                structure_state: &mut structure_state,
                 edit_history,
                 block_entities: &block_entities,
             };
@@ -256,10 +254,9 @@ pub fn placement_input(
                         render_assets: &render_assets,
                         block_index: &mut block_index,
                         scene_chunks: &mut scene_chunks,
-                        debug: &debug,
-                        structure_state: &mut structure_state,
                     },
                     world: &mut world,
+                    structure_state: &mut structure_state,
                     edit_history,
                     block_entities: &block_entities,
                 };
@@ -273,7 +270,7 @@ pub fn placement_input(
                         speed: 1.0,
                     });
                     // C 切变体后：后续放置朝向跟这个方块对齐
-                    if let Some(block) = edit.world.blocks.get(&pos) {
+                    if let Some(block) = edit.world.blocks().get(&pos) {
                         placement.preview_facing = block.facing;
                     }
                 }
@@ -303,19 +300,18 @@ pub fn placement_input(
                         render_assets: &render_assets,
                         block_index: &mut block_index,
                         scene_chunks: &mut scene_chunks,
-                        debug: &debug,
-                        structure_state: &mut structure_state,
                     },
                     world: &mut world,
+                    structure_state: &mut structure_state,
                     edit_history,
                     block_entities: &block_entities,
                 };
                 if rotate_block_at(&mut edit, pos, reverse_rotation) {
                     let facing = edit
                         .world
-                        .blocks
+                        .blocks()
                         .get(&pos)
-                        .or_else(|| edit.world.system_blocks.get(&pos))
+                        .or_else(|| edit.world.system_blocks().get(&pos))
                         .map(|block| block.facing);
                     if let Some(facing) = facing {
                         edit.edit_history.finish_rotation(pos, facing);
@@ -355,24 +351,32 @@ pub fn placement_input(
     }
 
     if input.delete.just_pressed {
-        if builder_mode == BuilderMode::Play
-            && try_player_teleport(current_target_pos, &world, &mut fly_camera)
-        {
-            placement.edit_gesture = None;
-            despawn_edit_previews(&mut commands, &edit_previews);
-            return;
+        if builder_mode == BuilderMode::Play {
+            if let Some(pos) = current_target_pos.filter(|pos| {
+                world.system_blocks().get(pos).is_some_and(|block| {
+                    block
+                        .kind
+                        .material_processor()
+                        .is_some_and(|processor| processor.is_teleport())
+                }) && world.teleport_partner(*pos).is_some()
+            }) {
+                teleport_requests.write(PlayerTeleportRequest(pos));
+                placement.edit_gesture = None;
+                despawn_edit_previews(&mut commands, &edit_previews);
+                return;
+            }
         }
         // 优先卸下瞄准面的灯面板（不占格，点对面删除）
         if let Some(target) = placement
             .target
             .filter(|target| target.normal != IVec3::ZERO)
         {
-            if let Some(block) = world.blocks.get(&target.pos).copied() {
+            if let Some(block) = world.blocks().get(&target.pos).copied() {
                 if block.kind.signal_behavior(block.facing)
                     == Some(crate::game::blocks::SignalBehavior::Wire)
                 {
                     let face = MaterialFace::new(block.id, target.normal);
-                    if world.wire_face_panels.contains(&face) {
+                    if world.wire_face_panels().contains(&face) {
                         edit_history.flush_pending_rotation();
                         let patch = WorldPatch {
                             face_panels: vec![FacePanelDelta {
@@ -401,9 +405,8 @@ pub fn placement_input(
                             render_assets: &render_assets,
                             block_index: &mut block_index,
                             scene_chunks: &mut scene_chunks,
-                            debug: &debug,
-                            structure_state: &mut structure_state,
                         };
+                        structure_state.apply_factory_edit(&world, &wire_neighbors);
                         refresh_edit_changes(&mut scene, &world, &wire_neighbors);
                         solution_state.dirty = true;
                         sound_writer.write(PlaySound {
@@ -451,12 +454,12 @@ pub fn placement_input(
                 .target
                 .filter(|target| target.normal != IVec3::ZERO)
             {
-                if let Some(block) = world.blocks.get(&target.pos).copied() {
+                if let Some(block) = world.blocks().get(&target.pos).copied() {
                     if block.kind.signal_behavior(block.facing)
                         == Some(crate::game::blocks::SignalBehavior::Wire)
                     {
                         let face = MaterialFace::new(block.id, target.normal);
-                        if !world.wire_face_panels.contains(&face) {
+                        if !world.wire_face_panels().contains(&face) {
                             edit_history.flush_pending_rotation();
                             let patch = WorldPatch {
                                 face_panels: vec![FacePanelDelta {
@@ -484,9 +487,8 @@ pub fn placement_input(
                                 render_assets: &render_assets,
                                 block_index: &mut block_index,
                                 scene_chunks: &mut scene_chunks,
-                                debug: &debug,
-                                structure_state: &mut structure_state,
                             };
+                            structure_state.apply_factory_edit(&world, &wire_neighbors);
                             refresh_edit_changes(&mut scene, &world, &wire_neighbors);
                             solution_state.dirty = true;
                             placed = true;
@@ -557,7 +559,7 @@ pub fn placement_input(
     let player_pos = fly_camera
         .single()
         .ok()
-        .map(|(_, transform)| transform.translation);
+        .map(|transform| transform.translation);
 
     if should_finish {
         if let Some(gesture) = placement.edit_gesture.take() {
@@ -577,10 +579,9 @@ pub fn placement_input(
                             render_assets: &render_assets,
                             block_index: &mut block_index,
                             scene_chunks: &mut scene_chunks,
-                            debug: &debug,
-                            structure_state: &mut structure_state,
                         },
                         world: &mut world,
+                        structure_state: &mut structure_state,
                         edit_history,
                         block_entities: &block_entities,
                     };
@@ -683,41 +684,44 @@ fn selected_area(inventory: &InventoryItems, placement: &PlacementState) -> Opti
 }
 
 /// 右键传送入口/出口时传送玩家
-fn try_player_teleport(
-    target: Option<IVec3>,
-    world: &WorldBlocks,
-    player: &mut Query<(&mut FlyCamera, &mut Transform), With<FlyCamera>>,
-) -> bool {
-    let Some(pos) = target else {
-        return false;
+#[derive(Message)]
+pub struct PlayerTeleportRequest(IVec3);
+
+/// 消费方块交互发出的传送请求，并移动玩家到配对端
+pub(super) fn apply_player_teleport_request(
+    mut requests: MessageReader<PlayerTeleportRequest>,
+    world: Res<WorldBlocks>,
+    mut player: Query<(&mut FlyCamera, &mut Transform), With<FlyCamera>>,
+) {
+    let Some(pos) = requests.read().last().map(|request| request.0) else {
+        return;
     };
-    let Some(block) = world.system_blocks.get(&pos) else {
-        return false;
+    let Some(block) = world.system_blocks().get(&pos) else {
+        return;
     };
     if !block
         .kind
         .material_processor()
         .is_some_and(|processor| processor.is_teleport())
     {
-        return false;
+        return;
     }
     let Some(partner) = world.teleport_partner(pos) else {
-        return false;
+        return;
     };
     let Ok((mut camera, mut transform)) = player.single_mut() else {
-        return false;
+        return;
     };
     teleport_player_preserve_offset(pos, partner, &mut transform, &mut camera);
-    true
 }
 
-/// 点击可配置方块时请求打开方块 UI（实际挂载延后到 UiAccessScope）
+/// 点击可配置方块时请求打开方块 UI（实际挂载延后到 UI 命令提交）
 fn open_target_block_ui(
     target: Option<IVec3>,
     world: &WorldBlocks,
     builder_mode: BuilderMode,
     entry: WorldEntryMode,
-    pending: &mut PendingBlockPanelOpen,
+    requests: &mut MessageWriter<OpenBlockPanelRequest>,
 ) -> bool {
     let Some(pos) = target else {
         return false;
@@ -725,11 +729,11 @@ fn open_target_block_ui(
     // Free / Edit：系统层优先；PlaySolution 的 Play：只看工厂层
     let block = if entry == WorldEntryMode::Free || builder_mode == BuilderMode::Edit {
         world
-            .system_blocks
+            .system_blocks()
             .get(&pos)
-            .or_else(|| world.blocks.get(&pos))
+            .or_else(|| world.blocks().get(&pos))
     } else {
-        world.blocks.get(&pos)
+        world.blocks().get(&pos)
     };
     let Some(block) = block else {
         return false;
@@ -739,7 +743,7 @@ fn open_target_block_ui(
         return false;
     };
 
-    pending.0 = Some((pos, panel));
+    requests.write(OpenBlockPanelRequest { pos, panel });
     true
 }
 
@@ -807,8 +811,8 @@ fn commit_edit_gesture(
                     world.insert(*pos, placed);
                     if placed.kind.attaches_to_factory_face() {
                         let host_pos = *pos - gesture.plane_normal;
-                        if let Some(host) = world.blocks.get(&host_pos).copied() {
-                            if let Some(sign) = world.blocks.get(pos).copied() {
+                        if let Some(host) = world.blocks().get(&host_pos).copied() {
+                            if let Some(sign) = world.blocks().get(pos).copied() {
                                 world.attach_factory_child(sign.id, host.id, gesture.plane_normal);
                             }
                         }
@@ -843,6 +847,8 @@ fn commit_edit_gesture(
     let cell_count = changed_positions.len();
     edit.edit_history.record(patch);
     refresh_edit_generated_markers(edit.world);
+    edit.structure_state
+        .apply_factory_edit(edit.world, &changed_positions);
     refresh_edit_changes(&mut edit.scene, edit.world, &changed_positions);
     let ms = started.elapsed().as_secs_f64() * 1000.0;
     if is_place {

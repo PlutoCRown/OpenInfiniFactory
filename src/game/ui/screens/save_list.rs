@@ -44,7 +44,7 @@ const SECTION_HEADING_H: f32 = 21.0;
 /// 右侧标题 / 方案条 / 封面之间的 gap
 const RIGHT_ROW_GAP: f32 = 8.0;
 
-/// 存档弹窗挂载时预解析的文案与图标（须在 UiAccessScope 内算好再传入）
+/// 存档弹窗挂载时预解析的文案与图标（须在 UI 命令提交 内算好再传入）
 pub struct SaveListSpawnCtx {
     pub title: String,
     pub puzzle_heading: String,

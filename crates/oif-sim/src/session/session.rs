@@ -1,4 +1,4 @@
-use crate::simulation::core::{TurnOutput, simulate_turn};
+use crate::simulation::core::{TurnOutput, TurnRunner};
 use crate::simulation::movement::PusherState;
 use crate::simulation::pending::PendingTurnEffects;
 use crate::simulation::signals::SignalNetworkCache;
@@ -12,6 +12,7 @@ use super::control::SimulationControl;
 
 /// 自有模拟会话：世界与回合状态，无 Bevy App
 pub struct SimSession {
+    runner: TurnRunner,
     pub world: WorldBlocks,
     pub pending_effects: PendingTurnEffects,
     pub signal_cache: SignalNetworkCache,
@@ -27,6 +28,7 @@ impl SimSession {
     /// 新建空会话
     pub fn new() -> Self {
         Self {
+            runner: TurnRunner::default(),
             world: WorldBlocks::default(),
             pending_effects: PendingTurnEffects::default(),
             signal_cache: SignalNetworkCache::default(),
@@ -113,7 +115,7 @@ impl SimSession {
     /// 推进下一回合；批量性能测试可关闭逐块日志，避免观测本身污染耗时
     pub fn simulate_next_turn_with_logging(&mut self, logging: bool) -> TurnOutput {
         let next_turn = self.control.turn + 1;
-        let output = simulate_turn(
+        let output = self.runner.run(
             &mut self.world,
             &mut self.pending_effects,
             &mut self.signal_cache,
@@ -266,5 +268,67 @@ mod tests {
         session.begin_simulation();
         session.simulate_next_turn();
         assert_eq!(session.world.material_count, 0);
+    }
+}
+
+#[cfg(test)]
+mod schedule_tests {
+    use super::*;
+    use crate::blocks::{BlockData, BlockKind};
+    use crate::world::Facing;
+    use glam::IVec3;
+
+    /// GUI 使用的持久执行器与无头会话应逐回合得到相同状态，回滚后可重复执行。
+    #[test]
+    fn shared_runner_matches_session_and_survives_rollback() {
+        let mut headless = SimSession::new();
+        headless
+            .world
+            .insert(IVec3::Y, BlockData::new(BlockKind::Blocker, Facing::East));
+        headless.world.insert(
+            IVec3::Y + IVec3::X,
+            BlockData::new(BlockKind::Platform, Facing::North),
+        );
+        headless.begin_simulation();
+        let mut world = headless.world.clone();
+        let mut structures = headless.structure_state.clone();
+        let mut pending = PendingTurnEffects::default();
+        let mut signals = SignalNetworkCache::default();
+        let mut history = MovementHistory::default();
+        let mut pushers = headless.pusher_state.clone();
+        let mut runner = TurnRunner::default();
+        let mut first_world = None;
+        for turn in 1..=4 {
+            let expected = headless.simulate_next_turn_with_logging(false);
+            let actual = runner.run(
+                &mut world,
+                &mut pending,
+                &mut signals,
+                turn,
+                &mut structures,
+                &mut history,
+                &mut pushers,
+                None,
+                None,
+            );
+            assert_eq!(world.blocks, headless.world.blocks);
+            assert_eq!(world.system_blocks, headless.world.system_blocks);
+            assert_eq!(actual.powered_wires, expected.powered_wires);
+            assert_eq!(actual.powered_devices, expected.powered_devices);
+            assert_eq!(
+                actual
+                    .animations
+                    .keys()
+                    .collect::<std::collections::HashSet<_>>(),
+                expected.animations.keys().collect()
+            );
+            if turn == 1 {
+                first_world = Some(headless.world.clone());
+            }
+        }
+        headless.rollback();
+        headless.begin_simulation();
+        headless.simulate_next_turn_with_logging(false);
+        assert_eq!(headless.world.blocks, first_world.unwrap().blocks);
     }
 }

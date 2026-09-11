@@ -1,8 +1,14 @@
+use super::{
+    BlockKind, HashMap, HashSet, IVec3, MovementMark, PusherAnimationKind, StructureMove,
+    StructureState, SuctionLinks, WorldBlocks, expanded_move_structure_with_occupancy,
+    movement_expansion_mode,
+};
+
 // 移动占位：动画占双格（起点+终点），同向 claim 兼容
 
 /// 回合内格子速度声明：同格同速度兼容，异速冲突
 #[derive(Default, Clone, Debug)]
-pub(super) struct MovingOccupancy {
+pub(in crate::simulation) struct MovingOccupancy {
     /// cell → velocity（已接受运动的占位）
     claims: HashMap<IVec3, IVec3>,
 }
@@ -74,7 +80,7 @@ impl MovingOccupancy {
 
 /// 按列表顺序 + 同向 fixpoint 仲裁；返回可提交的候选子集（保序）
 /// Push（推杆变形）仍交 execute 顺序兜底；占位仲裁覆盖重力/传送带等平移
-pub(super) fn arbitrate_movement_plan(
+pub(in crate::simulation) fn arbitrate_movement_plan(
     world: &WorldBlocks,
     structures: &StructureState,
     suction: &SuctionLinks,

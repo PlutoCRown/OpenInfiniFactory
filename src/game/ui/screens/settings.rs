@@ -10,9 +10,9 @@ use super::super::components::{
     spawn_panel, transparent_node,
 };
 use super::super::types::{
-    AUDIO_SETTINGS, GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, PanelVisibility, SettingsAction,
-    SettingsControl, SettingsDropdown, SettingsDropdownRow, SettingsItem, SettingsTab,
-    TOUCH_SETTINGS, UiPanelBinding,
+    AUDIO_SETTINGS, GAMEPLAY_SETTINGS, GRAPHICS_SETTINGS, SettingsAction, SettingsControl,
+    SettingsDropdown, SettingsDropdownRow, SettingsItem, SettingsTab, TOUCH_SETTINGS,
+    UiPanelBinding,
 };
 use super::super::widgets::{
     spawn_localized_settings_button, spawn_settings_dropdown, spawn_settings_dropdown_list,
@@ -85,7 +85,7 @@ fn spawn_settings_dropdown_row(
     panel
         .spawn((
             settings_row_node(),
-            PanelVisibility::SettingsTab(tab),
+            crate::game::ui::features::settings::types::SettingsTabPanel(tab),
             SettingsDropdownRow(dropdown),
             ZIndex(300),
         ))
@@ -110,7 +110,10 @@ fn spawn_settings_radio_row(
     tab: SettingsTab,
 ) {
     panel
-        .spawn((settings_row_node(), PanelVisibility::SettingsTab(tab)))
+        .spawn((
+            settings_row_node(),
+            crate::game::ui::features::settings::types::SettingsTabPanel(tab),
+        ))
         .with_children(|row| {
             spawn_settings_label(row, label_key);
             row.spawn(transparent_node(settings_control_cell()))
@@ -144,7 +147,7 @@ fn spawn_settings_slider_row(
 ) {
     panel
         .spawn(settings_row_node())
-        .insert(PanelVisibility::SettingsTab(tab))
+        .insert(crate::game::ui::features::settings::types::SettingsTabPanel(tab))
         .with_children(|row| {
             spawn_settings_label(row, label_key);
             row.spawn(transparent_node({
@@ -240,7 +243,7 @@ fn spawn_settings_item(
 fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
     panel
         .spawn(scroll_container())
-        .insert(PanelVisibility::SettingsTab(SettingsTab::Gameplay))
+        .insert(crate::game::ui::features::settings::types::SettingsTabPanel(SettingsTab::Gameplay))
         .with_children(|container| {
             container
                 .spawn(scroll_content(24.0))
@@ -256,7 +259,7 @@ fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, settings: &GameSett
 fn spawn_graphics_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
     panel
         .spawn(scroll_container())
-        .insert(PanelVisibility::SettingsTab(SettingsTab::Graphics))
+        .insert(crate::game::ui::features::settings::types::SettingsTabPanel(SettingsTab::Graphics))
         .with_children(|container| {
             container
                 .spawn(scroll_content(24.0))
@@ -282,7 +285,9 @@ fn spawn_key_bindings(
 ) {
     panel
         .spawn(scroll_container())
-        .insert(PanelVisibility::SettingsTab(SettingsTab::KeyBindings))
+        .insert(
+            crate::game::ui::features::settings::types::SettingsTabPanel(SettingsTab::KeyBindings),
+        )
         .with_children(|container| {
             container
                 .spawn(scroll_content(24.0))
@@ -321,7 +326,7 @@ fn spawn_key_bindings(
 fn spawn_audio_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
     panel
         .spawn(scroll_container())
-        .insert(PanelVisibility::SettingsTab(SettingsTab::Audio))
+        .insert(crate::game::ui::features::settings::types::SettingsTabPanel(SettingsTab::Audio))
         .with_children(|container| {
             container
                 .spawn(scroll_content(24.0))

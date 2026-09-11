@@ -18,8 +18,8 @@ pub use dispatch::{
     save_current_world_invalidate_resources, save_current_world_resources,
     save_world_as_new_puzzle_in_world, switch_to_edit_mode_in_world,
 };
-pub use messages::LoadWorld;
-pub use world_access::{PlayingWorldParams, SessionStateParams};
+pub use messages::{BeginSolutionPlay, LoadWorld};
+pub use world_access::{EditableWorldParams, PlayingWorldParams, SessionStateParams};
 pub use world_ops::SaveCurrentWorldResult;
 
 use cover::PendingMainMenuExit;
@@ -29,9 +29,8 @@ use cover::{CoverScreenshotComplete, on_screenshot_saved_for_exit};
 use bevy::prelude::*;
 
 use crate::game::cameras::GameplayViewImage;
+use crate::game::schedule::GameSet;
 use crate::game::simulation::structure_state::StructureState;
-use crate::game::systems::debug::DebugState;
-use crate::game::systems::perf::PerfScope;
 use crate::game::ui::PlayingUiRoot;
 use crate::game::ui::core::UiMountState;
 use crate::game::ui::core::UiNavigation;
@@ -60,7 +59,7 @@ use save::{
     handle_save_current_world_invalidate_solutions, handle_save_world_as_new_puzzle,
     process_pending_save,
 };
-use solution::{handle_reset_solution, handle_switch_to_edit_mode};
+use solution::{handle_begin_solution_play, handle_reset_solution, handle_switch_to_edit_mode};
 
 pub struct SessionPlugin;
 
@@ -78,6 +77,7 @@ impl Plugin for SessionPlugin {
             .add_message::<ExitToMainMenu>()
             .add_message::<ResetSolution>()
             .add_message::<SwitchToEditMode>()
+            .add_message::<BeginSolutionPlay>()
             .add_message::<LoadWorld>()
             .add_message::<CreateNewPuzzle>()
             .add_message::<CreateNewFree>()
@@ -98,6 +98,7 @@ impl Plugin for SessionPlugin {
                 process_deferred_main_menu_exit,
                 handle_reset_solution,
                 handle_switch_to_edit_mode,
+                handle_begin_solution_play,
                 handle_load_world,
                 poll_pending_world_load,
                 release_session_busy_after_playing,
@@ -108,15 +109,14 @@ impl Plugin for SessionPlugin {
                 ApplyDeferred,
             )
                 .chain()
-                .after(PerfScope::Menus)
-                .before(PerfScope::Simulation),
+                .in_set(crate::game::schedule::GameSet::Session),
         );
         #[cfg(not(target_arch = "wasm32"))]
         app.add_systems(
             Update,
             navigation::finish_pending_main_menu_exit
                 .after(process_deferred_main_menu_exit)
-                .before(PerfScope::Simulation),
+                .in_set(GameSet::Session),
         );
     }
 }
@@ -131,19 +131,17 @@ pub fn rebuild_playing_world(
     world: Res<WorldBlocks>,
     mut render_assets: ResMut<WorldRenderAssets>,
     builder_mode: Res<crate::game::state::BuilderMode>,
-    debug: Res<DebugState>,
     mut structure_state: ResMut<StructureState>,
     mut index: ResMut<crate::scene::BlockEntityIndex>,
     mut scene_chunks: ResMut<crate::game::world::rendering::SceneChunkMeshes>,
 ) {
     render_assets.set_goal_play_visual(*builder_mode == crate::game::state::BuilderMode::Play);
-    crate::game::world::rendering::rebuild_world_on_enter(
+    structure_state.rebuild_for_runtime(&world);
+    crate::game::world::rendering::rebuild_world(
         &mut commands,
         &mut meshes,
         &world,
         &render_assets,
-        &debug,
-        &mut structure_state,
         &mut index,
         &mut scene_chunks,
     );

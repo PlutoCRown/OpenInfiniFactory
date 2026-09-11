@@ -73,7 +73,109 @@ impl TurnOutput {
     }
 }
 
-/// 执行一整回合模拟（信号 → 运动标记 → 脆弱碎裂 → 执行运动 → 结构后处理）并产出表现数据
+use crate::session::SimulationDebugLog;
+use bevy_ecs::prelude::*;
+
+/// 一次回合的短生命周期工作区；仅保存阶段之间需要传递的数据。
+#[derive(Resource)]
+struct TurnWork {
+    turn: u64,
+    total_start: Instant,
+    mark: Instant,
+    sample: SimulationStepStats,
+    log: Option<SimulationDebugLog>,
+    break_debris: Vec<BreakDebris>,
+    acceptance_sparks: Vec<BreakDebris>,
+    laser_devices: HashSet<IVec3>,
+    powered_devices: HashSet<IVec3>,
+    powered_wire_ids: HashSet<crate::blocks::BlockId>,
+    powered_device_ids: HashSet<crate::blocks::BlockId>,
+    laser_beams: Vec<LaserBeam>,
+    laser_probe_sparks: Vec<IVec3>,
+    animations: HashMap<IVec3, BlockMotion>,
+    pusher_animations: HashMap<IVec3, PusherMotion>,
+    fragile_debris: Vec<(IVec3, crate::blocks::BlockKind)>,
+    output: Option<TurnOutput>,
+}
+
+/// 可复用的回合执行器；GUI 和无头会话使用相同的 ECS 系统与顺序。
+#[derive(Resource)]
+pub struct TurnRunner {
+    world: World,
+    schedule: Schedule,
+}
+
+impl Default for TurnRunner {
+    fn default() -> Self {
+        let mut schedule = Schedule::default();
+        schedule.add_systems((prepare_turn, resolve_signals, move_structures, finish_turn).chain());
+        Self {
+            world: World::new(),
+            schedule,
+        }
+    }
+}
+
+impl TurnRunner {
+    /// 原子推进回合：移动资源所有权，不复制世界；完成后归还宿主。
+    pub fn run(
+        &mut self,
+        world: &mut WorldBlocks,
+        pending_effects: &mut PendingTurnEffects,
+        signal_cache: &mut SignalNetworkCache,
+        turn: u64,
+        structure_state: &mut StructureState,
+        movement_history: &mut MovementHistory,
+        pusher_state: &mut PusherState,
+        mut sim_log: Option<&mut SimulationDebugLog>,
+        stats: Option<&mut SimulationStepStats>,
+    ) -> TurnOutput {
+        let now = Instant::now();
+        self.world.insert_resource(std::mem::take(world));
+        self.world.insert_resource(std::mem::take(pending_effects));
+        self.world.insert_resource(std::mem::take(signal_cache));
+        self.world.insert_resource(std::mem::take(structure_state));
+        self.world.insert_resource(std::mem::take(movement_history));
+        self.world.insert_resource(std::mem::take(pusher_state));
+        self.world.insert_resource(TurnWork {
+            turn,
+            total_start: now,
+            mark: now,
+            sample: SimulationStepStats::default(),
+            log: sim_log.as_deref_mut().map(std::mem::take),
+            break_debris: Vec::new(),
+            acceptance_sparks: Vec::new(),
+            laser_devices: HashSet::new(),
+            powered_devices: HashSet::new(),
+            powered_wire_ids: HashSet::new(),
+            powered_device_ids: HashSet::new(),
+            laser_beams: Vec::new(),
+            laser_probe_sparks: Vec::new(),
+            animations: HashMap::new(),
+            pusher_animations: HashMap::new(),
+            fragile_debris: Vec::new(),
+            output: None,
+        });
+        self.schedule.run(&mut self.world);
+        *world = self.world.remove_resource::<WorldBlocks>().unwrap();
+        *pending_effects = self.world.remove_resource::<PendingTurnEffects>().unwrap();
+        *signal_cache = self.world.remove_resource::<SignalNetworkCache>().unwrap();
+        *structure_state = self.world.remove_resource::<StructureState>().unwrap();
+        *movement_history = self.world.remove_resource::<MovementHistory>().unwrap();
+        *pusher_state = self.world.remove_resource::<PusherState>().unwrap();
+        let work = self.world.remove_resource::<TurnWork>().unwrap();
+        if let Some(log) = sim_log {
+            *log = work.log.unwrap();
+        }
+        let output = work.output.expect("turn schedule must produce its output");
+        if let Some(stats) = stats {
+            *stats = output.stats.clone();
+        }
+        output
+    }
+}
+
+/// 单次调用入口；连续会话应保留 TurnRunner，复用已经初始化的系统。
 pub fn simulate_turn(
     world: &mut WorldBlocks,
     pending_effects: &mut PendingTurnEffects,
@@ -82,24 +184,51 @@ pub fn simulate_turn(
     structure_state: &mut StructureState,
     movement_history: &mut MovementHistory,
     pusher_state: &mut PusherState,
-    mut sim_log: Option<&mut crate::session::SimulationDebugLog>,
+    sim_log: Option<&mut SimulationDebugLog>,
     stats: Option<&mut SimulationStepStats>,
 ) -> TurnOutput {
-    let total_start = Instant::now();
-    let mut mark = total_start;
-    let mut sample = SimulationStepStats::default();
+    TurnRunner::default().run(
+        world,
+        pending_effects,
+        signal_cache,
+        turn,
+        structure_state,
+        movement_history,
+        pusher_state,
+        sim_log,
+        stats,
+    )
+}
 
+/// 回合准备系统：提交上一回合延后效果与本回合初始生成。
+fn prepare_turn(
+    mut world: ResMut<WorldBlocks>,
+    mut pending_effects: ResMut<PendingTurnEffects>,
+    mut structure_state: ResMut<StructureState>,
+    mut work: ResMut<TurnWork>,
+) {
+    let world = &mut *world;
+    let pending_effects = &mut *pending_effects;
+    let structure_state = &mut *structure_state;
+    let TurnWork {
+        turn,
+        mark,
+        sample,
+        log: sim_log,
+        break_debris,
+        acceptance_sparks,
+        ..
+    } = &mut *work;
+    let turn = *turn;
     if let Some(sim_log) = sim_log.as_mut() {
         sim_log.log(turn, "turn begin");
     }
 
     // 回合初：只重建静态 marker；不做焊/传送/生成/销毁落地
     run_static_marker_phase(world);
-    sample.prep_ms = mark_elapsed_ms(&mut mark);
+    sample.prep_ms = mark_elapsed_ms(mark);
 
     // 上一回合挂起的钻头/验收销毁：此时上一回合移动动画已结束，再真正移除
-    let mut break_debris = Vec::new();
-    let mut acceptance_sparks = Vec::new();
     let mut structures_dirty = false;
     for (pos, kind, reason) in pending_effects.take_ready_destroyed(turn) {
         if !world.is_material_at(pos) {
@@ -134,7 +263,24 @@ pub fn simulate_turn(
     if structures_dirty {
         structure_state.refresh_material_structures(world);
     }
+}
 
+/// 信号系统：光学探测后计算供电，并保存移动前的方块身份。
+fn resolve_signals(
+    mut world: ResMut<WorldBlocks>,
+    mut signal_cache: ResMut<SignalNetworkCache>,
+    mut work: ResMut<TurnWork>,
+) {
+    let world = &mut *world;
+    let signal_cache = &mut *signal_cache;
+    let TurnWork {
+        turn,
+        mark,
+        sample,
+        log: sim_log,
+        ..
+    } = &mut *work;
+    let turn = *turn;
     // —— 阶段 1 信号：光学探测（不销毁）→ 二次供电 ——
     signal_cache.refresh(world);
     let laser_power = signal_cache.powered_components(world, &HashSet::new());
@@ -153,7 +299,7 @@ pub fn simulate_turn(
         .iter()
         .filter_map(|pos| world.blocks.get(pos).map(|block| block.id))
         .collect();
-    sample.signal_ms = mark_elapsed_ms(&mut mark);
+    sample.signal_ms = mark_elapsed_ms(mark);
     if let Some(sim_log) = sim_log.as_mut() {
         sim_log.log(
             turn,
@@ -177,6 +323,35 @@ pub fn simulate_turn(
         }
     }
 
+    work.laser_devices = laser_devices;
+    work.powered_devices = powered_devices;
+    work.powered_wire_ids = powered_wire_ids;
+    work.powered_device_ids = powered_device_ids;
+    work.laser_beams = laser_beams;
+    work.laser_probe_sparks = laser_probe_sparks;
+}
+
+/// 运动系统：统一标记、仲裁并提交重力和设备驱动的位移。
+fn move_structures(
+    mut world: ResMut<WorldBlocks>,
+    mut structure_state: ResMut<StructureState>,
+    mut movement_history: ResMut<MovementHistory>,
+    mut pusher_state: ResMut<PusherState>,
+    mut work: ResMut<TurnWork>,
+) {
+    let world = &mut *world;
+    let structure_state = &mut *structure_state;
+    let movement_history = &mut *movement_history;
+    let pusher_state = &mut *pusher_state;
+    let TurnWork {
+        turn,
+        mark,
+        sample,
+        log: sim_log,
+        powered_devices,
+        ..
+    } = &mut *work;
+    let turn = *turn;
     let actuating_devices = pusher_state.actuating_devices(world, &powered_devices);
     let actuating_structure_ids: HashSet<_> = actuating_devices
         .iter()
@@ -229,12 +404,12 @@ pub fn simulate_turn(
         &hard_pusher_head_occupancy,
         &suction,
     );
-    sample.gravity_ms = mark_elapsed_ms(&mut mark);
+    sample.gravity_ms = mark_elapsed_ms(mark);
     if let Some(sim_log) = sim_log.as_mut() {
         log_movement_plan(turn, sim_log, world, "gravity", &movement_plan);
     }
 
-    sample.marker_before_move_ms = mark_elapsed_ms(&mut mark);
+    sample.marker_before_move_ms = mark_elapsed_ms(mark);
 
     let (device_movement_plan, conveyor_diag) = {
         structure_state.clear_turn_marks();
@@ -278,7 +453,7 @@ pub fn simulate_turn(
     if let Some(sim_log) = sim_log.as_mut() {
         log_movement_plan(turn, sim_log, world, "merged", &movement_plan);
     }
-    sample.movement_mark_ms = mark_elapsed_ms(&mut mark);
+    sample.movement_mark_ms = mark_elapsed_ms(mark);
 
     // —— 阶段 3a 脆弱碎裂：按运动计划移除冲突脆弱材料，再执行位姿 ——
     let fragile_debris =
@@ -301,15 +476,51 @@ pub fn simulate_turn(
     for (pos, animation) in pusher_state.sustained_animations(world) {
         pusher_animations.entry(pos).or_insert(animation);
     }
-    sample.movement_execute_ms = mark_elapsed_ms(&mut mark);
+    sample.movement_execute_ms = mark_elapsed_ms(mark);
 
     run_static_marker_phase(world);
-    sample.marker_after_move_ms = mark_elapsed_ms(&mut mark);
+    sample.marker_after_move_ms = mark_elapsed_ms(mark);
 
+    work.animations = animations;
+    work.pusher_animations = pusher_animations;
+    work.fragile_debris = fragile_debris;
+}
+
+/// 后处理系统：执行业务效果、刷新索引并生成本回合表现输出。
+fn finish_turn(
+    mut world: ResMut<WorldBlocks>,
+    mut pending_effects: ResMut<PendingTurnEffects>,
+    mut signal_cache: ResMut<SignalNetworkCache>,
+    mut structure_state: ResMut<StructureState>,
+    mut work: ResMut<TurnWork>,
+) {
+    let world = &mut *world;
+    let pending_effects = &mut *pending_effects;
+    let signal_cache = &mut *signal_cache;
+    let structure_state = &mut *structure_state;
+    let TurnWork {
+        turn,
+        mark,
+        sample,
+        log: sim_log,
+        total_start,
+        laser_devices,
+        laser_probe_sparks,
+        break_debris,
+        fragile_debris,
+        animations,
+        pusher_animations,
+        laser_beams,
+        acceptance_sparks,
+        powered_wire_ids,
+        powered_device_ids,
+        ..
+    } = &mut *work;
+    let turn = *turn;
     // —— 阶段 4 结构后处理（销毁 → 传送 → 转换 → 验收 → 生成 → 焊 → 漆/印花挂起）——
-    let mut behavior_sparks = laser_probe_sparks;
+    let mut behavior_sparks = std::mem::take(laser_probe_sparks);
     break_debris.extend(
-        fragile_debris
+        std::mem::take(fragile_debris)
             .into_iter()
             .map(|(pos, kind)| BreakDebris { pos, kind }),
     );
@@ -355,18 +566,15 @@ pub fn simulate_turn(
     if had_materials || world.material_count > 0 {
         structure_state.refresh_material_structures(world);
     }
-    sample.behavior_ms = mark_elapsed_ms(&mut mark);
+    sample.behavior_ms = mark_elapsed_ms(mark);
 
     signal_cache.refresh(world);
-    sample.signal_refresh_ms = mark_elapsed_ms(&mut mark);
+    sample.signal_refresh_ms = mark_elapsed_ms(mark);
     sample.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
     sample.has_sample = true;
 
     if let Some(sim_log) = sim_log.as_mut() {
         sim_log.log(turn, format!("turn end: {:.2} ms", sample.total_ms));
-    }
-    if let Some(stats) = stats {
-        *stats = sample.clone();
     }
 
     // 表现用通电格：同一批通电 BlockId，落到本回合结束后的坐标
@@ -381,20 +589,21 @@ pub fn simulate_turn(
         .filter_map(|(pos, block)| powered_device_ids.contains(&block.id).then_some(*pos))
         .collect();
 
-    TurnOutput {
+    let output = TurnOutput {
         turn,
-        animations,
-        pusher_animations,
+        animations: std::mem::take(animations),
+        pusher_animations: std::mem::take(pusher_animations),
         powered_wires,
         powered_devices,
         weld_sparks,
         teleport_flashes,
         behavior_sparks,
-        break_debris,
-        laser_beams,
-        acceptance_sparks,
-        stats: sample,
-    }
+        break_debris: std::mem::take(break_debris),
+        laser_beams: std::mem::take(laser_beams),
+        acceptance_sparks: std::mem::take(acceptance_sparks),
+        stats: sample.clone(),
+    };
+    work.output = Some(output);
 }
 
 /// 落地 ready_turn 已到的生成材料，并焊接同参共生成块；有落地则返回 true

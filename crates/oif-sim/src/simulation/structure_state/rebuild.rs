@@ -1,3 +1,10 @@
+use super::{
+    AcceptorStructure, BlockId, FactoryActivity, GravitySupportContact, GridBounds, HashMap,
+    HashSet, IVec3, Structure, StructureFreedom, StructureId, StructureKind, StructureState,
+    WorldBlocks, factory_structure, is_blocked_factory_connection, material_id_to_pos,
+    material_structure_from, material_weld_neighbors, signal_offsets,
+};
+
 impl StructureState {
     pub fn clear(&mut self) {
         *self = Self::default();
@@ -17,7 +24,7 @@ impl StructureState {
         StructureId(self.next_structure_id)
     }
 
-    fn alloc_head_id(&mut self) -> BlockId {
+    pub(super) fn alloc_head_id(&mut self) -> BlockId {
         self.next_head_id = self.next_head_id.max(1);
         let id = BlockId(self.next_head_id);
         self.next_head_id += 1;
@@ -25,7 +32,7 @@ impl StructureState {
     }
 
     /// 逻辑头 ID 不得与世界方块 ID 冲突
-    fn sync_head_counter(&mut self, world: &WorldBlocks) {
+    pub(super) fn sync_head_counter(&mut self, world: &WorldBlocks) {
         self.next_head_id = self.next_head_id.max(world.next_block_id).max(1);
     }
 

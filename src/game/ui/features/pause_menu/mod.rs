@@ -4,12 +4,8 @@ use bevy::prelude::*;
 
 use crate::game::session;
 use crate::game::session::{SessionBusy, puzzle_save_needs_confirm};
-use crate::game::state::{
-    BuilderMode, GameMode, PendingPlayerSpawn, PlacementState, SimulationState, SolutionState,
-    WorldEntryMode,
-};
-use crate::game::systems::perf::PerfScope;
-use crate::game::ui::access::{UiAccessScope, UiMainThread, i18n, ui};
+use crate::game::state::{BuilderMode, GameMode, SolutionState, WorldEntryMode};
+use crate::game::ui::access::{UiContext, i18n, ui};
 use crate::game::ui::core::host::PlayingUiRootEntity;
 use crate::game::ui::core::runtime::{UiNavigation, UiPanelContext};
 use crate::game::ui::features::save::{
@@ -18,12 +14,9 @@ use crate::game::ui::features::save::{
 use crate::game::ui::menu_button::{
     MenuButtonClick, MenuButtonMarker, MenuButtonSet, spawn_menu_button,
 };
-use crate::game::ui::types::{CarriedItem, InventoryItems};
-use crate::game::world::grid::WorldBlocks;
-use crate::list_ui_config;
-use crate::shared::save::{
-    SaveKind, SaveSlot, SaveState, next_named_save, solution_names_for_puzzle,
-};
+use crate::shared::save::{SaveKind, SaveState};
+
+use super::playing_overlays::sync_playing_overlay_mounts;
 
 use confirm::{
     on_reset_solution, on_return_to_main, on_save_before_edit, reset_solution_spec,
@@ -32,171 +25,184 @@ use confirm::{
 
 pub struct PauseMenuPlugin;
 
-struct PauseMenuCtx<'w> {
-    builder_mode: &'w mut BuilderMode,
-    simulation: &'w mut SimulationState,
-    inventory: &'w mut InventoryItems,
-    carried: &'w mut CarriedItem,
-    placement: &'w mut PlacementState,
-    world: &'w mut WorldBlocks,
-    ui_navigation: &'w mut UiNavigation,
-    save_state: &'w mut SaveState,
-    solution_state: &'w mut SolutionState,
-    pending_player: &'w mut PendingPlayerSpawn,
-    ui_navigation_root: Option<Entity>,
-}
-
+/// 按钮只声明展示规则和命令绑定，执行系统独立声明业务依赖。
 struct PauseMenuButton {
     label_key: &'static str,
     label: Option<fn(&SaveState) -> String>,
-    visible: fn(&SaveState, &SolutionState) -> bool,
-    on_click: fn(&mut PauseMenuCtx<'_>, &mut Commands),
+    visible: Option<fn(&SaveState, &SolutionState) -> bool>,
+    on_click: fn(&mut Commands),
 }
 
-const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = list_ui_config!(
-    PauseMenuButton,
-    ctx: PauseMenuCtx<'_>,
-    {
-        key: "button.resume"
-        on_click(ctx, _commands) {
-            ctx.ui_navigation.close_pause();
-        }
-    };
-    {
-        key: "button.toggle_builder_mode"
-        visible(_save, solution) {
-            solution.entry == WorldEntryMode::EditPuzzle
-        }
-        on_click(ctx, _commands) {
-            if ctx.solution_state.entry != WorldEntryMode::EditPuzzle {
-                return;
-            }
-            *ctx.builder_mode = match *ctx.builder_mode {
-                BuilderMode::Edit => {
-                    ctx.simulation.reset();
-                    ctx.solution_state.puzzle_snapshot = Some(ctx.world.clone());
-                    ctx.solution_state.puzzle_id = ctx
-                        .save_state
-                        .current
-                        .as_ref()
-                        .map(|slot| slot.puzzle.clone());
-                    let puzzle_id = ctx
-                        .save_state
-                        .current
-                        .as_ref()
-                        .map(|slot| slot.puzzle.clone())
-                        .unwrap_or_else(|| "solution".to_string());
-                    let solution_name = next_named_save(
-                        &solution_names_for_puzzle(&ctx.save_state.entries, &puzzle_id),
-                        "solution",
-                    );
-                    ctx.save_state.current = Some(SaveSlot::solution(&puzzle_id, &solution_name));
-                    ctx.save_state.current_kind = Some(SaveKind::Solution);
-                    ctx.inventory
-                        .begin_play_from_edit(ctx.solution_state.factory_block_filter.as_ref());
-                    ctx.pending_player.0 = ctx.solution_state.solution_spawn.clone();
-                    BuilderMode::Play
-                }
-                BuilderMode::Play => {
-                    ui.open_confirm_then(save_before_edit_spec(), on_save_before_edit);
-                    return;
-                }
-            };
-            ctx.carried.clear();
-            ctx.placement.selected = 0;
-            ctx.ui_navigation.close_pause();
-        }
-    };
-    {
-        key: "button.save_world"
-        label(save) {
-            match save.current_kind {
-                Some(SaveKind::Solution) => i18n.t("button.save_solution"),
-                Some(SaveKind::Free) => i18n.t("button.save_world"),
-                _ => i18n.t("button.save_puzzle"),
-            }
-        }
-        on_click(ctx, commands) {
-            if puzzle_save_needs_confirm(ctx.save_state) {
-                open_save_puzzle_confirm();
-            } else {
-                session::save_current_world(commands);
-            }
-        }
-    };
-    {
-        key: "button.save_as_new_puzzle"
-        visible(save, _solution) {
-            save.current_kind == Some(SaveKind::Puzzle)
-        }
-        on_click(_ctx, _commands) {
-            open_save_as_new_puzzle_prompt();
-        }
-    };
-    {
-        key: "button.export_as_puzzle"
-        visible(save, _solution) {
-            save.current_kind == Some(SaveKind::Free)
-        }
-        on_click(_ctx, _commands) {
-            open_export_as_puzzle_prompt();
-        }
-    };
-    {
-        key: "button.reset_solution"
-        visible(save, _solution) {
-            save.current_kind == Some(SaveKind::Solution)
-        }
-        on_click(_ctx, _commands) {
-            ui.open_confirm_then(reset_solution_spec(), on_reset_solution);
-        }
-    };
-    {
-        key: "button.settings"
-        on_click(ctx, commands) {
-            ui.mount_settings(
-                commands,
-                ctx.ui_navigation_root,
-                UiPanelContext::SettingsFromPause,
-            );
-        }
-    };
-    {
-        key: "button.save_settings"
-        visible(save, _solution) {
+/// 暂停菜单的数据化按钮表；新增业务依赖只修改所绑定的系统。
+const PAUSE_MENU_BUTTONS: &[PauseMenuButton] = &[
+    PauseMenuButton {
+        label_key: "button.resume",
+        label: None,
+        visible: None,
+        on_click: |commands| {
+            commands.run_system_cached(resume_playing);
+        },
+    },
+    PauseMenuButton {
+        label_key: "button.toggle_builder_mode",
+        label: None,
+        visible: Some(|_, solution| solution.entry == WorldEntryMode::EditPuzzle),
+        on_click: |commands| {
+            commands.run_system_cached(toggle_builder_mode);
+        },
+    },
+    PauseMenuButton {
+        label_key: "button.save_world",
+        visible: None,
+        label: Some(|save| {
+            i18n.t(match save.current_kind {
+                Some(SaveKind::Solution) => "button.save_solution",
+                Some(SaveKind::Free) => "button.save_world",
+                _ => "button.save_puzzle",
+            })
+        }),
+        on_click: |commands| {
+            commands.run_system_cached(save_world);
+        },
+    },
+    PauseMenuButton {
+        label_key: "button.save_as_new_puzzle",
+        label: None,
+        visible: Some(|save, _| save.current_kind == Some(SaveKind::Puzzle)),
+        on_click: |commands| {
+            commands.run_system_cached(save_as_puzzle);
+        },
+    },
+    PauseMenuButton {
+        label_key: "button.export_as_puzzle",
+        label: None,
+        visible: Some(|save, _| save.current_kind == Some(SaveKind::Free)),
+        on_click: |commands| {
+            commands.run_system_cached(export_puzzle);
+        },
+    },
+    PauseMenuButton {
+        label_key: "button.reset_solution",
+        label: None,
+        visible: Some(|save, _| save.current_kind == Some(SaveKind::Solution)),
+        on_click: |commands| {
+            commands.run_system_cached(confirm_reset_solution);
+        },
+    },
+    PauseMenuButton {
+        label_key: "button.settings",
+        label: None,
+        visible: None,
+        on_click: |commands| {
+            commands.run_system_cached(open_settings);
+        },
+    },
+    PauseMenuButton {
+        label_key: "button.save_settings",
+        label: None,
+        visible: Some(|save, _| {
             matches!(save.current_kind, Some(SaveKind::Free | SaveKind::Puzzle))
-        }
-        on_click(ctx, commands) {
-            ui.mount_save_settings(commands, ctx.ui_navigation_root);
-        }
-    };
-    {
-        key: "button.back_to_main_menu"
-        on_click(ctx, commands) {
-            if ctx.solution_state.dirty {
-                ui.open_confirm_then(return_to_main_spec(), on_return_to_main);
-            } else {
-                session::exit_to_main_menu(commands, false);
-            }
-        }
+        }),
+        on_click: |commands| {
+            commands.run_system_cached(open_save_settings);
+        },
+    },
+    PauseMenuButton {
+        label_key: "button.back_to_main_menu",
+        label: None,
+        visible: None,
+        on_click: |commands| {
+            commands.run_system_cached(return_to_main_menu);
+        },
+    },
+];
+
+/// 继续游戏只需要导航状态。
+fn resume_playing(mut navigation: ResMut<UiNavigation>) {
+    navigation.close_pause();
+}
+
+/// 模式按钮决定是否确认，实际世界事务由会话层执行。
+fn toggle_builder_mode(
+    view: UiContext,
+    builder: Res<BuilderMode>,
+    solution: Res<SolutionState>,
+    mut commands: Commands,
+) {
+    if solution.entry != WorldEntryMode::EditPuzzle {
+        return;
     }
-);
+    if *builder == BuilderMode::Edit {
+        commands.write_message(session::BeginSolutionPlay);
+    } else {
+        let _scope = view.enter();
+        ui.open_confirm_then(&mut commands, save_before_edit_spec(), on_save_before_edit);
+    }
+}
+
+/// 保存按钮只选择确认流程和会话请求。
+fn save_world(view: UiContext, save: Res<SaveState>, mut commands: Commands) {
+    let _scope = view.enter();
+    if puzzle_save_needs_confirm(&save) {
+        open_save_puzzle_confirm(&mut commands);
+    } else {
+        session::save_current_world(&mut commands);
+    }
+}
+
+/// 为另存谜题按钮打开命名输入。
+fn save_as_puzzle(view: UiContext, mut commands: Commands) {
+    let _scope = view.enter();
+    open_save_as_new_puzzle_prompt(&mut commands);
+}
+
+/// 为导出谜题按钮打开命名输入。
+fn export_puzzle(view: UiContext, mut commands: Commands) {
+    let _scope = view.enter();
+    open_export_as_puzzle_prompt(&mut commands);
+}
+
+/// 重置按钮只打开确认框。
+fn confirm_reset_solution(view: UiContext, mut commands: Commands) {
+    let _scope = view.enter();
+    ui.open_confirm_then(&mut commands, reset_solution_spec(), on_reset_solution);
+}
+
+/// 设置按钮挂载全局设置页。
+fn open_settings(root: Option<Res<PlayingUiRootEntity>>, mut commands: Commands) {
+    ui.mount_settings(
+        &mut commands,
+        root.as_ref().map(|root| root.0),
+        UiPanelContext::SettingsFromPause,
+    );
+}
+
+/// 存档设置按钮只请求页面挂载。
+fn open_save_settings(root: Option<Res<PlayingUiRootEntity>>, mut commands: Commands) {
+    ui.mount_save_settings(&mut commands, root.as_ref().map(|root| root.0));
+}
+
+/// 返回按钮只读取未保存标记，保存和换档由会话层处理。
+fn return_to_main_menu(view: UiContext, solution: Res<SolutionState>, mut commands: Commands) {
+    let _scope = view.enter();
+    if solution.dirty {
+        ui.open_confirm_then(&mut commands, return_to_main_spec(), on_return_to_main);
+    } else {
+        session::exit_to_main_menu(&mut commands, false);
+    }
+}
 
 impl Plugin for PauseMenuPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
             (
-                dispatch_pause_menu_clicks
-                    .in_set(UiAccessScope)
-                    .after(PerfScope::Placement)
-                    .before(PerfScope::Menus),
+                dispatch_pause_menu_clicks.in_set(crate::game::schedule::GameSet::Menus),
                 sync_pause_menu_buttons
                     .run_if(|ui_navigation: Res<UiNavigation>| ui_navigation.is_paused())
-                    .in_set(UiAccessScope)
                     .after(crate::game::ui::update_localized_ui)
-                    .after(crate::game::systems::perf::perf_mark_ui_chrome)
-                    .before(crate::game::systems::perf::perf_mark_ui_feat),
+                    .in_set(crate::game::schedule::GameSet::UiFeat),
+                sync_playing_overlay_mounts.in_set(crate::game::schedule::GameSet::Menus),
             ),
         );
     }
@@ -213,62 +219,50 @@ pub fn spawn_pause_menu_buttons(panel: &mut ChildSpawnerCommands) {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// 分发点击只检查页面可用性和按钮显隐，不取得被点击业务的写资源。
 fn dispatch_pause_menu_clicks(
-    _ui_thread: UiMainThread,
     mut clicks: MessageReader<MenuButtonClick>,
     mode: Res<State<GameMode>>,
-    mut ui_navigation: ResMut<UiNavigation>,
-    mut builder_mode: ResMut<BuilderMode>,
-    mut simulation: ResMut<SimulationState>,
-    mut inventory: ResMut<InventoryItems>,
-    mut carried: ResMut<CarriedItem>,
-    mut placement: ResMut<PlacementState>,
-    mut world: ResMut<WorldBlocks>,
-    mut save_state: ResMut<SaveState>,
-    mut solution_state: ResMut<SolutionState>,
-    mut pending_player: ResMut<PendingPlayerSpawn>,
+    navigation: Res<UiNavigation>,
+    save: Res<SaveState>,
+    solution: Res<SolutionState>,
     busy: Res<SessionBusy>,
-    ui_navigation_root: Option<Res<PlayingUiRootEntity>>,
     mut commands: Commands,
 ) {
-    if *mode.get() != GameMode::Playing || !ui_navigation.is_paused() || busy.is_busy() {
-        return;
-    }
-    let ui_navigation_root = ui_navigation_root.as_deref().map(|root| root.0);
     for click in clicks.read() {
-        if click.set != MenuButtonSet::PauseMenu {
+        if *mode.get() != GameMode::Playing
+            || !navigation.is_paused()
+            || busy.is_busy()
+            || click.set != MenuButtonSet::PauseMenu
+        {
             continue;
         }
         let Some(button) = PAUSE_MENU_BUTTONS.get(click.index as usize) else {
             continue;
         };
-        let mut ctx = PauseMenuCtx {
-            builder_mode: &mut builder_mode,
-            simulation: &mut simulation,
-            inventory: &mut inventory,
-            carried: &mut carried,
-            placement: &mut placement,
-            world: &mut world,
-            ui_navigation: &mut ui_navigation,
-            save_state: &mut save_state,
-            solution_state: &mut solution_state,
-            pending_player: &mut pending_player,
-            ui_navigation_root,
-        };
-        (button.on_click)(&mut ctx, &mut commands);
+        if button
+            .visible
+            .is_some_and(|visible| !visible(&save, &solution))
+        {
+            continue;
+        }
+        (button.on_click)(&mut commands);
+        // 页面动作每帧提交一次，避免退出后继续消费排队的菜单点击。
+        break;
     }
 }
 
+/// 根据只读展示数据更新暂停菜单。
 fn sync_pause_menu_buttons(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     save_state: Res<SaveState>,
     solution_state: Res<SolutionState>,
     mut buttons: Query<(&MenuButtonMarker, &Children, &mut Node), With<Button>>,
     mut texts: Query<&mut Text>,
     added: Query<(), Added<MenuButtonMarker>>,
 ) {
-    let labels_dirty = save_state.is_changed() || !added.is_empty();
+    let _ui_scope = ui_context.enter();
+    let labels_dirty = save_state.is_changed() || ui_context.locale_changed() || !added.is_empty();
     for (marker, children, mut node) in &mut buttons {
         if marker.set != MenuButtonSet::PauseMenu {
             continue;
@@ -276,7 +270,10 @@ fn sync_pause_menu_buttons(
         let Some(button) = PAUSE_MENU_BUTTONS.get(marker.index as usize) else {
             continue;
         };
-        let next = if (button.visible)(&save_state, &solution_state) {
+        let next = if button
+            .visible
+            .is_none_or(|visible| visible(&save_state, &solution_state))
+        {
             Display::Flex
         } else {
             Display::None
@@ -293,7 +290,9 @@ fn sync_pause_menu_buttons(
         };
         for child in children.iter() {
             if let Ok(mut text) = texts.get_mut(child) {
-                text.0 = label.clone();
+                if text.0 != label {
+                    text.0 = label.clone();
+                }
             }
         }
     }

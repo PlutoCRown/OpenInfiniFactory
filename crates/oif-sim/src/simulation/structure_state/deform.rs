@@ -1,3 +1,9 @@
+use super::{
+    BlockId, BlockKind, DeformGroup, HashMap, HashSet, IVec3, MovementRule, StructureId,
+    StructureKind, StructureState, VecDeque, WorldBlocks, bpos_facing_toward,
+    is_blocked_factory_connection, signal_offsets,
+};
+
 impl StructureState {
     /// 为单个工厂结构分配逻辑头并构建共轴 DeformGroup
     pub(crate) fn rebuild_deform_for(&mut self, world: &WorldBlocks, id: StructureId) {

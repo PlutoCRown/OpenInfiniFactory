@@ -33,14 +33,37 @@ pub struct LocalPlayer<'w> {
     pub tool_swap: Res<'w, SelectionToolSwap>,
 }
 
-/// 本地玩家会话（可变）
+/// 放置事务需要的玩家状态
 #[derive(SystemParam)]
-pub struct LocalPlayerMut<'w> {
+pub struct PlacementPlayerMut<'w> {
+    pub placement: ResMut<'w, PlacementState>,
+    pub inventory: ResMut<'w, InventoryItems>,
+    pub builder_mode: ResMut<'w, BuilderMode>,
+    pub edit_history: ResMut<'w, EditHistory>,
+}
+
+/// 悬停计算需要的玩家状态
+#[derive(SystemParam)]
+pub struct HoverPlayerMut<'w> {
+    pub placement: ResMut<'w, PlacementState>,
+    pub inventory: Res<'w, InventoryItems>,
+    pub builder_mode: Res<'w, BuilderMode>,
+}
+
+/// 快捷栏与菜单输入需要的玩家状态
+#[derive(SystemParam)]
+pub struct GameplayInputPlayerMut<'w> {
     pub placement: ResMut<'w, PlacementState>,
     pub inventory: ResMut<'w, InventoryItems>,
     pub carried: ResMut<'w, CarriedItem>,
-    pub free_inventory_tab: ResMut<'w, FreeInventoryTab>,
-    pub builder_mode: ResMut<'w, BuilderMode>,
+}
+
+/// 配置剪贴与选区工具需要的玩家状态
+#[derive(SystemParam)]
+pub struct ClipboardPlayerMut<'w> {
+    pub placement: ResMut<'w, PlacementState>,
+    pub inventory: ResMut<'w, InventoryItems>,
+    pub builder_mode: Res<'w, BuilderMode>,
     pub edit_history: ResMut<'w, EditHistory>,
     pub clipboard: ResMut<'w, BlockSettingsClipboard>,
     pub tool_swap: ResMut<'w, SelectionToolSwap>,

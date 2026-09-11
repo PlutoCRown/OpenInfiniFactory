@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 
 use crate::game::block_editing::world_refresh::apply_block_settings_edit;
-use crate::game::local_player::LocalPlayerMut;
-use crate::game::session::PlayingWorldParams;
+use crate::game::local_player::ClipboardPlayerMut;
+use crate::game::session::EditableWorldParams;
 use crate::game::state::{BuilderMode, SolutionState};
 use crate::game::systems::gameplay::GameplayPlayGate;
 use crate::game::ui::core::text_input::InlineTextEditState;
@@ -20,8 +20,8 @@ pub fn clipboard_input(
     config: Res<GameConfig>,
     gate: GameplayPlayGate,
     inline_edit: Res<InlineTextEditState>,
-    mut player: LocalPlayerMut,
-    mut world: PlayingWorldParams,
+    mut player: ClipboardPlayerMut,
+    mut world: EditableWorldParams,
     mut solution_state: ResMut<SolutionState>,
 ) {
     if !gate.allows_world_edit() || inline_edit.is_active() {
@@ -61,12 +61,12 @@ pub fn clipboard_input(
     };
 
     if config.chord(ActionKeyName::Copy).just_triggered(&keys) {
-        let Some(block) = world.world.system_blocks.get(&pos) else {
+        let Some(block) = world.world.system_blocks().get(&pos) else {
             return;
         };
         let Some(settings) = world
             .world
-            .block_settings
+            .block_settings()
             .get(&pos)
             .cloned()
             .or_else(|| block.kind.default_settings(pos))
@@ -81,12 +81,12 @@ pub fn clipboard_input(
         let Some(copied) = player.clipboard.0.clone() else {
             return;
         };
-        let Some(block) = world.world.system_blocks.get(&pos).copied() else {
+        let Some(block) = world.world.system_blocks().get(&pos).copied() else {
             return;
         };
         let Some(current) = world
             .world
-            .block_settings
+            .block_settings()
             .get(&pos)
             .cloned()
             .or_else(|| block.kind.default_settings(pos))

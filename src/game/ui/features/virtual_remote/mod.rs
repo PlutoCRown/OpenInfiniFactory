@@ -6,7 +6,6 @@ mod update;
 
 use bevy::prelude::*;
 
-use crate::game::systems::perf::PerfScope;
 use crate::shared::config::VirtualControlId;
 
 pub use editor::{
@@ -118,8 +117,7 @@ impl Plugin for VirtualRemotePlugin {
                     editor::update_layout_editor_ui,
                 )
                     .chain()
-                    .after(PerfScope::PreUpdateRest)
-                    .before(PerfScope::VirtualRemote),
+                    .in_set(crate::game::schedule::GameSet::VirtualRemote),
             );
     }
 }

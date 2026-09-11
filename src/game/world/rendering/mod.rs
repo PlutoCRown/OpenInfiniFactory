@@ -67,8 +67,6 @@ pub(crate) use spawn::{
     factory_debug_overlay_material, spawn_factory_debug_overlay, spawn_world_block_entity,
 };
 pub use world_rebuild::{
-    despawn_world, rebuild_world, rebuild_world_for_debug_state, rebuild_world_on_enter,
-    rebuild_world_with_animations, rebuild_world_with_animations_for_debug_state,
-    rebuild_world_with_runtime_animations, rebuild_world_with_runtime_animations_for_debug_state,
-    rebuild_world_with_timed_animations,
+    despawn_world, rebuild_world, rebuild_world_with_animations,
+    rebuild_world_with_runtime_animations, rebuild_world_with_timed_animations,
 };

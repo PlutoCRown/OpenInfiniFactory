@@ -139,7 +139,7 @@ fn spawn_wood_part(
 /// 推断告示贴面法线（优先附着表，否则与 rebuild 同序几何推断）
 fn sign_mount_normal(world: &WorldBlocks, pos: IVec3, data: BlockData) -> Option<IVec3> {
     if !data.id.is_none() {
-        if let Some(att) = world.factory_attachments.get(&data.id) {
+        if let Some(att) = world.factory_attachments().get(&data.id) {
             return Some(att.parent_face_normal);
         }
     }
@@ -154,7 +154,7 @@ fn sign_mount_normal(world: &WorldBlocks, pos: IVec3, data: BlockData) -> Option
     ];
     for normal in candidates {
         let host_pos = pos - normal;
-        let Some(host) = world.blocks.get(&host_pos) else {
+        let Some(host) = world.blocks().get(&host_pos) else {
             continue;
         };
         if oif_sim::world::grid::WorldBlocks::host_face_accepts_sign(host, normal) {

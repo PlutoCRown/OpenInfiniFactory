@@ -16,22 +16,17 @@ pub use update::{
 };
 pub use view::save_list_title;
 
-use crate::game::systems::perf::PerfScope;
-use crate::game::ui::access::UiAccessScope;
-
 pub struct SavePlugin;
 
 impl Plugin for SavePlugin {
     fn build(&self, app: &mut App) {
+        app.add_message::<crate::game::ui::core::host::UiAction<types::SaveListAction>>();
         app.insert_resource(SaveListRenderState::default())
             .add_observer(emit_save_list_actions)
             .add_systems(
                 Update,
                 (
-                    dispatch_save_list_actions
-                        .in_set(UiAccessScope)
-                        .after(PerfScope::Placement)
-                        .before(PerfScope::Menus),
+                    dispatch_save_list_actions.in_set(crate::game::schedule::GameSet::Menus),
                     (
                         update_save_list_rows,
                         update_save_list_cover,
@@ -39,9 +34,7 @@ impl Plugin for SavePlugin {
                         update_save_list_styles,
                     )
                         .chain()
-                        .in_set(UiAccessScope)
-                        .after(crate::game::systems::perf::perf_mark_ui_chrome)
-                        .before(crate::game::systems::perf::perf_mark_ui_feat),
+                        .in_set(crate::game::schedule::GameSet::UiFeat),
                 ),
             );
     }

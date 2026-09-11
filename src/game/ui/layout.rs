@@ -1,7 +1,5 @@
 use bevy::prelude::*;
 
-use crate::game::ui::access::{bind_ui_scope, unbind_ui_scope};
-
 use super::components::{STATUS_TEXT, absolute_text_bundle, root_node};
 use super::screens::{
     spawn_carried_label, spawn_hotbar, spawn_inventory_panel, spawn_item_tooltip,
@@ -12,8 +10,7 @@ use super::types::{
 use crate::game::cameras::{GameplayViewBackdrop, GameplayViewImage};
 use crate::game::session::SessionBusy;
 use crate::game::state::{BuilderMode, SolutionState, WorldEntryMode};
-use crate::game::ui::access::with_ui_world;
-use crate::game::ui::components::UiIconAssets;
+use crate::game::ui::access::ui_icons;
 use crate::game::ui::core::UiMountState;
 use crate::game::ui::core::host::{PlayingUiRootEntity, UiHostMountRoot, UiRootEntity};
 use crate::game::ui::features::session_busy::spawn_session_busy_overlay;
@@ -22,11 +19,9 @@ use crate::shared::touch_profile::TouchProfile;
 
 /// 启动时只建空菜单根；主菜单/存档列表/对话框按需挂载
 pub fn setup_menu_ui(world: &mut World) {
-    bind_ui_scope(world);
     let mut commands = world.commands();
     let root = commands.spawn((root_node(), UiRoot)).id();
     commands.insert_resource(UiRootEntity(root));
-    unbind_ui_scope(world);
 }
 
 fn spawn_gameplay_view_backdrop(root: &mut ChildSpawnerCommands, image: Handle<Image>) {
@@ -44,9 +39,8 @@ fn spawn_gameplay_view_backdrop(root: &mut ChildSpawnerCommands, image: Handle<I
 }
 
 pub fn setup_playing_ui_system(world: &mut World) {
-    bind_ui_scope(world);
+    let _ui_scope = crate::game::ui::access::enter_ui_world(world);
     let Some(view) = world.get_resource::<GameplayViewImage>() else {
-        unbind_ui_scope(world);
         return;
     };
     let image = view.0.clone();
@@ -70,7 +64,6 @@ pub fn setup_playing_ui_system(world: &mut World) {
     let inventory = setup_playing_ui(&mut commands, image, touch, builder_mode, entry, busy);
     drop(commands);
     world.resource_mut::<UiMountState>().inventory = Some(inventory);
-    unbind_ui_scope(world);
 }
 
 /// 返回背包挂载根实体（常驻，用 Display 显隐）
@@ -120,7 +113,7 @@ pub fn setup_playing_ui(
 const CROSSHAIR_SIZE: f32 = 28.0;
 
 fn spawn_crosshair(root: &mut ChildSpawnerCommands) {
-    let image = with_ui_world(|world| world.resource::<UiIconAssets>().crosshair.clone());
+    let image = ui_icons().crosshair;
 
     root.spawn((
         Node {

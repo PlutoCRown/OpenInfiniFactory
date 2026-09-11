@@ -20,9 +20,9 @@ use crate::game::blocks::{
     stamp_catalog,
 };
 use crate::game::edit_history::EditHistory;
-use crate::game::session::PlayingWorldParams;
+use crate::game::session::EditableWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
-use crate::game::ui::access::{UiMainThread, i18n};
+use crate::game::ui::access::{UiContext, i18n};
 use crate::game::ui::components::{
     PanelOptions, default_button_size, localized_text, spawn_panel as spawn_ui_panel, text,
     transparent_node,
@@ -304,7 +304,7 @@ fn on_click(
     mut carried: ResMut<CarriedItem>,
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
-    mut world: PlayingWorldParams,
+    mut world: EditableWorldParams,
     actions: Query<&GoalAction>,
 ) {
     if ui_navigation.modal().is_some() || !primary_click(&mut click) {
@@ -423,13 +423,16 @@ fn open_paint_index(open_dropdown: &OpenBlockPanelDropdown) -> Option<usize> {
 }
 
 fn update_panel(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     ui_navigation: Res<UiNavigation>,
     world: Res<WorldBlocks>,
     mut id_text: Query<&mut Text, With<GoalAcceptorIdText>>,
     mut facing_rows: Query<&mut Node, With<GoalFacingRow>>,
     mut facing_buttons: Query<(&GoalAction, &mut BackgroundColor, &mut BorderColor), With<Button>>,
+    added_panel: Query<(), Or<(Added<GoalAcceptorIdText>, Added<GoalFacingRow>)>>,
+    mut last_settings: Local<Option<(IVec3, GoalSettings)>>,
 ) {
+    let _ui_scope = ui_context.enter();
     let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
@@ -437,13 +440,20 @@ fn update_panel(
         return;
     }
     let settings = world.goal_settings(pos);
+    if *last_settings == Some((pos, settings)) && !world.is_changed() && added_panel.is_empty() {
+        return;
+    }
+    *last_settings = Some((pos, settings));
     let show_facing = BlockKind::Material(settings.material).is_directional();
     for mut node in &mut facing_rows {
-        node.display = if show_facing {
+        let display = if show_facing {
             Display::Flex
         } else {
             Display::None
         };
+        if node.display != display {
+            node.display = display;
+        }
     }
     if show_facing {
         sync_facing_radio_buttons(
@@ -468,7 +478,7 @@ fn update_panel(
 }
 
 fn update_dropdown_overlays(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     ui_navigation: Res<UiNavigation>,
     open_dropdown: Res<OpenBlockPanelDropdown>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -480,6 +490,7 @@ fn update_dropdown_overlays(
     )>,
     triggers: Query<(&GoalAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
+    let _ui_scope = ui_context.enter();
     let panel = UiPanelId::Goal;
     let panel_active = ui_navigation.active_panel() == Some(panel);
     let material_open = panel_active && open_dropdown.is_open(panel, MATERIAL_SLOT);
@@ -571,7 +582,15 @@ fn update_slot_icons(
     )>,
     mut paint_options: Query<(&GoalPaintOption, &Children)>,
     mut material_icons: Query<&mut ImageNode>,
+    added_material_options: Query<(), Added<GoalMaterialOption>>,
+    added_stamp_options: Query<(), Added<GoalStampOption>>,
+    added_paint_options: Query<(), Added<GoalPaintOption>>,
+    added_material_slots: Query<(), Added<GoalMaterialSlot>>,
+    added_stamp_slots: Query<(), Added<GoalStampSlot>>,
+    added_paint_slots: Query<(), Added<GoalPaintSlot>>,
+    mut last_settings: Local<Option<(IVec3, GoalSettings)>>,
 ) {
+    let _ui_scope = deps.ui_context.enter();
     if deps.ui_navigation.active_panel() != Some(UiPanelId::Goal) {
         return;
     }
@@ -580,30 +599,46 @@ fn update_slot_icons(
         return;
     };
     let block_icons = icons.as_ref();
-    for (option, children) in &mut material_options {
-        update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
-    }
-    for (option, children) in &mut stamp_options {
-        update_slot_icon(
-            children,
-            option
-                .0
-                .and_then(|id| block_icons.get(BlockKind::stamp_block_kind(id))),
-            &mut material_icons,
-        );
-    }
-    for (option, children) in &mut paint_options {
-        update_slot_icon(
-            children,
-            option.0.and_then(|id| block_icons.paint(id)),
-            &mut material_icons,
-        );
+    if icons.is_changed()
+        || !added_material_options.is_empty()
+        || !added_stamp_options.is_empty()
+        || !added_paint_options.is_empty()
+    {
+        for (option, children) in &mut material_options {
+            update_material_icon(children, Some(option.0), block_icons, &mut material_icons);
+        }
+        for (option, children) in &mut stamp_options {
+            update_slot_icon(
+                children,
+                option
+                    .0
+                    .and_then(|id| block_icons.get(BlockKind::stamp_block_kind(id))),
+                &mut material_icons,
+            );
+        }
+        for (option, children) in &mut paint_options {
+            update_slot_icon(
+                children,
+                option.0.and_then(|id| block_icons.paint(id)),
+                &mut material_icons,
+            );
+        }
     }
 
     let settings = deps
         .ui_navigation
         .active_block_pos()
-        .map(|pos| deps.world.goal_settings(pos));
+        .map(|pos| (pos, deps.world.goal_settings(pos)));
+    if settings == *last_settings
+        && added_material_slots.is_empty()
+        && added_stamp_slots.is_empty()
+        && added_paint_slots.is_empty()
+        && !icons.is_changed()
+    {
+        return;
+    }
+    *last_settings = settings;
+    let settings = settings.map(|(_, settings)| settings);
     for (entity, _, children) in &mut material_slots {
         let material = settings.map(|s| s.material);
         update_material_icon(children, material, block_icons, &mut material_icons);
@@ -655,7 +690,7 @@ fn sync_attachment_slot_blocked(
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
-    mut playing: PlayingWorldParams,
+    mut playing: EditableWorldParams,
     stamp_slots: Query<(Entity, &GoalStampSlot, Option<&MaterialIconSlotBlocked>)>,
     paint_slots: Query<(Entity, &GoalPaintSlot, Option<&MaterialIconSlotBlocked>)>,
 ) {
@@ -703,7 +738,7 @@ fn sync_attachment_slot_blocked(
 
 /// 不可附着槽悬停：跟随光标的提示（风格同背包 tooltip）
 fn update_face_tooltip(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     ui_navigation: Res<UiNavigation>,
     stamp_slots: Query<(&GoalStampSlot, &Interaction), With<MaterialIconSlotBlocked>>,
     paint_slots: Query<(&GoalPaintSlot, &Interaction), With<MaterialIconSlotBlocked>>,
@@ -712,6 +747,7 @@ fn update_face_tooltip(
     mut tooltip: Query<(&mut Node, &mut Visibility), (With<GoalFaceTooltip>, Without<Button>)>,
     mut tooltip_text: Query<&mut Text, With<GoalFaceTooltipText>>,
 ) {
+    let _ui_scope = ui_context.enter();
     let Ok((mut tooltip_node, mut tooltip_visibility)) = tooltip.single_mut() else {
         return;
     };

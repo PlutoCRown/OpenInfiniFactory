@@ -12,9 +12,9 @@ use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
 use crate::game::blocks::{PaintMaterialId, paint_catalog};
 use crate::game::edit_history::EditHistory;
-use crate::game::session::PlayingWorldParams;
+use crate::game::session::EditableWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
-use crate::game::ui::access::{UiMainThread, i18n};
+use crate::game::ui::access::{UiContext, i18n};
 use crate::game::ui::components::{PanelOptions, spawn_panel_with_title_marker};
 use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::core::text_input::primary_click;
@@ -87,7 +87,7 @@ fn on_click(
     mut open_dropdown: ResMut<OpenBlockPanelDropdown>,
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
-    mut world: PlayingWorldParams,
+    mut world: EditableWorldParams,
     actions: Query<&RollerAction>,
 ) {
     if ui_navigation.modal().is_some() || !primary_click(&mut click) {
@@ -126,10 +126,11 @@ fn on_click(
 }
 
 fn update_title(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     ui_navigation: Res<UiNavigation>,
     mut titles: Query<&mut Text, With<RollerPanelTitle>>,
 ) {
+    let _ui_scope = ui_context.enter();
     if ui_navigation.active_panel() != Some(UiPanelId::Roller) {
         return;
     }

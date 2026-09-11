@@ -2,8 +2,6 @@
 
 use bevy::prelude::*;
 
-use crate::game::simulation::structure_state::StructureState;
-use crate::game::systems::debug::DebugState;
 use crate::game::world::rendering::{SceneChunkMeshes, WorldRenderAssets};
 
 use super::entity_index::BlockEntityIndex;
@@ -15,6 +13,4 @@ pub struct SceneRenderMut<'a, 'b, 's> {
     pub render_assets: &'a WorldRenderAssets,
     pub block_index: &'a mut BlockEntityIndex,
     pub scene_chunks: &'a mut SceneChunkMeshes,
-    pub debug: &'a DebugState,
-    pub structure_state: &'a mut StructureState,
 }

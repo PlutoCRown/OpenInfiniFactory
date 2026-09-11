@@ -52,6 +52,5 @@ pub enum PanelVisibility {
     StartMenuPage(StartMenuPage),
     PauseMenu,
     Inventory,
-    SettingsTab(crate::game::ui::features::settings::types::SettingsTab),
     ConfirmDialog,
 }

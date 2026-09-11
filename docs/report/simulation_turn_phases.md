@@ -1,14 +1,15 @@
-# 模拟回合五阶段
+# 模拟回合 ECS 调度与业务阶段
 
-入口：`crates/oif-sim/src/simulation/core.rs` 的 `simulate_turn()`。
+连续会话入口：`crates/oif-sim/src/simulation/core.rs` 的 `TurnRunner::run()`。`simulate_turn()` 仅是一次性兼容包装。
 
 ```mermaid
 flowchart LR
-  S["1 信号探测"] --> M["2 运动标记"]
-  M --> F["3a 脆弱碎裂"]
-  F --> E["3b 执行运动"]
-  E --> P["4 结构后处理"]
+  P["System 1 回合准备"] --> S["System 2 信号探测"]
+  S --> M["System 3 运动规划与提交"]
+  M --> F["System 4 行为与结构收尾"]
 ```
+
+这四个 System 在专用 Schedule 中串行执行，保证一个回合对宿主仍是原子事务。运动 System 内部保留“运动标记 → 脆弱碎裂 → 执行运动”的算法顺序；这些辅助步骤没有为了形式再注册为独立 System。
 
 ## 回合顺序
 
@@ -59,7 +60,7 @@ flowchart LR
 
 | 模块 | 责任 |
 |------|------|
-| `core.rs` | `simulate_turn` 五阶段编排 |
+| `core.rs` | `TurnRunner`、回合 Schedule、四个阶段 System 与 `TurnOutput` |
 | `signals.rs` | 信号网络与通电查询 |
 | `gravity.rs` / `movement.rs` | 重力与设备运动标记 |
 | `structures.rs` | 合并计划、脆弱碎裂、统一执行移动 |

@@ -34,6 +34,10 @@ pub struct SwitchToEditMode {
     pub save_first: bool,
 }
 
+/// 从谜题编辑态开始一次新的方案游玩会话。
+#[derive(Clone, Message)]
+pub struct BeginSolutionPlay;
+
 #[derive(Clone, Message)]
 pub struct LoadWorld {
     pub slot: crate::shared::save::SaveSlot,

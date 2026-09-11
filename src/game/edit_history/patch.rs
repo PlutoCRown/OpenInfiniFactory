@@ -128,35 +128,13 @@ impl WorldPatch {
     }
 
     fn apply(&self, world: &mut WorldBlocks, forward: bool) {
-        if !self.cells.is_empty() || !self.welds_add.is_empty() || !self.welds_remove.is_empty() {
-            world.invalidate_material_topology();
-        }
-        // 撤销/重做直接恢复格子，统一使涉及接线的索引失效。
-        if self.cells.iter().any(|delta| {
-            delta
-                .before
-                .iter()
-                .chain(delta.after.iter())
-                .any(|cell| cell.block.kind.signal_behavior(cell.block.facing).is_some())
-        }) {
-            world.invalidate_signal_topology();
-        }
         for delta in &self.settings {
             let value = if forward {
                 delta.after.clone()
             } else {
                 delta.before.clone()
             };
-            match value {
-                Some(settings) => {
-                    world.block_settings.insert(delta.pos, settings);
-                    world.topology_revision = world.topology_revision.wrapping_add(1);
-                }
-                None => {
-                    world.block_settings.remove(&delta.pos);
-                    world.topology_revision = world.topology_revision.wrapping_add(1);
-                }
-            }
+            world.restore_block_settings(delta.pos, value);
         }
 
         for delta in &self.cells {
@@ -165,7 +143,16 @@ impl WorldPatch {
             } else {
                 delta.before.clone()
             };
-            apply_cell_snapshot(world, delta.pos, snapshot);
+            let layer = snapshot
+                .as_ref()
+                .or(if forward {
+                    delta.before.as_ref()
+                } else {
+                    delta.after.as_ref()
+                })
+                .map(|snapshot| snapshot.layer)
+                .expect("cell delta must identify its edited layer");
+            apply_cell_snapshot(world, delta.pos, layer, snapshot);
         }
 
         let (add, remove) = if forward {
@@ -173,14 +160,7 @@ impl WorldPatch {
         } else {
             (&self.welds_remove, &self.welds_add)
         };
-        for weld in remove {
-            world.material_welds.remove(weld);
-        }
-        for weld in add {
-            if world.material_welds.insert(*weld) {
-                world.topology_revision = world.topology_revision.wrapping_add(1);
-            }
-        }
+        world.apply_material_weld_changes(add.iter().copied(), remove.iter().copied());
 
         for delta in &self.face_panels {
             let present = if forward { delta.after } else { delta.before };
@@ -198,17 +178,17 @@ impl WorldPatch {
 
 /// 读取单格当前快照
 pub fn capture_cell(world: &WorldBlocks, pos: IVec3) -> Option<CellSnapshot> {
-    if let Some(&block) = world.system_blocks.get(&pos) {
+    if let Some(&block) = world.system_blocks().get(&pos) {
         return Some(CellSnapshot {
             block,
             layer: BlockLayer::System,
-            settings: world.block_settings.get(&pos).cloned(),
+            settings: world.block_settings().get(&pos).cloned(),
         });
     }
-    world.blocks.get(&pos).copied().map(|block| CellSnapshot {
+    world.blocks().get(&pos).copied().map(|block| CellSnapshot {
         block,
         layer: BlockLayer::Factory,
-        settings: world.block_settings.get(&pos).cloned(),
+        settings: world.block_settings().get(&pos).cloned(),
     })
 }
 
@@ -218,7 +198,7 @@ pub fn capture_welds_for_ids(world: &WorldBlocks, ids: &HashSet<BlockId>) -> Vec
         return Vec::new();
     }
     world
-        .material_welds
+        .material_welds()
         .iter()
         .filter(|weld| ids.contains(&weld.a) || ids.contains(&weld.b))
         .copied()
@@ -234,12 +214,12 @@ pub fn capture_face_panels_for_ids(
         return HashMap::new();
     }
     let id_to_pos: HashMap<BlockId, IVec3> = world
-        .blocks
+        .blocks()
         .iter()
         .map(|(pos, block)| (block.id, *pos))
         .collect();
     world
-        .wire_face_panels
+        .wire_face_panels()
         .iter()
         .filter_map(|face| {
             ids.contains(&face.block)
@@ -410,77 +390,24 @@ pub fn build_rotation_patch(
     })
 }
 
-fn apply_cell_snapshot(world: &mut WorldBlocks, pos: IVec3, snapshot: Option<CellSnapshot>) {
-    if let Some(block) = world.system_blocks.remove(&pos) {
-        world.adjust_marker_count(block, -1);
+fn apply_cell_snapshot(
+    world: &mut WorldBlocks,
+    pos: IVec3,
+    layer: BlockLayer,
+    snapshot: Option<CellSnapshot>,
+) {
+    if let Some(snapshot) = snapshot {
+        debug_assert_eq!(
+            snapshot.layer == BlockLayer::System,
+            snapshot.block.kind.is_system_layer()
+        );
+        world.restore_cell(
+            pos,
+            layer == BlockLayer::System,
+            Some(snapshot.block),
+            snapshot.settings,
+        );
+    } else {
+        world.restore_cell(pos, layer == BlockLayer::System, None, None);
     }
-    let removed_factory = world.blocks.remove(&pos);
-    if let Some(block) = removed_factory {
-        world.adjust_block_count(block.kind, -1);
-        world.adjust_marker_count(block, -1);
-        if !block.id.is_none() {
-            world
-                .material_paints
-                .retain(|face, _| face.block != block.id);
-            world
-                .material_stamps
-                .retain(|face, _| face.block != block.id);
-            world.wire_face_panels.retain(|face| face.block != block.id);
-            world.factory_attachments.remove(&block.id);
-            let factory_children: Vec<_> = world
-                .factory_attachments
-                .iter()
-                .filter(|(_, att)| att.parent == block.id)
-                .map(|(child, _)| *child)
-                .collect();
-            for child_id in factory_children {
-                world.factory_attachments.remove(&child_id);
-                if let Some(child_pos) = world
-                    .blocks
-                    .iter()
-                    .find(|(_, b)| b.id == child_id)
-                    .map(|(p, _)| *p)
-                {
-                    if let Some(child) = world.blocks.remove(&child_pos) {
-                        world.adjust_block_count(child.kind, -1);
-                        world.adjust_marker_count(child, -1);
-                        world.block_settings.remove(&child_pos);
-                    }
-                }
-            }
-        }
-    }
-    if removed_factory.is_some() || world.block_settings.contains_key(&pos) {
-        world.block_settings.remove(&pos);
-    }
-
-    let Some(snapshot) = snapshot else {
-        world.topology_revision = world.topology_revision.wrapping_add(1);
-        return;
-    };
-
-    let mut block = snapshot.block;
-    world.assign_block_id(&mut block);
-    match snapshot.layer {
-        BlockLayer::Factory => {
-            world.blocks.insert(pos, block);
-            world.adjust_block_count(block.kind, 1);
-            world.adjust_marker_count(block, 1);
-            if let Some(settings) = snapshot.settings {
-                world.block_settings.insert(pos, settings);
-            } else if let Some(default_settings) = block.kind.default_settings(pos) {
-                world.block_settings.insert(pos, default_settings);
-            }
-        }
-        BlockLayer::System => {
-            world.system_blocks.insert(pos, block);
-            world.adjust_marker_count(block, 1);
-            if let Some(settings) = snapshot.settings {
-                world.block_settings.insert(pos, settings);
-            } else if let Some(default_settings) = block.kind.default_settings(pos) {
-                world.block_settings.insert(pos, default_settings);
-            }
-        }
-    }
-    world.topology_revision = world.topology_revision.wrapping_add(1);
 }

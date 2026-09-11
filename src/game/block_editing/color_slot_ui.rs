@@ -71,6 +71,7 @@ pub(crate) fn update_color_select_dropdowns(
     mut lists: Query<(&ColorSelectList, &mut Node, &mut Visibility, &ComputedNode)>,
     triggers: Query<(&ColorSelectSlot, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
+    let _ui_scope = deps.ui_context.enter();
     let panel = deps.ui_navigation.active_panel();
     let color_panel = matches!(panel, Some(UiPanelId::Stamper) | Some(UiPanelId::Roller));
     let open = color_panel && panel.is_some_and(|p| deps.open_dropdown.is_open(p, COLOR_SLOT));

@@ -18,7 +18,6 @@ use crate::debug_http::snapshot::{
 use crate::debug_http::world_ops::{
     block_kinds_json, parse_block_kind_exact, parse_facing, place_blocks_box,
 };
-use crate::game::block_editing::world_refresh::refresh_world_after_edit_many;
 use crate::game::debug::SimulationDebugLog;
 use crate::game::player::controller::{FlyCamera, apply_player_save};
 use crate::game::session::{self, PlayingWorldParams};
@@ -284,7 +283,7 @@ fn handle_embedded_debug_command(
             return json_ok(perf_snapshot.capture(
                 builder_mode,
                 simulation,
-                playing.world.blocks.len(),
+                playing.world.blocks().len(),
                 player_pos,
             ));
         }
@@ -492,7 +491,9 @@ fn handle_embedded_debug_command(
                 ));
             }
             let changed: HashSet<_> = placed.iter().copied().collect();
-            refresh_world_after_edit_many(playing, changed);
+            playing.movement_history.clear();
+            playing.pusher_state.clear();
+            playing.refresh_edit_changes(&changed);
             if !placed.is_empty() {
                 commands.queue(|world: &mut World| {
                     world.resource_mut::<SolutionState>().dirty = true;

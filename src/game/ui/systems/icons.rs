@@ -1,3 +1,5 @@
+use bevy::prelude::*;
+
 /// 启动时加载 UI 通用图标
 pub fn load_ui_icons(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(crate::game::ui::components::UiIconAssets {

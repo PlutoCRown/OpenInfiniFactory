@@ -29,17 +29,17 @@ impl Language {
 }
 
 /// 启动时按配置加载的文案表；会话内语言不变，热路径用 `t`/`fmt_into` 避免多余分配
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 pub struct I18n {
     language: Language,
-    messages: HashMap<String, String>,
+    messages: std::sync::Arc<HashMap<String, String>>,
 }
 
 impl I18n {
     pub fn new(language: Language) -> Self {
         Self {
             language,
-            messages: load_messages(language),
+            messages: std::sync::Arc::new(load_messages(language)),
         }
     }
 
@@ -49,10 +49,7 @@ impl I18n {
 
     /// 查表返回借用，不 clone；缺失时回退为 key 本身
     pub fn t(&self, key: &'static str) -> &str {
-        self.messages
-            .get(key)
-            .map(String::as_str)
-            .unwrap_or(key)
+        self.messages.get(key).map(String::as_str).unwrap_or(key)
     }
 
     /// 低频：拼出新 String；热路径请用 `fmt_into`

@@ -1,7 +1,7 @@
 //! 悬停准星、结构包围盒与 FOV
 
 use crate::game::blocks::BlockData;
-use crate::game::local_player::LocalPlayerMut;
+use crate::game::local_player::HoverPlayerMut;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
@@ -71,7 +71,7 @@ pub struct HoverPreviewDeps<'w, 's> {
 
 /// 更新准星目标、面高亮与放置悬停预览
 pub fn update_hover(
-    mut player: LocalPlayerMut,
+    mut player: HoverPlayerMut,
     config: Res<GameConfig>,
     gate: GameplayPlayGate,
     debug: Res<DebugState>,
@@ -236,7 +236,7 @@ pub fn update_hover(
                 .target
                 .filter(|target| target.normal != IVec3::ZERO)
                 .filter(|target| {
-                    world.blocks.get(&target.pos).is_some_and(|block| {
+                    world.blocks().get(&target.pos).is_some_and(|block| {
                         block.kind.signal_behavior(block.facing)
                             == Some(crate::game::blocks::SignalBehavior::Wire)
                     })
@@ -365,7 +365,7 @@ pub fn sync_factory_activity_debug_overlays(
         .then(|| placement.target.as_ref())
         .flatten()
         .and_then(|hit| {
-            let block = world.blocks.get(&hit.pos)?;
+            let block = world.blocks().get(&hit.pos)?;
             if !block.kind.is_factory() {
                 return None;
             }
@@ -393,7 +393,7 @@ pub fn sync_factory_activity_debug_overlays(
         return;
     };
     for &pos in positions {
-        let Some(block) = world.blocks.get(&pos) else {
+        let Some(block) = world.blocks().get(&pos) else {
             continue;
         };
         let Some(material) =

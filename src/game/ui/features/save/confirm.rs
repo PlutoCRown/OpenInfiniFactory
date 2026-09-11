@@ -10,7 +10,7 @@ use super::prompt::open_save_as_new_puzzle_prompt;
 
 pub const EXTRA_SAVE_AS: u32 = 1;
 
-pub fn open_delete_confirm(slot: SaveSlot) {
+pub fn open_delete_confirm(mut commands: &mut Commands, slot: SaveSlot) {
     let display = slot.display_name();
     let spec = ConfirmProps {
         title: i18n.t("confirm.title"),
@@ -19,7 +19,7 @@ pub fn open_delete_confirm(slot: SaveSlot) {
         cancel_text: i18n.t("button.cancel"),
         extra: None,
     };
-    ui.open_confirm_then(spec, move |result, world| {
+    ui.open_confirm_then(&mut commands, spec, move |result, world| {
         if !matches!(result, ConfirmResult::Confirmed) {
             return;
         }
@@ -41,7 +41,7 @@ pub fn open_delete_confirm(slot: SaveSlot) {
     });
 }
 
-pub fn open_save_puzzle_confirm() {
+pub fn open_save_puzzle_confirm(mut commands: &mut Commands) {
     let spec = ConfirmProps {
         title: i18n.t("confirm.title"),
         message: i18n.t("confirm.save_puzzle_invalidate_solutions"),
@@ -52,18 +52,21 @@ pub fn open_save_puzzle_confirm() {
             tag: EXTRA_SAVE_AS,
         }),
     };
-    ui.open_confirm_then(spec, on_save_puzzle_confirm);
+    ui.open_confirm_then(&mut commands, spec, on_save_puzzle_confirm);
 }
 
 pub fn on_save_puzzle_confirm(result: ConfirmResult, world: &mut World) {
+    let _ui_scope = crate::game::ui::access::enter_ui_world(world);
     match result {
         ConfirmResult::Confirmed => save_current_world_invalidate_in_world(world),
-        ConfirmResult::Extra(EXTRA_SAVE_AS) => open_save_as_new_puzzle_prompt(),
+        ConfirmResult::Extra(EXTRA_SAVE_AS) => {
+            open_save_as_new_puzzle_prompt(&mut world.commands())
+        }
         ConfirmResult::Cancelled | ConfirmResult::Extra(_) => {}
     }
 }
 
-pub fn open_save_puzzle_confirm_before_exit() {
+pub fn open_save_puzzle_confirm_before_exit(mut commands: &mut Commands) {
     let spec = ConfirmProps {
         title: i18n.t("confirm.title"),
         message: i18n.t("confirm.save_puzzle_invalidate_solutions"),
@@ -74,15 +77,18 @@ pub fn open_save_puzzle_confirm_before_exit() {
             tag: EXTRA_SAVE_AS,
         }),
     };
-    ui.open_confirm_then(spec, on_save_puzzle_confirm_before_exit);
+    ui.open_confirm_then(&mut commands, spec, on_save_puzzle_confirm_before_exit);
 }
 
 pub fn on_save_puzzle_confirm_before_exit(result: ConfirmResult, world: &mut World) {
+    let _ui_scope = crate::game::ui::access::enter_ui_world(world);
     match result {
         ConfirmResult::Confirmed => {
             exit_to_main_menu_in_world(world, true, true);
         }
-        ConfirmResult::Extra(EXTRA_SAVE_AS) => open_save_as_new_puzzle_prompt(),
+        ConfirmResult::Extra(EXTRA_SAVE_AS) => {
+            open_save_as_new_puzzle_prompt(&mut world.commands())
+        }
         ConfirmResult::Cancelled | ConfirmResult::Extra(_) => {}
     }
 }

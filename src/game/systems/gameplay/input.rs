@@ -1,10 +1,10 @@
 //! 暂停/背包/快捷栏输入
 
-use crate::game::local_player::LocalPlayerMut;
+use crate::game::local_player::GameplayInputPlayerMut;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
-use crate::game::state::{GameMode, SimulationState, SolutionState};
+use crate::game::state::{GameMode, SimulationState};
 use crate::game::ui::HOTBAR_SLOTS;
 use crate::game::ui::PanelCloseDeps;
 
@@ -14,8 +14,7 @@ pub fn gameplay_input(
     mut mouse_wheel: MessageReader<MouseWheel>,
     keys: Res<ButtonInput<KeyCode>>,
     mode: Res<State<GameMode>>,
-    mut player: LocalPlayerMut,
-    mut solution_state: ResMut<SolutionState>,
+    mut player: GameplayInputPlayerMut,
     mut panel_close: PanelCloseDeps,
     mut simulation: ResMut<SimulationState>,
     mut commands: Commands,
@@ -39,13 +38,7 @@ pub fn gameplay_input(
     }
 
     if input.pause {
-        if panel_close.dismiss_playing_overlay(
-            &mut player.carried,
-            &mut player.inventory,
-            &player.placement,
-            &mut solution_state,
-            &mut commands,
-        ) {
+        if panel_close.dismiss_playing_overlay(&mut commands) {
             // Overlay dismissed.
         } else {
             if panel_close.ui_navigation.toggle_pause() {
@@ -55,13 +48,7 @@ pub fn gameplay_input(
     }
 
     if input.inventory {
-        if panel_close.dismiss_playing_overlay(
-            &mut player.carried,
-            &mut player.inventory,
-            &player.placement,
-            &mut solution_state,
-            &mut commands,
-        ) {
+        if panel_close.dismiss_playing_overlay(&mut commands) {
             // Overlay dismissed.
         } else if !simulation.is_active() {
             // 模拟期禁止打开背包

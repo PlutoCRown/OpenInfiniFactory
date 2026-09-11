@@ -4,14 +4,12 @@ use std::collections::{HashMap, HashSet};
 
 use crate::game::audio::{PlaySound, SoundId};
 use crate::game::simulation::core::PresentationPhase;
-use crate::game::simulation::core::simulate_turn;
 use crate::game::simulation::movement::PusherState;
 use crate::game::simulation::pending::PendingTurnEffects;
 use crate::game::simulation::signals::SignalNetworkCache;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementHistory;
 use crate::game::state::{BuilderMode, SimulationState};
-use crate::game::systems::debug::DebugState;
 use crate::game::world::animation::{
     AnimationTiming, BlockAnimation, BlockAnimationKind, SIMULATION_TURN_SECONDS,
 };
@@ -21,6 +19,7 @@ use crate::game::world::rendering::{
     spawn_pending_generated_block,
 };
 use crate::scene::{BlockEntityIndex, SceneRenderMut, apply_turn_output};
+use oif_sim::simulation::core::TurnRunner;
 
 /// 表现层提交状态：已提交世界与上次通电电线集
 #[derive(Resource, Default)]
@@ -32,6 +31,7 @@ pub struct SimulationPresentationState {
 /// 已提交的模拟回合：只携带表现所需的前态、输出与播放时长
 #[derive(Message)]
 pub struct TurnCommitted {
+    epoch: oif_sim::session::SessionEpoch,
     before: WorldBlocks,
     output: crate::sim_bridge::TurnOutput,
     animation_duration: f32,
@@ -40,19 +40,18 @@ pub struct TurnCommitted {
 /// 回合表现所需的场景依赖集合
 #[derive(SystemParam)]
 pub struct SimulationPresentationDeps<'w> {
-    pub(crate) world: ResMut<'w, WorldBlocks>,
-    pub(crate) structure_state: ResMut<'w, StructureState>,
+    pub(crate) world: Res<'w, WorldBlocks>,
     pub(crate) presentation: ResMut<'w, SimulationPresentationState>,
     pub(crate) block_index: ResMut<'w, BlockEntityIndex>,
     pub(crate) scene_chunks: ResMut<'w, SceneChunkMeshes>,
     pub(crate) meshes: ResMut<'w, Assets<Mesh>>,
     pub(crate) render_assets: Option<Res<'w, WorldRenderAssets>>,
     pub(crate) portal_flash_queue: ResMut<'w, PortalFlashQueue>,
-    pub(crate) debug: Res<'w, DebugState>,
 }
 
 /// 原地推进权威模拟状态并发布已提交回合
 pub fn advance_simulation(
+    mut runner: ResMut<TurnRunner>,
     time: Res<Time>,
     builder_mode: Res<BuilderMode>,
     mut simulation: ResMut<SimulationState>,
@@ -68,68 +67,46 @@ pub fn advance_simulation(
         return;
     }
 
-    let animation_duration_for = |running: bool, speed: f32| {
-        if running {
-            SIMULATION_TURN_SECONDS / speed.max(0.001)
-        } else {
-            SIMULATION_TURN_SECONDS
-        }
-    };
-
     if simulation.step_requested {
         simulation.step_requested = false;
         simulation.accumulator = 0.0;
-        let next_turn = simulation.turn + 1;
-        let before = world.clone();
-        let output = simulate_turn(
-            &mut world,
-            &mut pending_effects,
-            &mut signal_cache,
-            next_turn,
-            &mut structure_state,
-            &mut movement_history,
-            &mut pusher_state,
-            None,
-            None,
-        );
-        simulation.turn = next_turn;
-        committed_turns.write(TurnCommitted {
-            before,
-            output,
-            animation_duration: animation_duration_for(simulation.running, simulation.speed),
-        });
-        return;
-    }
-
-    simulation.accumulator += time.delta_secs() * simulation.speed / SIMULATION_TURN_SECONDS;
-    // 每帧最多呈现一回合：多回合连续 present 会在命令未 flush 时改索引，
-    // 随后对已排队 despawn 的实体 insert，Bevy 0.19 会直接 panic。
-    if simulation.accumulator >= 1.0 {
-        let next_turn = simulation.turn + 1;
-        let before = world.clone();
-        let output = simulate_turn(
-            &mut world,
-            &mut pending_effects,
-            &mut signal_cache,
-            next_turn,
-            &mut structure_state,
-            &mut movement_history,
-            &mut pusher_state,
-            None,
-            None,
-        );
-        simulation.turn = next_turn;
+    } else {
+        simulation.accumulator += time.delta_secs() * simulation.speed / SIMULATION_TURN_SECONDS;
+        // 每帧最多推进一回合，保证表现命令落地后才能更新下一次实体索引。
+        if simulation.accumulator < 1.0 {
+            return;
+        }
         simulation.accumulator -= 1.0;
-        committed_turns.write(TurnCommitted {
-            before,
-            output,
-            animation_duration: animation_duration_for(simulation.running, simulation.speed),
-        });
     }
+    let next_turn = simulation.turn + 1;
+    let before = world.clone();
+    let output = runner.run(
+        &mut world,
+        &mut pending_effects,
+        &mut signal_cache,
+        next_turn,
+        &mut structure_state,
+        &mut movement_history,
+        &mut pusher_state,
+        None,
+        None,
+    );
+    simulation.turn = next_turn;
+    committed_turns.write(TurnCommitted {
+        epoch: simulation.epoch().clone(),
+        before,
+        output,
+        animation_duration: if simulation.running {
+            SIMULATION_TURN_SECONDS / simulation.speed.max(0.001)
+        } else {
+            SIMULATION_TURN_SECONDS
+        },
+    });
 }
 
 /// 消费已提交回合并更新场景、动画、音效和表现统计
 pub fn present_simulation_turns(
+    simulation: Res<SimulationState>,
     mut committed_turns: MessageReader<TurnCommitted>,
     mut commands: Commands,
     mut sounds: MessageWriter<PlaySound>,
@@ -140,6 +117,10 @@ pub fn present_simulation_turns(
         return;
     };
     for committed in committed_turns.read() {
+        if !simulation.epoch().matches(&committed.epoch) || simulation.turn != committed.output.turn
+        {
+            continue;
+        }
         let output = &committed.output;
         let mut presentation_stats = output.stats.clone();
         let mut scene = SceneRenderMut {
@@ -148,8 +129,6 @@ pub fn present_simulation_turns(
             render_assets,
             block_index: &mut deps.block_index,
             scene_chunks: &mut deps.scene_chunks,
-            debug: &deps.debug,
-            structure_state: &mut deps.structure_state,
         };
         apply_turn_output(
             &committed.before,
@@ -228,7 +207,7 @@ pub fn present_simulation_turns(
             });
         }
         for &pos in &output.powered_devices {
-            let Some(block) = deps.world.blocks.get(&pos) else {
+            let Some(block) = deps.world.blocks().get(&pos) else {
                 continue;
             };
             if matches!(
@@ -339,6 +318,70 @@ pub fn refresh_pending_generated_previews(
                 progress: Some(progress),
             }),
             AnimationTiming::simulation(SIMULATION_TURN_SECONDS),
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oif_sim::blocks::{BlockData, BlockKind};
+    use oif_sim::session::SimSession;
+    use oif_sim::world::Facing;
+
+    /// 实际 GUI 推进系统和无头会话共用回合语义，并给消息绑定正确的会话身份。
+    #[test]
+    fn gui_step_matches_headless_turn_and_tags_commit() {
+        let mut session = SimSession::new();
+        session
+            .world
+            .insert(IVec3::Y, BlockData::new(BlockKind::Blocker, Facing::East));
+        session.world.insert(
+            IVec3::Y + IVec3::X,
+            BlockData::new(BlockKind::Platform, Facing::North),
+        );
+        session.begin_simulation();
+        let mut control = session.control.clone();
+        control.step_requested = true;
+        let mut app = App::new();
+        app.init_resource::<TurnRunner>()
+            .init_resource::<Time>()
+            .insert_resource(BuilderMode::Play)
+            .insert_resource(control)
+            .insert_resource(session.world.clone())
+            .insert_resource(session.structure_state.clone())
+            .insert_resource(session.pusher_state.clone())
+            .init_resource::<PendingTurnEffects>()
+            .init_resource::<SignalNetworkCache>()
+            .init_resource::<MovementHistory>()
+            .add_message::<TurnCommitted>()
+            .add_systems(Update, advance_simulation);
+        app.update();
+        let expected = session.simulate_next_turn_with_logging(false);
+        let world = app.world();
+        assert_eq!(
+            world.resource::<WorldBlocks>().blocks(),
+            session.world.blocks()
+        );
+        let control = world.resource::<SimulationState>();
+        assert_eq!(control.turn, 1);
+        assert!(!control.step_requested);
+        let messages = world.resource::<Messages<TurnCommitted>>();
+        let mut cursor = messages.get_cursor();
+        let committed: Vec<_> = cursor.read(messages).collect();
+        assert_eq!(committed.len(), 1);
+        assert!(control.epoch().matches(&committed[0].epoch));
+        assert_eq!(
+            committed[0].output.powered_devices,
+            expected.powered_devices
+        );
+        let old_epoch = committed[0].epoch.clone();
+        app.world_mut().resource_mut::<SimulationState>().reset();
+        assert!(
+            !app.world()
+                .resource::<SimulationState>()
+                .epoch()
+                .matches(&old_epoch)
         );
     }
 }

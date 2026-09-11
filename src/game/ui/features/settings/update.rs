@@ -3,7 +3,7 @@ use bevy::ui_widgets::{Slider, SliderValue};
 use bevy::window::PrimaryWindow;
 
 use crate::game::state::GameSettings;
-use crate::game::ui::access::UiMainThread;
+use crate::game::ui::access::UiContext;
 use crate::game::ui::components::{
     BUTTON_BG, BUTTON_HOVER_BG, hover_border, pressed_border, raised_border, ui_logical_bounds,
 };
@@ -52,7 +52,7 @@ pub fn localized_binding_display(config: &GameConfig, action: ActionKeyName) -> 
 }
 
 pub fn update_settings_text_ui(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     ui_navigation: Res<UiNavigation>,
     config: Res<GameConfig>,
     pending_key_bind: Res<PendingKeyBind>,
@@ -63,6 +63,7 @@ pub fn update_settings_text_ui(
     added: Query<(), Added<SettingsText>>,
     key_buttons: Query<&KeyBindingButton>,
 ) {
+    let _ui_scope = ui_context.enter();
     use crate::game::ui::access::i18n;
 
     if !ui_navigation.is_settings_open() {
@@ -193,7 +194,7 @@ pub fn update_settings_sliders_ui(
 }
 
 pub fn update_settings_dropdowns_ui(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     ui_navigation: Res<UiNavigation>,
     config: Res<GameConfig>,
     settings: Res<GameSettings>,
@@ -226,6 +227,7 @@ pub fn update_settings_dropdowns_ui(
     added_labels: Query<(), Added<SettingsDropdownLabel>>,
     added_values: Query<(), Added<SettingsValueText>>,
 ) {
+    let _ui_scope = ui_context.enter();
     if !ui_navigation.is_settings_open() {
         *primed = false;
         return;

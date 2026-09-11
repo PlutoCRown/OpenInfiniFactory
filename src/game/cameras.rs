@@ -1,8 +1,18 @@
+use bevy::anti_alias::taa::TemporalAntiAliasing;
+use bevy::camera::{Hdr, RenderTarget};
+use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
+use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
+use bevy::light::ShadowFilteringMethod;
+use bevy::post_process::bloom::{Bloom, BloomCompositeMode, BloomPrefilter};
 use bevy::prelude::*;
+use bevy::render::camera::TemporalJitter;
 use bevy::render::render_resource::{Extent3d, TextureFormat};
 use bevy::window::PrimaryWindow;
 
+use crate::game::player::controller::{EYE_HEIGHT, FlyCamera};
+use crate::game::world::rendering::{GameplayScene, environment_map_light, gameplay_ssao};
 use crate::shared::config::{ConfigGameplayRenderRate, GameConfig};
+use crate::shared::save::PuzzleLighting;
 
 #[derive(Component)]
 pub struct UiCamera;
@@ -30,6 +40,95 @@ pub struct GameplayViewBackdrop;
 pub struct GameplayViewImage(pub Handle<Image>);
 
 pub const MENU_CLEAR: Color = Color::srgb(0.58, 0.68, 0.76);
+const INITIAL_PLAYER_EYE_Y: f32 = 1.0 + EYE_HEIGHT + 0.08 + 1.2;
+
+/// 创建玩法 3D 离屏相机与覆盖其上的 2D UI 相机
+pub fn spawn_player(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    window: Query<&Window, With<PrimaryWindow>>,
+    config: Res<GameConfig>,
+    lighting: Res<PuzzleLighting>,
+) {
+    let (width, height) = window
+        .single()
+        .map(gameplay_view_size)
+        .unwrap_or((1280, 720));
+    let image_handle = images.add(new_gameplay_view_image(width, height));
+    commands.insert_resource(GameplayViewImage(image_handle.clone()));
+
+    let clear_color = if config.skybox_enabled {
+        ClearColorConfig::Custom(Color::BLACK)
+    } else {
+        ClearColorConfig::Custom(MENU_CLEAR)
+    };
+    let fly_camera = FlyCamera::default();
+    let camera = commands
+        .spawn((
+            Camera3d::default(),
+            Camera {
+                order: 0,
+                clear_color,
+                ..default()
+            },
+            Projection::Perspective(PerspectiveProjection {
+                fov: config.fov_degrees.to_radians(),
+                ..default()
+            }),
+            RenderTarget::Image(image_handle.into()),
+            Transform::from_xyz(0.5, INITIAL_PLAYER_EYE_Y, 10.5)
+                .with_rotation(fly_camera.view_rotation()),
+            fly_camera,
+            GameplayCamera,
+            GameplayScene,
+            SpatialListener::new(0.25),
+            environment_map_light(&mut images, &lighting),
+        ))
+        .insert((
+            Hdr,
+            Msaa::Off,
+            Tonemapping::TonyMcMapface,
+            DebandDither::Enabled,
+            // 高阈值只让电线充能条和焊点等强自发光部分泛光。
+            Bloom {
+                intensity: 0.7,
+                low_frequency_boost: 0.85,
+                low_frequency_boost_curvature: 0.85,
+                high_pass_frequency: 0.85,
+                prefilter: BloomPrefilter {
+                    threshold: 5.0,
+                    threshold_softness: 0.5,
+                },
+                composite_mode: BloomCompositeMode::Additive,
+                ..Bloom::NATURAL
+            },
+            TemporalAntiAliasing::default(),
+            TemporalJitter::default(),
+            DepthPrepass,
+            NormalPrepass,
+            MotionVectorPrepass,
+            ShadowFilteringMethod::Temporal,
+        ))
+        .id();
+
+    // SSAO 让接缝和贴地接触变暗；强阳光下效果会偏淡。
+    if let Some(ssao) = gameplay_ssao(config.ssao_quality) {
+        commands.entity(camera).insert(ssao);
+    }
+
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 1,
+            clear_color: ClearColorConfig::None,
+            ..default()
+        },
+        Msaa::Off,
+        IsDefaultUiCamera,
+        PlayingUiCamera,
+        GameplayScene,
+    ));
+}
 
 pub fn gameplay_view_size(window: &Window) -> (u32, u32) {
     (

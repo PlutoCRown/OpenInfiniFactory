@@ -14,7 +14,7 @@ use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
 use crate::game::blocks::{MaterialBlockId, material_catalog};
 use crate::game::edit_history::EditHistory;
-use crate::game::session::PlayingWorldParams;
+use crate::game::session::EditableWorldParams;
 use crate::game::state::{SolutionState, UiPanelId};
 use crate::game::ui::components::{
     PanelOptions, default_button_size, localized_text, spawn_panel as spawn_ui_panel,
@@ -181,7 +181,7 @@ fn on_click(
     mut carried: ResMut<CarriedItem>,
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
-    mut world: PlayingWorldParams,
+    mut world: EditableWorldParams,
     actions: Query<&ConverterAction>,
 ) {
     if ui_navigation.modal().is_some() || !primary_click(&mut click) {
@@ -285,6 +285,7 @@ fn update_dropdowns(
     )>,
     triggers: Query<(&ConverterAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
+    let _ui_scope = deps.ui_context.enter();
     let panel = UiPanelId::Converter;
     let panel_active = deps.ui_navigation.active_panel() == Some(panel);
     let input_open = panel_active && deps.open_dropdown.is_open(panel, INPUT_SLOT);

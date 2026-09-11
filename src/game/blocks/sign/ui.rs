@@ -14,13 +14,13 @@ use crate::game::blocks::panels::BlockPanelHooks;
 use crate::game::blocks::traits::BlockUi;
 use crate::game::blocks::{MaterialBlockId, material_catalog};
 use crate::game::edit_history::EditHistory;
-use crate::game::session::PlayingWorldParams;
+use crate::game::session::EditableWorldParams;
 use crate::game::state::{GameMode, SolutionState, UiPanelId};
-use crate::game::ui::access::{UiMainThread, i18n, ui, with_ui_world};
+use crate::game::ui::access::{UiContext, i18n, ui, ui_icons};
 use crate::game::ui::components::{
-    BUTTON_BG, PanelOptions, UiIconAssets, button_border, button_shadow, default_button_size,
-    localized_text, raised_border, spawn_panel as spawn_ui_panel, spawn_ui_icon, styled_button,
-    text, transparent_node,
+    BUTTON_BG, PanelOptions, button_border, button_shadow, default_button_size, localized_text,
+    raised_border, spawn_panel as spawn_ui_panel, spawn_ui_icon, styled_button, text,
+    transparent_node,
 };
 use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::core::text_input::primary_click;
@@ -50,7 +50,7 @@ struct SignDisplayList;
 #[derive(Component, Clone, Copy)]
 struct SignMaterialOption(MaterialBlockId);
 
-/// 点击编辑后延迟到 UiAccessScope 内打开文本提示
+/// 点击编辑后延迟到 UI 命令提交 内打开文本提示
 #[derive(Resource, Default)]
 struct PendingSignTextEdit(Option<IVec3>);
 
@@ -117,8 +117,7 @@ pub fn register(app: &mut App) {
             (flush_sign_visual_refresh, super::nametag::sync_sign_nametag)
                 .chain()
                 .run_if(in_state(GameMode::Playing))
-                .after(crate::game::systems::perf::PerfScope::Hover)
-                .before(crate::game::systems::perf::PerfScope::Placement),
+                .in_set(crate::game::schedule::GameSet::Placement),
         );
 }
 
@@ -159,7 +158,7 @@ fn spawn_row(
 
 /// 文本后的编辑图标按钮
 fn spawn_edit_text_button(parent: &mut ChildSpawnerCommands) {
-    let edit = with_ui_world(|world| world.resource::<UiIconAssets>().edit.clone());
+    let edit = ui_icons().edit;
     let size = default_button_size(36.0);
     parent
         .spawn((
@@ -192,7 +191,7 @@ fn on_click(
     mut pending_text: ResMut<PendingSignTextEdit>,
     mut solution_state: ResMut<SolutionState>,
     mut edit_history: ResMut<EditHistory>,
-    mut world: PlayingWorldParams,
+    mut world: EditableWorldParams,
     actions: Query<&SignAction>,
 ) {
     if ui_navigation.modal().is_some() || !primary_click(&mut click) {
@@ -248,14 +247,16 @@ fn on_click(
 }
 
 fn process_sign_text_prompt(
-    _ui_thread: UiMainThread,
+    mut commands: Commands,
+    ui_context: UiContext,
     mut pending_text: ResMut<PendingSignTextEdit>,
     world: Res<WorldBlocks>,
 ) {
+    let _ui_scope = ui_context.enter();
     let Some(pos) = pending_text.0.take() else {
         return;
     };
-    if !world.blocks.contains_key(&pos) {
+    if !world.blocks().contains_key(&pos) {
         return;
     }
     let current = world.sign_settings(pos).text.unwrap_or_default();
@@ -266,7 +267,7 @@ fn process_sign_text_prompt(
         cancel_text: i18n.t("button.cancel"),
         max_characters: None,
     };
-    ui.open_text_prompt_then(spec, move |result, world| {
+    ui.open_text_prompt_then(&mut commands, spec, move |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
@@ -276,7 +277,7 @@ fn process_sign_text_prompt(
         } else {
             Some(trimmed.to_string())
         };
-        if !world.resource::<WorldBlocks>().blocks.contains_key(&pos) {
+        if !world.resource::<WorldBlocks>().blocks().contains_key(&pos) {
             return;
         }
         let mut settings = world.resource::<WorldBlocks>().sign_settings(pos);
@@ -284,7 +285,7 @@ fn process_sign_text_prompt(
         settings.display = None;
         let before = world
             .resource::<WorldBlocks>()
-            .block_settings
+            .block_settings()
             .get(&pos)
             .cloned();
         {
@@ -293,7 +294,7 @@ fn process_sign_text_prompt(
         }
         let after = world
             .resource::<WorldBlocks>()
-            .block_settings
+            .block_settings()
             .get(&pos)
             .cloned();
         if let Some(mut history) = world.get_resource_mut::<EditHistory>() {
@@ -307,7 +308,7 @@ fn process_sign_text_prompt(
 /// 消费文本编辑后的告示视觉刷新
 fn flush_sign_visual_refresh(
     mut pending: ResMut<PendingSignVisualRefresh>,
-    mut world: PlayingWorldParams,
+    mut world: EditableWorldParams,
 ) {
     let Some(pos) = pending.0.take() else {
         return;
@@ -316,11 +317,12 @@ fn flush_sign_visual_refresh(
 }
 
 fn update_panel(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     ui_navigation: Res<UiNavigation>,
     world: Res<WorldBlocks>,
     mut preview: Query<&mut Text, With<SignTextPreview>>,
 ) {
+    let _ui_scope = ui_context.enter();
     let Some(pos) = ui_navigation.active_block_pos() else {
         return;
     };
@@ -348,6 +350,7 @@ fn update_dropdowns(
     mut lists: Query<(&SignDisplayList, &mut Node, &mut Visibility, &ComputedNode)>,
     triggers: Query<(&SignAction, &ComputedNode, &UiGlobalTransform), With<Button>>,
 ) {
+    let _ui_scope = deps.ui_context.enter();
     let panel = UiPanelId::Sign;
     let panel_active = deps.ui_navigation.active_panel() == Some(panel);
     let open = panel_active && deps.open_dropdown.is_open(panel, DISPLAY_SLOT);

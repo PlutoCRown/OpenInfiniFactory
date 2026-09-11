@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, block_on, futures_lite::future};
 
 use crate::game::state::GameMode;
-use crate::game::ui::access::UiMainThread;
+use crate::game::ui::access::UiContext;
 use crate::game::ui::components::{
     BUTTON_BG, BUTTON_HOVER_BG, DisabledButton, disabled_border, hover_border, pressed_border,
     raised_border,
@@ -31,7 +31,7 @@ fn save_list_visible(mode: &State<GameMode>, navigation: &UiNavigation) -> bool 
 
 /// 重建谜题/方案行，并刷新标题
 pub fn update_save_list_rows(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     mode: Res<State<GameMode>>,
     navigation: Res<UiNavigation>,
     save_state: Res<SaveState>,
@@ -42,7 +42,32 @@ pub fn update_save_list_rows(
     solution_rows_query: Query<Entity, With<SaveListSolutionRows>>,
     children_query: Query<&Children>,
 ) {
+    let locale_changed = ui_context.locale_changed();
+    let _ui_scope = ui_context.enter();
     if !save_list_visible(&mode, &navigation) {
+        return;
+    }
+
+    let structure_changed = mode.is_changed() || navigation.is_changed() || save_state.is_changed();
+    if !structure_changed
+        && !locale_changed
+        && !render_state.paint_buttons
+        && !row_hosts_stale(
+            puzzle_rows_query.iter(),
+            &children_query,
+            render_state.puzzle_keys.len(),
+        )
+        && !row_hosts_stale(
+            solution_rows_query.iter(),
+            &children_query,
+            render_state.solution_keys.len()
+                + usize::from(
+                    save_state.selected_puzzle.is_some()
+                        && selected_top_level_kind(&save_state) != Some(SaveKind::Free),
+                ),
+        )
+    {
+        render_state.rows_rebuilt = false;
         return;
     }
 
@@ -57,8 +82,6 @@ pub fn update_save_list_rows(
             .filter_map(|entry| entry.slot.solution.clone())
             .collect::<Vec<_>>()
     };
-
-    let structure_changed = mode.is_changed() || navigation.is_changed() || save_state.is_changed();
 
     let puzzle_rows_stale =
         row_hosts_stale(puzzle_rows_query.iter(), &children_query, puzzle_rows.len())
@@ -76,7 +99,7 @@ pub fn update_save_list_rows(
         solution_expected,
     ) || render_state.solution_keys != solution_rows;
 
-    if structure_changed {
+    if structure_changed || locale_changed {
         let title = save_list_title();
         for mut text in &mut titles {
             if text.0 != title {
@@ -326,7 +349,7 @@ pub fn update_save_list_scroll(
 
 /// 刷新按钮样式与文案，并同步 Free/Puzzle 区域显隐
 pub fn update_save_list_styles(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     mode: Res<State<GameMode>>,
     navigation: Res<UiNavigation>,
     save_state: Res<SaveState>,
@@ -370,13 +393,16 @@ pub fn update_save_list_styles(
         ),
     >,
 ) {
+    let locale_changed = ui_context.locale_changed();
+    let _ui_scope = ui_context.enter();
     if !save_list_visible(&mode, &navigation) {
         return;
     }
 
     let structure_changed = mode.is_changed() || navigation.is_changed() || save_state.is_changed();
-    let paint_labels = structure_changed || render_state.paint_buttons;
-    let style_changed = structure_changed || hover.is_changed() || render_state.paint_buttons;
+    let paint_labels = structure_changed || locale_changed || render_state.paint_buttons;
+    let style_changed =
+        structure_changed || locale_changed || hover.is_changed() || render_state.paint_buttons;
     if !render_state.rows_rebuilt {
         render_state.paint_buttons = false;
     }
@@ -408,10 +434,14 @@ pub fn update_save_list_styles(
     let ctx = SaveListViewCtx {
         save_state: &save_state,
     };
+    let previous_hover = render_state.last_hover;
     render_state.last_hover = hover.entity;
     for (entity, action, children, mut background, mut border, mut node, save_row, disabled) in
         &mut buttons
     {
+        if !paint_labels && Some(entity) != hover.entity && Some(entity) != previous_hover {
+            continue;
+        }
         let view = action.button_view(&ctx);
         if let Some(display) = view.display {
             if node.display != display {

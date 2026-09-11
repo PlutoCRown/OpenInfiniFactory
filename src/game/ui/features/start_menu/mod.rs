@@ -2,94 +2,59 @@ use bevy::prelude::*;
 
 use crate::game::input::GameplayInputState;
 use crate::game::state::{GameMode, SolutionState, WorldEntryMode};
-use crate::game::systems::perf::PerfScope;
 use crate::game::ui::PanelCloseDeps;
-use crate::game::ui::access::UiMainThread;
-use crate::game::ui::access::{UiAccessScope, ui};
+use crate::game::ui::access::ui;
 use crate::game::ui::core::host::UiRootEntity;
 use crate::game::ui::core::runtime::UiPanelContext;
 use crate::game::ui::core::{StartMenuPage, UiNavigation};
 use crate::game::ui::menu_button::{MenuButtonClick, MenuButtonSet, spawn_menu_button};
-use crate::list_ui_config;
 use crate::shared::save::SaveState;
+
+use super::start_menu_mounts::sync_start_menu_mounts;
 
 pub struct StartMenuPlugin;
 
-struct StartMenuCtx<'w> {
-    navigation: &'w mut UiNavigation,
-    save_state: &'w mut SaveState,
-    solution_state: &'w mut SolutionState,
-    ui_root: Option<Entity>,
-}
-
+/// 主菜单按钮只绑定业务系统，不持有业务资源集合。
 struct StartMenuButton {
     label_key: &'static str,
-    on_click: fn(&mut StartMenuCtx<'_>, &mut Commands),
+    on_click: fn(&mut Commands),
 }
 
-const START_MENU_BUTTONS: &[StartMenuButton] = list_ui_config!(
-    StartMenuButton,
-    ctx: StartMenuCtx<'_>,
-    {
-        key: "button.start_playing"
-        on_click(ctx, _commands) {
-            ctx.save_state.refresh();
-            ctx.save_state.select_puzzle(None);
-            ctx.save_state.select_solution(None);
-            ctx.solution_state.save_list_entry = WorldEntryMode::PlaySolution;
-            ctx.navigation.show_start_menu(StartMenuPage::SaveList);
-        }
-    };
-    {
-        key: "button.settings"
-        on_click(ctx, commands) {
-            ui.mount_settings(
-                commands,
-                ctx.ui_root,
-                UiPanelContext::SettingsFromStartMenu,
-            );
-        }
-    }
-);
-
-#[cfg(not(target_arch = "wasm32"))]
-const START_MENU_QUIT: StartMenuButton = StartMenuButton {
-    label_key: "button.quit_game",
-    on_click: {
-        fn on_click(_ctx: &mut StartMenuCtx<'_>, _commands: &mut Commands) {
-            std::process::exit(0);
-        }
-        on_click
+const START_MENU_BUTTONS: &[StartMenuButton] = &[
+    StartMenuButton {
+        label_key: "button.start_playing",
+        on_click: |commands| {
+            commands.run_system_cached(open_save_list);
+        },
     },
-};
-
-fn start_menu_buttons() -> Vec<&'static StartMenuButton> {
-    let mut buttons: Vec<&'static StartMenuButton> = START_MENU_BUTTONS.iter().collect();
+    StartMenuButton {
+        label_key: "button.settings",
+        on_click: |commands| {
+            commands.run_system_cached(open_start_menu_settings);
+        },
+    },
     #[cfg(not(target_arch = "wasm32"))]
-    buttons.push(&START_MENU_QUIT);
-    buttons
-}
+    StartMenuButton {
+        label_key: "button.quit_game",
+        on_click: |_commands| std::process::exit(0),
+    },
+];
 
 impl Plugin for StartMenuPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
             (
-                dispatch_start_menu_clicks
-                    .in_set(UiAccessScope)
-                    .after(PerfScope::Placement)
-                    .before(PerfScope::Menus),
-                start_menu_escape
-                    .in_set(UiAccessScope)
-                    .after(PerfScope::Placement)
-                    .before(PerfScope::Menus),
+                dispatch_start_menu_clicks.in_set(crate::game::schedule::GameSet::Menus),
+                start_menu_escape.in_set(crate::game::schedule::GameSet::Menus),
+                sync_start_menu_mounts.in_set(crate::game::schedule::GameSet::Menus),
             ),
         );
     }
 }
 
 pub fn spawn_start_menu_buttons(panel: &mut ChildSpawnerCommands) {
-    for (index, button) in start_menu_buttons().into_iter().enumerate() {
+    for (index, button) in START_MENU_BUTTONS.iter().enumerate() {
         spawn_menu_button(
             panel,
             MenuButtonSet::StartMenu,
@@ -100,35 +65,44 @@ pub fn spawn_start_menu_buttons(panel: &mut ChildSpawnerCommands) {
 }
 
 fn dispatch_start_menu_clicks(
-    _ui_thread: UiMainThread,
     mut clicks: MessageReader<MenuButtonClick>,
     mode: Res<State<GameMode>>,
-    mut navigation: ResMut<UiNavigation>,
-    mut save_state: ResMut<SaveState>,
-    mut solution_state: ResMut<SolutionState>,
-    ui_root: Option<Res<UiRootEntity>>,
     mut commands: Commands,
 ) {
     if *mode.get() != GameMode::StartMenu {
         return;
     }
-    let ui_root = ui_root.as_deref().map(|root| root.0);
-    let buttons = start_menu_buttons();
     for click in clicks.read() {
         if click.set != MenuButtonSet::StartMenu {
             continue;
         }
-        let Some(button) = buttons.get(click.index as usize) else {
+        let Some(button) = START_MENU_BUTTONS.get(click.index as usize) else {
             continue;
         };
-        let mut ctx = StartMenuCtx {
-            navigation: &mut navigation,
-            save_state: &mut save_state,
-            solution_state: &mut solution_state,
-            ui_root,
-        };
-        (button.on_click)(&mut ctx, &mut commands);
+        (button.on_click)(&mut commands);
     }
+}
+
+/// 开始游玩业务系统刷新存档并进入存档选择页。
+fn open_save_list(
+    mut navigation: ResMut<UiNavigation>,
+    mut save_state: ResMut<SaveState>,
+    mut solution_state: ResMut<SolutionState>,
+) {
+    save_state.refresh();
+    save_state.select_puzzle(None);
+    save_state.select_solution(None);
+    solution_state.save_list_entry = WorldEntryMode::PlaySolution;
+    navigation.show_start_menu(StartMenuPage::SaveList);
+}
+
+/// 设置按钮系统只声明挂载设置面板所需的根实体。
+fn open_start_menu_settings(ui_root: Option<Res<UiRootEntity>>, mut commands: Commands) {
+    ui.mount_settings(
+        &mut commands,
+        ui_root.as_deref().map(|root| root.0),
+        UiPanelContext::SettingsFromStartMenu,
+    );
 }
 
 /// 主菜单 Esc：关设置/确认/输入，或从存档列表返回

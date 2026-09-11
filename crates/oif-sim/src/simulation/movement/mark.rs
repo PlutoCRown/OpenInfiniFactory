@@ -1,4 +1,11 @@
-pub(super) fn mark_structure_movement_phase(
+use super::{
+    BlockId, BlockKind, FactoryActivity, HashMap, HashSet, IVec3, MovementMark, MovementRule,
+    PUSHER_REVERSE_ENABLED, PusherActor, PusherAnimationKind, PusherState, PusherStateEntry,
+    SimMovementMarkCtx, StructureId, StructureKind, StructureMove, StructureState, SuctionLinks,
+    WorldBlocks, can_translate_structure,
+};
+
+pub(in crate::simulation) fn mark_structure_movement_phase(
     world: &mut WorldBlocks,
     powered_devices: &HashSet<IVec3>,
     structures: &mut StructureState,
@@ -255,7 +262,7 @@ pub(super) fn mark_structure_movement_phase(
 
 /// 传送带标记诊断：回答「单次 can_translate 有多贵」
 #[derive(Default, Clone, Debug)]
-pub(super) struct ConveyorMarkDiag {
+pub(in crate::simulation) struct ConveyorMarkDiag {
     pub attempts: u32,
     pub cache_hits: u32,
     pub can_translate_calls: u32,
@@ -481,8 +488,7 @@ fn mark_pusher_movement(
     }
 
     if desired_extended {
-        if lazy_anchored
-            && (ctx.world.is_fragile_material_at(head) || !ctx.world.is_occupied(head))
+        if lazy_anchored && (ctx.world.is_fragile_material_at(head) || !ctx.world.is_occupied(head))
         {
             if !ctx.claimed_heads.insert(head) {
                 return None;

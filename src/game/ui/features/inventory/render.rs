@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::game::state::{BuilderMode, PlacementState, SolutionState, WorldEntryMode};
-use crate::game::ui::access::{UiMainThread, i18n};
+use crate::game::ui::access::{UiContext, i18n};
 use crate::game::ui::components::{default_button_size, hover_border, inset_border, window_to_ui};
 use crate::game::ui::core::UiNavigation;
 use crate::game::ui::features::inventory::InventoryTabButton;
@@ -17,6 +17,17 @@ use crate::shared::touch_profile::TouchProfile;
 
 use super::types::{InventoryTitleText, TouchInventoryState};
 
+/// 背包槽位上次绘制的最小状态，用于定向更新交互样式。
+#[derive(Default)]
+pub(super) struct InventorySlotRenderState {
+    initialized: bool,
+    selected: usize,
+    had_block_icons: bool,
+    slot_count: usize,
+    hovered: Option<Entity>,
+    touch_selected: Option<usize>,
+}
+
 fn builder_mode_key(mode: BuilderMode) -> &'static str {
     match mode {
         BuilderMode::Edit => "mode.edit",
@@ -24,14 +35,20 @@ fn builder_mode_key(mode: BuilderMode) -> &'static str {
     }
 }
 
-pub fn update_inventory_title(
-    _ui_thread: UiMainThread,
+pub(super) fn update_inventory_title(
+    ui_context: UiContext,
     builder_mode: Res<BuilderMode>,
     solution_state: Res<SolutionState>,
     mut titles: Query<&mut Text, With<InventoryTitleText>>,
     added: Query<(), Added<InventoryTitleText>>,
 ) {
-    if !builder_mode.is_changed() && !solution_state.is_changed() && added.is_empty() {
+    let locale_changed = ui_context.locale_changed();
+    let _ui_scope = ui_context.enter();
+    if !builder_mode.is_changed()
+        && !solution_state.is_changed()
+        && !locale_changed
+        && added.is_empty()
+    {
         return;
     }
     let mode = i18n.t(match solution_state.entry {
@@ -44,13 +61,14 @@ pub fn update_inventory_title(
 }
 
 /// Free 背包页签选中样式
-pub fn update_inventory_tabs(
-    _ui_thread: UiMainThread,
+pub(super) fn update_inventory_tabs(
+    ui_context: UiContext,
     free_tab: Res<FreeInventoryTab>,
     solution_state: Res<SolutionState>,
     mut tabs: Query<(&InventoryTabButton, &mut BackgroundColor, &mut BorderColor)>,
     added: Query<(), Added<InventoryTabButton>>,
 ) {
+    let _ui_scope = ui_context.enter();
     if solution_state.entry != WorldEntryMode::Free {
         return;
     }
@@ -73,20 +91,19 @@ pub fn update_inventory_tabs(
 }
 
 /// 物品格内容与选中/悬停样式：只在相关状态变化时刷新，不跟鼠标每帧重绘
-pub fn update_inventory_slots(
-    _ui_thread: UiMainThread,
+pub(super) fn update_inventory_slots(
+    ui_context: UiContext,
     placement: Res<PlacementState>,
     inventory: Res<InventoryItems>,
     touch: Res<TouchProfile>,
     touch_inventory: Res<TouchInventoryState>,
     block_icons: Option<Res<BlockIconAssets>>,
     mut commands: Commands,
-    mut initialized: Local<bool>,
-    mut last_selected: Local<usize>,
-    mut had_block_icons: Local<bool>,
-    mut last_slot_count: Local<usize>,
-    mut last_hovered: Local<Option<Entity>>,
-    mut last_touch_selected: Local<Option<usize>>,
+    mut render_state: Local<InventorySlotRenderState>,
+    interaction_changes: Query<
+        (Entity, &Interaction),
+        (Changed<Interaction>, With<InventorySlot>, With<Button>),
+    >,
     mut slot_query: Query<
         (
             Entity,
@@ -110,23 +127,31 @@ pub fn update_inventory_slots(
     >,
     mut icons: Query<&mut ImageNode>,
 ) {
+    let locale_changed = ui_context.locale_changed();
+    let _ui_scope = ui_context.enter();
     let icons_ready = block_icons.is_some();
-    let icons_became_ready = icons_ready && !*had_block_icons;
-    *had_block_icons = icons_ready;
+    let icons_became_ready = icons_ready && !render_state.had_block_icons;
+    render_state.had_block_icons = icons_ready;
     let icons_changed = block_icons.as_ref().is_some_and(|icons| icons.is_changed());
     // PlacementState.target 几乎每帧变化，只跟踪快捷栏选中下标
-    let selected_changed = !*initialized || placement.selected != *last_selected;
-    let inventory_changed = !*initialized || inventory.is_changed();
+    let selected_changed = !render_state.initialized || placement.selected != render_state.selected;
+    let inventory_changed = !render_state.initialized || inventory.is_changed();
     let slot_count = slot_query.iter().len();
     // 背包按需挂载后 Slot 实体会增减，必须重新灌内容
-    let slots_changed = !*initialized || slot_count != *last_slot_count;
+    let slots_changed = !render_state.initialized || slot_count != render_state.slot_count;
 
-    let hovered_entity = slot_query.iter().find_map(|(entity, _, interaction, ..)| {
-        (*interaction == Interaction::Hovered).then_some(entity)
-    });
-    let hover_changed = !*initialized || hovered_entity != *last_hovered;
+    let mut hovered_entity = render_state.hovered;
+    for (entity, interaction) in &interaction_changes {
+        if *interaction == Interaction::Hovered {
+            hovered_entity = Some(entity);
+        } else if hovered_entity == Some(entity) {
+            hovered_entity = None;
+        }
+    }
+    let hover_changed = !render_state.initialized || hovered_entity != render_state.hovered;
     let touch_selected = touch_inventory.selected_backpack.map(|(index, _)| index);
-    let touch_selected_changed = !*initialized || touch_selected != *last_touch_selected;
+    let touch_selected_changed =
+        !render_state.initialized || touch_selected != render_state.touch_selected;
 
     if !inventory_changed
         && !selected_changed
@@ -135,16 +160,21 @@ pub fn update_inventory_slots(
         && !icons_became_ready
         && !slots_changed
         && !touch_selected_changed
+        && !locale_changed
     {
         return;
     }
-    *initialized = true;
-    *last_selected = placement.selected;
-    *last_hovered = hovered_entity;
-    *last_slot_count = slot_count;
-    *last_touch_selected = touch_selected;
+    let previous_hovered = render_state.hovered;
+    let previous_selected = render_state.selected;
+    let previous_touch_selected = render_state.touch_selected;
+    render_state.initialized = true;
+    render_state.selected = placement.selected;
+    render_state.hovered = hovered_entity;
+    render_state.slot_count = slot_count;
+    render_state.touch_selected = touch_selected;
 
-    let refresh_content = inventory_changed || icons_changed || icons_became_ready || slots_changed;
+    let refresh_content =
+        inventory_changed || icons_changed || icons_became_ready || slots_changed || locale_changed;
 
     for (entity, slot, interaction, children, mut node, mut background, mut border, tip) in
         &mut slot_query
@@ -162,6 +192,20 @@ pub fn update_inventory_slots(
             node.display = next;
         }
 
+        let refresh_style = refresh_content
+            || Some(entity) == hovered_entity
+            || Some(entity) == previous_hovered
+            || (selected_changed
+                && slot.area == SlotArea::Hotbar
+                && (slot.index == placement.selected || slot.index == previous_selected))
+            || (touch_selected_changed
+                && slot.area == SlotArea::Backpack
+                && (Some(slot.index) == touch_selected
+                    || Some(slot.index) == previous_touch_selected));
+        if !refresh_style && !refresh_content {
+            continue;
+        }
+
         let icon_handle = item.and_then(|item| match item {
             InventoryItem::Block(kind) => block_icons.as_deref().and_then(|icons| icons.get(kind)),
             InventoryItem::Area(AreaKind::Selection) => {
@@ -177,8 +221,10 @@ pub fn update_inventory_slots(
         let selected_touch =
             touch.enabled && slot.area == SlotArea::Backpack && touch_selected == Some(slot.index);
 
-        *background = slot_background(item, has_icon, hovered);
-        *border = slot_border(selected_hotbar || selected_touch, hovered);
+        let next_background = slot_background(item, has_icon, hovered);
+        let next_border = slot_border(selected_hotbar || selected_touch, hovered);
+        background.set_if_neq(next_background);
+        border.set_if_neq(next_border);
 
         let next_tip = item.map(|item| HoverTooltip {
             name_key: item.name_key(),
@@ -217,20 +263,26 @@ pub fn update_inventory_slots(
 }
 
 /// 通用悬停提示：任意挂了 HoverTooltip 的按钮；手持物品时隐藏
-pub fn update_item_tooltip(
-    _ui_thread: UiMainThread,
+pub(super) fn update_item_tooltip(
+    ui_context: UiContext,
     carried: Res<CarriedItem>,
     touch: Res<TouchProfile>,
     ui_navigation: Res<UiNavigation>,
     ui_scale: Res<UiScale>,
     touch_inventory: Res<TouchInventoryState>,
-    targets: Query<(&HoverTooltip, &Interaction)>,
+    changed_targets: Query<
+        (Entity, &HoverTooltip, &Interaction),
+        Or<(Changed<HoverTooltip>, Changed<Interaction>)>,
+    >,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut last_keys: Local<Option<HoverTooltip>>,
+    mut hovered_target: Local<Option<(Entity, HoverTooltip)>>,
     mut tooltip: Query<(&mut Node, &mut Visibility), (With<ItemTooltip>, Without<Button>)>,
     mut tooltip_name: Query<&mut Text, (With<ItemTooltipName>, Without<ItemTooltipDescription>)>,
     mut tooltip_desc: Query<&mut Text, (With<ItemTooltipDescription>, Without<ItemTooltipName>)>,
 ) {
+    let locale_changed = ui_context.locale_changed();
+    let _ui_scope = ui_context.enter();
     let Ok((mut tooltip_node, mut tooltip_visibility)) = tooltip.single_mut() else {
         return;
     };
@@ -242,7 +294,9 @@ pub fn update_item_tooltip(
             None
         };
         let Some(item) = selected else {
-            tooltip_node.display = Display::None;
+            if tooltip_node.display != Display::None {
+                tooltip_node.display = Display::None;
+            }
             tooltip_visibility.set_if_neq(Visibility::Hidden);
             *last_keys = None;
             return;
@@ -252,12 +306,22 @@ pub fn update_item_tooltip(
             description_key: item.description_key(),
         };
         tooltip_visibility.set_if_neq(Visibility::Visible);
-        tooltip_node.display = Display::Flex;
-        tooltip_node.left = Val::Auto;
-        tooltip_node.top = Val::Auto;
-        tooltip_node.right = Val::Px(16.0);
-        tooltip_node.bottom = Val::Px(84.0);
-        if last_keys.as_ref() != Some(&tip) {
+        if tooltip_node.display != Display::Flex {
+            tooltip_node.display = Display::Flex;
+        }
+        if tooltip_node.left != Val::Auto {
+            tooltip_node.left = Val::Auto;
+        }
+        if tooltip_node.top != Val::Auto {
+            tooltip_node.top = Val::Auto;
+        }
+        if tooltip_node.right != Val::Px(16.0) {
+            tooltip_node.right = Val::Px(16.0);
+        }
+        if tooltip_node.bottom != Val::Px(84.0) {
+            tooltip_node.bottom = Val::Px(84.0);
+        }
+        if locale_changed || last_keys.as_ref() != Some(&tip) {
             if let Ok(mut text) = tooltip_name.single_mut() {
                 text.0 = i18n.t(tip.name_key);
             }
@@ -279,9 +343,14 @@ pub fn update_item_tooltip(
         return;
     }
 
-    let hovered = targets
-        .iter()
-        .find_map(|(tip, interaction)| (*interaction == Interaction::Hovered).then_some(*tip));
+    for (entity, tip, interaction) in &changed_targets {
+        if *interaction == Interaction::Hovered {
+            *hovered_target = Some((entity, *tip));
+        } else if hovered_target.is_some_and(|(hovered, _)| hovered == entity) {
+            *hovered_target = None;
+        }
+    }
+    let hovered = hovered_target.map(|(_, tip)| tip);
 
     let Some(tip) = hovered else {
         if tooltip_node.display != Display::None {
@@ -309,10 +378,18 @@ pub fn update_item_tooltip(
 
     tooltip_visibility.set_if_neq(Visibility::Visible);
     let was_hidden = tooltip_node.display == Display::None;
-    tooltip_node.display = Display::Flex;
-    tooltip_node.left = Val::Px(cursor.x + 16.0);
-    tooltip_node.top = Val::Px(cursor.y + 16.0);
-    if was_hidden || last_keys.as_ref() != Some(&tip) {
+    if tooltip_node.display != Display::Flex {
+        tooltip_node.display = Display::Flex;
+    }
+    let left = Val::Px(cursor.x + 16.0);
+    let top = Val::Px(cursor.y + 16.0);
+    if tooltip_node.left != left {
+        tooltip_node.left = left;
+    }
+    if tooltip_node.top != top {
+        tooltip_node.top = top;
+    }
+    if locale_changed || was_hidden || last_keys.as_ref() != Some(&tip) {
         if let Ok(mut text) = tooltip_name.single_mut() {
             text.0 = i18n.t(tip.name_key);
         }
@@ -324,8 +401,8 @@ pub fn update_item_tooltip(
 }
 
 /// 手持物品预览：纯 Icon 居中跟光标，图标只在手持变化时更新
-pub fn update_carried_item_ui(
-    _ui_thread: UiMainThread,
+pub(super) fn update_carried_item_ui(
+    ui_context: UiContext,
     carried: Res<CarriedItem>,
     touch: Res<TouchProfile>,
     touch_inventory: Res<TouchInventoryState>,
@@ -335,6 +412,7 @@ pub fn update_carried_item_ui(
     windows: Query<&Window, With<PrimaryWindow>>,
     mut preview: Query<(&mut Node, &mut ImageNode), With<CarriedItemPreview>>,
 ) {
+    let _ui_scope = ui_context.enter();
     let Ok((mut style, mut image)) = preview.single_mut() else {
         return;
     };

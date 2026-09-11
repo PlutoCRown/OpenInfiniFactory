@@ -5,8 +5,6 @@ use std::collections::HashMap;
 use bevy::picking::prelude::{Click, Pointer};
 use bevy::prelude::*;
 
-use crate::game::systems::perf::PerfScope;
-use crate::game::ui::access::UiAccessScope;
 use crate::game::ui::components::{
     STATUS_TEXT, auto_width_button, flex_row_auto, panel_bundle, panel_content, panel_title_bar,
     panel_title_label, text,
@@ -117,9 +115,7 @@ impl Plugin for TutorialPlugin {
                 Update,
                 (reduce_tutorial_intents, reconcile_tutorial_panel)
                     .chain()
-                    .in_set(UiAccessScope)
-                    .after(PerfScope::Placement)
-                    .before(PerfScope::Menus),
+                    .in_set(crate::game::schedule::GameSet::Menus),
             );
     }
 }

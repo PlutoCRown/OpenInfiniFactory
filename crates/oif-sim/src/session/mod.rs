@@ -4,6 +4,6 @@ pub mod control;
 pub mod log;
 pub mod session;
 
-pub use control::SimulationControl;
+pub use control::{SessionEpoch, SimulationControl};
 pub use log::SimulationDebugLog;
 pub use session::SimSession;

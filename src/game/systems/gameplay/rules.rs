@@ -72,10 +72,10 @@ pub(super) fn can_delete_at(
     world: &WorldBlocks,
 ) -> bool {
     if entry == WorldEntryMode::Free || mode == BuilderMode::Edit {
-        return world.blocks.contains_key(&pos) || world.system_blocks.contains_key(&pos);
+        return world.blocks().contains_key(&pos) || world.system_blocks().contains_key(&pos);
     }
     world
-        .blocks
+        .blocks()
         .get(&pos)
         .is_some_and(|block| block.kind.is_factory())
 }
@@ -91,7 +91,7 @@ pub(super) fn delete_block_at(
         return world.remove(&pos).is_some() || world.remove_system(&pos).is_some();
     }
     if !world
-        .blocks
+        .blocks()
         .get(&pos)
         .is_some_and(|block| block.kind.is_factory())
     {

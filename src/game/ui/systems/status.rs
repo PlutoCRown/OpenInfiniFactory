@@ -1,10 +1,17 @@
 use std::fmt::Write;
 
+use bevy::prelude::*;
+
 use crate::game::blocks::BlockKind;
+use crate::game::state::{BuilderMode, PlacementState, SimulationState};
+use crate::game::systems::gameplay::AimFocus;
+use crate::game::ui::access::UiContext;
+use crate::game::ui::types::{InventoryItem, InventoryItems, StatusText, StatusTextKind};
 use crate::game::world::direction::Facing;
+use crate::game::world::grid::WorldBlocks;
 use crate::shared::config::{ActionKeyName, GameConfig};
 use crate::shared::i18n::{I18n, subst_template};
-use crate::shared::save::SaveKind;
+use crate::shared::save::{SaveKind, SaveState};
 
 /// 游戏状态栏缓存：世界/手持很少变，瞄准行跟 AimFocus 变
 pub struct GameplayStatusCache {
@@ -76,7 +83,7 @@ impl Default for GameplayStatusCache {
 }
 
 pub fn update_status_ui(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     locale: Res<I18n>,
     placement: Res<PlacementState>,
     world: Res<WorldBlocks>,
@@ -93,6 +100,7 @@ pub fn update_status_ui(
     mut texts: Query<(&StatusText, &mut Text)>,
     added_texts: Query<(), Added<StatusText>>,
 ) {
+    let _ui_scope = ui_context.enter();
     let force = !*primed || locale.is_changed() || !added_texts.is_empty();
     let held = inventory.hotbar[placement.selected];
     // 勿用 inventory.is_changed()：其它系统若误 DerefMut 会每帧脏，状态栏文案其实没变
@@ -101,7 +109,7 @@ pub fn update_status_ui(
         || placement.selected != *last_selected
         || held != *last_held;
     let aim_dirty = force || aim.is_changed();
-    let block_counts = (world.scene_count, world.factory_count, world.material_count);
+    let block_counts = world.block_counts();
     let blocks_dirty = force || gameplay_cache.block_counts != Some(block_counts);
     gameplay_cache.block_counts = Some(block_counts);
     let gameplay_dirty = headers_dirty || aim_dirty || blocks_dirty;
@@ -308,9 +316,10 @@ fn compose_gameplay_status(cache: &mut GameplayStatusCache) {
 
 /// 统计场景 / 工厂 / 材料三层方块数量（读 WorldBlocks 增量计数，O(1)）
 fn write_blocks_status_line(cache: &mut GameplayStatusCache, world: &WorldBlocks) {
-    write_usize(&mut cache.num_scene, world.scene_count);
-    write_usize(&mut cache.num_factory, world.factory_count);
-    write_usize(&mut cache.num_material, world.material_count);
+    let (scene, factory, material) = world.block_counts();
+    write_usize(&mut cache.num_scene, scene);
+    write_usize(&mut cache.num_factory, factory);
+    write_usize(&mut cache.num_material, material);
     if cache.blocks_tpl.is_empty() {
         return;
     }

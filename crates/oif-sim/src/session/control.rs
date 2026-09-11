@@ -4,9 +4,21 @@ use crate::simulation::structure_state::StructureState;
 use crate::simulation::structures::MovementHistory;
 use crate::world::grid::WorldBlocks;
 
+/// 会话身份：克隆保持身份，重置或回滚会创建新的身份，避免旧回合被继续呈现。
+#[derive(Clone, Debug)]
+pub struct SessionEpoch(std::sync::Arc<()>);
+
+impl SessionEpoch {
+    /// 比较是否来自同一次世界会话，而非比较可重复的回合编号。
+    pub fn matches(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 /// 游戏与无头调试共用的模拟控制面：回合计数、运行意图与回滚检查点
 #[derive(bevy_ecs::prelude::Resource, Clone)]
 pub struct SimulationControl {
+    epoch: SessionEpoch,
     pub turn: u64,
     pub running: bool,
     pub step_requested: bool,
@@ -17,6 +29,11 @@ pub struct SimulationControl {
 }
 
 impl SimulationControl {
+    /// 返回当前会话身份，供延迟结果验证归属。
+    pub fn epoch(&self) -> &SessionEpoch {
+        &self.epoch
+    }
+
     /// 是否处于模拟中
     pub fn is_active(&self) -> bool {
         self.start_snapshot.is_some() || self.running || self.turn > 0
@@ -86,6 +103,7 @@ impl SimulationControl {
         movement_history: &mut MovementHistory,
         pusher_state: &mut PusherState,
     ) {
+        self.epoch = SessionEpoch(std::sync::Arc::new(()));
         self.running = false;
         self.step_requested = false;
         self.turn = 0;
@@ -111,6 +129,7 @@ impl SimulationControl {
 impl Default for SimulationControl {
     fn default() -> Self {
         Self {
+            epoch: SessionEpoch(std::sync::Arc::new(())),
             turn: 0,
             running: false,
             step_requested: false,
@@ -119,5 +138,29 @@ impl Default for SimulationControl {
             start_snapshot: None,
             start_structures: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 相同回合号的替换世界和回滚必须拒绝先前会话的结果。
+    #[test]
+    fn reset_and_rollback_invalidate_session_identity() {
+        let mut session = SimulationControl::default();
+        let original = session.epoch().clone();
+        assert!(session.clone().epoch().matches(&original));
+        session.reset();
+        assert!(!session.epoch().matches(&original));
+        let before_rollback = session.epoch().clone();
+        session.rollback(
+            &mut WorldBlocks::default(),
+            &mut PendingTurnEffects::default(),
+            &mut StructureState::default(),
+            &mut MovementHistory::default(),
+            &mut PusherState::default(),
+        );
+        assert!(!session.epoch().matches(&before_rollback));
     }
 }

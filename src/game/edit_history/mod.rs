@@ -203,9 +203,9 @@ pub fn apply_block_settings_with_history(
     pos: IVec3,
     apply: impl FnOnce(&mut WorldBlocks),
 ) {
-    let before = world.block_settings.get(&pos).cloned();
+    let before = world.block_settings().get(&pos).cloned();
     apply(world);
-    let after = world.block_settings.get(&pos).cloned();
+    let after = world.block_settings().get(&pos).cloned();
     history.record_settings(pos, before, after);
 }
 
@@ -229,7 +229,7 @@ pub fn apply_teleport_pair_with_history(
     }
     let before: HashMap<IVec3, Option<BlockSettings>> = affected
         .iter()
-        .map(|p| (*p, world.block_settings.get(p).cloned()))
+        .map(|p| (*p, world.block_settings().get(p).cloned()))
         .collect();
     world.set_teleport_pair(pos, partner);
     let settings: Vec<SettingsDelta> = before
@@ -237,7 +237,7 @@ pub fn apply_teleport_pair_with_history(
         .map(|(p, b)| SettingsDelta {
             pos: p,
             before: b,
-            after: world.block_settings.get(&p).cloned(),
+            after: world.block_settings().get(&p).cloned(),
         })
         .filter(|delta| delta.before != delta.after)
         .collect();

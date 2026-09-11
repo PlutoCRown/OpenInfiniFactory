@@ -15,9 +15,9 @@ pub fn text_prompt_spec(title_key: &'static str, default_value: &str) -> TextPro
     }
 }
 
-pub fn open_new_puzzle_prompt() {
+pub fn open_new_puzzle_prompt(mut commands: &mut Commands) {
     let spec = text_prompt_spec("save.prompt.new_puzzle", "puzzle");
-    ui.open_text_prompt_then(spec, |result, world| {
+    ui.open_text_prompt_then(&mut commands, spec, |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
@@ -29,9 +29,9 @@ pub fn open_new_puzzle_prompt() {
     });
 }
 
-pub fn open_new_free_prompt() {
+pub fn open_new_free_prompt(mut commands: &mut Commands) {
     let spec = text_prompt_spec("save.prompt.new_free", "free");
-    ui.open_text_prompt_then(spec, |result, world| {
+    ui.open_text_prompt_then(&mut commands, spec, |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
@@ -43,9 +43,9 @@ pub fn open_new_free_prompt() {
     });
 }
 
-pub fn open_new_solution_prompt(puzzle: String) {
+pub fn open_new_solution_prompt(mut commands: &mut Commands, puzzle: String) {
     let spec = text_prompt_spec("save.prompt.new_solution", "solution");
-    ui.open_text_prompt_then(spec, move |result, world| {
+    ui.open_text_prompt_then(&mut commands, spec, move |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
@@ -58,9 +58,13 @@ pub fn open_new_solution_prompt(puzzle: String) {
 }
 
 /// 重命名选中谜题（改显示名，必要时跟着改文件夹）
-pub fn open_rename_puzzle_prompt(slot: SaveSlot, current_name: String) {
+pub fn open_rename_puzzle_prompt(
+    mut commands: &mut Commands,
+    slot: SaveSlot,
+    current_name: String,
+) {
     let spec = text_prompt_spec("save.prompt.rename_puzzle", &current_name);
-    ui.open_text_prompt_then(spec, move |result, world| {
+    ui.open_text_prompt_then(&mut commands, spec, move |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
@@ -87,9 +91,13 @@ pub fn open_rename_puzzle_prompt(slot: SaveSlot, current_name: String) {
 }
 
 /// 重命名选中方案
-pub fn open_rename_solution_prompt(slot: SaveSlot, current_name: String) {
+pub fn open_rename_solution_prompt(
+    mut commands: &mut Commands,
+    slot: SaveSlot,
+    current_name: String,
+) {
     let spec = text_prompt_spec("save.prompt.rename_solution", &current_name);
-    ui.open_text_prompt_then(spec, move |result, world| {
+    ui.open_text_prompt_then(&mut commands, spec, move |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
@@ -113,9 +121,9 @@ pub fn open_rename_solution_prompt(slot: SaveSlot, current_name: String) {
     });
 }
 
-pub fn open_save_as_new_puzzle_prompt() {
+pub fn open_save_as_new_puzzle_prompt(mut commands: &mut Commands) {
     let spec = text_prompt_spec("save.prompt.save_as_new_puzzle", "puzzle");
-    ui.open_text_prompt_then(spec, |result, world| {
+    ui.open_text_prompt_then(&mut commands, spec, |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };
@@ -128,9 +136,9 @@ pub fn open_save_as_new_puzzle_prompt() {
 }
 
 /// Free：导出为新谜题（不离开当前 Free 会话）
-pub fn open_export_as_puzzle_prompt() {
+pub fn open_export_as_puzzle_prompt(mut commands: &mut Commands) {
     let spec = text_prompt_spec("save.prompt.export_as_puzzle", "puzzle");
-    ui.open_text_prompt_then(spec, |result, world| {
+    ui.open_text_prompt_then(&mut commands, spec, |result, world| {
         let TextPromptResult::Saved(requested) = result else {
             return;
         };

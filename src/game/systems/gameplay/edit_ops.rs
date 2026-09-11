@@ -7,7 +7,7 @@ use crate::game::state::PlacementState;
 use crate::game::ui::InventoryItems;
 use crate::game::world::animation::BlockAnimation;
 use crate::game::world::grid::WorldBlocks;
-use crate::game::world::rendering::{rebuild_world_for_debug_state, rebuild_world_with_animations};
+use crate::game::world::rendering::{rebuild_world, rebuild_world_with_animations};
 use crate::scene::WorldEditScene;
 
 use super::placement::{despawn_block_entities, refresh_edit_generated_markers};
@@ -21,9 +21,9 @@ pub(super) fn pick_target_block(
     inventory: &mut InventoryItems,
 ) {
     let Some(block) = world
-        .blocks
+        .blocks()
         .get(&pos)
-        .or_else(|| world.system_blocks.get(&pos))
+        .or_else(|| world.system_blocks().get(&pos))
     else {
         return;
     };
@@ -48,7 +48,7 @@ pub(super) fn pick_target_block(
 /// 切换目标方块的变体并重建场景
 pub(super) fn alternate_block_at(edit: &mut WorldEditScene, pos: IVec3) -> bool {
     let patch = build_cell_patch(edit.world, &[pos], |world| {
-        let Some(mut block) = world.blocks.get(&pos).copied() else {
+        let Some(mut block) = world.blocks().get(&pos).copied() else {
             return;
         };
         let Some(kind) = block.kind.alternate() else {
@@ -66,8 +66,7 @@ pub(super) fn alternate_block_at(edit: &mut WorldEditScene, pos: IVec3) -> bool 
     }
     edit.edit_history.record(patch);
     refresh_edit_generated_markers(edit.world);
-    edit.scene
-        .structure_state
+    edit.structure_state
         .apply_factory_edit(edit.world, &std::collections::HashSet::from([pos]));
     despawn_block_entities(
         edit.scene.commands,
@@ -76,13 +75,11 @@ pub(super) fn alternate_block_at(edit: &mut WorldEditScene, pos: IVec3) -> bool 
         edit.scene.block_index,
         edit.scene.scene_chunks,
     );
-    rebuild_world_for_debug_state(
+    rebuild_world(
         edit.scene.commands,
         edit.scene.meshes,
         edit.world,
         edit.scene.render_assets,
-        edit.scene.debug,
-        edit.scene.structure_state,
         edit.scene.block_index,
         edit.scene.scene_chunks,
     );
@@ -91,11 +88,11 @@ pub(super) fn alternate_block_at(edit: &mut WorldEditScene, pos: IVec3) -> bool 
 
 /// 旋转目标方块朝向并重建场景
 pub(super) fn rotate_block_at(edit: &mut WorldEditScene, pos: IVec3, reverse: bool) -> bool {
-    let in_system = !edit.world.blocks.contains_key(&pos);
+    let in_system = !edit.world.blocks().contains_key(&pos);
     let Some(mut block) = (if in_system {
-        edit.world.system_blocks.get(&pos)
+        edit.world.system_blocks().get(&pos)
     } else {
-        edit.world.blocks.get(&pos)
+        edit.world.blocks().get(&pos)
     })
     .copied() else {
         return false;
@@ -125,8 +122,7 @@ pub(super) fn rotate_block_at(edit: &mut WorldEditScene, pos: IVec3, reverse: bo
         },
     );
 
-    edit.scene
-        .structure_state
+    edit.structure_state
         .apply_factory_edit(edit.world, &std::collections::HashSet::from([pos]));
     despawn_block_entities(
         edit.scene.commands,
@@ -141,7 +137,6 @@ pub(super) fn rotate_block_at(edit: &mut WorldEditScene, pos: IVec3, reverse: bo
         edit.world,
         edit.scene.render_assets,
         &animations,
-        None,
         edit.scene.block_index,
         edit.scene.scene_chunks,
     );

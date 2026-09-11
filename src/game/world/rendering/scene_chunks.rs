@@ -104,7 +104,7 @@ pub fn rebuild_all_scene_chunks(
 ) {
     clear_scene_chunks(commands, meshes, scene_chunks);
     let mut needed = HashSet::new();
-    for (pos, data) in &world.blocks {
+    for (pos, data) in world.blocks() {
         if data.kind.is_scene() {
             needed.insert(chunk_coord(*pos));
         }
@@ -169,7 +169,7 @@ fn rebuild_one_chunk(
         for y in min.y..max.y {
             for z in min.z..max.z {
                 let pos = IVec3::new(x, y, z);
-                let Some(data) = world.blocks.get(&pos).copied() else {
+                let Some(data) = world.blocks().get(&pos).copied() else {
                     continue;
                 };
                 if !data.kind.is_scene() {

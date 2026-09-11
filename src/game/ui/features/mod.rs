@@ -23,20 +23,15 @@ pub use block_panels::BlockPanelsPlugin;
 pub use gameplay_toast::{GameplayToast, GameplayToastPlugin};
 pub use inventory::InventoryPlugin;
 pub use pause_menu::PauseMenuPlugin;
-pub use playing_overlays::PlayingOverlaysPlugin;
 pub use save::SavePlugin;
 pub use save_settings::SaveSettingsPlugin;
 pub use session_busy::SessionBusyUiPlugin;
 pub use settings::SettingsPlugin;
 pub use start_menu::StartMenuPlugin;
-pub use start_menu_mounts::StartMenuMountsPlugin;
 pub use tutorial::{
     TutorialCatalog, TutorialDefinition, TutorialIntent, TutorialPlugin, TutorialStep,
 };
 pub use virtual_remote::VirtualRemotePlugin;
-
-use crate::game::systems::perf::PerfScope;
-use crate::game::ui::access::UiAccessScope;
 
 pub struct UiFeaturesPlugin;
 
@@ -44,9 +39,7 @@ impl Plugin for UiFeaturesPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             StartMenuPlugin,
-            StartMenuMountsPlugin,
             PauseMenuPlugin,
-            PlayingOverlaysPlugin,
             SavePlugin,
             SaveSettingsPlugin,
             SettingsPlugin,
@@ -66,9 +59,7 @@ impl Plugin for UiFeaturesPlugin {
                 settings_menu_actions,
             )
                 .chain()
-                .in_set(UiAccessScope)
-                .after(PerfScope::Placement)
-                .before(PerfScope::Menus),
+                .in_set(crate::game::schedule::GameSet::Menus),
         );
     }
 }

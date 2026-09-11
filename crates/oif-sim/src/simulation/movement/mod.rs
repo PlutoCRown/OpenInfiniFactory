@@ -29,8 +29,22 @@ pub(super) struct SimMovementMarkCtx<'a> {
     pub actuating_retract: &'a HashSet<BlockId>,
 }
 
-include!("pusher_state.rs");
-include!("mark.rs");
+mod pusher_state;
+/// 活塞/拦截器伸出状态，按方块运行时 ID 索引（随实体移动，不跟格子走）
+#[derive(bevy_ecs::prelude::Resource, Default, Clone)]
+pub struct PusherState {
+    entries: HashMap<BlockId, PusherStateEntry>,
+}
+
+#[derive(Clone, Copy)]
+struct PusherStateEntry {
+    extended: bool,
+    /// 开局快照时头前是否已有工厂方块；运行时掉到面前的不粘
+    bound_front: bool,
+}
+
+mod mark;
+pub(super) use mark::mark_structure_movement_phase;
 
 #[cfg(test)]
 #[path = "tests.rs"]

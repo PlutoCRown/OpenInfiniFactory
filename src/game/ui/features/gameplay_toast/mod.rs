@@ -3,7 +3,6 @@
 use bevy::prelude::*;
 
 use crate::game::state::{GameMode, PlacementState};
-use crate::game::ui::access::UiAccessScope;
 use crate::game::ui::components::text;
 use crate::game::ui::types::{InventoryItem, InventoryItems};
 use crate::shared::i18n::I18n;
@@ -129,9 +128,7 @@ impl Plugin for GameplayToastPlugin {
             (toast_on_hotbar_select, update_gameplay_toast)
                 .chain()
                 .run_if(|mode: Res<State<GameMode>>| *mode.get() == GameMode::Playing)
-                .in_set(UiAccessScope)
-                .after(crate::game::systems::perf::perf_mark_ui_chrome)
-                .before(crate::game::systems::perf::perf_mark_ui_feat),
+                .in_set(crate::game::schedule::GameSet::UiFeat),
         );
     }
 }

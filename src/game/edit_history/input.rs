@@ -1,11 +1,9 @@
-use crate::game::local_player::LocalPlayerMut;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::game::simulation::markers::refresh_static_generated_markers;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::state::SolutionState;
-use crate::game::systems::debug::DebugState;
 use crate::game::systems::gameplay::GameplayPlayGate;
 use crate::game::ui::core::text_input::InlineTextEditState;
 use crate::game::world::grid::WorldBlocks;
@@ -23,7 +21,6 @@ pub struct EditHistoryApply<'w, 's> {
     scene_chunks: ResMut<'w, SceneChunkMeshes>,
     structure_state: ResMut<'w, StructureState>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
-    debug: Res<'w, DebugState>,
 }
 
 impl<'w, 's> EditHistoryApply<'w, 's> {
@@ -33,6 +30,7 @@ impl<'w, 's> EditHistoryApply<'w, 's> {
         world: &WorldBlocks,
         changed: &std::collections::HashSet<IVec3>,
     ) {
+        self.structure_state.apply_factory_edit(world, changed);
         let Some(render_assets) = self.render_assets.as_ref() else {
             return;
         };
@@ -42,8 +40,6 @@ impl<'w, 's> EditHistoryApply<'w, 's> {
             render_assets,
             block_index: &mut self.block_index,
             scene_chunks: &mut self.scene_chunks,
-            debug: &self.debug,
-            structure_state: &mut self.structure_state,
         };
         refresh_edit_changes(&mut scene, world, changed);
     }
@@ -55,7 +51,8 @@ pub fn edit_history_input(
     config: Res<GameConfig>,
     gate: GameplayPlayGate,
     inline_edit: Res<InlineTextEditState>,
-    mut player: LocalPlayerMut,
+    mut placement: ResMut<crate::game::state::PlacementState>,
+    mut edit_history: ResMut<crate::game::edit_history::EditHistory>,
     mut world: ResMut<WorldBlocks>,
     mut solution_state: ResMut<SolutionState>,
     mut apply: EditHistoryApply,
@@ -65,13 +62,9 @@ pub fn edit_history_input(
     }
 
     let patch = if config.chord(ActionKeyName::Redo).just_triggered(&keys) {
-        player
-            .edit_history
-            .redo(&mut world, &mut player.placement.selection)
+        edit_history.redo(&mut world, &mut placement.selection)
     } else if config.chord(ActionKeyName::Undo).just_triggered(&keys) {
-        player
-            .edit_history
-            .undo(&mut world, &mut player.placement.selection)
+        edit_history.undo(&mut world, &mut placement.selection)
     } else {
         return;
     };
@@ -83,9 +76,6 @@ pub fn edit_history_input(
     // 格子变更后重建焊点等虚方块；验收/生成器仍走同一刷新
     if !patch.cells.is_empty() || patch.touches_goal_or_generator() {
         refresh_static_generated_markers(&mut world);
-    }
-    if apply.render_assets.is_none() {
-        return;
     }
     apply.refresh_edit_changes(&world, &patch.affected_positions());
     solution_state.dirty = true;

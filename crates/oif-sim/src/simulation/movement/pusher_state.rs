@@ -1,15 +1,7 @@
-/// 活塞/拦截器伸出状态，按方块运行时 ID 索引（随实体移动，不跟格子走）
-#[derive(bevy_ecs::prelude::Resource, Default, Clone)]
-pub struct PusherState {
-    entries: HashMap<BlockId, PusherStateEntry>,
-}
-
-#[derive(Clone, Copy)]
-struct PusherStateEntry {
-    extended: bool,
-    /// 开局快照时头前是否已有工厂方块；运行时掉到面前的不粘
-    bound_front: bool,
-}
+use super::{
+    BlockData, BlockId, BlockKind, HashMap, HashSet, IVec3, MovementRule, PusherMotion,
+    PusherState, PusherStateEntry, WorldBlocks,
+};
 
 impl PusherState {
     pub fn rebuild_from_world(world: &WorldBlocks) -> Self {
@@ -64,7 +56,7 @@ impl PusherState {
             .collect()
     }
 
-    pub(super) fn actuating_devices(
+    pub(in crate::simulation) fn actuating_devices(
         &self,
         world: &WorldBlocks,
         powered_devices: &HashSet<IVec3>,
@@ -97,7 +89,7 @@ impl PusherState {
     }
 
     /// 已伸出头占格：世界里的真实 PusherHead 方块
-    pub(super) fn hard_head_occupancy(world: &WorldBlocks) -> HashSet<IVec3> {
+    pub(in crate::simulation) fn hard_head_occupancy(world: &WorldBlocks) -> HashSet<IVec3> {
         world
             .blocks
             .iter()
@@ -107,7 +99,10 @@ impl PusherState {
     }
 
     /// 该格若为已伸出推杆头，返回其本体坐标
-    pub(super) fn body_at_extended_head(world: &WorldBlocks, head: IVec3) -> Option<IVec3> {
+    pub(in crate::simulation) fn body_at_extended_head(
+        world: &WorldBlocks,
+        head: IVec3,
+    ) -> Option<IVec3> {
         let head_block = world.blocks.get(&head)?;
         if head_block.kind != BlockKind::PusherHead {
             return None;
@@ -122,7 +117,7 @@ impl PusherState {
     }
 
     /// 推动/收回执行成功后提交伸出状态，并同步真实头方块
-    pub(super) fn set_extended(
+    pub(in crate::simulation) fn set_extended(
         &mut self,
         world: &mut WorldBlocks,
         id: BlockId,

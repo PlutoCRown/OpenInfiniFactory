@@ -1,3 +1,8 @@
+use super::{
+    BlockId, DeformSides, FactoryActivity, GridBounds, HashSet, IVec3, Structure, StructureFreedom,
+    StructureId, StructureKind, StructureState, WorldBlocks, collect_gravity_support,
+};
+
 impl StructureState {
     pub fn structure_ids(&self) -> impl Iterator<Item = StructureId> + '_ {
         self.structures.keys().copied()
@@ -399,7 +404,7 @@ impl StructureState {
             .and_then(|id| self.structures.get(id))
     }
 
-    pub(super) fn structure_by_id(&self, id: StructureId) -> Option<&Structure> {
+    pub(in crate::simulation) fn structure_by_id(&self, id: StructureId) -> Option<&Structure> {
         self.structures.get(&id)
     }
 }

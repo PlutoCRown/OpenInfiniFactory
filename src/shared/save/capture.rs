@@ -1,6 +1,6 @@
 fn capture_puzzle_layer(world: &WorldBlocks, hotbar: &SavedHotbar) -> PuzzleLayer {
     let scene_blocks: Vec<SavedBlock> = world
-        .blocks
+        .blocks()
         .iter()
         .filter_map(|(pos, data)| {
             (data.kind.persistent_layer() == Some(PersistentLayer::Puzzle))
@@ -8,11 +8,11 @@ fn capture_puzzle_layer(world: &WorldBlocks, hotbar: &SavedHotbar) -> PuzzleLaye
         })
         .collect();
     let system_blocks: Vec<SavedBlock> = world
-        .system_blocks
+        .system_blocks()
         .iter()
         .filter_map(|(pos, data)| {
             (data.kind.persistent_layer() == Some(PersistentLayer::Puzzle)).then_some({
-                let settings = world.block_settings.get(pos).cloned();
+                let settings = world.block_settings().get(pos).cloned();
                 saved_block(*pos, *data, settings)
             })
         })
@@ -47,11 +47,11 @@ fn capture_free_world(world: &WorldBlocks, hotbar: &SavedHotbar) -> FreeWorldCap
 
 fn capture_factory_blocks(world: &WorldBlocks) -> Vec<SavedBlock> {
     world
-        .blocks
+        .blocks()
         .iter()
         .filter_map(|(pos, data)| {
             (data.kind.persistent_layer() == Some(PersistentLayer::SolutionFactory)).then_some(
-                saved_block(*pos, *data, world.block_settings.get(pos).cloned()),
+                saved_block(*pos, *data, world.block_settings().get(pos).cloned()),
             )
         })
         .collect()
@@ -59,12 +59,12 @@ fn capture_factory_blocks(world: &WorldBlocks) -> Vec<SavedBlock> {
 
 fn capture_wire_face_panels(world: &WorldBlocks) -> Vec<save_format::SavedWireFacePanel> {
     let id_to_pos: std::collections::HashMap<_, _> = world
-        .blocks
+        .blocks()
         .iter()
         .map(|(pos, block)| (block.id, *pos))
         .collect();
     world
-        .wire_face_panels
+        .wire_face_panels()
         .iter()
         .filter_map(|face| {
             let pos = id_to_pos.get(&face.block)?;
@@ -108,7 +108,7 @@ fn apply_factory_blocks(world: &mut WorldBlocks, factory_blocks: Vec<SavedBlock>
 fn apply_wire_face_panels(world: &mut WorldBlocks, panels: Vec<save_format::SavedWireFacePanel>) {
     for panel in panels {
         let pos = panel.pos();
-        let Some(block) = world.blocks.get(&pos).copied() else {
+        let Some(block) = world.blocks().get(&pos).copied() else {
             continue;
         };
         if block.kind != BlockKind::Wire {

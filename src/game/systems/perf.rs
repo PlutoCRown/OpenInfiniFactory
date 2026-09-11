@@ -214,24 +214,6 @@ pub struct PerfPlugin;
 impl Plugin for PerfPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PerfStats>()
-            // 整条 Update 观测链串死，避免 Menus/Simulation 漂进 UI
-            .configure_sets(
-                Update,
-                (
-                    PerfScope::PreUpdateRest,
-                    PerfScope::VirtualRemote,
-                    PerfScope::InputGather,
-                    PerfScope::PlayerMove,
-                    PerfScope::Hover,
-                    PerfScope::Placement,
-                    PerfScope::Menus,
-                    PerfScope::Simulation,
-                    PerfScope::View,
-                    PerfScope::Animation,
-                    PerfScope::Debug,
-                )
-                    .chain(),
-            )
             .add_systems(First, begin_perf_frame)
             .add_systems(
                 PreUpdate,
@@ -241,38 +223,92 @@ impl Plugin for PerfPlugin {
             )
             .add_systems(
                 Update,
-                perf_mark_pre_update_rest.in_set(PerfScope::PreUpdateRest),
+                perf_mark_pre_update_rest
+                    .after(crate::game::schedule::GameSet::PreUpdateRest)
+                    .before(crate::game::schedule::GameSet::VirtualRemote),
             )
             .add_systems(
                 Update,
-                perf_mark_virtual_remote.in_set(PerfScope::VirtualRemote),
+                perf_mark_virtual_remote
+                    .after(crate::game::schedule::GameSet::VirtualRemote)
+                    .before(crate::game::schedule::GameSet::InputGather),
             )
             .add_systems(
                 Update,
-                perf_mark_input_gather.in_set(PerfScope::InputGather),
+                perf_mark_input_gather
+                    .after(crate::game::schedule::GameSet::InputGather)
+                    .before(crate::game::schedule::GameSet::PlayerMove),
             )
-            .add_systems(Update, perf_mark_player_move.in_set(PerfScope::PlayerMove))
-            .add_systems(Update, perf_mark_hover.in_set(PerfScope::Hover))
-            .add_systems(Update, perf_mark_placement.in_set(PerfScope::Placement))
-            .add_systems(Update, perf_mark_menus.in_set(PerfScope::Menus))
-            .add_systems(Update, perf_mark_simulation.in_set(PerfScope::Simulation))
-            .add_systems(Update, perf_mark_view.in_set(PerfScope::View))
-            .add_systems(Update, perf_mark_animation.in_set(PerfScope::Animation))
-            // UI 子段标记：挂在 UiAccessScope 内、夹在各业务系统之间（勿再 chain 进全局 Update）
             .add_systems(
                 Update,
-                (
-                    perf_mark_ui_inventory,
-                    perf_mark_ui_status,
-                    perf_mark_ui_chrome,
-                    perf_mark_ui_feat,
-                )
-                    .chain()
-                    .in_set(crate::game::ui::UiAccessScope)
-                    .after(PerfScope::Animation)
-                    .before(PerfScope::Debug),
+                perf_mark_player_move
+                    .after(crate::game::schedule::GameSet::PlayerMove)
+                    .before(crate::game::schedule::GameSet::Hover),
             )
-            .add_systems(Update, perf_mark_debug.in_set(PerfScope::Debug))
+            .add_systems(
+                Update,
+                perf_mark_hover
+                    .after(crate::game::schedule::GameSet::Hover)
+                    .before(crate::game::schedule::GameSet::Placement),
+            )
+            .add_systems(
+                Update,
+                perf_mark_placement
+                    .after(crate::game::schedule::GameSet::Placement)
+                    .before(crate::game::schedule::GameSet::Menus),
+            )
+            .add_systems(
+                Update,
+                perf_mark_menus
+                    .after(crate::game::schedule::GameSet::Menus)
+                    .before(crate::game::schedule::GameSet::Session),
+            )
+            .add_systems(
+                Update,
+                perf_mark_simulation
+                    .after(crate::game::schedule::GameSet::Presentation)
+                    .before(crate::game::schedule::GameSet::View),
+            )
+            .add_systems(
+                Update,
+                perf_mark_view
+                    .after(crate::game::schedule::GameSet::View)
+                    .before(crate::game::schedule::GameSet::Animation),
+            )
+            .add_systems(
+                Update,
+                perf_mark_animation
+                    .after(crate::game::schedule::GameSet::Animation)
+                    .before(crate::game::schedule::GameSet::UiInventory),
+            )
+            .add_systems(
+                Update,
+                perf_mark_ui_inventory
+                    .after(crate::game::schedule::GameSet::UiInventory)
+                    .before(crate::game::schedule::GameSet::UiStatus),
+            )
+            .add_systems(
+                Update,
+                perf_mark_ui_status
+                    .after(crate::game::schedule::GameSet::UiStatus)
+                    .before(crate::game::schedule::GameSet::UiChrome),
+            )
+            .add_systems(
+                Update,
+                perf_mark_ui_chrome
+                    .after(crate::game::schedule::GameSet::UiChrome)
+                    .before(crate::game::schedule::GameSet::UiFeat),
+            )
+            .add_systems(
+                Update,
+                perf_mark_ui_feat
+                    .after(crate::game::schedule::GameSet::UiFeat)
+                    .before(crate::game::schedule::GameSet::Debug),
+            )
+            .add_systems(
+                Update,
+                perf_mark_debug.after(crate::game::schedule::GameSet::Debug),
+            )
             .add_systems(
                 PostUpdate,
                 perf_mark_post_update_start

@@ -1,5 +1,14 @@
+use super::{
+    BlockData, BlockId, BlockKind, Facing, FactoryActivity, HashMap, HashSet, IVec3, MaterialFace,
+    MovementMark, MovementRule, MovingOccupancy, StructureId, StructureKind, StructureState,
+    SuctionLinks, VecDeque, WorldBlocks,
+};
+
 /// 抬到 range 上一格（range=5 时为第 6 格）后悬停：已出抬升标记范围，靠此抑制重力，避免边缘上下弹跳
-fn structure_supported_by_lifter(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
+pub(super) fn structure_supported_by_lifter(
+    world: &WorldBlocks,
+    structure: &HashSet<IVec3>,
+) -> bool {
     // Lifter range 固定 5：只查正下方第 6 格，避免全图 / 多段扫描
     structure.iter().any(|pos| {
         let candidate = *pos - IVec3::Y * 6;
@@ -34,7 +43,7 @@ fn structure_id_rests_on_stable_support(
 }
 
 /// 重力是否被支撑链接地（场景/Inactive，或下方 Active 已接地）；带 memo，避免重复扫
-fn structure_id_gravity_grounded(
+pub(super) fn structure_id_gravity_grounded(
     world: &WorldBlocks,
     structures: &StructureState,
     id: StructureId,
@@ -101,7 +110,7 @@ fn structure_id_gravity_grounded(
 
 /// 运动执行前：按计划压碎/让出冲突的脆弱材料（与钻头/激光销毁分离）
 /// 返回碎裂格子与种类，供表现层生成碎片
-fn can_move_gravity_structure(
+pub(super) fn can_move_gravity_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     structures: &StructureState,
@@ -125,7 +134,7 @@ fn can_move_gravity_structure(
         && can_move_own_extended_heads(world, &expanded, IVec3::NEG_Y, hard_pusher_head_occupancy)
 }
 
-fn hard_pusher_head_blocked_below(
+pub(super) fn hard_pusher_head_blocked_below(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
@@ -156,7 +165,7 @@ fn hard_pusher_head_blocked_below(
 }
 
 /// 结构内已伸出推杆的头格（随结构一起平移）
-fn own_extended_heads(
+pub(super) fn own_extended_heads(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
@@ -185,7 +194,7 @@ fn own_extended_heads(
 }
 
 /// 平移体积（体格 ∪ 自带头）是否会撞上外来活塞头
-fn hard_pusher_head_blocks_move(
+pub(super) fn hard_pusher_head_blocks_move(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,
@@ -200,7 +209,7 @@ fn hard_pusher_head_blocks_move(
 }
 
 /// 自带头平移后是否有落脚处（不钻进实心/外来头）
-fn can_move_own_extended_heads(
+pub(super) fn can_move_own_extended_heads(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,
@@ -218,7 +227,7 @@ fn can_move_own_extended_heads(
 }
 
 /// 把结构内推杆的真实伸出头并入移动集合
-fn with_pusher_heads(world: &WorldBlocks, structure: &HashSet<IVec3>) -> HashSet<IVec3> {
+pub(super) fn with_pusher_heads(world: &WorldBlocks, structure: &HashSet<IVec3>) -> HashSet<IVec3> {
     let mut expanded = structure.clone();
     for &pos in structure {
         let Some(block) = world.blocks.get(&pos) else {
@@ -250,7 +259,7 @@ fn is_pusher_head_at(world: &WorldBlocks, pos: IVec3) -> bool {
         .is_some_and(|block| block.kind == BlockKind::PusherHead)
 }
 
-fn expanded_move_structure(
+pub(super) fn expanded_move_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,
@@ -265,13 +274,13 @@ fn expanded_move_structure(
 
 /// 移动后印花凸出的一格是否撞上外部方块；印花本身不进入世界占用表
 #[derive(Clone, Copy)]
-pub(super) struct StampCollision {
+pub(in crate::simulation) struct StampCollision {
     pub face: MaterialFace,
     pub target: IVec3,
 }
 
 /// 收集结构平移后会撞上的印花面
-pub(super) fn stamp_collisions(
+pub(in crate::simulation) fn stamp_collisions(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,
@@ -335,7 +344,7 @@ pub(super) fn stamp_collisions(
 }
 
 /// 展开推动链；`occupancy` 下同向离开的格视为空（不并入），异速占用则失败
-pub(super) fn expanded_move_structure_with_occupancy(
+pub(in crate::simulation) fn expanded_move_structure_with_occupancy(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,
@@ -437,7 +446,7 @@ fn can_move_structure_without_push_occupancy(
 }
 
 /// 把工厂附着子格（告示等）并入待移动集合
-fn with_factory_attachment_children(
+pub(super) fn with_factory_attachment_children(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
 ) -> HashSet<IVec3> {
@@ -467,7 +476,7 @@ fn with_factory_attachment_children(
     expanded
 }
 
-pub(super) fn can_translate_structure(
+pub(in crate::simulation) fn can_translate_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,
@@ -490,12 +499,12 @@ pub(super) fn can_translate_structure(
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-pub(super) enum MovementExpansionMode {
+pub(in crate::simulation) enum MovementExpansionMode {
     Normal,
     Gravity,
 }
 
-pub(super) fn movement_expansion_mode(
+pub(in crate::simulation) fn movement_expansion_mode(
     mark: MovementMark,
     source: Option<BlockId>,
 ) -> MovementExpansionMode {
@@ -524,7 +533,7 @@ fn pushable_structure_at(
     None
 }
 
-pub(super) fn can_rotate_structure(
+pub(in crate::simulation) fn can_rotate_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     pivot: IVec3,
@@ -543,7 +552,7 @@ pub(super) fn can_rotate_structure(
 }
 
 /// 收集结构旋转后会撞上的印花面
-pub(super) fn stamp_collisions_for_rotation(
+pub(in crate::simulation) fn stamp_collisions_for_rotation(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     pivot: IVec3,
@@ -602,7 +611,7 @@ pub(super) fn stamp_collisions_for_rotation(
 }
 
 /// 同步提交旋转后的世界占格、面附着与结构索引
-pub(super) fn rotate_structure(
+pub(in crate::simulation) fn rotate_structure(
     world: &mut WorldBlocks,
     structures: &mut StructureState,
     structure: &HashSet<IVec3>,
@@ -702,7 +711,7 @@ pub(super) fn rotate_structure(
     }
 }
 
-pub(super) fn rotate_pos_y(pos: IVec3, pivot: IVec3, clockwise: bool) -> IVec3 {
+pub(in crate::simulation) fn rotate_pos_y(pos: IVec3, pivot: IVec3, clockwise: bool) -> IVec3 {
     let rel = pos - pivot;
     pivot + rotate_offset_y(rel, clockwise)
 }
@@ -715,7 +724,7 @@ fn rotate_offset_y(offset: IVec3, clockwise: bool) -> IVec3 {
     }
 }
 
-fn rotate_facing(facing: Facing, clockwise: bool) -> Facing {
+pub(super) fn rotate_facing(facing: Facing, clockwise: bool) -> Facing {
     if clockwise {
         facing.rotate()
     } else {

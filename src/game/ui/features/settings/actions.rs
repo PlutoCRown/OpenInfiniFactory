@@ -6,12 +6,11 @@ use bevy::ui_widgets::{Slider, SliderRange, ValueChange};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::debug_http::PendingDebugHttpStart;
 use crate::game::state::GameSettings;
-use crate::game::ui::access::{UiMainThread, ui};
-use crate::game::ui::core::host::{UiAction, UiActionKind, UiInstanceId};
+use crate::game::ui::access::{UiContext, ui};
+use crate::game::ui::core::host::{UiAction, UiInstanceId};
 use crate::game::ui::core::runtime::UiNavigation;
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::settings::confirm::{on_reset_defaults, reset_defaults_spec};
-use crate::list_ui_config;
 use crate::shared::config::{
     GameConfig, chord_from_input, input_from_buttons, open_config_folder, save_config,
 };
@@ -22,36 +21,37 @@ use super::types::{
     SettingsSliderTrigger, SettingsTab,
 };
 
-struct SettingsFooterCtx;
-
+/// 设置页脚按钮绑定局部操作，不要求分发系统预借用业务资源。
 struct SettingsFooterButton {
     action: SettingsAction,
-    on_click: fn(&mut SettingsFooterCtx, &mut Commands),
+    on_click: fn(&mut Commands),
 }
 
-const SETTINGS_FOOTER: &[SettingsFooterButton] = list_ui_config!(
-    SettingsFooterButton,
-    ctx: SettingsFooterCtx,
-    {
-        for SettingsAction::ResetDefaults =>
-        on_click(_ctx, _commands) {
-            ui.open_confirm_then(reset_defaults_spec(), on_reset_defaults);
-        }
-    };
-    {
-        for SettingsAction::OpenFolder =>
-        on_click(_ctx, _commands) {
-            open_config_folder();
-        }
-    };
-    {
-        for SettingsAction::StartDebugHttp =>
-        on_click(_ctx, commands) {
+const SETTINGS_FOOTER: &[SettingsFooterButton] = &[
+    SettingsFooterButton {
+        action: SettingsAction::ResetDefaults,
+        on_click: |commands| {
+            commands.run_system_cached(confirm_reset_defaults);
+        },
+    },
+    SettingsFooterButton {
+        action: SettingsAction::OpenFolder,
+        on_click: |_commands| open_config_folder(),
+    },
+    SettingsFooterButton {
+        action: SettingsAction::StartDebugHttp,
+        on_click: |commands| {
             #[cfg(not(target_arch = "wasm32"))]
             commands.insert_resource(PendingDebugHttpStart(true));
-        }
-    }
-);
+        },
+    },
+];
+
+/// 重置设置按钮系统只在需要确认时获取本地化上下文。
+fn confirm_reset_defaults(ui_context: UiContext, mut commands: Commands) {
+    let _ui_scope = ui_context.enter();
+    ui.open_confirm_then(&mut commands, reset_defaults_spec(), on_reset_defaults);
+}
 
 pub fn settings_menu_actions(
     keys: Res<ButtonInput<KeyCode>>,
@@ -144,7 +144,7 @@ pub fn settings_slider_released(
 pub fn emit_settings_actions(
     mut click: On<Pointer<Click>>,
     ui_navigation: Res<UiNavigation>,
-    mut writer: MessageWriter<UiAction>,
+    mut writer: MessageWriter<UiAction<SettingsAction>>,
     actions: Query<&SettingsAction>,
 ) {
     if ui_navigation.modal().is_some()
@@ -159,13 +159,12 @@ pub fn emit_settings_actions(
     click.propagate(false);
     writer.write(UiAction {
         instance: UiInstanceId::SETTINGS,
-        kind: UiActionKind::Settings(action),
+        kind: action,
     });
 }
 
 pub fn dispatch_settings_actions(
-    _ui_thread: UiMainThread,
-    mut actions: MessageReader<UiAction>,
+    mut actions: MessageReader<UiAction<SettingsAction>>,
     mut config: ResMut<GameConfig>,
     mut settings_tab: ResMut<SettingsTab>,
     mut open_dropdown: ResMut<OpenSettingsDropdown>,
@@ -176,10 +175,9 @@ pub fn dispatch_settings_actions(
         if action.instance != UiInstanceId::SETTINGS {
             continue;
         }
-        let UiActionKind::Settings(action) = action.kind.clone() else {
-            continue;
-        };
-        if dispatch_settings_footer(action, &mut SettingsFooterCtx, &mut commands) {
+        let action = action.kind.clone();
+        if let Some(entry) = SETTINGS_FOOTER.iter().find(|entry| entry.action == action) {
+            (entry.on_click)(&mut commands);
             continue;
         }
         match action {
@@ -266,18 +264,4 @@ pub fn dispatch_settings_actions(
             | SettingsAction::StartDebugHttp => {}
         }
     }
-}
-
-fn dispatch_settings_footer(
-    action: SettingsAction,
-    ctx: &mut SettingsFooterCtx,
-    commands: &mut Commands,
-) -> bool {
-    for entry in SETTINGS_FOOTER {
-        if entry.action == action {
-            (entry.on_click)(ctx, commands);
-            return true;
-        }
-    }
-    false
 }

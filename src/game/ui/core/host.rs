@@ -1,23 +1,14 @@
 use bevy::ecs::system::SystemParam;
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 
-use crate::game::blocks::panels::find_block_panel_hooks;
-use crate::game::state::{GameSettings, UiPanelId};
+use crate::game::state::UiPanelId;
 use crate::game::ui::core::confirm_dialog::{
     ConfirmDialogState, ConfirmProps, ConfirmResult, PendingConfirmHandler, spawn_confirm_dialog,
 };
-use crate::game::ui::core::runtime::{UiModal, UiNavigation, UiPanelContext};
+use crate::game::ui::core::runtime::{UiModal, UiNavigation};
 use crate::game::ui::core::text_prompt::{
     PendingTextPromptHandler, TextPromptProps, TextPromptResult, TextPromptState, spawn_text_prompt,
 };
-use crate::game::ui::features::save::types::SaveListAction;
-use crate::game::ui::features::save_settings::types::SaveSettingsAction;
-use crate::game::ui::features::settings::types::SettingsAction;
-use crate::game::ui::screens::{
-    SaveSettingsSpawnCtx, spawn_save_settings_panel, spawn_settings_panel,
-};
-use crate::game::ui::types::InventorySlot;
 #[derive(Resource, Clone, Copy)]
 pub struct UiRootEntity(pub Entity);
 
@@ -46,27 +37,16 @@ pub enum ViewSpec {
 }
 
 #[derive(Clone, Debug, Eq, Message, PartialEq)]
-pub struct UiAction {
+pub struct UiAction<T: Send + Sync + 'static = UiActionKind> {
     pub instance: UiInstanceId,
-    pub kind: UiActionKind,
+    pub kind: T,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UiActionKind {
-    SaveList(SaveListAction),
-    Settings(SettingsAction),
-    SaveSettings(SaveSettingsAction),
-    InventorySlot {
-        slot: InventorySlot,
-        button: PointerButton,
-    },
-    InventoryTab(crate::game::ui::types::FreeInventoryTab),
     ConfirmDialog(super::confirm_dialog::ConfirmButtonId),
-    TextPromptSubmit {
-        value: String,
-    },
+    TextPromptSubmit { value: String },
     TextPromptCancel,
-    PanelClose,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -81,6 +61,13 @@ enum MountedView {
         panel: UiPanelId,
         entity: Option<Entity>,
     },
+}
+
+/// 面板挂载策略由功能层提供，宿主只保存实例和实体。
+pub struct PanelMount {
+    pub panel: UiPanelId,
+    pub instance: Option<UiInstanceId>,
+    pub replaces: fn(UiPanelId) -> bool,
 }
 
 #[derive(Resource, Default)]
@@ -102,6 +89,19 @@ pub(crate) struct UiHostCommands<'w> {
 }
 
 impl UiHostCommands<'_> {
+    /// 用功能层构建回调挂载面板，宿主不接收页面业务资源。
+    pub fn mount_panel(
+        &mut self,
+        commands: &mut Commands,
+        root: Option<Entity>,
+        mount: PanelMount,
+        navigate: impl FnOnce(&mut UiNavigation),
+        build: impl FnOnce(&mut ChildSpawnerCommands),
+    ) -> UiInstanceId {
+        self.host
+            .mount_panel(commands, root, &mut self.navigation, mount, navigate, build)
+    }
+
     fn active_root(&self) -> Option<Entity> {
         self.playing_ui_root
             .as_ref()
@@ -109,53 +109,9 @@ impl UiHostCommands<'_> {
             .or_else(|| self.ui_root.as_ref().map(|root| root.0))
     }
 
-    pub fn mount_settings(
-        &mut self,
-        commands: &mut Commands,
-        root: Option<Entity>,
-        context: UiPanelContext,
-        settings: &GameSettings,
-        panel_w: f32,
-        panel_h: f32,
-        touch_enabled: bool,
-    ) -> UiInstanceId {
-        self.host.mount_settings(
-            commands,
-            root,
-            &mut self.navigation,
-            context,
-            settings,
-            panel_w,
-            panel_h,
-            touch_enabled,
-        )
-    }
-
-    pub fn mount_save_settings(
-        &mut self,
-        commands: &mut Commands,
-        root: Option<Entity>,
-        context: UiPanelContext,
-        view: &SaveSettingsSpawnCtx,
-    ) -> UiInstanceId {
-        self.host
-            .mount_save_settings(commands, root, &mut self.navigation, context, view)
-    }
-
     pub fn unmount_panel(&mut self, panel: UiPanelId, commands: &mut Commands) {
         self.host
             .unmount_panel(panel, &mut self.navigation, Some(commands));
-    }
-
-    pub fn mount_block_panel(
-        &mut self,
-        commands: &mut Commands,
-        root: Option<Entity>,
-        panel: UiPanelId,
-        pos: IVec3,
-    ) -> UiInstanceId {
-        self.host
-            .mount_block_panel(commands, root, &mut self.navigation, panel, pos)
     }
 
     pub fn open_confirm_then(
@@ -198,6 +154,57 @@ impl UiHostCommands<'_> {
 }
 
 impl UiHost {
+    /// 通用面板挂载：替换指定实例，功能层负责导航意图和子树内容。
+    pub fn mount_panel(
+        &mut self,
+        commands: &mut Commands,
+        root: Option<Entity>,
+        navigation: &mut UiNavigation,
+        mount: PanelMount,
+        navigate: impl FnOnce(&mut UiNavigation),
+        build: impl FnOnce(&mut ChildSpawnerCommands),
+    ) -> UiInstanceId {
+        let replaced: Vec<_> = self
+            .stack
+            .iter()
+            .filter_map(|(_, view)| match view {
+                MountedView::Panel { panel, .. } if (mount.replaces)(*panel) => Some(*panel),
+                _ => None,
+            })
+            .collect();
+        for panel in replaced {
+            self.unmount_panel(panel, navigation, Some(commands));
+        }
+        navigate(navigation);
+        let id = mount.instance.unwrap_or_else(|| self.next_id());
+        let entity = root.map(|root| {
+            let container = commands
+                .spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        position_type: PositionType::Absolute,
+                        ..default()
+                    },
+                    BackgroundColor(Color::NONE),
+                    UiHostMountRoot,
+                    Pickable::IGNORE,
+                ))
+                .with_children(build)
+                .id();
+            commands.entity(root).add_child(container);
+            container
+        });
+        self.stack.push((
+            id,
+            MountedView::Panel {
+                panel: mount.panel,
+                entity,
+            },
+        ));
+        id
+    }
+
     pub fn active_confirm_instance(&self) -> Option<UiInstanceId> {
         self.stack.iter().rev().find_map(|(instance, view)| {
             matches!(view, MountedView::Confirm { .. }).then_some(*instance)
@@ -313,156 +320,6 @@ impl UiHost {
     }
 
     /// 按需挂载方块属性面板（含下拉 overlay）
-    pub fn mount_block_panel(
-        &mut self,
-        commands: &mut Commands,
-        root: Option<Entity>,
-        runtime: &mut UiNavigation,
-        panel: UiPanelId,
-        pos: IVec3,
-    ) -> UiInstanceId {
-        let other_blocks: Vec<UiPanelId> = self
-            .stack
-            .iter()
-            .filter_map(|(_, view)| match view {
-                MountedView::Panel { panel: mounted, .. } if !mounted.is_settings() => {
-                    Some(*mounted)
-                }
-                _ => None,
-            })
-            .collect();
-        for mounted in other_blocks {
-            self.unmount_panel(mounted, runtime, Some(commands));
-        }
-
-        let id = self.next_id();
-        runtime.open_block(panel, pos);
-        let Some(hooks) = find_block_panel_hooks(panel) else {
-            self.stack.push((
-                id,
-                MountedView::Panel {
-                    panel,
-                    entity: None,
-                },
-            ));
-            return id;
-        };
-
-        let entity = root.map(|root| {
-            let mut container = None;
-            commands.entity(root).with_children(|root| {
-                let spawned = root
-                    .spawn((
-                        Node {
-                            width: Val::Percent(100.0),
-                            height: Val::Percent(100.0),
-                            position_type: PositionType::Absolute,
-                            ..default()
-                        },
-                        BackgroundColor(Color::NONE),
-                        UiHostMountRoot,
-                        Pickable::IGNORE,
-                    ))
-                    .with_children(|container| {
-                        (hooks.spawn_panel)(container);
-                        (hooks.spawn_overlays)(container);
-                    })
-                    .id();
-                container = Some(spawned);
-            });
-            container.unwrap_or(root)
-        });
-        self.stack.push((id, MountedView::Panel { panel, entity }));
-        id
-    }
-
-    pub fn mount_settings(
-        &mut self,
-        commands: &mut Commands,
-        root: Option<Entity>,
-        runtime: &mut UiNavigation,
-        context: UiPanelContext,
-        settings: &GameSettings,
-        panel_w: f32,
-        panel_h: f32,
-        touch_enabled: bool,
-    ) -> UiInstanceId {
-        let id = self.next_id();
-        self.unmount_panel(UiPanelId::Settings, runtime, Some(commands));
-        runtime.open(UiPanelId::Settings, context);
-        let entity = root.map(|root| {
-            let mut container = None;
-            commands.entity(root).with_children(|root| {
-                let spawned = root
-                    .spawn((
-                        Node {
-                            width: Val::Percent(100.0),
-                            height: Val::Percent(100.0),
-                            position_type: PositionType::Absolute,
-                            ..default()
-                        },
-                        BackgroundColor(Color::NONE),
-                        UiHostMountRoot,
-                    ))
-                    .with_children(|container| {
-                        spawn_settings_panel(container, settings, panel_w, panel_h, touch_enabled);
-                    })
-                    .id();
-                container = Some(spawned);
-            });
-            container.unwrap_or(root)
-        });
-        self.stack.push((
-            id,
-            MountedView::Panel {
-                panel: UiPanelId::Settings,
-                entity,
-            },
-        ));
-        id
-    }
-
-    pub fn mount_save_settings(
-        &mut self,
-        commands: &mut Commands,
-        root: Option<Entity>,
-        runtime: &mut UiNavigation,
-        context: UiPanelContext,
-        view: &SaveSettingsSpawnCtx,
-    ) -> UiInstanceId {
-        self.unmount_panel(UiPanelId::Settings, runtime, Some(commands));
-        runtime.open(UiPanelId::Settings, context);
-        let entity = root.map(|root| {
-            let mut container = None;
-            commands.entity(root).with_children(|root| {
-                let spawned = root
-                    .spawn((
-                        Node {
-                            width: Val::Percent(100.0),
-                            height: Val::Percent(100.0),
-                            position_type: PositionType::Absolute,
-                            ..default()
-                        },
-                        BackgroundColor(Color::NONE),
-                        UiHostMountRoot,
-                    ))
-                    .with_children(|container| {
-                        spawn_save_settings_panel(container, view);
-                    })
-                    .id();
-                container = Some(spawned);
-            });
-            container.unwrap_or(root)
-        });
-        self.stack.push((
-            UiInstanceId::SAVE_SETTINGS,
-            MountedView::Panel {
-                panel: UiPanelId::Settings,
-                entity,
-            },
-        ));
-        UiInstanceId::SAVE_SETTINGS
-    }
 
     pub fn dispatch_completions(
         &mut self,
@@ -672,12 +529,6 @@ pub fn dispatch_ui_action(
                 text_prompt.submit();
             }
             UiActionKind::TextPromptCancel => text_prompt.cancel(),
-            UiActionKind::SaveList(_)
-            | UiActionKind::Settings(_)
-            | UiActionKind::SaveSettings(_)
-            | UiActionKind::InventorySlot { .. }
-            | UiActionKind::InventoryTab(_) => {}
-            UiActionKind::PanelClose => {}
         }
     }
 }

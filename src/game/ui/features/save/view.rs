@@ -40,7 +40,6 @@ impl SaveListAction {
         match self {
             Self::SelectPuzzle(storage) => save_state
                 .top_level_worlds()
-                .iter()
                 .any(|entry| entry.slot.puzzle == *storage),
             Self::SelectSolution(storage) => save_state
                 .selected_puzzle_solutions()
@@ -50,7 +49,6 @@ impl SaveListAction {
             Self::NewSolution => selected_top_level_kind(save_state) == Some(SaveKind::Puzzle),
             Self::ToggleFavorite(storage) => save_state
                 .top_level_worlds()
-                .iter()
                 .any(|entry| entry.slot.puzzle == *storage),
             Self::EditSelectedPuzzle => {
                 selected_top_level_kind(save_state) == Some(SaveKind::Puzzle)
@@ -76,7 +74,6 @@ impl SaveListAction {
         match self {
             Self::SelectPuzzle(storage) => save_state
                 .top_level_worlds()
-                .into_iter()
                 .find(|entry| entry.slot.puzzle == *storage)
                 .map(|entry| entry.name.clone())
                 .unwrap_or_else(|| storage.to_string()),
@@ -98,7 +95,6 @@ impl SaveListAction {
             Self::SelectPuzzle(storage) => ctx
                 .save_state
                 .top_level_worlds()
-                .into_iter()
                 .find(|entry| entry.slot.puzzle == *storage),
             Self::SelectSolution(storage) => ctx
                 .save_state
@@ -123,7 +119,6 @@ impl SaveListAction {
                 let entry = ctx
                     .save_state
                     .top_level_worlds()
-                    .into_iter()
                     .find(|entry| entry.slot.puzzle == *storage)?;
                 let kind_key = match entry.kind {
                     SaveKind::Puzzle => "save.kind.puzzle",
@@ -141,7 +136,6 @@ impl SaveListAction {
             Self::SelectPuzzle(storage) => ctx
                 .save_state
                 .top_level_worlds()
-                .into_iter()
                 .find(|entry| entry.slot.puzzle == *storage)
                 .is_some_and(|entry| entry.favorite),
             _ => false,
@@ -176,7 +170,6 @@ pub fn selected_top_level_kind(save_state: &SaveState) -> Option<SaveKind> {
     let name = save_state.selected_puzzle.as_deref()?;
     save_state
         .top_level_worlds()
-        .into_iter()
         .find(|entry| entry.slot.puzzle == name)
         .map(|entry| entry.kind)
 }
@@ -197,7 +190,6 @@ fn solution_display_name(save_state: &SaveState, storage: &str) -> String {
 pub fn save_list_puzzle_rows(save_state: &SaveState) -> Vec<String> {
     save_state
         .top_level_worlds()
-        .into_iter()
         .map(|entry| entry.slot.puzzle.clone())
         .collect()
 }

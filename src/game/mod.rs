@@ -9,6 +9,7 @@ pub mod local_player;
 pub mod material_blocks;
 pub mod player;
 pub mod scene_blocks;
+pub mod schedule;
 pub mod session;
 pub mod simulation;
 pub mod state;
@@ -29,35 +30,20 @@ use crate::shared::persistent_storage::{self, StoragePlugin, StorageReady};
 use crate::shared::save::SaveState;
 use crate::shared::touch_profile::TouchProfile;
 
-use cameras::{
-    GameplayRenderThrottle, spawn_ui_camera, sync_gameplay_render_rate,
-    sync_gameplay_view_image_size,
-};
+use cameras::{GameplayRenderThrottle, spawn_player, spawn_ui_camera};
 #[cfg(not(target_arch = "wasm32"))]
 use debug::DebugToolsPlugin;
-use edit_history::{EditHistory, edit_history_input};
-use player::controller::{
-    MouseLookBaseline, apply_pending_player_spawn, camera_look, camera_move, spawn_player,
-    sync_cursor_grab,
-};
+use player::controller::{MouseLookBaseline, apply_pending_player_spawn};
+use schedule::{GameSchedulePlugin, GameSet};
 use session::{SessionPlugin, on_exit_playing, prepare_playing_session, rebuild_playing_world};
-use state::{
-    BuilderMode, GameMode, GameSettings, PendingPlayerSpawn, PlacementState, SimulationState,
-    SolutionState,
-};
-use systems::gameplay::{
-    AimFocus, BlockSettingsClipboard, SelectionToolSwap, apply_fov, clipboard_input,
-    draw_hover_structure_bounds, gameplay_input, placement_input, sync_aim_focus,
-    sync_edit_bounds_overlays, sync_factory_activity_debug_overlays, update_hover,
-};
-use systems::perf::{PerfPlugin, PerfScope};
-use systems::simulation_controls::{simulation_controls, sync_generator_config_material_preview};
+use state::{BuilderMode, GameMode, GameSettings, PendingPlayerSpawn, SolutionState};
+use systems::perf::PerfPlugin;
 use ui::{GameUiPlugin, InventoryItems};
 use world::animation::{animate_blocks, scroll_conveyor_belts, update_lifter_disk_glow};
 use world::grid::WorldBlocks;
 use world::rendering::{
-    GoalGhostPlugin, HoverStructureBounds, PortalMaterialPlugin, ShadowProxyMaterialPlugin,
-    SkyboxPlugin, retire_block_icon_renderers,
+    GoalGhostPlugin, PortalMaterialPlugin, ShadowProxyMaterialPlugin, SkyboxPlugin,
+    retire_block_icon_renderers,
 };
 
 pub struct GamePlugin;
@@ -113,7 +99,8 @@ impl Plugin for GamePlugin {
             sfx_volume: config.sfx_volume.clamp(0.0, 1.0),
         };
 
-        app.add_plugins(StoragePlugin)
+        app.add_plugins(GameSchedulePlugin)
+            .add_plugins(StoragePlugin)
             .insert_resource(ClearColor(Color::srgb(0.58, 0.68, 0.76)))
             .insert_resource(GlobalAmbientLight {
                 color: Color::srgb(0.90, 0.94, 1.0),
@@ -122,24 +109,11 @@ impl Plugin for GamePlugin {
             })
             .insert_resource(DirectionalLightShadowMap { size: 2048 })
             .insert_resource(WorldBlocks::default())
-            .insert_resource(HoverStructureBounds::default())
-            .insert_resource(PlacementState::default())
-            .init_resource::<AimFocus>()
             .insert_resource(InventoryItems::default())
             .init_resource::<GameplayRenderThrottle>()
-            .init_resource::<crate::game::systems::gameplay::EditBatchTiming>()
             .init_state::<GameMode>()
             .insert_resource(BuilderMode::default())
-            .insert_resource(SimulationState::default())
             .insert_resource(SolutionState::default())
-            .insert_resource(simulation::signals::SignalNetworkCache::default())
-            .insert_resource(simulation::stats::SimulationStepStats::default())
-            .insert_resource(simulation::pending::PendingTurnEffects::default())
-            .insert_resource(simulation::structure_state::StructureState::default())
-            .insert_resource(simulation::movement::PusherState::default())
-            .insert_resource(simulation::structures::MovementHistory::default())
-            .insert_resource(crate::sim_bridge::SimulationPresentationState::default())
-            .add_message::<crate::sim_bridge::TurnCommitted>()
             .insert_resource(BlockEntityIndex::default())
             .init_resource::<crate::game::world::rendering::SceneChunkMeshes>()
             .insert_resource(settings)
@@ -148,11 +122,8 @@ impl Plugin for GamePlugin {
             .insert_resource(i18n)
             .insert_resource(SaveState::default())
             .insert_resource(touch_profile)
-            .init_resource::<EditHistory>()
             .init_resource::<PendingPlayerSpawn>()
             .init_resource::<MouseLookBaseline>()
-            .init_resource::<BlockSettingsClipboard>()
-            .init_resource::<SelectionToolSwap>()
             .init_resource::<scene_blocks::SceneBlockRegistry>()
             .init_resource::<material_blocks::MaterialBlockRegistry>()
             .init_resource::<material_blocks::StampMaterialRegistry>()
@@ -161,7 +132,9 @@ impl Plugin for GamePlugin {
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_plugins(audio::GameAudioPlugin)
             .add_plugins(input::GameplayInputPlugin)
+            .add_plugins(systems::gameplay::GameplayPlugin)
             .add_plugins(SessionPlugin)
+            .add_plugins(crate::sim_bridge::SimulationBridgePlugin)
             .add_plugins(GameUiPlugin)
             .add_plugins(PerfPlugin)
             .add_plugins(SkyboxPlugin)
@@ -187,7 +160,7 @@ impl Plugin for GamePlugin {
                 Update,
                 (apply_storage_ready, apply_launch_load_save_when_ready)
                     .chain()
-                    .before(PerfScope::Menus),
+                    .before(GameSet::Menus),
             )
             .add_systems(
                 OnEnter(GameMode::Playing),
@@ -211,115 +184,6 @@ impl Plugin for GamePlugin {
             .add_systems(
                 Update,
                 (
-                    sync_cursor_grab,
-                    input::gather_gameplay_input,
-                    camera_look,
-                    gameplay_input,
-                )
-                    .chain()
-                    .after(PerfScope::VirtualRemote)
-                    .before(PerfScope::InputGather),
-            )
-            .add_systems(
-                Update,
-                camera_move
-                    .after(PerfScope::InputGather)
-                    .before(PerfScope::PlayerMove),
-            )
-            .add_systems(
-                Update,
-                (
-                    sync_gameplay_view_image_size,
-                    sync_gameplay_render_rate,
-                    world::rendering::sync_shadow_settings,
-                    world::rendering::sync_ssao_settings,
-                    world::rendering::sync_vsync_settings,
-                    world::rendering::sync_window_mode_settings,
-                )
-                    .after(PerfScope::Placement)
-                    .before(PerfScope::Menus),
-            )
-            .add_systems(
-                Update,
-                edit_history_input
-                    .after(PerfScope::Hover)
-                    .before(placement_input),
-            )
-            .add_systems(
-                Update,
-                clipboard_input
-                    .after(PerfScope::Hover)
-                    .before(placement_input),
-            )
-            .add_systems(
-                Update,
-                update_hover
-                    .after(PerfScope::PlayerMove)
-                    .before(PerfScope::Hover),
-            )
-            .add_systems(
-                Update,
-                sync_aim_focus.after(update_hover).before(PerfScope::Hover),
-            )
-            .add_systems(
-                Update,
-                sync_factory_activity_debug_overlays
-                    .after(update_hover)
-                    .before(PerfScope::Hover),
-            )
-            .add_systems(
-                Update,
-                placement_input
-                    .after(PerfScope::Hover)
-                    .before(PerfScope::Placement),
-            )
-            .add_systems(
-                Update,
-                sync_edit_bounds_overlays
-                    .after(placement_input)
-                    .after(PerfScope::Placement)
-                    .before(PerfScope::Menus),
-            )
-            .add_systems(
-                Update,
-                simulation_controls
-                    .after(PerfScope::Menus)
-                    .before(crate::sim_bridge::advance_simulation),
-            )
-            .add_systems(
-                Update,
-                sync_generator_config_material_preview
-                    .after(simulation_controls)
-                    .before(PerfScope::Simulation),
-            )
-            .add_systems(
-                Update,
-                (
-                    crate::sim_bridge::advance_simulation,
-                    crate::sim_bridge::present_simulation_turns,
-                    // 先落地 present/despawn，再跑动画，避免对已销毁实体 remove/insert
-                    ApplyDeferred,
-                )
-                    .chain()
-                    .after(simulation_controls)
-                    .before(PerfScope::Simulation),
-            )
-            .add_systems(
-                Update,
-                crate::sim_bridge::refresh_pending_generated_previews
-                    .after(crate::sim_bridge::present_simulation_turns)
-                    .before(PerfScope::Simulation),
-            )
-            .add_systems(
-                Update,
-                (apply_fov, draw_hover_structure_bounds)
-                    .chain()
-                    .after(PerfScope::Simulation)
-                    .before(PerfScope::View),
-            )
-            .add_systems(
-                Update,
-                (
                     animate_blocks,
                     apply_pending_teleport_snaps,
                     scroll_conveyor_belts,
@@ -327,8 +191,7 @@ impl Plugin for GamePlugin {
                     retire_block_icon_renderers,
                 )
                     .chain()
-                    .after(PerfScope::View)
-                    .before(PerfScope::Animation),
+                    .in_set(crate::game::schedule::GameSet::Animation),
             )
             .add_systems(
                 Update,
@@ -339,8 +202,7 @@ impl Plugin for GamePlugin {
                     systems::debug::draw_player_collider,
                 )
                     .chain()
-                    .after(crate::game::systems::perf::perf_mark_ui_feat)
-                    .before(PerfScope::Debug),
+                    .in_set(crate::game::schedule::GameSet::Debug),
             );
     }
 }

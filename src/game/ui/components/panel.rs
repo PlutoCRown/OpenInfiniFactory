@@ -5,10 +5,9 @@ use super::super::types::{
     PanelWindow,
 };
 use super::button::{BUTTON_BG, HoverButton, button_border, raised_border};
-use super::icon::{UiIconAssets, spawn_ui_icon};
+use super::icon::spawn_ui_icon;
 use super::text::default_font_size;
-use crate::game::ui::access::{i18n, with_ui_world};
-use crate::game::ui::systems::UiFont;
+use crate::game::ui::access::{i18n, ui_font, ui_icons};
 
 pub const PANEL_BG: Color = Color::srgb(0.192, 0.188, 0.192);
 pub const PANEL_LIGHT_EDGE: Color = Color::srgb(0.40, 0.38, 0.36);
@@ -111,9 +110,7 @@ pub fn spawn_panel_with_title(
     content: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
     let title = title.into();
-    let close_icon = options
-        .show_close
-        .then(|| with_ui_world(|world| world.resource::<UiIconAssets>().close.clone()));
+    let close_icon = options.show_close.then(|| ui_icons().close);
     let mut entity = root.spawn((
         panel_window_bundle(
             Val::Px(options.width),
@@ -300,7 +297,7 @@ pub fn panel_title_bar() -> impl Bundle {
 
 /// 面板标题文案（字号/加粗字重统一在此；MiSansVF 用 SEMIBOLD）
 pub fn panel_title_label(value: impl Into<String>) -> impl Bundle {
-    let font = with_ui_world(|world| world.resource::<UiFont>().0.clone());
+    let font = ui_font();
     (
         Text::new(value),
         TextFont {

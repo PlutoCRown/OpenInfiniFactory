@@ -48,16 +48,18 @@ pub fn save_before_edit_spec() -> ConfirmProps {
 }
 
 pub fn on_reset_solution(result: ConfirmResult, world: &mut World) {
+    let _ui_scope = crate::game::ui::access::enter_ui_world(world);
     if matches!(result, ConfirmResult::Confirmed) {
         reset_solution_in_world(world);
     }
 }
 
 pub fn on_return_to_main(result: ConfirmResult, world: &mut World) {
+    let _ui_scope = crate::game::ui::access::enter_ui_world(world);
     match result {
         ConfirmResult::Confirmed => {
             if puzzle_save_needs_confirm(world.resource::<SaveState>()) {
-                open_save_puzzle_confirm_before_exit();
+                open_save_puzzle_confirm_before_exit(&mut world.commands());
             } else {
                 exit_to_main_menu_in_world(world, true, false);
             }
@@ -68,6 +70,7 @@ pub fn on_return_to_main(result: ConfirmResult, world: &mut World) {
 }
 
 pub fn on_save_before_edit(result: ConfirmResult, world: &mut World) {
+    let _ui_scope = crate::game::ui::access::enter_ui_world(world);
     match result {
         ConfirmResult::Confirmed => switch_to_edit_mode_in_world(world, true),
         ConfirmResult::Extra(EXTRA_DISCARD) => switch_to_edit_mode_in_world(world, false),

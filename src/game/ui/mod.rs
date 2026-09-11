@@ -3,8 +3,6 @@ pub(crate) mod components;
 pub mod core;
 pub mod features;
 mod layout;
-#[macro_use]
-mod list_ui_config;
 mod menu_button;
 mod screens;
 mod systems;
@@ -13,7 +11,7 @@ mod widgets;
 
 use bevy::prelude::*;
 
-pub use access::{UiAccessScope, bind_ui_scope, i18n, ui};
+pub use access::{i18n, ui};
 pub use layout::{setup_menu_ui, setup_playing_ui_system};
 pub use systems::{
     PanelCloseDeps, apply_ui_font, dismiss_dropdowns_on_outside_click, load_ui_font, load_ui_icons,
@@ -30,7 +28,6 @@ use crate::game::ui::core::host::UiAction;
 use crate::game::ui::core::text_prompt::{
     PendingTextPromptHandler, emit_text_prompt_actions, update_text_prompt_ui,
 };
-use access::unbind_ui_scope;
 use components::{
     button_cancelled, button_hovered, button_pressed, button_released, button_unhovered,
     fix_scroll_clip_picking, scroll_dragged, update_scroll_containers,
@@ -43,10 +40,7 @@ pub struct GameUiPlugin;
 
 impl Plugin for GameUiPlugin {
     fn build(&self, app: &mut App) {
-        app.configure_sets(Update, UiAccessScope)
-            .add_systems(Update, bind_ui_scope.before(UiAccessScope))
-            .add_systems(Update, unbind_ui_scope.after(UiAccessScope))
-            .add_message::<UiAction>()
+        app.add_message::<UiAction>()
             .insert_resource(UiNavigation::default())
             .insert_resource(UiMountState::default())
             .insert_resource(crate::game::ui::core::host::UiHost::default())
@@ -77,25 +71,17 @@ impl Plugin for GameUiPlugin {
             .add_observer(emit_text_prompt_actions)
             .add_systems(
                 Update,
-                update_status_ui
-                    .in_set(UiAccessScope)
-                    .after(crate::game::systems::perf::perf_mark_ui_inventory)
-                    .before(crate::game::systems::perf::perf_mark_ui_status),
+                update_status_ui.in_set(crate::game::schedule::GameSet::UiStatus),
             )
             .add_systems(
                 Update,
-                update_hud_visibility
-                    .in_set(UiAccessScope)
-                    .after(crate::game::systems::perf::perf_mark_ui_status)
-                    .before(crate::game::systems::perf::perf_mark_ui_chrome),
+                update_hud_visibility.in_set(crate::game::schedule::GameSet::UiChrome),
             )
             .add_systems(
                 Update,
                 (update_panel_visibility, update_ui_layers)
                     .chain()
-                    .in_set(UiAccessScope)
-                    .after(crate::game::systems::perf::perf_mark_ui_status)
-                    .before(crate::game::systems::perf::perf_mark_ui_chrome),
+                    .in_set(crate::game::schedule::GameSet::UiChrome),
             )
             .add_systems(
                 Update,
@@ -107,9 +93,7 @@ impl Plugin for GameUiPlugin {
                     update_scroll_containers,
                     apply_ui_font,
                 )
-                    .in_set(UiAccessScope)
-                    .after(crate::game::systems::perf::perf_mark_ui_status)
-                    .before(crate::game::systems::perf::perf_mark_ui_chrome),
+                    .in_set(crate::game::schedule::GameSet::UiChrome),
             );
     }
 }

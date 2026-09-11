@@ -11,7 +11,7 @@ use crate::game::local_player::LocalPlayer;
 use crate::game::state::BuilderMode;
 use crate::game::systems::gameplay::GameplayPlayGate;
 use crate::game::world::grid::WorldBlocks;
-use crate::shared::config::{GameConfig, VirtualControlId};
+use crate::shared::config::{GameConfig, VirtualControlId, VirtualControlsLayout};
 use crate::shared::touch_profile::TouchProfile;
 
 use super::editor::VirtualLayoutEditorOpen;
@@ -28,6 +28,29 @@ use super::{
 const JOYSTICK_DEADZONE: f32 = 0.18;
 const FLY_SWIPE_THRESHOLD: f32 = 24.0;
 const LOOK_SENSITIVITY: f32 = 1.5;
+
+/// 触控控件上次绘制的布局与动态外观状态。
+pub(super) struct VirtualControlRenderState {
+    layout: VirtualControlsLayout,
+    opacity: f32,
+    height_unit: f32,
+    pressed: Vec<VirtualControlId>,
+    stick_offset: Vec2,
+    initialized: bool,
+}
+
+impl Default for VirtualControlRenderState {
+    fn default() -> Self {
+        Self {
+            layout: VirtualControlsLayout::DEFAULT,
+            opacity: 0.0,
+            height_unit: 0.0,
+            pressed: Vec::new(),
+            stick_offset: Vec2::ZERO,
+            initialized: false,
+        }
+    }
+}
 
 pub fn update_virtual_remote_input(
     touch: Res<TouchProfile>,
@@ -519,6 +542,8 @@ pub fn apply_virtual_control_layout(
         (With<VirtualJoystickKnob>, Without<VirtualRemoteControl>),
     >,
     mut labels: Query<&mut TextColor>,
+    added_controls: Query<(), Added<VirtualRemoteControl>>,
+    mut render_state: Local<VirtualControlRenderState>,
 ) {
     if !touch.enabled || editor_open.0 {
         return;
@@ -527,16 +552,35 @@ pub fn apply_virtual_control_layout(
         .single()
         .map(|w| layout_height_unit(window_short_edge(w)))
         .unwrap_or(1.0);
+    let opacity = config.virtual_controls_opacity.clamp(0.0, 1.0);
+    let layout_changed = !render_state.initialized
+        || render_state.layout != config.virtual_controls
+        || render_state.opacity != opacity
+        || render_state.height_unit != height_unit
+        || !added_controls.is_empty();
+    let pressed_changed =
+        !render_state.initialized || render_state.pressed != runtime.pressed_controls;
+    let stick_changed =
+        !render_state.initialized || render_state.stick_offset != runtime.joystick_stick_offset;
+    if !layout_changed && !pressed_changed && !stick_changed {
+        return;
+    }
     for (control, mut node, mut bg, mut border, children) in &mut controls {
         let transform = config.virtual_controls.transform(control.0);
-        apply_layout_to_node(control.0, transform, &mut node);
+        if layout_changed {
+            apply_layout_to_node(control.0, transform, &mut node);
+        }
         let pressed = runtime.pressed_controls.contains(&control.0);
-        let opacity = config.virtual_controls_opacity.clamp(0.0, 1.0);
-        set_control_pressed_style(&mut bg, &mut border, pressed, opacity);
-        if let Some(children) = children {
+        if layout_changed || pressed_changed {
+            set_control_pressed_style(&mut bg, &mut border, pressed, opacity);
+        }
+        if layout_changed && let Some(children) = children {
             for child in children.iter() {
                 if let Ok(mut label) = labels.get_mut(child) {
-                    label.0 = label.0.with_alpha(opacity);
+                    let next = label.0.with_alpha(opacity);
+                    if label.0 != next {
+                        label.0 = next;
+                    }
                 }
             }
         }
@@ -545,13 +589,23 @@ pub fn apply_virtual_control_layout(
             if let Some(children) = children {
                 for child in children.iter() {
                     if let Ok((mut knob, mut knob_bg)) = knobs.get_mut(child) {
-                        apply_knob_node(&mut knob, size, runtime.joystick_stick_offset);
-                        set_knob_pressed_style(&mut knob_bg, pressed, opacity);
+                        if layout_changed || stick_changed {
+                            apply_knob_node(&mut knob, size, runtime.joystick_stick_offset);
+                        }
+                        if layout_changed || pressed_changed {
+                            set_knob_pressed_style(&mut knob_bg, pressed, opacity);
+                        }
                     }
                 }
             }
         }
     }
+    render_state.layout.clone_from(&config.virtual_controls);
+    render_state.opacity = opacity;
+    render_state.height_unit = height_unit;
+    render_state.pressed.clone_from(&runtime.pressed_controls);
+    render_state.stick_offset = runtime.joystick_stick_offset;
+    render_state.initialized = true;
 }
 
 pub fn sync_virtual_remote_visibility(
@@ -612,7 +666,7 @@ pub fn sync_virtual_remote_visibility(
         && player
             .placement
             .target
-            .and_then(|t| world.system_blocks.get(&t.pos))
+            .and_then(|t| world.system_blocks().get(&t.pos))
             .and_then(|b| b.kind.ui_panel())
             .is_some();
 
@@ -679,5 +733,40 @@ pub fn sync_landscape_overlay(
             *visibility = Visibility::Hidden;
             node.display = Display::None;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 静止触控 HUD 的第二帧不再标记控件 Node 为变化。
+    #[test]
+    fn idle_layout_does_not_rewrite_control_node() {
+        let mut app = App::new();
+        app.insert_resource(TouchProfile { enabled: true })
+            .init_resource::<GameConfig>()
+            .init_resource::<VirtualLayoutEditorOpen>()
+            .init_resource::<VirtualRemoteRuntime>()
+            .add_systems(Update, apply_virtual_control_layout);
+        let entity = app
+            .world_mut()
+            .spawn((
+                VirtualRemoteControl(VirtualControlId::Jump),
+                Node::default(),
+                BackgroundColor::default(),
+                BorderColor::default(),
+            ))
+            .id();
+        app.update();
+        app.world_mut().clear_trackers();
+        app.update();
+        assert!(
+            !app.world()
+                .entity(entity)
+                .get_ref::<Node>()
+                .unwrap()
+                .is_changed()
+        );
     }
 }

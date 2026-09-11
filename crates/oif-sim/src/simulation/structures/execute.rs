@@ -1,4 +1,14 @@
-pub(super) fn apply_fragile_shatter_before_execute(
+use super::{
+    BlockId, BlockKind, BlockMotion, BlockMotionKind, ExecutedMovement, HashMap, HashSet, IVec3,
+    MovementHistory, MovementMark, PusherActor, PusherAnimationKind, PusherMotion, StructureId,
+    StructureMove, StructureState, SuctionLinks, WorldBlocks, can_move_own_extended_heads,
+    can_rotate_structure, expanded_move_structure, hard_pusher_head_blocked_below,
+    hard_pusher_head_blocks_move, movement_expansion_mode, own_extended_heads, rotate_facing,
+    rotate_pos_y, rotate_structure, stamp_collisions, stamp_collisions_for_rotation,
+    with_factory_attachment_children, with_pusher_heads,
+};
+
+pub(in crate::simulation) fn apply_fragile_shatter_before_execute(
     world: &mut WorldBlocks,
     moves: &mut [StructureMove],
     structures: &mut StructureState,
@@ -122,7 +132,7 @@ pub(super) fn apply_fragile_shatter_before_execute(
 /// `gravity_held`：已有推杆动画的整坨，只抑重力。
 /// `push_held`：本回合已平移或已开推动画的格子，后续非零 Push 不可再吃。
 /// 抬升与重力的互斥在 merge 阶段完成（有抬升标签则丢掉重叠重力）。
-pub(super) fn execute_structure_moves_with_pushers(
+pub(in crate::simulation) fn execute_structure_moves_with_pushers(
     world: &mut WorldBlocks,
     moves: Vec<StructureMove>,
     structures: &mut StructureState,

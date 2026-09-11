@@ -219,7 +219,7 @@ fn sync_machine_audio_loops(
         .map(|transform| transform.translation());
     let mut ranked: Vec<(f32, IVec3)> = if simulation.running {
         world
-            .blocks
+            .blocks()
             .iter()
             .filter_map(|(&pos, block)| {
                 let motor = matches!(

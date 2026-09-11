@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 
 use crate::game::session::{SessionBusy, SessionBusyCover};
-use crate::game::ui::access::{UiAccessScope, UiMainThread, i18n};
+use crate::game::ui::access::{UiContext, i18n};
 use crate::game::ui::components::text;
 
 /// 全屏忙碌遮罩根节点
@@ -91,7 +91,7 @@ pub fn spawn_session_busy_overlay(root: &mut ChildSpawnerCommands, busy: Session
 
 /// 按 SessionBusy 切换遮罩显隐、文案与封面
 pub fn update_session_busy_overlay(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     busy: Res<SessionBusy>,
     cover: Res<SessionBusyCover>,
     mut overlays: Query<&mut Node, (With<SessionBusyOverlay>, Without<SessionBusyCoverImage>)>,
@@ -101,6 +101,7 @@ pub fn update_session_busy_overlay(
     >,
     mut labels: Query<&mut Text, With<SessionBusyLabel>>,
 ) {
+    let _ui_scope = ui_context.enter();
     let busy_changed = busy.is_changed();
     let cover_changed = cover.is_changed();
 
@@ -157,10 +158,7 @@ impl Plugin for SessionBusyUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            update_session_busy_overlay
-                .in_set(UiAccessScope)
-                .after(crate::game::systems::perf::perf_mark_ui_chrome)
-                .before(crate::game::systems::perf::perf_mark_ui_feat),
+            update_session_busy_overlay.in_set(crate::game::schedule::GameSet::UiFeat),
         );
     }
 }

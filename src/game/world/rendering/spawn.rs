@@ -32,7 +32,6 @@ pub enum SpawnMode<'a> {
     /// 游玩/世界中的正式方块
     World {
         index: &'a mut BlockEntityIndex,
-        factory_debug: Option<&'a StructureState>,
         show_generator_preview: bool,
     },
     /// 模拟待落地的半透明生成预览
@@ -239,20 +238,9 @@ pub fn spawn_block(
     world: &WorldBlocks,
     pos: IVec3,
     data: BlockData,
-    factory_debug: Option<&StructureState>,
     index: &mut BlockEntityIndex,
 ) {
-    spawn_block_with_animation(
-        commands,
-        meshes,
-        assets,
-        world,
-        pos,
-        data,
-        None,
-        factory_debug,
-        index,
-    );
+    spawn_block_with_animation(commands, meshes, assets, world, pos, data, None, index);
 }
 
 /// 以编辑时序生成可带动画的方块
@@ -264,7 +252,6 @@ pub fn spawn_block_with_animation(
     pos: IVec3,
     data: BlockData,
     animation: Option<BlockAnimation>,
-    factory_debug: Option<&StructureState>,
     index: &mut BlockEntityIndex,
 ) -> Entity {
     spawn_block_with_timed_animation(
@@ -276,7 +263,6 @@ pub fn spawn_block_with_animation(
         data,
         animation,
         AnimationTiming::edit(),
-        factory_debug,
         false,
         index,
     )
@@ -292,7 +278,6 @@ pub fn spawn_block_with_timed_animation(
     data: BlockData,
     animation: Option<BlockAnimation>,
     timing: AnimationTiming,
-    factory_debug: Option<&StructureState>,
     powered_wire: bool,
     index: &mut BlockEntityIndex,
 ) -> Entity {
@@ -310,7 +295,6 @@ pub fn spawn_block_with_timed_animation(
             timing,
             mode: SpawnMode::World {
                 index,
-                factory_debug,
                 show_generator_preview: true,
             },
         },
@@ -364,7 +348,6 @@ pub(crate) fn spawn_world_block_entity(
     pusher_animation: Option<PusherAnimation>,
     timing: AnimationTiming,
     powered_wire: bool,
-    factory_debug: Option<&StructureState>,
 ) -> Entity {
     spawn_block_model(
         commands,
@@ -380,7 +363,6 @@ pub(crate) fn spawn_world_block_entity(
             timing,
             mode: SpawnMode::World {
                 index,
-                factory_debug,
                 show_generator_preview: true,
             },
         },
@@ -410,40 +392,19 @@ pub(crate) fn spawn_block_model(
         show_generator_preview,
         icon_render,
         edit_preview,
-        factory_debug,
         index,
     ) = match mode {
         SpawnMode::World {
             index,
-            factory_debug,
             show_generator_preview,
-        } => (
-            true,
-            false,
-            show_generator_preview,
-            None,
-            None,
-            factory_debug,
-            Some(index),
-        ),
-        SpawnMode::PendingGen => (false, true, false, None, None, None, None),
+        } => (true, false, show_generator_preview, None, None, Some(index)),
+        SpawnMode::PendingGen => (false, true, false, None, None, None),
         SpawnMode::Icon {
             origin_offset,
             layer,
-        } => (
-            false,
-            false,
-            true,
-            Some((origin_offset, layer)),
-            None,
-            None,
-            None,
-        ),
-        SpawnMode::Preview => (false, false, true, None, Some(EditPreview), None, None),
+        } => (false, false, true, Some((origin_offset, layer)), None, None),
+        SpawnMode::Preview => (false, false, true, None, Some(EditPreview), None),
     };
-    let debug_overlay = factory_debug.and_then(|structure_state| {
-        factory_debug_overlay_material(assets, structure_state, pos, data.kind)
-    });
 
     // 变换：动画插值 / 朝向 / 图标偏移 / 材料壳缩放
     let mut transform = Transform::from_translation(grid_to_world(pos));
@@ -660,18 +621,18 @@ pub(crate) fn spawn_block_model(
                 // 本面有灯板：仍画该向臂（面板贴臂端）；信号隔断在 BFS，不在这里
                 let has_panel = data.kind == BlockKind::Wire
                     && world
-                        .wire_face_panels
+                        .wire_face_panels()
                         .contains(&MaterialFace::new(data.id, offset));
                 let neighbor_connects = {
                     let neighbor = pos + offset;
                     let neighbor_block = world
-                        .blocks
+                        .blocks()
                         .get(&neighbor)
-                        .or_else(|| world.system_blocks.get(&neighbor));
+                        .or_else(|| world.system_blocks().get(&neighbor));
                     neighbor_block.is_some_and(|block| {
                         if block.kind == BlockKind::Wire
                             && world
-                                .wire_face_panels
+                                .wire_face_panels()
                                 .contains(&MaterialFace::new(block.id, -offset))
                         {
                             return false;
@@ -774,7 +735,7 @@ pub(crate) fn spawn_block_model(
             if data.kind == BlockKind::Wire {
                 let panel_lit = material == assets.active_wire_material;
                 for face in world
-                    .wire_face_panels
+                    .wire_face_panels()
                     .iter()
                     .filter(|face| face.block == data.id)
                 {
@@ -797,7 +758,7 @@ pub(crate) fn spawn_block_model(
 
         if data.kind.is_material() {
             for (face, paint) in world
-                .material_paints
+                .material_paints()
                 .iter()
                 .filter(|(face, _)| face.block == data.id)
             {
@@ -814,7 +775,7 @@ pub(crate) fn spawn_block_model(
             }
             let stamps = GOAL_PREVIEW_FACES.map(|normal| {
                 world
-                    .material_stamps
+                    .material_stamps()
                     .get(&MaterialFace::new(data.id, normal))
                     .copied()
             });
@@ -873,10 +834,6 @@ pub(crate) fn spawn_block_model(
                     );
                 }
             }
-        }
-
-        if let Some(material) = debug_overlay {
-            spawn_factory_debug_overlay(parent, assets, material);
         }
     });
     entity.id()

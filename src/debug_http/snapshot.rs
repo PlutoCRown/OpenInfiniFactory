@@ -30,8 +30,8 @@ pub fn block_json_with_structure(
     structures: Option<&oif_sim::simulation::structure_state::StructureState>,
     pos: IVec3,
 ) -> Value {
-    let material_block = world.blocks.get(&pos).copied();
-    let system_block = world.system_blocks.get(&pos).copied();
+    let material_block = world.blocks().get(&pos).copied();
+    let system_block = world.system_blocks().get(&pos).copied();
 
     let Some(block) = material_block.or(system_block) else {
         return Value::Null;
@@ -45,7 +45,7 @@ pub fn block_json_with_structure(
     let id = block.id;
 
     let paints: Vec<Value> = world
-        .material_paints
+        .material_paints()
         .iter()
         .filter(|(face, _)| face.block == id)
         .map(|(face, paint)| {
@@ -57,7 +57,7 @@ pub fn block_json_with_structure(
         .collect();
 
     let attached_stamps: Vec<Value> = world
-        .material_stamps
+        .material_stamps()
         .iter()
         .filter(|(face, _)| face.block == id)
         .map(|(face, stamp)| {
@@ -69,9 +69,9 @@ pub fn block_json_with_structure(
         })
         .collect();
 
-    let attachment = world.factory_attachments.get(&id).map(|att| {
+    let attachment = world.factory_attachments().get(&id).map(|att| {
         let parent_pos = world
-            .blocks
+            .blocks()
             .iter()
             .find(|(_, b)| b.id == att.parent)
             .map(|(p, _)| pos_json(*p));
@@ -83,12 +83,12 @@ pub fn block_json_with_structure(
     });
 
     let welds: Vec<Value> = world
-        .material_welds
+        .material_welds()
         .iter()
         .filter_map(|weld| {
             let other = weld.other(id)?;
             let other_pos = world
-                .blocks
+                .blocks()
                 .iter()
                 .find(|(_, b)| b.id == other)
                 .map(|(p, _)| pos_json(*p));
@@ -100,14 +100,14 @@ pub fn block_json_with_structure(
         .collect();
 
     let wire_panels: Vec<Value> = world
-        .wire_face_panels
+        .wire_face_panels()
         .iter()
         .filter(|face| face.block == id)
         .map(|face| json!({ "normal": pos_json(face.normal) }))
         .collect();
 
     let settings = world
-        .block_settings
+        .block_settings()
         .get(&pos)
         .map(block_settings_json)
         .unwrap_or(Value::Null);
@@ -174,9 +174,9 @@ pub fn structure_json(
         .iter()
         .map(|pos| {
             let block = world
-                .blocks
+                .blocks()
                 .get(pos)
-                .or_else(|| world.system_blocks.get(pos));
+                .or_else(|| world.system_blocks().get(pos));
             json!({
                 "pos": pos_json(*pos),
                 "kind": block.map(|b| format!("{:?}", b.kind)),
@@ -235,7 +235,7 @@ pub fn resolve_structure_query(
     block_id: Option<u64>,
     structure_id: Option<u64>,
 ) -> Result<Value, String> {
-    if structures.is_empty() && !world.blocks.is_empty() {
+    if structures.is_empty() && !world.blocks().is_empty() {
         structures.rebuild_factory_for_debug(world);
     }
 
@@ -243,9 +243,9 @@ pub fn resolve_structure_query(
         oif_sim::simulation::structure_state::StructureId(structure_id)
     } else if let Some(block_id) = block_id {
         let pos = world
-            .blocks
+            .blocks()
             .iter()
-            .chain(world.system_blocks.iter())
+            .chain(world.system_blocks().iter())
             .find(|(_, block)| block.id.0 == block_id)
             .map(|(pos, _)| *pos)
             .ok_or_else(|| format!("no block with id={block_id}"))?;
@@ -270,9 +270,9 @@ pub fn resolve_structure_query(
 /// 按方块 ID 查找坐标
 pub fn find_block_pos(world: &oif_sim::WorldBlocks, block_id: u64) -> Option<IVec3> {
     world
-        .blocks
+        .blocks()
         .iter()
-        .chain(world.system_blocks.iter())
+        .chain(world.system_blocks().iter())
         .find(|(_, block)| block.id.0 == block_id)
         .map(|(pos, _)| *pos)
 }
@@ -333,9 +333,9 @@ pub fn blocks_json(
     let limit = limit.clamp(1, 1000);
 
     let mut matches = world
-        .blocks
+        .blocks()
         .iter()
-        .chain(world.system_blocks.iter())
+        .chain(world.system_blocks().iter())
         .filter_map(|(pos, block)| {
             if kind.is_some_and(|wanted| wanted != block.kind) {
                 return None;
@@ -448,7 +448,7 @@ pub fn acceptors_json(
             .collect()
     } else {
         world
-            .acceptor_structures
+            .stored_acceptor_structures()
             .iter()
             .map(|a| {
                 json!({
@@ -882,20 +882,20 @@ pub fn target_status_line(placement: &PlacementState, world: &WorldBlocks) -> St
     };
     let place_at = hit.pos + hit.normal;
     let block_label = world
-        .blocks
+        .blocks()
         .get(&hit.pos)
         .map(|block| format!("{:?}", block.kind))
         .or_else(|| {
             world
-                .system_blocks
+                .system_blocks()
                 .get(&hit.pos)
                 .map(|block| format!("{:?}", block.kind))
         })
         .unwrap_or_else(|| "Scene".into());
     let facing = world
-        .blocks
+        .blocks()
         .get(&hit.pos)
-        .or_else(|| world.system_blocks.get(&hit.pos))
+        .or_else(|| world.system_blocks().get(&hit.pos))
         .map(|block| facing_label(block.facing))
         .unwrap_or("-");
     format!(

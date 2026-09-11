@@ -5,7 +5,7 @@ use crate::game::blocks::{
     stamp_def,
 };
 use crate::game::state::UiPanelId;
-use crate::game::ui::access::UiMainThread;
+use crate::game::ui::access::UiContext;
 use crate::game::ui::components::{
     BUTTON_BG, BUTTON_PRESSED_BG, default_button_size, default_font_size, hover_border,
     inset_border, localized_text, menu_button, raised_border, styled_button, text,
@@ -501,7 +501,7 @@ fn material_icon_node() -> impl Bundle {
 
 /// 材料凹槽悬停：亮一点背景 + hover 边框，移出恢复凹槽；Blocked 保持暗色
 pub fn update_material_slot_hover(
-    _ui_thread: UiMainThread,
+    ui_context: UiContext,
     mut slots: Query<
         (&Interaction, &mut BackgroundColor, &mut BorderColor),
         (
@@ -515,6 +515,7 @@ pub fn update_material_slot_hover(
         (With<MaterialIconSlot>, With<MaterialIconSlotBlocked>),
     >,
 ) {
+    let _ui_scope = ui_context.enter();
     for (interaction, mut background, mut border) in &mut slots {
         let hovered = *interaction == Interaction::Hovered;
         *background = if hovered {

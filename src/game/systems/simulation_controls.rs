@@ -7,12 +7,11 @@ use crate::game::simulation::pending::PendingTurnEffects;
 use crate::game::simulation::structure_state::StructureState;
 use crate::game::simulation::structures::MovementHistory;
 use crate::game::state::{BuilderMode, GameMode, SimulationState};
-use crate::game::systems::debug::DebugState;
 use crate::game::ui::UiNavigation;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::{
     BlockEntity, GeneratorConfigMaterialPreview, SceneChunkMeshes, WorldRenderAssets,
-    despawn_world, rebuild_world_for_debug_state,
+    despawn_world, rebuild_world,
 };
 use crate::sim_bridge::SimulationPresentationState;
 use crate::sim_bridge::reset_simulation_presentation;
@@ -30,7 +29,6 @@ pub struct SimulationControlDeps<'w> {
     world: ResMut<'w, WorldBlocks>,
     presentation: ResMut<'w, SimulationPresentationState>,
     render_assets: Option<Res<'w, WorldRenderAssets>>,
-    debug: Res<'w, DebugState>,
 }
 
 pub fn simulation_controls(
@@ -120,13 +118,11 @@ pub fn simulation_controls(
             &mut block_index,
             &mut scene_chunks,
         );
-        rebuild_world_for_debug_state(
+        rebuild_world(
             &mut commands,
             &mut meshes,
             &deps.world,
             render_assets,
-            &deps.debug,
-            &deps.structure_state,
             &mut block_index,
             &mut scene_chunks,
         );

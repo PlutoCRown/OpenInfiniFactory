@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 
 use crate::game::edit_history::EditHistory;
+use crate::game::simulation::structure_state::StructureState;
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::rendering::BlockEntity;
 
@@ -12,6 +13,7 @@ use super::scene_render::SceneRenderMut;
 pub struct WorldEditScene<'a, 'b, 's> {
     pub scene: SceneRenderMut<'a, 'b, 's>,
     pub world: &'a mut WorldBlocks,
+    pub structure_state: &'a mut StructureState,
     pub edit_history: &'a mut EditHistory,
     pub block_entities: &'a Query<'a, 's, (Entity, &'static BlockEntity)>,
 }

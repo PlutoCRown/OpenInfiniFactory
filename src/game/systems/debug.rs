@@ -220,7 +220,7 @@ pub fn update_debug_ui(
         render_remainder_ms,
         sim_turn_text,
         edit_batch_text,
-        world.blocks.len(),
+        world.blocks().len(),
         block_entities.iter().count(),
         player_pos.x,
         player_pos.y,

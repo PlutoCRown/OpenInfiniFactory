@@ -38,12 +38,12 @@ pub(super) fn weld_neighbor_connects_to(
     neighbor: IVec3,
     connector_from_block: IVec3,
 ) -> bool {
-    if let Some(block) = world.system_blocks.get(&neighbor) {
+    if let Some(block) = world.system_blocks().get(&neighbor) {
         return weld_connects_to(block, connector_from_block);
     }
 
     world
-        .blocks
+        .blocks()
         .get(&neighbor)
         .is_some_and(|block| weld_connects_to(block, connector_from_block))
 }

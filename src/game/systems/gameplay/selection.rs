@@ -179,7 +179,7 @@ fn selected_blocks(
         .positions()
         .iter()
         .filter_map(|pos| {
-            let block = world.blocks.get(pos).copied()?;
+            let block = world.blocks().get(pos).copied()?;
             if entry == WorldEntryMode::Free || mode == BuilderMode::Edit {
                 return Some((*pos, block));
             }
@@ -210,7 +210,7 @@ fn selection_can_place(
         if world.has_system_block_at(target) || world.has_generated_marker_at(target) {
             return false;
         }
-        let Some(occupant) = world.blocks.get(&target) else {
+        let Some(occupant) = world.blocks().get(&target) else {
             return true;
         };
         if !force {
@@ -237,7 +237,7 @@ fn selection_overwrite_targets(
         if vacate_sources && selected_positions.contains(&target) {
             continue;
         }
-        if world.blocks.contains_key(&target) {
+        if world.blocks().contains_key(&target) {
             targets.push(target);
         }
     }
@@ -322,14 +322,15 @@ fn move_selection(
         .collect();
     let mut patch = build_relocate_patch(edit.world, &moves);
 
-    let weld_count = edit.world.material_welds.len();
+    let removed_welds: Vec<_> = edit
+        .world
+        .material_welds()
+        .iter()
+        .filter(|weld| selected_ids.contains(&weld.a) != selected_ids.contains(&weld.b))
+        .copied()
+        .collect();
     edit.world
-        .material_welds
-        .retain(|weld| selected_ids.contains(&weld.a) == selected_ids.contains(&weld.b));
-    if edit.world.material_welds.len() != weld_count {
-        edit.world.topology_revision = edit.world.topology_revision.wrapping_add(1);
-        edit.world.invalidate_material_topology();
-    }
+        .apply_material_weld_changes(std::iter::empty(), removed_welds);
 
     let mut despawn_positions: Vec<IVec3> = selected.iter().map(|(pos, _)| *pos).collect();
     despawn_positions.extend(overwrite.iter().copied());
@@ -357,7 +358,7 @@ fn move_selection(
     let mut animations = HashMap::new();
     for (pos, block) in selected {
         let target = pos + offset;
-        let stored = edit.world.blocks[&target];
+        let stored = edit.world.blocks()[&target];
         animations.insert(
             target,
             BlockAnimation {
@@ -425,7 +426,7 @@ fn copy_selection(
         .collect();
     let internal_welds: Vec<_> = edit
         .world
-        .material_welds
+        .material_welds()
         .iter()
         .copied()
         .filter(|weld| selected_ids.contains(&weld.a) && selected_ids.contains(&weld.b))
@@ -434,7 +435,7 @@ fn copy_selection(
         .iter()
         .filter_map(|(pos, _)| {
             edit.world
-                .block_settings
+                .block_settings()
                 .get(pos)
                 .cloned()
                 .map(|settings| (*pos, settings))
@@ -455,15 +456,15 @@ fn copy_selection(
             copy.id = BlockId::NONE;
             let target = *pos + offset;
             world.insert(target, copy);
-            let new_id = world.blocks[&target].id;
+            let new_id = world.blocks()[&target].id;
             if !old_id.is_none() {
                 id_map.insert(old_id, new_id);
             }
             if let Some(settings) = settings_by_pos.get(pos) {
-                world.block_settings.insert(target, settings.clone());
+                world.restore_block_settings(target, Some(settings.clone()));
             }
         }
-        let mut added_weld = false;
+        let mut added_welds = Vec::new();
         for weld in &internal_welds {
             let Some(&a) = id_map.get(&weld.a) else {
                 continue;
@@ -471,17 +472,9 @@ fn copy_selection(
             let Some(&b) = id_map.get(&weld.b) else {
                 continue;
             };
-            if world
-                .material_welds
-                .insert(crate::game::world::grid::MaterialWeld::new(a, b))
-            {
-                added_weld = true;
-            }
+            added_welds.push(crate::game::world::grid::MaterialWeld::new(a, b));
         }
-        if added_weld {
-            world.topology_revision = world.topology_revision.wrapping_add(1);
-            world.invalidate_material_topology();
-        }
+        world.apply_material_weld_changes(added_welds, std::iter::empty());
     });
 
     let mut after = selection_before.clone();
@@ -492,7 +485,7 @@ fn copy_selection(
     let mut animations = HashMap::new();
     for (pos, block) in selected {
         let target = pos + offset;
-        let stored = edit.world.blocks[&target];
+        let stored = edit.world.blocks()[&target];
         animations.insert(
             target,
             BlockAnimation {
@@ -526,11 +519,12 @@ fn spawn_selection_result(
     dirty.extend(animations.keys().copied());
     dirty.extend(animations.values().map(|animation| animation.from_pos));
 
+    edit.structure_state.apply_factory_edit(edit.world, &dirty);
     refresh_edit_changes(&mut edit.scene, edit.world, &dirty);
 
     // 增量刷新会无动画生成搬移目标，再叠一层移动动画
     for (target, animation) in &animations {
-        let block = edit.world.blocks[target];
+        let block = edit.world.blocks()[target];
         if block.kind.is_scene() {
             continue;
         }
@@ -545,7 +539,6 @@ fn spawn_selection_result(
             *target,
             block,
             Some(*animation),
-            None,
             edit.scene.block_index,
         );
     }

@@ -141,11 +141,10 @@ impl SaveState {
     }
 
     /// 左侧列表用的顶层世界（Puzzle + Free）
-    pub fn top_level_worlds(&self) -> Vec<&SaveEntry> {
+    pub fn top_level_worlds(&self) -> impl Iterator<Item = &SaveEntry> {
         self.entries
             .iter()
             .filter(|entry| matches!(entry.kind, SaveKind::Puzzle | SaveKind::Free))
-            .collect()
     }
 
     pub fn select_puzzle(&mut self, puzzle: Option<String>) {

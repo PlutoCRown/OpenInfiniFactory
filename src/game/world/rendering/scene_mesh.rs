@@ -12,7 +12,7 @@ pub(super) fn scene_block_occludes(
     pos: IVec3,
 ) -> bool {
     world
-        .blocks
+        .blocks()
         .get(&pos)
         .is_some_and(|block| assets.scene_occludes_faces(block.kind))
 }

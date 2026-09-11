@@ -1,32 +1,25 @@
-use bevy::ecs::system::SystemParam;
-use bevy::picking::pointer::PointerButton;
-use bevy::picking::prelude::{Click, Drag, DragEnd, DragStart, Out, Over, Pointer};
-use bevy::prelude::*;
+// UI 字体资源与字体应用系统。
+mod font;
+// UI 指针悬停状态系统。
+mod hover;
+// 游戏内 HUD 显示系统。
+mod hud;
+// UI 通用图标加载系统。
+mod icons;
+// 本地化文本刷新系统。
+mod localized;
+// 浮动面板交互与层级系统。
+mod panels;
+// 游戏状态栏文本系统。
+mod status;
 
-use crate::game::state::{
-    BuilderMode, GameMode, PlacementState, SimulationState, SolutionState, UiPanelId,
+pub use font::{UiFont, apply_ui_font, load_ui_font};
+pub use hover::{ui_hovered, ui_unhovered};
+pub use hud::update_hud_visibility;
+pub use icons::load_ui_icons;
+pub use localized::update_localized_ui;
+pub use panels::{
+    PanelCloseDeps, dismiss_dropdowns_on_outside_click, panel_close_clicked, panel_drag_ended,
+    panel_drag_started, panel_dragged, update_panel_visibility, update_ui_layers,
 };
-use crate::game::systems::gameplay::AimFocus;
-use crate::game::world::grid::WorldBlocks;
-use crate::shared::save::SaveState;
-
-use crate::game::ui::access::{UiMainThread, i18n};
-use crate::game::ui::components::ui_logical_bounds;
-
-use super::types::{
-    CarriedItem, Crosshair, DropdownSurface, GameplayHudVisibility, InGameHudStyle,
-    InGameHudVisibility, InlineTextEditState, InventoryItem, InventoryItems, LocalizedText,
-    OpenBlockPanelDropdown, OpenSettingsDropdown, PanelCloseButton, PanelDragState,
-    PanelFlowLayout, PanelPosition, PanelTitleBar, PanelVisibility, PanelWindow, PendingKeyBind,
-    SettingsTab, StatusText, StatusTextKind, TextPromptRoot, TextPromptState, UiHost, UiHoverState,
-    UiNavigation, UiPanelBinding,
-};
-use crate::game::ui::core::StartMenuPage;
-use crate::game::ui::core::confirm_dialog::{ConfirmButtonId, ConfirmDialogState};
-include!("font.rs");
-include!("icons.rs");
-include!("status.rs");
-include!("hover.rs");
-include!("localized.rs");
-include!("panels.rs");
-include!("hud.rs");
+pub use status::update_status_ui;

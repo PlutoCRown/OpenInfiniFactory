@@ -5,14 +5,14 @@ use bevy::prelude::IVec3;
 use crate::game::edit_history::{
     EditHistory, apply_block_settings_with_history, apply_teleport_pair_with_history,
 };
-use crate::game::session::PlayingWorldParams;
+use crate::game::session::EditableWorldParams;
 use crate::game::world::grid::WorldBlocks;
 
-pub fn refresh_world_after_edit(world: &mut PlayingWorldParams, pos: IVec3) {
+pub fn refresh_world_after_edit(world: &mut EditableWorldParams, pos: IVec3) {
     refresh_world_after_edit_many(world, HashSet::from([pos]));
 }
 
-pub fn refresh_world_after_edit_many(world: &mut PlayingWorldParams, changed: HashSet<IVec3>) {
+pub fn refresh_world_after_edit_many(world: &mut EditableWorldParams, changed: HashSet<IVec3>) {
     world.movement_history.clear();
     world.pusher_state.clear();
     world.refresh_edit_changes(&changed);
@@ -21,7 +21,7 @@ pub fn refresh_world_after_edit_many(world: &mut PlayingWorldParams, changed: Ha
 /// 写入方块配置、记入历史，并重建受影响格的渲染（生成器/验收器材料预览等）
 pub fn apply_block_settings_edit(
     history: &mut EditHistory,
-    world: &mut PlayingWorldParams,
+    world: &mut EditableWorldParams,
     pos: IVec3,
     apply: impl FnOnce(&mut WorldBlocks),
 ) {
@@ -32,7 +32,7 @@ pub fn apply_block_settings_edit(
 /// 写入传送门配对、记入历史，并刷新相关格渲染
 pub fn apply_teleport_pair_edit(
     history: &mut EditHistory,
-    world: &mut PlayingWorldParams,
+    world: &mut EditableWorldParams,
     pos: IVec3,
     partner: Option<IVec3>,
 ) {

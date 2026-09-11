@@ -1,3 +1,5 @@
+use bevy::prelude::*;
+
 #[derive(Resource, Clone)]
 pub struct UiFont(pub Handle<Font>);
 

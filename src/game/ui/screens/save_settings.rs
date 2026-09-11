@@ -8,14 +8,12 @@ use crate::game::ui::components::{
 };
 use crate::game::ui::features::save_settings::types::SaveSettingsAction;
 use crate::game::ui::types::UiPanelBinding;
-use crate::shared::save::{FactoryBlockFilterMode, SaveSettingsData, SaveSlot};
+use crate::shared::save::{FactoryBlockFilterMode, SaveSettingsData};
 
 /// 存档设置页挂载时使用的只读快照。
 #[derive(Clone)]
 pub struct SaveSettingsSpawnCtx {
-    pub slot: SaveSlot,
     pub data: SaveSettingsData,
-    pub skybox_bytes: Option<Vec<u8>>,
     pub edit_mode: bool,
     pub panel_w: f32,
     pub panel_h: f32,

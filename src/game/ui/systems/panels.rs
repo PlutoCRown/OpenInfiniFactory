@@ -1,4 +1,20 @@
+use bevy::ecs::system::SystemParam;
+use bevy::picking::pointer::PointerButton;
+use bevy::picking::prelude::{Click, Drag, DragEnd, DragStart, Pointer};
+use bevy::prelude::*;
+
 use crate::game::blocks::BlockPresent;
+use crate::game::state::{GameMode, UiPanelId};
+use crate::game::ui::components::ui_logical_bounds;
+use crate::game::ui::core::StartMenuPage;
+use crate::game::ui::core::confirm_dialog::{ConfirmButtonId, ConfirmDialogState};
+use crate::game::ui::types::{
+    DropdownSurface, InlineTextEditState, OpenBlockPanelDropdown, OpenSettingsDropdown,
+    PanelCloseButton, PanelDragState, PanelFlowLayout, PanelPosition, PanelTitleBar,
+    PanelVisibility, PanelWindow, PendingKeyBind, TextPromptRoot, TextPromptState, UiHost,
+    UiNavigation, UiPanelBinding,
+};
+use crate::game::world::grid::WorldBlocks;
 
 /// 点击下拉触发器与列表之外的 UI 时关闭所有下拉
 pub fn dismiss_dropdowns_on_outside_click(
@@ -83,27 +99,15 @@ impl PanelCloseDeps<'_> {
 
     /// 关闭最顶层覆盖 UI（Esc / 关钮共用）
     /// 顺序：输入框 → 确认框 → 下拉 → UiHost 面板 → 背包 → 暂停
-    pub fn dismiss_playing_overlay(
-        &mut self,
-        carried: &mut CarriedItem,
-        inventory: &mut InventoryItems,
-        placement: &PlacementState,
-        solution_state: &mut SolutionState,
-        commands: &mut Commands,
-    ) -> bool {
+    pub fn dismiss_playing_overlay(&mut self, commands: &mut Commands) -> bool {
         if self.dismiss_modals_and_host_panels(commands) {
             return true;
         }
         if self.ui_navigation.is_inventory_open() {
             self.ui_navigation.close_inventory();
-            // 手里有东西时放进当前激活快捷栏，而不是丢掉
-            if let Some(item) = carried.take() {
-                let slot = &mut inventory.hotbar[placement.selected];
-                if *slot != Some(item) {
-                    *slot = Some(item);
-                    solution_state.dirty = true;
-                }
-            }
+            commands.trigger(crate::game::ui::core::runtime::OverlayClosed(
+                crate::game::ui::core::runtime::UiOverlay::Inventory,
+            ));
             return true;
         }
         if self.ui_navigation.is_paused() {
@@ -128,7 +132,6 @@ impl PanelCloseDeps<'_> {
 
 pub fn update_panel_visibility(
     mode: Res<State<GameMode>>,
-    settings_tab: Res<SettingsTab>,
     ui_navigation: Res<UiNavigation>,
     world: Res<WorldBlocks>,
     mut open_block_dropdown: ResMut<OpenBlockPanelDropdown>,
@@ -159,7 +162,6 @@ pub fn update_panel_visibility(
 
     let dirty = !*primed
         || mode.is_changed()
-        || settings_tab.is_changed()
         || ui_navigation.is_changed()
         || !added_visibility.is_empty()
         || !added_binding.is_empty()
@@ -171,12 +173,7 @@ pub fn update_panel_visibility(
 
     let mode = mode.get();
     for (visibility, mut style) in &mut nodes.p0() {
-        let next = display_for(panel_visible(
-            *visibility,
-            *mode,
-            *settings_tab,
-            &ui_navigation,
-        ));
+        let next = display_for(panel_visible(*visibility, *mode, &ui_navigation));
         if style.display != next {
             style.display = next;
         }
@@ -206,10 +203,6 @@ pub fn update_panel_visibility(
 
 pub fn panel_close_clicked(
     mut click: On<Pointer<Click>>,
-    mut carried: ResMut<CarriedItem>,
-    mut inventory: ResMut<InventoryItems>,
-    placement: Res<PlacementState>,
-    mut solution_state: ResMut<SolutionState>,
     mut close: PanelCloseDeps,
     mut commands: Commands,
     close_buttons: Query<(), With<PanelCloseButton>>,
@@ -218,13 +211,7 @@ pub fn panel_close_clicked(
         return;
     }
     click.propagate(false);
-    close.dismiss_playing_overlay(
-        &mut carried,
-        &mut inventory,
-        &placement,
-        &mut solution_state,
-        &mut commands,
-    );
+    close.dismiss_playing_overlay(&mut commands);
 }
 
 pub fn panel_drag_started(
@@ -308,7 +295,6 @@ pub fn panel_drag_ended(
 fn panel_visible(
     visibility: PanelVisibility,
     mode: GameMode,
-    settings_tab: SettingsTab,
     ui_navigation: &UiNavigation,
 ) -> bool {
     match visibility {
@@ -318,9 +304,6 @@ fn panel_visible(
         PanelVisibility::PauseMenu => mode == GameMode::Playing && ui_navigation.is_paused(),
         PanelVisibility::Inventory => {
             mode == GameMode::Playing && ui_navigation.is_inventory_open()
-        }
-        PanelVisibility::SettingsTab(tab) => {
-            ui_navigation.is_settings_open() && settings_tab == tab
         }
         PanelVisibility::ConfirmDialog => {
             ui_navigation.modal() == Some(crate::game::ui::core::UiModal::Confirm)
@@ -337,9 +320,9 @@ fn active_block_has_panel(
         return false;
     };
     world
-        .system_blocks
+        .system_blocks()
         .get(&pos)
-        .or_else(|| world.blocks.get(&pos))
+        .or_else(|| world.blocks().get(&pos))
         .and_then(|block| block.kind.ui_panel())
         == active_panel
 }

@@ -1,3 +1,8 @@
+use bevy::picking::prelude::{Out, Over, Pointer};
+use bevy::prelude::*;
+
+use crate::game::ui::types::UiHoverState;
+
 pub fn ui_hovered(event: On<Pointer<Over>>, mut hover: ResMut<UiHoverState>) {
     hover.entity = Some(event.entity);
 }

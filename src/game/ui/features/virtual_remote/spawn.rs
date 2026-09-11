@@ -299,8 +299,11 @@ pub fn apply_layout_to_node(
     node: &mut Node,
 ) {
     let size_ref = control_ref_size(id, transform);
-    *node = anchor_node(id.anchor(), transform, size_ref);
-    node.position_type = PositionType::Absolute;
+    let mut next = anchor_node(id.anchor(), transform, size_ref);
+    next.position_type = PositionType::Absolute;
+    if *node != next {
+        *node = next;
+    }
 }
 
 /// 刷新摇杆芯（相对父盘百分比；stick_offset 为父盘逻辑像素位移）
@@ -308,39 +311,60 @@ pub fn apply_knob_node(knob: &mut Node, outer_logical: f32, stick_offset: Vec2) 
     const KNOB_FRAC: f32 = 0.42;
     let base = (0.5 - KNOB_FRAC * 0.5) * 100.0;
     let denom = outer_logical.max(1.0);
-    knob.width = Val::Percent(KNOB_FRAC * 100.0);
-    knob.height = Val::Percent(KNOB_FRAC * 100.0);
-    knob.position_type = PositionType::Absolute;
-    knob.left = Val::Percent(base + stick_offset.x / denom * 100.0);
-    knob.top = Val::Percent(base + stick_offset.y / denom * 100.0);
-    knob.border_radius = BorderRadius::all(Val::Percent(50.0));
-    knob.border = UiRect::all(Val::Px(2.0));
+    let width = Val::Percent(KNOB_FRAC * 100.0);
+    let left = Val::Percent(base + stick_offset.x / denom * 100.0);
+    let top = Val::Percent(base + stick_offset.y / denom * 100.0);
+    let radius = BorderRadius::all(Val::Percent(50.0));
+    let border = UiRect::all(Val::Px(2.0));
+    if knob.width != width {
+        knob.width = width;
+    }
+    if knob.height != width {
+        knob.height = width;
+    }
+    if knob.position_type != PositionType::Absolute {
+        knob.position_type = PositionType::Absolute;
+    }
+    if knob.left != left {
+        knob.left = left;
+    }
+    if knob.top != top {
+        knob.top = top;
+    }
+    if knob.border_radius != radius {
+        knob.border_radius = radius;
+    }
+    if knob.border != border {
+        knob.border = border;
+    }
 }
 
 /// 控件按下外观
 pub fn set_control_pressed_style(
-    bg: &mut BackgroundColor,
-    border: &mut BorderColor,
+    bg: &mut Mut<'_, BackgroundColor>,
+    border: &mut Mut<'_, BorderColor>,
     pressed: bool,
     opacity: f32,
 ) {
     let base = if pressed { CTRL_BG_PRESSED } else { CTRL_BG };
-    *bg = base.with_alpha(base.alpha() * opacity).into();
-    *border = if pressed {
+    let next_bg = base.with_alpha(base.alpha() * opacity).into();
+    let mut next_border = if pressed {
         pressed_border()
     } else {
         raised_border()
     };
-    border.top = border.top.with_alpha(opacity);
-    border.right = border.right.with_alpha(opacity);
-    border.bottom = border.bottom.with_alpha(opacity);
-    border.left = border.left.with_alpha(opacity);
+    next_border.top = next_border.top.with_alpha(opacity);
+    next_border.right = next_border.right.with_alpha(opacity);
+    next_border.bottom = next_border.bottom.with_alpha(opacity);
+    next_border.left = next_border.left.with_alpha(opacity);
+    bg.set_if_neq(next_bg);
+    border.set_if_neq(next_border);
 }
 
 /// 摇杆芯按下外观
-pub fn set_knob_pressed_style(bg: &mut BackgroundColor, pressed: bool, opacity: f32) {
+pub fn set_knob_pressed_style(bg: &mut Mut<'_, BackgroundColor>, pressed: bool, opacity: f32) {
     let base = if pressed { KNOB_BG_PRESSED } else { KNOB_BG };
-    *bg = base.with_alpha(base.alpha() * opacity).into();
+    bg.set_if_neq(base.with_alpha(base.alpha() * opacity).into());
 }
 
 pub fn control_base_size(id: VirtualControlId) -> f32 {

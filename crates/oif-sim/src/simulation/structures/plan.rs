@@ -1,5 +1,10 @@
+use super::{
+    BlockId, HashMap, HashSet, IVec3, MovementHistory, MovementMark, Ordering, StructureId,
+    StructureMove, StructureState, WorldBlocks,
+};
+
 /// 合并重力与设备运动标签：抬升覆盖重力；其余重叠保留，按优先级排序，执行时再 fallback
-pub(super) fn merge_structure_movement_plan(
+pub(in crate::simulation) fn merge_structure_movement_plan(
     mut planned_moves: Vec<StructureMove>,
     device_moves: Vec<StructureMove>,
     history: &mut MovementHistory,

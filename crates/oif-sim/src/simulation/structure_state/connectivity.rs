@@ -1,9 +1,14 @@
-fn bpos_facing_toward(body: IVec3, source: IVec3, target: IVec3) -> bool {
+use super::{
+    BlockId, BlockKind, GravitySupportContact, HashMap, HashSet, IVec3, MovementRule, VecDeque,
+    WorldBlocks, signal_offsets,
+};
+
+pub(super) fn bpos_facing_toward(body: IVec3, source: IVec3, target: IVec3) -> bool {
     body + source == target
 }
 
 /// 材料 id → 坐标（连通洪水复用，避免每个种子重建）
-fn material_id_to_pos(world: &WorldBlocks) -> HashMap<BlockId, IVec3> {
+pub(super) fn material_id_to_pos(world: &WorldBlocks) -> HashMap<BlockId, IVec3> {
     world
         .blocks
         .iter()
@@ -13,7 +18,7 @@ fn material_id_to_pos(world: &WorldBlocks) -> HashMap<BlockId, IVec3> {
 }
 
 /// 材料焊接邻接表（同轮多次洪水复用，避免逐节点扫描全部焊缝）
-fn material_weld_neighbors(world: &WorldBlocks) -> HashMap<BlockId, Vec<BlockId>> {
+pub(super) fn material_weld_neighbors(world: &WorldBlocks) -> HashMap<BlockId, Vec<BlockId>> {
     let mut neighbors: HashMap<BlockId, Vec<BlockId>> = HashMap::new();
     for weld in &world.material_welds {
         neighbors.entry(weld.a).or_default().push(weld.b);
@@ -29,7 +34,7 @@ pub fn material_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     material_structure_from(world, start, &id_to_pos, &weld_neighbors)
 }
 
-fn material_structure_from(
+pub(super) fn material_structure_from(
     world: &WorldBlocks,
     start: IVec3,
     id_to_pos: &HashMap<BlockId, IVec3>,
@@ -74,7 +79,7 @@ pub fn query_factory_structure(world: &WorldBlocks, pos: IVec3) -> Option<HashSe
         .then(|| factory_structure(world, pos))
 }
 
-fn collect_gravity_support(
+pub(super) fn collect_gravity_support(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
@@ -92,7 +97,7 @@ fn collect_gravity_support(
         .collect()
 }
 
-fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
+pub(super) fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     let allowed: HashSet<IVec3> = world
         .blocks
         .iter()
@@ -179,7 +184,7 @@ fn is_blocked_pusher_edge(
     })
 }
 
-fn is_blocked_factory_connection(world: &WorldBlocks, from: IVec3, to: IVec3) -> bool {
+pub(super) fn is_blocked_factory_connection(world: &WorldBlocks, from: IVec3, to: IVec3) -> bool {
     world
         .blocks
         .get(&from)

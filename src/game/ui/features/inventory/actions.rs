@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use crate::game::state::{GameMode, PlacementState, SolutionState, WorldEntryMode};
 use crate::game::ui::components::ui_logical_bounds;
-use crate::game::ui::core::host::{UiAction, UiActionKind, UiInstanceId};
+use crate::game::ui::core::host::{UiAction, UiInstanceId};
 use crate::game::ui::core::text_input::primary_click;
 use crate::game::ui::features::inventory::InventoryTabButton;
 use crate::game::ui::types::FreeInventoryTab;
@@ -17,9 +17,19 @@ use crate::shared::touch_profile::TouchProfile;
 
 use super::types::TouchInventoryState;
 
-pub fn emit_inventory_slot_actions(
+/// 背包功能自身的交互动作，不扩展公共 UI 动作枚举。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum InventoryAction {
+    Slot {
+        slot: InventorySlot,
+        button: PointerButton,
+    },
+    Tab(FreeInventoryTab),
+}
+
+pub(super) fn emit_inventory_slot_actions(
     mut click: On<Pointer<Click>>,
-    mut writer: MessageWriter<UiAction>,
+    mut writer: MessageWriter<UiAction<InventoryAction>>,
     slots: Query<&InventorySlot>,
     mode: Res<State<GameMode>>,
     ui_navigation: Res<UiNavigation>,
@@ -38,7 +48,7 @@ pub fn emit_inventory_slot_actions(
     click.propagate(false);
     writer.write(UiAction {
         instance: UiInstanceId::INVENTORY,
-        kind: UiActionKind::InventorySlot {
+        kind: InventoryAction::Slot {
             slot: *slot,
             button,
         },
@@ -46,9 +56,9 @@ pub fn emit_inventory_slot_actions(
 }
 
 /// Free 背包页签点击
-pub fn emit_inventory_tab_actions(
+pub(super) fn emit_inventory_tab_actions(
     mut click: On<Pointer<Click>>,
-    mut writer: MessageWriter<UiAction>,
+    mut writer: MessageWriter<UiAction<InventoryAction>>,
     tabs: Query<&InventoryTabButton>,
     mode: Res<State<GameMode>>,
     ui_navigation: Res<UiNavigation>,
@@ -68,12 +78,12 @@ pub fn emit_inventory_tab_actions(
     click.propagate(false);
     writer.write(UiAction {
         instance: UiInstanceId::INVENTORY,
-        kind: UiActionKind::InventoryTab(tab.0),
+        kind: InventoryAction::Tab(tab.0),
     });
 }
 
-pub fn dispatch_inventory_slot_actions(
-    mut actions: MessageReader<UiAction>,
+pub(super) fn dispatch_inventory_slot_actions(
+    mut actions: MessageReader<UiAction<InventoryAction>>,
     config: Res<GameConfig>,
     mut inventory: ResMut<InventoryItems>,
     mut carried: ResMut<CarriedItem>,
@@ -89,7 +99,7 @@ pub fn dispatch_inventory_slot_actions(
             continue;
         }
         match action.kind.clone() {
-            UiActionKind::InventoryTab(tab) => {
+            InventoryAction::Tab(tab) => {
                 if solution_state.entry != WorldEntryMode::Free || *free_tab == tab {
                     continue;
                 }
@@ -97,7 +107,7 @@ pub fn dispatch_inventory_slot_actions(
                 inventory.fill_free_backpack(tab);
                 touch_inventory.clear();
             }
-            UiActionKind::InventorySlot { slot, button } => {
+            InventoryAction::Slot { slot, button } => {
                 dispatch_inventory_slot_action(
                     slot,
                     button,
@@ -111,7 +121,6 @@ pub fn dispatch_inventory_slot_actions(
                     &mut touch_inventory,
                 );
             }
-            _ => {}
         }
     }
 }
@@ -388,5 +397,26 @@ fn pointer_button(button: MouseButton) -> PointerButton {
         MouseButton::Right => PointerButton::Secondary,
         MouseButton::Middle => PointerButton::Middle,
         MouseButton::Back | MouseButton::Forward | MouseButton::Other(_) => PointerButton::Primary,
+    }
+}
+
+/// 背包关闭后的物品归位事务，只由背包功能持有业务写资源。
+pub(super) fn return_carried_item_on_close(
+    closed: On<crate::game::ui::core::runtime::OverlayClosed>,
+    mut carried: ResMut<CarriedItem>,
+    mut inventory: ResMut<InventoryItems>,
+    placement: Res<PlacementState>,
+    mut solution: ResMut<SolutionState>,
+) {
+    if closed.0 != crate::game::ui::core::runtime::UiOverlay::Inventory {
+        return;
+    }
+    if let Some(item) = carried.take() {
+        if let Some(slot) = inventory.hotbar.get_mut(placement.selected) {
+            if *slot != Some(item) {
+                *slot = Some(item);
+                solution.dirty = true;
+            }
+        }
     }
 }

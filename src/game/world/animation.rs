@@ -586,7 +586,7 @@ pub fn update_lifter_disk_glow(
     }
 
     let id_to_pos: std::collections::HashMap<_, _> = world
-        .blocks
+        .blocks()
         .iter()
         .map(|(pos, block)| (block.id, *pos))
         .collect();

@@ -1,27 +1,12 @@
-use bevy::anti_alias::taa::TemporalAntiAliasing;
-use bevy::camera::{Hdr, RenderTarget};
-use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
-use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
-use bevy::light::ShadowFilteringMethod;
-use bevy::post_process::bloom::{Bloom, BloomCompositeMode, BloomPrefilter};
 use bevy::prelude::*;
-use bevy::render::camera::TemporalJitter;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow, WindowFocused};
 
-use crate::game::cameras::{
-    GameplayCamera, GameplayViewImage, MENU_CLEAR, PlayingUiCamera, gameplay_view_size,
-    new_gameplay_view_image,
-};
 use crate::game::scene_blocks::SceneBlockRegistry;
 use crate::game::state::{GameSettings, SimulationState};
 use crate::game::systems::gameplay::GameplayPlayGate;
 use crate::game::world::animation::{AnimatedBlock, SIMULATION_TURN_SECONDS};
 use crate::game::world::grid::{WorldBlocks, grid_to_world};
-use crate::game::world::rendering::{
-    BlockEntity, GameplayScene, environment_map_light, gameplay_ssao,
-};
-use crate::shared::config::GameConfig;
-use crate::shared::save::PuzzleLighting;
+use crate::game::world::rendering::BlockEntity;
 
 pub const EYE_HEIGHT: f32 = 1.7;
 pub const PLAYER_RADIUS: f32 = 0.28;
@@ -49,10 +34,7 @@ const AABB_EPSILON: f32 = 0.001;
 const STEP_HEIGHT: f32 = 0.55;
 /// 鼠标视角基础灵敏度，X/Y 轴倍率由设置中的 mouse_sensitivity_x/y 控制。
 const BASE_MOUSE_SENSITIVITY: f32 = 0.0025;
-/// 初始镜头朝向必须与移动使用的 yaw/pitch 完全一致。
-const INITIAL_YAW: f32 = 0.0;
-const INITIAL_PITCH: f32 = -0.15;
-
+/// 玩家第一人称视角及移动状态
 #[derive(Component)]
 pub struct FlyCamera {
     yaw: f32,
@@ -69,103 +51,27 @@ pub struct FlyCamera {
     fly_drift_remaining: f32,
 }
 
-pub fn spawn_player(
-    mut commands: Commands,
-    mut images: ResMut<Assets<Image>>,
-    window: Query<&Window, With<PrimaryWindow>>,
-    config: Res<GameConfig>,
-    lighting: Res<PuzzleLighting>,
-) {
-    let (width, height) = window
-        .single()
-        .map(gameplay_view_size)
-        .unwrap_or((1280, 720));
-    let image_handle = images.add(new_gameplay_view_image(width, height));
-    commands.insert_resource(GameplayViewImage(image_handle.clone()));
-
-    let clear_color = if config.skybox_enabled {
-        ClearColorConfig::Custom(Color::BLACK)
-    } else {
-        ClearColorConfig::Custom(MENU_CLEAR)
-    };
-
-    let camera = commands
-        .spawn((
-            Camera3d::default(),
-            Camera {
-                order: 0,
-                clear_color,
-                ..default()
-            },
-            Projection::Perspective(PerspectiveProjection {
-                fov: config.fov_degrees.to_radians(),
-                ..default()
-            }),
-            RenderTarget::Image(image_handle.into()),
-            Transform::from_xyz(0.5, SPAWN_EYE_Y + 1.2, 10.5).with_rotation(
-                Quat::from_axis_angle(Vec3::Y, INITIAL_YAW)
-                    * Quat::from_axis_angle(Vec3::X, INITIAL_PITCH),
-            ),
-            FlyCamera {
-                yaw: INITIAL_YAW,
-                pitch: INITIAL_PITCH,
-                velocity_y: 0.0,
-                grounded: false,
-                flying: false,
-                last_space_press: -10.0,
-                fly_was_moving: false,
-                fly_last_dir: Vec3::ZERO,
-                fly_drift_remaining: 0.0,
-            },
-            GameplayCamera,
-            GameplayScene,
-            SpatialListener::new(0.25),
-            environment_map_light(&mut images, &lighting),
-        ))
-        .insert((
-            Hdr,
-            Msaa::Off,
-            Tonemapping::TonyMcMapface,
-            DebandDither::Enabled,
-            // 高阈值：只让电线充能条 / 焊点（自发光 ≫ 环境光）泛光
-            Bloom {
-                intensity: 0.7,
-                low_frequency_boost: 0.85,
-                low_frequency_boost_curvature: 0.85,
-                high_pass_frequency: 0.85,
-                prefilter: BloomPrefilter {
-                    threshold: 5.0,
-                    threshold_softness: 0.5,
-                },
-                composite_mode: BloomCompositeMode::Additive,
-                ..Bloom::NATURAL
-            },
-            TemporalAntiAliasing::default(),
-            TemporalJitter::default(),
-            DepthPrepass,
-            NormalPrepass,
-            MotionVectorPrepass,
-            ShadowFilteringMethod::Temporal,
-        ))
-        .id();
-
-    // SSAO：接缝/贴地接触变暗；只吃环境光，强阳光下会偏淡
-    if let Some(ssao) = gameplay_ssao(config.ssao_quality) {
-        commands.entity(camera).insert(ssao);
+impl Default for FlyCamera {
+    fn default() -> Self {
+        Self {
+            yaw: 0.0,
+            pitch: -0.15,
+            velocity_y: 0.0,
+            grounded: false,
+            flying: false,
+            last_space_press: -10.0,
+            fly_was_moving: false,
+            fly_last_dir: Vec3::ZERO,
+            fly_drift_remaining: 0.0,
+        }
     }
+}
 
-    commands.spawn((
-        Camera2d,
-        Camera {
-            order: 1,
-            clear_color: ClearColorConfig::None,
-            ..default()
-        },
-        Msaa::Off,
-        IsDefaultUiCamera,
-        PlayingUiCamera,
-        GameplayScene,
-    ));
+impl FlyCamera {
+    /// 由当前偏航和俯仰生成玩家视角旋转
+    pub(crate) fn view_rotation(&self) -> Quat {
+        Quat::from_axis_angle(Vec3::Y, self.yaw) * Quat::from_axis_angle(Vec3::X, self.pitch)
+    }
 }
 
 use crate::shared::save::PlayerSave;
@@ -192,8 +98,7 @@ pub fn apply_player_save(camera: &mut FlyCamera, transform: &mut Transform, save
     camera.fly_was_moving = false;
     camera.fly_last_dir = Vec3::ZERO;
     camera.fly_drift_remaining = 0.0;
-    transform.rotation =
-        Quat::from_axis_angle(Vec3::Y, camera.yaw) * Quat::from_axis_angle(Vec3::X, camera.pitch);
+    transform.rotation = camera.view_rotation();
 }
 
 pub fn apply_pending_player_spawn(
@@ -253,13 +158,13 @@ pub fn camera_move(
                 continue;
             }
             if world
-                .blocks
+                .blocks()
                 .get(&entity.pos)
                 .copied()
                 .filter(|block| block.id == entity.id && block.kind.has_collision())
                 .or_else(|| {
                     world
-                        .blocks
+                        .blocks()
                         .values()
                         .copied()
                         .find(|block| block.id == entity.id && block.kind.has_collision())
@@ -328,7 +233,7 @@ pub fn camera_move(
             for y in (min_block.y - 1)..=max_block.y {
                 for z in min_block.z..=max_block.z {
                     let pos = IVec3::new(x, y, z);
-                    let Some(block) = world.blocks.get(&pos) else {
+                    let Some(block) = world.blocks().get(&pos) else {
                         continue;
                     };
                     let direction = match block.kind {
@@ -550,8 +455,7 @@ pub fn camera_look(
     camera.yaw -= delta.x * BASE_MOUSE_SENSITIVITY * settings.mouse_sensitivity_x;
     camera.pitch = (camera.pitch - delta.y * BASE_MOUSE_SENSITIVITY * settings.mouse_sensitivity_y)
         .clamp(-1.45, 1.45);
-    transform.rotation =
-        Quat::from_axis_angle(Vec3::Y, camera.yaw) * Quat::from_axis_angle(Vec3::X, camera.pitch);
+    transform.rotation = camera.view_rotation();
 }
 
 /// 锁鼠回中后的视角基准：下一次非零 MouseMotion 只同步基准，不转镜头
@@ -838,7 +742,7 @@ fn player_hits_block(
     if dynamic_targets.contains(&block_pos) {
         return false;
     }
-    let Some(block) = world.blocks.get(&block_pos) else {
+    let Some(block) = world.blocks().get(&block_pos) else {
         return false;
     };
     if !block.kind.has_collision() {
@@ -993,7 +897,7 @@ fn block_collision_aabb(
 ) -> (Vec3, Vec3) {
     let full_min = block_pos.as_vec3();
     let full_max = full_min + Vec3::ONE;
-    let Some(block) = world.blocks.get(&block_pos) else {
+    let Some(block) = world.blocks().get(&block_pos) else {
         return (full_min, full_max);
     };
     let Some(tris) = scene_registry.collision_tris(block.kind) else {
