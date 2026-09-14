@@ -1,6 +1,7 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::window::PrimaryWindow;
 use std::collections::HashSet;
 use std::sync::{Mutex, mpsc};
@@ -21,6 +22,7 @@ use crate::debug_http::world_ops::{
 use crate::game::debug::SimulationDebugLog;
 use crate::game::player::controller::{FlyCamera, apply_player_save};
 use crate::game::session::{self, PlayingWorldParams};
+use crate::game::showcase::StartMenuShowcaseDebugSnapshot;
 use crate::game::simulation::stats::SimulationStepStats;
 use crate::game::state::{
     BuilderMode, GameMode, PlacementState, SimulationState, SolutionState, WorldEntryMode,
@@ -220,9 +222,10 @@ fn process_pending_debug_http_start(
     try_start_debug_http_server(&mut commands, &mut sim_log, DEFAULT_DEBUG_HTTP_PORT);
 }
 
-pub fn poll_debug_http(
+pub(crate) fn poll_debug_http(
     mut commands: Commands,
     session: DebugHttpSessionSnapshot,
+    showcase: StartMenuShowcaseDebugSnapshot,
     placement: Res<PlacementState>,
     perf_snapshot: DebugHttpPerfSnapshot,
     mut simulation: ResMut<SimulationState>,
@@ -241,6 +244,7 @@ pub fn poll_debug_http(
             request.command,
             &mut commands,
             &session,
+            &showcase,
             &placement,
             &perf_snapshot,
             &mut simulation,
@@ -258,6 +262,7 @@ fn handle_embedded_debug_command(
     command: DebugHttpCommand,
     commands: &mut Commands,
     session: &DebugHttpSessionSnapshot<'_, '_>,
+    showcase: &StartMenuShowcaseDebugSnapshot<'_, '_>,
     placement: &PlacementState,
     perf_snapshot: &DebugHttpPerfSnapshot<'_, '_>,
     simulation: &mut SimulationState,
@@ -287,19 +292,43 @@ fn handle_embedded_debug_command(
                 player_pos,
             ));
         }
+        DebugHttpCommand::CaptureScreenshot { target } => {
+            let normalized_target = target.to_ascii_lowercase();
+            let screenshot = match normalized_target.as_str() {
+                "window" => Screenshot::primary_window(),
+                "showcase" => {
+                    let Some(showcase_state) = showcase.showcase.as_ref() else {
+                        return json_error("startup showcase is not available");
+                    };
+                    Screenshot::image(showcase_state.view.clone())
+                }
+                _ => return json_error("screenshot target must be `window` or `showcase`"),
+            };
+            let path = std::env::temp_dir()
+                .join(format!("open-infinifactory-{normalized_target}-debug.png"));
+            let path_text = path.to_string_lossy().into_owned();
+            commands.spawn(screenshot).observe(save_to_disk(path));
+            return json_ok(serde_json::json!({
+                "queued": true,
+                "path": path_text,
+                "target": normalized_target,
+            }));
+        }
         DebugHttpCommand::GetStatus => {
             let cursor = if mode == GameMode::Playing {
                 cursor_target_json(placement, &playing.world)
             } else {
                 serde_json::Value::Null
             };
-            return session
-                .status_json(
-                    simulation,
-                    render_ready && mode == GameMode::Playing,
-                    cursor,
-                )
-                .to_string();
+            let mut status = session.status_json(
+                simulation,
+                render_ready && mode == GameMode::Playing,
+                cursor,
+            );
+            if let Some(object) = status.as_object_mut() {
+                object.insert("showcase".into(), showcase.capture());
+            }
+            return status.to_string();
         }
         DebugHttpCommand::GetPlayers => {
             if mode != GameMode::Playing {
@@ -368,6 +397,7 @@ fn handle_embedded_debug_command(
         DebugHttpCommand::Help
         | DebugHttpCommand::BlockKinds
         | DebugHttpCommand::GetPerf
+        | DebugHttpCommand::CaptureScreenshot { .. }
         | DebugHttpCommand::GetStatus
         | DebugHttpCommand::GetPlayers
         | DebugHttpCommand::LoadSave { .. }

@@ -20,6 +20,10 @@ pub struct UiCamera;
 #[derive(Component)]
 pub struct GameplayCamera;
 
+/// 可供世界动画读取朝向的位置相机，包含玩家视角和菜单橱窗视角。
+#[derive(Component)]
+pub struct WorldViewCamera;
+
 /// 记录 3D 离屏画面的刷新节奏，不影响 UI、输入和模拟更新
 #[derive(Resource, Default)]
 pub struct GameplayRenderThrottle {
@@ -80,6 +84,7 @@ pub fn spawn_player(
                 .with_rotation(fly_camera.view_rotation()),
             fly_camera,
             GameplayCamera,
+            WorldViewCamera,
             GameplayScene,
             SpatialListener::new(0.25),
             environment_map_light(&mut images, &lighting),

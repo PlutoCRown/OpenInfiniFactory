@@ -126,10 +126,11 @@ impl SaveFile {
                     puzzle_snapshot: Some(puzzle_world),
                     puzzle_id: Some(puzzle_id),
                     hotbar,
-                    player: self
-                        .meta
-                        .player
-                        .or_else(|| puzzle_meta.as_ref().and_then(|meta| meta.solution_spawn.clone())),
+                    player: self.meta.player.or_else(|| {
+                        puzzle_meta
+                            .as_ref()
+                            .and_then(|meta| meta.solution_spawn.clone())
+                    }),
                     solution_spawn: puzzle_meta
                         .as_ref()
                         .and_then(|meta| meta.solution_spawn.clone()),
@@ -166,17 +167,7 @@ impl SaveFile {
                 }
                 let lighting = resolve_lighting(&self.meta);
                 let hotbar = self.meta.hotbar;
-                let mut world = WorldBlocks::default();
-                apply_layer(
-                    &mut world,
-                    PuzzleLayer {
-                        scene_blocks: self.blocks.scene_blocks,
-                        system_blocks: self.blocks.system_blocks,
-                        hotbar: None,
-                    },
-                );
-                apply_factory_blocks(&mut world, self.blocks.factory_blocks);
-                apply_wire_face_panels(&mut world, self.blocks.wire_face_panels);
+                let world = world_from_free_blocks(self.blocks);
                 Some(LoadedSave {
                     world,
                     puzzle_snapshot: None,

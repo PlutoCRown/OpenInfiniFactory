@@ -333,7 +333,7 @@ impl WeldBurstParticle {
 pub fn animate_blocks(
     time: Res<Time>,
     simulation: Res<crate::game::state::SimulationState>,
-    camera: Query<&GlobalTransform, With<crate::game::cameras::GameplayCamera>>,
+    camera: Query<&GlobalTransform, With<crate::game::cameras::WorldViewCamera>>,
     mut commands: Commands,
     mut blocks: Query<(Entity, &mut Transform, &mut AnimatedBlock)>,
     mut pushers: Query<
@@ -532,18 +532,23 @@ pub fn animate_blocks(
 /// 模拟运行时滚动传送带皮带 UV（独立系统，避免与 animate_blocks 的 Transform 查询冲突）
 pub fn scroll_conveyor_belts(
     time: Res<Time>,
+    mode: Res<State<crate::game::state::GameMode>>,
     simulation: Res<crate::game::state::SimulationState>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     belts: Query<&MeshMaterial3d<StandardMaterial>, With<ScrollingConveyorBelt>>,
 ) {
-    if !simulation.running {
+    let showcase_running = *mode.get() == crate::game::state::GameMode::StartMenu;
+    if !simulation.running && !showcase_running {
         return;
     }
     // 皮带动画的速度，数字越大，速度越慢。
     const BELT_WORLD_PER_V: f32 = 1.21;
-    let delta_v = time.delta_secs()
-        * simulation.speed.max(0.001)
-        * (crate::game::blocks::BLOCK_SIZE / BELT_WORLD_PER_V)
+    let speed = if simulation.running {
+        simulation.speed.max(0.001)
+    } else {
+        1.0
+    };
+    let delta_v = time.delta_secs() * speed * (crate::game::blocks::BLOCK_SIZE / BELT_WORLD_PER_V)
         / SIMULATION_TURN_SECONDS;
     let mut updated = std::collections::HashSet::new();
     for handle in &belts {

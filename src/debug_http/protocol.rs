@@ -37,6 +37,9 @@ pub enum DebugHttpCommand {
     GetAcceptors,
     GetStatus,
     GetPerf,
+    CaptureScreenshot {
+        target: String,
+    },
     Run,
     RunOneTurn,
     RunN {
@@ -142,6 +145,12 @@ pub fn parse_http_request(request: &tiny_http::Request) -> DebugHttpCommand {
         ("GET", "/acceptors") => DebugHttpCommand::GetAcceptors,
         ("GET", "/status") => DebugHttpCommand::GetStatus,
         ("GET", "/perf") => DebugHttpCommand::GetPerf,
+        ("GET", "/screenshot") | ("POST", "/screenshot") => DebugHttpCommand::CaptureScreenshot {
+            target: params
+                .get("target")
+                .cloned()
+                .unwrap_or_else(|| "window".to_owned()),
+        },
         ("GET", "/blockkinds") => DebugHttpCommand::BlockKinds,
         ("GET", "/logs") => DebugHttpCommand::GetLogs {
             limit: params
@@ -178,16 +187,15 @@ pub fn parse_http_request(request: &tiny_http::Request) -> DebugHttpCommand {
         },
         ("POST", "/run") | ("GET", "/run") => DebugHttpCommand::Run,
         ("POST", "/runoneturn") | ("GET", "/runoneturn") => DebugHttpCommand::RunOneTurn,
-        ("POST", "/runn")
-        | ("GET", "/runn")
-        | ("POST", "/sim/run")
-        | ("GET", "/sim/run") => DebugHttpCommand::RunN {
-            n: params
-                .get("n")
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(1)
-                .max(1),
-        },
+        ("POST", "/runn") | ("GET", "/runn") | ("POST", "/sim/run") | ("GET", "/sim/run") => {
+            DebugHttpCommand::RunN {
+                n: params
+                    .get("n")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(1)
+                    .max(1),
+            }
+        }
         ("POST", "/players/0/teleport") | ("GET", "/players/0/teleport") => {
             DebugHttpCommand::TeleportPlayer {
                 x: params.get("x").and_then(|v| v.parse().ok()).unwrap_or(0.0),
@@ -237,6 +245,7 @@ pub fn help_json() -> String {
             {"method": "GET", "path": "/acceptors", "desc": "acceptor structures with accepted counts"},
             {"method": "GET", "path": "/status", "desc": "session + simulation + current save path/dirty/exit_requires_save snapshot"},
             {"method": "GET", "path": "/perf", "desc": "load_ms + sim turn + frame timing"},
+            {"method": "POST", "path": "/screenshot?target=window|showcase", "desc": "capture the embedded game window or startup showcase texture to a temporary PNG"},
             {"method": "GET", "path": "/blockKinds", "desc": "all registered block kinds"},
             {"method": "POST", "path": "/session/enter?name=", "desc": "load save (alias /loadSave)"},
             {"method": "POST", "path": "/session/exit", "desc": "exit world / reset headless session"},

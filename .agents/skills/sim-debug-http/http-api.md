@@ -19,8 +19,9 @@
 | GET | `/power?x=&y=&z=` 或 `?id=` | 信号网络：连通分量导线 + 用电器（刷新 SignalNetworkCache） |
 | GET | `/players` | `[{position, look_target}]`；无头 `[]`；内嵌为相机位置 + 准星 |
 | GET | `/acceptors` | `[{id, positions, count}]`；有 StructureState 用其 count，否则世界结构 count=0 |
-| GET | `/status` | `mode` / `in_world` / save / builder / entry / sim phase·turn；`save.path` 为当前存档路径，`save.dirty` 和 `save.exit_requires_save` 表示退出前是否需要保存 |
+| GET | `/status` | `mode` / `in_world` / save / builder / entry / sim phase·turn；`save.path` 为当前存档路径，`save.dirty` 和 `save.exit_requires_save` 表示退出前是否需要保存；嵌入式客户端额外返回 `showcase` 橱窗相机、离屏纹理、UI 和模拟快照 |
 | GET | `/perf` | `load_ms` + `sim_turn` + `frame`；内嵌 frame 含窗口焦点、实际 PresentMode 和物理尺寸（无头 frame=null） |
+| POST | `/screenshot?target=window\|showcase` | 嵌入式客户端截取当前主窗口或启动界面橱窗的离屏纹理到临时 PNG；响应返回 `path`，无头服务不支持 |
 | GET | `/logs?limit=` | 模拟日志 |
 | GET | `/blockKinds` | 方块种类表 |
 
@@ -56,5 +57,6 @@
 - `/world/place` 超过 1000 个结果时只返回数量和首尾坐标，避免基准请求把时间耗在巨大 JSON 上。
 - `/sim/run?n=` 批量运行关闭逐块模拟日志，避免格式化与日志内存占用污染性能数据；单步接口仍保留详细日志。
 - 内嵌 `session/enter`：仅主菜单可排队 `LoadWorld`；已在世界中会报错。
+- 内嵌 `GET /status` 的 `showcase` 字段含 `available` / `scene` / `phase` / `turn` / `world` / `camera` / `texture` / `backdrop_visibility` / `image_node` / `rendered_block_entities`，可用于定位启动菜单背景未显示。
 - 交互式重启前必须检查 `/status.save.path` 和 `/status.save.dirty`；脏状态未清除或保存失败时禁止关闭玩家客户端。
 - 内嵌 `/sim/run?n=` 请改用无头二进制，或用 `/run` / `/runOneTurn`。

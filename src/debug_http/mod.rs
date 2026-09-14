@@ -16,6 +16,5 @@ pub use snapshot::{
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use embedded::{
-    poll_debug_http, start_debug_http_server, try_start_debug_http_server, DebugHttpBridge,
-    PendingDebugHttpStart,
+    DebugHttpBridge, PendingDebugHttpStart, start_debug_http_server, try_start_debug_http_server,
 };

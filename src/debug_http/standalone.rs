@@ -1,11 +1,11 @@
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
 
 use oif_sim::SimSession;
 
 use super::headless::handle_headless_command;
-use super::protocol::{parse_http_request, DebugHttpRequest};
+use super::protocol::{DebugHttpRequest, parse_http_request};
 
 /// 无头调试状态：自有 SimSession + 当前存档与加载耗时
 pub struct HeadlessDebugState {
@@ -81,10 +81,7 @@ pub fn run_http_thread(listen_addr: &str, request_tx: mpsc::Sender<DebugHttpRequ
 
         let (status, body) = match response_rx.recv_timeout(Duration::from_secs(30)) {
             Ok(body) => (200, body),
-            Err(_) => (
-                504,
-                r#"{"ok":false,"error":"handler timeout"}"#.into(),
-            ),
+            Err(_) => (504, r#"{"ok":false,"error":"handler timeout"}"#.into()),
         };
         let response = tiny_http::Response::from_string(body)
             .with_status_code(status)

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "kind": "free",
+  "name": "Showcase - Lifter",
+  "player": {
+    "x": 0.5,
+    "y": 8.0,
+    "z": 12.5,
+    "yaw": 0.0,
+    "pitch": -0.25,
+    "flying": true
+  },
+  "showcase": {
+    "id": "lifter",
+    "title_key": "showcase.lifter.title",
+    "subtitle_key": "showcase.lifter.subtitle",
+    "turn_seconds": 0.75,
+    "max_turns": 10,
+    "completion_hold_seconds": 1.0,
+    "camera_position": [11.0, 12.0, 11.0],
+    "camera_target": [0.0, 3.0, 0.0],
+    "viewport_height": 12.5
+  }
+}

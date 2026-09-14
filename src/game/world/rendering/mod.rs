@@ -49,8 +49,8 @@ pub use previews::{
     update_selection_bounds_overlay,
 };
 pub use scene::{
-    gameplay_ssao, setup_scene, sync_shadow_settings, sync_ssao_settings, sync_vsync_settings,
-    sync_window_mode_settings, teardown_playing_scene,
+    create_world_render_assets, gameplay_ssao, setup_scene, sync_shadow_settings,
+    sync_ssao_settings, sync_vsync_settings, sync_window_mode_settings, teardown_playing_scene,
 };
 pub use scene_chunks::{
     SceneChunkMeshes, clear_scene_chunks, forget_scene_chunks, rebuild_all_scene_chunks,

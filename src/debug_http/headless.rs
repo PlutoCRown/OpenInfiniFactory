@@ -112,6 +112,9 @@ pub fn handle_headless_command(
             let load_ms = state.last_load_ms;
             state.with_core(|core| json_ok(headless_perf_json(load_ms, &core.stats)))
         }
+        DebugHttpCommand::CaptureScreenshot { .. } => {
+            json_error("screenshot only available in the embedded game client")
+        }
         DebugHttpCommand::WorldReset => {
             state.current_save = None;
             state.last_load_ms = None;

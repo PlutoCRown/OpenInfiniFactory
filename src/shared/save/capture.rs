@@ -118,6 +118,22 @@ fn apply_wire_face_panels(world: &mut WorldBlocks, panels: Vec<save_format::Save
     }
 }
 
+/// 将标准 Free 存档的方块分层数据还原成可模拟世界。
+pub(crate) fn world_from_free_blocks(blocks: SaveBlocksData) -> WorldBlocks {
+    let mut world = WorldBlocks::default();
+    apply_layer(
+        &mut world,
+        PuzzleLayer {
+            scene_blocks: blocks.scene_blocks,
+            system_blocks: blocks.system_blocks,
+            hotbar: None,
+        },
+    );
+    apply_factory_blocks(&mut world, blocks.factory_blocks);
+    apply_wire_face_panels(&mut world, blocks.wire_face_panels);
+    world
+}
+
 fn saved_block(pos: IVec3, data: BlockData, settings: Option<BlockSettings>) -> SavedBlock {
     let mut saved = SavedBlock::from_block_data(pos, data);
     saved.settings = settings;

@@ -63,6 +63,12 @@ scene_blocks/quartz_slope
 scene_blocks/short_grass
 scene_blocks/stone
 shaders
+showcases
+showcases/conversion
+showcases/lifter
+showcases/pusher
+showcases/transport
+showcases/welding
 stamp_materials
 stamp_materials/blue
 stamp_materials/green

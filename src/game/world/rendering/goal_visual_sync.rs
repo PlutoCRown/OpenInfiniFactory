@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::game::state::BuilderMode;
+use crate::game::state::{BuilderMode, GameMode};
 use crate::game::world::grid::WorldBlocks;
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::scene::BlockEntityIndex;
@@ -23,6 +23,7 @@ pub fn register_goal_visual_systems(app: &mut App) {
 
 /// BuilderMode 变化时切换验收器外观并重建世界
 fn sync_goal_play_visual_on_builder_mode(
+    mode: Res<State<GameMode>>,
     builder_mode: Res<BuilderMode>,
     render_assets: Option<ResMut<WorldRenderAssets>>,
     mut commands: Commands,
@@ -32,6 +33,9 @@ fn sync_goal_play_visual_on_builder_mode(
     mut block_index: ResMut<BlockEntityIndex>,
     mut scene_chunks: ResMut<SceneChunkMeshes>,
 ) {
+    if *mode.get() != GameMode::Playing {
+        return;
+    }
     let Some(mut render_assets) = render_assets else {
         return;
     };

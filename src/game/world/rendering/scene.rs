@@ -13,6 +13,34 @@ use super::skybox::{SkyMaterial, spawn_sky_dome, transform_for_sun};
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::shared::save::PuzzleLighting;
 
+/// 按当前资源包构建世界渲染句柄，供游玩场景和菜单橱窗共用。
+pub fn create_world_render_assets(
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    shadow_proxy_materials: &mut Assets<ShadowProxyMaterial>,
+    ghost_materials: &mut Assets<GoalGhostMaterial>,
+    portal_materials: &mut Assets<PortalMaterial>,
+    images: &mut Assets<Image>,
+    scene_registry: &crate::game::scene_blocks::SceneBlockRegistry,
+    material_registry: &crate::game::material_blocks::MaterialBlockRegistry,
+    stamp_registry: &crate::game::material_blocks::StampMaterialRegistry,
+    paint_registry: &crate::game::material_blocks::PaintMaterialRegistry,
+) -> WorldRenderAssets {
+    let mut render_assets = WorldRenderAssets::new(
+        meshes,
+        materials,
+        shadow_proxy_materials,
+        images,
+        scene_registry,
+        material_registry,
+        stamp_registry,
+        paint_registry,
+    );
+    render_assets.install_goal_ghost_materials(materials, ghost_materials, images);
+    render_assets.install_portal_material(portal_materials);
+    render_assets
+}
+
 /// 初始化游玩场景灯光、渲染资源与准星/预览实体
 pub fn setup_scene(
     mut commands: Commands,
@@ -75,18 +103,18 @@ pub fn setup_scene(
         &lighting,
     );
 
-    let mut render_assets = WorldRenderAssets::new(
+    let render_assets = create_world_render_assets(
         &mut meshes,
         &mut materials,
         &mut shadow_proxy_materials,
+        &mut ghost_materials,
+        &mut portal_materials,
         &mut images,
         &scene_registry,
         &material_registry,
         &stamp_registry,
         &paint_registry,
     );
-    render_assets.install_goal_ghost_materials(&materials, &mut ghost_materials, &mut images);
-    render_assets.install_portal_material(&mut portal_materials);
     spawn_bounds_overlays(&mut commands, &render_assets);
     commands.insert_resource(render_assets);
 

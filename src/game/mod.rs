@@ -11,6 +11,7 @@ pub mod player;
 pub mod scene_blocks;
 pub mod schedule;
 pub mod session;
+pub mod showcase;
 pub mod simulation;
 pub mod state;
 pub mod systems;
@@ -136,6 +137,7 @@ impl Plugin for GamePlugin {
             .add_plugins(SessionPlugin)
             .add_plugins(crate::sim_bridge::SimulationBridgePlugin)
             .add_plugins(GameUiPlugin)
+            .add_plugins(showcase::StartMenuShowcasePlugin)
             .add_plugins(PerfPlugin)
             .add_plugins(SkyboxPlugin)
             .add_plugins(GoalGhostPlugin)

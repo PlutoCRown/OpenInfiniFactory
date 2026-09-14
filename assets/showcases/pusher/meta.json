@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "kind": "free",
+  "name": "Showcase - Pusher",
+  "player": {
+    "x": 0.5,
+    "y": 6.0,
+    "z": 8.5,
+    "yaw": 0.0,
+    "pitch": -0.3,
+    "flying": true
+  },
+  "showcase": {
+    "id": "pusher",
+    "title_key": "showcase.pusher.title",
+    "subtitle_key": "showcase.pusher.subtitle",
+    "turn_seconds": 0.75,
+    "max_turns": 8,
+    "completion_hold_seconds": 2.0,
+    "camera_position": [8.0, 7.0, 8.0],
+    "camera_target": [0.0, 0.8, 0.0],
+    "viewport_height": 8.5
+  }
+}
