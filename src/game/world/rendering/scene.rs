@@ -6,10 +6,10 @@ use bevy::prelude::*;
 use super::components::{AimFaceHighlight, GameplayScene, HoverMarker, PlacementPreview};
 use super::depth_bias;
 use super::goal_ghost::GoalGhostMaterial;
+use super::lighting::transform_for_sun_direction;
 use super::portal_material::PortalMaterial;
 use super::previews::spawn_bounds_overlays;
 use super::shadow_proxy_material::ShadowProxyMaterial;
-use super::skybox::transform_for_sun_direction;
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::shared::save::PuzzleLighting;
 
@@ -180,22 +180,6 @@ pub fn setup_scene(
 pub fn teardown_playing_scene(commands: &mut Commands) {
     commands.remove_resource::<WorldRenderAssets>();
     commands.remove_resource::<super::components::BlockIconAssets>();
-    commands.remove_resource::<super::components::BlockIconRenderState>();
-}
-
-/// 把配置里的阴影开关同步到场景平行光
-pub fn sync_shadow_settings(
-    config: Res<crate::shared::config::GameConfig>,
-    mut lights: Query<&mut DirectionalLight, With<GameplayScene>>,
-) {
-    if !config.is_changed() {
-        return;
-    }
-    for mut light in &mut lights {
-        if light.shadow_maps_enabled != config.shadows_enabled {
-            light.shadow_maps_enabled = config.shadows_enabled;
-        }
-    }
 }
 
 /// 把配置里的 SSAO 质量同步到游玩相机

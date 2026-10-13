@@ -1,12 +1,7 @@
 use bevy::prelude::*;
 
-use crate::game::state::GameSettings;
 use crate::game::ui::access::i18n;
 use crate::game::ui::core::confirm_dialog::{ConfirmProps, ConfirmResult};
-use crate::game::{
-    GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, MOUSE_SENSITIVITY_MAX, MOUSE_SENSITIVITY_MIN,
-    UI_SCALE_MAX, UI_SCALE_MIN,
-};
 use crate::shared::config::{GameConfig, save_config};
 use crate::shared::touch_profile::TouchProfile;
 
@@ -27,56 +22,15 @@ pub fn on_reset_defaults(result: ConfirmResult, world: &mut World) {
         return;
     }
 
-    *world.resource_mut::<GameConfig>() = GameConfig::default();
-
-    let (
-        fov,
-        ui_scale,
-        gravity,
-        mouse_sensitivity_x,
-        mouse_sensitivity_y,
-        virtual_controls_opacity,
-        master_volume,
-        music_volume,
-        sfx_volume,
-    ) = {
-        let config = world.resource::<GameConfig>();
-        (
-            config.fov_degrees,
-            config.ui_scale.clamp(UI_SCALE_MIN, UI_SCALE_MAX),
-            config
-                .gravity_scale
-                .clamp(GRAVITY_SCALE_MIN, GRAVITY_SCALE_MAX),
-            config
-                .mouse_sensitivity_x
-                .clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX),
-            config
-                .mouse_sensitivity_y
-                .clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX),
-            config.virtual_controls_opacity.clamp(0.0, 1.0),
-            config.master_volume.clamp(0.0, 1.0),
-            config.music_volume.clamp(0.0, 1.0),
-            config.sfx_volume.clamp(0.0, 1.0),
-        )
-    };
-
-    {
-        let mut settings = world.resource_mut::<GameSettings>();
-        settings.fov_degrees = fov;
-        settings.ui_scale = ui_scale;
-        settings.gravity_scale = gravity;
-        settings.mouse_sensitivity_x = mouse_sensitivity_x;
-        settings.mouse_sensitivity_y = mouse_sensitivity_y;
-        settings.virtual_controls_opacity = virtual_controls_opacity;
-        settings.master_volume = master_volume;
-        settings.music_volume = music_volume;
-        settings.sfx_volume = sfx_volume;
-    }
-
+    let config = GameConfig::default().normalized();
     let effective_ui_scale = world
         .resource::<TouchProfile>()
-        .effective_ui_scale(ui_scale);
+        .effective_ui_scale(config.ui_scale);
+    *world.resource_mut::<GameConfig>() = config;
     world.resource_mut::<UiScale>().0 = effective_ui_scale;
+    world
+        .resource_mut::<super::types::ActiveSettingsSlider>()
+        .clear();
     world.resource_mut::<OpenSettingsDropdown>().0 = None;
     world.resource_mut::<PendingKeyBind>().0 = None;
     save_config(world.resource::<GameConfig>());

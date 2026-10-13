@@ -213,7 +213,8 @@ pub struct PerfPlugin;
 
 impl Plugin for PerfPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PerfStats>()
+        app.add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
+            .init_resource::<PerfStats>()
             .add_systems(First, begin_perf_frame)
             .add_systems(
                 PreUpdate,

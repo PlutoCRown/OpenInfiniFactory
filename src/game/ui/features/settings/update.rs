@@ -2,7 +2,6 @@ use bevy::prelude::*;
 use bevy::ui_widgets::{Slider, SliderValue};
 use bevy::window::PrimaryWindow;
 
-use crate::game::state::GameSettings;
 use crate::game::ui::access::UiContext;
 use crate::game::ui::components::{
     BUTTON_BG, BUTTON_HOVER_BG, hover_border, pressed_border, raised_border, ui_logical_bounds,
@@ -132,7 +131,7 @@ pub fn update_settings_text_ui(
 
 pub fn update_settings_sliders_ui(
     ui_navigation: Res<UiNavigation>,
-    settings: Res<GameSettings>,
+    settings: Res<GameConfig>,
     active_slider: Res<ActiveSettingsSlider>,
     mut primed: Local<bool>,
     mut slider_fills: Query<
@@ -197,7 +196,6 @@ pub fn update_settings_dropdowns_ui(
     ui_context: UiContext,
     ui_navigation: Res<UiNavigation>,
     config: Res<GameConfig>,
-    settings: Res<GameSettings>,
     active_slider: Res<ActiveSettingsSlider>,
     open_dropdown: Res<OpenSettingsDropdown>,
     ui_scale: Res<UiScale>,
@@ -235,7 +233,7 @@ pub fn update_settings_dropdowns_ui(
 
     let labels_dirty = !*primed || config.is_changed() || !added_labels.is_empty();
     let values_dirty =
-        !*primed || settings.is_changed() || active_slider.is_changed() || !added_values.is_empty();
+        !*primed || config.is_changed() || active_slider.is_changed() || !added_values.is_empty();
     let placement_pending = dropdown_lists.iter().any(|(list, _, visibility, _)| {
         open_dropdown.0 == Some(list.0) && *visibility == Visibility::Hidden
     });
@@ -257,7 +255,7 @@ pub fn update_settings_dropdowns_ui(
 
     if values_dirty {
         for (value, mut text) in &mut texts.p1() {
-            let next = value.0.display(&settings, active_slider.preview(value.0));
+            let next = value.0.display(&config, active_slider.preview(value.0));
             if text.0 != next {
                 text.0 = next;
             }

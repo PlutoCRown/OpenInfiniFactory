@@ -1,12 +1,12 @@
+use crate::shared::config::GameConfig;
 use bevy::prelude::*;
 
-use crate::game::state::GameSettings;
-use crate::game::{
-    GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, MOUSE_SENSITIVITY_MAX, MOUSE_SENSITIVITY_MIN,
-    UI_SCALE_MAX, UI_SCALE_MIN,
-};
 use crate::shared::config::{
     ActionKeyName, ConfigGameplayRenderRate, ConfigSelectionMode, ConfigWindowMode,
+};
+use crate::shared::config::{
+    GRAVITY_SCALE_MAX, GRAVITY_SCALE_MIN, MOUSE_SENSITIVITY_MAX, MOUSE_SENSITIVITY_MIN,
+    UI_SCALE_MAX, UI_SCALE_MIN,
 };
 use crate::shared::i18n::Language;
 use crate::shared::touch_profile::TouchProfile;
@@ -251,14 +251,14 @@ impl SettingsField {
             })
     }
 
-    pub fn percent(self, settings: &GameSettings) -> f32 {
+    pub fn percent(self, settings: &GameConfig) -> f32 {
         let Some(slider) = self.slider() else {
             return 0.0;
         };
         ((self.value(settings) - slider.min) / (slider.max - slider.min) * 100.0).clamp(0.0, 100.0)
     }
 
-    pub fn display(self, settings: &GameSettings, preview: Option<f32>) -> String {
+    pub fn display(self, settings: &GameConfig, preview: Option<f32>) -> String {
         use crate::game::ui::access::i18n;
 
         let value = preview
@@ -303,7 +303,6 @@ impl SettingsField {
     pub fn apply_percent(
         self,
         percent: f32,
-        settings: &mut GameSettings,
         ui_scale: &mut UiScale,
         config: &mut crate::shared::config::GameConfig,
         touch: TouchProfile,
@@ -313,16 +312,24 @@ impl SettingsField {
         };
         let raw = slider.min + percent.clamp(0.0, 1.0) * (slider.max - slider.min);
         let value = (raw / slider.step).round() * slider.step;
-        self.apply_value(
-            value.clamp(slider.min, slider.max),
-            settings,
-            ui_scale,
-            config,
-            touch,
-        );
+        let value = value.clamp(slider.min, slider.max);
+        match self {
+            Self::Fov => config.fov_degrees = value,
+            Self::UiScale => {
+                config.ui_scale = value;
+                ui_scale.0 = touch.effective_ui_scale(value);
+            }
+            Self::Gravity => config.gravity_scale = value,
+            Self::MouseSensitivityX => config.mouse_sensitivity_x = value,
+            Self::MouseSensitivityY => config.mouse_sensitivity_y = value,
+            Self::VirtualControlsOpacity => config.virtual_controls_opacity = value,
+            Self::MasterVolume => config.master_volume = value,
+            Self::MusicVolume => config.music_volume = value,
+            Self::SfxVolume => config.sfx_volume = value,
+        }
     }
 
-    fn value(self, settings: &GameSettings) -> f32 {
+    fn value(self, settings: &GameConfig) -> f32 {
         match self {
             Self::Fov => settings.fov_degrees,
             Self::UiScale => settings.ui_scale,
@@ -333,55 +340,6 @@ impl SettingsField {
             Self::MasterVolume => settings.master_volume,
             Self::MusicVolume => settings.music_volume,
             Self::SfxVolume => settings.sfx_volume,
-        }
-    }
-
-    fn apply_value(
-        self,
-        value: f32,
-        settings: &mut GameSettings,
-        ui_scale: &mut UiScale,
-        config: &mut crate::shared::config::GameConfig,
-        touch: TouchProfile,
-    ) {
-        match self {
-            Self::Fov => {
-                settings.fov_degrees = value;
-                config.fov_degrees = value;
-            }
-            Self::UiScale => {
-                settings.ui_scale = value;
-                ui_scale.0 = touch.effective_ui_scale(value);
-                config.ui_scale = value;
-            }
-            Self::Gravity => {
-                settings.gravity_scale = value;
-                config.gravity_scale = value;
-            }
-            Self::MouseSensitivityX => {
-                settings.mouse_sensitivity_x = value;
-                config.mouse_sensitivity_x = value;
-            }
-            Self::MouseSensitivityY => {
-                settings.mouse_sensitivity_y = value;
-                config.mouse_sensitivity_y = value;
-            }
-            Self::VirtualControlsOpacity => {
-                settings.virtual_controls_opacity = value;
-                config.virtual_controls_opacity = value;
-            }
-            Self::MasterVolume => {
-                settings.master_volume = value;
-                config.master_volume = value;
-            }
-            Self::MusicVolume => {
-                settings.music_volume = value;
-                config.music_volume = value;
-            }
-            Self::SfxVolume => {
-                settings.sfx_volume = value;
-                config.sfx_volume = value;
-            }
         }
     }
 }

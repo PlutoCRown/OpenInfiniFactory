@@ -1,3 +1,4 @@
+use crate::shared::config::GameConfig;
 use bevy::audio::{
     AudioPlayer, AudioSink, AudioSinkPlayback, AudioSource, PlaybackSettings, SpatialAudioSink,
     Volume,
@@ -7,7 +8,7 @@ use std::collections::HashSet;
 
 use crate::game::blocks::BlockKind;
 use crate::game::player::controller::FlyCamera;
-use crate::game::state::{GameSettings, SimulationState};
+use crate::game::state::SimulationState;
 use crate::game::world::grid::{WorldBlocks, grid_to_world};
 
 const MAX_SOUND_DISTANCE: f32 = 24.0;
@@ -120,7 +121,10 @@ impl Plugin for GameAudioPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<PlaySound>()
             .init_resource::<SoundAssets>()
-            .add_systems(Startup, start_music)
+            .add_systems(
+                Startup,
+                start_music.in_set(crate::game::schedule::GameStartupSet::Presentation),
+            )
             .add_systems(
                 Update,
                 (
@@ -129,13 +133,14 @@ impl Plugin for GameAudioPlugin {
                     update_music_volume,
                     update_machine_audio_volumes,
                 )
-                    .chain(),
+                    .chain()
+                    .in_set(crate::game::schedule::GameSet::Animation),
             );
     }
 }
 
 /// 启动全局循环音乐。
-fn start_music(mut commands: Commands, assets: Res<SoundAssets>, settings: Res<GameSettings>) {
+fn start_music(mut commands: Commands, assets: Res<SoundAssets>, settings: Res<GameConfig>) {
     commands.spawn((
         MusicAudio,
         AudioPlayer::new(assets.music.clone()),
@@ -151,7 +156,7 @@ fn play_sound_events(
     mut commands: Commands,
     mut events: MessageReader<PlaySound>,
     assets: Res<SoundAssets>,
-    settings: Res<GameSettings>,
+    settings: Res<GameConfig>,
     listener: Query<&GlobalTransform, With<FlyCamera>>,
     mut scheduled: Local<Vec<(PlaySound, f32)>>,
 ) {
@@ -206,7 +211,7 @@ fn play_sound_events(
 fn sync_machine_audio_loops(
     mut commands: Commands,
     assets: Res<SoundAssets>,
-    settings: Res<GameSettings>,
+    settings: Res<GameConfig>,
     simulation: Res<SimulationState>,
     presentation: Res<crate::sim_bridge::SimulationPresentationState>,
     world: Res<WorldBlocks>,
@@ -267,22 +272,21 @@ fn sync_machine_audio_loops(
 
 /// 实时更新音乐音量，覆盖总音量和音乐分音量设置。
 fn update_music_volume(
-    settings: Res<GameSettings>,
-    mut sinks: Query<&mut AudioSink, With<MusicAudio>>,
+    settings: Res<GameConfig>,
+    mut sinks: Query<(&mut AudioSink, &mut PlaybackSettings), With<MusicAudio>>,
 ) {
-    if !settings.is_changed() {
-        return;
-    }
-    for mut sink in &mut sinks {
-        sink.set_volume(Volume::Linear(
-            settings.master_volume * settings.music_volume,
-        ));
+    let volume = Volume::Linear(settings.master_volume * settings.music_volume);
+    for (mut sink, mut playback) in &mut sinks {
+        if settings.is_changed() || sink.is_added() {
+            playback.volume = volume;
+            sink.set_volume(volume);
+        }
     }
 }
 
 /// 实时更新机器底噪的距离衰减与音量设置。
 fn update_machine_audio_volumes(
-    settings: Res<GameSettings>,
+    settings: Res<GameConfig>,
     listener: Query<&GlobalTransform, With<FlyCamera>>,
     mut loops: Query<(&Transform, &mut SpatialAudioSink), With<MachineAudioLoop>>,
 ) {

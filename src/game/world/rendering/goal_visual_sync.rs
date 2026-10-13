@@ -11,18 +11,8 @@ use super::components::BlockEntity;
 use super::scene_chunks::SceneChunkMeshes;
 use super::world_rebuild::{despawn_world, rebuild_world};
 
-/// 注册验收器外观与 BuilderMode 的同步
-pub fn register_goal_visual_systems(app: &mut App) {
-    app.add_systems(
-        Update,
-        sync_goal_play_visual_on_builder_mode
-            .in_set(crate::game::schedule::GameSet::SimulationControls)
-            .after(crate::game::systems::simulation_controls::simulation_controls),
-    );
-}
-
 /// BuilderMode 变化时切换验收器外观并重建世界
-fn sync_goal_play_visual_on_builder_mode(
+pub(super) fn sync_goal_play_visual_on_builder_mode(
     mode: Res<State<GameMode>>,
     builder_mode: Res<BuilderMode>,
     render_assets: Option<ResMut<WorldRenderAssets>>,

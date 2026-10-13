@@ -25,7 +25,6 @@ pub use inventory::InventoryPlugin;
 pub use pause_menu::PauseMenuPlugin;
 pub use save::SavePlugin;
 pub use save_settings::SaveSettingsPlugin;
-pub use session_busy::SessionBusyUiPlugin;
 pub use settings::SettingsPlugin;
 pub use start_menu::StartMenuPlugin;
 pub use tutorial::{
@@ -46,7 +45,6 @@ impl Plugin for UiFeaturesPlugin {
             BlockPanelsPlugin,
             InventoryPlugin,
             GameplayToastPlugin,
-            SessionBusyUiPlugin,
             VirtualRemotePlugin,
             TutorialPlugin,
         ))

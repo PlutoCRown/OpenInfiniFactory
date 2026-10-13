@@ -1,7 +1,7 @@
+use crate::shared::config::GameConfig;
 use bevy::prelude::*;
 
 use crate::game::blocks::BlockPresent;
-use crate::game::state::GameSettings;
 
 use super::components::{
     BUTTON_BG, default_button_size, default_font_size, full_width_button, inset_border,
@@ -134,7 +134,7 @@ pub(super) fn spawn_settings_tab(parent: &mut ChildSpawnerCommands, action: Sett
 pub(super) fn spawn_settings_slider(
     parent: &mut ChildSpawnerCommands,
     field: SettingsField,
-    settings: &GameSettings,
+    settings: &GameConfig,
 ) {
     let percent = field.percent(settings);
     parent

@@ -61,11 +61,17 @@ use save::{
 };
 use solution::{handle_begin_solution_play, handle_reset_solution, handle_switch_to_edit_mode};
 
+/// 管理存档、会话世界与进入/退出请求。
 pub struct SessionPlugin;
 
 impl Plugin for SessionPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SessionBusy>()
+        app.init_resource::<WorldBlocks>()
+            .init_resource::<crate::shared::save::SaveState>()
+            .init_resource::<crate::shared::save::PuzzleLighting>()
+            .init_resource::<crate::game::state::SolutionState>()
+            .init_resource::<crate::game::state::PendingPlayerSpawn>()
+            .init_resource::<SessionBusy>()
             .init_resource::<SessionBusyCover>()
             .init_resource::<PendingMainMenuExit>()
             .init_resource::<PendingWorldLoad>()

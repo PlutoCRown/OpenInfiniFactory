@@ -5,9 +5,7 @@ use bevy::prelude::*;
 use super::block_icons::{
     bakeable_block_icon_kinds, baked_block_icon_path, light_panel_icon_path, selection_icon_path,
 };
-use super::components::{
-    BlockIconAssets, BlockIconRenderCamera, BlockIconRenderRoot, BlockIconRenderState,
-};
+use super::components::BlockIconAssets;
 use super::depth_bias;
 use crate::game::blocks::BlockKind;
 use crate::game::material_blocks::{
@@ -168,28 +166,4 @@ pub fn setup_block_icons(
     }
 
     commands.insert_resource(icon_assets);
-}
-
-/// 兼容旧离屏拍帧清理（现已无 BlockIconRenderState，通常为空操作）
-pub fn retire_block_icon_renderers(
-    mut commands: Commands,
-    state: Option<ResMut<BlockIconRenderState>>,
-    render_entities: Query<Entity, With<BlockIconRenderRoot>>,
-    mut cameras: Query<&mut Camera, With<BlockIconRenderCamera>>,
-) {
-    let Some(mut state) = state else {
-        return;
-    };
-    if state.frames_remaining > 0 {
-        state.frames_remaining -= 1;
-        return;
-    }
-
-    for mut camera in &mut cameras {
-        camera.is_active = false;
-    }
-    for entity in &render_entities {
-        commands.entity(entity).despawn();
-    }
-    commands.remove_resource::<BlockIconRenderState>();
 }

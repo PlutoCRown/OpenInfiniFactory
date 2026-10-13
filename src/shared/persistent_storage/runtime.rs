@@ -23,11 +23,9 @@ impl Plugin for StoragePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<StorageReady>()
             .init_resource::<PersistFlushState>()
-            .add_systems(Startup, begin_storage_hydrate)
-            .add_systems(
-                Update,
-                (poll_storage_hydrate, flush_persist_queue).chain(),
-            );
+            .add_systems(PreStartup, begin_storage_hydrate)
+            .add_systems(PreUpdate, poll_storage_hydrate)
+            .add_systems(Last, flush_persist_queue);
     }
 }
 

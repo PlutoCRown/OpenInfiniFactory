@@ -1,4 +1,66 @@
 impl GameConfig {
+    /// 统一校验配置数值，损坏或非有限值回到默认设置。
+    pub fn normalized(mut self) -> Self {
+        for (value, min, max, default) in [
+            (
+                &mut self.fov_degrees,
+                50.0,
+                110.0,
+                DEFAULT_CONFIG.fov_degrees,
+            ),
+            (
+                &mut self.ui_scale,
+                UI_SCALE_MIN,
+                UI_SCALE_MAX,
+                DEFAULT_CONFIG.ui_scale,
+            ),
+            (
+                &mut self.gravity_scale,
+                GRAVITY_SCALE_MIN,
+                GRAVITY_SCALE_MAX,
+                DEFAULT_CONFIG.gravity_scale,
+            ),
+            (
+                &mut self.mouse_sensitivity_x,
+                MOUSE_SENSITIVITY_MIN,
+                MOUSE_SENSITIVITY_MAX,
+                DEFAULT_CONFIG.mouse_sensitivity_x,
+            ),
+            (
+                &mut self.mouse_sensitivity_y,
+                MOUSE_SENSITIVITY_MIN,
+                MOUSE_SENSITIVITY_MAX,
+                DEFAULT_CONFIG.mouse_sensitivity_y,
+            ),
+            (
+                &mut self.virtual_controls_opacity,
+                0.0,
+                1.0,
+                DEFAULT_CONFIG.virtual_controls_opacity,
+            ),
+            (
+                &mut self.master_volume,
+                0.0,
+                1.0,
+                DEFAULT_CONFIG.master_volume,
+            ),
+            (
+                &mut self.music_volume,
+                0.0,
+                1.0,
+                DEFAULT_CONFIG.music_volume,
+            ),
+            (&mut self.sfx_volume, 0.0, 1.0, DEFAULT_CONFIG.sfx_volume),
+        ] {
+            *value = if value.is_finite() {
+                value.clamp(min, max)
+            } else {
+                default
+            };
+        }
+        self
+    }
+
     pub fn chord(&self, action: ActionKeyName) -> ConfigChord {
         match action {
             ActionKeyName::Undo => self.key_bindings.undo,

@@ -23,7 +23,8 @@ pub struct InventoryPlugin;
 impl Plugin for InventoryPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<crate::game::ui::core::host::UiAction<actions::InventoryAction>>();
-        app.init_resource::<TouchInventoryState>()
+        app.init_resource::<crate::game::ui::InventoryItems>()
+            .init_resource::<TouchInventoryState>()
             .add_observer(actions::return_carried_item_on_close)
             .add_observer(emit_inventory_slot_actions)
             .add_observer(emit_inventory_tab_actions)

@@ -1,10 +1,11 @@
 //! UI 只读快照与延迟挂载请求。
 
+use crate::shared::config::GameConfig;
 use bevy::ecs::system::{NonSendMarker, SystemParam, SystemState};
 use bevy::prelude::*;
 use std::cell::RefCell;
 
-use crate::game::state::{GameSettings, UiPanelId};
+use crate::game::state::UiPanelId;
 use crate::game::ui::components::UiIconAssets;
 use crate::game::ui::core::confirm_dialog::{ConfirmProps, ConfirmResult};
 use crate::game::ui::core::host::{PanelMount, UiHostCommands, UiInstanceId};
@@ -141,20 +142,7 @@ impl Command for UiRequest {
         let _scope = enter_ui_world(world);
         match self {
             UiRequest::MountSettings { root, context } => {
-                let settings = {
-                    let settings = world.resource::<GameSettings>();
-                    GameSettings {
-                        fov_degrees: settings.fov_degrees,
-                        ui_scale: settings.ui_scale,
-                        gravity_scale: settings.gravity_scale,
-                        mouse_sensitivity_x: settings.mouse_sensitivity_x,
-                        mouse_sensitivity_y: settings.mouse_sensitivity_y,
-                        virtual_controls_opacity: settings.virtual_controls_opacity,
-                        master_volume: settings.master_volume,
-                        music_volume: settings.music_volume,
-                        sfx_volume: settings.sfx_volume,
-                    }
-                };
+                let settings = world.resource::<GameConfig>().clone();
                 let touch_enabled = world
                     .resource::<crate::shared::touch_profile::TouchProfile>()
                     .enabled;

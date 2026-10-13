@@ -1,8 +1,9 @@
+use crate::shared::config::GameConfig;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow, WindowFocused};
 
 use crate::game::scene_blocks::SceneBlockRegistry;
-use crate::game::state::{GameSettings, SimulationState};
+use crate::game::state::SimulationState;
 use crate::game::systems::gameplay::GameplayPlayGate;
 use crate::game::world::animation::{AnimatedBlock, SIMULATION_TURN_SECONDS};
 use crate::game::world::grid::{WorldBlocks, grid_to_world};
@@ -118,7 +119,7 @@ pub fn camera_move(
     time: Res<Time>,
     input: Res<crate::game::input::GameplayInputState>,
     keys: Res<ButtonInput<KeyCode>>,
-    settings: Res<GameSettings>,
+    settings: Res<GameConfig>,
     simulation: Res<SimulationState>,
     gate: GameplayPlayGate,
     world: Res<WorldBlocks>,
@@ -436,7 +437,7 @@ pub fn camera_look(
     keys: Res<ButtonInput<KeyCode>>,
     input: Res<crate::game::input::GameplayInputState>,
     gate: GameplayPlayGate,
-    settings: Res<GameSettings>,
+    settings: Res<GameConfig>,
     mut query: Query<(&mut FlyCamera, &mut Transform)>,
 ) {
     let Ok((mut camera, mut transform)) = query.single_mut() else {

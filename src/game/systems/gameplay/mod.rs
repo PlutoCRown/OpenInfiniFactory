@@ -27,13 +27,15 @@ pub struct GameplayPlugin;
 
 impl bevy::prelude::Plugin for GameplayPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
-        use crate::game::cameras::{sync_gameplay_render_rate, sync_gameplay_view_image_size};
         use crate::game::edit_history::{EditHistory, edit_history_input};
+        use crate::game::input;
         use crate::game::player::controller::{camera_look, camera_move, sync_cursor_grab};
         use crate::game::schedule::GameSet;
-        use crate::game::{input, world};
         use bevy::prelude::*;
-        app.init_resource::<crate::game::state::PlacementState>()
+        app.init_resource::<crate::game::state::BuilderMode>()
+            .init_resource::<crate::game::player::controller::MouseLookBaseline>()
+            .init_resource::<crate::game::systems::debug::DebugState>()
+            .init_resource::<crate::game::state::PlacementState>()
             .init_resource::<crate::game::world::rendering::HoverStructureBounds>()
             .init_resource::<AimFocus>()
             .init_resource::<EditBatchTiming>()
@@ -41,6 +43,22 @@ impl bevy::prelude::Plugin for GameplayPlugin {
             .init_resource::<BlockSettingsClipboard>()
             .init_resource::<SelectionToolSwap>()
             .add_message::<placement::PlayerTeleportRequest>()
+            .add_systems(
+                Startup,
+                crate::game::systems::debug::load_debug_font
+                    .in_set(crate::game::schedule::GameStartupSet::Presentation),
+            )
+            .add_systems(
+                Update,
+                (
+                    crate::game::systems::debug::toggle_debug,
+                    crate::game::systems::debug::toggle_factory_activity_debug,
+                    crate::game::systems::debug::update_debug_ui,
+                    crate::game::systems::debug::draw_player_collider,
+                )
+                    .chain()
+                    .in_set(GameSet::Debug),
+            )
             .add_systems(
                 Update,
                 (
@@ -57,26 +75,14 @@ impl bevy::prelude::Plugin for GameplayPlugin {
             )
             .add_systems(
                 Update,
-                (
-                    sync_gameplay_view_image_size,
-                    sync_gameplay_render_rate,
-                    world::rendering::sync_shadow_settings,
-                    world::rendering::sync_ssao_settings,
-                    world::rendering::sync_vsync_settings,
-                    world::rendering::sync_window_mode_settings,
-                )
-                    .in_set(crate::game::schedule::GameSet::Menus),
-            )
-            .add_systems(
-                Update,
                 edit_history_input
-                    .after(GameSet::Hover)
+                    .in_set(GameSet::Placement)
                     .before(placement_input),
             )
             .add_systems(
                 Update,
                 clipboard_input
-                    .after(GameSet::Hover)
+                    .in_set(GameSet::Placement)
                     .before(placement_input),
             )
             .add_systems(

@@ -1,3 +1,4 @@
+use crate::shared::config::GameConfig;
 use bevy::prelude::*;
 
 use crate::shared::config::{
@@ -19,7 +20,7 @@ use super::super::widgets::{
     spawn_settings_radio_group, spawn_settings_slider, spawn_settings_slider_value,
     spawn_settings_tab,
 };
-use crate::game::state::{GameSettings, UiPanelId};
+use crate::game::state::UiPanelId;
 use crate::game::ui::access::i18n;
 
 /// 相对窗口逻辑像素的外边距（与存档列表一致）
@@ -36,7 +37,7 @@ pub fn settings_panel_size(window_w: f32, window_h: f32, ui_scale: f32) -> (f32,
 
 pub fn spawn_settings_panel(
     root: &mut ChildSpawnerCommands,
-    settings: &GameSettings,
+    settings: &GameConfig,
     panel_w: f32,
     panel_h: f32,
     touch_enabled: bool,
@@ -142,7 +143,7 @@ fn spawn_settings_slider_row(
     panel: &mut ChildSpawnerCommands,
     label_key: &'static str,
     item: SettingsItem,
-    settings: &GameSettings,
+    settings: &GameConfig,
     tab: SettingsTab,
 ) {
     panel
@@ -224,7 +225,7 @@ fn spawn_settings_label(row: &mut ChildSpawnerCommands, label_key: &'static str)
 fn spawn_settings_item(
     panel: &mut ChildSpawnerCommands,
     item: SettingsItem,
-    settings: &GameSettings,
+    settings: &GameConfig,
     tab: SettingsTab,
 ) {
     match item.control {
@@ -240,7 +241,7 @@ fn spawn_settings_item(
     }
 }
 
-fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
+fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, settings: &GameConfig) {
     panel
         .spawn(scroll_container())
         .insert(crate::game::ui::features::settings::types::SettingsTabPanel(SettingsTab::Gameplay))
@@ -256,7 +257,7 @@ fn spawn_gameplay_settings(panel: &mut ChildSpawnerCommands, settings: &GameSett
         });
 }
 
-fn spawn_graphics_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
+fn spawn_graphics_settings(panel: &mut ChildSpawnerCommands, settings: &GameConfig) {
     panel
         .spawn(scroll_container())
         .insert(crate::game::ui::features::settings::types::SettingsTabPanel(SettingsTab::Graphics))
@@ -280,7 +281,7 @@ fn spawn_graphics_settings(panel: &mut ChildSpawnerCommands, settings: &GameSett
 
 fn spawn_key_bindings(
     panel: &mut ChildSpawnerCommands,
-    settings: &GameSettings,
+    settings: &GameConfig,
     touch_enabled: bool,
 ) {
     panel
@@ -323,7 +324,7 @@ fn spawn_key_bindings(
         });
 }
 
-fn spawn_audio_settings(panel: &mut ChildSpawnerCommands, settings: &GameSettings) {
+fn spawn_audio_settings(panel: &mut ChildSpawnerCommands, settings: &GameConfig) {
     panel
         .spawn(scroll_container())
         .insert(crate::game::ui::features::settings::types::SettingsTabPanel(SettingsTab::Audio))

@@ -5,7 +5,6 @@ use bevy::ui_widgets::{Slider, SliderRange, ValueChange};
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::debug_http::PendingDebugHttpStart;
-use crate::game::state::GameSettings;
 use crate::game::ui::access::{UiContext, ui};
 use crate::game::ui::core::host::{UiAction, UiInstanceId};
 use crate::game::ui::core::runtime::UiNavigation;
@@ -89,7 +88,6 @@ pub fn settings_slider_changed(
     change: On<ValueChange<f32>>,
     sliders: Query<(&SettingsAction, &SliderRange), With<Slider>>,
     mut active_slider: ResMut<ActiveSettingsSlider>,
-    mut settings: ResMut<GameSettings>,
     mut ui_scale: ResMut<UiScale>,
     mut config: ResMut<GameConfig>,
     touch: Res<TouchProfile>,
@@ -106,7 +104,7 @@ pub fn settings_slider_changed(
         .slider()
         .is_some_and(|slider| slider.trigger == SettingsSliderTrigger::Live);
     if live || change.is_final {
-        field.apply_percent(percent, &mut settings, &mut ui_scale, &mut config, *touch);
+        field.apply_percent(percent, &mut ui_scale, &mut config, *touch);
     }
     if change.is_final {
         save_config(&config);
@@ -119,7 +117,6 @@ pub fn settings_slider_released(
     release: On<Pointer<Release>>,
     sliders: Query<(), With<Slider>>,
     mut active_slider: ResMut<ActiveSettingsSlider>,
-    mut settings: ResMut<GameSettings>,
     mut ui_scale: ResMut<UiScale>,
     mut config: ResMut<GameConfig>,
     touch: Res<TouchProfile>,
@@ -130,13 +127,7 @@ pub fn settings_slider_released(
     let Some(field) = active_slider.field else {
         return;
     };
-    field.apply_percent(
-        active_slider.percent,
-        &mut settings,
-        &mut ui_scale,
-        &mut config,
-        *touch,
-    );
+    field.apply_percent(active_slider.percent, &mut ui_scale, &mut config, *touch);
     save_config(&config);
     active_slider.clear();
 }
@@ -263,5 +254,72 @@ pub fn dispatch_settings_actions(
             | SettingsAction::OpenFolder
             | SettingsAction::StartDebugHttp => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::types::SettingsField;
+    use super::*;
+
+    /// 同一配置源下，提交型滑条仅保留预览，实时型滑条立即影响游戏。
+    #[test]
+    fn slider_preview_and_live_update_use_one_configuration() {
+        let mut app = App::new();
+        app.init_resource::<GameConfig>()
+            .init_resource::<ActiveSettingsSlider>()
+            .init_resource::<UiScale>()
+            .insert_resource(TouchProfile { enabled: true })
+            .add_observer(settings_slider_changed);
+        let scale = app
+            .world_mut()
+            .spawn((
+                Slider::default(),
+                SliderRange::new(0.0, 100.0),
+                SettingsAction::Field(SettingsField::UiScale),
+            ))
+            .id();
+        app.world_mut().trigger(ValueChange::<f32> {
+            source: scale,
+            value: 100.0,
+            is_final: false,
+        });
+        assert_eq!(app.world().resource::<GameConfig>().ui_scale, 1.0);
+        assert_eq!(app.world().resource::<UiScale>().0, 1.0);
+        assert_eq!(
+            app.world()
+                .resource::<ActiveSettingsSlider>()
+                .preview(SettingsField::UiScale),
+            Some(1.0)
+        );
+
+        let fov = app
+            .world_mut()
+            .spawn((
+                Slider::default(),
+                SliderRange::new(0.0, 100.0),
+                SettingsAction::Field(SettingsField::Fov),
+            ))
+            .id();
+        app.world_mut().trigger(ValueChange::<f32> {
+            source: fov,
+            value: 100.0,
+            is_final: false,
+        });
+        assert_eq!(app.world().resource::<GameConfig>().fov_degrees, 110.0);
+
+        let mut config = GameConfig::default();
+        let mut ui_scale = UiScale(1.0);
+        SettingsField::UiScale.apply_percent(
+            1.0,
+            &mut ui_scale,
+            &mut config,
+            TouchProfile { enabled: true },
+        );
+        assert_eq!(config.ui_scale, 3.0);
+        assert_eq!(
+            ui_scale.0,
+            3.0 * crate::shared::touch_profile::TOUCH_UI_SCALE
+        );
     }
 }

@@ -1,3 +1,4 @@
+/// 读取持久配置并统一校验数值。
 pub fn load_config() -> GameConfig {
     let key = persistent_storage::config_key();
     let Some(contents) = persistent_storage::read(key) else {
@@ -8,10 +9,12 @@ pub fn load_config() -> GameConfig {
         }
         return config;
     };
-    ron::from_str::<GameConfig>(&contents).unwrap_or_else(|error| {
-        warn!("Failed to load config: {error}");
-        GameConfig::default()
-    })
+    ron::from_str::<GameConfig>(&contents)
+        .unwrap_or_else(|error| {
+            warn!("Failed to load config: {error}");
+            GameConfig::default()
+        })
+        .normalized()
 }
 
 pub fn save_config(config: &GameConfig) {

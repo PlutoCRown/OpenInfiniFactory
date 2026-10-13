@@ -17,7 +17,12 @@ pub struct GoalGhostPlugin;
 impl Plugin for GoalGhostPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<GoalGhostMaterial>::default());
-        super::goal_visual_sync::register_goal_visual_systems(app);
+        app.add_systems(
+            Update,
+            super::goal_visual_sync::sync_goal_play_visual_on_builder_mode
+                .in_set(crate::game::schedule::GameSet::SimulationControls)
+                .after(crate::game::systems::simulation_controls::simulation_controls),
+        );
     }
 }
 

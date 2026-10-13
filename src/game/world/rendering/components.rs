@@ -167,20 +167,3 @@ pub(crate) struct BlockIconRenderEntity;
 /// 图标离屏场景根（渲染结束后可整体销毁）
 #[derive(Component)]
 pub struct BlockIconRenderRoot;
-
-/// 图标离屏相机
-#[derive(Component)]
-pub struct BlockIconRenderCamera;
-
-/// 图标渲染剩余帧数，到 0 后停相机并清理
-#[derive(Resource)]
-pub struct BlockIconRenderState {
-    pub(super) frames_remaining: u8,
-}
-
-impl BlockIconRenderState {
-    /// 离屏图标是否还在拍
-    pub fn is_rendering(&self) -> bool {
-        self.frames_remaining > 0
-    }
-}

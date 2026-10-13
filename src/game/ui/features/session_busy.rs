@@ -151,14 +151,3 @@ pub fn update_session_busy_overlay(
         }
     }
 }
-
-pub struct SessionBusyUiPlugin;
-
-impl Plugin for SessionBusyUiPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            update_session_busy_overlay.in_set(crate::game::schedule::GameSet::UiFeat),
-        );
-    }
-}

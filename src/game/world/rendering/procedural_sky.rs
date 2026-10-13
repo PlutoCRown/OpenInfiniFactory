@@ -20,7 +20,7 @@ use bevy::render::{
     view::{ViewDepthTexture, ViewTarget, ViewUniform, ViewUniformOffset, ViewUniforms},
 };
 
-use super::skybox::resolved_sun_direction;
+use super::lighting::resolved_sun_direction;
 use crate::shared::save::PuzzleLighting;
 
 /// 随相机提取到渲染世界的太阳、曝光和连续动画时间。
@@ -429,7 +429,10 @@ mod tests {
                 .disable::<AudioPlugin>()
                 .disable::<PipelinedRenderingPlugin>(),
         )
-        .add_plugins(ProceduralSkyPlugin)
+        .add_plugins((
+            ProceduralSkyPlugin,
+            super::super::frame_ready::SceneReadinessPlugin,
+        ))
         .init_resource::<Captures>();
         app.finish();
         app.cleanup();
@@ -443,6 +446,27 @@ mod tests {
                 None,
             ));
         let camera_transform = Transform::default().looking_to(Vec3::new(0.0, 0.55, -1.0), Vec3::Y);
+        let ui_image =
+            app.world_mut()
+                .resource_mut::<Assets<Image>>()
+                .add(Image::new_target_texture(
+                    64,
+                    64,
+                    TextureFormat::Rgba8UnormSrgb,
+                    None,
+                ));
+        let ui_camera = app
+            .world_mut()
+            .spawn((
+                Camera2d,
+                RenderTarget::Image(ui_image.into()),
+                Camera {
+                    order: 1,
+                    ..default()
+                },
+                super::super::frame_ready::SceneFrameReady::default(),
+            ))
+            .id();
         let camera = app
             .world_mut()
             .spawn((
@@ -453,6 +477,7 @@ mod tests {
                 RenderTarget::Image(image.clone().into()),
                 camera_transform,
                 ProceduralSky::from_lighting(&PuzzleLighting::default()),
+                super::super::frame_ready::SceneFrameReady::default(),
             ))
             .id();
         let mesh = app
@@ -474,6 +499,15 @@ mod tests {
         ));
         for (width, height) in [(640, 360), (801, 451)] {
             app.world_mut()
+                .entity_mut(camera)
+                .insert(super::super::frame_ready::SceneFrameReady::default());
+            assert!(
+                !app.world()
+                    .get::<super::super::frame_ready::SceneFrameReady>(camera)
+                    .unwrap()
+                    .is_ready()
+            );
+            app.world_mut()
                 .resource_mut::<Assets<Image>>()
                 .get_mut(&image)
                 .unwrap()
@@ -493,6 +527,20 @@ mod tests {
                     .unwrap();
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
+            assert!(
+                app.world()
+                    .get::<super::super::frame_ready::SceneFrameReady>(camera)
+                    .unwrap()
+                    .is_ready(),
+                "GPU first-frame receipt never arrived"
+            );
+            assert!(
+                app.world()
+                    .get::<super::super::frame_ready::SceneFrameReady>(ui_camera)
+                    .unwrap()
+                    .is_ready(),
+                "2D loading-cover GPU receipt never arrived"
+            );
             let render = app.sub_app(RenderApp);
             let pipeline = render.world().resource::<SkyPipeline>();
             let pipelines = render.world().resource::<PipelineCache>();

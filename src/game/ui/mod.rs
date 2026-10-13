@@ -54,7 +54,19 @@ impl Plugin for GameUiPlugin {
             .insert_resource(UiHoverState::default())
             .add_plugins(UiFeaturesPlugin);
         register_menu_button_clicks(app);
-        app.add_observer(panel_close_clicked)
+        app.add_observer(bevy::ui_widgets::slider_self_update)
+            .add_systems(
+                Startup,
+                (
+                    crate::game::cameras::spawn_ui_camera,
+                    load_ui_font,
+                    load_ui_icons,
+                    setup_menu_ui,
+                )
+                    .chain()
+                    .in_set(crate::game::schedule::GameStartupSet::Presentation),
+            )
+            .add_observer(panel_close_clicked)
             .add_observer(dismiss_dropdowns_on_outside_click)
             .add_observer(panel_drag_started)
             .add_observer(panel_dragged)
@@ -69,6 +81,11 @@ impl Plugin for GameUiPlugin {
             .add_observer(scroll_dragged)
             .add_observer(emit_confirm_dialog_actions)
             .add_observer(emit_text_prompt_actions)
+            .add_systems(
+                Update,
+                features::session_busy::update_session_busy_overlay
+                    .in_set(crate::game::schedule::GameSet::UiFeat),
+            )
             .add_systems(
                 Update,
                 update_status_ui.in_set(crate::game::schedule::GameSet::UiStatus),

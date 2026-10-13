@@ -24,7 +24,8 @@ impl Plugin for PortalMaterialPlugin {
                     apply_portal_flash_queue,
                     decay_portal_flash,
                 )
-                    .chain(),
+                    .chain()
+                    .in_set(crate::game::schedule::GameSet::Animation),
             );
     }
 }

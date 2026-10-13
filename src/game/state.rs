@@ -225,32 +225,3 @@ use crate::shared::save::PlayerSave;
 
 #[derive(Resource, Default)]
 pub struct PendingPlayerSpawn(pub Option<PlayerSave>);
-
-#[derive(Resource)]
-pub struct GameSettings {
-    pub fov_degrees: f32,
-    pub ui_scale: f32,
-    pub gravity_scale: f32,
-    pub mouse_sensitivity_x: f32,
-    pub mouse_sensitivity_y: f32,
-    pub virtual_controls_opacity: f32,
-    pub master_volume: f32,
-    pub music_volume: f32,
-    pub sfx_volume: f32,
-}
-
-impl Default for GameSettings {
-    fn default() -> Self {
-        Self {
-            fov_degrees: 70.0,
-            ui_scale: 1.0,
-            gravity_scale: crate::game::GRAVITY_SCALE_DEFAULT,
-            mouse_sensitivity_x: crate::game::MOUSE_SENSITIVITY_DEFAULT,
-            mouse_sensitivity_y: crate::game::MOUSE_SENSITIVITY_DEFAULT,
-            virtual_controls_opacity: 1.0,
-            master_volume: 1.0,
-            music_volume: 0.0,
-            sfx_volume: 1.0,
-        }
-    }
-}

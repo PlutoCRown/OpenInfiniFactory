@@ -4,11 +4,10 @@ use std::sync::Arc;
 
 use bevy::asset::RenderAssetUsages;
 use bevy::image::ImageSampler;
-use bevy::light::{EnvironmentMapLight, GlobalAmbientLight, Skybox};
+use bevy::light::Skybox;
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureViewDescriptor, TextureViewDimension};
 
-use super::components::GameplayScene;
 use super::procedural_sky::{ProceduralSky, ProceduralSkyPlugin};
 use crate::game::cameras::{GameplayCamera, MENU_CLEAR};
 use crate::shared::config::GameConfig;
@@ -16,25 +15,18 @@ use crate::shared::persistent_storage;
 use crate::shared::save::{PuzzleLighting, SaveSlot, SaveState};
 use crate::shared::save_format::SKYBOX_FILE;
 
-/// 贴图天空盒默认亮度（meta 未指定时）
-const DEFAULT_IMAGE_SKYBOX_BRIGHTNESS: f32 = 1000.0;
-
-/// 选择贴图天空或程序化天空，并同步关卡光照。
+/// 根据存档贴图和设置选择相机的天空通道。
 pub struct SkyboxPlugin;
 
 impl Plugin for SkyboxPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PuzzleLighting>()
-            .add_plugins(ProceduralSkyPlugin)
-            .add_systems(
-                Update,
-                (
-                    sync_skybox_settings,
-                    sync_puzzle_image_skybox,
-                    sync_puzzle_lighting,
-                )
-                    .chain(),
-            );
+        app.add_plugins(ProceduralSkyPlugin).add_systems(
+            Update,
+            (sync_skybox_settings, sync_puzzle_image_skybox)
+                .chain()
+                .in_set(crate::game::schedule::GameSet::View)
+                .before(super::lighting::sync_puzzle_lighting),
+        );
     }
 }
 
@@ -45,49 +37,6 @@ struct AppliedImageSkybox {
     source: Option<Arc<[u8]>>,
     camera: Option<Entity>,
     enabled: Option<bool>,
-}
-
-/// 与场景平行光一致的默认旋转
-pub fn sunlight_rotation() -> Quat {
-    Quat::from_euler(EulerRot::XYZ, -1.05, -0.55, -0.28)
-}
-
-/// 由方向向量得到平行光 Transform（局部 +Z 指向太阳）
-pub fn transform_for_sun_direction(dir: Option<Vec3>) -> Transform {
-    match dir {
-        Some(dir) if dir != Vec3::ZERO => {
-            Transform::from_rotation(Quat::from_rotation_arc(Vec3::Z, dir.normalize()))
-        }
-        _ => Transform::from_rotation(sunlight_rotation()),
-    }
-}
-
-/// 解析后的太阳方向（含默认）。
-pub fn resolved_sun_direction(dir: Option<Vec3>) -> Vec3 {
-    match dir {
-        Some(dir) if dir != Vec3::ZERO => dir.normalize(),
-        _ => (sunlight_rotation() * Vec3::Z).normalize(),
-    }
-}
-
-/// 环境贴图强度：给金属镜面反射，略低于环境光以免整景过曝
-pub fn environment_map_intensity(lighting: &PuzzleLighting) -> f32 {
-    (lighting.ambient_brightness * 0.6).clamp(100.0, 450.0)
-}
-
-/// 简易半球环境贴图（金属 PBR 需要可反射的环境，否则金属度几乎看不见）
-pub fn environment_map_light(
-    images: &mut Assets<Image>,
-    lighting: &PuzzleLighting,
-) -> EnvironmentMapLight {
-    let mut light = EnvironmentMapLight::hemispherical_gradient(
-        images,
-        Color::srgb(0.42, 0.58, 0.95),
-        lighting.ambient_color,
-        Color::srgb(0.30, 0.28, 0.26),
-    );
-    light.intensity = environment_map_intensity(lighting);
-    light
 }
 
 /// 配置开关时更新相机清屏色
@@ -120,11 +69,7 @@ fn sync_puzzle_image_skybox(
 ) {
     let puzzle = save_state.current.as_ref().map(|slot| slot.puzzle.clone());
     let want_sky = config.skybox_enabled;
-    let skybox_brightness = if lighting.skybox_brightness > 0.0 {
-        lighting.skybox_brightness
-    } else {
-        DEFAULT_IMAGE_SKYBOX_BRIGHTNESS
-    };
+    let skybox_brightness = super::lighting::image_skybox_brightness(&lighting);
 
     let Ok(camera) = cameras.single() else {
         *applied = AppliedImageSkybox::default();
@@ -226,45 +171,72 @@ fn horizontal_cross_png_to_cubemap(png_bytes: &[u8]) -> Result<Image, String> {
     Ok(image)
 }
 
-/// 把 PuzzleLighting 同步到平行光、环境光、贴图天空亮度与程序化天空
-fn sync_puzzle_lighting(
-    lighting: Res<PuzzleLighting>,
-    config: Res<GameConfig>,
-    mut lights: Query<(&mut Transform, &mut DirectionalLight), With<GameplayScene>>,
-    mut skyboxes: Query<&mut Skybox, With<GameplayCamera>>,
-    mut env_maps: Query<&mut EnvironmentMapLight, With<GameplayCamera>>,
-    mut procedural_skies: Query<&mut ProceduralSky>,
-    mut ambient: ResMut<GlobalAmbientLight>,
-) {
-    if !lighting.is_changed() && !config.is_changed() {
-        return;
-    }
-    let tf = transform_for_sun_direction(lighting.direction);
-    for (mut light_tf, mut light) in &mut lights {
-        *light_tf = tf;
-        light.illuminance = lighting.illuminance;
-        light.color = lighting.color;
-        light.shadow_maps_enabled = config.shadows_enabled;
-    }
-    for mut skybox in &mut skyboxes {
-        skybox.brightness = lighting.skybox_brightness;
-    }
-    for mut env in &mut env_maps {
-        env.intensity = environment_map_intensity(&lighting);
-    }
-    for mut sky in &mut procedural_skies {
-        let time = sky.time;
-        *sky = ProceduralSky::from_lighting(&lighting);
-        sky.time = time;
-    }
-    ambient.color = lighting.ambient_color;
-    ambient.brightness = lighting.ambient_brightness;
-}
-
 /// 验证天空开关和相机重建时的兜底通道生命周期。
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 菜单开关与会话光照在同帧落地后，真实天空插件和光照同步再读取它们。
+    #[test]
+    fn menu_and_session_changes_reach_rendering_in_the_same_frame() {
+        use super::super::components::GameplayScene;
+        use crate::game::schedule::{GameSchedulePlugin, GameSet};
+        let mut app = App::new();
+        app.add_plugins(GameSchedulePlugin)
+            .init_resource::<Time>()
+            .init_resource::<GameConfig>()
+            .init_resource::<SaveState>()
+            .init_resource::<PuzzleLighting>()
+            .init_resource::<Assets<Image>>()
+            .init_resource::<bevy::light::GlobalAmbientLight>()
+            .add_plugins(SkyboxPlugin)
+            .add_systems(
+                Update,
+                super::super::lighting::sync_puzzle_lighting.in_set(GameSet::View),
+            )
+            .add_systems(
+                Update,
+                (|mut config: ResMut<GameConfig>| {
+                    config.skybox_enabled = false;
+                    config.shadows_enabled = false;
+                })
+                .in_set(GameSet::Menus),
+            )
+            .add_systems(
+                Update,
+                (|mut commands: Commands| {
+                    commands.insert_resource(PuzzleLighting {
+                        direction: Some(Vec3::Y),
+                        illuminance: 1234.0,
+                        ..default()
+                    });
+                })
+                .in_set(GameSet::Session),
+            );
+        let camera = app
+            .world_mut()
+            .spawn((Camera::default(), GameplayCamera))
+            .id();
+        let light = app
+            .world_mut()
+            .spawn((
+                DirectionalLight::default(),
+                Transform::default(),
+                GameplayScene,
+            ))
+            .id();
+        app.update();
+        assert!(app.world().get::<ProceduralSky>(camera).is_none());
+        assert!(
+            matches!(app.world().get::<Camera>(camera).unwrap().clear_color,
+            ClearColorConfig::Custom(color) if color == MENU_CLEAR)
+        );
+        let light_data = app.world().get::<DirectionalLight>(light).unwrap();
+        assert!(!light_data.shadow_maps_enabled);
+        assert_eq!(light_data.illuminance, 1234.0);
+        let sun = app.world().get::<Transform>(light).unwrap().rotation * Vec3::Z;
+        assert!(sun.abs_diff_eq(Vec3::Y, 0.0001));
+    }
 
     /// 无渲染世界时仍能按输入正确装卸相机上的程序化天空。
     #[test]

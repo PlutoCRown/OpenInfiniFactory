@@ -7,7 +7,7 @@ use bevy::prelude::*;
 
 use crate::game::player::controller::FlyCamera;
 use crate::game::simulation::structure_state::{StructureId, StructureKind, StructureState};
-use crate::game::state::{EditGestureKind, GameSettings, PlacementState, SolutionState};
+use crate::game::state::{EditGestureKind, PlacementState, SolutionState};
 use crate::game::systems::debug::DebugState;
 use crate::game::systems::gameplay::GameplayPlayGate;
 use crate::game::world::grid::{
@@ -41,10 +41,7 @@ pub enum HoverPreviewKey {
 }
 
 /// 根据设置同步玩家相机 FOV
-pub fn apply_fov(
-    settings: Res<GameSettings>,
-    mut cameras: Query<&mut Projection, With<FlyCamera>>,
-) {
+pub fn apply_fov(settings: Res<GameConfig>, mut cameras: Query<&mut Projection, With<FlyCamera>>) {
     if !settings.is_changed() {
         return;
     }

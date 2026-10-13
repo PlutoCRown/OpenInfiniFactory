@@ -84,6 +84,7 @@ pub fn spawn_player(
                 .with_rotation(fly_camera.view_rotation()),
             fly_camera,
             GameplayCamera,
+            crate::game::world::rendering::SceneFrameReady::default(),
             WorldViewCamera,
             GameplayScene,
             SpatialListener::new(0.25),
@@ -191,6 +192,7 @@ pub fn sync_gameplay_view_image_size(
     window: Query<&Window, (With<PrimaryWindow>, Changed<Window>)>,
     mut images: ResMut<Assets<Image>>,
     view: Option<Res<GameplayViewImage>>,
+    mut frames: Query<&mut crate::game::world::rendering::SceneFrameReady, With<GameplayCamera>>,
 ) {
     let Some(view) = view else {
         return;
@@ -210,6 +212,10 @@ pub fn sync_gameplay_view_image_size(
         height,
         depth_or_array_layers: 1,
     });
+    // 新纹理尚未绘制，撤销旧尺寸的回执，并由限帧系统保证本帧绘制。
+    for mut frame in &mut frames {
+        *frame = crate::game::world::rendering::SceneFrameReady::default();
+    }
 }
 
 /// 按设置跳过部分 3D 相机渲染帧，UI 相机继续复用上一张离屏画面
@@ -217,16 +223,22 @@ pub fn sync_gameplay_render_rate(
     time: Res<Time<Real>>,
     config: Res<GameConfig>,
     mut throttle: ResMut<GameplayRenderThrottle>,
-    mut cameras: Query<&mut Camera, With<GameplayCamera>>,
+    mut cameras: Query<
+        (&mut Camera, &crate::game::world::rendering::SceneFrameReady),
+        With<GameplayCamera>,
+    >,
 ) {
-    let Ok(mut camera) = cameras.single_mut() else {
+    let Ok((mut camera, frame)) = cameras.single_mut() else {
         throttle.elapsed = 0.0;
         throttle.rate = None;
         return;
     };
 
     let rate = config.gameplay_render_rate;
-    let render = if let Some(fps) = rate.fps() {
+    let render = if !frame.is_ready() && !frame.is_failed() {
+        throttle.elapsed = 0.0;
+        true
+    } else if let Some(fps) = rate.fps() {
         let interval = 1.0 / fps;
         if throttle.rate != Some(rate) {
             throttle.elapsed = 0.0;
