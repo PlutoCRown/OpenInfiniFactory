@@ -293,7 +293,6 @@ pub fn save_solution(
 /// 暂停菜单“存档设置”使用的可编辑配置快照。
 #[derive(Clone, Debug)]
 pub struct SaveSettingsData {
-    pub light_position: Option<Vec3>,
     pub light_direction: Option<Vec3>,
     pub light_intensity: f32,
     pub solution_spawn: Option<PlayerSave>,
@@ -304,7 +303,6 @@ impl Default for SaveSettingsData {
     fn default() -> Self {
         let lighting = PuzzleLighting::default();
         Self {
-            light_position: lighting.position,
             light_direction: lighting.direction,
             light_intensity: lighting.illuminance,
             solution_spawn: None,
@@ -332,7 +330,6 @@ pub fn read_save_settings(slot: &SaveSlot) -> Option<SaveSettingsData> {
         save
     };
     Some(SaveSettingsData {
-        light_position: lighting.position,
         light_direction: lighting.direction,
         light_intensity: lighting.illuminance,
         solution_spawn: settings_save.meta.solution_spawn,
@@ -346,7 +343,6 @@ pub fn write_save_settings(slot: &SaveSlot, settings: &SaveSettingsData) -> bool
         return false;
     };
     let mut sun = save.meta.sun.take().unwrap_or_default();
-    sun.position = settings.light_position.map(|value| value.to_array());
     sun.direction = settings.light_direction.map(|value| value.to_array());
     sun.illuminance = Some(settings.light_intensity.max(0.0));
     save.meta.sun = Some(sun);

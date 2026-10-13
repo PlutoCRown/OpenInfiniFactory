@@ -129,15 +129,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "position": {
-          "type": "array",
-          "description": "全局平行光实体位置。",
-          "minItems": 3,
-          "maxItems": 3,
-          "items": {
-            "type": "number"
-          }
-        },
         "direction": {
           "type": "array",
           "description": "光线前进方向（太阳 → 地面）。不必单位向量，加载时归一化。默认约 (-0.5, -0.7, -0.5) 量级（内置欧拉角）。",

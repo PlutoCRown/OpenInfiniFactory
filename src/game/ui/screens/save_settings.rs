@@ -22,9 +22,9 @@ pub struct SaveSettingsSpawnCtx {
 #[derive(Component)]
 pub struct SaveSettingsSkyboxPreview;
 
+/// 存档设置面板中需要同步文本的字段。
 #[derive(Component, Clone, Copy)]
 pub enum SaveSettingsValueText {
-    LightPosition,
     LightDirection,
     LightIntensity,
     SolutionSpawn,
@@ -193,14 +193,9 @@ fn value_row(
         });
 }
 
+/// 构建全局平行光的方向、强度与视角朝向采集入口。
 fn spawn_light_section(parent: &mut ChildSpawnerCommands, _data: &SaveSettingsData) {
     section_title(parent, "save_settings.global_light");
-    value_row(
-        parent,
-        "save_settings.light_position",
-        SaveSettingsValueText::LightPosition,
-        SaveSettingsAction::EditLightPosition,
-    );
     value_row(
         parent,
         "save_settings.light_direction",
@@ -215,7 +210,7 @@ fn spawn_light_section(parent: &mut ChildSpawnerCommands, _data: &SaveSettingsDa
     );
     action_button(
         parent,
-        SaveSettingsAction::CaptureLightPose,
+        SaveSettingsAction::CaptureLightDirection,
         crate::game::ui::access::i18n.t("save_settings.capture_light"),
     );
 }

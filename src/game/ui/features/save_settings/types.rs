@@ -7,10 +7,9 @@ use crate::shared::save::{FactoryBlockFilterMode, SaveSettingsData, SaveSlot};
 /// 存档设置页中的可点击动作。
 #[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SaveSettingsAction {
-    EditLightPosition,
     EditLightDirection,
     EditLightIntensity,
-    CaptureLightPose,
+    CaptureLightDirection,
     EditSolutionSpawn,
     CaptureSolutionSpawn,
     SetFactoryFilterMode(FactoryBlockFilterMode),

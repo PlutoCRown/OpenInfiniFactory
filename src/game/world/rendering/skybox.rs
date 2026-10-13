@@ -62,15 +62,6 @@ pub fn transform_for_sun_direction(dir: Option<Vec3>) -> Transform {
     }
 }
 
-/// 由存档中的位置和方向构造平行光 Transform。
-pub fn transform_for_sun(position: Option<Vec3>, direction: Option<Vec3>) -> Transform {
-    let mut transform = transform_for_sun_direction(direction);
-    if let Some(position) = position {
-        transform.translation = position;
-    }
-    transform
-}
-
 /// 解析后的太阳方向（含默认）。
 pub fn resolved_sun_direction(dir: Option<Vec3>) -> Vec3 {
     match dir {
@@ -248,7 +239,7 @@ fn sync_puzzle_lighting(
     if !lighting.is_changed() && !config.is_changed() {
         return;
     }
-    let tf = transform_for_sun(lighting.position, lighting.direction);
+    let tf = transform_for_sun_direction(lighting.direction);
     for (mut light_tf, mut light) in &mut lights {
         *light_tf = tf;
         light.illuminance = lighting.illuminance;

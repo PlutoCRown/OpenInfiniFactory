@@ -306,9 +306,6 @@ struct SaveMeta {
 /// meta.json 里的平行光 / 天空盒亮度配置（各项均可选）
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct SunMeta {
-    /// 平行光实体位置；方向仍由 `direction` 表示。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    position: Option<[f32; 3]>,
     /// 光线前进方向（太阳 → 地面）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     direction: Option<[f32; 3]>,
@@ -338,7 +335,6 @@ struct AmbientMeta {
 /// 加载后解析好的谜题光照（缺省项已填默认值）
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct PuzzleLighting {
-    pub position: Option<Vec3>,
     pub direction: Option<Vec3>,
     pub illuminance: f32,
     pub color: Color,
@@ -350,7 +346,6 @@ pub struct PuzzleLighting {
 impl Default for PuzzleLighting {
     fn default() -> Self {
         Self {
-            position: None,
             direction: None,
             illuminance: 9500.0,
             color: Color::srgb(1.0, 0.97, 0.92),

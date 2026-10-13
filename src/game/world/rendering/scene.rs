@@ -9,7 +9,7 @@ use super::goal_ghost::GoalGhostMaterial;
 use super::portal_material::PortalMaterial;
 use super::previews::spawn_bounds_overlays;
 use super::shadow_proxy_material::ShadowProxyMaterial;
-use super::skybox::transform_for_sun;
+use super::skybox::transform_for_sun_direction;
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::shared::save::PuzzleLighting;
 
@@ -82,7 +82,7 @@ pub fn setup_scene(
             shadow_maps_enabled: config.shadows_enabled,
             ..default()
         },
-        transform_for_sun(lighting.position, lighting.direction),
+        transform_for_sun_direction(lighting.direction),
         CascadeShadowConfigBuilder {
             num_cascades: 3,
             minimum_distance: 0.15,

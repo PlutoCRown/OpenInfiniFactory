@@ -167,8 +167,11 @@ pub fn update_save_settings_ui(
     if state_changed || locale_changed {
         for (marker, mut text) in &mut values {
             let next = match marker {
-                SaveSettingsValueText::LightPosition => format_vec3(state.data.light_position),
-                SaveSettingsValueText::LightDirection => format_vec3(state.data.light_direction),
+                SaveSettingsValueText::LightDirection => state
+                    .data
+                    .light_direction
+                    .map(|value| format!("{:.3}, {:.3}, {:.3}", value.x, value.y, value.z))
+                    .unwrap_or_default(),
                 SaveSettingsValueText::LightIntensity => {
                     format!("{:.2}", state.data.light_intensity)
                 }
@@ -197,12 +200,6 @@ pub fn update_save_settings_ui(
             }
         }
     }
-}
-
-fn format_vec3(value: Option<Vec3>) -> String {
-    value
-        .map(|value| format!("{:.3}, {:.3}, {:.3}", value.x, value.y, value.z))
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

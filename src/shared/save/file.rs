@@ -303,7 +303,6 @@ fn read_puzzle_lighting(puzzle: &str) -> PuzzleLighting {
 fn resolve_lighting(meta: &SaveMeta) -> PuzzleLighting {
     let mut lighting = PuzzleLighting::default();
     let sun = meta.sun.clone().unwrap_or_default();
-    lighting.position = sun.position.and_then(parse_vec3);
     let direction = sun
         .direction
         .or(meta.sun_direction)
@@ -344,11 +343,6 @@ fn parse_direction(raw: [f32; 3]) -> Option<Vec3> {
     let v = Vec3::new(raw[0], raw[1], raw[2]);
     let n = v.normalize_or_zero();
     (n != Vec3::ZERO).then_some(n)
-}
-
-fn parse_vec3(raw: [f32; 3]) -> Option<Vec3> {
-    let v = Vec3::new(raw[0], raw[1], raw[2]);
-    v.is_finite().then_some(v)
 }
 
 fn parse_rgb(raw: [f32; 3]) -> Option<[f32; 3]> {

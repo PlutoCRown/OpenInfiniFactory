@@ -33,6 +33,7 @@ pub fn emit_save_settings_actions(
     });
 }
 
+/// 保存设置快照，并同步全局平行光的方向与强度。
 fn persist_settings(state: &mut SaveSettingsUiState, lighting: &mut PuzzleLighting) {
     let Some(slot) = state.slot.clone() else {
         return;
@@ -40,7 +41,6 @@ fn persist_settings(state: &mut SaveSettingsUiState, lighting: &mut PuzzleLighti
     if !write_save_settings(&slot, &state.data) {
         return;
     }
-    lighting.position = state.data.light_position;
     lighting.direction = state.data.light_direction;
     lighting.illuminance = state.data.light_intensity;
 }
@@ -55,26 +55,19 @@ fn parse_values(value: &str, count: usize) -> Option<Vec<f32>> {
     (values.len() == count && values.iter().all(|value| value.is_finite())).then_some(values)
 }
 
-fn format_vec3(value: Option<Vec3>) -> String {
-    value
-        .map(|value| format!("{:.3}, {:.3}, {:.3}", value.x, value.y, value.z))
-        .unwrap_or_default()
-}
-
 fn open_value_prompt(
     mut commands: &mut Commands,
     action: SaveSettingsAction,
     state: &SaveSettingsUiState,
 ) {
     let (title, default_value, count) = match action {
-        SaveSettingsAction::EditLightPosition => (
-            "save_settings.light_position",
-            format_vec3(state.data.light_position),
-            3,
-        ),
         SaveSettingsAction::EditLightDirection => (
             "save_settings.light_direction",
-            format_vec3(state.data.light_direction),
+            state
+                .data
+                .light_direction
+                .map(|value| format!("{:.3}, {:.3}, {:.3}", value.x, value.y, value.z))
+                .unwrap_or_default(),
             3,
         ),
         SaveSettingsAction::EditLightIntensity => (
@@ -120,9 +113,6 @@ fn open_value_prompt(
             };
             let mut current = read_save_settings(&slot).unwrap_or_default();
             match action {
-                SaveSettingsAction::EditLightPosition => {
-                    current.light_position = Some(Vec3::new(values[0], values[1], values[2]));
-                }
                 SaveSettingsAction::EditLightDirection => {
                     let direction = Vec3::new(values[0], values[1], values[2]).normalize_or_zero();
                     if direction == Vec3::ZERO {
@@ -152,7 +142,6 @@ fn open_value_prompt(
                 solution_state.solution_spawn = current.solution_spawn.clone();
                 solution_state.factory_block_filter = Some(current.factory_block_filter.clone());
                 let mut lighting = world.resource_mut::<PuzzleLighting>();
-                lighting.position = current.light_position;
                 lighting.direction = current.light_direction;
                 lighting.illuminance = current.light_intensity;
             }
@@ -176,17 +165,15 @@ pub fn dispatch_save_settings_actions(
         }
         let action = message.kind.clone();
         match action {
-            SaveSettingsAction::EditLightPosition
-            | SaveSettingsAction::EditLightDirection
+            SaveSettingsAction::EditLightDirection
             | SaveSettingsAction::EditLightIntensity
             | SaveSettingsAction::EditSolutionSpawn => {
                 open_value_prompt(&mut commands, action, &state);
             }
-            SaveSettingsAction::CaptureLightPose => {
+            SaveSettingsAction::CaptureLightDirection => {
                 let Ok((_, transform)) = player.single() else {
                     continue;
                 };
-                state.data.light_position = Some(transform.translation);
                 state.data.light_direction =
                     Some((transform.rotation * Vec3::Z).normalize_or_zero());
                 persist_settings(&mut state, &mut lighting);
