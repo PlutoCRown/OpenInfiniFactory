@@ -658,11 +658,12 @@ pub(in crate::simulation) fn rotate_structure(
         world.topology_revision = world.topology_revision.wrapping_add(1);
         world.invalidate_signal_topology();
     }
-    let target_positions = structure
-        .iter()
-        .map(|pos| rotate_pos_y(*pos, pivot, clockwise))
-        .collect();
-    structures.replace_structure_positions(world, structure, target_positions);
+    let changed_ids =
+        structures.remap_structure_members(structure, |pos| rotate_pos_y(pos, pivot, clockwise));
+    for id in changed_ids {
+        structures.clear_gravity_support(id);
+        structures.rebuild_deform_for(world, id);
+    }
     if was_synced {
         structures.material_topology = Some(world.material_topology.clone());
     }

@@ -9,6 +9,114 @@ use crate::world::Facing;
 use glam::IVec3;
 use std::collections::HashSet;
 
+/// 吸盘关联的独立结构连续旋转后仍保持各自成员、索引和方块身份
+#[test]
+fn suction_linked_rotation_preserves_structure_membership() {
+    for clockwise in [true, false] {
+        let mut world = WorldBlocks::default();
+        let pivot = IVec3::ZERO;
+        let cup = IVec3::Y;
+        let back = IVec3::new(-1, 1, 0);
+        let near = IVec3::new(1, 1, 0);
+        let far = IVec3::new(2, 1, 0);
+        world.insert(
+            pivot,
+            BlockData::new(
+                if clockwise {
+                    BlockKind::Rotator
+                } else {
+                    BlockKind::CounterRotator
+                },
+                Facing::North,
+            ),
+        );
+        world.insert(cup, BlockData::new(BlockKind::SuctionCup, Facing::East));
+        for pos in [back, near, far] {
+            world.insert(pos, BlockData::new(BlockKind::Platform, Facing::North));
+        }
+        let block_ids = [cup, back, near, far].map(|pos| world.blocks[&pos].id);
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let rotator_id = structures.id_at(pivot).unwrap();
+        let a_id = structures.id_at(cup).unwrap();
+        let b_id = structures.id_at(near).unwrap();
+        assert_ne!(a_id, b_id);
+        assert_ne!(a_id, rotator_id);
+        assert_ne!(b_id, rotator_id);
+        assert_eq!(
+            structures.structure_positions(a_id).unwrap(),
+            &HashSet::from([cup, back])
+        );
+        assert_eq!(
+            structures.structure_positions(b_id).unwrap(),
+            &HashSet::from([near, far])
+        );
+
+        let powered = HashSet::from([pivot, cup]);
+        let mut pusher_state = PusherState::rebuild_from_world(&world);
+        let directions = if clockwise {
+            [
+                (0, 1, Facing::South),
+                (-1, 0, Facing::West),
+                (0, -1, Facing::North),
+                (1, 0, Facing::East),
+            ]
+        } else {
+            [
+                (0, -1, Facing::North),
+                (-1, 0, Facing::West),
+                (0, 1, Facing::South),
+                (1, 0, Facing::East),
+            ]
+        };
+        for (x, z, facing) in directions {
+            run_pusher_phase(&mut world, &mut structures, &mut pusher_state, &powered);
+            let positions = [
+                cup,
+                IVec3::new(-x, 1, -z),
+                IVec3::new(x, 1, z),
+                IVec3::new(2 * x, 1, 2 * z),
+            ];
+            let a_positions = HashSet::from([positions[0], positions[1]]);
+            let b_positions = HashSet::from([positions[2], positions[3]]);
+            // 先确认世界确实完成旋转，再检查结构状态，防止未执行运动也误通过。
+            for (pos, id) in positions.into_iter().zip(block_ids) {
+                assert_eq!(world.blocks.get(&pos).map(|block| block.id), Some(id));
+            }
+            assert_eq!(world.blocks[&cup].facing, facing);
+            for (id, members) in [(a_id, a_positions), (b_id, b_positions)] {
+                let structure = structures.get(id).unwrap();
+                assert_eq!(
+                    structure.positions, members,
+                    "clockwise={clockwise}, facing={facing:?}"
+                );
+                assert_eq!(
+                    structure.bounds,
+                    crate::simulation::structure_state::GridBounds::from_positions(&members)
+                );
+                for pos in members {
+                    assert_eq!(structures.id_at(pos), Some(id));
+                }
+            }
+            assert_eq!(structures.id_at(pivot), Some(rotator_id));
+            assert_eq!(structures.structure_ids().count(), 3);
+            for x in -2..=2 {
+                for z in -2..=2 {
+                    let pos = IVec3::new(x, 1, z);
+                    if !positions.contains(&pos) {
+                        assert_eq!(structures.id_at(pos), None, "stale index at {pos:?}");
+                    }
+                }
+            }
+        }
+        let detached = SuctionLinks::rebuild(&world, &structures, &HashSet::from([pivot]));
+        assert_eq!(
+            structures.linked_unanchored_positions_at(&detached, near),
+            Some(HashSet::from([near, far]))
+        );
+    }
+}
+
 /// 准星读到的面对面活塞：北向 Pusher@(11,2,-4) 对南向 Pusher@(11,2,-5)
 fn face_to_face_cursor_world() -> (WorldBlocks, IVec3, IVec3) {
     let mut world = WorldBlocks::default();

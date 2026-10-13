@@ -212,12 +212,23 @@ impl StructureState {
             })
             .collect();
         world.relocate_blocks(moves);
-        let mut changed_ids = HashSet::new();
-        for pos in positions {
-            if let Some(id) = self.structure_by_pos.get(pos).copied() {
-                changed_ids.insert(id);
-            }
+        self.remap_structure_members(positions, |pos| pos + offset);
+        if was_synced {
+            self.material_topology = Some(world.material_topology.clone());
         }
+    }
+
+    /// 按原结构归属原子更新运动成员，平移和旋转共享索引维护
+    pub(crate) fn remap_structure_members(
+        &mut self,
+        positions: &HashSet<IVec3>,
+        target_of: impl Fn(IVec3) -> IVec3,
+    ) -> HashSet<StructureId> {
+        let changed_ids: HashSet<_> = positions
+            .iter()
+            .filter_map(|pos| self.structure_by_pos.get(pos).copied())
+            .collect();
+        // 先清掉所有受影响结构的旧索引，避免新位置与其它结构旧位置重叠。
         for id in &changed_ids {
             let Some(structure) = self.structures.get(id) else {
                 continue;
@@ -226,7 +237,7 @@ impl StructureState {
                 self.structure_by_pos.remove(pos);
             }
         }
-        for id in changed_ids {
+        for &id in &changed_ids {
             let Some(structure) = self.structures.get_mut(&id) else {
                 continue;
             };
@@ -235,7 +246,7 @@ impl StructureState {
                 .iter()
                 .map(|pos| {
                     if positions.contains(pos) {
-                        *pos + offset
+                        target_of(*pos)
                     } else {
                         *pos
                     }
@@ -244,7 +255,7 @@ impl StructureState {
             structure.bounds = GridBounds::from_positions(&structure.positions);
             for (member, _dir) in &mut structure.gravity_support {
                 if positions.contains(member) {
-                    *member += offset;
+                    *member = target_of(*member);
                 }
             }
             structure.anchored_members = structure
@@ -252,7 +263,7 @@ impl StructureState {
                 .iter()
                 .map(|pos| {
                     if positions.contains(pos) {
-                        *pos + offset
+                        target_of(*pos)
                     } else {
                         *pos
                     }
@@ -262,9 +273,7 @@ impl StructureState {
                 self.structure_by_pos.insert(*pos, id);
             }
         }
-        if was_synced {
-            self.material_topology = Some(world.material_topology.clone());
-        }
+        changed_ids
     }
 
     pub fn replace_structure_positions(
