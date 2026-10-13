@@ -10,6 +10,7 @@ mod goal_visual_sync;
 mod icons;
 pub(crate) mod portal_material;
 mod previews;
+mod procedural_sky;
 mod scene;
 mod scene_chunks;
 mod scene_mesh;

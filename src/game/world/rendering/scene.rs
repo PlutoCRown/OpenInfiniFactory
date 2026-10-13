@@ -9,7 +9,7 @@ use super::goal_ghost::GoalGhostMaterial;
 use super::portal_material::PortalMaterial;
 use super::previews::spawn_bounds_overlays;
 use super::shadow_proxy_material::ShadowProxyMaterial;
-use super::skybox::{SkyMaterial, spawn_sky_dome, transform_for_sun};
+use super::skybox::transform_for_sun;
 use crate::game::world::render_assets::WorldRenderAssets;
 use crate::shared::save::PuzzleLighting;
 
@@ -49,7 +49,6 @@ pub fn setup_scene(
     mut shadow_proxy_materials: ResMut<Assets<ShadowProxyMaterial>>,
     mut ghost_materials: ResMut<Assets<GoalGhostMaterial>>,
     mut portal_materials: ResMut<Assets<PortalMaterial>>,
-    mut sky_materials: ResMut<Assets<SkyMaterial>>,
     mut images: ResMut<Assets<Image>>,
     mut gizmo_config: ResMut<GizmoConfigStore>,
     scene_registry: Res<crate::game::scene_blocks::SceneBlockRegistry>,
@@ -94,14 +93,6 @@ pub fn setup_scene(
         .build(),
         GameplayScene,
     ));
-
-    spawn_sky_dome(
-        &mut commands,
-        &mut meshes,
-        &mut sky_materials,
-        config.skybox_enabled,
-        &lighting,
-    );
 
     let render_assets = create_world_render_assets(
         &mut meshes,

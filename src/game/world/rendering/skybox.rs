@@ -1,56 +1,42 @@
-//! 天空盒：默认程序化 WGSL；存档有 skybox.png（水平十字）时用 Bevy Skybox 覆盖
+//! 天空盒：存档贴图优先，否则启用相机上的低分辨率体积云通道。
 
 use std::sync::Arc;
 
 use bevy::asset::RenderAssetUsages;
-use bevy::camera::Camera3d;
 use bevy::image::ImageSampler;
-use bevy::light::{EnvironmentMapLight, GlobalAmbientLight, NotShadowCaster, Skybox};
-use bevy::mesh::MeshVertexBufferLayoutRef;
-use bevy::pbr::{Material, MaterialPipeline, MaterialPipelineKey, MaterialPlugin};
+use bevy::light::{EnvironmentMapLight, GlobalAmbientLight, Skybox};
 use bevy::prelude::*;
-use bevy::reflect::TypePath;
-use bevy::render::render_resource::{
-    AsBindGroup, CompareFunction, Face, RenderPipelineDescriptor, ShaderType,
-    SpecializedMeshPipelineError, TextureViewDescriptor, TextureViewDimension,
-};
-use bevy::shader::ShaderRef;
+use bevy::render::render_resource::{TextureViewDescriptor, TextureViewDimension};
 
 use super::components::GameplayScene;
+use super::procedural_sky::{ProceduralSky, ProceduralSkyPlugin};
 use crate::game::cameras::{GameplayCamera, MENU_CLEAR};
 use crate::shared::config::GameConfig;
 use crate::shared::persistent_storage;
 use crate::shared::save::{PuzzleLighting, SaveSlot, SaveState};
 use crate::shared::save_format::SKYBOX_FILE;
 
-/// 天空穹顶半边长
-const SKY_HALF_EXTENT: f32 = 800.0;
-
 /// 贴图天空盒默认亮度（meta 未指定时）
 const DEFAULT_IMAGE_SKYBOX_BRIGHTNESS: f32 = 1000.0;
 
-/// 天空盒材质与跟随相机
+/// 选择贴图天空或程序化天空，并同步关卡光照。
 pub struct SkyboxPlugin;
 
 impl Plugin for SkyboxPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PuzzleLighting>()
-            .add_plugins(MaterialPlugin::<SkyMaterial>::default())
+            .add_plugins(ProceduralSkyPlugin)
             .add_systems(
                 Update,
                 (
-                    sync_sky_to_camera,
                     sync_skybox_settings,
                     sync_puzzle_image_skybox,
                     sync_puzzle_lighting,
-                ),
+                )
+                    .chain(),
             );
     }
 }
-
-/// 跟随游玩相机的天空立方体
-#[derive(Component)]
-struct SkyDome;
 
 /// 当前已应用到相机的贴图天空（puzzle 名）
 #[derive(Default)]
@@ -59,7 +45,6 @@ struct AppliedImageSkybox {
     source: Option<Arc<[u8]>>,
     camera: Option<Entity>,
     enabled: Option<bool>,
-    image_visible: bool,
 }
 
 /// 与场景平行光一致的默认旋转
@@ -67,7 +52,7 @@ pub fn sunlight_rotation() -> Quat {
     Quat::from_euler(EulerRot::XYZ, -1.05, -0.55, -0.28)
 }
 
-/// 由方向向量得到平行光 Transform（局部 +Z 对齐光线前进方向）
+/// 由方向向量得到平行光 Transform（局部 +Z 指向太阳）
 pub fn transform_for_sun_direction(dir: Option<Vec3>) -> Transform {
     match dir {
         Some(dir) if dir != Vec3::ZERO => {
@@ -86,7 +71,7 @@ pub fn transform_for_sun(position: Option<Vec3>, direction: Option<Vec3>) -> Tra
     transform
 }
 
-/// 解析后的光线前进方向（含默认）
+/// 解析后的太阳方向（含默认）。
 pub fn resolved_sun_direction(dir: Option<Vec3>) -> Vec3 {
     match dir {
         Some(dir) if dir != Vec3::ZERO => dir.normalize(),
@@ -114,97 +99,6 @@ pub fn environment_map_light(
     light
 }
 
-/// 着色器天空参数
-#[derive(Clone, Copy, Debug, ShaderType)]
-struct SkyUniform {
-    sun_dir: Vec3,
-    /// 线性曝光，配合场景色调映射（勿用 Skybox 的 cd/m² 大数）
-    exposure: f32,
-}
-
-/// 天空盒自定义材质
-#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
-pub struct SkyMaterial {
-    #[uniform(0)]
-    params: SkyUniform,
-}
-
-impl Material for SkyMaterial {
-    fn fragment_shader() -> ShaderRef {
-        "shaders/sky_material.wgsl".into()
-    }
-
-    fn alpha_mode(&self) -> AlphaMode {
-        AlphaMode::Opaque
-    }
-
-    fn enable_prepass() -> bool {
-        false
-    }
-
-    fn enable_shadows() -> bool {
-        false
-    }
-
-    fn specialize(
-        _pipeline: &MaterialPipeline,
-        descriptor: &mut RenderPipelineDescriptor,
-        _layout: &MeshVertexBufferLayoutRef,
-        _key: MaterialPipelineKey<Self>,
-    ) -> Result<(), SpecializedMeshPipelineError> {
-        descriptor.primitive.cull_mode = Some(Face::Front);
-        if let Some(depth) = &mut descriptor.depth_stencil {
-            depth.depth_compare = Some(CompareFunction::GreaterEqual);
-            depth.depth_write_enabled = Some(false);
-        }
-        Ok(())
-    }
-}
-
-/// 生成天空立方体（默认可见性由配置决定）
-pub fn spawn_sky_dome(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<SkyMaterial>,
-    enabled: bool,
-    lighting: &PuzzleLighting,
-) {
-    let sun_dir = resolved_sun_direction(lighting.direction);
-    let material = materials.add(SkyMaterial {
-        params: SkyUniform {
-            sun_dir,
-            exposure: 0.055,
-        },
-    });
-
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::from_length(SKY_HALF_EXTENT * 2.0))),
-        MeshMaterial3d(material),
-        Transform::default(),
-        if enabled {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        },
-        NotShadowCaster,
-        SkyDome,
-        GameplayScene,
-    ));
-}
-
-/// 天空中心跟随游玩相机
-fn sync_sky_to_camera(
-    camera: Query<&Transform, (With<GameplayCamera>, With<Camera3d>, Without<SkyDome>)>,
-    mut sky: Query<&mut Transform, With<SkyDome>>,
-) {
-    let Ok(camera_tf) = camera.single() else {
-        return;
-    };
-    for mut sky_tf in &mut sky {
-        sky_tf.translation = camera_tf.translation;
-    }
-}
-
 /// 配置开关时更新相机清屏色
 fn sync_skybox_settings(
     config: Res<GameConfig>,
@@ -223,7 +117,7 @@ fn sync_skybox_settings(
     }
 }
 
-/// 存档 skybox.png → Bevy Skybox；没有则回退程序化穹顶
+/// 存档贴图优先；关闭天空或贴图可用时移除程序化通道。
 fn sync_puzzle_image_skybox(
     save_state: Res<SaveState>,
     config: Res<GameConfig>,
@@ -231,8 +125,6 @@ fn sync_puzzle_image_skybox(
     mut images: ResMut<Assets<Image>>,
     mut commands: Commands,
     cameras: Query<Entity, With<GameplayCamera>>,
-    mut sky_domes: Query<&mut Visibility, With<SkyDome>>,
-    added_sky_domes: Query<(), Added<SkyDome>>,
     mut applied: Local<AppliedImageSkybox>,
 ) {
     let puzzle = save_state.current.as_ref().map(|slot| slot.puzzle.clone());
@@ -267,16 +159,6 @@ fn sync_puzzle_image_skybox(
         && applied.puzzle == puzzle
         && same_source
     {
-        if !added_sky_domes.is_empty() {
-            let visibility = if want_sky && !applied.image_visible {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            };
-            for mut vis in &mut sky_domes {
-                vis.set_if_neq(visibility);
-            }
-        }
         return;
     }
     // 失败也记录输入身份，内容更新前不逐帧重试损坏图片。
@@ -298,17 +180,15 @@ fn sync_puzzle_image_skybox(
             Err(err) => bevy::log::warn!("skybox.png load failed: {err}"),
         }
     }
-    applied.image_visible = image_visible;
     if !image_visible {
         commands.entity(camera).remove::<Skybox>();
     }
-    let visibility = if want_sky && !image_visible {
-        Visibility::Visible
+    if want_sky && !image_visible {
+        commands
+            .entity(camera)
+            .insert(ProceduralSky::from_lighting(&lighting));
     } else {
-        Visibility::Hidden
-    };
-    for mut vis in &mut sky_domes {
-        vis.set_if_neq(visibility);
+        commands.entity(camera).remove::<ProceduralSky>();
     }
 }
 
@@ -362,15 +242,13 @@ fn sync_puzzle_lighting(
     mut lights: Query<(&mut Transform, &mut DirectionalLight), With<GameplayScene>>,
     mut skyboxes: Query<&mut Skybox, With<GameplayCamera>>,
     mut env_maps: Query<&mut EnvironmentMapLight, With<GameplayCamera>>,
-    sky_meshes: Query<&MeshMaterial3d<SkyMaterial>, With<SkyDome>>,
-    mut sky_materials: ResMut<Assets<SkyMaterial>>,
+    mut procedural_skies: Query<&mut ProceduralSky>,
     mut ambient: ResMut<GlobalAmbientLight>,
 ) {
     if !lighting.is_changed() && !config.is_changed() {
         return;
     }
     let tf = transform_for_sun(lighting.position, lighting.direction);
-    let dir = resolved_sun_direction(lighting.direction);
     for (mut light_tf, mut light) in &mut lights {
         *light_tf = tf;
         light.illuminance = lighting.illuminance;
@@ -383,11 +261,42 @@ fn sync_puzzle_lighting(
     for mut env in &mut env_maps {
         env.intensity = environment_map_intensity(&lighting);
     }
-    for mat in &sky_meshes {
-        if let Some(mut material) = sky_materials.get_mut(&mat.0) {
-            material.params.sun_dir = dir;
-        }
+    for mut sky in &mut procedural_skies {
+        let time = sky.time;
+        *sky = ProceduralSky::from_lighting(&lighting);
+        sky.time = time;
     }
     ambient.color = lighting.ambient_color;
     ambient.brightness = lighting.ambient_brightness;
+}
+
+/// 验证天空开关和相机重建时的兜底通道生命周期。
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 无渲染世界时仍能按输入正确装卸相机上的程序化天空。
+    #[test]
+    fn procedural_fallback_tracks_toggle_and_recreated_camera() {
+        let mut app = App::new();
+        app.init_resource::<GameConfig>()
+            .init_resource::<SaveState>()
+            .init_resource::<PuzzleLighting>()
+            .init_resource::<Assets<Image>>()
+            .add_systems(Update, sync_puzzle_image_skybox);
+        app.world_mut().resource_mut::<GameConfig>().skybox_enabled = true;
+        let camera = app.world_mut().spawn(GameplayCamera).id();
+        app.update();
+        assert!(app.world().get::<ProceduralSky>(camera).is_some());
+        app.world_mut().resource_mut::<GameConfig>().skybox_enabled = false;
+        app.update();
+        assert!(app.world().get::<ProceduralSky>(camera).is_none());
+        app.world_mut().resource_mut::<GameConfig>().skybox_enabled = true;
+        app.update();
+        assert!(app.world().get::<ProceduralSky>(camera).is_some());
+        app.world_mut().despawn(camera);
+        let replacement = app.world_mut().spawn(GameplayCamera).id();
+        app.update();
+        assert!(app.world().get::<ProceduralSky>(replacement).is_some());
+    }
 }
