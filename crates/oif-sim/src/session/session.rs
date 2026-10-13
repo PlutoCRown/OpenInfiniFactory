@@ -184,8 +184,8 @@ mod tests {
         session
             .structure_state
             .rebuild_for_simulation(&session.world);
-        let sid_body = session.structure_state.structure_id_at(body);
-        let sid_front = session.structure_state.structure_id_at(front);
+        let sid_body = session.structure_state.id_at(body);
+        let sid_front = session.structure_state.id_at(front);
         assert_eq!(
             sid_body, sid_front,
             "body and front must remain one structure through the arm"

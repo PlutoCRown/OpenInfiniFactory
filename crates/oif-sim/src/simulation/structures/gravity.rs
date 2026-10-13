@@ -1,13 +1,14 @@
 use super::{
     HashMap, HashSet, IVec3, MovementMark, StructureId, StructureMove, StructureState,
-    SuctionLinks, WorldBlocks, can_move_gravity_structure, structure_id_gravity_grounded,
+    SuctionLinks, WorldBlocks, can_move_pusher_heads, expanded_move_structure,
+    hard_pusher_head_blocked_below, own_extended_heads, structure_id_gravity_grounded,
     structure_supported_by_lifter,
 };
 
+/// 标记未被稳定支撑或抬升器托住的结构下落
 pub(in crate::simulation) fn gravity_moves(
     world: &WorldBlocks,
     structures: &mut StructureState,
-    skip_factory_positions: &HashSet<IVec3>,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
     suction: &SuctionLinks,
 ) -> Vec<StructureMove> {
@@ -34,12 +35,6 @@ pub(in crate::simulation) fn gravity_moves(
         };
         handled.extend(structure.iter().copied());
 
-        if structure
-            .iter()
-            .any(|pos| skip_factory_positions.contains(pos))
-        {
-            continue;
-        }
         if structure_supported_by_lifter(world, &structure) {
             for pos in &structure {
                 if let Some(sid) = structures.id_at(*pos) {
@@ -66,12 +61,27 @@ pub(in crate::simulation) fn gravity_moves(
             continue;
         }
         // 整块结构一起下落；不可拆开，否则焊接材料会被撕开并丢掉焊缝
-        if can_move_gravity_structure(
+        let own = own_extended_heads(world, &structure, hard_pusher_head_occupancy);
+        if hard_pusher_head_blocked_below(world, &structure, hard_pusher_head_occupancy, &own) {
+            continue;
+        }
+        let Some(expanded) = expanded_move_structure(
             world,
             &structure,
+            IVec3::NEG_Y,
             structures,
-            hard_pusher_head_occupancy,
+            super::collision::MovementExpansionMode::Gravity,
             suction,
+        ) else {
+            continue;
+        };
+        let own = own_extended_heads(world, &expanded, hard_pusher_head_occupancy);
+        if can_move_pusher_heads(
+            world,
+            &expanded,
+            IVec3::NEG_Y,
+            hard_pusher_head_occupancy,
+            &own,
         ) {
             for pos in &structure {
                 if let Some(sid) = structures.id_at(*pos) {

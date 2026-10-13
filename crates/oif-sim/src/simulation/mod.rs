@@ -1,6 +1,5 @@
 mod behaviors;
 pub mod core;
-mod gravity;
 pub mod markers;
 mod mirror;
 pub mod motion;

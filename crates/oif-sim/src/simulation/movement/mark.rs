@@ -121,7 +121,6 @@ pub(in crate::simulation) fn mark_structure_movement_phase(
         }
     }
     let mut motion_held: HashSet<IVec3> = HashSet::new();
-    let mut motion_tags: HashMap<IVec3, IVec3> = HashMap::new();
     let mut succeeded_deform: HashSet<(StructureId, u32)> = HashSet::new();
     // 本回合欲伸出 / 欲收回的推杆体（共轴组校验用）
     let mut actuating_extend: HashSet<BlockId> = HashSet::new();
@@ -159,7 +158,11 @@ pub(in crate::simulation) fn mark_structure_movement_phase(
                     &emitted_translate,
                     &mut conveyor_diag,
                 ) {
-                    let key = (movement.structure_id(), translate_offset(&movement));
+                    let move_offset = match &movement {
+                        StructureMove::Translate { offset, .. } => *offset,
+                        StructureMove::Rotate { .. } => IVec3::ZERO,
+                    };
+                    let key = (movement.structure_id(), move_offset);
                     if emitted_translate.insert(key) {
                         conveyor_diag.emitted += 1;
                         if let Some(source_id) = source_id {
@@ -212,7 +215,6 @@ pub(in crate::simulation) fn mark_structure_movement_phase(
             suction,
             claimed_heads: &mut claimed_heads,
             motion_held: &mut motion_held,
-            motion_tags: &mut motion_tags,
             succeeded_deform: &mut succeeded_deform,
             actuating_extend: &actuating_extend,
             actuating_retract: &actuating_retract,
@@ -269,13 +271,6 @@ pub(in crate::simulation) struct ConveyorMarkDiag {
     pub can_translate_ms: f64,
     pub emitted: u32,
     pub deduped: u32,
-}
-
-fn translate_offset(movement: &StructureMove) -> IVec3 {
-    match movement {
-        StructureMove::Translate { offset, .. } => *offset,
-        StructureMove::Rotate { .. } => IVec3::ZERO,
-    }
 }
 
 fn cached_can_translate(
@@ -531,7 +526,7 @@ fn mark_pusher_movement(
                 if external && !ctx.structures.held_blocks.contains(&front_id) {
                     let cargo_pos =
                         PusherState::body_at_extended_head(ctx.world, head).unwrap_or(head);
-                    if let Some(movement) = mark_structure_translate(
+                    if let Some(mut movement) = mark_structure_translate(
                         ctx.world,
                         ctx.structures,
                         pos,
@@ -551,12 +546,7 @@ fn mark_pusher_movement(
                             &heads,
                         ) {
                             ctx.claimed_heads.insert(head);
-                            apply_motion_tags(
-                                movement.structure(),
-                                offset,
-                                ctx.motion_held,
-                                ctx.motion_tags,
-                            );
+                            ctx.motion_held.extend(movement.structure().iter().copied());
                             for &p in movement.structure() {
                                 if let Some(b) = ctx.world.blocks.get(&p) {
                                     ctx.structures.held_blocks.insert(b.id);
@@ -568,11 +558,10 @@ fn mark_pusher_movement(
                                 let node_ids: Vec<_> = nodes.to_vec();
                                 ctx.structures.held_blocks.extend(node_ids);
                             }
-                            return Some(
-                                movement
-                                    .with_pusher_actor(id, pos, MovementMark::Push, animation)
-                                    .with_source(id, pos),
-                            );
+                            if let StructureMove::Translate { actors, .. } = &mut movement {
+                                actors.push(PusherActor { id, pos, animation });
+                            }
+                            return Some(movement.with_source(id, pos));
                         }
                     }
                 }
@@ -783,7 +772,7 @@ fn try_deform_action(
             }
         }
 
-        apply_motion_tags(&expanded, move_offset, ctx.motion_held, ctx.motion_tags);
+        ctx.motion_held.extend(expanded.iter().copied());
         ctx.structures.held_blocks.extend(nodes.iter().copied());
         for &p in &expanded {
             if let Some(b) = ctx.world.blocks.get(&p) {
@@ -807,88 +796,7 @@ fn try_deform_action(
     None
 }
 
-fn apply_motion_tags(
-    structure: &HashSet<IVec3>,
-    offset: IVec3,
-    motion_held: &mut HashSet<IVec3>,
-    motion_tags: &mut HashMap<IVec3, IVec3>,
-) {
-    for &pos in structure {
-        motion_held.insert(pos);
-        motion_tags.insert(pos, offset);
-    }
-}
-
-trait StructureMoveActorExt {
-    fn with_pusher_actor(
-        self,
-        actor_id: BlockId,
-        actor: IVec3,
-        mark: MovementMark,
-        animation: PusherAnimationKind,
-    ) -> StructureMove;
-}
-
-impl StructureMoveActorExt for StructureMove {
-    fn with_pusher_actor(
-        self,
-        actor_id: BlockId,
-        actor: IVec3,
-        mark: MovementMark,
-        animation: PusherAnimationKind,
-    ) -> StructureMove {
-        match self {
-            StructureMove::Translate {
-                structure_id,
-                structure,
-                offset,
-                mut actors,
-                source,
-                source_pos,
-                ..
-            } => {
-                actors.push(PusherActor {
-                    id: actor_id,
-                    pos: actor,
-                    animation,
-                });
-                StructureMove::Translate {
-                    structure_id,
-                    structure,
-                    offset,
-                    actors,
-                    mark,
-                    source: None,
-                    source_pos: None,
-                }
-                .with_optional_source(source, source_pos)
-            }
-            movement => movement,
-        }
-    }
-}
-
-trait StructureMoveSourceExt {
-    fn with_optional_source(
-        self,
-        source: Option<crate::blocks::BlockId>,
-        source_pos: Option<IVec3>,
-    ) -> StructureMove;
-}
-
-impl StructureMoveSourceExt for StructureMove {
-    fn with_optional_source(
-        self,
-        source: Option<crate::blocks::BlockId>,
-        source_pos: Option<IVec3>,
-    ) -> StructureMove {
-        match (source, source_pos) {
-            (Some(source), Some(source_pos)) => self.with_source(source, source_pos),
-            _ => self,
-        }
-    }
-}
-
+/// 标记材料或外部工厂关联结构的平移候选
 fn mark_structure_translate(
     world: &WorldBlocks,
     structures: &StructureState,

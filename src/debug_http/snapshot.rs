@@ -124,7 +124,7 @@ pub fn block_json_with_structure(
     });
 
     let structure_summary = structures.and_then(|state| {
-        let id = state.structure_id_at(pos)?;
+        let id = state.id_at(pos)?;
         let structure = state.get(id)?;
         Some(json!({
             "id": id.0,
@@ -242,7 +242,7 @@ pub fn resolve_structure_query(
             .find(|(_, block)| block.id.0 == block_id)
             .map(|(pos, _)| *pos)
             .ok_or_else(|| format!("no block with id={block_id}"))?;
-        structures.structure_id_at(pos).ok_or_else(|| {
+        structures.id_at(pos).ok_or_else(|| {
             format!(
                 "block id={block_id} at ({}, {}, {}) has no structure",
                 pos.x, pos.y, pos.z
@@ -251,7 +251,7 @@ pub fn resolve_structure_query(
     } else if let (Some(x), Some(y), Some(z)) = (x, y, z) {
         let pos = IVec3::new(x, y, z);
         structures
-            .structure_id_at(pos)
+            .id_at(pos)
             .ok_or_else(|| format!("no structure at ({x}, {y}, {z})"))?
     } else {
         return Err("getStructure requires ?id= or ?blockId= or ?x=&y=&z=".into());

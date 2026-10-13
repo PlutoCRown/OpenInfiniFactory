@@ -87,11 +87,6 @@ impl WorldBlocks {
         !self.is_occupied(pos)
     }
 
-    /// 从 from 格移入 target 时是否可进入（含脆弱材料让出）
-    pub fn cell_accepts_move_from(&self, _from: IVec3, target: IVec3) -> bool {
-        self.can_move_into(target) || self.is_fragile_material_at(target)
-    }
-
     /// 格上是否为脆弱材料（运动冲突时让出并碎裂）
     pub fn is_fragile_material_at(&self, pos: IVec3) -> bool {
         self.blocks.get(&pos).is_some_and(|block| {

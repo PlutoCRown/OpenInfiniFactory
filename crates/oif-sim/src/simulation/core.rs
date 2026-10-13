@@ -10,7 +10,6 @@ use super::behaviors::{
     run_material_acceptance_phase, run_material_conversion_phase, run_material_destroy_phase,
     run_material_label_phase, run_material_teleport_phase, run_weld_behavior_phase,
 };
-use super::gravity::mark_gravity_phase;
 use super::markers::run_static_marker_phase;
 use super::motion::{BlockMotion, PusherMotion};
 use super::movement::{PusherState, mark_structure_movement_phase};
@@ -20,7 +19,7 @@ use super::stats::SimulationStepStats;
 use super::structure_state::StructureState;
 use super::structures::{
     MovementHistory, StructureMove, apply_fragile_shatter_before_execute, arbitrate_movement_plan,
-    execute_structure_moves_with_pushers, merge_structure_movement_plan,
+    execute_structure_moves_with_pushers, gravity_moves, merge_structure_movement_plan,
 };
 use super::suction::SuctionLinks;
 
@@ -397,10 +396,9 @@ fn move_structures(
 
     // —— 阶段 2 运动标记：重力 + 通电设备，再 merge ——
     let hard_pusher_head_occupancy = PusherState::hard_head_occupancy(world);
-    let mut movement_plan = mark_gravity_phase(
+    let mut movement_plan = gravity_moves(
         world,
         structure_state,
-        &HashSet::new(),
         &hard_pusher_head_occupancy,
         &suction,
     );
@@ -411,16 +409,13 @@ fn move_structures(
 
     sample.marker_before_move_ms = mark_elapsed_ms(mark);
 
-    let (device_movement_plan, conveyor_diag) = {
-        structure_state.clear_turn_marks();
-        mark_structure_movement_phase(
-            world,
-            &powered_devices,
-            structure_state,
-            pusher_state,
-            &suction,
-        )
-    };
+    let (device_movement_plan, conveyor_diag) = mark_structure_movement_phase(
+        world,
+        &powered_devices,
+        structure_state,
+        pusher_state,
+        &suction,
+    );
     if let Some(sim_log) = sim_log.as_mut() {
         let avg = if conveyor_diag.can_translate_calls == 0 {
             0.0

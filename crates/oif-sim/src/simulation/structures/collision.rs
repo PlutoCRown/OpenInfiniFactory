@@ -34,7 +34,7 @@ fn structure_id_rests_on_stable_support(
             return false;
         }
         world.is_scene_at(below)
-            || structures.structure_id_at(below).is_some_and(|below_id| {
+            || structures.id_at(below).is_some_and(|below_id| {
                 structures
                     .get(below_id)
                     .is_some_and(|s| s.kind == StructureKind::Factory && s.is_anchored())
@@ -78,7 +78,7 @@ pub(super) fn structure_id_gravity_grounded(
             grounded = true;
             break;
         }
-        if let Some(below_id) = structures.structure_id_at(below) {
+        if let Some(below_id) = structures.id_at(below) {
             if below_id == id {
                 continue;
             }
@@ -109,36 +109,12 @@ pub(super) fn structure_id_gravity_grounded(
     grounded
 }
 
-/// 运动执行前：按计划压碎/让出冲突的脆弱材料（与钻头/激光销毁分离）
-/// 返回碎裂格子与种类，供表现层生成碎片
-pub(super) fn can_move_gravity_structure(
-    world: &WorldBlocks,
-    structure: &HashSet<IVec3>,
-    structures: &StructureState,
-    hard_pusher_head_occupancy: &HashSet<IVec3>,
-    suction: &SuctionLinks,
-) -> bool {
-    if hard_pusher_head_blocked_below(world, structure, hard_pusher_head_occupancy) {
-        return false;
-    }
-    let Some(expanded) = expanded_move_structure(
-        world,
-        structure,
-        IVec3::NEG_Y,
-        structures,
-        MovementExpansionMode::Gravity,
-        suction,
-    ) else {
-        return false;
-    };
-    !hard_pusher_head_blocks_move(world, &expanded, IVec3::NEG_Y, hard_pusher_head_occupancy)
-        && can_move_own_extended_heads(world, &expanded, IVec3::NEG_Y, hard_pusher_head_occupancy)
-}
-
+/// 检查种子结构自带活塞头的下方是否被阻挡
 pub(super) fn hard_pusher_head_blocked_below(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
+    own: &HashSet<IVec3>,
 ) -> bool {
     structure.iter().any(|pos| {
         let Some(block) = world.blocks.get(pos) else {
@@ -158,8 +134,7 @@ pub(super) fn hard_pusher_head_blocked_below(
         // 活塞头是实体：下方有方块或其它活塞头都算挡住
         target.y < 0
             || (!structure.contains(&target)
-                && !own_extended_heads(world, structure, hard_pusher_head_occupancy)
-                    .contains(&target)
+                && !own.contains(&target)
                 && (!world.can_move_into_yielding_fragile(target)
                     || hard_pusher_head_occupancy.contains(&target)))
     })
@@ -194,33 +169,23 @@ pub(super) fn own_extended_heads(
         .collect()
 }
 
-/// 平移体积（体格 ∪ 自带头）是否会撞上外来活塞头
-pub(super) fn hard_pusher_head_blocks_move(
+/// 复用自带头集合，统一检查移动体积与活塞头的目标占位
+pub(super) fn can_move_pusher_heads(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
     offset: IVec3,
     hard_pusher_head_occupancy: &HashSet<IVec3>,
+    own: &HashSet<IVec3>,
 ) -> bool {
-    let own = own_extended_heads(world, structure, hard_pusher_head_occupancy);
-    let volume: HashSet<IVec3> = structure.iter().chain(own.iter()).copied().collect();
-    volume.iter().any(|pos| {
+    structure.iter().chain(own.iter()).all(|pos| {
         let target = *pos + offset;
-        !volume.contains(&target) && hard_pusher_head_occupancy.contains(&target)
-    })
-}
-
-/// 自带头平移后是否有落脚处（不钻进实心/外来头）
-pub(super) fn can_move_own_extended_heads(
-    world: &WorldBlocks,
-    structure: &HashSet<IVec3>,
-    offset: IVec3,
-    hard_pusher_head_occupancy: &HashSet<IVec3>,
-) -> bool {
-    let own = own_extended_heads(world, structure, hard_pusher_head_occupancy);
-    let volume: HashSet<IVec3> = structure.iter().chain(own.iter()).copied().collect();
-    own.iter().all(|head| {
+        structure.contains(&target)
+            || own.contains(&target)
+            || !hard_pusher_head_occupancy.contains(&target)
+    }) && own.iter().all(|head| {
         let target = *head + offset;
-        volume.contains(&target)
+        structure.contains(&target)
+            || own.contains(&target)
             || (target.y >= 0
                 && world.can_move_into_yielding_fragile(target)
                 && !hard_pusher_head_occupancy.contains(&target))
@@ -375,14 +340,14 @@ pub(in crate::simulation) fn expanded_move_structure_with_occupancy(
             .then_some(structure);
     }
 
-    let mut expanded = structure.clone();
     let mut queue: VecDeque<IVec3> = structure.iter().copied().collect();
+    let mut expanded = structure;
     while let Some(pos) = queue.pop_front() {
         let target = pos + offset;
         if target.y < 0 || expanded.contains(&target) {
             continue;
         }
-        if world.cell_accepts_move_from(pos, target) {
+        if world.can_move_into_yielding_fragile(target) {
             continue;
         }
         if is_pusher_head_at(world, target) {
@@ -399,7 +364,7 @@ pub(in crate::simulation) fn expanded_move_structure_with_occupancy(
         }
 
         if mode == MovementExpansionMode::Gravity {
-            if let Some(sid) = structures.structure_id_at(target) {
+            if let Some(sid) = structures.id_at(target) {
                 // 下方结构已接地则整条重力链失败；先查 id 再克隆
                 if structure_id_rests_on_stable_support(world, structures, sid)
                     || structures
@@ -440,7 +405,7 @@ fn can_move_structure_without_push_occupancy(
             return false;
         }
         if structure.contains(&target)
-            || world.cell_accepts_move_from(*pos, target)
+            || world.can_move_into_yielding_fragile(target)
             || is_pusher_head_at(world, target)
         {
             return true;
@@ -504,8 +469,8 @@ pub(in crate::simulation) fn can_translate_structure(
     ) else {
         return false;
     };
-    !hard_pusher_head_blocks_move(world, &expanded, offset, hard_pusher_head_occupancy)
-        && can_move_own_extended_heads(world, &expanded, offset, hard_pusher_head_occupancy)
+    let own = own_extended_heads(world, &expanded, hard_pusher_head_occupancy);
+    can_move_pusher_heads(world, &expanded, offset, hard_pusher_head_occupancy, &own)
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]

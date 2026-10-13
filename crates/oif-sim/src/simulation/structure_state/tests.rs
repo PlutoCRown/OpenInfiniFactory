@@ -100,7 +100,7 @@ fn deform_figure_a_three_parallel() {
 
     let mut state = StructureState::default();
     state.rebuild_for_simulation(&world);
-    let sid = state.structure_id_at(IVec3::new(0, 0, 0)).unwrap();
+    let sid = state.id_at(IVec3::new(0, 0, 0)).unwrap();
     let structure = state.get(sid).unwrap();
     assert_eq!(structure.deform_groups.len(), 2);
 
@@ -149,7 +149,7 @@ fn deform_figure_b_bent() {
 
     let mut state = StructureState::default();
     state.rebuild_for_simulation(&world);
-    let sid = state.structure_id_at(IVec3::new(0, 0, 0)).unwrap();
+    let sid = state.id_at(IVec3::new(0, 0, 0)).unwrap();
     let structure = state.get(sid).unwrap();
 
     let h1 = *structure.head_of.get(&b1).unwrap();
@@ -214,7 +214,7 @@ fn deform_face_to_face_includes_back_cargo() {
 
     let mut state = StructureState::default();
     state.rebuild_for_simulation(&world);
-    let sid = state.structure_id_at(IVec3::new(0, 0, 1)).unwrap();
+    let sid = state.id_at(IVec3::new(0, 0, 1)).unwrap();
     let structure = state.get(sid).unwrap();
     let h_south = *structure.head_of.get(&south).unwrap();
     let h_north = *structure.head_of.get(&north).unwrap();
@@ -289,7 +289,7 @@ fn deform_parallel_gap_fork_independent() {
     let mut state = StructureState::default();
     state.rebuild_for_simulation(&world);
     let structure = state
-        .get(state.structure_id_at(IVec3::new(-1, 2, -4)).unwrap())
+        .get(state.id_at(IVec3::new(-1, 2, -4)).unwrap())
         .unwrap();
     let ha = *structure.head_of.get(&a).unwrap();
     let hb = *structure.head_of.get(&b).unwrap();
@@ -369,7 +369,7 @@ fn deform_single_pusher_square_loop_discards() {
     let mut state = StructureState::default();
     state.rebuild_for_simulation(&world);
     let structure = state
-        .get(state.structure_id_at(IVec3::new(13, 4, 12)).unwrap())
+        .get(state.id_at(IVec3::new(13, 4, 12)).unwrap())
         .unwrap();
     assert!(
         structure.deform_groups.is_empty(),
@@ -421,7 +421,7 @@ fn deform_opposing_ring_coaxial_after_all_cut() {
         "west reverse == east forward"
     );
 
-    let structure = state.get(state.structure_id_at(west).unwrap()).unwrap();
+    let structure = state.get(state.id_at(west).unwrap()).unwrap();
     let w_fwd = structure.action_to_groups.get(&(west_id, true)).unwrap()[0];
     let e_rev = structure.action_to_groups.get(&(east_id, false)).unwrap()[0];
     assert_eq!(w_fwd, e_rev);
@@ -479,22 +479,22 @@ fn factory_anchors_do_not_cross_disconnected_faces() {
     state.rebuild_for_simulation(&world);
 
     let anchored = state
-        .get(state.structure_id_at(IVec3::new(1, 1, 0)).unwrap())
+        .get(state.id_at(IVec3::new(1, 1, 0)).unwrap())
         .unwrap();
     assert!(anchored.is_anchored());
 
     let welder = state
-        .get(state.structure_id_at(IVec3::new(0, 1, 0)).unwrap())
+        .get(state.id_at(IVec3::new(0, 1, 0)).unwrap())
         .unwrap();
     assert!(!welder.is_anchored());
     assert_ne!(
-        state.structure_id_at(IVec3::new(0, 1, 0)),
-        state.structure_id_at(IVec3::new(1, 1, 0)),
+        state.id_at(IVec3::new(0, 1, 0)),
+        state.id_at(IVec3::new(1, 1, 0)),
         "blocked face must keep separate structures"
     );
 
     let lone = state
-        .get(state.structure_id_at(IVec3::new(5, 1, 0)).unwrap())
+        .get(state.id_at(IVec3::new(5, 1, 0)).unwrap())
         .unwrap();
     assert!(!lone.is_anchored());
 }
@@ -522,13 +522,13 @@ fn factory_edit_merges_and_splits_anchors_locally() {
     state.rebuild_for_simulation(&world);
     assert!(
         state
-            .get(state.structure_id_at(IVec3::new(0, 1, 0)).unwrap())
+            .get(state.id_at(IVec3::new(0, 1, 0)).unwrap())
             .unwrap()
             .is_anchored()
     );
     assert!(
         !state
-            .get(state.structure_id_at(IVec3::new(2, 1, 0)).unwrap())
+            .get(state.id_at(IVec3::new(2, 1, 0)).unwrap())
             .unwrap()
             .is_anchored()
     );
@@ -540,14 +540,14 @@ fn factory_edit_merges_and_splits_anchors_locally() {
         Facing::North,
     );
     state.apply_factory_edit(&world, &HashSet::from([IVec3::new(1, 1, 0)]));
-    let merged_id = state.structure_id_at(IVec3::new(2, 1, 0)).unwrap();
-    assert_eq!(state.structure_id_at(IVec3::new(0, 1, 0)), Some(merged_id));
+    let merged_id = state.id_at(IVec3::new(2, 1, 0)).unwrap();
+    assert_eq!(state.id_at(IVec3::new(0, 1, 0)), Some(merged_id));
     assert!(state.get(merged_id).unwrap().is_anchored());
 
     world.remove(&IVec3::new(0, 1, 0));
     state.apply_factory_edit(&world, &HashSet::from([IVec3::new(0, 1, 0)]));
-    let left = state.structure_id_at(IVec3::new(1, 1, 0)).unwrap();
-    assert_eq!(state.structure_id_at(IVec3::new(2, 1, 0)), Some(left));
+    let left = state.id_at(IVec3::new(1, 1, 0)).unwrap();
+    assert_eq!(state.id_at(IVec3::new(2, 1, 0)), Some(left));
     assert!(!state.get(left).unwrap().is_anchored());
 }
 

@@ -46,9 +46,7 @@ pub fn sync_aim_focus(
         None => AimFocus::default(),
         Some(hit) => {
             let (block, sign_label) = resolve_aimed_block(&world, hit.pos);
-            let structure_id = structure_state
-                .structure_id_at(hit.pos)
-                .filter(|id| !id.is_none());
+            let structure_id = structure_state.id_at(hit.pos).filter(|id| !id.is_none());
             let deform_summary = if debug.factory_activity {
                 structure_id.and_then(|id| {
                     let structure = structure_state.get(id)?;

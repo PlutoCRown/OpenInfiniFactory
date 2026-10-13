@@ -8,6 +8,7 @@ impl StructureState {
         self.structures.keys().copied()
     }
 
+    /// 查询格子所属的结构 ID
     pub fn id_at(&self, pos: IVec3) -> Option<StructureId> {
         self.structure_by_pos.get(&pos).copied()
     }
@@ -90,10 +91,6 @@ impl StructureState {
 
     pub fn get(&self, id: StructureId) -> Option<&Structure> {
         self.structures.get(&id)
-    }
-
-    pub fn structure_id_at(&self, pos: IVec3) -> Option<StructureId> {
-        self.structure_by_pos.get(&pos).copied()
     }
 
     pub fn structure_positions(&self, id: StructureId) -> Option<&HashSet<IVec3>> {

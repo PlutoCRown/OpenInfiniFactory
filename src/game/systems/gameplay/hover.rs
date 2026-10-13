@@ -205,7 +205,7 @@ pub fn update_hover(
 
     let next_bounds = if player.placement.edit_gesture.is_none() {
         player.placement.target.and_then(|target| {
-            let id = structure_state.structure_id_at(target.pos)?;
+            let id = structure_state.id_at(target.pos)?;
             let structure = structure_state.get(id)?;
             if structure.kind == StructureKind::Factory
                 && (!debug.factory_activity || structure.is_anchored())
@@ -367,7 +367,7 @@ pub fn sync_factory_activity_debug_overlays(
             if !block.kind.is_factory() {
                 return None;
             }
-            let id = structure_state.structure_id_at(hit.pos)?;
+            let id = structure_state.id_at(hit.pos)?;
             let len = structure_state.structure_positions(id)?.len();
             Some((id, len))
         });

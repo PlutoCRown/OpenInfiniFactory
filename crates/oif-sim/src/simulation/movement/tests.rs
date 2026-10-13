@@ -988,6 +988,91 @@ mod moving_occupancy_cases {
         assert_eq!(pos_of(&world, right), IVec3::new(2, 2, 0));
     }
 
+    /// 推动链必须整条同移，末端被场景挡住时整条保持原位
+    #[test]
+    fn conveyor_push_chain_moves_together_or_stays_blocked() {
+        for blocked in [false, true] {
+            let mut world = WorldBlocks::default();
+            for x in 0..5 {
+                world.insert(IVec3::new(x, 0, 0), scene());
+                if x != 0 {
+                    world.insert(IVec3::new(x, 1, 0), scene());
+                }
+            }
+            world.insert(
+                IVec3::new(0, 1, 0),
+                BlockData::new(BlockKind::Conveyor, Facing::East),
+            );
+            let mut blocks = Vec::new();
+            for x in 0..3 {
+                let pos = IVec3::new(x, 2, 0);
+                world.insert(pos, mat());
+                blocks.push((id_at(&world, pos), pos));
+            }
+            if blocked {
+                world.insert(IVec3::new(3, 2, 0), scene());
+            }
+            let mut structures = StructureState::default();
+            structures.rebuild_for_simulation(&world);
+            let mut pusher = PusherState::rebuild_from_world(&world);
+            turn(&mut world, &mut structures, &mut pusher, 1);
+            let offset = if blocked { IVec3::ZERO } else { IVec3::X };
+            for (id, pos) in blocks {
+                assert_eq!(pos_of(&world, id), pos + offset, "blocked={blocked}");
+            }
+        }
+    }
+
+    /// 被异向占位拒绝的长结构不能污染另一端独立结构的运动
+    #[test]
+    fn rejected_movement_does_not_reserve_partial_footprint() {
+        use crate::simulation::structures::arbitrate_movement_plan;
+
+        let mut world = WorldBlocks::default();
+        let first = IVec3::new(2, 1, 0);
+        let last = IVec3::new(2, 1, 2);
+        world.insert(first, mat());
+        world.insert(last, mat());
+        let mut middle = HashSet::new();
+        for z in 0..3 {
+            let pos = IVec3::new(0, 1, z);
+            world.insert(pos, mat());
+            middle.insert(pos);
+            if z > 0 {
+                assert!(world.weld_materials(pos - IVec3::Z, pos));
+            }
+        }
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        let first_id = structures.id_at(first).unwrap();
+        let middle_id = structures.id_at(IVec3::Y).unwrap();
+        let last_id = structures.id_at(last).unwrap();
+        let candidates = vec![
+            StructureMove::translate_marked(
+                first_id,
+                HashSet::from([first]),
+                IVec3::NEG_X,
+                MovementMark::Conveyor,
+            ),
+            StructureMove::translate_marked(middle_id, middle, IVec3::X, MovementMark::Conveyor),
+            StructureMove::translate_marked(
+                last_id,
+                HashSet::from([last]),
+                IVec3::NEG_X,
+                MovementMark::Conveyor,
+            ),
+        ];
+        let accepted =
+            arbitrate_movement_plan(&world, &structures, &SuctionLinks::default(), candidates);
+        assert_eq!(
+            accepted
+                .iter()
+                .map(StructureMove::structure_id)
+                .collect::<Vec<_>>(),
+            vec![first_id, last_id],
+        );
+    }
+
     /// 竖叠两独立块同向下落
     #[test]
     fn stacked_fall_same_direction() {

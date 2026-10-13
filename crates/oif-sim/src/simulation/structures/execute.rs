@@ -1,11 +1,10 @@
 use super::{
     BlockId, BlockKind, BlockMotion, BlockMotionKind, ExecutedMovement, HashMap, HashSet, IVec3,
     MovementHistory, MovementMark, PusherActor, PusherAnimationKind, PusherMotion, StructureId,
-    StructureMove, StructureState, SuctionLinks, WorldBlocks, can_move_own_extended_heads,
+    StructureMove, StructureState, SuctionLinks, WorldBlocks, can_move_pusher_heads,
     can_rotate_structure, expanded_move_structure, hard_pusher_head_blocked_below,
-    hard_pusher_head_blocks_move, movement_expansion_mode, own_extended_heads, rotate_facing,
-    rotate_pos_y, rotate_structure, stamp_collisions, stamp_collisions_for_rotation,
-    with_factory_attachment_children, with_pusher_heads,
+    movement_expansion_mode, own_extended_heads, rotate_facing, rotate_pos_y, rotate_structure,
+    stamp_collisions, stamp_collisions_for_rotation, with_factory_attachment_children,
 };
 
 pub(in crate::simulation) fn apply_fragile_shatter_before_execute(
@@ -54,8 +53,7 @@ pub(in crate::simulation) fn apply_fragile_shatter_before_execute(
                     if world.is_fragile_material_at(*pos)
                         && target.y >= 0
                         && !structure.contains(&target)
-                        && !world.cell_accepts_move_from(*pos, target)
-                        && !world.is_fragile_material_at(target)
+                        && !world.can_move_into_yielding_fragile(target)
                     {
                         shatter.insert(*pos);
                     }
@@ -213,10 +211,10 @@ pub(in crate::simulation) fn execute_structure_moves_with_pushers(
                         }
                     }
                 }
-                let seed = structure.clone();
+                let seed = structure;
                 let Some(structure) = expanded_move_structure(
                     world,
-                    &structure,
+                    &seed,
                     offset,
                     structures,
                     movement_expansion_mode(mark, source),
@@ -239,28 +237,39 @@ pub(in crate::simulation) fn execute_structure_moves_with_pushers(
                 {
                     continue;
                 }
-                // 活塞头是实体：本回合已提交的头会挡住后续更低优先级移动（自带头随结构走，不挡自己）
-                if offset != IVec3::ZERO
-                    && (hard_pusher_head_blocks_move(world, &structure, offset, &heads_for_check)
-                        || !can_move_own_extended_heads(
-                            world,
-                            &structure,
-                            offset,
-                            &heads_for_check,
-                        ))
-                {
-                    continue;
-                }
-                if offset == IVec3::NEG_Y
-                    && hard_pusher_head_blocked_below(world, &seed, &heads_for_check)
-                {
-                    continue;
-                }
                 let own_heads_before = if offset != IVec3::ZERO {
                     own_extended_heads(world, &structure, &heads)
                 } else {
                     HashSet::new()
                 };
+                // 检查占位只过滤逻辑收回的头，复用移动前已经查出的自带头。
+                if offset != IVec3::ZERO {
+                    let own_heads_for_check = own_heads_before
+                        .iter()
+                        .copied()
+                        .filter(|head| heads_for_check.contains(head))
+                        .collect();
+                    if !can_move_pusher_heads(
+                        world,
+                        &structure,
+                        offset,
+                        &heads_for_check,
+                        &own_heads_for_check,
+                    ) {
+                        continue;
+                    }
+                }
+                if offset == IVec3::NEG_Y {
+                    let own_seed_heads = own_extended_heads(world, &seed, &heads_for_check);
+                    if hard_pusher_head_blocked_below(
+                        world,
+                        &seed,
+                        &heads_for_check,
+                        &own_seed_heads,
+                    ) {
+                        continue;
+                    }
+                }
                 // 平移前筛推杆：仅伸出时，伸头终点若落在同标签其它成员落点上则丢掉（A/B 同推 {B,C}）。
                 // 收回把物体拉进头格是预期，不能用同一规则滤掉收回动画。
                 let actors: Vec<PusherActor> = actors
@@ -318,8 +327,7 @@ pub(in crate::simulation) fn execute_structure_moves_with_pushers(
                     }
                     moved.extend(structure.iter().copied());
                     push_held.extend(structure.iter().copied());
-                    // 真实头并入集合后由 relocate 一并平移
-                    let structure = with_pusher_heads(world, &structure);
+                    // 推动链已包含真实头，由统一提交入口一并平移。
                     structures.translate(world, &structure, offset);
                     for head in own_heads_before {
                         heads.remove(&head);

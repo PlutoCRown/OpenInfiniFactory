@@ -23,7 +23,6 @@ pub(super) struct SimMovementMarkCtx<'a> {
     pub suction: &'a SuctionLinks,
     pub claimed_heads: &'a mut HashSet<IVec3>,
     pub motion_held: &'a mut HashSet<IVec3>,
-    pub motion_tags: &'a mut HashMap<IVec3, IVec3>,
     pub succeeded_deform: &'a mut HashSet<(StructureId, u32)>,
     pub actuating_extend: &'a HashSet<BlockId>,
     pub actuating_retract: &'a HashSet<BlockId>,

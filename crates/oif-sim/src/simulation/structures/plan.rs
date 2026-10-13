@@ -1,6 +1,6 @@
 use super::{
-    BlockId, HashMap, HashSet, IVec3, MovementHistory, MovementMark, Ordering, StructureId,
-    StructureMove, StructureState, WorldBlocks,
+    BlockId, HashMap, HashSet, IVec3, MovementHistory, MovementMark, StructureId, StructureMove,
+    StructureState, WorldBlocks,
 };
 
 /// 合并重力与设备运动标签：抬升覆盖重力；其余重叠保留，按优先级排序，执行时再 fallback
@@ -42,16 +42,11 @@ pub(in crate::simulation) fn merge_structure_movement_plan(
             )
         });
     }
-    planned_moves.sort_by(|a, b| compare_movement_priority(a, b, history));
+    planned_moves.sort_by_key(|movement| movement_priority_key(movement, history));
     // 同结构同位移的 Push 合并推杆，粘头也能同回合同步推
-    coalesce_same_push_moves(planned_moves)
-}
-
-/// 把同 structure_id + offset 的 Push 合成一条，actors 并在一起
-fn coalesce_same_push_moves(moves: Vec<StructureMove>) -> Vec<StructureMove> {
     let mut out = Vec::new();
     let mut push_index: HashMap<(StructureId, IVec3), usize> = HashMap::new();
-    for movement in moves {
+    for movement in planned_moves {
         match movement {
             StructureMove::Translate {
                 structure_id,
@@ -92,14 +87,7 @@ fn coalesce_same_push_moves(moves: Vec<StructureMove>) -> Vec<StructureMove> {
     out
 }
 
-fn compare_movement_priority(
-    a: &StructureMove,
-    b: &StructureMove,
-    history: &MovementHistory,
-) -> Ordering {
-    movement_priority_key(a, history).cmp(&movement_priority_key(b, history))
-}
-
+/// 计算运动种类、历史次数和传送带位置的稳定裁决顺序
 fn movement_priority_key(
     movement: &StructureMove,
     history: &MovementHistory,
@@ -107,7 +95,7 @@ fn movement_priority_key(
     // 种类优先：活塞 > 抬升 > 下落 > 旋转 > 传送带
     (
         movement_kind_priority(movement),
-        movement.source().map_or(0, |_| history.count(movement)),
+        history.count(movement),
         conveyor_source_priority(movement),
     )
 }
