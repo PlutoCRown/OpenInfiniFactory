@@ -1,7 +1,7 @@
 use super::{
     BlockId, BlockKind, DeformGroup, HashMap, HashSet, IVec3, MovementRule, StructureId,
     StructureKind, StructureState, VecDeque, WorldBlocks, bpos_facing_toward,
-    is_blocked_factory_connection, signal_offsets,
+    factory_faces_connect, signal_offsets,
 };
 
 impl StructureState {
@@ -16,8 +16,6 @@ impl StructureState {
         }
         let positions = structure.positions.clone();
         let mut prev_heads = structure.head_of.clone();
-
-        let scene_touching = structure.scene_touching.clone();
 
         // body → head；复用旧 head id
         let mut head_of: HashMap<BlockId, BlockId> = HashMap::new();
@@ -108,9 +106,7 @@ impl StructureState {
                 let Some(&neighbor_id) = id_at.get(&neighbor) else {
                     continue;
                 };
-                if is_blocked_factory_connection(world, pos, neighbor)
-                    || is_blocked_factory_connection(world, neighbor, pos)
-                {
+                if !factory_faces_connect(world, pos, neighbor) {
                     continue;
                 }
                 // 邻块若是朝向本格的推杆，已有「邻体→头→本格」，不再加体—体边
@@ -307,7 +303,6 @@ impl StructureState {
             structure.body_of_head = body_of_head;
             structure.deform_groups = deform_groups;
             structure.action_to_groups = action_to_groups;
-            structure.scene_touching = scene_touching;
         }
     }
 }

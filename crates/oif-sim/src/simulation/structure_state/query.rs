@@ -1,6 +1,6 @@
 use super::{
-    BlockId, DeformSides, FactoryActivity, GridBounds, HashSet, IVec3, Structure, StructureFreedom,
-    StructureId, StructureKind, StructureState, WorldBlocks, collect_gravity_support,
+    BlockId, DeformSides, GridBounds, HashSet, IVec3, Structure, StructureId, StructureKind,
+    StructureState, WorldBlocks, collect_gravity_support,
 };
 
 impl StructureState {
@@ -8,55 +8,8 @@ impl StructureState {
         self.structures.keys().copied()
     }
 
-    pub fn activity_at(&self, pos: IVec3) -> Option<FactoryActivity> {
-        Some(self.structure(pos)?.activity)
-    }
-
     pub fn id_at(&self, pos: IVec3) -> Option<StructureId> {
         self.structure_by_pos.get(&pos).copied()
-    }
-
-    pub fn pushable_structure_at(&self, pos: IVec3, offset: IVec3) -> Option<HashSet<IVec3>> {
-        self.pushable_structure_positions_at(pos, offset).cloned()
-    }
-
-    /// 查询可推动结构的位置引用，供只读热点避免复制整组坐标
-    pub fn pushable_structure_positions_at(
-        &self,
-        pos: IVec3,
-        offset: IVec3,
-    ) -> Option<&HashSet<IVec3>> {
-        let structure = self.structure(pos)?;
-        if !structure.is_pushable() || !structure.freedom.can_translate(offset) {
-            return None;
-        }
-        Some(&structure.positions)
-    }
-
-    pub fn active_structure_at(&self, pos: IVec3, offset: IVec3) -> Option<HashSet<IVec3>> {
-        self.pushable_structure_at(pos, offset)
-    }
-
-    /// 不同结构正推：整坨；同结构变形由 deform_sides 负责
-    pub fn pusher_target_structure(
-        &self,
-        _world: &WorldBlocks,
-        pusher_pos: IVec3,
-        target_pos: IVec3,
-        offset: IVec3,
-    ) -> Option<HashSet<IVec3>> {
-        let target = self.structure(target_pos)?;
-        if target.kind != StructureKind::Factory {
-            return None;
-        }
-        let actor_id = self.id_at(pusher_pos)?;
-        if actor_id != target.id {
-            if !target.is_pushable() || !target.freedom.can_translate(offset) {
-                return None;
-            }
-            return Some(target.positions.clone());
-        }
-        None
     }
 
     /// 查询活塞某方向 deform 候选（按节点数升序）；返回结构与组下标列表
@@ -101,8 +54,8 @@ impl StructureState {
         let separated = !target_side.is_empty()
             && !actor_side.is_empty()
             && target_side.is_disjoint(&actor_side);
-        let actor_anchored = actor_side.iter().any(|p| seed.scene_touching.contains(p));
-        let target_anchored = target_side.iter().any(|p| seed.scene_touching.contains(p));
+        let actor_anchored = seed.contains_anchored_members(&actor_side);
+        let target_anchored = seed.contains_anchored_members(&target_side);
         Some(DeformSides {
             separated,
             actor_side,
@@ -139,20 +92,6 @@ impl StructureState {
         self.structures.get(&id)
     }
 
-    pub fn falling_structure_at(
-        &self,
-        pos: IVec3,
-        offset: IVec3,
-    ) -> Option<(StructureId, HashSet<IVec3>)> {
-        let id = *self.structure_by_pos.get(&pos)?;
-        let structure = self.structures.get(&id)?;
-        if structure.activity != FactoryActivity::Active || !structure.freedom.can_translate(offset)
-        {
-            return None;
-        }
-        Some((id, structure.positions.clone()))
-    }
-
     pub fn structure_id_at(&self, pos: IVec3) -> Option<StructureId> {
         self.structure_by_pos.get(&pos).copied()
     }
@@ -173,7 +112,7 @@ impl StructureState {
             return false;
         };
         let contacts = &structure.gravity_support;
-        // 仅场景 / Inactive 支撑可跨回合生效；撑在 Active 上时对方下回合可能自己动
+        // 场景或锚定结构的支撑可跨回合生效，未锚定的支撑结构下回合可能移动
         !contacts.is_empty()
             && contacts.iter().any(|(member, dir)| {
                 structure.positions.contains(member) && {
@@ -184,8 +123,7 @@ impl StructureState {
                             || hard_pusher_head_occupancy.contains(&support))
                         && (world.is_scene_at(support)
                             || self.structure(support).is_some_and(|s| {
-                                s.kind == StructureKind::Factory
-                                    && s.activity == FactoryActivity::Inactive
+                                s.kind == StructureKind::Factory && s.is_anchored()
                             }))
                 }
             })
@@ -204,7 +142,7 @@ impl StructureState {
             collect_gravity_support(world, &structure.positions, hard_pusher_head_occupancy);
     }
 
-    /// 扫描结构成员下方，找到第一个场景 / Inactive 稳定支撑即记下并返回 true
+    /// 记录成员下方第一个场景或锚定结构提供的稳定支撑
     pub fn try_record_stable_gravity_support(
         &mut self,
         id: StructureId,
@@ -232,9 +170,9 @@ impl StructureState {
                 continue;
             }
             let stable = world.is_scene_at(below)
-                || self.structure(below).is_some_and(|s| {
-                    s.kind == StructureKind::Factory && s.activity == FactoryActivity::Inactive
-                });
+                || self
+                    .structure(below)
+                    .is_some_and(|s| s.kind == StructureKind::Factory && s.is_anchored());
             if stable {
                 contact = Some((pos, IVec3::NEG_Y));
                 break;
@@ -312,8 +250,8 @@ impl StructureState {
                     *member += offset;
                 }
             }
-            structure.scene_touching = structure
-                .scene_touching
+            structure.anchored_members = structure
+                .anchored_members
                 .iter()
                 .map(|pos| {
                     if positions.contains(pos) {
@@ -359,20 +297,6 @@ impl StructureState {
         self.rebuild_deform_for(world, id);
     }
 
-    pub fn movable_structure_at(&self, pos: IVec3) -> Option<HashSet<IVec3>> {
-        let structure = self.structure(pos)?;
-        if structure.activity != FactoryActivity::Active
-            || structure.freedom == StructureFreedom::None
-        {
-            return None;
-        }
-        Some(structure.positions.clone())
-    }
-
-    pub fn freedom_at(&self, pos: IVec3) -> Option<StructureFreedom> {
-        Some(self.structure(pos)?.freedom)
-    }
-
     pub fn kind_at(&self, pos: IVec3) -> Option<StructureKind> {
         Some(self.structure(pos)?.kind)
     }
@@ -382,11 +306,12 @@ impl StructureState {
             .is_some_and(|structure| structure.positions.contains(&candidate))
     }
 
+    /// 从低到高列出未锚定结构，重力支撑与碰撞由运动阶段判断
     pub fn gravity_structure_ids(&self) -> Vec<StructureId> {
         let mut ids: Vec<StructureId> = self
             .structures
             .iter()
-            .filter(|(_, structure)| structure.activity == FactoryActivity::Active)
+            .filter(|(_, structure)| !structure.is_anchored())
             .map(|(id, _)| *id)
             .collect();
         ids.sort_by_key(|id| {
@@ -402,9 +327,5 @@ impl StructureState {
         self.structure_by_pos
             .get(&pos)
             .and_then(|id| self.structures.get(id))
-    }
-
-    pub(in crate::simulation) fn structure_by_id(&self, id: StructureId) -> Option<&Structure> {
-        self.structures.get(&id)
     }
 }

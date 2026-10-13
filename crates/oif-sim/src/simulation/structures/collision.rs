@@ -1,7 +1,7 @@
 use super::{
-    BlockData, BlockId, BlockKind, Facing, FactoryActivity, HashMap, HashSet, IVec3, MaterialFace,
-    MovementMark, MovementRule, MovingOccupancy, StructureId, StructureKind, StructureState,
-    SuctionLinks, VecDeque, WorldBlocks,
+    BlockData, BlockId, BlockKind, Facing, HashMap, HashSet, IVec3, MaterialFace, MovementMark,
+    MovementRule, MovingOccupancy, StructureId, StructureKind, StructureState, SuctionLinks,
+    VecDeque, WorldBlocks,
 };
 
 /// 抬到 range 上一格（range=5 时为第 6 格）后悬停：已出抬升标记范围，靠此抑制重力，避免边缘上下弹跳
@@ -19,7 +19,7 @@ pub(super) fn structure_supported_by_lifter(
     })
 }
 
-/// 结构是否直接搁在场景 / Inactive 上（找到一处即可）
+/// 结构是否直接搁在场景或锚定结构上，找到一处即可
 fn structure_id_rests_on_stable_support(
     world: &WorldBlocks,
     structures: &StructureState,
@@ -35,14 +35,14 @@ fn structure_id_rests_on_stable_support(
         }
         world.is_scene_at(below)
             || structures.structure_id_at(below).is_some_and(|below_id| {
-                structures.get(below_id).is_some_and(|s| {
-                    s.kind == StructureKind::Factory && s.activity == FactoryActivity::Inactive
-                })
+                structures
+                    .get(below_id)
+                    .is_some_and(|s| s.kind == StructureKind::Factory && s.is_anchored())
             })
     })
 }
 
-/// 重力是否被支撑链接地（场景/Inactive，或下方 Active 已接地）；带 memo，避免重复扫
+/// 检查下方支撑链是否最终接到场景或锚定结构，用缓存避免重复扫描
 pub(super) fn structure_id_gravity_grounded(
     world: &WorldBlocks,
     structures: &StructureState,
@@ -82,9 +82,10 @@ pub(super) fn structure_id_gravity_grounded(
             if below_id == id {
                 continue;
             }
-            if structures.get(below_id).is_some_and(|s| {
-                s.kind == StructureKind::Factory && s.activity == FactoryActivity::Inactive
-            }) {
+            if structures
+                .get(below_id)
+                .is_some_and(|s| s.kind == StructureKind::Factory && s.is_anchored())
+            {
                 grounded = true;
                 break;
             }
@@ -353,7 +354,11 @@ pub(in crate::simulation) fn expanded_move_structure_with_occupancy(
     suction: &SuctionLinks,
     occupancy: Option<&MovingOccupancy>,
 ) -> Option<HashSet<IVec3>> {
-    let structure = structures.linked_expand_pusher_subset(suction, structure, offset)?;
+    // 零位移只提交活塞伸缩，固定的体格不需要通过运动锚定检查
+    if offset == IVec3::ZERO {
+        return Some(structure.clone());
+    }
+    let structure = structures.expand_unanchored_subset(suction, structure)?;
     let structure = with_factory_attachment_children(world, &structure);
     let structure = with_pusher_heads(world, &structure);
 
@@ -405,7 +410,11 @@ pub(in crate::simulation) fn expanded_move_structure_with_occupancy(
                 }
             }
         }
-        let pushed = pushable_structure_at(world, structures, target, offset, suction)?;
+        let block = world.blocks.get(&target)?;
+        if !block.kind.is_material() && !block.kind.is_factory() {
+            return None;
+        }
+        let pushed = structures.linked_unanchored_positions_at(suction, target)?;
         let pushed = with_factory_attachment_children(world, &pushed);
         let pushed = with_pusher_heads(world, &pushed);
         for pushed_pos in pushed {
@@ -476,6 +485,7 @@ pub(super) fn with_factory_attachment_children(
     expanded
 }
 
+/// 验证待平移成员的锚定、吸盘关联、推动链和活塞头碰撞
 pub(in crate::simulation) fn can_translate_structure(
     world: &WorldBlocks,
     structure: &HashSet<IVec3>,
@@ -513,24 +523,6 @@ pub(in crate::simulation) fn movement_expansion_mode(
     } else {
         MovementExpansionMode::Normal
     }
-}
-
-fn pushable_structure_at(
-    world: &WorldBlocks,
-    structures: &StructureState,
-    pos: IVec3,
-    offset: IVec3,
-    suction: &SuctionLinks,
-) -> Option<HashSet<IVec3>> {
-    let block = world.blocks.get(&pos)?;
-    // PusherHead 不是货物；顶头推挤由 mark_pusher 的 body_at_extended_head 路径处理
-    if block.kind == BlockKind::PusherHead {
-        return None;
-    }
-    if block.kind.is_material() || block.kind.is_factory() {
-        return structures.linked_pushable_at(suction, pos, offset);
-    }
-    None
 }
 
 pub(in crate::simulation) fn can_rotate_structure(

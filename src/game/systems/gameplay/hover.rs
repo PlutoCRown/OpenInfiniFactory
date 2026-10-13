@@ -6,9 +6,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::game::player::controller::FlyCamera;
-use crate::game::simulation::structure_state::{
-    StructureFreedom, StructureId, StructureKind, StructureState,
-};
+use crate::game::simulation::structure_state::{StructureId, StructureKind, StructureState};
 use crate::game::state::{EditGestureKind, GameSettings, PlacementState, SolutionState};
 use crate::game::systems::debug::DebugState;
 use crate::game::systems::gameplay::GameplayPlayGate;
@@ -210,7 +208,7 @@ pub fn update_hover(
             let id = structure_state.structure_id_at(target.pos)?;
             let structure = structure_state.get(id)?;
             if structure.kind == StructureKind::Factory
-                && (!debug.factory_activity || structure.freedom == StructureFreedom::None)
+                && (!debug.factory_activity || structure.is_anchored())
             {
                 return None;
             }

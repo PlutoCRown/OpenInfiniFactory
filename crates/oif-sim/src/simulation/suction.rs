@@ -95,28 +95,18 @@ impl SuctionLinks {
 }
 
 impl StructureState {
-    /// 经吸盘粘连扩展后的可平移位置并集；分量内任一结构不可动则 None
-    pub fn linked_pushable_at(
+    /// 查询整组未锚定的吸盘关联成员，不判断具体运动的碰撞
+    pub fn linked_unanchored_positions_at(
         &self,
         links: &SuctionLinks,
         pos: IVec3,
-        offset: IVec3,
     ) -> Option<HashSet<IVec3>> {
         let seed_id = self.id_at(pos)?;
-        self.linked_pushable_ids(links, [seed_id], offset)
-    }
-
-    fn linked_pushable_ids(
-        &self,
-        links: &SuctionLinks,
-        seed_ids: impl IntoIterator<Item = StructureId>,
-        offset: IVec3,
-    ) -> Option<HashSet<IVec3>> {
-        let component = links.component_ids(self, seed_ids);
+        let component = links.component_ids(self, [seed_id]);
         let mut positions = HashSet::new();
         for id in component {
-            let structure = self.structure_by_id(id)?;
-            if !structure.is_pushable() || !structure.freedom.can_translate(offset) {
+            let structure = self.get(id)?;
+            if structure.is_anchored() {
                 return None;
             }
             positions.extend(structure.positions.iter().copied());
@@ -124,27 +114,31 @@ impl StructureState {
         (!positions.is_empty()).then_some(positions)
     }
 
-    /// 活塞可推子集经吸盘扩展：子集本身不膨胀，只并入其它粘连结构的完整位置
-    pub fn linked_expand_pusher_subset(
+    /// 验证子集无锚定成员，再并入其它未锚定的吸盘关联结构
+    pub fn expand_unanchored_subset(
         &self,
         links: &SuctionLinks,
         subset: &HashSet<IVec3>,
-        offset: IVec3,
     ) -> Option<HashSet<IVec3>> {
         let subset_ids: HashSet<StructureId> =
             subset.iter().filter_map(|pos| self.id_at(*pos)).collect();
         if subset_ids.is_empty() {
             return None;
         }
+        for id in &subset_ids {
+            if self.get(*id)?.contains_anchored_members(subset) {
+                return None;
+            }
+        }
         let component = links.component_ids(self, subset_ids.iter().copied());
         let mut positions = subset.clone();
         for id in component {
-            let structure = self.structure_by_id(id)?;
+            let structure = self.get(id)?;
             if subset_ids.contains(&id) {
-                // 种子子集已由调用方验证（如活塞子集），不因整结构 scene-anchored 而拒绝
+                // 子集已在入口验证，只保留参与局部变形的成员
                 continue;
             }
-            if !structure.is_pushable() || !structure.freedom.can_translate(offset) {
+            if structure.is_anchored() {
                 return None;
             }
             positions.extend(structure.positions.iter().copied());
@@ -158,7 +152,7 @@ impl StructureState {
             return false;
         };
         links.component_ids(self, [seed_id]).into_iter().any(|id| {
-            self.structure_by_id(id)
+            self.get(id)
                 .is_some_and(|s| s.kind == StructureKind::Factory)
         })
     }

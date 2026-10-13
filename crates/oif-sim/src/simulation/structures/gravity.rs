@@ -28,9 +28,7 @@ pub(in crate::simulation) fn gravity_moves(
         }
 
         // 经吸盘扩展；粘到固定结构则整体不可落（种子为完整结构时并集等价）
-        let Some(structure) =
-            structures.linked_expand_pusher_subset(suction, positions, IVec3::NEG_Y)
-        else {
+        let Some(structure) = structures.expand_unanchored_subset(suction, positions) else {
             handled.extend(positions.iter().copied());
             continue;
         };
@@ -53,11 +51,11 @@ pub(in crate::simulation) fn gravity_moves(
         if structures.gravity_support_valid(id, world, hard_pusher_head_occupancy) {
             continue;
         }
-        // 场景 / Inactive 稳定支撑：找到一处即可早退并缓存
+        // 场景或锚定结构提供稳定支撑，找到一处即可早退并缓存
         if structures.try_record_stable_gravity_support(id, world, hard_pusher_head_occupancy) {
             continue;
         }
-        // Active 支撑链若最终接地，则本回合不落（无需展开 can_move 克隆大结构）
+        // 未锚定结构的支撑链若最终接地，则本回合不落，无需展开整个移动集合
         if structure_id_gravity_grounded(
             world,
             structures,

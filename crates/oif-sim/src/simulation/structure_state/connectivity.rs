@@ -1,6 +1,6 @@
 use super::{
-    BlockId, BlockKind, GravitySupportContact, HashMap, HashSet, IVec3, MovementRule, VecDeque,
-    WorldBlocks, signal_offsets,
+    BlockId, BlockKind, GravitySupportContact, HashMap, HashSet, IVec3, VecDeque, WorldBlocks,
+    signal_offsets,
 };
 
 pub(super) fn bpos_facing_toward(body: IVec3, source: IVec3, target: IVec3) -> bool {
@@ -97,22 +97,13 @@ pub(super) fn collect_gravity_support(
         .collect()
 }
 
+/// 收集工厂连通成员，真实活塞头可作为连接桥
 pub(super) fn factory_structure(world: &WorldBlocks, start: IVec3) -> HashSet<IVec3> {
     let allowed: HashSet<IVec3> = world
         .blocks
         .iter()
         .filter_map(|(pos, block)| block.kind.is_factory().then_some(*pos))
         .collect();
-    connected_factory_subset(world, &allowed, start, None)
-}
-
-/// 在 allowed 内工厂连通（可穿过真实活塞头）
-fn connected_factory_subset(
-    world: &WorldBlocks,
-    allowed: &HashSet<IVec3>,
-    start: IVec3,
-    blocked_pusher_pos: Option<IVec3>,
-) -> HashSet<IVec3> {
     let mut structure = HashSet::new();
     let mut queue = VecDeque::from([start]);
     structure.insert(start);
@@ -128,10 +119,7 @@ fn connected_factory_subset(
                 .get(&neighbor)
                 .is_some_and(|block| block.kind == BlockKind::PusherHead)
             {
-                if is_blocked_pusher_edge(world, blocked_pusher_pos, pos, neighbor)
-                    || is_blocked_factory_connection(world, pos, neighbor)
-                    || is_blocked_factory_connection(world, neighbor, pos)
-                {
+                if !factory_faces_connect(world, pos, neighbor) {
                     continue;
                 }
                 for offset2 in signal_offsets() {
@@ -139,9 +127,7 @@ fn connected_factory_subset(
                     if structure.contains(&beyond) || !allowed.contains(&beyond) {
                         continue;
                     }
-                    if is_blocked_factory_connection(world, beyond, neighbor)
-                        || is_blocked_factory_connection(world, neighbor, beyond)
-                    {
+                    if !factory_faces_connect(world, neighbor, beyond) {
                         continue;
                     }
                     structure.insert(beyond);
@@ -149,11 +135,7 @@ fn connected_factory_subset(
                 }
                 continue;
             }
-            if !allowed.contains(&neighbor)
-                || is_blocked_pusher_edge(world, blocked_pusher_pos, pos, neighbor)
-                || is_blocked_factory_connection(world, pos, neighbor)
-                || is_blocked_factory_connection(world, neighbor, pos)
-            {
+            if !allowed.contains(&neighbor) || !factory_faces_connect(world, pos, neighbor) {
                 continue;
             }
             structure.insert(neighbor);
@@ -164,39 +146,16 @@ fn connected_factory_subset(
     structure
 }
 
-fn is_blocked_pusher_edge(
-    world: &WorldBlocks,
-    pusher_pos: Option<IVec3>,
-    from: IVec3,
-    to: IVec3,
-) -> bool {
-    let Some(pusher_pos) = pusher_pos else {
+/// 工厂与场景的连接要求相邻两面均可连接，活塞头沿用连通桥语义
+pub(super) fn factory_faces_connect(world: &WorldBlocks, from: IVec3, to: IVec3) -> bool {
+    let Some(a) = world.blocks.get(&from) else {
         return false;
     };
-    world.blocks.get(&pusher_pos).is_some_and(|block| {
-        matches!(
-            block.kind.movement_rule(block.facing),
-            Some(MovementRule::PoweredTranslate { .. })
-        ) && {
-            let front = pusher_pos + block.facing.forward_ivec3();
-            (from == pusher_pos && to == front) || (from == front && to == pusher_pos)
-        }
-    })
-}
-
-pub(super) fn is_blocked_factory_connection(world: &WorldBlocks, from: IVec3, to: IVec3) -> bool {
-    world
-        .blocks
-        .get(&from)
-        .is_some_and(|block| block.kind.non_connection_face(block.facing) == Some(to - from))
-}
-
-/// 子集是否贴着场景格
-pub fn touches_scene(world: &WorldBlocks, structure: &HashSet<IVec3>) -> bool {
-    structure.iter().any(|pos| {
-        signal_offsets().into_iter().any(|offset| {
-            let neighbor = *pos + offset;
-            world.is_scene_at(neighbor) && !is_blocked_factory_connection(world, *pos, neighbor)
-        })
-    })
+    let Some(b) = world.blocks.get(&to) else {
+        return false;
+    };
+    let normal = to - from;
+    normal.abs().element_sum() == 1
+        && (a.kind == BlockKind::PusherHead || a.kind.face_attachable(a.facing, normal))
+        && (b.kind == BlockKind::PusherHead || b.kind.face_attachable(b.facing, -normal))
 }

@@ -20,28 +20,11 @@ impl StructureId {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum FactoryActivity {
-    Active,
-    Inactive,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StructureFreedom {
-    None,
-    All,
-}
-
+/// 结构成员类别，用于区分工厂连接与材料焊接
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StructureKind {
     Material,
     Factory,
-}
-
-impl StructureFreedom {
-    pub fn can_translate(self, _offset: IVec3) -> bool {
-        self == Self::All
-    }
 }
 
 /// 重力支撑接触：成员格 → 支撑方向
@@ -95,8 +78,6 @@ pub struct Structure {
     pub kind: StructureKind,
     pub positions: HashSet<IVec3>,
     pub bounds: Option<GridBounds>,
-    pub activity: FactoryActivity,
-    pub freedom: StructureFreedom,
     gravity_support: Vec<GravitySupportContact>,
     /// 推杆体 → 逻辑头 BlockId（放置/重建时分配，伸出前后稳定）
     pub head_of: HashMap<BlockId, BlockId>,
@@ -105,19 +86,19 @@ pub struct Structure {
     pub deform_groups: Vec<DeformGroup>,
     /// (体, 正推?) → 候选组下标，按 nodes.len() 升序（优先多杆共轴、少节点）
     action_to_groups: HashMap<(BlockId, bool), Vec<u32>>,
-    /// 开局/编辑时贴场景的成员格（锚死快照，中途落地不改）
-    pub(crate) scene_touching: HashSet<IVec3>,
+    /// 开局/编辑时连接场景的成员格，运行中接触场景不新增锚定
+    pub(crate) anchored_members: HashSet<IVec3>,
 }
 
 impl Structure {
-    /// 是否可被推动：无贴场景成员
-    pub fn is_pushable(&self) -> bool {
-        self.scene_touching.is_empty()
+    /// 是否被场景锚定，仅表示整体固定，不判断碰撞或吸盘关联
+    pub fn is_anchored(&self) -> bool {
+        !self.anchored_members.is_empty()
     }
 
-    /// 子集是否含贴场景成员（锚死不可推）
-    pub fn is_scene_anchored_subset(&self, positions: &HashSet<IVec3>) -> bool {
-        positions.iter().any(|p| self.scene_touching.contains(p))
+    /// 局部变形是否包含锚定成员，固定结构的其余部分仍可运动
+    pub fn contains_anchored_members(&self, positions: &HashSet<IVec3>) -> bool {
+        !self.anchored_members.is_disjoint(positions)
     }
 }
 
@@ -151,14 +132,13 @@ mod query;
 mod rebuild;
 use connectivity::bpos_facing_toward;
 use connectivity::collect_gravity_support;
+use connectivity::factory_faces_connect;
 use connectivity::factory_structure;
-use connectivity::is_blocked_factory_connection;
 use connectivity::material_id_to_pos;
 pub use connectivity::material_structure;
 use connectivity::material_structure_from;
 use connectivity::material_weld_neighbors;
 pub use connectivity::query_factory_structure;
-pub use connectivity::touches_scene;
 
 #[cfg(test)]
 #[path = "tests.rs"]

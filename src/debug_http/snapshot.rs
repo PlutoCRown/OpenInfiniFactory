@@ -129,10 +129,7 @@ pub fn block_json_with_structure(
         Some(json!({
             "id": id.0,
             "kind": format!("{:?}", structure.kind),
-            "activity": format!("{:?}", structure.activity),
-            "pushable": structure.is_pushable(),
-            "freedom": format!("{:?}", structure.freedom),
-            "movable": structure.is_pushable() && structure.freedom != oif_sim::simulation::structure_state::StructureFreedom::None,
+            "anchored": structure.is_anchored(),
             "size": structure.positions.len(),
         }))
     });
@@ -196,11 +193,7 @@ pub fn structure_json(
     Some(json!({
         "id": id.0,
         "kind": format!("{:?}", structure.kind),
-        "activity": format!("{:?}", structure.activity),
-        "pushable": structure.is_pushable(),
-        "freedom": format!("{:?}", structure.freedom),
-        "movable": structure.is_pushable()
-            && structure.freedom != oif_sim::simulation::structure_state::StructureFreedom::None,
+        "anchored": structure.is_anchored(),
         "size": structure.positions.len(),
         "blocks": blocks,
         "head_of": structure

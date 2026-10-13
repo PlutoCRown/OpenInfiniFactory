@@ -5,10 +5,10 @@ use std::sync::{LazyLock, RwLock};
 use serde::{Deserialize, Serialize};
 
 use super::catalog_store::{
-    clone_global, install_global, with_global, with_global_mut, CatalogEntry, HasStringId,
-    StringIdCatalog,
+    CatalogEntry, HasStringId, StringIdCatalog, clone_global, install_global, with_global,
+    with_global_mut,
 };
-use super::{rgb, ColorSpec};
+use super::{ColorSpec, rgb};
 
 pub use super::catalog_store::leak_str;
 
@@ -138,9 +138,158 @@ pub fn scene_def(id: SceneBlockId) -> SceneBlockDef {
 
 /// 确保兜底场景方块已注册
 pub fn ensure_fallback_scene_catalog() {
-    if with_global(&CATALOG, |c| c.id_by_string(FALLBACK_SCENE_STRING_ID).is_some()) {
+    if with_global(&CATALOG, |c| {
+        c.id_by_string(FALLBACK_SCENE_STRING_ID).is_some()
+    }) {
         return;
     }
     with_global_mut(&CATALOG, ensure_fallback_entry);
 }
 
+/// 用资源元数据验证场景连接面、朝向和模拟锚定行为
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::blocks::{BlockData, BlockKind};
+    use crate::session::SimSession;
+    use crate::simulation::structure_state::StructureState;
+    use crate::world::Facing;
+    use crate::world::grid::WorldBlocks;
+    use glam::IVec3;
+    use std::collections::HashSet;
+
+    /// 草不能固定工厂，斜坡按旋转后的可连接面固定，编辑重新计算锚定
+    #[test]
+    fn factory_anchors_follow_scene_metadata_and_orientation() {
+        ensure_fallback_scene_catalog();
+        let scene_ids = with_global_mut(&CATALOG, |catalog| {
+            // 保留旧测试使用的 0..=6 兜底句柄，新增定义不改变并行测试的场景语义
+            let fallback = catalog.get(catalog.fallback_id()).unwrap().clone();
+            while catalog.len() <= 6 {
+                let mut def = fallback.clone();
+                def.string_id = format!("test_legacy_scene_{}", catalog.len());
+                catalog.register(def).unwrap();
+            }
+            [
+                (
+                    "test_short_grass",
+                    include_str!("../../../../assets/scene_blocks/short_grass/meta.json"),
+                ),
+                (
+                    "test_quartz_slope",
+                    include_str!("../../../../assets/scene_blocks/quartz_slope/meta.json"),
+                ),
+                (
+                    "test_basic",
+                    include_str!("../../../../assets/scene_blocks/basic/meta.json"),
+                ),
+            ]
+            .map(|(string_id, metadata)| {
+                let metadata: serde_json::Value = serde_json::from_str(metadata).unwrap();
+                let mut def = fallback.clone();
+                def.string_id = string_id.to_string();
+                def.collision = metadata["collision"].as_bool().unwrap_or(true);
+                def.connectable = serde_json::from_value(metadata["connectable"].clone()).unwrap();
+                def.directional = metadata["directional"].as_bool().unwrap_or(false);
+                catalog.register(def).unwrap()
+            })
+        });
+        let normals = [
+            IVec3::X,
+            IVec3::NEG_X,
+            IVec3::Y,
+            IVec3::NEG_Y,
+            IVec3::Z,
+            IVec3::NEG_Z,
+        ];
+        let facings = [Facing::North, Facing::East, Facing::South, Facing::West];
+        let expected_faces = [
+            [[false; 6]; 4],
+            [
+                [true, true, false, true, false, true],
+                [true, false, false, true, true, true],
+                [true, true, false, true, true, false],
+                [false, true, false, true, true, true],
+            ],
+            [[true; 6]; 4],
+        ];
+        let scene_pos = IVec3::new(0, 3, 0);
+        for (fixture, scene_id) in scene_ids.into_iter().enumerate() {
+            for (facing_index, facing) in facings.into_iter().enumerate() {
+                for (face_index, normal) in normals.into_iter().enumerate() {
+                    let mut world = WorldBlocks::default();
+                    world.insert(
+                        scene_pos,
+                        BlockData::new(BlockKind::Scene(scene_id), facing),
+                    );
+                    let factory_pos = scene_pos + normal;
+                    world.insert(
+                        factory_pos,
+                        BlockData::new(BlockKind::Platform, Facing::North),
+                    );
+                    let mut structures = StructureState::default();
+                    structures.rebuild_for_simulation(&world);
+                    let structure = structures
+                        .get(structures.id_at(factory_pos).unwrap())
+                        .unwrap();
+                    assert_eq!(
+                        structure.is_anchored(),
+                        expected_faces[fixture][facing_index][face_index],
+                        "fixture={fixture}, facing={facing:?}, normal={normal:?}"
+                    );
+                }
+            }
+        }
+
+        let mut session = SimSession::new();
+        let factory_pos = scene_pos + IVec3::X;
+        session.world.insert(
+            scene_pos,
+            BlockData::new(BlockKind::Scene(scene_ids[0]), Facing::North),
+        );
+        let factory = BlockData::new(BlockKind::Platform, Facing::North);
+        session.world.insert(factory_pos, factory);
+        let factory_id = session.world.blocks[&factory_pos].id;
+        session.begin_simulation();
+        session.simulate_next_turn();
+        assert_eq!(
+            session.world.blocks[&(factory_pos + IVec3::NEG_Y)].id,
+            factory_id
+        );
+
+        let mut world = WorldBlocks::default();
+        let factory_pos = scene_pos + IVec3::Z;
+        world.insert(
+            scene_pos,
+            BlockData::new(BlockKind::Scene(scene_ids[1]), Facing::North),
+        );
+        world.insert(factory_pos, factory);
+        let mut structures = StructureState::default();
+        structures.rebuild_for_simulation(&world);
+        assert!(
+            !structures
+                .get(structures.id_at(factory_pos).unwrap())
+                .unwrap()
+                .is_anchored()
+        );
+        world.insert(
+            scene_pos,
+            BlockData::new(BlockKind::Scene(scene_ids[1]), Facing::South),
+        );
+        structures.apply_factory_edit(&world, &HashSet::from([scene_pos]));
+        assert!(
+            structures
+                .get(structures.id_at(factory_pos).unwrap())
+                .unwrap()
+                .is_anchored()
+        );
+        world.remove(&scene_pos);
+        structures.apply_factory_edit(&world, &HashSet::from([scene_pos]));
+        assert!(
+            !structures
+                .get(structures.id_at(factory_pos).unwrap())
+                .unwrap()
+                .is_anchored()
+        );
+    }
+}

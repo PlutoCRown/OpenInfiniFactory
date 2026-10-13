@@ -17,7 +17,7 @@ use crate::game::blocks::{
     BlockData, BlockKind, WeldConnectorBehavior, WireConnectorBehavior, spawn_factory_wire_arm,
     spawn_factory_wire_core, spawn_model_parts,
 };
-use crate::game::simulation::structure_state::{FactoryActivity, StructureState};
+use crate::game::simulation::structure_state::StructureState;
 use crate::game::world::animation::{
     AnimatedBlock, AnimationEasing, AnimationTiming, BlockAnimation, BlockAnimationKind,
     PusherAnimation, rotate_world_pos_y,
@@ -100,9 +100,14 @@ pub(crate) fn factory_debug_overlay_material(
     if !kind.is_factory() {
         return None;
     }
-    Some(match structure_state.activity_at(pos) {
-        Some(FactoryActivity::Inactive) => assets.inactive_factory_debug_material(),
-        _ => assets.active_factory_debug_material(),
+    let anchored = structure_state
+        .id_at(pos)
+        .and_then(|id| structure_state.get(id))
+        .is_some_and(|structure| structure.is_anchored());
+    Some(if anchored {
+        assets.inactive_factory_debug_material()
+    } else {
+        assets.active_factory_debug_material()
     })
 }
 

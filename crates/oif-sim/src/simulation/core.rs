@@ -368,13 +368,13 @@ fn move_structures(
                         return false;
                     };
                     let head = *pos + block.facing.forward_ivec3();
-                    structure.activity == super::structure_state::FactoryActivity::Active
+                    !structure.is_anchored()
                         || world
                             .blocks
                             .get(&head)
                             .is_some_and(|head| head.kind == crate::blocks::BlockKind::PusherHead)
                         || (structure_state.id_at(head) == Some(id)
-                            && !structure.scene_touching.contains(&head))
+                            && !structure.anchored_members.contains(&head))
                 })
         });
         if needs_deform {

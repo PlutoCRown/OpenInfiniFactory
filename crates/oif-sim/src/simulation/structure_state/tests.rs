@@ -450,9 +450,9 @@ fn extended_pusher_head_keeps_front_connected() {
     assert!(!sides.target_side.contains(&body));
 }
 
-/// 贴场景 → Inactive；未贴 → Active；遮挡面相邻不传播
+/// 场景锚定只沿可连接面传播，不跨独立结构
 #[test]
-fn factory_activity_from_scene_only_no_cross_structure_prop() {
+fn factory_anchors_do_not_cross_disconnected_faces() {
     let mut world = WorldBlocks::default();
     let scene = BlockKind::Scene(crate::blocks::SceneBlockId(6));
     place(&mut world, IVec3::new(1, 0, 0), scene, Facing::North);
@@ -481,14 +481,12 @@ fn factory_activity_from_scene_only_no_cross_structure_prop() {
     let anchored = state
         .get(state.structure_id_at(IVec3::new(1, 1, 0)).unwrap())
         .unwrap();
-    assert_eq!(anchored.activity, FactoryActivity::Inactive);
-    assert_eq!(anchored.freedom, StructureFreedom::None);
+    assert!(anchored.is_anchored());
 
     let welder = state
         .get(state.structure_id_at(IVec3::new(0, 1, 0)).unwrap())
         .unwrap();
-    assert_eq!(welder.activity, FactoryActivity::Active);
-    assert_eq!(welder.freedom, StructureFreedom::All);
+    assert!(!welder.is_anchored());
     assert_ne!(
         state.structure_id_at(IVec3::new(0, 1, 0)),
         state.structure_id_at(IVec3::new(1, 1, 0)),
@@ -498,12 +496,12 @@ fn factory_activity_from_scene_only_no_cross_structure_prop() {
     let lone = state
         .get(state.structure_id_at(IVec3::new(5, 1, 0)).unwrap())
         .unwrap();
-    assert_eq!(lone.activity, FactoryActivity::Active);
+    assert!(!lone.is_anchored());
 }
 
-/// 并入贴场景结构 → 整团 Inactive；拆掉唯一贴场景接触 → 变回 Active
+/// 编辑合并结构时继承场景锚定，拆掉唯一锚定成员后解除固定
 #[test]
-fn factory_edit_merges_and_splits_activity_locally() {
+fn factory_edit_merges_and_splits_anchors_locally() {
     let mut world = WorldBlocks::default();
     let scene = BlockKind::Scene(crate::blocks::SceneBlockId(6));
     place(&mut world, IVec3::new(0, 0, 0), scene, Facing::North);
@@ -522,19 +520,17 @@ fn factory_edit_merges_and_splits_activity_locally() {
 
     let mut state = StructureState::default();
     state.rebuild_for_simulation(&world);
-    assert_eq!(
+    assert!(
         state
             .get(state.structure_id_at(IVec3::new(0, 1, 0)).unwrap())
             .unwrap()
-            .activity,
-        FactoryActivity::Inactive
+            .is_anchored()
     );
-    assert_eq!(
-        state
+    assert!(
+        !state
             .get(state.structure_id_at(IVec3::new(2, 1, 0)).unwrap())
             .unwrap()
-            .activity,
-        FactoryActivity::Active
+            .is_anchored()
     );
 
     place(
@@ -546,17 +542,122 @@ fn factory_edit_merges_and_splits_activity_locally() {
     state.apply_factory_edit(&world, &HashSet::from([IVec3::new(1, 1, 0)]));
     let merged_id = state.structure_id_at(IVec3::new(2, 1, 0)).unwrap();
     assert_eq!(state.structure_id_at(IVec3::new(0, 1, 0)), Some(merged_id));
-    assert_eq!(
-        state.get(merged_id).unwrap().activity,
-        FactoryActivity::Inactive
-    );
+    assert!(state.get(merged_id).unwrap().is_anchored());
 
     world.remove(&IVec3::new(0, 1, 0));
     state.apply_factory_edit(&world, &HashSet::from([IVec3::new(0, 1, 0)]));
     let left = state.structure_id_at(IVec3::new(1, 1, 0)).unwrap();
     assert_eq!(state.structure_id_at(IVec3::new(2, 1, 0)), Some(left));
-    assert_eq!(state.get(left).unwrap().activity, FactoryActivity::Active);
-    assert_eq!(state.get(left).unwrap().freedom, StructureFreedom::All);
+    assert!(!state.get(left).unwrap().is_anchored());
+}
+
+/// 固定结构的无锚定子集可动，但吸盘关联到其它固定结构时必须拒绝
+#[test]
+fn subset_motion_checks_its_anchors_and_linked_structures() {
+    use crate::simulation::structures::can_translate_structure;
+    use crate::simulation::suction::SuctionLinks;
+
+    let mut world = WorldBlocks::default();
+    let scene = BlockKind::Scene(crate::blocks::fallback_scene_id());
+    let anchor = IVec3::Y;
+    let cup = IVec3::new(1, 1, 0);
+    let target = IVec3::new(2, 1, 0);
+    place(&mut world, IVec3::ZERO, scene, Facing::North);
+    place(&mut world, anchor, BlockKind::Platform, Facing::North);
+    place(&mut world, cup, BlockKind::SuctionCup, Facing::East);
+    place(&mut world, target, BlockKind::Platform, Facing::North);
+    let mut structures = StructureState::default();
+    structures.rebuild_for_simulation(&world);
+    assert_eq!(structures.id_at(anchor), structures.id_at(cup));
+    assert_ne!(structures.id_at(cup), structures.id_at(target));
+
+    let subset = HashSet::from([cup]);
+    let links = SuctionLinks::default();
+    assert!(
+        structures
+            .linked_unanchored_positions_at(&links, cup)
+            .is_none()
+    );
+    assert_eq!(
+        structures.expand_unanchored_subset(&links, &subset),
+        Some(subset.clone())
+    );
+    assert!(
+        structures
+            .expand_unanchored_subset(&links, &HashSet::from([anchor, cup]))
+            .is_none()
+    );
+
+    let powered = HashSet::from([cup]);
+    let links = SuctionLinks::rebuild(&world, &structures, &powered);
+    assert_eq!(
+        structures.expand_unanchored_subset(&links, &subset),
+        Some(HashSet::from([cup, target]))
+    );
+    assert!(can_translate_structure(
+        &world,
+        &subset,
+        IVec3::NEG_Z,
+        &structures,
+        &links,
+        &HashSet::new()
+    ));
+
+    let target_support = target + IVec3::NEG_Y;
+    place(&mut world, target_support, scene, Facing::North);
+    structures.apply_factory_edit(&world, &HashSet::from([target_support]));
+    let links = SuctionLinks::rebuild(&world, &structures, &powered);
+    assert!(
+        structures
+            .expand_unanchored_subset(&links, &subset)
+            .is_none()
+    );
+    assert!(!can_translate_structure(
+        &world,
+        &subset,
+        IVec3::NEG_Z,
+        &structures,
+        &links,
+        &HashSet::new()
+    ));
+}
+
+/// 运行中落到场景上只获得重力支撑，不自动固定或禁止后续横向运动
+#[test]
+fn landing_does_not_add_scene_anchors() {
+    use crate::session::SimSession;
+    use crate::simulation::structures::can_translate_structure;
+    use crate::simulation::suction::SuctionLinks;
+
+    let mut session = SimSession::new();
+    place(
+        &mut session.world,
+        IVec3::ZERO,
+        BlockKind::Scene(crate::blocks::fallback_scene_id()),
+        Facing::North,
+    );
+    let factory_id = place(
+        &mut session.world,
+        IVec3::Y * 2,
+        BlockKind::Platform,
+        Facing::North,
+    );
+    session.begin_simulation();
+    let structure_id = session.structure_state.id_at(IVec3::Y * 2).unwrap();
+    session.simulate_next_turn();
+    assert_eq!(session.world.blocks[&IVec3::Y].id, factory_id);
+    session.simulate_next_turn();
+    assert_eq!(session.world.blocks[&IVec3::Y].id, factory_id);
+    let structure = session.structure_state.get(structure_id).unwrap();
+    assert!(!structure.is_anchored());
+    assert!(can_translate_structure(
+        &session.world,
+        &structure.positions,
+        IVec3::X,
+        &session.structure_state,
+        &SuctionLinks::default(),
+        &HashSet::new()
+    ));
 }
 
 /// 整体平移同步世界、反向索引和包围盒，并保留运行历史

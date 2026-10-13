@@ -1,5 +1,5 @@
 use super::{
-    BlockId, BlockKind, FactoryActivity, HashMap, HashSet, IVec3, MovementMark, MovementRule,
+    BlockId, BlockKind, HashMap, HashSet, IVec3, MovementMark, MovementRule,
     PUSHER_REVERSE_ENABLED, PusherActor, PusherAnimationKind, PusherState, PusherStateEntry,
     SimMovementMarkCtx, StructureId, StructureKind, StructureMove, StructureState, SuctionLinks,
     WorldBlocks, can_translate_structure,
@@ -391,7 +391,7 @@ fn mark_conveyor_movement(
     match translate_ok.get(&key).copied() {
         Some(false) => return None,
         Some(true) => {
-            let structure = structures.linked_pushable_at(suction, pos, reverse)?;
+            let structure = structures.linked_unanchored_positions_at(suction, pos)?;
             return Some(StructureMove::translate_marked(
                 structure_id,
                 structure,
@@ -400,7 +400,7 @@ fn mark_conveyor_movement(
             ));
         }
         None => {
-            let structure = structures.linked_pushable_at(suction, pos, reverse)?;
+            let structure = structures.linked_unanchored_positions_at(suction, pos)?;
             if !cached_can_translate(
                 world,
                 structures,
@@ -454,9 +454,10 @@ fn mark_pusher_movement(
 
     let head = pos + source;
     let structure_id = ctx.structures.id_at(pos)?;
-    let lazy_anchored = ctx.structures.get(structure_id).is_some_and(|structure| {
-        structure.activity == FactoryActivity::Inactive && structure.head_of.is_empty()
-    });
+    let lazy_anchored = ctx
+        .structures
+        .get(structure_id)
+        .is_some_and(|structure| structure.is_anchored() && structure.head_of.is_empty());
 
     // 体已 held：不可再发动其它 deform；仅当某动作组已成功时挂共轴动画
     if ctx.structures.held_blocks.contains(&id) || ctx.motion_held.contains(&pos) {
@@ -691,15 +692,12 @@ fn try_deform_action(
             continue;
         }
 
-        let (subset, anchored) = {
+        let subset = {
             let structure = ctx.structures.get(structure_id)?;
-            let subset = ctx
-                .structures
-                .nodes_to_positions(ctx.world, structure, &nodes);
-            let anchored = structure.is_scene_anchored_subset(&subset);
-            (subset, anchored)
+            ctx.structures
+                .nodes_to_positions(ctx.world, structure, &nodes)
         };
-        if anchored || subset.iter().any(|p| ctx.motion_held.contains(p)) {
+        if subset.iter().any(|p| ctx.motion_held.contains(p)) {
             continue;
         }
 
@@ -746,9 +744,9 @@ fn try_deform_action(
             );
         }
 
-        let Some(expanded) =
-            ctx.structures
-                .linked_expand_pusher_subset(ctx.suction, &subset, move_offset)
+        let Some(expanded) = ctx
+            .structures
+            .expand_unanchored_subset(ctx.suction, &subset)
         else {
             continue;
         };
@@ -907,7 +905,7 @@ fn mark_structure_translate(
     if world.is_material_at(source) {
         let structure_id = structures.id_at(source)?;
         return structures
-            .linked_pushable_at(suction, source, offset)
+            .linked_unanchored_positions_at(suction, source)
             .map(|structure| {
                 StructureMove::translate_marked(structure_id, structure, offset, mark)
             });
@@ -921,14 +919,17 @@ fn mark_structure_translate(
                 Some(MovementRule::PoweredTranslate { .. })
             )
         }) {
-        // 活塞子集后再经吸盘扩展（子集不膨胀为整结构）
-        let subset = structures.pusher_target_structure(world, actor, source, offset)?;
-        structures.linked_expand_pusher_subset(suction, &subset, offset)?
+        // 同结构动作走局部变形；推动其它工厂时取完整的未锚定关联结构
+        let target = structures.get(structure_id)?;
+        if target.kind != StructureKind::Factory || structures.id_at(actor)? == structure_id {
+            return None;
+        }
+        structures.linked_unanchored_positions_at(suction, source)?
     } else {
         if structures.structure_contains(source, actor) {
             return None;
         }
-        structures.linked_pushable_at(suction, source, offset)?
+        structures.linked_unanchored_positions_at(suction, source)?
     };
     Some(StructureMove::translate_marked(
         structure_id,
@@ -970,7 +971,7 @@ fn mark_lift_structures(
         {
             continue;
         }
-        // 吸盘分量内须全是 Active 且可上移（工厂 / 材料均可）
+        // 吸盘分量内所有结构都必须未锚定，碰撞留到执行阶段检查
         let component = suction.component_ids(structures, [id]);
         let mut structure = HashSet::new();
         let mut liftable = !component.is_empty();
@@ -983,7 +984,7 @@ fn mark_lift_structures(
                 liftable = false;
                 break;
             };
-            if meta.activity != FactoryActivity::Active || !meta.freedom.can_translate(IVec3::Y) {
+            if meta.is_anchored() {
                 liftable = false;
                 break;
             }
@@ -1034,7 +1035,7 @@ fn mark_rotate_structure(
     {
         return None;
     }
-    let structure = structures.linked_pushable_at(suction, source, IVec3::ZERO)?;
+    let structure = structures.linked_unanchored_positions_at(suction, source)?;
     Some(StructureMove::rotate(
         structure_id,
         structure,
